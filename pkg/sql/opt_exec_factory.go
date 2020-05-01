@@ -986,7 +986,12 @@ func (ef *execFactory) ConstructPlan(
 			out.plan = in.Root.(planNode)
 		}
 	}
-	res.cascades = cascades
+	if len(cascades) > 0 {
+		res.cascades = make([]cascadeMetadata, len(cascades))
+		for i := range cascades {
+			res.cascades[i].Cascade = cascades[i]
+		}
+	}
 	if len(checks) > 0 {
 		res.checkPlans = make([]checkPlan, len(checks))
 		for i := range checks {

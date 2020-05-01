@@ -325,11 +325,18 @@ type planComponents struct {
 	main planNode
 
 	// cascades contains metadata for all cascades.
-	cascades []exec.Cascade
+	cascades []cascadeMetadata
 
 	// checkPlans contains all the plans for queries that are to be executed after
 	// the main query (for example, foreign key checks).
 	checkPlans []checkPlan
+}
+
+type cascadeMetadata struct {
+	exec.Cascade
+	// plan for the cascade. This plan is not populated upfront; it is created
+	// only when it needs to run, after the main query (and previous cascades).
+	plan planNode
 }
 
 // checkPlan is a query tree that is executed after the main one. It can only
@@ -351,6 +358,13 @@ func (p *planComponents) close(ctx context.Context) {
 		if p.subqueryPlans[i].plan != nil {
 			p.subqueryPlans[i].plan.Close(ctx)
 			p.subqueryPlans[i].plan = nil
+		}
+	}
+
+	for i := range p.cascades {
+		if p.cascades[i].plan != nil {
+			p.cascades[i].plan.Close(ctx)
+			p.cascades[i].plan = nil
 		}
 	}
 
