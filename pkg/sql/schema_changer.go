@@ -263,7 +263,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		)
 		defer recv.Release()
 
-		rec, err := sc.distSQLPlanner.checkSupportForNode(localPlanner.curPlan.plan)
+		rec, err := sc.distSQLPlanner.checkSupportForNode(localPlanner.curPlan.main)
 		var planAndRunErr error
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
 			// Resolve subqueries before running the queries' physical plan.
@@ -287,7 +287,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 			}}
 
 			PlanAndRunCTAS(ctx, sc.distSQLPlanner, localPlanner,
-				txn, isLocal, localPlanner.curPlan.plan, out, recv)
+				txn, isLocal, localPlanner.curPlan.main, out, recv)
 			if planAndRunErr = rw.Err(); planAndRunErr != nil {
 				return
 			}
