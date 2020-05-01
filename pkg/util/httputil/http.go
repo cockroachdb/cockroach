@@ -17,8 +17,8 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/pkg/errors"
 )
 
 const (

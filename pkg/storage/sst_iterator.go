@@ -14,9 +14,9 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
-	"github.com/pkg/errors"
 )
 
 type sstIterator struct {

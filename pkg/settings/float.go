@@ -13,7 +13,7 @@ package settings
 import (
 	"math"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // FloatSetting is the interface of a setting variable that will be

@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // SortableRowContainer is a container used to store rows and optionally sort

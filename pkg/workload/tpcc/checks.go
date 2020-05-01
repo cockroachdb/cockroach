@@ -13,7 +13,7 @@ package tpcc
 import (
 	gosql "database/sql"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Check is a tpcc consistency check.

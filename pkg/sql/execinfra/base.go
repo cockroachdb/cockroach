@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // RowChannelBufSize is the default buffer size of a RowChannel.

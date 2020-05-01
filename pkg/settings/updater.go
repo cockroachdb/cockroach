@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EncodeDuration encodes a duration in the format parseRaw expects.

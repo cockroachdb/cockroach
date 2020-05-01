@@ -18,7 +18,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 

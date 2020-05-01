@@ -27,8 +27,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
-	"github.com/pkg/errors"
 	"golang.org/x/tools/go/buildutil"
 )
 
@@ -1169,6 +1169,7 @@ func TestLint(t *testing.T) {
 			"golang.org/x/sync/singleflight":              "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
 			"syscall":                                     "sysutil",
 			"errors":                                      "github.com/cockroachdb/errors",
+			"github.com/pkg/errors":                       "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/assert":        "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/barriers":      "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/contexttags":   "github.com/cockroachdb/errors",
@@ -1233,6 +1234,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
+			stream.GrepNot(`cockroach/pkg/util/log: github\.com/pkg/errors$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Grant adds privileges to users.

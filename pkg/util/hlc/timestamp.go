@@ -19,7 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Timestamp constant values.

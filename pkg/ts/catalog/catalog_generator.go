@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 

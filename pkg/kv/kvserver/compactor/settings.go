@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func validateFraction(v float64) error {

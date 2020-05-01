@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ExpandDataSourceGlob is a utility function that expands a tree.TablePattern

@@ -15,7 +15,7 @@ package sysutil
 import (
 	"os"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // CreateLargeFile creates a large file at the given path with bytes size. On

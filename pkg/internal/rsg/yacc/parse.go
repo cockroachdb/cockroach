@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Tree is the representation of a single parsed file.
