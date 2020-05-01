@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 

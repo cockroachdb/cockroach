@@ -12,12 +12,12 @@ package kvserver_test
 
 import (
 	"context"
-	"errors"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft"
 )
 

@@ -11,13 +11,13 @@
 package grpcutil
 
 import (
-	"errors"
 	"regexp"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/petermattis/goid"
 )
 

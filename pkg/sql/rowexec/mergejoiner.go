@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 )
 

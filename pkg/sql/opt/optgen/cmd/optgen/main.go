@@ -12,7 +12,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"go/format"
@@ -22,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
+	"github.com/cockroachdb/errors"
 )
 
 type globResolver func(pattern string) (matches []string, err error)

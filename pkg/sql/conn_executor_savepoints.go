@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // commitOnReleaseSavepointName is the name of the savepoint with special

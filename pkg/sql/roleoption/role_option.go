@@ -11,13 +11,13 @@
 package roleoption
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 //go:generate stringer -type=Option

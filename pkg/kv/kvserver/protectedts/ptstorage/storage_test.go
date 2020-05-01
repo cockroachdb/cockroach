@@ -13,7 +13,6 @@ package ptstorage_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 

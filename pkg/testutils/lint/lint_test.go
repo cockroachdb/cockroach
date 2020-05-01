@@ -1188,6 +1188,7 @@ func TestLint(t *testing.T) {
 			"github.com/satori/go.uuid":                   "util/uuid",
 			"golang.org/x/sync/singleflight":              "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
 			"syscall":                                     "sysutil",
+			"errors":                                      "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/assert":        "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/barriers":      "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/contexttags":   "github.com/cockroachdb/errors",

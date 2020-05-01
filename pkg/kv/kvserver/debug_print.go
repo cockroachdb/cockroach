@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 

@@ -17,12 +17,13 @@
 package singleflight
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 func TestDo(t *testing.T) {

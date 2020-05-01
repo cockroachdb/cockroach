@@ -13,11 +13,12 @@
 package sysutil
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/user"
 	"syscall"
+
+	"github.com/cockroachdb/errors"
 )
 
 // ProcessIdentity returns a string describing the user and group that this

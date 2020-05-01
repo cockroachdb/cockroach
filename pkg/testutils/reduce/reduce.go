@@ -16,13 +16,13 @@ package reduce
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Pass defines a reduce pass.
