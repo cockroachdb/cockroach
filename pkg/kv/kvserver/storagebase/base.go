@@ -99,7 +99,7 @@ type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 // ReplicaResponseFilter is used in unittests to modify the outbound
 // response returned to a waiting client after a replica command has
 // been processed. This filter is invoked only by the command proposer.
-type ReplicaResponseFilter func(roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
+type ReplicaResponseFilter func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
 
 // ContainsKey returns whether this range contains the specified key.
 func ContainsKey(desc *roachpb.RangeDescriptor, key roachpb.Key) bool {

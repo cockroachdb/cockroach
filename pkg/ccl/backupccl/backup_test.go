@@ -839,7 +839,7 @@ func checkInProgressBackupRestore(
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 			for _, ru := range br.Responses {
 				switch ru.GetInner().(type) {
 				case *roachpb.ExportResponse, *roachpb.ImportResponse:
@@ -3595,7 +3595,9 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		TestingResponseFilter: func(
+			ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+		) *roachpb.Error {
 			for _, ru := range br.Responses {
 				switch ru.GetInner().(type) {
 				case *roachpb.ExportResponse, *roachpb.ImportResponse:
