@@ -1,4 +1,4 @@
-# LogicTest: local-vec fakedist-vec
+# LogicTest: local fakedist
 
 # Check that all types supported by the vectorized engine can be read correctly.
 statement ok

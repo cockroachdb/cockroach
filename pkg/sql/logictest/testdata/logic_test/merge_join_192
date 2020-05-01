@@ -1,4 +1,4 @@
-# LogicTest: local-vec
+# LogicTest: local
 
 # Test to make sure that vectorized engine is used when merge joiner is
 # streaming when vectorize=201auto.
