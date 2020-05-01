@@ -30,7 +30,7 @@ import (
 func NewSorter(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (colexecbase.Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
@@ -39,18 +39,18 @@ func NewSorter(
 func newSorter(
 	allocator *colmem.Allocator,
 	input spooler,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
 	for i, ord := range orderingCols {
-		if !isSorterSupported(&inputTypes[ord.ColIdx], ord.Direction) {
-			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", &inputTypes[ord.ColIdx], ord.Direction)
+		if !isSorterSupported(inputTypes[ord.ColIdx], ord.Direction) {
+			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", inputTypes[ord.ColIdx], ord.Direction)
 		}
 		if i < len(orderingCols)-1 {
-			partitioners[i], err = newPartitioner(&inputTypes[ord.ColIdx])
+			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx])
 			if err != nil {
 				return nil, err
 			}
@@ -103,7 +103,7 @@ type allSpooler struct {
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from the input.
-	inputTypes []types.T
+	inputTypes []*types.T
 	// bufferedTuples stores all the values from the input after spooling. Each
 	// Vec in this batch is the entire column from the input.
 	bufferedTuples *appendOnlyBufferedBatch
@@ -116,7 +116,7 @@ var _ spooler = &allSpooler{}
 var _ resetter = &allSpooler{}
 
 func newAllSpooler(
-	allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []types.T,
+	allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []*types.T,
 ) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
@@ -190,7 +190,7 @@ type sortOp struct {
 	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []types.T
+	inputTypes []*types.T
 	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
 	orderingCols []execinfrapb.Ordering_Column
@@ -321,7 +321,7 @@ func (p *sortOp) sort(ctx context.Context) {
 
 	for i := range p.orderingCols {
 		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
-		p.sorters[i] = newSingleSorter(&p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
+		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
 		p.sorters[i].init(inputVec, p.order)
 	}
 

@@ -32,7 +32,7 @@ import (
 type Processor interface {
 	// OutputTypes returns the column types of the results (that are to be fed
 	// through an output router).
-	OutputTypes() []types.T
+	OutputTypes() []*types.T
 
 	// Run is the main loop of the processor.
 	Run(context.Context)
@@ -68,7 +68,7 @@ type ProcOutputHelper struct {
 	// If outputCols is set, these types correspond to the types of
 	// those columns.
 	// If neither is set, this is the internal schema of the processor.
-	OutputTypes []types.T
+	OutputTypes []*types.T
 
 	// offset is the number of rows that are suppressed.
 	offset uint64
@@ -93,7 +93,7 @@ func (h *ProcOutputHelper) Reset() {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *execinfrapb.PostProcessSpec, typs []types.T, evalCtx *tree.EvalContext, output RowReceiver,
+	post *execinfrapb.PostProcessSpec, typs []*types.T, evalCtx *tree.EvalContext, output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -124,7 +124,7 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.OutputTypes) >= nOutputCols {
 			h.OutputTypes = h.OutputTypes[:nOutputCols]
 		} else {
-			h.OutputTypes = make([]types.T, nOutputCols)
+			h.OutputTypes = make([]*types.T, nOutputCols)
 		}
 		for i, c := range h.outputCols {
 			h.OutputTypes[i] = typs[c]
@@ -138,21 +138,21 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.OutputTypes) >= nRenders {
 			h.OutputTypes = h.OutputTypes[:nRenders]
 		} else {
-			h.OutputTypes = make([]types.T, nRenders)
+			h.OutputTypes = make([]*types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
 			h.renderExprs[i] = ExprHelper{}
 			if err := h.renderExprs[i].Init(expr, typs, evalCtx); err != nil {
 				return err
 			}
-			h.OutputTypes[i] = *h.renderExprs[i].Expr.ResolvedType()
+			h.OutputTypes[i] = h.renderExprs[i].Expr.ResolvedType()
 		}
 	} else {
 		// No rendering or projection.
 		if cap(h.OutputTypes) >= len(typs) {
 			h.OutputTypes = h.OutputTypes[:len(typs)]
 		} else {
-			h.OutputTypes = make([]types.T, len(typs))
+			h.OutputTypes = make([]*types.T, len(typs))
 		}
 		copy(h.OutputTypes, typs)
 	}
@@ -294,7 +294,7 @@ func (h *ProcOutputHelper) ProcessRow(
 			if err != nil {
 				return nil, false, err
 			}
-			h.outputRow[i] = sqlbase.DatumToEncDatum(&h.OutputTypes[i], datum)
+			h.outputRow[i] = sqlbase.DatumToEncDatum(h.OutputTypes[i], datum)
 		}
 	} else if h.outputCols != nil {
 		// Projection.
@@ -736,7 +736,7 @@ func (pb *ProcessorBase) ProcessRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDa
 }
 
 // OutputTypes is part of the processor interface.
-func (pb *ProcessorBase) OutputTypes() []types.T {
+func (pb *ProcessorBase) OutputTypes() []*types.T {
 	return pb.Out.OutputTypes
 }
 
@@ -766,7 +766,7 @@ type ProcStateOpts struct {
 func (pb *ProcessorBase) Init(
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
-	types []types.T,
+	types []*types.T,
 	flowCtx *FlowCtx,
 	processorID int32,
 	output RowReceiver,
@@ -782,7 +782,7 @@ func (pb *ProcessorBase) Init(
 func (pb *ProcessorBase) InitWithEvalCtx(
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
-	types []types.T,
+	types []*types.T,
 	flowCtx *FlowCtx,
 	evalCtx *tree.EvalContext,
 	processorID int32,

@@ -370,7 +370,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	const numCols = 2
 	rows := sqlbase.MakeRepeatedIntRows(numRowsInBucket, numRows, numCols)
 	storedEqColumns := columns{0}
-	types := []types.T{*types.Int, *types.Int}
+	types := []*types.T{types.Int, types.Int}
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)

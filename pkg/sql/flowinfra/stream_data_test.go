@@ -49,7 +49,7 @@ func testGetDecodedRows(
 	return decodedRows, metas
 }
 
-func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []rowOrMeta) {
+func testRowStream(tb testing.TB, rng *rand.Rand, types []*types.T, records []rowOrMeta) {
 	var se StreamEncoder
 	var sd StreamDecoder
 
@@ -117,8 +117,8 @@ func TestStreamEncodeDecode(t *testing.T) {
 			if rng.Intn(10) != 0 {
 				rows[i].row = make(sqlbase.EncDatumRow, rowLen)
 				for j := range rows[i].row {
-					rows[i].row[j] = sqlbase.DatumToEncDatum(&info[j].Type,
-						sqlbase.RandDatum(rng, &info[j].Type, true))
+					rows[i].row[j] = sqlbase.DatumToEncDatum(info[j].Type,
+						sqlbase.RandDatum(rng, info[j].Type, true))
 				}
 			} else {
 				rows[i].meta.Err = fmt.Errorf("test error %d", i)

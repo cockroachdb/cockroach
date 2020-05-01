@@ -236,7 +236,7 @@ func isAllowedDependentDescInRenameDatabase(
 		if err != nil {
 			return false, "", err
 		}
-		typedExpr, err := tree.TypeCheck(parsedExpr, nil, &column.Type)
+		typedExpr, err := tree.TypeCheck(parsedExpr, nil, column.Type)
 		if err != nil {
 			return false, "", err
 		}

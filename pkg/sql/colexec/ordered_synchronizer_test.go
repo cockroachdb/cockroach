@@ -139,9 +139,9 @@ func TestOrderedSync(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		numCols := len(tc.sources[0][0])
-		typs := make([]types.T, numCols)
+		typs := make([]*types.T, numCols)
 		for i := range typs {
-			typs[i] = *types.Int
+			typs[i] = types.Int
 		}
 		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewOrderedSynchronizer(testAllocator, inputs, typs, tc.ordering)
@@ -157,7 +157,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	if batchSize > coldata.BatchSize() {
 		batchSize = coldata.BatchSize()
 	}
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 
 	// Generate a random slice of sorted ints.
 	randInts := make([]int, inputLen)
@@ -197,7 +197,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	ctx := context.Background()
 
 	numInputs := int64(3)
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batches := make([]coldata.Batch, numInputs)
 	for i := range batches {
 		batches[i] = testAllocator.NewMemBatch(typs)

@@ -19,7 +19,7 @@ import (
 // the underlying capacity might be different (a new batch is created only with
 // capacity original.Length()).
 // NOTE: memory accounting is not performed.
-func CopyBatch(original coldata.Batch, typs []types.T) coldata.Batch {
+func CopyBatch(original coldata.Batch, typs []*types.T) coldata.Batch {
 	b := coldata.NewMemBatchWithSize(typs, original.Length())
 	b.SetLength(original.Length())
 	for colIdx, col := range original.ColVecs() {

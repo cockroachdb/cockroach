@@ -36,9 +36,9 @@ type verifyColOperatorArgs struct {
 	// anyOrder determines whether the results should be matched in order (when
 	// anyOrder is false) or as sets (when anyOrder is true).
 	anyOrder    bool
-	inputTypes  [][]types.T
+	inputTypes  [][]*types.T
 	inputs      []sqlbase.EncDatumRows
-	outputTypes []types.T
+	outputTypes []*types.T
 	pspec       *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
 	forceDiskSpill bool
@@ -163,7 +163,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	printRowForChecking := func(r sqlbase.EncDatumRow) []string {
 		res := make([]string, len(args.outputTypes))
 		for i, col := range r {
-			res[i] = col.String(&args.outputTypes[i])
+			res[i] = col.String(args.outputTypes[i])
 		}
 		return res
 	}
@@ -279,7 +279,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 				}
 				foundDifference := false
 				for k, typ := range args.outputTypes {
-					match, err := datumsMatch(expStrRow[k], retStrRow[k], &typ)
+					match, err := datumsMatch(expStrRow[k], retStrRow[k], typ)
 					if err != nil {
 						return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 							expStrRow, retStrRow, err.Error())
@@ -306,7 +306,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 			retStrRow := colOpRows[i]
 			// anyOrder is false, so the result rows must match in the same order.
 			for k, typ := range args.outputTypes {
-				match, err := datumsMatch(expStrRow[k], retStrRow[k], &typ)
+				match, err := datumsMatch(expStrRow[k], retStrRow[k], typ)
 				if err != nil {
 					return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 						expStrRow, retStrRow, err.Error())

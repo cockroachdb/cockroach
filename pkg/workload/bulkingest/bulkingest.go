@@ -129,11 +129,11 @@ func (w *bulkingest) Tables() []workload.Table {
 	}
 	schema += ")"
 
-	var bulkingestTypes = []types.T{
-		*types.Int,
-		*types.Int,
-		*types.Int,
-		*types.Bytes,
+	var bulkingestTypes = []*types.T{
+		types.Int,
+		types.Int,
+		types.Int,
+		types.Bytes,
 	}
 
 	table := workload.Table{

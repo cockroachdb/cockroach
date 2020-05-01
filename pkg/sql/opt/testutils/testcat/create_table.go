@@ -222,7 +222,6 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		Nullable: false,
 		Name:     "crdb_internal_vtable_pk",
 		Type:     types.Int,
-		ColType:  *types.Int,
 	}}
 
 	for _, def := range stmt.Defs {
@@ -385,7 +384,6 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		Type:     tree.MustBeStaticallyKnownType(def.Type),
 		Nullable: nullable,
 	}
-	col.ColType = *tree.MustBeStaticallyKnownType(def.Type)
 
 	// Look for name suffixes indicating this is a mutation column.
 	if name, ok := extractWriteOnlyColumn(def); ok {

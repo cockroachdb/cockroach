@@ -32,9 +32,9 @@ func runProcessorTest(
 	t *testing.T,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	inputRows sqlbase.EncDatumRows,
-	outputTypes []types.T,
+	outputTypes []*types.T,
 	expected sqlbase.EncDatumRows,
 	txn *kv.Txn,
 ) {
@@ -94,7 +94,7 @@ func (s *sorterBase) getRows() *rowcontainer.DiskBackedRowContainer {
 }
 
 type rowGeneratingSource struct {
-	types              []types.T
+	types              []*types.T
 	fn                 sqlutils.GenRowFn
 	scratchEncDatumRow sqlbase.EncDatumRow
 
@@ -105,12 +105,12 @@ type rowGeneratingSource struct {
 // newRowGeneratingSource creates a new rowGeneratingSource with the given fn
 // and a maximum number of rows to generate. Can be reset using Reset.
 func newRowGeneratingSource(
-	types []types.T, fn sqlutils.GenRowFn, maxRows int,
+	types []*types.T, fn sqlutils.GenRowFn, maxRows int,
 ) *rowGeneratingSource {
 	return &rowGeneratingSource{types: types, fn: fn, rowIdx: 1, maxRows: maxRows}
 }
 
-func (r *rowGeneratingSource) OutputTypes() []types.T { return r.types }
+func (r *rowGeneratingSource) OutputTypes() []*types.T { return r.types }
 
 func (r *rowGeneratingSource) Start(ctx context.Context) context.Context { return ctx }
 
@@ -128,7 +128,7 @@ func (r *rowGeneratingSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 	}
 
 	for i := range r.scratchEncDatumRow {
-		r.scratchEncDatumRow[i] = sqlbase.DatumToEncDatum(&r.types[i], datumRow[i])
+		r.scratchEncDatumRow[i] = sqlbase.DatumToEncDatum(r.types[i], datumRow[i])
 	}
 	r.rowIdx++
 	return r.scratchEncDatumRow, nil
@@ -168,7 +168,7 @@ func (r *rowDisposer) Push(
 func (r *rowDisposer) ProducerDone() {}
 
 // Types is part of the RowReceiver interface.
-func (r *rowDisposer) Types() []types.T {
+func (r *rowDisposer) Types() []*types.T {
 	return nil
 }
 

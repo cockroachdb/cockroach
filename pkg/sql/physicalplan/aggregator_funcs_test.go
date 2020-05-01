@@ -162,7 +162,7 @@ func checkDistAggregationInfo(
 		execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
 				Type:        execinfrapb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []types.T{colType},
+				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 0},
 				},
@@ -199,14 +199,14 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the local stage can be different than the input type
 	// (e.g. DECIMAL instead of INT).
-	intermediaryTypes := make([]types.T, numIntermediary)
+	intermediaryTypes := make([]*types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
 		_, returnTyp, err := execinfrapb.GetAggregateInfo(fn, colType)
 		if err != nil {
 			t.Fatal(err)
 		}
-		intermediaryTypes[i] = *returnTyp
+		intermediaryTypes[i] = returnTyp
 	}
 
 	localAggregations := make([]execinfrapb.AggregatorSpec_Aggregation, numIntermediary)
@@ -249,7 +249,7 @@ func checkDistAggregationInfo(
 	// to the post processor.
 	varIdxs := make([]int, numFinal)
 	for i, finalInfo := range info.FinalStage {
-		inputTypes := make([]types.T, len(finalInfo.LocalIdxs))
+		inputTypes := make([]*types.T, len(finalInfo.LocalIdxs))
 		for i, localIdx := range finalInfo.LocalIdxs {
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
@@ -267,7 +267,7 @@ func checkDistAggregationInfo(
 		agg := execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
 				Type:        execinfrapb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []types.T{colType},
+				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2 * i)},
 				},

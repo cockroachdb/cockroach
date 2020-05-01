@@ -72,7 +72,7 @@ type OrderedSynchronizer struct {
 	allocator             *colmem.Allocator
 	inputs                []colexecbase.Operator
 	ordering              sqlbase.ColumnOrdering
-	typs                  []types.T
+	typs                  []*types.T
 	canonicalTypeFamilies []types.Family
 
 	// inputBatches stores the current batch for each input.
@@ -126,7 +126,7 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 func NewOrderedSynchronizer(
 	allocator *colmem.Allocator,
 	inputs []colexecbase.Operator,
-	typs []types.T,
+	typs []*types.T,
 	ordering sqlbase.ColumnOrdering,
 ) (*OrderedSynchronizer, error) {
 	return &OrderedSynchronizer{
@@ -234,7 +234,7 @@ func (o *OrderedSynchronizer) Init() {
 			}
 		// {{end}}
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i].String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i]))
 		}
 	}
 	for i := range o.inputs {
@@ -243,7 +243,7 @@ func (o *OrderedSynchronizer) Init() {
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
 		typ := o.typs[o.ordering[i].ColIdx]
-		o.comparators[i] = GetVecComparator(&typ, len(o.inputs))
+		o.comparators[i] = GetVecComparator(typ, len(o.inputs))
 	}
 }
 

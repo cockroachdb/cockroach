@@ -909,7 +909,7 @@ func decodeTuple(a *DatumAlloc, tupTyp *types.T, b []byte) (tree.Datum, []byte, 
 
 	var datum tree.Datum
 	for i := range tupTyp.TupleContents() {
-		datum, b, err = DecodeTableValue(a, &tupTyp.TupleContents()[i], b)
+		datum, b, err = DecodeTableValue(a, tupTyp.TupleContents()[i], b)
 		if err != nil {
 			return nil, b, err
 		}

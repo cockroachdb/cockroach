@@ -457,7 +457,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 		addRow func(...tree.Datum) error) error {
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
 		addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colID sqlbase.ColumnID) error {
-			colTyp := &column.Type
+			colTyp := column.Type
 			attTypMod := int32(-1)
 			if width := colTyp.Width(); width != 0 {
 				switch colTyp.Family() {
@@ -1606,7 +1606,7 @@ CREATE TABLE pg_catalog.pg_index (
 						if err != nil {
 							return err
 						}
-						if err := collationOids.Append(typColl(&col.Type, h)); err != nil {
+						if err := collationOids.Append(typColl(col.Type, h)); err != nil {
 							return err
 						}
 						// Currently, nulls always appear first if the order is ascending,

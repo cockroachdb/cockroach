@@ -114,9 +114,9 @@ func (c *CustomFuncs) ConstructSortedUniqueList(
 	newList = newList[:n]
 
 	// Construct the type of the tuple.
-	contents := make([]types.T, n)
+	contents := make([]*types.T, n)
 	for i := range newList {
-		contents[i] = *newList[i].DataType()
+		contents[i] = newList[i].DataType()
 	}
 	return newList, types.MakeTuple(contents)
 }
@@ -1078,7 +1078,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	projections memo.ProjectionsExpr, passthrough opt.ColSet, input memo.RelExpr,
 ) memo.RelExpr {
 	newExprs := make(memo.ScalarListExpr, 0, len(projections)+passthrough.Len())
-	newTypes := make([]types.T, 0, len(newExprs))
+	newTypes := make([]*types.T, 0, len(newExprs))
 	newCols := make(opt.ColList, 0, len(newExprs))
 
 	values := input.(*memo.ValuesExpr)
@@ -1086,7 +1086,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	for i, colID := range values.Cols {
 		if passthrough.Contains(colID) {
 			newExprs = append(newExprs, tuple.Elems[i])
-			newTypes = append(newTypes, *tuple.Elems[i].DataType())
+			newTypes = append(newTypes, tuple.Elems[i].DataType())
 			newCols = append(newCols, colID)
 		}
 	}
@@ -1094,7 +1094,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	for i := range projections {
 		item := &projections[i]
 		newExprs = append(newExprs, item.Element)
-		newTypes = append(newTypes, *item.Element.DataType())
+		newTypes = append(newTypes, item.Element.DataType())
 		newCols = append(newCols, item.Col)
 	}
 
@@ -1235,7 +1235,7 @@ func (c *CustomFuncs) MakeColsForUnnestTuples(tupleColID opt.ColumnID) opt.ColLi
 	outColIDs := make(opt.ColList, tupleLen)
 	for i := 0; i < tupleLen; i++ {
 		newAlias := fmt.Sprintf("%s_%d", tupleAlias, i+1)
-		newColID := mem.AddColumn(newAlias, &tupleType.TupleContents()[i])
+		newColID := mem.AddColumn(newAlias, tupleType.TupleContents()[i])
 		outColIDs[i] = newColID
 	}
 	return outColIDs
@@ -1274,7 +1274,7 @@ func (c *CustomFuncs) UnnestTuplesFromValues(
 			dTuple := t.Value.(*tree.DTuple)
 			tupleVals := make(memo.ScalarListExpr, len(dTuple.D))
 			for i, v := range dTuple.D {
-				val := c.f.ConstructConstVal(v, &tupleType.TupleContents()[i])
+				val := c.f.ConstructConstVal(v, tupleType.TupleContents()[i])
 				tupleVals[i] = val
 			}
 			outTuples[i] = c.f.ConstructTuple(tupleVals, tupleType)
@@ -1593,14 +1593,14 @@ func (c *CustomFuncs) CanConstructValuesFromZips(zip memo.ZipExpr) bool {
 // ArrayExpr's or ConstExpr's wrapping DArrays.
 func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 	numCols := len(zip)
-	outColTypes := make([]types.T, numCols)
+	outColTypes := make([]*types.T, numCols)
 	outColIDs := make(opt.ColList, numCols)
 	var outRows []memo.ScalarListExpr
 
 	// Get type and ColumnID of each column.
 	for i, zipItem := range zip {
 		arrExpr := zipItem.Fn.(*memo.FunctionExpr).Args[0]
-		outColTypes[i] = *arrExpr.DataType().ArrayContents()
+		outColTypes[i] = arrExpr.DataType().ArrayContents()
 		outColIDs[i] = zipItem.Cols[0]
 	}
 
@@ -1611,7 +1611,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			// fill with NullExpr's.
 			outRows = append(outRows, make(memo.ScalarListExpr, numCols))
 			for i := 0; i < numCols; i++ {
-				outRows[rIndex][i] = c.f.ConstructNull(&outColTypes[cIndex])
+				outRows[rIndex][i] = c.f.ConstructNull(outColTypes[cIndex])
 			}
 		}
 		outRows[rIndex][cIndex] = expr // Insert value into outRows.
@@ -2178,10 +2178,10 @@ func (c *CustomFuncs) IsStaticArray(scalar opt.ScalarExpr) bool {
 func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.ScalarExpr {
 	darr := scalar.(*memo.ConstExpr).Value.(*tree.DArray)
 	elems := make(memo.ScalarListExpr, len(darr.Array))
-	ts := make([]types.T, len(darr.Array))
+	ts := make([]*types.T, len(darr.Array))
 	for i, delem := range darr.Array {
 		elems[i] = c.f.ConstructConstVal(delem, delem.ResolvedType())
-		ts[i] = *darr.ParamTyp
+		ts[i] = darr.ParamTyp
 	}
 	return c.f.ConstructTuple(elems, types.MakeTuple(ts))
 }
@@ -2326,9 +2326,9 @@ func (c *CustomFuncs) InlineValues(v memo.RelExpr) *memo.TupleExpr {
 	values := v.(*memo.ValuesExpr)
 	md := c.mem.Metadata()
 	if len(values.Cols) > 1 {
-		colTypes := make([]types.T, len(values.Cols))
+		colTypes := make([]*types.T, len(values.Cols))
 		for i, colID := range values.Cols {
-			colTypes[i] = *md.ColumnMeta(colID).Type
+			colTypes[i] = md.ColumnMeta(colID).Type
 		}
 		// Inlining a multi-column VALUES results in a tuple of tuples. Example:
 		//
@@ -2337,7 +2337,7 @@ func (c *CustomFuncs) InlineValues(v memo.RelExpr) *memo.TupleExpr {
 		//   (a,b) IN ((1,1), (2,2))
 		return &memo.TupleExpr{
 			Elems: values.Rows,
-			Typ:   types.MakeTuple([]types.T{*types.MakeTuple(colTypes)}),
+			Typ:   types.MakeTuple([]*types.T{types.MakeTuple(colTypes)}),
 		}
 	}
 	// Inlining a sngle-column VALUES results in a simple tuple. Example:
@@ -2347,7 +2347,7 @@ func (c *CustomFuncs) InlineValues(v memo.RelExpr) *memo.TupleExpr {
 	colType := md.ColumnMeta(values.Cols[0]).Type
 	tuple := &memo.TupleExpr{
 		Elems: make(memo.ScalarListExpr, len(values.Rows)),
-		Typ:   types.MakeTuple([]types.T{*colType}),
+		Typ:   types.MakeTuple([]*types.T{colType}),
 	}
 	for i := range values.Rows {
 		tuple.Elems[i] = values.Rows[i].(*memo.TupleExpr).Elems[0]

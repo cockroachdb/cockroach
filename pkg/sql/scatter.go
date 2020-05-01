@@ -62,7 +62,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			if err != nil {
 				return nil, err
 			}
-			desiredTypes[i] = &c.Type
+			desiredTypes[i] = c.Type
 		}
 		fromVals := make([]tree.Datum, len(n.From))
 		for i, expr := range n.From {

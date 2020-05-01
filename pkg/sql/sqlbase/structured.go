@@ -1254,7 +1254,7 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
 			Name:        GenerateUniqueConstraintName("rowid", nameExists),
-			Type:        *types.Int,
+			Type:        types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
 			Nullable:    false,
@@ -2336,7 +2336,7 @@ func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames 
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !ColumnTypeIsIndexable(&col.Type) {
+				if !ColumnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -2359,7 +2359,7 @@ func checkColumnsValidForInvertedIndex(
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !ColumnTypeIsInvertedIndexable(&col.Type) {
+				if !ColumnTypeIsInvertedIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -3421,7 +3421,7 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 }
 
 // ColumnTypes returns the types of all columns.
-func (desc *TableDescriptor) ColumnTypes() []types.T {
+func (desc *TableDescriptor) ColumnTypes() []*types.T {
 	return desc.ColumnTypesWithMutations(false)
 }
 
@@ -3442,9 +3442,9 @@ func (desc *TableDescriptor) ColumnsWithMutations(mutations bool) []ColumnDescri
 
 // ColumnTypesWithMutations returns the types of all columns, optionally
 // including mutation columns, which will be returned if the input bool is true.
-func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T {
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []*types.T {
 	columns := desc.ColumnsWithMutations(mutations)
-	types := make([]types.T, len(columns))
+	types := make([]*types.T, len(columns))
 	for i := range columns {
 		types[i] = columns[i].Type
 	}
@@ -3829,7 +3829,7 @@ func (desc *ColumnDescriptor) ColName() tree.Name {
 
 // DatumType is part of the cat.Column interface.
 func (desc *ColumnDescriptor) DatumType() *types.T {
-	return &desc.Type
+	return desc.Type
 }
 
 // ColTypePrecision is part of the cat.Column interface.

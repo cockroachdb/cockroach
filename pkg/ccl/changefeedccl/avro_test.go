@@ -79,7 +79,7 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 		for colIdx, expr := range rowTuple {
 			col := &tableDesc.Columns[colIdx]
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-				expr, &col.Type, "avro", semaCtx, false /* allowImpure */)
+				expr, col.Type, "avro", semaCtx, false /* allowImpure */)
 			if err != nil {
 				return nil, err
 			}
@@ -87,7 +87,7 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 			if err != nil {
 				return nil, errors.Wrap(err, typedExpr.String())
 			}
-			row = append(row, sqlbase.DatumToEncDatum(&col.Type, datum))
+			row = append(row, sqlbase.DatumToEncDatum(col.Type, datum))
 		}
 		rows = append(rows, row)
 	}

@@ -41,7 +41,7 @@ var TypeFamilyToCanonicalTypeFamily = map[types.Family]types.Family{
 
 // ToCanonicalTypeFamilies converts typs to the corresponding canonical type
 // families.
-func ToCanonicalTypeFamilies(typs []types.T) []types.Family {
+func ToCanonicalTypeFamilies(typs []*types.T) []types.Family {
 	families := make([]types.Family, len(typs))
 	for i := range typs {
 		families[i] = TypeFamilyToCanonicalTypeFamily[typs[i].Family()]
@@ -51,22 +51,22 @@ func ToCanonicalTypeFamilies(typs []types.T) []types.Family {
 
 // AllSupportedSQLTypes is a slice of all SQL types that the vectorized engine
 // currently supports.
-var AllSupportedSQLTypes = []types.T{
-	*types.Bool,
-	*types.Bytes,
-	*types.Date,
-	*types.Decimal,
-	*types.Int2,
-	*types.Int4,
-	*types.Int,
-	*types.Oid,
-	*types.Float,
-	*types.Float4,
-	*types.String,
-	*types.Uuid,
-	*types.Timestamp,
-	*types.TimestampTZ,
-	*types.Interval,
+var AllSupportedSQLTypes = []*types.T{
+	types.Bool,
+	types.Bytes,
+	types.Date,
+	types.Decimal,
+	types.Int2,
+	types.Int4,
+	types.Int,
+	types.Oid,
+	types.Float,
+	types.Float4,
+	types.String,
+	types.Uuid,
+	types.Timestamp,
+	types.TimestampTZ,
+	types.Interval,
 }
 
 // IsTypeSupported returns whether t is supported by the vectorized engine.
@@ -90,10 +90,10 @@ func IsTypeSupported(t *types.T) bool {
 
 // AreTypesSupported checks whether all types in typs are supported by the
 // vectorized engine and returns an error if they are not.
-func AreTypesSupported(typs []types.T) error {
-	for i := range typs {
-		if !IsTypeSupported(&typs[i]) {
-			return errors.Errorf("unsupported type %s", typs[i].String())
+func AreTypesSupported(typs []*types.T) error {
+	for _, t := range typs {
+		if !IsTypeSupported(t) {
+			return errors.Errorf("unsupported type %s", t)
 		}
 	}
 	return nil

@@ -29,7 +29,7 @@ import (
 // ArrowBatchConverter converts batches to arrow column data
 // ([]*array.Data) and back again.
 type ArrowBatchConverter struct {
-	typs []types.T
+	typs []*types.T
 
 	// builders are the set of builders that need to be kept around in order to
 	// construct arrow representations of certain types when they cannot be simply
@@ -55,7 +55,7 @@ type ArrowBatchConverter struct {
 // NewArrowBatchConverter converts coldata.Batches to []*array.Data and back
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
-func NewArrowBatchConverter(typs []types.T) (*ArrowBatchConverter, error) {
+func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
 	if err := typeconv.AreTypesSupported(typs); err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
 			datumSize = sizeOfFloat64
 		default:
-			panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", &typ))
+			panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
 		}
 
 		// Cast values if not set (mostly for non-byte types).

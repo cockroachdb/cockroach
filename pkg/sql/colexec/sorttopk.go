@@ -34,7 +34,7 @@ const (
 func NewTopKSorter(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k int,
 ) colexecbase.Operator {
@@ -66,7 +66,7 @@ type topKSorter struct {
 
 	allocator    *colmem.Allocator
 	orderingCols []execinfrapb.Ordering_Column
-	inputTypes   []types.T
+	inputTypes   []*types.T
 	k            int
 
 	// state is the current state of the sort.
@@ -100,7 +100,7 @@ func (t *topKSorter) Init() {
 	)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i, typ := range t.inputTypes {
-		t.comparators[i] = GetVecComparator(&typ, 2)
+		t.comparators[i] = GetVecComparator(typ, 2)
 	}
 	// TODO(yuzefovich): switch to calling this method on allocator. This will
 	// require plumbing unlimited allocator to work correctly in tests with

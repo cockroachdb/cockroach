@@ -28,8 +28,8 @@ import (
 )
 
 // CTASPlanResultTypes is the result types for EXPORT plans.
-var CTASPlanResultTypes = []types.T{
-	*types.Bytes, // rows
+var CTASPlanResultTypes = []*types.T{
+	types.Bytes, // rows
 }
 
 type bulkRowWriter struct {
@@ -118,7 +118,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (sp *bulkRowWriter) OutputTypes() []types.T {
+func (sp *bulkRowWriter) OutputTypes() []*types.T {
 	return CTASPlanResultTypes
 }
 
@@ -196,7 +196,7 @@ func (sp *bulkRowWriter) convertLoop(
 					conv.Datums[i] = tree.DNull
 					continue
 				}
-				if err := ed.EnsureDecoded(&typs[i], alloc); err != nil {
+				if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 					return err
 				}
 				conv.Datums[i] = ed.Datum

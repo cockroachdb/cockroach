@@ -100,11 +100,11 @@ func (m *Outbox) SetFlowCtx(flowCtx *execinfra.FlowCtx) {
 }
 
 // Init initializes the Outbox.
-func (m *Outbox) Init(typs []types.T) {
+func (m *Outbox) Init(typs []*types.T) {
 	if typs == nil {
 		// We check for nil to detect uninitialized cases; but we support 0-length
 		// rows.
-		typs = make([]types.T, 0)
+		typs = make([]*types.T, 0)
 	}
 	m.RowChannel.InitWithNumSenders(typs, 1)
 	m.encoder.Init(typs)

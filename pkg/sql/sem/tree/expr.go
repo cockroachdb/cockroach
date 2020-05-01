@@ -514,7 +514,7 @@ func (node *ComparisonExpr) memoizeFn() {
 			//   x = ANY(SELECT y FROM t)
 			//   x = ANY(1,2)
 			if len(rightRet.TupleContents()) > 0 {
-				rightRet = &rightRet.TupleContents()[0]
+				rightRet = rightRet.TupleContents()[0]
 			} else {
 				rightRet = leftRet
 			}
@@ -1710,7 +1710,7 @@ func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *Colum
 		ColName:        colName,
 		ByIndex:        colName == "",
 		ColIndex:       colIdx,
-		typeAnnotation: typeAnnotation{typ: &expr.ResolvedType().TupleContents()[colIdx]},
+		typeAnnotation: typeAnnotation{typ: expr.ResolvedType().TupleContents()[colIdx]},
 	}
 }
 

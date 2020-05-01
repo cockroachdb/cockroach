@@ -53,9 +53,9 @@ func TestAllocateIDs(t *testing.T) {
 		ID:       keys.MinUserDescID + 1,
 		Name:     "foo",
 		Columns: []ColumnDescriptor{
-			{Name: "a"},
-			{Name: "b"},
-			{Name: "c"},
+			{Name: "a", Type: types.Int},
+			{Name: "b", Type: types.Int},
+			{Name: "c", Type: types.Int},
 		},
 		PrimaryIndex: makeIndexDescriptor("c", []string{"a", "b"}),
 		Indexes: []IndexDescriptor{
@@ -80,9 +80,9 @@ func TestAllocateIDs(t *testing.T) {
 		Version:  1,
 		Name:     "foo",
 		Columns: []ColumnDescriptor{
-			{ID: 1, Name: "a"},
-			{ID: 2, Name: "b"},
-			{ID: 3, Name: "c"},
+			{ID: 1, Name: "a", Type: types.Int},
+			{ID: 2, Name: "b", Type: types.Int},
+			{ID: 3, Name: "c", Type: types.Int},
 		},
 		Families: []ColumnFamilyDescriptor{
 			{
@@ -922,7 +922,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION name must be non-empty",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -935,7 +935,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: must contain values",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -948,7 +948,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: decoding: empty array",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -963,7 +963,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: decoding: int64 varint decoding failed: 0",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -978,7 +978,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: superfluous data in encoded value",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -993,7 +993,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"partitions p1 and p2 overlap",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1, 1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
@@ -1009,7 +1009,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: name must be unique",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -1025,7 +1025,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"not enough columns in index for this partitioning",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -1045,7 +1045,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: name must be unique",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: *types.Int}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.Int}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1, 1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
@@ -1112,7 +1112,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 func TestFitColumnToFamily(t *testing.T) {
 	intEncodedSize := 10 // 1 byte tag + 9 bytes max varint encoded size
 
-	makeTestTableDescriptor := func(familyTypes [][]types.T) *MutableTableDescriptor {
+	makeTestTableDescriptor := func(familyTypes [][]*types.T) *MutableTableDescriptor {
 		nextColumnID := ColumnID(8)
 		var desc TableDescriptor
 		for _, fTypes := range familyTypes {
@@ -1130,48 +1130,48 @@ func TestFitColumnToFamily(t *testing.T) {
 		return NewMutableCreatedTableDescriptor(desc)
 	}
 
-	emptyFamily := []types.T{}
-	partiallyFullFamily := []types.T{
-		*types.Int,
-		*types.Bytes,
+	emptyFamily := []*types.T{}
+	partiallyFullFamily := []*types.T{
+		types.Int,
+		types.Bytes,
 	}
-	fullFamily := []types.T{
-		*types.Bytes,
+	fullFamily := []*types.T{
+		types.Bytes,
 	}
-	maxIntsInOneFamily := make([]types.T, FamilyHeuristicTargetBytes/intEncodedSize)
+	maxIntsInOneFamily := make([]*types.T, FamilyHeuristicTargetBytes/intEncodedSize)
 	for i := range maxIntsInOneFamily {
-		maxIntsInOneFamily[i] = *types.Int
+		maxIntsInOneFamily[i] = types.Int
 	}
 
 	tests := []struct {
-		newCol           types.T
-		existingFamilies [][]types.T
+		newCol           *types.T
+		existingFamilies [][]*types.T
 		colFits          bool
 		idx              int // not applicable if colFits is false
 	}{
 		// Bounded size column.
-		{colFits: true, idx: 0, newCol: *types.Bool,
+		{colFits: true, idx: 0, newCol: types.Bool,
 			existingFamilies: nil,
 		},
-		{colFits: true, idx: 0, newCol: *types.Bool,
-			existingFamilies: [][]types.T{emptyFamily},
+		{colFits: true, idx: 0, newCol: types.Bool,
+			existingFamilies: [][]*types.T{emptyFamily},
 		},
-		{colFits: true, idx: 0, newCol: *types.Bool,
-			existingFamilies: [][]types.T{partiallyFullFamily},
+		{colFits: true, idx: 0, newCol: types.Bool,
+			existingFamilies: [][]*types.T{partiallyFullFamily},
 		},
-		{colFits: true, idx: 0, newCol: *types.Bool,
-			existingFamilies: [][]types.T{fullFamily},
+		{colFits: true, idx: 0, newCol: types.Bool,
+			existingFamilies: [][]*types.T{fullFamily},
 		},
-		{colFits: true, idx: 0, newCol: *types.Bool,
-			existingFamilies: [][]types.T{fullFamily, emptyFamily},
+		{colFits: true, idx: 0, newCol: types.Bool,
+			existingFamilies: [][]*types.T{fullFamily, emptyFamily},
 		},
 
 		// Unbounded size column.
-		{colFits: true, idx: 0, newCol: *types.Decimal,
-			existingFamilies: [][]types.T{emptyFamily},
+		{colFits: true, idx: 0, newCol: types.Decimal,
+			existingFamilies: [][]*types.T{emptyFamily},
 		},
-		{colFits: true, idx: 0, newCol: *types.Decimal,
-			existingFamilies: [][]types.T{partiallyFullFamily},
+		{colFits: true, idx: 0, newCol: types.Decimal,
+			existingFamilies: [][]*types.T{partiallyFullFamily},
 		},
 	}
 	for i, test := range tests {
@@ -1237,9 +1237,12 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 
 func TestUnvalidateConstraints(t *testing.T) {
 	desc := NewMutableCreatedTableDescriptor(TableDescriptor{
-		Name:          "test",
-		ParentID:      ID(1),
-		Columns:       []ColumnDescriptor{{Name: "a"}, {Name: "b"}, {Name: "c"}},
+		Name:     "test",
+		ParentID: ID(1),
+		Columns: []ColumnDescriptor{
+			{Name: "a", Type: types.Int},
+			{Name: "b", Type: types.Int},
+			{Name: "c", Type: types.Int}},
 		FormatVersion: FamilyFormatVersion,
 		Indexes:       []IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
 		Privileges:    NewDefaultPrivilegeDescriptor(),
@@ -1334,9 +1337,9 @@ func TestColumnNeedsBackfill(t *testing.T) {
 	// Create Column Descriptors that reflect the definition of a column with a
 	// default value of NULL that was set implicitly, one that was set explicitly,
 	// and one that has an INT default value, respectively.
-	implicitNull := &ColumnDescriptor{Name: "im", ID: 2, DefaultExpr: nil, Nullable: true, ComputeExpr: nil}
-	explicitNull := &ColumnDescriptor{Name: "ex", ID: 3, DefaultExpr: &null, Nullable: true, ComputeExpr: nil}
-	defaultNotNull := &ColumnDescriptor{Name: "four", ID: 4, DefaultExpr: &four, Nullable: true, ComputeExpr: nil}
+	implicitNull := &ColumnDescriptor{Name: "im", ID: 2, Type: types.Int, DefaultExpr: nil, Nullable: true, ComputeExpr: nil}
+	explicitNull := &ColumnDescriptor{Name: "ex", ID: 3, Type: types.Int, DefaultExpr: &null, Nullable: true, ComputeExpr: nil}
+	defaultNotNull := &ColumnDescriptor{Name: "four", ID: 4, Type: types.Int, DefaultExpr: &four, Nullable: true, ComputeExpr: nil}
 	// Verify that a backfill doesn't occur according to the ColumnNeedsBackfill
 	// function for the default NULL values, and that it does occur for an INT
 	// default value.

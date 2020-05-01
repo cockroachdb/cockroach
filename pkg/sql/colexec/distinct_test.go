@@ -29,14 +29,14 @@ func TestDistinct(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	tcs := []struct {
 		distinctCols            []uint32
-		typs                    []types.T
+		typs                    []*types.T
 		tuples                  []tuple
 		expected                []tuple
 		isOrderedOnDistinctCols bool
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
-			typs:         []types.T{*types.Float, *types.Int, *types.Bytes, *types.Int},
+			typs:         []*types.T{types.Float, types.Int, types.Bytes, types.Int},
 			tuples: tuples{
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
@@ -60,7 +60,7 @@ func TestDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{1, 0, 2},
-			typs:         []types.T{*types.Float, *types.Int, *types.Bytes, *types.Int},
+			typs:         []*types.T{types.Float, types.Int, types.Bytes, types.Int},
 			tuples: tuples{
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
@@ -84,7 +84,7 @@ func TestDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{0, 1, 2},
-			typs:         []types.T{*types.Float, *types.Int, *types.Bytes, *types.Int},
+			typs:         []*types.T{types.Float, types.Int, types.Bytes, types.Int},
 			tuples: tuples{
 				{1.0, 2, "30", 4},
 				{1.0, 2, "30", 4},
@@ -107,7 +107,7 @@ func TestDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{0},
-			typs:         []types.T{*types.Int, *types.Bytes},
+			typs:         []*types.T{types.Int, types.Bytes},
 			tuples: tuples{
 				{1, "a"},
 				{2, "b"},
@@ -132,7 +132,7 @@ func TestDistinct(t *testing.T) {
 			// This is to test hashTable deduplication with various batch size
 			// boundaries and ensure it always emits the first tuple it encountered.
 			distinctCols: []uint32{0},
-			typs:         []types.T{*types.Int, *types.Bytes},
+			typs:         []*types.T{types.Int, types.Bytes},
 			tuples: tuples{
 				{1, "1"},
 				{1, "2"},
@@ -200,14 +200,14 @@ func BenchmarkDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	distinctConstructors := []func(*colmem.Allocator, colexecbase.Operator, []uint32, int, []types.T) (colexecbase.Operator, error){
-		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []types.T) (colexecbase.Operator, error) {
+	distinctConstructors := []func(*colmem.Allocator, colexecbase.Operator, []uint32, int, []*types.T) (colexecbase.Operator, error){
+		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
 			return NewUnorderedDistinct(allocator, input, distinctCols, typs, hashTableNumBuckets), nil
 		},
-		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []types.T) (colexecbase.Operator, error) {
+		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
 			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
 		},
-		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []types.T) (colexecbase.Operator, error) {
+		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
 			return NewOrderedDistinct(input, distinctCols, typs)
 		},
 	}
@@ -217,9 +217,9 @@ func BenchmarkDistinct(b *testing.B) {
 		for _, newTupleProbability := range []float64{0.001, 0.01, 0.1} {
 			for _, nBatches := range []int{1 << 2, 1 << 6} {
 				for _, nCols := range []int{2, 4} {
-					typs := make([]types.T, nCols)
+					typs := make([]*types.T, nCols)
 					for i := range typs {
-						typs[i] = *types.Int
+						typs[i] = types.Int
 					}
 					batch := testAllocator.NewMemBatch(typs)
 					batch.SetLength(coldata.BatchSize())

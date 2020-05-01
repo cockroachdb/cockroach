@@ -102,7 +102,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	typs := []types.T{*types.Bytes}
+	typs := []*types.T{types.Bytes}
 	batch := testAllocator.NewMemBatch(typs)
 	col := batch.ColVec(0).Bytes()
 	width := 64

@@ -30,11 +30,11 @@ import (
 type mergeJoinerTestCase struct {
 	spec          execinfrapb.MergeJoinerSpec
 	outCols       []uint32
-	leftTypes     []types.T
+	leftTypes     []*types.T
 	leftInput     sqlbase.EncDatumRows
-	rightTypes    []types.T
+	rightTypes    []*types.T
 	rightInput    sqlbase.EncDatumRows
-	expectedTypes []types.T
+	expectedTypes []*types.T
 	expected      sqlbase.EncDatumRows
 }
 
@@ -387,7 +387,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
-			expectedTypes: []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
+			expectedTypes: []*types.T{types.Int, types.Int, types.Int, types.Int},
 			expected: sqlbase.EncDatumRows{
 				{null, v[4], null, null},
 				{null, null, null, v[4]},

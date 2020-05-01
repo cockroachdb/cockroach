@@ -101,7 +101,7 @@ func (b Overload) Signature(simplify bool) string {
 	retType := b.FixedReturnType()
 	if simplify {
 		if retType.Family() == types.TupleFamily && len(retType.TupleContents()) == 1 {
-			retType = &retType.TupleContents()[0]
+			retType = retType.TupleContents()[0]
 		}
 	}
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), retType)

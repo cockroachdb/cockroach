@@ -145,7 +145,7 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
 		datum, col := row.datums[idx], &row.tableDesc.Columns[idx]
-		if err := datum.EnsureDecoded(&col.Type, &e.alloc); err != nil {
+		if err := datum.EnsureDecoded(col.Type, &e.alloc); err != nil {
 			return nil, err
 		}
 		var err error
@@ -170,7 +170,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 		for i := range columns {
 			col := &columns[i]
 			datum := row.datums[i]
-			if err := datum.EnsureDecoded(&col.Type, &e.alloc); err != nil {
+			if err := datum.EnsureDecoded(col.Type, &e.alloc); err != nil {
 				return nil, err
 			}
 			var err error
@@ -188,7 +188,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 		for i := range columns {
 			col := &columns[i]
 			datum := row.prevDatums[i]
-			if err := datum.EnsureDecoded(&col.Type, &e.alloc); err != nil {
+			if err := datum.EnsureDecoded(col.Type, &e.alloc); err != nil {
 				return nil, err
 			}
 			var err error

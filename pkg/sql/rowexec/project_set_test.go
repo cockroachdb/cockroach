@@ -37,7 +37,7 @@ func TestProjectSet(t *testing.T) {
 		description string
 		spec        execinfrapb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []types.T
+		inputTypes  []*types.T
 		expected    sqlbase.EncDatumRows
 	}{
 		{
@@ -135,7 +135,7 @@ func BenchmarkProjectSet(b *testing.B) {
 		description string
 		spec        execinfrapb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []types.T
+		inputTypes  []*types.T
 	}{
 		{
 			description: "generate_series",

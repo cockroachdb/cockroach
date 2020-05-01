@@ -70,9 +70,9 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			rows := make(sqlbase.EncDatumRows, numRows)
 			for i := 0; i < numRows; i++ {
 				rows[i] = make(sqlbase.EncDatumRow, 1)
-				rows[i][0] = sqlbase.DatumToEncDatum(&typ, sqlbase.RandDatum(rng, &typ, true /* nullOk */))
+				rows[i][0] = sqlbase.DatumToEncDatum(typ, sqlbase.RandDatum(rng, typ, true /* nullOk */))
 			}
-			typs := []types.T{typ}
+			typs := []*types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)
 
 			columnarizer, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, source)
@@ -105,7 +105,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			require.Equal(t, len(rows), len(actualRows))
 			for rowIdx, expectedRow := range rows {
 				require.Equal(t, len(expectedRow), len(actualRows[rowIdx]))
-				cmp, err := expectedRow[0].Compare(&typ, &da, &evalCtx, &actualRows[rowIdx][0])
+				cmp, err := expectedRow[0].Compare(typ, &da, &evalCtx, &actualRows[rowIdx][0])
 				require.NoError(t, err)
 				require.Equal(t, 0, cmp)
 			}
@@ -126,7 +126,7 @@ type arrowTestOperator struct {
 	c *colserde.ArrowBatchConverter
 	r *colserde.RecordBatchSerializer
 
-	typs []types.T
+	typs []*types.T
 }
 
 var _ colexecbase.Operator = &arrowTestOperator{}
@@ -135,7 +135,7 @@ func newArrowTestOperator(
 	input colexecbase.Operator,
 	c *colserde.ArrowBatchConverter,
 	r *colserde.RecordBatchSerializer,
-	typs []types.T,
+	typs []*types.T,
 ) colexecbase.Operator {
 	return &arrowTestOperator{
 		OneInputNode: NewOneInputNode(input),

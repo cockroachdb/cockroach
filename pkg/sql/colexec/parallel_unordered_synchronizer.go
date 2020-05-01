@@ -91,7 +91,7 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
 func NewParallelUnorderedSynchronizer(
-	inputs []colexecbase.Operator, typs []types.T, wg *sync.WaitGroup,
+	inputs []colexecbase.Operator, typs []*types.T, wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {

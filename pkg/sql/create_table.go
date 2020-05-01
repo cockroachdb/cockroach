@@ -681,7 +681,7 @@ func ResolveFK(
 	}
 
 	for i := range originCols {
-		if s, t := originCols[i], referencedCols[i]; !s.Type.Equivalent(&t.Type) {
+		if s, t := originCols[i], referencedCols[i]; !s.Type.Equivalent(t.Type) {
 			return pgerror.Newf(pgcode.DatatypeMismatch,
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
 				s.Name, s.Type.String(), target.Name, t.Name, t.Type.String())
@@ -949,7 +949,7 @@ func addInterleave(
 				strings.Join(index.ColumnNames, ", "),
 			)
 		}
-		if !col.Type.Identical(&targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
+		if !col.Type.Identical(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
 			return pgerror.Newf(
 				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
@@ -2016,7 +2016,7 @@ func makeShardColumnDesc(colNames []string, buckets int) (*sqlbase.ColumnDescrip
 	col := &sqlbase.ColumnDescriptor{
 		Hidden:   true,
 		Nullable: false,
-		Type:     *types.Int4,
+		Type:     types.Int4,
 	}
 	col.Name = sqlbase.GetShardColumnName(colNames, int32(buckets))
 	col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
@@ -2297,7 +2297,7 @@ func replaceVars(
 		}
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
-		return false, &dummyColumnItem{typ: &col.Type, name: c.ColumnName}, nil
+		return false, &dummyColumnItem{typ: col.Type, name: c.ColumnName}, nil
 	})
 	return newExpr, colIDs, err
 }

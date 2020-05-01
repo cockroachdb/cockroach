@@ -419,15 +419,15 @@ func BenchmarkAppend(b *testing.B) {
 		},
 	}
 
-	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
+	for _, typ := range []*types.T{types.Bytes, types.Decimal, types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
-			src := coldata.NewMemColumn(&typ, coldata.BatchSize())
+			src := coldata.NewMemColumn(typ, coldata.BatchSize())
 			coldatatestutils.RandomVec(rng, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.SrcEndIdx = coldata.BatchSize()
-				dest := coldata.NewMemColumn(&typ, coldata.BatchSize())
-				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {
+				dest := coldata.NewMemColumn(typ, coldata.BatchSize())
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
 					b.SetBytes(8 * int64(coldata.BatchSize()))
 					bc.args.DestIdx = 0
 					for i := 0; i < b.N; i++ {
@@ -462,15 +462,15 @@ func BenchmarkCopy(b *testing.B) {
 		},
 	}
 
-	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
+	for _, typ := range []*types.T{types.Bytes, types.Decimal, types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
-			src := coldata.NewMemColumn(&typ, coldata.BatchSize())
+			src := coldata.NewMemColumn(typ, coldata.BatchSize())
 			coldatatestutils.RandomVec(rng, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.SrcEndIdx = coldata.BatchSize()
-				dest := coldata.NewMemColumn(&typ, coldata.BatchSize())
-				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {
+				dest := coldata.NewMemColumn(typ, coldata.BatchSize())
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
 					b.SetBytes(8 * int64(coldata.BatchSize()))
 					for i := 0; i < b.N; i++ {
 						dest.Copy(bc.args)

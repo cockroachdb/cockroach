@@ -27,11 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func randomBatch(allocator *colmem.Allocator) ([]types.T, coldata.Batch) {
+func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
-	typs := make([]types.T, rng.Intn(maxTyps)+1)
+	typs := make([]*types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
 		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
 	}
@@ -45,9 +45,9 @@ func randomBatch(allocator *colmem.Allocator) ([]types.T, coldata.Batch) {
 func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	unsupportedTypes := []types.T{*types.INet}
+	unsupportedTypes := []*types.T{types.INet}
 	for _, typ := range unsupportedTypes {
-		_, err := colserde.NewArrowBatchConverter([]types.T{typ})
+		_, err := colserde.NewArrowBatchConverter([]*types.T{typ})
 		require.Error(t, err)
 	}
 }
@@ -79,7 +79,7 @@ func roundTripBatch(
 	b coldata.Batch,
 	c *colserde.ArrowBatchConverter,
 	r *colserde.RecordBatchSerializer,
-	typs []types.T,
+	typs []*types.T,
 ) (coldata.Batch, error) {
 	var buf bytes.Buffer
 	arrowDataIn, err := c.BatchToArrow(b)
@@ -129,12 +129,12 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	typs := []types.T{
-		*types.Bool,
-		*types.Bytes,
-		*types.Decimal,
-		*types.Int,
-		*types.Timestamp,
+	typs := []*types.T{
+		types.Bool,
+		types.Bytes,
+		types.Decimal,
+		types.Int,
+		types.Timestamp,
 	}
 	// numBytes corresponds 1:1 to typs and specifies how many bytes we are
 	// converting on one iteration of the benchmark for the corresponding type in
@@ -148,7 +148,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := coldatatestutils.RandomBatch(testAllocator, rng, []types.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
+		batch := coldatatestutils.RandomBatch(testAllocator, rng, []*types.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
@@ -180,7 +180,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 				numBytes[typIdx] += int64(len(marshaled))
 			}
 		}
-		c, err := colserde.NewArrowBatchConverter([]types.T{typ})
+		c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
 		require.NoError(b, err)
 		nullFractions := []float64{0, 0.25, 0.5}
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {
@@ -214,7 +214,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			data, err := c.BatchToArrow(batch)
 			require.NoError(b, err)
 			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
-			result := coldata.NewMemBatch([]types.T{typ})
+			result := coldata.NewMemBatch([]*types.T{typ})
 			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
 				b.SetBytes(numBytes[typIdx])
 				for i := 0; i < b.N; i++ {

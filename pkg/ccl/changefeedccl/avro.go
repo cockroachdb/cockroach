@@ -96,7 +96,7 @@ type avroSchemaField struct {
 	Default    *string        `json:"default"`
 	Metadata   string         `json:"__crdb__,omitempty"`
 
-	typ types.T
+	typ *types.T
 
 	encodeFn func(tree.Datum) (interface{}, error)
 	decodeFn func(interface{}) (tree.Datum, error)
@@ -503,7 +503,7 @@ func (r *avroDataRecord) nativeFromRow(row sqlbase.EncDatumRow) (interface{}, er
 	avroDatums := make(map[string]interface{}, len(row))
 	for fieldIdx, field := range r.Fields {
 		d := row[r.colIdxByFieldIdx[fieldIdx]]
-		if err := d.EnsureDecoded(&field.typ, &r.alloc); err != nil {
+		if err := d.EnsureDecoded(field.typ, &r.alloc); err != nil {
 			return nil, err
 		}
 		var err error
@@ -531,7 +531,7 @@ func (r *avroDataRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRow,
 		if err != nil {
 			return nil, err
 		}
-		row[r.colIdxByFieldIdx[fieldIdx]] = sqlbase.DatumToEncDatum(&field.typ, decoded)
+		row[r.colIdxByFieldIdx[fieldIdx]] = sqlbase.DatumToEncDatum(field.typ, decoded)
 	}
 	return row, nil
 }

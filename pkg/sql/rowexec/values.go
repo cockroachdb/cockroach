@@ -55,7 +55,7 @@ func newValuesProcessor(
 		numRows: spec.NumRows,
 		data:    spec.RawBytes,
 	}
-	types := make([]types.T, len(v.columns))
+	types := make([]*types.T, len(v.columns))
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}

@@ -133,7 +133,7 @@ func TestOrdinality(t *testing.T) {
 				res = append(res, row)
 			}
 
-			var typs []types.T
+			var typs []*types.T
 			switch len(res[0]) {
 			case 1:
 				typs = sqlbase.OneIntCol

@@ -28,11 +28,11 @@ import (
 func NewWindowSortingPartitioner(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	inputTyps []types.T,
+	inputTyps []*types.T,
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
-	createDiskBackedSorter func(input colexecbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column) (colexecbase.Operator, error),
+	createDiskBackedSorter func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecbase.Operator, error),
 ) (op colexecbase.Operator, err error) {
 	partitionAndOrderingCols := make([]execinfrapb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {

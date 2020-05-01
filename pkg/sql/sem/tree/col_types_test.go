@@ -126,7 +126,7 @@ func TestParseColumnTypeAliases(t *testing.T) {
 				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
 			}
 			colType := tree.MustBeStaticallyKnownType(columnDef.Type)
-			if !reflect.DeepEqual(*d.expectedType, *colType) {
+			if !d.expectedType.Identical(colType) {
 				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType.DebugString(), colType.DebugString())
 			}
 		})

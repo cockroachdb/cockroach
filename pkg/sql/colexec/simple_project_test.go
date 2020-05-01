@@ -75,7 +75,7 @@ func TestSimpleProjectOp(t *testing.T) {
 		})
 
 	t.Run("RedundantProjectionIsNotPlanned", func(t *testing.T) {
-		typs := []types.T{*types.Int, *types.Int}
+		typs := []*types.T{types.Int, types.Int}
 		input := newFiniteBatchSource(testAllocator.NewMemBatch(typs), typs, 1 /* usableCount */)
 		projectOp := NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
 		require.IsType(t, input, projectOp)
@@ -94,7 +94,7 @@ func TestSimpleProjectOp(t *testing.T) {
 // batches. See #45686 for detailed discussion.
 func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	inputTypes := []types.T{*types.Bytes, *types.Float}
+	inputTypes := []*types.T{types.Bytes, types.Float}
 	constVal := int64(42)
 	var wg sync.WaitGroup
 	inputTuples := []tuples{
@@ -107,7 +107,7 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 		{"b", constVal},
 		{"bb", constVal},
 	}
-	runTestsWithoutAllNullsInjection(t, inputTuples, [][]types.T{inputTypes, inputTypes}, expected,
+	runTestsWithoutAllNullsInjection(t, inputTuples, [][]*types.T{inputTypes, inputTypes}, expected,
 		unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 			var input colexecbase.Operator
 			input = NewParallelUnorderedSynchronizer(inputs, inputTypes, &wg)

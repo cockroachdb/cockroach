@@ -124,7 +124,7 @@ func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDis
 }
 
 func (d *tupleHashDistributor) distribute(
-	ctx context.Context, b coldata.Batch, types []types.T, hashCols []uint32,
+	ctx context.Context, b coldata.Batch, types []*types.T, hashCols []uint32,
 ) [][]int {
 	n := b.Length()
 	initHash(d.buckets, n, d.initHashValue)

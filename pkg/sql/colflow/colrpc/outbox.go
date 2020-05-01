@@ -51,7 +51,7 @@ type Dialer interface {
 type Outbox struct {
 	colexec.OneInputNode
 
-	typs []types.T
+	typs []*types.T
 	// batch is the last batch received from the input.
 	batch coldata.Batch
 
@@ -78,7 +78,7 @@ type Outbox struct {
 func NewOutbox(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	typs []types.T,
+	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) (*Outbox, error) {

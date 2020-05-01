@@ -147,7 +147,7 @@ func (b *Builder) finishBuildGeneratorFunction(
 		// as column aliases.
 		typ := f.ResolvedType()
 		for i := range typ.TupleContents() {
-			b.synthesizeColumn(outScope, typ.TupleLabels()[i], &typ.TupleContents()[i], nil, fn)
+			b.synthesizeColumn(outScope, typ.TupleLabels()[i], typ.TupleContents()[i], nil, fn)
 		}
 	}
 

@@ -48,7 +48,7 @@ func TestSorter(t *testing.T) {
 		name     string
 		spec     execinfrapb.SorterSpec
 		post     execinfrapb.PostProcessSpec
-		types    []types.T
+		types    []*types.T
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
@@ -213,7 +213,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
-			types: []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
+			types: []*types.T{types.Int, types.Int, types.Int, types.Int},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[1], v[2], v[5]},
 				{v[0], v[1], v[2], v[4]},
@@ -245,7 +245,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
-			types: []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
+			types: []*types.T{types.Int, types.Int, types.Int, types.Int},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[1], v[2], v[2]},
 				{v[0], v[1], v[2], v[3]},

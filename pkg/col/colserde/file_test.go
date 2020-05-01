@@ -99,7 +99,7 @@ func TestFileIndexing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numInts = 10
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batchSize := 1
 
 	var buf bytes.Buffer

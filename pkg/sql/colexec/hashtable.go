@@ -155,7 +155,7 @@ var _ resetter = &hashTable{}
 func newHashTable(
 	allocator *colmem.Allocator,
 	numBuckets uint64,
-	sourceTypes []types.T,
+	sourceTypes []*types.T,
 	eqCols []uint32,
 	allowNullEquality bool,
 	mode hashTableMode,

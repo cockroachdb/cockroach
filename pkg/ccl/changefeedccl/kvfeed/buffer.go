@@ -202,14 +202,14 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 var MemBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
 	"COCKROACH_CHANGEFEED_BUFFER_CAPACITY", 1<<30) // 1GB
 
-var memBufferColTypes = []types.T{
-	*types.Bytes, // KV.Key
-	*types.Bytes, // KV.Value
-	*types.Bytes, // KV.PrevValue
-	*types.Bytes, // span.Key
-	*types.Bytes, // span.EndKey
-	*types.Int,   // ts.WallTime
-	*types.Int,   // ts.Logical
+var memBufferColTypes = []*types.T{
+	types.Bytes, // KV.Key
+	types.Bytes, // KV.Value
+	types.Bytes, // KV.PrevValue
+	types.Bytes, // span.Key
+	types.Bytes, // span.EndKey
+	types.Int,   // ts.WallTime
+	types.Int,   // ts.Logical
 }
 
 // memBuffer is an in-memory buffer for changed KV and Resolved timestamp

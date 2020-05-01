@@ -184,7 +184,7 @@ func (r *errorReportingRowReceiver) Push(
 }
 
 func (r *errorReportingRowReceiver) ProducerDone() {}
-func (r *errorReportingRowReceiver) Types() []types.T {
+func (r *errorReportingRowReceiver) Types() []*types.T {
 	return nil
 }
 
