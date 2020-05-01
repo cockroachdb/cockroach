@@ -840,6 +840,7 @@ func TestLint(t *testing.T) {
 			`\.Marshal\(`,
 			"--",
 			"*.go",
+			":!sql/*.pb.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!settings/settings_test.go",

@@ -411,6 +411,20 @@ message GeoMetadata {
   optional geopb.Shape shape = 2 [(gogoproto.nullable)=false];
 }
 
+// T is a wrapper around InternalType.
+message T {
+    option (gogoproto.marshaler) = false;
+    option (gogoproto.unmarshaler) = false;
+    option (gogoproto.sizer) = false;
+    option (gogoproto.goproto_getters) = false;
+    option (gogoproto.goproto_stringer) = false;
+    // InternalType should never be directly referenced outside this package. The
+    // only reason it is exported is because gogoproto panics when printing the
+    // string representation of an unexported field. This is a problem when this
+    // struct is embedded in a larger struct (like a ColumnDescriptor).
+    optional InternalType internal_type = 1 [(gogoproto.nullable) = false];
+}
+
 // InternalType is the protobuf encoding for SQL types. It is always wrapped by
 // a T struct, and should never be used directly by outside packages. See the
 // comment header for the T struct for more details.
@@ -453,7 +467,7 @@ message InternalType {
 
     // TupleContents returns a slice containing the type of each tuple field. This
     // is nil for non-TUPLE types.
-    repeated bytes tuple_contents = 8 [(gogoproto.nullable) = false, (gogoproto.customtype) = "T"];
+    repeated T tuple_contents = 8 [(gogoproto.nullable) = false];
 
     // TupleLabels returns a slice containing the labels of each tuple field. This
     // is nil for non-TUPLE types, or if the TUPLE type does not specify labels.
@@ -465,7 +479,7 @@ message InternalType {
 
     // ArrayContents returns the type of array elements. This is nil for non-ARRAY
     // types.
-    optional bytes array_contents = 11 [(gogoproto.customtype) = "T"];
+    optional T array_contents = 11;
 
     // TimePrecisionIsSet indicates whether the precision was explicitly set.
     // It is currently in use for the TIME-related families and INTERVALs
