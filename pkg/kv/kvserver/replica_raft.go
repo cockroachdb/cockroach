@@ -863,10 +863,10 @@ func splitMsgApps(msgs []raftpb.Message) (msgApps, otherMsgs []raftpb.Message) {
 // maybeFatalOnRaftReadyErr will fatal if err is neither nil nor
 // apply.ErrRemoved.
 func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (removed bool) {
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		return false
-	case apply.ErrRemoved:
+	case errors.Is(err, apply.ErrRemoved):
 		return true
 	default:
 		log.FatalfDepth(ctx, 1, "%s: %+v", log.Safe(expl), err)

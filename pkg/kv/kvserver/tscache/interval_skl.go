@@ -610,14 +610,14 @@ func (p *sklPage) addNode(
 			err = it.Add(key, b, meta)
 		}
 
-		switch err {
-		case arenaskl.ErrArenaFull:
+		switch {
+		case errors.Is(err, arenaskl.ErrArenaFull):
 			atomic.StoreInt32(&p.isFull, 1)
 			return err
-		case arenaskl.ErrRecordExists:
+		case errors.Is(err, arenaskl.ErrRecordExists):
 			// Another thread raced and added the node, so just ratchet its
 			// values instead (down below).
-		case nil:
+		case err == nil:
 			// Add was successful, so finish initialization by scanning for gap
 			// value and using it to ratchet the new nodes' values.
 			return p.ensureInitialized(it, key)
@@ -747,10 +747,10 @@ func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheVa
 		// timestamp from the previous node, and don't need an initialized node
 		// for this operation anyway.
 		err := p.ratchetValueSet(it, always, val, val, false /* setInit */)
-		switch err {
-		case nil:
+		switch {
+		case err == nil:
 			// Continue scanning.
-		case arenaskl.ErrArenaFull:
+		case errors.Is(err, arenaskl.ErrArenaFull):
 			// Page is too full to ratchet value, so stop iterating.
 			return false
 		default:
@@ -875,14 +875,14 @@ func (p *sklPage) ratchetValueSet(
 			newMeta |= valMeta
 
 			err := it.Set(b, newMeta)
-			switch err {
-			case nil:
+			switch {
+			case err == nil:
 				// Success.
 				return nil
-			case arenaskl.ErrRecordUpdated:
+			case errors.Is(err, arenaskl.ErrRecordUpdated):
 				// Record was updated by another thread, so restart ratchet attempt.
 				continue
-			case arenaskl.ErrArenaFull:
+			case errors.Is(err, arenaskl.ErrArenaFull):
 				// The arena was full which means that we were unable to ratchet
 				// the value of this node. Mark the page as full and make sure
 				// that the node is moved to the "cantInit" state if it hasn't
@@ -894,12 +894,12 @@ func (p *sklPage) ratchetValueSet(
 
 				if !inited && (meta&cantInit) == 0 {
 					err := it.SetMeta(meta | cantInit)
-					switch err {
-					case arenaskl.ErrRecordUpdated:
+					switch {
+					case errors.Is(err, arenaskl.ErrRecordUpdated):
 						// Record was updated by another thread, so restart
 						// ratchet attempt.
 						continue
-					case arenaskl.ErrArenaFull:
+					case errors.Is(err, arenaskl.ErrArenaFull):
 						panic(fmt.Sprintf("SetMeta with larger meta should not return %v", err))
 					}
 				}
@@ -912,14 +912,14 @@ func (p *sklPage) ratchetValueSet(
 			// use it.SetMeta instead of it.Set, which avoids allocating new
 			// chunks in the arena.
 			err := it.SetMeta(newMeta)
-			switch err {
-			case nil:
+			switch {
+			case err == nil:
 				// Success.
 				return nil
-			case arenaskl.ErrRecordUpdated:
+			case errors.Is(err, arenaskl.ErrRecordUpdated):
 				// Record was updated by another thread, so restart ratchet attempt.
 				continue
-			case arenaskl.ErrArenaFull:
+			case errors.Is(err, arenaskl.ErrArenaFull):
 				panic(fmt.Sprintf("SetMeta with larger meta should not return %v", err))
 			default:
 				panic(fmt.Sprintf("unexpected error: %v", err))

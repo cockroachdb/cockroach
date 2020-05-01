@@ -1248,10 +1248,10 @@ func (s *Server) Start(ctx context.Context) error {
 		// Note that we're not checking whether the node is already bootstrapped;
 		// if this is the case, Bootstrap will simply fail.
 		_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
-		switch err {
-		case nil:
+		switch {
+		case err == nil:
 			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
-		case ErrClusterInitialized:
+		case errors.Is(err, ErrClusterInitialized):
 		default:
 			// Process is shutting down.
 		}

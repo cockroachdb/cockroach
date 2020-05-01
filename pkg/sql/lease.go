@@ -459,14 +459,14 @@ func (s LeaseStore) PublishMultiple(
 			return txn.CommitInBatch(ctx, b)
 		})
 
-		switch err {
-		case nil, errDidntUpdateDescriptor:
+		switch {
+		case err == nil || errors.Is(err, errDidntUpdateDescriptor):
 			immutTableDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
 			for id, tableDesc := range tableDescs {
 				immutTableDescs[id] = sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor)
 			}
 			return immutTableDescs, nil
-		case errLeaseVersionChanged:
+		case errors.Is(err, errLeaseVersionChanged):
 			// will loop around to retry
 		default:
 			return nil, err
@@ -1670,8 +1670,8 @@ func (m *LeaseManager) Acquire(
 			}
 			return &table.ImmutableTableDescriptor, table.expiration, nil
 		}
-		switch err {
-		case errRenewLease:
+		switch {
+		case errors.Is(err, errRenewLease):
 			// Renew lease and retry. This will block until the lease is acquired.
 			if _, errLease := acquireNodeLease(ctx, m, tableID); errLease != nil {
 				return nil, hlc.Timestamp{}, errLease
@@ -1680,7 +1680,7 @@ func (m *LeaseManager) Acquire(
 				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireBlock)
 			}
 
-		case errReadOlderTableVersion:
+		case errors.Is(err, errReadOlderTableVersion):
 			// Read old table versions from the store. This can block while reading
 			// old table versions from the store.
 			versions, errRead := m.readOlderVersionForTimestamp(ctx, tableID, timestamp)
