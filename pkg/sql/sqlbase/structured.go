@@ -3222,10 +3222,8 @@ func MakeNotNullCheckConstraint(
 		inuseNames[name] = struct{}{}
 	}
 
-	expr := &tree.ComparisonExpr{
-		Operator: tree.IsDistinctFrom,
-		Left:     &tree.ColumnItem{ColumnName: tree.Name(colName)},
-		Right:    tree.DNull,
+	expr := &tree.IsNotNullExpr{
+		Expr: &tree.ColumnItem{ColumnName: tree.Name(colName)},
 	}
 
 	return &TableDescriptor_CheckConstraint{

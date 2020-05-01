@@ -298,6 +298,20 @@ define Not {
     Input ScalarExpr
 }
 
+# IsTupleNull is the boolean expression with a tuple input that evaluates to
+# true if all elements in the tuple are null.
+[Scalar, Bool]
+define IsTupleNull {
+    Input ScalarExpr
+}
+
+# IsTupleNotNull is the boolean expression with a tuple input that evaluates to
+# true if all elements in the tuple are not null.
+[Scalar, Bool]
+define IsTupleNotNull {
+    Input ScalarExpr
+}
+
 [Scalar, Bool, Comparison]
 define Eq {
     Left ScalarExpr
@@ -406,12 +420,16 @@ define NotRegIMatch {
     Right ScalarExpr
 }
 
+# Is maps to the IS NOT DISTINCT FROM operator which is equivalent to IS for
+# non-tuples.
 [Scalar, Bool, Comparison]
 define Is {
     Left ScalarExpr
     Right ScalarExpr
 }
 
+# IsNot is the inverse of Is. It maps to the IS DISTINCT FROM operator which is
+# equivalent to IS NOT for non-tuples.
 [Scalar, Bool, Comparison]
 define IsNot {
     Left ScalarExpr

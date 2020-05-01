@@ -1096,6 +1096,28 @@ func (expr *NotExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 }
 
 // TypeCheck implements the Expr interface.
+func (expr *IsNullExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
+	exprTyped, err := expr.Expr.TypeCheck(ctx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	expr.Expr = exprTyped
+	expr.typ = types.Bool
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *IsNotNullExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
+	exprTyped, err := expr.Expr.TypeCheck(ctx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	expr.Expr = exprTyped
+	expr.typ = types.Bool
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
 func (expr *NullIfExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, expr.Expr1, expr.Expr2)
 	if err != nil {
