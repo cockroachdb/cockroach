@@ -668,7 +668,7 @@ $(GEOS_DIR)/Makefile: $(C_DEPS_DIR)/geos-rebuild | bin/.submodules-initialized
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/geos-rebuild. See above for rationale.
 	cd $(GEOS_DIR) && \
-	  cmake $(xcmake-flags) $(GEOS_SRC_DIR) -DCMAKE_BUILD_TYPE=Release
+	  cmake $(xcmake-flags) $(GEOS_SRC_DIR) -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fPIC -DCMAKE_CXX_FLAGS=-fPIC
 	@# Copy geos/export.h to the capi include directory to avoid needing multiple include
 	@# directories.
 	mkdir $(GEOS_DIR)/capi/geos
