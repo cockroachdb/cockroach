@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -315,7 +314,7 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	err := p.removeTableComment(ctx, tableDesc)
+	err := p.removeTableComments(ctx, tableDesc)
 	if err != nil {
 		return droppedViews, err
 	}
@@ -592,36 +591,18 @@ func removeMatchingReferences(
 	return updatedRefs
 }
 
-func (p *planner) removeTableComment(
+func (p *planner) removeTableComments(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
 ) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
-		"delete-table-comment",
+		"delete-table-comments",
 		p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-		keys.TableCommentType,
+		"DELETE FROM system.comments WHERE object_id=$1",
 		tableDesc.ID)
 	if err != nil {
 		return err
 	}
-
-	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"delete-comment",
-		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2",
-		keys.ColumnCommentType,
-		tableDesc.ID)
-
-	for _, indexDesc := range tableDesc.Indexes {
-		err = p.removeIndexComment(
-			ctx,
-			tableDesc.ID,
-			indexDesc.ID)
-	}
-
 	return err
 }
