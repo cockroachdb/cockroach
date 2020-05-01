@@ -103,7 +103,7 @@ func TestQuotaPoolContextCancellation(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("context cancellation did not unblock acquisitions within 5s")
 	case err := <-errCh:
-		if err != context.Canceled {
+		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("expected context cancellation error, got %v", err)
 		}
 	}
@@ -194,7 +194,7 @@ func TestQuotaPoolCanceledAcquisitions(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("context cancellations did not unblock acquisitions within 5s")
 		case err := <-errCh:
-			if err != context.Canceled {
+			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("expected context cancellation error, got %v", err)
 			}
 		}

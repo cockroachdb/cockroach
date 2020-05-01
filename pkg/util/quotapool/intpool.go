@@ -499,7 +499,7 @@ func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled boo
 		if took != 0 {
 			panic(fmt.Sprintf("IntRequestFunc returned both took: %d and err: %s", took, err))
 		}
-		if err == ErrNotEnoughQuota {
+		if errors.Is(err, ErrNotEnoughQuota) {
 			return false, nil
 		}
 		r.err = err

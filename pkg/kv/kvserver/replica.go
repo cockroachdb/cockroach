@@ -1444,7 +1444,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		r.mu.Unlock()
 		r.raftMu.Unlock()
 	})
-	if err == stop.ErrUnavailable {
+	if errors.Is(err, stop.ErrUnavailable) {
 		// We weren't able to launch a goroutine to watch for the merge's completion
 		// because the server is shutting down. Normally failing to launch the
 		// watcher goroutine would wedge pending requests on the replica's

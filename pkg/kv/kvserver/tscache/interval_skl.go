@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // rangeOptions are passed to AddRange to indicate the bounds of the range. By
@@ -309,7 +310,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 			err = fp.addNode(&it, to, val, 0, true /* mustInit */)
 		}
 
-		if err == arenaskl.ErrArenaFull {
+		if errors.Is(err, arenaskl.ErrArenaFull) {
 			return fp
 		}
 	}
@@ -327,7 +328,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 		err = fp.addNode(&it, from, val, hasGap, false /* mustInit */)
 	}
 
-	if err == arenaskl.ErrArenaFull {
+	if errors.Is(err, arenaskl.ErrArenaFull) {
 		return fp
 	}
 
@@ -1030,7 +1031,7 @@ func (p *sklPage) scanTo(
 
 		// Decode the current node's value set.
 		keyVal, gapVal := decodeValueSet(it.Value(), it.Meta())
-		if ratchetErr == arenaskl.ErrArenaFull {
+		if errors.Is(ratchetErr, arenaskl.ErrArenaFull) {
 			// If we failed to ratchet an uninitialized node above, the desired
 			// ratcheting won't be reflected in the decoded values. Perform the
 			// ratcheting manually.

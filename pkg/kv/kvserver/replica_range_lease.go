@@ -379,7 +379,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 						// so we don't log it as an error.
 						//
 						// https://github.com/cockroachdb/cockroach/issues/35986
-						if err != ErrEpochAlreadyIncremented {
+						if !errors.Is(err, ErrEpochAlreadyIncremented) {
 							log.Errorf(ctx, "%v", err)
 						}
 					}

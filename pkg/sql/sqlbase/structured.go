@@ -992,7 +992,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
 			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, codec, ref.Table)
 			if err != nil {
-				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
+				if errors.Is(err, ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
 				} else {
 					return false, err
@@ -1031,7 +1031,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
 			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, codec, ref.Table)
 			if err != nil {
-				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
+				if errors.Is(err, ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
 				} else {
 					return false, err
@@ -2215,10 +2215,10 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 				return fmt.Errorf("partitions %s and %s overlap",
 					overlaps[0].(partitionInterval).name, p.Name)
 			}
-			if err := tree.Insert(pi, false /* fast */); err == interval.ErrEmptyRange {
+			if err := tree.Insert(pi, false /* fast */); errors.Is(err, interval.ErrEmptyRange) {
 				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is equal to upper bound %s",
 					p.Name, fromDatums, toDatums)
-			} else if err == interval.ErrInvertedRange {
+			} else if errors.Is(err, interval.ErrInvertedRange) {
 				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is greater than upper bound %s",
 					p.Name, fromDatums, toDatums)
 			} else if err != nil {

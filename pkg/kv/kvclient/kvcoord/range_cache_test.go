@@ -493,7 +493,7 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 	}
 
 	expectContextCancellation := func(t *testing.T, c <-chan error) {
-		if err := <-c; errors.Cause(err) != context.Canceled {
+		if err := <-c; !errors.Is(err, context.Canceled) {
 			t.Errorf("expected context cancellation error, found %v", err)
 		}
 	}

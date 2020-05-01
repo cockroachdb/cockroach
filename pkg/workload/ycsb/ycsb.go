@@ -716,7 +716,7 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 		_, err := tx.StmtContext(ctx, updateStmt).ExecContext(ctx, args[:]...)
 		return err
 	})
-	if err == gosql.ErrNoRows && ctx.Err() != nil {
+	if errors.Is(err, gosql.ErrNoRows) && ctx.Err() != nil {
 		// Sometimes a context cancellation during a transaction can result in
 		// sql.ErrNoRows instead of the appropriate context.DeadlineExceeded. In
 		// this case, we just return ctx.Err(). See

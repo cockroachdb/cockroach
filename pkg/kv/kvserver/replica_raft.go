@@ -387,7 +387,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		err := raftGroup.Step(req.Message)
-		if err == raft.ErrProposalDropped {
+		if errors.Is(err, raft.ErrProposalDropped) {
 			// A proposal was forwarded to this replica but we couldn't propose it.
 			// Swallow the error since we don't have an effective way of signaling
 			// this to the sender.
@@ -467,7 +467,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return unquiesceAndWakeLeader, nil
 	})
 	r.mu.Unlock()
-	if err == errRemoved {
+	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
 		return stats, "", nil
 	} else if err != nil {
@@ -1193,7 +1193,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
-		}); err != nil && err != errRemoved {
+		}); err != nil && !errors.Is(err, errRemoved) {
 			log.Fatalf(ctx, "%v", err)
 		}
 	}
@@ -1236,7 +1236,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
-	}); err != nil && err != errRemoved {
+	}); err != nil && !errors.Is(err, errRemoved) {
 		log.Fatalf(ctx, "%v", err)
 	}
 }

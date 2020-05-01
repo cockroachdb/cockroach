@@ -249,7 +249,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	// the below withRaftGroupLocked will no-op.
 	if err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
-	}); err != nil && err != errRemoved {
+	}); err != nil && !errors.Is(err, errRemoved) {
 		log.VErrEventf(ctx, 1, "unable to initialize raft group: %s", err)
 	}
 }

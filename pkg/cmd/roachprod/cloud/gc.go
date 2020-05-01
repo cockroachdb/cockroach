@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/nlopes/slack"
 )
 
@@ -314,7 +315,7 @@ func GCClusters(cloud *Cloud, dryrun bool) error {
 			userChannel, err := findUserChannel(client, user+config.EmailDomain)
 			if err == nil {
 				postStatus(client, userChannel, dryrun, status, nil)
-			} else if err != errNoSlackClient {
+			} else if !errors.Is(err, errNoSlackClient) {
 				log.Printf("could not deliver Slack DM to %s: %v", user+config.EmailDomain, err)
 			}
 		}

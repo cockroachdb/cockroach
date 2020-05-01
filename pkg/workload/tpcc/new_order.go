@@ -433,7 +433,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 
 			return nil
 		})
-	if err == errSimulated {
+	if errors.Is(err, errSimulated) {
 		return d, nil
 	}
 	return d, err

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // ReconcileInterval is the interval between two generations of the reports.
@@ -167,7 +168,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 				return nil
 			}
 			err = r.pts.Release(ctx, txn, rec.ID)
-			if err != nil && err != protectedts.ErrNotExists {
+			if err != nil && !errors.Is(err, protectedts.ErrNotExists) {
 				return err
 			}
 			didRemove = true

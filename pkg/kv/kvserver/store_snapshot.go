@@ -429,7 +429,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				}
 				return nil
 			}); err != nil {
-				if errors.Cause(err) == errSideloadedFileNotFound {
+				if errors.Is(err, errSideloadedFileNotFound) {
 					// We're creating the Raft snapshot based on a snapshot of
 					// the engine, but the Raft log may since have been
 					// truncated and corresponding on-disk sideloaded payloads

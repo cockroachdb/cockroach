@@ -103,7 +103,7 @@ func TestStoresVisitStores(t *testing.T) {
 	errBoom := errors.New("boom")
 	if err := ls.VisitStores(func(s *Store) error {
 		return errBoom
-	}); err != errBoom {
+	}); !errors.Is(err, errBoom) {
 		t.Errorf("got unexpected error %v", err)
 	}
 }

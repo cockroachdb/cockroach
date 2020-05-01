@@ -399,7 +399,7 @@ func (is *infoStore) combine(
 		// the data in *is is newer than in *delta.
 		if addErr := is.addInfo(key, &infoCopy); addErr == nil {
 			freshCount++
-		} else if addErr != errNotFresh {
+		} else if !errors.Is(addErr, errNotFresh) {
 			err = addErr
 		}
 	}

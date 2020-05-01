@@ -184,7 +184,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	defer cancel()
 	for i := 0; i < routines; i++ {
 		id, err := idAlloc.Allocate(ctx)
-		if id != 0 || err != context.DeadlineExceeded {
+		if id != 0 || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expected context cancellation, found id=%d, err=%v", id, err)
 		}
 	}

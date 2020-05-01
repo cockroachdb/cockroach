@@ -232,7 +232,7 @@ func maybePurgeSideloaded(
 	var totalSize int64
 	for i := firstIndex; i <= lastIndex; i++ {
 		size, err := ss.Purge(ctx, i, term)
-		if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
+		if err != nil && !errors.Is(err, errSideloadedFileNotFound) {
 			return totalSize, err
 		}
 		totalSize += size

@@ -345,7 +345,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	} else {
 		alloc, err = sem.TryAcquire(ctx, 1)
 	}
-	if err == quotapool.ErrNotEnoughQuota {
+	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
 		err = ErrThrottled
 	} else if quotapool.HasErrClosed(err) {
 		err = ErrUnavailable

@@ -2454,7 +2454,7 @@ CREATE TABLE crdb_internal.zones (
 				for i, s := range subzones {
 					index, err := table.FindIndexByID(sqlbase.IndexID(s.IndexID))
 					if err != nil {
-						if err == sqlbase.ErrIndexGCMutationsList {
+						if errors.Is(err, sqlbase.ErrIndexGCMutationsList) {
 							continue
 						}
 						return err
