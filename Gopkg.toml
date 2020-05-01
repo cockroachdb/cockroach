@@ -76,6 +76,10 @@ ignored = [
   branch = "master"
 
 [[constraint]]
+  name = "github.com/cockroachdb/errors"
+  branch = "v1.2.4-cockroach20.1"
+
+[[constraint]]
   name = "vitess.io/vitess"
   source = "https://github.com/cockroachdb/vitess"
   branch = "no-flag-names-parens"
