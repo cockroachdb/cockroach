@@ -131,6 +131,20 @@
 =>
 (False)
 
+# FoldNullTupleIsTupleNull replaces x IS NULL with True if x is a tuple with
+# only constant, null elements.
+[FoldNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:(Tuple) & (HasAllNullElements $input))
+=>
+(True)
+
+# FoldNonNullTupleIsTupleNull replaces x IS NULL with False if x is a tuple
+# with at least one constant, non-null element.
+[FoldNonNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:(Tuple) & (HasOneNonNullElement $input))
+=>
+(False)
+
 # FoldIsNotNull replaces NULL IS NOT NULL with False.
 [FoldIsNotNull, Normalize]
 (IsNot (Null) (Null))
@@ -142,6 +156,20 @@
 (IsNot $left:^(Null) & (IsConstValueOrTuple $left) (Null))
 =>
 (True)
+
+# FoldNonNullTupleIsTupleNotNull replaces x IS NOT NULL with True if x is a
+# tuple with only constant, non-null elements.
+[FoldNonNullTupleIsTupleNotNull, Normalize]
+(IsTupleNotNull $input:(Tuple) & (HasAllNonNullElements $input))
+=>
+(True)
+
+# FoldNullTupleIsTupleNotNull replaces x IS NOT NULL with False if x is a tuple
+# with at least one constant, null element.
+[FoldNullTupleIsTupleNotNull, Normalize]
+(IsTupleNotNull $input:(Tuple) & (HasOneNullElement $input))
+=>
+(False)
 
 # CommuteNullIs moves a NULL onto the right side of an IS/IS NOT comparison.
 [CommuteNullIs, Normalize]

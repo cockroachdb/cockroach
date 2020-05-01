@@ -623,7 +623,7 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 	case *VariableExpr:
 		return notNullCols.Contains(t.Col)
 
-	case *TrueExpr, *FalseExpr, *ConstExpr, *IsExpr, *IsNotExpr:
+	case *TrueExpr, *FalseExpr, *ConstExpr, *IsExpr, *IsNotExpr, *IsTupleNullExpr, *IsTupleNotNullExpr:
 		return true
 
 	case *NullExpr:

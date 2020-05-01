@@ -854,9 +854,9 @@ func (p *PrettyCfg) peelCompOperand(e Expr) Expr {
 
 func (node *ComparisonExpr) doc(p *PrettyCfg) pretty.Doc {
 	opStr := node.Operator.String()
-	if node.Operator == IsDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	if node.Operator == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS NOT"
-	} else if node.Operator == IsNotDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	} else if node.Operator == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
 	opDoc := pretty.Keyword(opStr)
@@ -2077,6 +2077,20 @@ func (node *NotExpr) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(
 		pretty.Keyword("NOT"),
 		p.exprDocWithParen(node.Expr),
+	)
+}
+
+func (node *IsNullExpr) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.ConcatSpace(
+		p.exprDocWithParen(node.Expr),
+		pretty.Keyword("IS NULL"),
+	)
+}
+
+func (node *IsNotNullExpr) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.ConcatSpace(
+		p.exprDocWithParen(node.Expr),
+		pretty.Keyword("IS NOT NULL"),
 	)
 }
 
