@@ -11,7 +11,7 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
@@ -23,10 +23,10 @@ type ClusterWideID struct {
 	uint128.Uint128
 }
 
-// GenerateClusterWideID takes a timestamp and node ID, and generates a
+// GenerateClusterWideID takes a timestamp and SQLInstanceID, and generates a
 // ClusterWideID.
-func GenerateClusterWideID(timestamp hlc.Timestamp, nodeID roachpb.NodeID) ClusterWideID {
-	loInt := (uint64)(nodeID)
+func GenerateClusterWideID(timestamp hlc.Timestamp, instID base.SQLInstanceID) ClusterWideID {
+	loInt := (uint64)(instID)
 	loInt = loInt | ((uint64)(timestamp.Logical) << 32)
 
 	return ClusterWideID{Uint128: uint128.FromInts((uint64)(timestamp.WallTime), loInt)}

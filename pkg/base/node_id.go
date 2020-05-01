@@ -81,7 +81,7 @@ func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 // only one SQL server must be running on behalf of the tenant at any given
 // time. After that, it's likely that we'll allocate these IDs off a counter,
 // so they will be completely unique (per tenant).
-type SQLInstanceID int64
+type SQLInstanceID int32
 
 func (s SQLInstanceID) String() string {
 	return strconv.FormatInt(int64(s), 10)
