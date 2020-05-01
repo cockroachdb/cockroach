@@ -11,14 +11,20 @@
 package debug
 
 import (
+	"bytes"
 	"context"
 	"expvar"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"path"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -28,8 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	pebbletool "github.com/cockroachdb/pebble/tool"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
+	"github.com/spf13/cobra"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -169,6 +177,60 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 		mux: mux,
 		spy: spy,
 	}
+}
+
+func analyzeLSM(dir string, writer io.Writer) error {
+	manifestName, err := ioutil.ReadFile(path.Join(dir, "CURRENT"))
+	if err != nil {
+		return err
+	}
+
+	manifestPath := path.Join(dir, string(bytes.TrimSpace(manifestName)))
+
+	t := pebbletool.New(pebbletool.Comparers(storage.MVCCComparer))
+
+	// TODO(yevgeniy): Consider exposing LSM tool directly.
+	var lsm *cobra.Command
+	for _, c := range t.Commands {
+		if c.Name() == "lsm" {
+			lsm = c
+		}
+	}
+	if lsm == nil {
+		return errors.New("no such command")
+	}
+
+	lsm.SetOutput(writer)
+	lsm.Run(lsm, []string{manifestPath})
+	return nil
+}
+
+// RegisterEngines setups up debug engine endpoints for the known storage engines.
+func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engine) error {
+	if len(specs) != len(engines) {
+		// TODO(yevgeniy): Consider adding accessors to storage.Engine to get their path.
+		return errors.New("number of store specs must match number of engines")
+	}
+	for i := 0; i < len(specs); i++ {
+		if specs[i].InMemory {
+			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
+			continue
+		}
+
+		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		if err != nil {
+			return err
+		}
+
+		dir := specs[i].Path
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm/%d", id.StoreID),
+			func(w http.ResponseWriter, req *http.Request) {
+				if err := analyzeLSM(dir, w); err != nil {
+					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)
+				}
+			})
+	}
+	return nil
 }
 
 // ServeHTTP serves various tools under the /debug endpoint. It restricts access

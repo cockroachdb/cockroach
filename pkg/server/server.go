@@ -1195,6 +1195,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if storeSpec.InMemory {
 			continue
 		}
+
 		for name, val := range listenerFiles {
 			file := filepath.Join(storeSpec.Path, name)
 			if err := ioutil.WriteFile(file, []byte(val), 0644); err != nil {
@@ -1551,6 +1552,10 @@ func (s *Server) Start(ctx context.Context) error {
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err
+	}
+
+	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
+		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
 
 	log.Event(ctx, "server ready")
