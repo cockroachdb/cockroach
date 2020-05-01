@@ -12,8 +12,9 @@ package lang
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
 )
 
 // CompiledExpr is the result of Optgen scanning, parsing, and semantic

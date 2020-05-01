@@ -11,7 +11,6 @@ package importccl
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"unicode"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/errors"
 )
 
 type mysqloutfileReader struct {

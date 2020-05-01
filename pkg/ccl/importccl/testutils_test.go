@@ -10,7 +10,6 @@ package importccl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 func descForTable(

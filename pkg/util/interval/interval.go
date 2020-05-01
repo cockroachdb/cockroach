@@ -24,11 +24,11 @@ package interval
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // ErrInvertedRange is returned if an interval is used where the start value is greater

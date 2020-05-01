@@ -12,11 +12,11 @@ package resolver
 
 import (
 	"context"
-	"errors"
 	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 

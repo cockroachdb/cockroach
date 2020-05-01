@@ -12,7 +12,6 @@ package log
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -22,6 +21,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 type vmoduleConfig struct {

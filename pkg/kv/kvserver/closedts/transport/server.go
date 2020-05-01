@@ -12,7 +12,6 @@ package transport
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Server handles incoming closed timestamp update stream requests.
