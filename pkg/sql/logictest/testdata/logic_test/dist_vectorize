@@ -1,4 +1,4 @@
-# LogicTest: 5node-vec 5node-vec-disk
+# LogicTest: 5node 5node-disk
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
