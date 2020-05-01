@@ -621,7 +621,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
-	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
 	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}

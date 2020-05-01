@@ -564,6 +564,7 @@ func (s *Server) newConnExecutor(
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
 	)
 
+	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
 	ex := &connExecutor{
 		server:      s,
 		metrics:     srvMetrics,
@@ -578,9 +579,9 @@ func (s *Server) newConnExecutor(
 			connCtx: ctx,
 		},
 		transitionCtx: transitionCtx{
-			db:     s.cfg.DB,
-			nodeID: s.cfg.NodeID.Get(),
-			clock:  s.cfg.Clock,
+			db:           s.cfg.DB,
+			nodeIDOrZero: nodeIDOrZero,
+			clock:        s.cfg.Clock,
 			// Future transaction's monitors will inherits from sessionRootMon.
 			connMon:  &sessionRootMon,
 			tracer:   s.cfg.AmbientCtx.Tracer,
