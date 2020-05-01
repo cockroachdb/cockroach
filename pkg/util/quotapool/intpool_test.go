@@ -147,7 +147,7 @@ func TestQuotaPoolClose(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("quota pool closing did not unblock acquisitions within 5s")
 		case err := <-resCh:
-			if _, isErrClosed := err.(*quotapool.ErrClosed); !isErrClosed {
+			if !errors.HasType(err, (*quotapool.ErrClosed)(nil)) {
 				t.Fatal(err)
 			}
 		}
@@ -159,7 +159,7 @@ func TestQuotaPoolClose(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("quota pool closing did not unblock acquisitions within 5s")
 	case err := <-resCh:
-		if _, isErrClosed := err.(*quotapool.ErrClosed); !isErrClosed {
+		if !errors.HasType(err, (*quotapool.ErrClosed)(nil)) {
 			t.Fatal(err)
 		}
 	}

@@ -144,7 +144,7 @@ func checkURL(client *http.Client, url string) error {
 func checkURLWithRetries(client *http.Client, url string) error {
 	for i := 0; i < timeoutRetries; i++ {
 		err := checkURL(client, url)
-		if err, ok := err.(net.Error); ok && err.Timeout() {
+		if netErr := (net.Error)(nil); errors.As(err, &netErr) && netErr.Timeout() {
 			// Back off exponentially if we hit a timeout.
 			time.Sleep((1 << uint(i)) * time.Second)
 			continue

@@ -89,6 +89,6 @@ type DuplicateKeyError struct {
 	Value []byte
 }
 
-func (d DuplicateKeyError) Error() string {
+func (d *DuplicateKeyError) Error() string {
 	return fmt.Sprintf("duplicate key: %s", d.Key)
 }

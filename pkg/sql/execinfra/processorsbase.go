@@ -644,8 +644,7 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 				// We only look for UnhandledRetryableErrors. Local reads (which would
 				// be transformed by the Root TxnCoordSender into
 				// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
-				err = errors.Cause(err)
-				if ure, ok := err.(*roachpb.UnhandledRetryableError); ok {
+				if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
 					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
 					if uncertain != nil {
 						continue

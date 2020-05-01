@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	crdberrors "github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Error is an interface for error types used by the main.wrap() function
@@ -54,7 +54,7 @@ func (e Cmd) ExitCode() int {
 
 // Format passes formatting responsibilities to cockroachdb/errors
 func (e Cmd) Format(s fmt.State, verb rune) {
-	crdberrors.FormatError(e, s, verb)
+	errors.FormatError(e, s, verb)
 }
 
 // Unwrap the wrapped the non-cockroach command error.
@@ -80,7 +80,7 @@ func (e Cockroach) ExitCode() int {
 
 // Format passes formatting responsibilities to cockroachdb/errors
 func (e Cockroach) Format(s fmt.State, verb rune) {
-	crdberrors.FormatError(e, s, verb)
+	errors.FormatError(e, s, verb)
 }
 
 // Unwrap the wrapped cockroach error.
@@ -104,7 +104,7 @@ func (e SSH) ExitCode() int {
 
 // Format passes formatting responsibilities to cockroachdb/errors
 func (e SSH) Format(s fmt.State, verb rune) {
-	crdberrors.FormatError(e, s, verb)
+	errors.FormatError(e, s, verb)
 }
 
 // Unwrap the wrapped SSH error.
@@ -128,7 +128,7 @@ func (e Unclassified) ExitCode() int {
 
 // Format passes formatting responsibilities to cockroachdb/errors
 func (e Unclassified) Format(s fmt.State, verb rune) {
-	crdberrors.FormatError(e, s, verb)
+	errors.FormatError(e, s, verb)
 }
 
 // Unwrap the wrapped unclassified error.
@@ -173,26 +173,18 @@ func ClassifyCockroachError(err error) Error {
 
 // Extract the an ExitError from err's error tree or (nil, false) if none exists.
 func asExitError(err error) (*exec.ExitError, bool) {
-	if exitErr, ok := crdberrors.If(err, func(err error) (interface{}, bool) {
-		if err, ok := err.(*exec.ExitError); ok {
-			return err, true
-		}
-		return nil, false
-	}); ok {
-		return exitErr.(*exec.ExitError), true
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr, true
 	}
 	return nil, false
 }
 
 // AsError extracts the Error from err's error tree or (nil, false) if none exists.
 func AsError(err error) (Error, bool) {
-	if rpErr, ok := crdberrors.If(err, func(err error) (interface{}, bool) {
-		if rpErr, ok := err.(Error); ok {
-			return rpErr, true
-		}
-		return nil, false
-	}); ok {
-		return rpErr.(Error), true
+	var e Error
+	if errors.As(err, &e) {
+		return e, true
 	}
 	return nil, false
 }

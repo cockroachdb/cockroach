@@ -493,7 +493,7 @@ func WriteTableDescs(
 			b.InitPut(kv.Key, &kv.Value, false)
 		}
 		if err := txn.Run(ctx, b); err != nil {
-			if _, ok := errors.UnwrapAll(err).(*roachpb.ConditionFailedError); ok {
+			if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 				return pgerror.Newf(pgcode.DuplicateObject, "table already exists")
 			}
 			return err

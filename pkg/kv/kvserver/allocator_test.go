@@ -5181,7 +5181,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
-	if _, ok := err.(purgatoryError); !ok {
+	if !errors.HasInterface(err, (*purgatoryError)(nil)) {
 		t.Fatalf("expected a purgatory error, got: %+v", err)
 	}
 
@@ -5215,7 +5215,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
-	if _, ok := err.(purgatoryError); ok {
+	if errors.HasInterface(err, (*purgatoryError)(nil)) {
 		t.Fatalf("expected a non purgatory error, got: %+v", err)
 	}
 }

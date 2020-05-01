@@ -1562,7 +1562,7 @@ func (c *readTimeoutConn) Read(b []byte) (int, error) {
 		}
 		n, err := c.Conn.Read(b)
 		// Continue if the error is due to timing out.
-		if err, ok := err.(net.Error); ok && err.Timeout() {
+		if ne := (net.Error)(nil); errors.As(err, &ne) && ne.Timeout() {
 			continue
 		}
 		return n, err

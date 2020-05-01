@@ -828,7 +828,7 @@ func (nl *NodeLiveness) updateLiveness(
 		}
 		if err := nl.updateLivenessAttempt(ctx, update, oldLiveness, handleCondFailed); err != nil {
 			// Intentionally don't errors.Cause() the error, or we'd hop past errRetryLiveness.
-			if _, ok := err.(*errRetryLiveness); ok {
+			if errors.HasType(err, (*errRetryLiveness)(nil)) {
 				log.Infof(ctx, "retrying liveness update after %s", err)
 				continue
 			}
@@ -883,8 +883,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		})
 		return txn.Run(ctx, b)
 	}); err != nil {
-		switch tErr := errors.Cause(err).(type) {
-		case *roachpb.ConditionFailedError:
+		if tErr := (*roachpb.ConditionFailedError)(nil); errors.As(err, &tErr) {
 			if handleCondFailed != nil {
 				if tErr.ActualValue == nil {
 					return handleCondFailed(storagepb.Liveness{})
@@ -895,9 +894,8 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 				}
 				return handleCondFailed(actualLiveness)
 			}
-		case *roachpb.TransactionStatusError:
-			return &errRetryLiveness{err}
-		case *roachpb.AmbiguousResultError:
+		} else if errors.HasType(err, (*roachpb.TransactionStatusError)(nil)) ||
+			errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 			return &errRetryLiveness{err}
 		}
 		return err

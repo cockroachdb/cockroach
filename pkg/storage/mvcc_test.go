@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -496,14 +497,14 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					// Read with transaction, should get error back.
 					if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					if _, err := MVCCScan(
 						ctx, engine, testKey2, testKey2.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxn,
 					); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					// Case 2b: Reduce MaxTimestamp to exactly that of value in future.
@@ -517,14 +518,14 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					// -----------------
 					if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS9); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					if _, err := MVCCScan(
 						ctx, engine, testKey2, testKey2.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS9,
 					); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					// Case 2c: Reduce MaxTimestamp below value in future. Value should
@@ -566,14 +567,14 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					// Read with transaction, should get error back.
 					if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 						t.Fatalf("wanted a WriteIntentError, got %+v", err)
 					}
 					if _, err := MVCCScan(
 						ctx, engine, testKey3, testKey3.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxn,
 					); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 						t.Fatalf("wanted a WriteIntentError, got %+v", err)
 					}
 					// Case 3b: Reduce MaxTimestamp to exactly that of intent in future.
@@ -586,14 +587,14 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					// -----------------
 					if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS9); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 						t.Fatalf("wanted a WriteIntentError, got %+v", err)
 					}
 					if _, err := MVCCScan(
 						ctx, engine, testKey3, testKey3.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS9,
 					); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 						t.Fatalf("wanted a WriteIntentError, got %+v", err)
 					}
 					// Case 3c: Reduce MaxTimestamp below intent in future. Intent should
@@ -634,14 +635,14 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					}
 					if _, _, err := mvccGet(ctx, engine, testKey4, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
 						t.Fatalf("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					if _, err := MVCCScan(
 						ctx, engine, testKey4, testKey4.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxn,
 					); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					// Case 4b: Reduce MaxTimestamp to exactly that of second value in
@@ -657,14 +658,14 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					// -----------------
 					if _, _, err := mvccGet(ctx, engine, testKey4, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS9); err == nil {
 						t.Fatalf("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					if _, err := MVCCScan(
 						ctx, engine, testKey4, testKey4.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS9,
 					); err == nil {
 						t.Fatal("wanted an error")
-					} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 					}
 					// Case 4c: Reduce MaxTimestamp below second value in future. Value should
@@ -1060,7 +1061,8 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 				}
 				res, err := MVCCScan(ctx, engine, testKey1, testKey4.Next(),
 					hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn})
-				wiErr, _ := err.(*roachpb.WriteIntentError)
+				var wiErr *roachpb.WriteIntentError
+				_ = errors.As(err, &wiErr)
 				if (err == nil) != (wiErr == nil) {
 					t.Errorf("%s(%d): unexpected error: %+v", cStr, i, err)
 				}
@@ -1199,7 +1201,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 				Txn:          txn1,
 			}); err == nil {
 				t.Error("expected an error getting inconsistently in txn")
-			} else if _, ok := err.(*roachpb.WriteIntentError); ok {
+			} else if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 				t.Error("expected non-WriteIntentError with inconsistent read in txn")
 			}
 
@@ -2703,14 +2705,13 @@ func TestMVCCInitPut(t *testing.T) {
 
 			// Reinserting the value fails if we fail on tombstones.
 			err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 4}, value1, true, nil)
-			switch e := err.(type) {
-			case *roachpb.ConditionFailedError:
+			if e := (*roachpb.ConditionFailedError)(nil); errors.As(err, &e) {
 				if !bytes.Equal(e.ActualValue.RawBytes, nil) {
 					t.Fatalf("the value %s in get result is not a tombstone", e.ActualValue.RawBytes)
 				}
-			case nil:
+			} else if err == nil {
 				t.Fatal("MVCCInitPut with a different value did not fail")
-			default:
+			} else {
 				t.Fatalf("unexpected error %T", e)
 			}
 
@@ -2722,15 +2723,14 @@ func TestMVCCInitPut(t *testing.T) {
 
 			// A repeat of the command with a different value will fail.
 			err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 6}, value2, false, nil)
-			switch e := err.(type) {
-			case *roachpb.ConditionFailedError:
+			if e := (*roachpb.ConditionFailedError)(nil); errors.As(err, &e) {
 				if !bytes.Equal(e.ActualValue.RawBytes, value1.RawBytes) {
 					t.Fatalf("the value %s in get result does not match the value %s in request",
 						e.ActualValue.RawBytes, value1.RawBytes)
 				}
-			case nil:
+			} else if err == nil {
 				t.Fatal("MVCCInitPut with a different value did not fail")
-			default:
+			} else {
 				t.Fatalf("unexpected error %T", e)
 			}
 
@@ -2813,14 +2813,12 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 
 			// Write value4 with an old timestamp without txn...should get an error.
 			err = MVCCInitPut(ctx, engine, nil, testKey1, clock.Now(), value4, false, nil)
-			switch e := err.(type) {
-			case *roachpb.ConditionFailedError:
+			if e := (*roachpb.ConditionFailedError)(nil); errors.As(err, &e) {
 				if !bytes.Equal(e.ActualValue.RawBytes, value2.RawBytes) {
 					t.Fatalf("the value %s in get result does not match the value %s in request",
 						e.ActualValue.RawBytes, value2.RawBytes)
 				}
-
-			default:
+			} else {
 				t.Fatalf("unexpected error %T", e)
 			}
 		})
@@ -3158,7 +3156,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 			// Now, put down an intent which should return a write too old error
 			// (but will still write the intent at tx1Commit.Timestmap+1.
 			err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, value2, txn1)
-			if _, ok := err.(*roachpb.WriteTooOldError); !ok {
+			if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
 				t.Fatalf("expected write too old error; got %s", err)
 			}
 
@@ -3221,7 +3219,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 				{hlc.MaxTimestamp, true},
 			} {
 				_, _, err := MVCCGet(ctx, engine, testKey1, test.Timestamp, MVCCGetOptions{})
-				if _, ok := err.(*roachpb.WriteIntentError); ok != test.found {
+				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) != test.found {
 					t.Fatalf("%d: expected write intent error: %t, got %v", i, test.found, err)
 				}
 			}
@@ -3257,7 +3255,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 			if err == nil {
 				t.Errorf("unexpected success on conditional put")
 			}
-			if _, ok := err.(*roachpb.ConditionFailedError); !ok {
+			if !errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 				t.Errorf("unexpected error on conditional put: %+v", err)
 			}
 
@@ -3267,7 +3265,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 			if err == nil {
 				t.Errorf("unexpected success on conditional put")
 			}
-			if _, ok := err.(*roachpb.WriteTooOldError); !ok {
+			if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
 				t.Errorf("unexpected error on conditional put: %+v", err)
 			}
 			// Verify new value was actually written at (3, 1).
@@ -3305,7 +3303,7 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 			txn.Sequence++
 			err = MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, value2, txn)
-			if _, ok := err.(*roachpb.WriteTooOldError); !ok {
+			if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
 				t.Errorf("expected WriteTooOldError on Put; got %v", err)
 			}
 			// Verify new value was actually written at (3, 1).
@@ -3389,7 +3387,7 @@ func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 			// Verify that the Put returned a WriteTooOld with the ActualTime set to the
 			// transactions provisional commit timestamp.
 			expTS := txn.WriteTimestamp
-			if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
+			if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) || wtoErr.ActualTimestamp != expTS {
 				t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
 			}
 
@@ -3545,7 +3543,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 
 			// Now try writing an earlier value without a txn--should get WriteTooOldError.
 			err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value4, nil)
-			if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
+			if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
 				t.Fatal("unexpected success")
 			} else if wtoErr.ActualTimestamp != expTS {
 				t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, wtoErr.ActualTimestamp)
@@ -3559,7 +3557,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 			// Now write an intent with exactly the same timestamp--ties also get WriteTooOldError.
 			err = MVCCPut(ctx, engine, nil, testKey1, txn2.ReadTimestamp, value5, txn2)
 			intentTS := expTS.Add(0, 1)
-			if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
+			if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
 				t.Fatal("unexpected success")
 			} else if wtoErr.ActualTimestamp != intentTS {
 				t.Fatalf("expected write too old error with actual ts %s; got %s", intentTS, wtoErr.ActualTimestamp)
@@ -3640,7 +3638,7 @@ func TestMVCCGetWithDiffEpochs(t *testing.T) {
 							if test.expErr {
 								if err == nil {
 									t.Errorf("test %d: unexpected success", i)
-								} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+								} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 									t.Errorf("test %d: expected write intent error; got %v", i, err)
 								}
 							} else if err != nil || value == nil || !bytes.Equal(test.expValue.RawBytes, value.RawBytes) {
@@ -3688,7 +3686,7 @@ func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 					txn1ts.WriteTimestamp = hlc.Timestamp{WallTime: 4}
 					// Expected to hit WriteTooOld error but to still lay down intent.
 					err := MVCCPut(ctx, engine, nil, testKey1, txn1ts.ReadTimestamp, value3, txn1ts)
-					if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
+					if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
 						t.Fatalf("unexpectedly not WriteTooOld: %+v", err)
 					} else if expTS, actTS := txn1ts.WriteTimestamp, wtoErr.ActualTimestamp; expTS != actTS {
 						t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, actTS)

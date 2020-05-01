@@ -1877,7 +1877,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 		testutils.SucceedsSoon(t, func() error {
 			mtc.stores[1].MustForceReplicaGCScanAndProcess()
 			_, err := mtc.stores[1].GetReplica(rangeID)
-			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+			if !errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
 				return errors.Errorf("expected replica to be garbage collected, got %v %T", err, err)
 			}
 			return nil
@@ -2632,7 +2632,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, s := range mtc.stores[1:] {
 			_, err := s.GetReplica(rangeID)
-			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+			if !errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
 				return errors.Wrapf(err, "range %d not yet removed from %s", rangeID, s)
 			}
 		}
@@ -3470,7 +3470,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		replica, err := mtc.stores[3].GetReplica(rangeID)
 		if err != nil {
-			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
+			if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
 				return nil
 			}
 			return err

@@ -1245,7 +1245,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 	})
 	// CPuts only provide idempotent inserts if we ignore the errors that arise
 	// when the condition isn't met.
-	if _, ok := err.(*roachpb.ConditionFailedError); ok {
+	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 		return nil
 	}
 	return err

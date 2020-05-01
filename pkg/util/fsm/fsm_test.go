@@ -83,7 +83,7 @@ func TestBasicTransitions(t *testing.T) {
 	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state2{}, Event: event2{}}), state2{})
 
 	// Invalid transitions.
-	notFoundErr := TransitionNotFoundError{}
+	notFoundErr := &TransitionNotFoundError{}
 	require.IsType(t, trans.applyWithErr(t, Args{Prev: state3{}, Event: event1{}}), notFoundErr)
 	require.IsType(t, trans.applyWithErr(t, Args{Prev: state1{}, Event: event3{}}), notFoundErr)
 }

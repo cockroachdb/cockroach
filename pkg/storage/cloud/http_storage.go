@@ -198,7 +198,7 @@ func (r *resumingHTTPReader) sendRequest(
 
 		log.Errorf(r.ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
 
-		if _, ok := err.(*retryableHTTPError); !ok {
+		if !errors.HasType(err, (*retryableHTTPError)(nil)) {
 			return
 		}
 	}

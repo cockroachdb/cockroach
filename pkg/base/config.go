@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // Base config defaults.
@@ -219,7 +220,7 @@ type Config struct {
 }
 
 func wrapError(err error) error {
-	if _, ok := err.(*security.Error); !ok {
+	if !errors.HasType(err, (*security.Error)(nil)) {
 		return &security.Error{
 			Message: "problem using security settings",
 			Err:     err,

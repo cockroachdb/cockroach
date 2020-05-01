@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // CollectIntentRows collects the provisional key-value pairs for each intent
@@ -53,11 +54,9 @@ func CollectIntentRows(
 	for i := range intents {
 		kv, err := readProvisionalVal(ctx, reader, usePrefixIter, &intents[i])
 		if err != nil {
-			switch t := err.(type) {
-			case *roachpb.WriteIntentError:
-				log.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", t, t)
-			case *roachpb.ReadWithinUncertaintyIntervalError:
-				log.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", t, t)
+			if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) ||
+				errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
+				log.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", err, err)
 			}
 			return nil, err
 		}

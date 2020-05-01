@@ -1692,6 +1692,36 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^#`), // comment line
 			// This exception is for the colexec generated files.
 			stream.GrepNot(`pkg/sql/colexec/.*\.eg.go:[0-9:]+: self-assignment of .* to .*`),
+			// Roachpb generated switch on `error`. It's OK for now because
+			// the inner error is always unwrapped (it's a protobuf
+			// enum). Eventually we want to use generalized error
+			// encode/decode instead and drop the linter exception.
+			stream.GrepNot(`pkg/roachpb/batch_generated\.go:.*invalid direct cast on error object`),
+			// Roachpb's own error package takes ownership of error unwraps
+			// (by enforcing that errors can never been wrapped under a
+			// roachpb.Error, which is an inconvenient limitation but it is
+			// what it is). Once this code is simplified to use generalized
+			// error encode/decode, it can be dropped from the linter
+			// exception as well.
+			stream.GrepNot(`pkg/roachpb/errors\.go:.*invalid direct cast on error object`),
+			// pgerror's pgcode logic uses its own custom cause recursion
+			// algorithm and thus cannot use errors.If() which mandates a
+			// different recursion order.
+			//
+			// It's a bit unfortunate that the entire file is added
+			// as an exception here, given that only one function
+			// really needs the linter. We could consider splitting
+			// that function to a different file to limit the scope
+			// of the exception.
+			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
+			// The crash reporting code uses its own custom cause recursion
+			// algorithm and thus cannot use errors.Is.  However, it's also
+			// due an overhaul - it's really redundant with the error
+			// redaction code already present in the errors library.
+			//
+			// TODO(knz): remove the code in log and replace by the errors'
+			// own redact code.
+			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct cast on error object`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")

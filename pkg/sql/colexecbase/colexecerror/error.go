@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -155,21 +154,12 @@ func newNotInternalError(err error) *notInternalError {
 }
 
 var (
-	_ causer.Causer  = &notInternalError{}
 	_ errors.Wrapper = &notInternalError{}
 )
 
-func (e *notInternalError) Error() string {
-	return e.cause.Error()
-}
-
-func (e *notInternalError) Cause() error {
-	return e.cause
-}
-
-func (e *notInternalError) Unwrap() error {
-	return e.Cause()
-}
+func (e *notInternalError) Error() string { return e.cause.Error() }
+func (e *notInternalError) Cause() error  { return e.cause }
+func (e *notInternalError) Unwrap() error { return e.Cause() }
 
 func decodeNotInternalError(
 	_ context.Context, cause error, _ string, _ []string, _ proto.Message,

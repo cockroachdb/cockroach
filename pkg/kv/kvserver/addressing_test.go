@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 type metaRecord struct {
@@ -169,7 +170,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				hlc.MaxTimestamp, storage.MVCCScanOptions{})
 			if err != nil {
 				// Wait for the intent to be resolved.
-				if _, ok := err.(*roachpb.WriteIntentError); ok {
+				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 					return err
 				}
 				t.Fatal(err)
