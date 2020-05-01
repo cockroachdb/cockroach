@@ -1348,6 +1348,8 @@ func registerBinOpOutputTypes() {
 		// Use an output type of the same width when input widths are the same.
 		binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, coltypes.Decimal}] = coltypes.Decimal
 		binOpOutputTypes[binOp][coltypePair{coltypes.Float64, coltypes.Float64}] = coltypes.Float64
+		// Note: keep output type of binary operations on integers of different
+		// widths in line with planning in colexec/execplan.go.
 		binOpOutputTypes[binOp][coltypePair{coltypes.Int16, coltypes.Int16}] = coltypes.Int16
 		binOpOutputTypes[binOp][coltypePair{coltypes.Int32, coltypes.Int32}] = coltypes.Int32
 		binOpOutputTypes[binOp][coltypePair{coltypes.Int64, coltypes.Int64}] = coltypes.Int64
