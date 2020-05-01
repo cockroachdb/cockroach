@@ -12,7 +12,6 @@ package cli
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,17 +21,21 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
 
@@ -113,9 +116,10 @@ func newZipper(f *os.File) *zipper {
 	}
 }
 
-func (z *zipper) close() {
-	_ = z.z.Close()
-	_ = z.f.Close()
+func (z *zipper) close() error {
+	err1 := z.z.Close()
+	err2 := z.f.Close()
+	return errors.CombineErrors(err1, err2)
 }
 
 func (z *zipper) create(name string, mtime time.Time) (io.Writer, error) {
@@ -201,7 +205,7 @@ func runZipRequestWithTimeout(
 	return contextutil.RunWithTimeout(ctx, requestName, timeout, fn)
 }
 
-func runDebugZip(cmd *cobra.Command, args []string) error {
+func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	const (
 		base          = "debug"
 		eventsName    = base + "/events"
@@ -243,6 +247,14 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// We're going to use the SQL code, but in non-interactive mode.
+	// Override whatever terminal-driven defaults there may be out there.
+	cliCtx.isInteractive = false
+	cliCtx.terminalOutput = false
+	sqlCtx.showTimes = false
+	// Use a streaming format to avoid accumulating all rows in RAM.
+	cliCtx.tableDisplayFormat = tableDisplayTSV
+
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
 		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
@@ -262,7 +274,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	fmt.Printf("writing %s\n", name)
 
 	z := newZipper(out)
-	defer z.close()
+	defer func() {
+		cErr := z.close()
+		retErr = errors.CombineErrors(retErr, cErr)
+	}()
 
 	timeout := 10 * time.Second
 	if cliCtx.cmdTimeout != 0 {
@@ -327,13 +342,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 
 	{
 		var nodes *serverpb.NodesResponse
-		if err := runZipRequestWithTimeout(baseCtx, "requesting nodes", timeout, func(ctx context.Context) error {
+		err := runZipRequestWithTimeout(baseCtx, "requesting nodes", timeout, func(ctx context.Context) error {
 			nodes, err = status.Nodes(ctx, &serverpb.NodesRequest{})
 			return err
-		}); err != nil {
-			if err := z.createError(nodesPrefix, err); err != nil {
-				return err
-			}
+		})
+		if cErr := z.createJSONOrError(base+"/nodes.json", nodes, err); cErr != nil {
+			return cErr
 		}
 
 		// In case nodes came up back empty (the Nodes() RPC failed), we
@@ -350,9 +364,49 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			nodeList = nodes.Nodes
 		}
 
+		// We'll want livenesses to decide whether a node is decommissioned.
+		var lresponse *serverpb.LivenessResponse
+		err = runZipRequestWithTimeout(baseCtx, "requesting liveness", timeout, func(ctx context.Context) error {
+			lresponse, err = admin.Liveness(ctx, &serverpb.LivenessRequest{})
+			return err
+		})
+		if cErr := z.createJSONOrError(base+"/liveness.json", nodes, err); cErr != nil {
+			return cErr
+		}
+		livenessByNodeID := map[roachpb.NodeID]storagepb.NodeLivenessStatus{}
+		if lresponse != nil {
+			livenessByNodeID = lresponse.Statuses
+		}
+
 		for _, node := range nodeList {
-			id := fmt.Sprintf("%d", node.Desc.NodeID)
+			nodeID := node.Desc.NodeID
+
+			liveness := livenessByNodeID[nodeID]
+			if liveness == storagepb.NodeLivenessStatus_DECOMMISSIONED {
+				// Decommissioned + process terminated. Let's not waste time
+				// on this node.
+				//
+				// NB: we still inspect DECOMMISSIONING nodes (marked as
+				// decommissioned but the process is still alive) to get a
+				// chance to collect their log files.
+				//
+				// NB: we still inspect DEAD nodes because even though they
+				// don't heartbeat their liveness record their process might
+				// still be up and willing to deliver some log files.
+				continue
+			}
+
+			id := fmt.Sprintf("%d", nodeID)
 			prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+
+			if !zipCtx.nodes.isIncluded(nodeID) {
+				if err := z.createRaw(prefix+".skipped",
+					[]byte(fmt.Sprintf("skipping excluded node %d\n", nodeID))); err != nil {
+					return err
+				}
+				continue
+			}
+
 			// Don't use sqlConn because that's only for is the node `debug
 			// zip` was pointed at, but here we want to connect to nodes
 			// individually to grab node- local SQL tables. Try to guess by
@@ -648,18 +702,122 @@ func dumpTableDataForZip(
 	z *zipper, conn *sqlConn, timeout time.Duration, base, table, selectClause string,
 ) error {
 	query := fmt.Sprintf(`SET statement_timeout = '%s'; SELECT %s FROM %s`, timeout, selectClause, table)
-	name := base + "/" + table + ".txt"
+	baseName := base + "/" + table
 
 	fmt.Printf("retrieving SQL data for %s... ", table)
-	var buf bytes.Buffer
-	err := runQueryAndFormatResults(conn, &buf, makeQuery(query))
-	if err != nil {
-		return z.createError(name, err)
+	const maxRetries = 5
+	suffix := ""
+	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
+		name := baseName + suffix + ".txt"
+		w, err := z.create(name, time.Time{})
+		if err != nil {
+			return err
+		}
+		// Pump the SQL rows directly into the zip writer, to avoid
+		// in-RAM buffering.
+		if err := runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
+			if cErr := z.createError(name, err); cErr != nil {
+				return cErr
+			}
+			pqErr, ok := errors.UnwrapAll(err).(*pq.Error)
+			if !ok {
+				// Not a SQL error. Nothing to retry.
+				break
+			}
+			if pqErr.Code != pgcode.SerializationFailure {
+				// A non-retry error. We've printed the error, and
+				// there's nothing to retry. Stop here.
+				break
+			}
+			// We've encountered a retry error. Add a suffix then loop.
+			suffix = fmt.Sprintf(".%d", numRetries)
+			continue
+		}
+		break
 	}
-	w, err := z.create(name, time.Time{})
-	if err != nil {
-		return err
+	return nil
+}
+
+type nodeSelection struct {
+	inclusive     rangeSelection
+	exclusive     rangeSelection
+	includedCache map[int]struct{}
+	excludedCache map[int]struct{}
+}
+
+func (n *nodeSelection) isIncluded(nodeID roachpb.NodeID) bool {
+	// Avoid recomputing the maps on every call.
+	if n.includedCache == nil {
+		n.includedCache = n.inclusive.items()
 	}
-	_, err = io.Copy(w, bytes.NewReader(buf.Bytes()))
-	return err
+	if n.excludedCache == nil {
+		n.excludedCache = n.exclusive.items()
+	}
+
+	// If the included cache is empty, then we're assuming the node is included.
+	isIncluded := true
+	if len(n.includedCache) > 0 {
+		_, isIncluded = n.includedCache[int(nodeID)]
+	}
+	// Then filter out excluded IDs.
+	if _, excluded := n.excludedCache[int(nodeID)]; excluded {
+		isIncluded = false
+	}
+	return isIncluded
+}
+
+type rangeSelection struct {
+	input  string
+	ranges []vrange
+}
+
+type vrange struct {
+	a, b int
+}
+
+func (r *rangeSelection) String() string { return r.input }
+
+func (r *rangeSelection) Type() string {
+	return "a-b,c,d-e,..."
+}
+
+func (r *rangeSelection) Set(v string) error {
+	r.input = v
+	for _, rs := range strings.Split(v, ",") {
+		var thisRange vrange
+		if strings.Contains(rs, "-") {
+			ab := strings.SplitN(rs, "-", 2)
+			a, err := strconv.Atoi(ab[0])
+			if err != nil {
+				return err
+			}
+			b, err := strconv.Atoi(ab[1])
+			if err != nil {
+				return err
+			}
+			if b < a {
+				return errors.New("invalid range")
+			}
+			thisRange = vrange{a, b}
+		} else {
+			a, err := strconv.Atoi(rs)
+			if err != nil {
+				return err
+			}
+			thisRange = vrange{a, a}
+		}
+		r.ranges = append(r.ranges, thisRange)
+	}
+	return nil
+}
+
+// items returns the values selected by the range selection
+func (r *rangeSelection) items() map[int]struct{} {
+	s := map[int]struct{}{}
+	for _, vr := range r.ranges {
+		for i := vr.a; i <= vr.b; i++ {
+			s[i] = struct{}{}
+		}
+	}
+	return s
 }

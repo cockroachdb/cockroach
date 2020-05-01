@@ -1,0 +1,81 @@
+zip
+----
+debug zip /dev/null --timeout=.5s
+establishing RPC connection to ...
+retrieving the node status to get the SQL address...
+using SQL address: ...
+using SQL connection URL: postgresql://...
+writing /dev/null
+requesting data for debug/events... writing: debug/events.json.err.txt
+  ^- resulted in ...
+requesting data for debug/rangelog... writing: debug/rangelog.json.err.txt
+  ^- resulted in ...
+requesting data for debug/liveness... writing: debug/liveness.json
+requesting data for debug/settings... writing: debug/settings.json
+requesting data for debug/reports/problemranges... writing: debug/reports/problemranges.json
+retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
+retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
+retrieving SQL data for crdb_internal.cluster_settings... writing: debug/crdb_internal.cluster_settings.txt
+retrieving SQL data for crdb_internal.cluster_transactions... writing: debug/crdb_internal.cluster_transactions.txt
+retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.txt
+writing: debug/crdb_internal.jobs.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
+writing: debug/system.jobs.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
+writing: debug/system.descriptor.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for system.namespace... writing: debug/system.namespace.txt
+writing: debug/system.namespace.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for system.namespace2... writing: debug/system.namespace2.txt
+writing: debug/system.namespace2.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
+writing: debug/crdb_internal.kv_node_status.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt
+writing: debug/crdb_internal.kv_store_status.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
+writing: debug/crdb_internal.schema_changes.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal.partitions.txt
+writing: debug/crdb_internal.partitions.txt.err.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt
+writing: debug/crdb_internal.zones.txt.err.txt
+  ^- resulted in ...
+requesting nodes... writing: debug/nodes.json.err.txt
+  ^- resulted in ...
+requesting liveness... writing: debug/liveness.json
+writing: debug/nodes/1/status.json
+using SQL connection URL for node 1: postgresql://...
+retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/1/crdb_internal.feature_usage.txt
+retrieving SQL data for crdb_internal.gossip_alerts... writing: debug/nodes/1/crdb_internal.gossip_alerts.txt
+retrieving SQL data for crdb_internal.gossip_liveness... writing: debug/nodes/1/crdb_internal.gossip_liveness.txt
+retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/1/crdb_internal.gossip_network.txt
+retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/1/crdb_internal.gossip_nodes.txt
+retrieving SQL data for crdb_internal.leases... writing: debug/nodes/1/crdb_internal.leases.txt
+retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/1/crdb_internal.node_build_info.txt
+retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/1/crdb_internal.node_metrics.txt
+retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crdb_internal.node_queries.txt
+retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/1/crdb_internal.node_runtime_info.txt
+retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/1/crdb_internal.node_sessions.txt
+retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/1/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/1/crdb_internal.node_transactions.txt
+retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/1/crdb_internal.node_txn_stats.txt
+requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
+requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
+requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginestats.json
+requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
+requesting threads for node 1... writing: debug/nodes/1/threads.txt
+requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
+requesting heap files for node 1... writing: debug/nodes/1/heapprof.err.txt
+  ^- resulted in ...
+requesting goroutine files for node 1... writing: debug/nodes/1/goroutines.err.txt
+  ^- resulted in ...
+requesting log file ...
+requesting list of SQL databases... writing: debug/schema.err.txt
+  ^- resulted in ...

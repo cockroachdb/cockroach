@@ -91,6 +91,8 @@ func initCLIDefaults() {
 	sqlCtx.debugMode = false
 	sqlCtx.echo = false
 
+	zipCtx.nodes = nodeSelection{}
+
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
 
@@ -259,6 +261,12 @@ var sqlCtx = struct {
 	// more verbose (sets echo).
 	debugMode bool
 }{cliContext: &cliCtx}
+
+// zipCtx captures the command-line parameters of the `zip` command.
+// Defaults set by InitCLIDefaults() above.
+var zipCtx struct {
+	nodes nodeSelection
+}
 
 // dumpCtx captures the command-line parameters of the `dump` command.
 // Defaults set by InitCLIDefaults() above.
