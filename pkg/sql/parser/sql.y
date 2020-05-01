@@ -8234,19 +8234,19 @@ a_expr:
   }
 | a_expr IS NULL %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.IsNotDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.IsNullExpr{Expr: $1.expr()}
   }
 | a_expr ISNULL %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.IsNotDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.IsNullExpr{Expr: $1.expr()}
   }
 | a_expr IS NOT NULL %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.IsDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.IsNotNullExpr{Expr: $1.expr()}
   }
 | a_expr NOTNULL %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.IsDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.IsNotNullExpr{Expr: $1.expr()}
   }
 | row OVERLAPS row { return unimplemented(sqllex, "overlaps") }
 | a_expr IS TRUE %prec IS

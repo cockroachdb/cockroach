@@ -781,9 +781,7 @@ func NewColOperator(
 				colmem.NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx,
 			)
 			result.IsStreaming = true
-			result.ColumnTypes = make([]*types.T, outputIdx+1)
-			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
-			result.ColumnTypes[outputIdx] = types.Int
+			result.ColumnTypes = appendOneType(spec.Input[0].ColumnTypes, types.Int)
 
 		case core.HashJoiner != nil:
 			if err := checkNumIn(inputs, 2); err != nil {
@@ -1085,10 +1083,7 @@ func NewColOperator(
 				if err != nil {
 					return result, err
 				}
-				oldColumnTypes := result.ColumnTypes
-				result.ColumnTypes = make([]*types.T, len(oldColumnTypes)+1)
-				copy(result.ColumnTypes, oldColumnTypes)
-				result.ColumnTypes[len(oldColumnTypes)] = returnType
+				result.ColumnTypes = appendOneType(result.ColumnTypes, returnType)
 				input = result.Op
 			}
 
@@ -1115,6 +1110,11 @@ func NewColOperator(
 		ColumnTypes: result.ColumnTypes,
 	}
 	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount)
+	if err != nil && processorConstructor == nil {
+		// Do not attempt to wrap as a row source if there is no
+		// processorConstructor because it would fail.
+		return result, err
+	}
 	if err != nil {
 		log.VEventf(
 			ctx, 2,
@@ -1478,6 +1478,18 @@ func planSelectionOperators(
 		)
 		op = NewBoolVecToSelOp(op, resultIdx)
 		return op, resultIdx, typs, internalMemUsed, err
+	case *tree.IsNullExpr:
+		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc,
+		)
+		op = newIsNullSelOp(op, resultIdx, false)
+		return op, resultIdx, typs, internalMemUsed, err
+	case *tree.IsNotNullExpr:
+		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc,
+		)
+		op = newIsNullSelOp(op, resultIdx, true)
+		return op, resultIdx, typs, internalMemUsed, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, internalMemUsedLeft, err := planProjectionOperators(
@@ -1509,8 +1521,10 @@ func planSelectionOperators(
 					err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
 					return nil, resultIdx, ct, internalMemUsed, err
 				}
-				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
-				// negate when IS DISTINCT FROM is used.
+				// IS NOT DISTINCT FROM NULL is synonymous with IS NULL and IS
+				// DISTINCT FROM NULL is synonymous with IS NOT NULL (except for
+				// tuples). Therefore, negate when the operator is IS DISTINCT
+				// FROM NULL.
 				negate := t.Operator == tree.IsDistinctFrom
 				op = newIsNullSelOp(leftOp, leftIdx, negate)
 				return op, resultIdx, ct, internalMemUsedLeft, err
@@ -1546,9 +1560,7 @@ func planTypedMaybeNullProjectionOperators(
 	if expr == tree.DNull {
 		resultIdx = len(columnTypes)
 		op = NewConstNullOp(colmem.NewAllocator(ctx, acc), input, resultIdx, exprTyp)
-		typs = make([]*types.T, len(columnTypes)+1)
-		copy(typs, columnTypes)
-		typs[len(columnTypes)] = exprTyp
+		typs = appendOneType(columnTypes, exprTyp)
 		return op, resultIdx, typs, internalMemUsed, nil
 	}
 	return planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc)
@@ -1587,9 +1599,7 @@ func planCastOperator(
 	}
 	outputIdx := len(columnTypes)
 	op, err = GetCastOperator(colmem.NewAllocator(ctx, acc), input, inputIdx, outputIdx, fromType, toType)
-	typs = make([]*types.T, len(columnTypes)+1)
-	copy(typs, columnTypes)
-	typs[len(columnTypes)] = toType
+	typs = appendOneType(columnTypes, toType)
 	return op, outputIdx, typs, err
 }
 
@@ -1613,6 +1623,11 @@ func planProjectionOperators(
 		return planProjectionExpr(ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input, acc)
 	case *tree.BinaryExpr:
 		return planProjectionExpr(ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input, acc)
+	case *tree.IsNullExpr:
+		t.TypedInnerExpr()
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false)
+	case *tree.IsNotNullExpr:
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true)
 	case *tree.CastExpr:
 		expr := t.Expr.(tree.TypedExpr)
 		// If the expression is NULL, we use planTypedMaybeNullProjectionOperators instead of planProjectionOperators
@@ -1651,22 +1666,16 @@ func planProjectionOperators(
 			inputCols = append(inputCols, resultIdx)
 			internalMemUsed += projectionInternalMem
 		}
-		funcOutputType := t.ResolvedType()
-		resultIdx = len(typs)
-		oldTyps := typs
-		typs = make([]*types.T, len(oldTyps)+1)
-		copy(typs, oldTyps)
-		typs[len(oldTyps)] = funcOutputType
+		typs = appendOneType(typs, t.ResolvedType())
+		resultIdx = len(typs) - 1
 		op, err = NewBuiltinFunctionOperator(
 			colmem.NewAllocator(ctx, acc), evalCtx, t, typs, inputCols, resultIdx, op,
 		)
 		return op, resultIdx, typs, internalMemUsed, err
 	case tree.Datum:
 		datumType := t.ResolvedType()
-		typs = make([]*types.T, len(columnTypes)+1)
-		copy(typs, columnTypes)
-		resultIdx = len(columnTypes)
-		typs[resultIdx] = datumType
+		typs = appendOneType(columnTypes, datumType)
+		resultIdx = len(typs) - 1
 		if datumType.Family() == types.UnknownFamily {
 			return nil, resultIdx, typs, internalMemUsed, errors.New("cannot plan null type unknown")
 		}
@@ -1703,10 +1712,8 @@ func planProjectionOperators(
 			return nil, resultIdx, typs, internalMemUsed, errors.Newf(
 				"unsupported type %s", caseOutputType)
 		}
-		caseOutputIdx := len(columnTypes)
-		typs = make([]*types.T, len(columnTypes)+1)
-		copy(typs, columnTypes)
-		typs[caseOutputIdx] = caseOutputType
+		typs = appendOneType(columnTypes, caseOutputType)
+		caseOutputIdx := len(typs) - 1
 		thenIdxs := make([]int, len(t.Whens)+1)
 		for i, when := range t.Whens {
 			// The case operator is assembled from n WHEN arms, n THEN arms, and an
@@ -1961,10 +1968,7 @@ func planProjectionExpr(
 	if sMem, ok := op.(InternalMemoryOperator); ok {
 		internalMemUsed += sMem.InternalMemoryUsage()
 	}
-	oldTyps := typs
-	typs = make([]*types.T, len(oldTyps)+1)
-	copy(typs, oldTyps)
-	typs[len(oldTyps)] = actualOutputType
+	typs = appendOneType(typs, actualOutputType)
 	if !outputType.Identical(actualOutputType) {
 		// The projection operator outputs a column of a different type than
 		// the expected logical type. In order to "synchronize" the reality and
@@ -1995,10 +1999,8 @@ func planLogicalProjectionOp(
 	acc *mon.BoundAccount,
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
 	// Add a new boolean column that will store the result of the projection.
-	resultIdx = len(columnTypes)
-	typs = make([]*types.T, resultIdx+1)
-	copy(typs, columnTypes)
-	typs[resultIdx] = types.Bool
+	typs = appendOneType(columnTypes, types.Bool)
+	resultIdx = len(typs) - 1
 	var (
 		typedLeft, typedRight                       tree.TypedExpr
 		leftProjOpChain, rightProjOpChain, outputOp colexecbase.Operator
@@ -2047,4 +2049,36 @@ func planLogicalProjectionOp(
 		)
 	}
 	return outputOp, resultIdx, typs, internalMemUsedLeft + internalMemUsedRight, nil
+}
+
+// planIsNullProjectionOp plans the operator for IS NULL and IS NOT NULL
+// expressions (tree.IsNullExpr and tree.IsNotNullExpr, respectively).
+func planIsNullProjectionOp(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	outputType *types.T,
+	expr tree.TypedExpr,
+	columnTypes []*types.T,
+	input colexecbase.Operator,
+	acc *mon.BoundAccount,
+	negate bool,
+) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
+	op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
+		ctx, evalCtx, expr, columnTypes, input, acc,
+	)
+	typs = appendOneType(typs, outputType)
+	outputIdx := len(typs) - 1
+	op = newIsNullProjOp(colmem.NewAllocator(ctx, acc), op, resultIdx, outputIdx, negate)
+	return op, outputIdx, typs, internalMemUsed, err
+}
+
+// appendOneType appends a *types.T to then end of a []*types.T. The size of the
+// underlying array of the resulting slice is 1 greater than the input slice.
+// This differs from the built-in append function, which can double the capacity
+// of the slice if its length is less than 1024, or increase by 25% otherwise.
+func appendOneType(typs []*types.T, t *types.T) []*types.T {
+	newTyps := make([]*types.T, len(typs)+1)
+	copy(newTyps, typs)
+	newTyps[len(newTyps)-1] = t
+	return newTyps
 }
