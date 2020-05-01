@@ -528,9 +528,9 @@ func (ts *TestServer) StartTenant() (addr string, _ error) {
 		return "", err
 	}
 
-	s.execCfg.DistSQLPlanner.SetNodeDesc(roachpb.NodeDescriptor{
-		NodeID: args.nodeIDContainer.Get(),
-	})
+	// NB: this should no longer be necessary after #47902. Right now it keeps
+	// the tenant from crashing.
+	s.execCfg.DistSQLPlanner.SetNodeDesc(roachpb.NodeDescriptor{NodeID: -1})
 
 	connManager := netutil.MakeServer(
 		args.stopper,
