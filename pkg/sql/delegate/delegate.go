@@ -112,6 +112,9 @@ func TryDelegate(
 	case *tree.ShowSavepointStatus:
 		return nil, unimplemented.NewWithIssue(47333, "cannot use SHOW SAVEPOINT STATUS as a statement source")
 
+	case *tree.Notify:
+		return d.delegateNotify(t)
+
 	default:
 		return nil, nil
 	}

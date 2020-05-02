@@ -14,6 +14,7 @@ stmt ::=
 	| revoke_stmt
 	| savepoint_stmt
 	| release_stmt
+	| listen_notify_stmt
 	| nonpreparable_set_stmt
 	| transaction_stmt
 	| close_cursor_stmt
@@ -81,6 +82,13 @@ savepoint_stmt ::=
 
 release_stmt ::=
 	'RELEASE' savepoint_name
+
+listen_notify_stmt ::=
+	'NOTIFY' name
+	| 'NOTIFY' name ',' 'SCONST'
+	| 'LISTEN' name
+	| 'UNLISTEN' name
+	| 'UNLISTEN' '*'
 
 nonpreparable_set_stmt ::=
 	set_transaction_stmt
@@ -725,6 +733,7 @@ unreserved_keyword ::=
 	| 'LEVEL'
 	| 'LINESTRING'
 	| 'LIST'
+	| 'LISTEN'
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGIN'
@@ -748,6 +757,7 @@ unreserved_keyword ::=
 	| 'NO_INDEX_JOIN'
 	| 'NOCREATEROLE'
 	| 'NOLOGIN'
+	| 'NOTIFY'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -852,6 +862,7 @@ unreserved_keyword ::=
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
+	| 'UNLISTEN'
 	| 'UNLOGGED'
 	| 'UNSPLIT'
 	| 'UNTIL'

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -193,7 +194,15 @@ type planner struct {
 	// instead.
 	noticeSender noticeSender
 
+	// notificationSender allows the sending of LISTEN/NOTIFY notifications.
+	notificationSender notify.NotificationSender
+
 	queryCacheSession querycache.Session
+
+	// sessionLifetimeContext is a context that gets cancelled exactly when the
+	// session ends. It's suitable for processes that must outlast a single
+	// statement, but not outlast the session that they were created from.
+	sessionLifetimeContext context.Context
 }
 
 func (ctx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
@@ -270,6 +279,7 @@ func newInternalPlanner(
 	}
 
 	p := &planner{execCfg: execCfg}
+	p.sessionLifetimeContext = ctx
 
 	p.txn = txn
 	p.stmt = nil

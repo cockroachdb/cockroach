@@ -1182,7 +1182,7 @@
   revision = "634a59d12406abc51545000deab7cf43ebc32378"
 
 [[projects]]
-  digest = "1:e8501d7fa801be523f103178ced935b37778925c7338f0f94e50c14a4d450f4a"
+  digest = "1:4b3538f72f5c6f77e801bf35500407ed1acac6b91b5e90a8f969a623c67c4379"
   name = "github.com/lib/pq"
   packages = [
     ".",
@@ -1190,7 +1190,7 @@
     "scram",
   ]
   pruneopts = "UT"
-  revision = "9eb3fc897d6fd97dd4aad3d0404b54e2f7cc56be"
+  revision = "c904eabba4136fb97e44adefd2f4f979131242c7"
 
 [[projects]]
   digest = "1:078d0b47a888546a9f8810d64f76792f70b2fa564ad2bbe6dddd002c032ce7cf"
@@ -2265,6 +2265,7 @@
     "golang.org/x/tools/go/ast/inspector",
     "golang.org/x/tools/go/buildutil",
     "golang.org/x/tools/go/packages",
+    "golang.org/x/tools/go/types/typeutil",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
     "google.golang.org/grpc",

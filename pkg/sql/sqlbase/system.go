@@ -286,6 +286,15 @@ create table system.statement_diagnostics(
 
 	FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error)
 );`
+
+	PGNotificationsTableSchema = `
+CREATE TABLE system.pg_notifications(
+  chan_name STRING PRIMARY KEY,
+  message STRING,
+  node_id INT4,
+
+  FAMILY "primary" (chan_name, message, node_id)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -338,6 +347,8 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.StatementBundleChunksTableID:         privilege.ReadWriteData,
 	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
 	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
+	// TODO (jordan): we want to restrict ordinary users from writing to this table.
+	keys.PGNotificationsTableID: privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -1454,6 +1465,34 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	PGNotificationsTable = TableDescriptor{
+		Name:                    "pg_notifications",
+		ID:                      keys.PGNotificationsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "chan_name", ID: 1, Type: *types.String, Nullable: false},
+			{Name: "message", ID: 2, Type: *types.String, Nullable: false},
+			{Name: "node_id", ID: 3, Type: *types.Int4, Nullable: false},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"chan_name", "message", "node_id"},
+				ColumnIDs:   []ColumnID{1, 2, 3},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("chan_name"),
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.StatementDiagnosticsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -1512,6 +1551,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementBundleChunksTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsRequestsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsTable)
+
+	// Tables introduced in 20.2.
+	target.AddDescriptor(keys.SystemDatabaseID, &PGNotificationsTable)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the

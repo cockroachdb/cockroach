@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -67,6 +68,10 @@ type conn struct {
 
 	// stmtBuf is populated with commands queued for execution by this conn.
 	stmtBuf sql.StmtBuf
+
+	// notificationBuf is filled with LISTEN/NOTIFY notifications that we haven't
+	// yet sent out to the client.
+	notificationBuf []notify.Payload
 
 	// res is used to avoid allocations in the conn's ClientComm implementation.
 	res commandResult
@@ -432,6 +437,7 @@ Loop:
 				ctx,
 				sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
 		}
+
 		if err != nil {
 			break Loop
 		}
@@ -609,6 +615,20 @@ func (c *conn) bufferParamStatus(param, value string) error {
 	c.msgBuilder.writeTerminatedString(param)
 	c.msgBuilder.writeTerminatedString(value)
 	return c.msgBuilder.finishMsg(&c.writerState.buf)
+}
+
+// SendNotification is part of the notify.NotificationSender interface.
+func (c *conn) SendNotification(ctx context.Context, payload notify.Payload) {
+	if log.V(2) {
+		log.Infof(ctx, "buffering notification %v", payload)
+	}
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
+	c.msgBuilder.putInt32(payload.NodeID)
+	c.msgBuilder.writeTerminatedString(payload.ChannelName)
+	c.msgBuilder.writeTerminatedString(payload.Message)
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		log.Errorf(ctx, "got error while sending async notif")
+	}
 }
 
 func (c *conn) bufferNotice(ctx context.Context, noticeErr error) error {

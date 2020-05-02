@@ -1,0 +1,79 @@
+# LogicTest: local
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration='10ms'
+
+statement error not available without rangefeeds
+LISTEN foo
+
+statement error not available without rangefeeds
+NOTIFY foo
+
+statement ok
+SET CLUSTER SETTING kv.rangefeed.enabled=true
+
+statement ok
+LISTEN foo
+
+# Duplicate listens do nothing.
+statement ok
+LISTEN foo
+
+query T notificationtrace
+NOTIFY foo
+----
+Asynchronous notification "foo" received from server with node ID 1.
+
+query T notificationtrace
+NOTIFY foo, 'bar'; select pg_sleep(.4)
+----
+Asynchronous notification "foo" with payload "bar" received from server with node ID 1.
+
+query T notificationtrace
+NOTIFY foo; NOTIFY foo, 'bar';
+----
+Asynchronous notification "foo" received from server with node ID 1.
+Asynchronous notification "foo" with payload "bar" received from server with node ID 1.
+
+statement ok
+UNLISTEN foo
+
+query T notificationtrace
+NOTIFY foo
+----
+
+statement ok
+LISTEN bar
+
+# We're not listening on foo - no notification.
+query T notificationtrace
+NOTIFY foo, 'bar'
+----
+
+query T notificationtrace
+NOTIFY bar, 'hello mate"\n foosfoo'
+----
+Asynchronous notification "bar" with payload "hello mate\"\\n foosfoo" received from server with node ID 1.
+
+# Notifications sent within transactions aren't sent until the end of the transaction.
+statement ok
+BEGIN TRANSACTION
+
+query T notificationtrace
+NOTIFY bar, 'sup'
+----
+
+query T notificationtrace
+COMMIT TRANSACTION
+----
+
+query T notificationtrace
+SELECT 1
+----
+
+query T notificationtrace
+UNLISTEN *
+
+query T notificationtrace
+NOTIFY bar, 'not sent'
+----

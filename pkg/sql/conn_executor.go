@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -999,6 +1000,13 @@ type connExecutor struct {
 		// processing the command at position txnRewindPos. When rewinding, we're
 		// going to restore this snapshot.
 		savepointsAtTxnRewindPos savepointStack
+
+		// notifications maintains the list of NOTIFY/LISTEN messages to send once
+		// the txn ends.
+		mu struct {
+			syncutil.Mutex
+		}
+		notifications []notify.Payload
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1175,6 +1183,9 @@ func (ex *connExecutor) resetExtraTxnState(
 
 	switch ev {
 	case txnCommit, txnRollback:
+		for _, notif := range ex.planner.execCfg.PgNotificationRegistry.DrainNotifications(ex.sessionID.Uint128) {
+			ex.clientComm.SendNotification(ctx, notif)
+		}
 		ex.extraTxnState.savepoints.clear()
 		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
 		if ex.extraTxnState.onTxnFinish != nil {
@@ -1286,6 +1297,7 @@ func (ex *connExecutor) run(
 	ex.sessionID = ex.generateID()
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
+	defer ex.server.cfg.PgNotificationRegistry.UnlistenAll(ex.sessionID.Uint128)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
 	for {
@@ -2042,10 +2054,12 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	p.sessionDataMutator = ex.dataMutator
 	p.noticeSender = nil
+	p.notificationSender = ex.clientComm
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.sessionLifetimeContext = ctx
 }
 
 func (ex *connExecutor) resetPlanner(

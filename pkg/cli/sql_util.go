@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotify"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -127,6 +129,10 @@ func (c *sqlConn) handleNotice(notice *pq.Error) {
 	}
 }
 
+func (c *sqlConn) handleNotification(notification *pq.Notification) {
+	fmt.Fprintln(os.Stdout, pgnotify.Stringify(notification))
+}
+
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && cliCtx.isInteractive {
@@ -138,8 +144,11 @@ func (c *sqlConn) ensureConn() error {
 			return wrapConnError(err)
 		}
 		// Add a notice handler - re-use the cliOutputError function in this case.
-		connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		var connector driver.Connector = pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
 			c.handleNotice(notice)
+		})
+		connector = pq.ConnectorWithNotificationHandler(base, func(notification *pq.Notification) {
+			c.handleNotification(notification)
 		})
 		// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
 		// to follow the gosql.DB interface. We should probably look at initializing

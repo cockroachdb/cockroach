@@ -39,6 +39,8 @@ type singleRangeInfo struct {
 //
 // Note that the timestamps in RangeFeedCheckpoint events that are streamed back
 // may be lower than the timestamp given here.
+//
+// RangeFeed blocks forever, or until the range feed terminates.
 func (ds *DistSender) RangeFeed(
 	ctx context.Context,
 	span roachpb.Span,

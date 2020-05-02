@@ -62,6 +62,7 @@ const (
 	Version20_1
 	VersionStart20_2
 	VersionGeospatialType
+	VersionPGNotificationsTable
 
 	// Add new versions here (step one of two).
 )
@@ -473,6 +474,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionGeospatialType enables the use of Geospatial features.
 		Key:     VersionGeospatialType,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 2},
+	},
+	{
+		// Version enables the use of LISTEN/NOTIFY.
+		Key:     VersionPGNotificationsTable,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 3},
 	},
 
 	// Add new versions here (step two of two).

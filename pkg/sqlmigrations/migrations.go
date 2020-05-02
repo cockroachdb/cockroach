@@ -312,6 +312,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add CREATEROLE privilege to admin/root",
 		workFn: addCreateRoleToAdminAndRoot,
 	},
+	{
+		// Introduced in v20.2.
+		// TODO(jordan): Bake this migration into v21.1.
+		name:                "add system.pg_notifications table for LISTEN/NOTIFY",
+		workFn:              createPGNotificationSystemTable,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionPGNotificationsTable),
+		newDescriptorIDs:    staticIDs(keys.PGNotificationsTableID),
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -1419,6 +1427,13 @@ func createStatementInfoSystemTables(ctx context.Context, r runner) error {
 	}
 	if err := createSystemTable(ctx, r, sqlbase.StatementDiagnosticsTable); err != nil {
 		return errors.Wrap(err, "failed to create system.statement_diagnostics")
+	}
+	return nil
+}
+
+func createPGNotificationSystemTable(ctx context.Context, r runner) error {
+	if err := createSystemTable(ctx, r, sqlbase.PGNotificationsTable); err != nil {
+		return errors.Wrap(err, "failed to create system.pg_notifications")
 	}
 	return nil
 }

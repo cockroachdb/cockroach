@@ -1460,6 +1460,13 @@ func TestParse(t *testing.T) {
 		{`WITH cte AS NOT MATERIALIZED (SELECT 1) SELECT * FROM cte`},
 		{`WITH cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2`},
 		{`WITH RECURSIVE cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2`},
+
+		{`LISTEN foo`},
+		{`NOTIFY foo`},
+		{`NOTIFY "fOo"`},
+		{`NOTIFY foo, 'blah'`},
+		{`UNLISTEN foo`},
+		{`UNLISTEN *`},
 	}
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {

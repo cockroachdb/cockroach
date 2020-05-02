@@ -45,6 +45,7 @@ const (
 	ServerMsgEmptyQuery           ServerMessageType = 'I'
 	ServerMsgErrorResponse        ServerMessageType = 'E'
 	ServerMsgNoticeResponse       ServerMessageType = 'N'
+	ServerMsgNotificationResponse ServerMessageType = 'A'
 	ServerMsgNoData               ServerMessageType = 'n'
 	ServerMsgParameterDescription ServerMessageType = 't'
 	ServerMsgParameterStatus      ServerMessageType = 'S'

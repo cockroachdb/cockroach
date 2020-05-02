@@ -584,14 +584,14 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> KEY KEYS KV
 
 %token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
-%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LINESTRING LIST LOCAL
+%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LINESTRING LIST LISTEN LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 %token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NOLOGIN NO_INDEX_JOIN
-%token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NONE NORMAL NOT NOTHING NOTIFY NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
@@ -620,7 +620,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
 
-%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
+%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIRTUAL
@@ -762,6 +762,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt
 %type <tree.Statement> release_stmt
+%type <tree.Statement> listen_notify_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt
 %type <tree.Statement> restore_stmt
@@ -1166,6 +1167,7 @@ stmt:
 | revoke_stmt       // EXTEND WITH HELP: REVOKE
 | savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
 | release_stmt      // EXTEND WITH HELP: RELEASE
+| listen_notify_stmt
 | nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
 | close_cursor_stmt
@@ -5744,6 +5746,28 @@ opt_set_data:
   SET DATA {}
 | /* EMPTY */ {}
 
+listen_notify_stmt:
+  NOTIFY name
+  {
+    $$.val = &tree.Notify{ChanName: tree.Name($2), Message: tree.NewStrVal("")}
+  }
+| NOTIFY name ',' SCONST
+  {
+    $$.val = &tree.Notify{ChanName: tree.Name($2), Message: tree.NewStrVal($4)}
+  }
+| LISTEN name
+  {
+    $$.val = &tree.Listen{ChanName: tree.Name($2)}
+  }
+| UNLISTEN name
+  {
+    $$.val = &tree.Listen{ChanName: tree.Name($2), Unlisten: true}
+  }
+| UNLISTEN '*'
+  {
+    $$.val = &tree.Listen{Unlisten: true, UnlistenAll: true}
+  }
+
 // %Help: RELEASE - complete a sub-transaction
 // %Category: Txn
 // %Text: RELEASE [SAVEPOINT] <savepoint name>
@@ -10118,6 +10142,7 @@ unreserved_keyword:
 | LEVEL
 | LINESTRING
 | LIST
+| LISTEN
 | LOCAL
 | LOCKED
 | LOGIN
@@ -10141,6 +10166,7 @@ unreserved_keyword:
 | NO_INDEX_JOIN
 | NOCREATEROLE
 | NOLOGIN
+| NOTIFY
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
@@ -10245,6 +10271,7 @@ unreserved_keyword:
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN
+| UNLISTEN
 | UNLOGGED
 | UNSPLIT
 | UNTIL
