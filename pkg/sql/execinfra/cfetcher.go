@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package execinfra
 
 import (
 	"bytes"
@@ -224,7 +224,9 @@ type cFetcher struct {
 		prettyValueBuf *bytes.Buffer
 
 		// batch is the output batch the fetcher writes to.
-		batch coldata.Batch
+		batch                       coldata.Batch
+		typs                        []*types.T
+		curBatchSize, nextBatchSize int
 
 		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
 		// having to call batch.Vec too often in the tight loop.
@@ -239,6 +241,9 @@ type cFetcher struct {
 		err       error
 	}
 }
+
+// TODO(yuzefovich): tune.
+const cFetcherInitialBatchSize = 1
 
 // Init sets up a Fetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
@@ -286,18 +291,23 @@ func (rf *cFetcher) Init(
 		cols:             colDescriptors,
 	}
 
-	typs := make([]*types.T, len(colDescriptors))
-	for i := range typs {
-		typs[i] = colDescriptors[i].Type
-		if !typeconv.IsTypeSupported(typs[i]) && tableArgs.ValNeededForCol.Contains(i) {
+	rf.machine.typs = make([]*types.T, len(colDescriptors))
+	for i := range rf.machine.typs {
+		rf.machine.typs[i] = colDescriptors[i].Type
+		if !typeconv.IsTypeSupported(rf.machine.typs[i]) && tableArgs.ValNeededForCol.Contains(i) {
 			// Only return an error if the type is unhandled and needed. If not needed,
 			// a placeholder Vec will be created.
 			return errors.Errorf("unhandled type %+v", colDescriptors[i].Type)
 		}
 	}
 
-	rf.machine.batch = allocator.NewMemBatch(typs)
+	rf.machine.curBatchSize = cFetcherInitialBatchSize
+	if rf.machine.curBatchSize > coldata.BatchSize() {
+		rf.machine.curBatchSize = coldata.BatchSize()
+	}
+	rf.machine.batch = allocator.NewMemBatchWithSize(rf.machine.typs, rf.machine.curBatchSize)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
+	rf.machine.nextBatchSize = rf.machine.curBatchSize
 
 	var err error
 
@@ -579,10 +589,19 @@ const debugState = false
 // NextBatch is nextBatch with the addition of memory accounting.
 func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	rf.adapter.ctx = ctx
+	if rf.machine.curBatchSize < rf.machine.nextBatchSize {
+		rf.adapter.allocator.ReleaseBatch(rf.machine.batch)
+		rf.machine.batch = rf.adapter.allocator.NewMemBatchWithSize(rf.machine.typs, rf.machine.nextBatchSize)
+		rf.machine.colvecs = rf.machine.batch.ColVecs()
+		rf.machine.curBatchSize = rf.machine.nextBatchSize
+	}
 	rf.adapter.allocator.PerformOperation(
 		rf.machine.colvecs,
 		rf.nextAdapter,
 	)
+	if 2*rf.machine.nextBatchSize < coldata.BatchSize() {
+		rf.machine.nextBatchSize *= 2
+	}
 	return rf.adapter.batch, rf.adapter.err
 }
 
@@ -591,8 +610,8 @@ func (rf *cFetcher) nextAdapter() {
 }
 
 // nextBatch processes keys until we complete one batch of rows,
-// coldata.BatchSize() in length, which are returned in columnar format as a
-// coldata.Batch. The batch contains one Vec per table column, regardless of
+// rf.machine.curBatchSize in length, which are returned in columnar format as
+// a coldata.Batch. The batch contains one Vec per table column, regardless of
 // the index used; columns that are not needed (as per neededCols) are empty.
 // The Batch should not be modified and is only valid until the next call.
 // When there are no more rows, the Batch.Length is 0.
@@ -855,7 +874,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
-			if rf.machine.rowIdx >= coldata.BatchSize() {
+			if rf.machine.rowIdx >= rf.machine.curBatchSize {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0

@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -167,19 +167,19 @@ type hashAggregator struct {
 	decimalScratch decimalOverloadScratch
 }
 
-var _ colexecbase.Operator = &hashAggregator{}
+var _ execinfra.Operator = &hashAggregator{}
 
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
 func NewHashAggregator(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	typs []*types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	aggTyps := extractAggTypes(aggCols, typs)
 	outputTypes, err := makeAggregateFuncsOutputTypes(aggTyps, aggFns)
 	if err != nil {

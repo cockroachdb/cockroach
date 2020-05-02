@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,7 +63,7 @@ type Outbox struct {
 	draining        uint32
 	metadataSources []execinfrapb.MetadataSource
 	// closers is a slice of Closers that need to be Closed on termination.
-	closers []colexec.IdempotentCloser
+	closers []execinfra.IdempotentCloser
 
 	scratch struct {
 		buf *bytes.Buffer
@@ -78,10 +78,10 @@ type Outbox struct {
 // NewOutbox creates a new Outbox.
 func NewOutbox(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []execinfra.IdempotentCloser,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {

@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -238,11 +238,11 @@ func GetProjection_CONST_SIDEConstOperator(
 	rightType *types.T,
 	outputType *types.T,
 	op tree.Operator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
 		OneInputNode: NewOneInputNode(input),

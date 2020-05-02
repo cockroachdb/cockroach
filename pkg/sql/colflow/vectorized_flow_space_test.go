@@ -82,7 +82,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, success), func(t *testing.T) {
-				inputs := []colexecbase.Operator{colexec.NewZeroOp(nil)}
+				inputs := []execinfra.Operator{colexec.NewZeroOp(nil)}
 				if len(tc.spec.Input) > 1 {
 					inputs = append(inputs, colexec.NewZeroOp(nil))
 				}
@@ -200,7 +200,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		for _, success := range []bool{true, false} {
 			expectNoMemoryError := success || tc.spillingSupported
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expectNoMemoryError), func(t *testing.T) {
-				inputs := []colexecbase.Operator{colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)}
+				inputs := []execinfra.Operator{colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)}
 				if len(tc.spec.Input) > 1 {
 					inputs = append(inputs, colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs))
 				}

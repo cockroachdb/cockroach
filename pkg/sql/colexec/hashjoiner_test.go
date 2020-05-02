@@ -937,7 +937,7 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 func runHashJoinTestCase(
 	t *testing.T,
 	tc *joinTestCase,
-	hjOpConstructor func(sources []colexecbase.Operator) (colexecbase.Operator, error),
+	hjOpConstructor func(sources []execinfra.Operator) (execinfra.Operator, error),
 ) {
 	tc.init()
 	inputs := []tuples{tc.leftTuples, tc.rightTuples}
@@ -975,7 +975,7 @@ func TestHashJoiner(t *testing.T) {
 		for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
 				for _, tc := range tc.mutateTypes() {
-					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+					runHashJoinTestCase(t, tc, func(sources []execinfra.Operator) (execinfra.Operator, error) {
 						spec := createSpecForHashJoiner(tc)
 						args := NewColOperatorArgs{
 							Spec:                spec,
@@ -1160,7 +1160,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	rightSource := newOpTestInput(1, rightTuples, rightTypes)
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{leftSource, rightSource},
+		Inputs:              []execinfra.Operator{leftSource, rightSource},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true

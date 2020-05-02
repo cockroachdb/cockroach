@@ -24,7 +24,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -34,10 +33,10 @@ import (
 
 type _OP_LOWERProjOp struct {
 	allocator *colmem.Allocator
-	input     colexecbase.Operator
+	input     execinfra.Operator
 
-	leftProjOpChain  colexecbase.Operator
-	rightProjOpChain colexecbase.Operator
+	leftProjOpChain  execinfra.Operator
+	rightProjOpChain execinfra.Operator
 	leftFeedOp       *feedOperator
 	rightFeedOp      *feedOperator
 
@@ -56,10 +55,10 @@ type _OP_LOWERProjOp struct {
 // outputIdx.
 func New_OP_TITLEProjOp(
 	allocator *colmem.Allocator,
-	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
+	input, leftProjOpChain, rightProjOpChain execinfra.Operator,
 	leftFeedOp, rightFeedOp *feedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colexecbase.Operator {
+) execinfra.Operator {
 	return &_OP_LOWERProjOp{
 		allocator:        allocator,
 		input:            input,

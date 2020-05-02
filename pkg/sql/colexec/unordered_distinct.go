@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -25,11 +25,11 @@ import (
 // created with.
 func NewUnorderedDistinct(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	distinctCols []uint32,
 	typs []*types.T,
 	numHashBuckets uint64,
-) colexecbase.Operator {
+) execinfra.Operator {
 	ht := newHashTable(
 		allocator,
 		numHashBuckets,
@@ -67,7 +67,7 @@ type unorderedDistinct struct {
 	outputBatchStart int
 }
 
-var _ colexecbase.Operator = &unorderedDistinct{}
+var _ execinfra.Operator = &unorderedDistinct{}
 
 func (op *unorderedDistinct) Init() {
 	op.input.Init()

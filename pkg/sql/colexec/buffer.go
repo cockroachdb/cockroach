@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
 // bufferOp is an operator that buffers a single batch at a time from an input,
@@ -28,11 +28,11 @@ type bufferOp struct {
 	batch coldata.Batch
 }
 
-var _ colexecbase.Operator = &bufferOp{}
+var _ execinfra.Operator = &bufferOp{}
 
 // NewBufferOp returns a new bufferOp, initialized to buffer batches from the
 // supplied input.
-func NewBufferOp(input colexecbase.Operator) colexecbase.Operator {
+func NewBufferOp(input execinfra.Operator) execinfra.Operator {
 	return &bufferOp{
 		OneInputNode: NewOneInputNode(input),
 	}

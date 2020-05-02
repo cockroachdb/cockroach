@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -196,7 +196,7 @@ func newHashTable(
 
 // build executes the entirety of the hash table build phase using the input
 // as the build source. The input is entirely consumed in the process.
-func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
+func (ht *hashTable) build(ctx context.Context, input execinfra.Operator) {
 	nKeyCols := len(ht.keyCols)
 
 	switch ht.mode {

@@ -49,7 +49,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 		},
 	}
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []execinfra.Operator) (execinfra.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
 				"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -71,7 +71,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 	}
 	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}},
 		orderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []execinfra.Operator) (execinfra.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int, types.Int},
 				"@1 + @2" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -93,7 +93,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 	}
 	runTests(t, []tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}},
 		orderedVerifier,
-		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		func(input []execinfra.Operator) (execinfra.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Float, types.Float},
 				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -160,7 +160,7 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	binOp := tree.Mult
-	var input colexecbase.Operator
+	var input execinfra.Operator
 	colIdx := 3
 	constVal := 31.37
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
@@ -189,7 +189,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	binOp := tree.GE
-	var input colexecbase.Operator
+	var input execinfra.Operator
 	colIdx := 3
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
@@ -266,8 +266,8 @@ func TestRandomComparisons(t *testing.T) {
 			)
 		}
 		for i := range lDatums {
-			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, &da, typ)
-			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, &da, typ)
+			lDatums[i] = execinfra.PhysicalTypeColElemToDatum(lVec, i, &da, typ)
+			rDatums[i] = execinfra.PhysicalTypeColElemToDatum(rVec, i, &da, typ)
 		}
 		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 			for i := range lDatums {
@@ -317,7 +317,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	typ := types.Int2
 	binOp := tree.Mult
-	var input colexecbase.Operator
+	var input execinfra.Operator
 	col1Idx := 5
 	col2Idx := 7
 	outputIdx := 9
@@ -344,7 +344,7 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func benchmarkProjOp(
 	b *testing.B,
-	makeProjOp func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error),
+	makeProjOp func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (execinfra.Operator, error),
 	useSelectionVector bool,
 	hasNulls bool,
 	left, right *types.T,
@@ -487,7 +487,7 @@ func BenchmarkProjOp(b *testing.B) {
 						b.Run(fmt.Sprintf("proj%s%s%s/useSel=%t/hasNulls=%t",
 							opName, typeName(left), typeName(right), useSel, hasNulls),
 							func(b *testing.B) {
-								benchmarkProjOp(b, func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error) {
+								benchmarkProjOp(b, func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (execinfra.Operator, error) {
 									return createTestProjectingOperator(
 										ctx, flowCtx, source, []*types.T{left, right},
 										fmt.Sprintf("@1 %s @2", opInfixForm), false, /* canFallbackToRowexec */

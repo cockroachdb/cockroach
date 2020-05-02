@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -33,22 +32,14 @@ const (
 	OperatorInitialized
 )
 
-// NonExplainable is a marker interface which identifies an Operator that
-// should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
-// explain option will override the omitting behavior.
-type NonExplainable interface {
-	// nonExplainableMarker is just a marker method. It should never be called.
-	nonExplainableMarker()
-}
-
 // NewOneInputNode returns an execinfra.OpNode with a single Operator input.
-func NewOneInputNode(input colexecbase.Operator) OneInputNode {
+func NewOneInputNode(input execinfra.Operator) OneInputNode {
 	return OneInputNode{input: input}
 }
 
 // OneInputNode is an execinfra.OpNode with a single Operator input.
 type OneInputNode struct {
-	input colexecbase.Operator
+	input execinfra.Operator
 }
 
 // ChildCount implements the execinfra.OpNode interface.
@@ -67,18 +58,18 @@ func (n OneInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 }
 
 // Input returns the single input of this OneInputNode as an Operator.
-func (n OneInputNode) Input() colexecbase.Operator {
+func (n OneInputNode) Input() execinfra.Operator {
 	return n.input
 }
 
 // newTwoInputNode returns an execinfra.OpNode with two Operator inputs.
-func newTwoInputNode(inputOne, inputTwo colexecbase.Operator) twoInputNode {
+func newTwoInputNode(inputOne, inputTwo execinfra.Operator) twoInputNode {
 	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
 }
 
 type twoInputNode struct {
-	inputOne colexecbase.Operator
-	inputTwo colexecbase.Operator
+	inputOne execinfra.Operator
+	inputTwo execinfra.Operator
 }
 
 func (twoInputNode) ChildCount(verbose bool) int {
@@ -105,7 +96,7 @@ func (n *twoInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 // "private" to the operator and is not exposed to the outside; notably, it
 // does *not* include any coldata.Batch'es and coldata.Vec's.
 type InternalMemoryOperator interface {
-	colexecbase.Operator
+	execinfra.Operator
 	// InternalMemoryUsage reports the internal memory usage (in bytes) of an
 	// operator.
 	InternalMemoryUsage() int
@@ -119,14 +110,8 @@ type resetter interface {
 
 // resettableOperator is an Operator that can be reset.
 type resettableOperator interface {
-	colexecbase.Operator
+	execinfra.Operator
 	resetter
-}
-
-// IdempotentCloser is an object that releases resource on the first call to
-// IdempotentClose but does nothing for any subsequent call.
-type IdempotentCloser interface {
-	IdempotentClose(ctx context.Context) error
 }
 
 // closerHelper is a simple helper that helps Operators implement
@@ -148,19 +133,19 @@ func (c *closerHelper) close() bool {
 }
 
 type closableOperator interface {
-	colexecbase.Operator
-	IdempotentCloser
+	execinfra.Operator
+	execinfra.IdempotentCloser
 }
 
 type noopOperator struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 }
 
-var _ colexecbase.Operator = &noopOperator{}
+var _ execinfra.Operator = &noopOperator{}
 
 // NewNoop returns a new noop Operator.
-func NewNoop(input colexecbase.Operator) colexecbase.Operator {
+func NewNoop(input execinfra.Operator) execinfra.Operator {
 	return &noopOperator{OneInputNode: NewOneInputNode(input)}
 }
 
@@ -180,13 +165,13 @@ func (n *noopOperator) reset(ctx context.Context) {
 
 type zeroOperator struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 }
 
-var _ colexecbase.Operator = &zeroOperator{}
+var _ execinfra.Operator = &zeroOperator{}
 
 // NewZeroOp creates a new operator which just returns an empty batch.
-func NewZeroOp(input colexecbase.Operator) colexecbase.Operator {
+func NewZeroOp(input execinfra.Operator) execinfra.Operator {
 	return &zeroOperator{OneInputNode: NewOneInputNode(input)}
 }
 
@@ -199,18 +184,18 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 type singleTupleNoInputOperator struct {
-	colexecbase.ZeroInputNode
-	NonExplainable
+	execinfra.ZeroInputNode
+	execinfra.NonExplainable
 	batch  coldata.Batch
 	nexted bool
 }
 
-var _ colexecbase.Operator = &singleTupleNoInputOperator{}
+var _ execinfra.Operator = &singleTupleNoInputOperator{}
 
 // NewSingleTupleNoInputOp creates a new Operator which returns a batch of
 // length 1 with no actual columns on the first call to Next() and zero-length
 // batches on all consecutive calls.
-func NewSingleTupleNoInputOp(allocator *colmem.Allocator) colexecbase.Operator {
+func NewSingleTupleNoInputOp(allocator *colmem.Allocator) execinfra.Operator {
 	return &singleTupleNoInputOperator{
 		batch: allocator.NewMemBatchWithSize(nil /* types */, 1 /* size */),
 	}
@@ -232,8 +217,8 @@ func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
 // feedOperator is used to feed an Operator chain with input by manually
 // setting the next batch.
 type feedOperator struct {
-	colexecbase.ZeroInputNode
-	NonExplainable
+	execinfra.ZeroInputNode
+	execinfra.NonExplainable
 	batch coldata.Batch
 }
 
@@ -243,7 +228,7 @@ func (o *feedOperator) Next(context.Context) coldata.Batch {
 	return o.batch
 }
 
-var _ colexecbase.Operator = &feedOperator{}
+var _ execinfra.Operator = &feedOperator{}
 
 // vectorTypeEnforcer is a utility Operator that on every call to Next
 // enforces that non-zero length batch from the input has a vector of the
@@ -271,18 +256,18 @@ var _ colexecbase.Operator = &feedOperator{}
 //
 type vectorTypeEnforcer struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 
 	allocator *colmem.Allocator
 	typ       *types.T
 	idx       int
 }
 
-var _ colexecbase.Operator = &vectorTypeEnforcer{}
+var _ execinfra.Operator = &vectorTypeEnforcer{}
 
 func newVectorTypeEnforcer(
-	allocator *colmem.Allocator, input colexecbase.Operator, typ *types.T, idx int,
-) colexecbase.Operator {
+	allocator *colmem.Allocator, input execinfra.Operator, typ *types.T, idx int,
+) execinfra.Operator {
 	return &vectorTypeEnforcer{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -316,16 +301,16 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 // the output type of the Operator that the enforcer will be the input to.
 type batchSchemaPrefixEnforcer struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 
 	allocator *colmem.Allocator
 	typs      []*types.T
 }
 
-var _ colexecbase.Operator = &batchSchemaPrefixEnforcer{}
+var _ execinfra.Operator = &batchSchemaPrefixEnforcer{}
 
 func newBatchSchemaPrefixEnforcer(
-	allocator *colmem.Allocator, input colexecbase.Operator, typs []*types.T,
+	allocator *colmem.Allocator, input execinfra.Operator, typs []*types.T,
 ) *batchSchemaPrefixEnforcer {
 	return &batchSchemaPrefixEnforcer{
 		OneInputNode: NewOneInputNode(input),

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -348,8 +347,8 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // created wrapper with those corresponding to operators in inputs (the latter
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
-	op colexecbase.Operator,
-	inputs []colexecbase.Operator,
+	op execinfra.Operator,
+	inputs []execinfra.Operator,
 	id int32,
 	idTagKey string,
 	monitors []*mon.BytesMonitor,
@@ -406,7 +405,7 @@ type flowCreatorHelper interface {
 	// to be run asynchronously.
 	accumulateAsyncComponent(runFn)
 	// addMaterializer adds a materializer to the flow.
-	addMaterializer(*colexec.Materializer)
+	addMaterializer(*execinfra.Materializer)
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -415,9 +414,9 @@ type flowCreatorHelper interface {
 // as the metadataSources and closers in this DAG that need to be drained and
 // closed.
 type opDAGWithMetaSources struct {
-	rootOperator    colexecbase.Operator
+	rootOperator    execinfra.Operator
 	metadataSources []execinfrapb.MetadataSource
-	toClose         []colexec.IdempotentCloser
+	toClose         []execinfra.IdempotentCloser
 }
 
 // remoteComponentCreator is an interface that abstracts the constructors for
@@ -425,10 +424,10 @@ type opDAGWithMetaSources struct {
 type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colmem.Allocator,
-		input colexecbase.Operator,
+		input execinfra.Operator,
 		typs []*types.T,
 		metadataSources []execinfrapb.MetadataSource,
-		toClose []colexec.IdempotentCloser,
+		toClose []execinfra.IdempotentCloser,
 	) (*colrpc.Outbox, error)
 	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
@@ -437,10 +436,10 @@ type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []execinfra.IdempotentCloser,
 ) (*colrpc.Outbox, error) {
 	return colrpc.NewOutbox(allocator, input, typs, metadataSources, toClose)
 }
@@ -568,11 +567,11 @@ func (s *vectorizedFlowCreator) newStreamingMemAccount(
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	op colexecbase.Operator,
+	op execinfra.Operator,
 	outputTyps []*types.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []execinfra.IdempotentCloser,
 ) (execinfra.OpNode, error) {
 	// TODO(yuzefovich): we should collect some statistics on the outbox (e.g.
 	// number of bytes sent).
@@ -614,11 +613,11 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	outputTyps []*types.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []execinfra.IdempotentCloser,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
@@ -711,8 +710,8 @@ func (s *vectorizedFlowCreator) setupInput(
 	flowCtx *execinfra.FlowCtx,
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
-) (op colexecbase.Operator, _ []execinfrapb.MetadataSource, _ error) {
-	inputStreamOps := make([]colexecbase.Operator, 0, len(input.Streams))
+) (op execinfra.Operator, _ []execinfrapb.MetadataSource, _ error) {
+	inputStreamOps := make([]execinfra.Operator, 0, len(input.Streams))
 	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
@@ -804,10 +803,10 @@ func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	pspec *execinfrapb.ProcessorSpec,
-	op colexecbase.Operator,
+	op execinfra.Operator,
 	opOutputTypes []*types.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []execinfra.IdempotentCloser,
 ) error {
 	output := &pspec.Output[0]
 	if output.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
@@ -885,7 +884,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				)
 			}
 		}
-		proc, err := colexec.NewMaterializer(
+		proc, err := execinfra.NewMaterializer(
 			flowCtx,
 			pspec.ProcessorID,
 			op,
@@ -939,7 +938,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		queue = append(queue, i)
 	}
 
-	inputs := make([]colexecbase.Operator, 0, 2)
+	inputs := make([]execinfra.Operator, 0, 2)
 	for len(queue) > 0 {
 		pspec := &processorSpecs[queue[0]]
 		queue = queue[1:]
@@ -956,7 +955,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// toClose is similar to metadataSourcesQueue with the difference that these
 		// components do not produce metadata and should be Closed even during
 		// non-graceful termination.
-		toClose := make([]colexec.IdempotentCloser, 0, 1)
+		toClose := make([]execinfra.IdempotentCloser, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
 			input, metadataSources, err := s.setupInput(ctx, flowCtx, pspec.Input[i], opt)
@@ -1143,7 +1142,7 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 		}))
 }
 
-func (r *vectorizedFlowCreatorHelper) addMaterializer(m *colexec.Materializer) {
+func (r *vectorizedFlowCreatorHelper) addMaterializer(m *execinfra.Materializer) {
 	processors := make([]execinfra.Processor, 1)
 	processors[0] = m
 	r.f.SetProcessors(processors)
@@ -1182,7 +1181,7 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addMaterializer(*colexec.Materializer) {}
+func (r *noopFlowCreatorHelper) addMaterializer(*execinfra.Materializer) {}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil

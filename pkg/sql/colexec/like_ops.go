@@ -13,8 +13,8 @@ package colexec
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -89,8 +89,8 @@ func getLikeOperatorType(pattern string, negate bool) (likeOpType, string, error
 // pattern, or NOT LIKE if the negate argument is true. The implementation
 // varies depending on the complexity of the pattern.
 func GetLikeOperator(
-	ctx *tree.EvalContext, input colexecbase.Operator, colIdx int, pattern string, negate bool,
-) (colexecbase.Operator, error) {
+	ctx *tree.EvalContext, input execinfra.Operator, colIdx int, pattern string, negate bool,
+) (execinfra.Operator, error) {
 	likeOpType, pattern, err := getLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
@@ -176,12 +176,12 @@ func isWildcard(c byte) bool {
 func GetLikeProjectionOperator(
 	allocator *colmem.Allocator,
 	ctx *tree.EvalContext,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	colIdx int,
 	resultIdx int,
 	pattern string,
 	negate bool,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	likeOpType, pattern, err := getLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err

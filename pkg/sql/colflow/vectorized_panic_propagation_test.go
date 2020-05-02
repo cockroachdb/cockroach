@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -53,7 +52,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	}
 
 	vee := newTestVectorizedInternalPanicEmitter(col)
-	mat, err := colexec.NewMaterializer(
+	mat, err := execinfra.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		vee,
@@ -100,7 +99,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	}
 
 	nvee := newTestNonVectorizedPanicEmitter(col)
-	mat, err := colexec.NewMaterializer(
+	mat, err := execinfra.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		nvee,
@@ -128,9 +127,9 @@ type testVectorizedInternalPanicEmitter struct {
 	emitBatch bool
 }
 
-var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
+var _ execinfra.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestVectorizedInternalPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
+func newTestVectorizedInternalPanicEmitter(input execinfra.Operator) execinfra.Operator {
 	return &testVectorizedInternalPanicEmitter{
 		OneInputNode: colexec.NewOneInputNode(input),
 	}
@@ -161,9 +160,9 @@ type testNonVectorizedPanicEmitter struct {
 	emitBatch bool
 }
 
-var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
+var _ execinfra.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestNonVectorizedPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
+func newTestNonVectorizedPanicEmitter(input execinfra.Operator) execinfra.Operator {
 	return &testNonVectorizedPanicEmitter{
 		OneInputNode: colexec.NewOneInputNode(input),
 	}

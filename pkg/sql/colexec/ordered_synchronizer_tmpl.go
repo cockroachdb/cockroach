@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -70,7 +69,7 @@ const _TYPE_WIDTH = 0
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
 	allocator             *colmem.Allocator
-	inputs                []colexecbase.Operator
+	inputs                []execinfra.Operator
 	ordering              sqlbase.ColumnOrdering
 	typs                  []*types.T
 	canonicalTypeFamilies []types.Family
@@ -110,7 +109,7 @@ type OrderedSynchronizer struct {
 	outColsMap []int
 }
 
-var _ colexecbase.Operator = &OrderedSynchronizer{}
+var _ execinfra.Operator = &OrderedSynchronizer{}
 
 // ChildCount implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
@@ -125,7 +124,7 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
 	allocator *colmem.Allocator,
-	inputs []colexecbase.Operator,
+	inputs []execinfra.Operator,
 	typs []*types.T,
 	ordering sqlbase.ColumnOrdering,
 ) (*OrderedSynchronizer, error) {

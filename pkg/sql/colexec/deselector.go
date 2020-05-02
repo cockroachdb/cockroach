@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -25,20 +25,20 @@ import (
 // selection vector, it is a noop.
 type deselectorOp struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 	allocator  *colmem.Allocator
 	inputTypes []*types.T
 
 	output coldata.Batch
 }
 
-var _ colexecbase.Operator = &deselectorOp{}
+var _ execinfra.Operator = &deselectorOp{}
 
 // NewDeselectorOp creates a new deselector operator on the given input
 // operator with the given column types.
 func NewDeselectorOp(
-	allocator *colmem.Allocator, input colexecbase.Operator, typs []*types.T,
-) colexecbase.Operator {
+	allocator *colmem.Allocator, input execinfra.Operator, typs []*types.T,
+) execinfra.Operator {
 	return &deselectorOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,

@@ -66,7 +66,7 @@ func TestOrdinality(t *testing.T) {
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []execinfra.Operator) (execinfra.Operator, error) {
 				return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
 			})
 	}
@@ -99,11 +99,8 @@ func BenchmarkOrdinality(b *testing.B) {
 }
 
 func createTestOrdinalityOperator(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
-	inputTypes []*types.T,
-) (colexecbase.Operator, error) {
+	ctx context.Context, flowCtx *execinfra.FlowCtx, input execinfra.Operator, inputTypes []*types.T,
+) (execinfra.Operator, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -112,7 +109,7 @@ func createTestOrdinalityOperator(
 	}
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{input},
+		Inputs:              []execinfra.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true

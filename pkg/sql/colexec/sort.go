@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -29,10 +28,10 @@ import (
 // in the input operator.
 func NewSorter(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
 }
 
@@ -99,7 +98,7 @@ type spooler interface {
 // by the general sorter over the whole input.
 type allSpooler struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from the input.
@@ -116,7 +115,7 @@ var _ spooler = &allSpooler{}
 var _ resetter = &allSpooler{}
 
 func newAllSpooler(
-	allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []*types.T,
+	allocator *colmem.Allocator, input execinfra.Operator, inputTypes []*types.T,
 ) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
@@ -426,7 +425,7 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (p *sortOp) ExportBuffered(execinfra.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}

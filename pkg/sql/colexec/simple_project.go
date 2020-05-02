@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -22,7 +22,7 @@ import (
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 	closerHelper
 
 	projection []uint32
@@ -92,8 +92,8 @@ func (b *projectingBatch) ReplaceCol(col coldata.Vec, idx int) {
 // when input already outputs batches that satisfy the projection, a
 // simpleProjectOp is not planned and input is returned.
 func NewSimpleProjectOp(
-	input colexecbase.Operator, numInputCols int, projection []uint32,
-) colexecbase.Operator {
+	input execinfra.Operator, numInputCols int, projection []uint32,
+) execinfra.Operator {
 	if numInputCols == len(projection) {
 		projectionIsRedundant := true
 		for i := range projection {
@@ -146,7 +146,7 @@ func (d *simpleProjectOp) IdempotentClose(ctx context.Context) error {
 	if !d.close() {
 		return nil
 	}
-	if c, ok := d.input.(IdempotentCloser); ok {
+	if c, ok := d.input.(execinfra.IdempotentCloser); ok {
 		return c.IdempotentClose(ctx)
 	}
 	return nil

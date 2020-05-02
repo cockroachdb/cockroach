@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -203,11 +203,11 @@ type mergeJoinInput struct {
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
 	distincterInput *feedOperator
-	distincter      colexecbase.Operator
+	distincter      execinfra.Operator
 	distinctOutput  []bool
 
 	// source specifies the input operator to the merge join.
-	source colexecbase.Operator
+	source execinfra.Operator
 }
 
 // The merge join operator uses a probe and build approach to generate the
@@ -235,8 +235,8 @@ func newMergeJoinOp(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left colexecbase.Operator,
-	right colexecbase.Operator,
+	left execinfra.Operator,
+	right execinfra.Operator,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -298,8 +298,8 @@ func newMergeJoinBase(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left colexecbase.Operator,
-	right colexecbase.Operator,
+	left execinfra.Operator,
+	right execinfra.Operator,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -412,7 +412,7 @@ type mergeJoinBase struct {
 }
 
 var _ resetter = &mergeJoinBase{}
-var _ IdempotentCloser = &mergeJoinBase{}
+var _ execinfra.IdempotentCloser = &mergeJoinBase{}
 
 func (o *mergeJoinBase) reset(ctx context.Context) {
 	if r, ok := o.left.source.(resetter); ok {
@@ -710,8 +710,8 @@ func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
 		return nil
 	}
 	var lastErr error
-	for _, op := range []colexecbase.Operator{o.left.source, o.right.source} {
-		if c, ok := op.(IdempotentCloser); ok {
+	for _, op := range []execinfra.Operator{o.left.source, o.right.source} {
+		if c, ok := op.(execinfra.IdempotentCloser); ok {
 			if err := c.IdempotentClose(ctx); err != nil {
 				lastErr = err
 			}

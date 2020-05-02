@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -30,13 +30,13 @@ import (
 // corresponding VectorizedStatsCollectors are also "connected" by sharing a
 // StopWatch.
 type VectorizedStatsCollector struct {
-	colexecbase.Operator
-	NonExplainable
+	execinfra.Operator
+	execinfra.NonExplainable
 	execpb.VectorizedStats
 	idTagKey string
 
 	// inputWatch is a single stop watch that is shared with all the input
-	// Operators. If the Operator doesn't have any inputs (like colBatchScan),
+	// Operators. If the Operator doesn't have any inputs (like ColBatchScan),
 	// it is not shared with anyone. It is used by the wrapped Operator to
 	// measure its stall or execution time.
 	inputWatch *timeutil.StopWatch
@@ -49,7 +49,7 @@ type VectorizedStatsCollector struct {
 	diskMonitors []*mon.BytesMonitor
 }
 
-var _ colexecbase.Operator = &VectorizedStatsCollector{}
+var _ execinfra.Operator = &VectorizedStatsCollector{}
 
 // NewVectorizedStatsCollector creates a new VectorizedStatsCollector which
 // wraps 'op' that corresponds to a component with either ProcessorID or
@@ -57,7 +57,7 @@ var _ colexecbase.Operator = &VectorizedStatsCollector{}
 // indicates whether stall or execution time is being measured. 'inputWatch'
 // must be non-nil.
 func NewVectorizedStatsCollector(
-	op colexecbase.Operator,
+	op execinfra.Operator,
 	id int32,
 	idTagKey string,
 	isStall bool,

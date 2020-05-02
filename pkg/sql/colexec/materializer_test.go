@@ -48,7 +48,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := NewMaterializer(
+	m, err := execinfra.NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		c,
@@ -133,7 +133,7 @@ func TestMaterializeTypes(t *testing.T) {
 	for i := range outputToInputColIdx {
 		outputToInputColIdx[i] = i
 	}
-	m, err := NewMaterializer(
+	m, err := execinfra.NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		c,
@@ -187,7 +187,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 	for i := 0; i < b.N; i++ {
-		m, err := NewMaterializer(
+		m, err := execinfra.NewMaterializer(
 			flowCtx,
 			1, /* processorID */
 			c,

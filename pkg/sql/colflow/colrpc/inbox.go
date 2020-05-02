@@ -19,9 +19,9 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -46,7 +46,7 @@ type flowStreamServer interface {
 // RunWithStream (or more specifically, the RPC handler) will unblock Next by
 // closing the stream.
 type Inbox struct {
-	colexecbase.ZeroInputNode
+	execinfra.ZeroInputNode
 	typs []*types.T
 
 	converter  *colserde.ArrowBatchConverter
@@ -114,7 +114,7 @@ type Inbox struct {
 	}
 }
 
-var _ colexecbase.Operator = &Inbox{}
+var _ execinfra.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(

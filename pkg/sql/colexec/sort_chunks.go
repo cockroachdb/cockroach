@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -29,11 +28,11 @@ import (
 // matchLen columns.
 func NewSortChunks(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	if matchLen < 1 || matchLen == len(orderingCols) {
 		colexecerror.InternalError(fmt.Sprintf(
 			"sort chunks should only be used when the input is "+
@@ -65,7 +64,7 @@ type sortChunksOp struct {
 	windowedBatch      coldata.Batch
 }
 
-var _ colexecbase.Operator = &sortChunksOp{}
+var _ execinfra.Operator = &sortChunksOp{}
 var _ bufferingInMemoryOperator = &sortChunksOp{}
 
 func (c *sortChunksOp) ChildCount(verbose bool) int {
@@ -110,7 +109,7 @@ func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (c *sortChunksOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (c *sortChunksOp) ExportBuffered(execinfra.Operator) coldata.Batch {
 	// First, we check whether chunker has buffered up any tuples, and if so,
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {
@@ -199,7 +198,7 @@ const (
 // buffer when appropriate.
 type chunker struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from input.
@@ -253,7 +252,7 @@ var _ spooler = &chunker{}
 
 func newChunker(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	alreadySortedCols []uint32,
 ) (*chunker, error) {

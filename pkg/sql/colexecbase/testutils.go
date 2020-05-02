@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -24,11 +25,11 @@ import (
 // BatchBuffer exposes a buffer of coldata.Batches through an Operator
 // interface. If there are no batches to return, Next will panic.
 type BatchBuffer struct {
-	ZeroInputNode
+	execinfra.ZeroInputNode
 	buffer []coldata.Batch
 }
 
-var _ Operator = &BatchBuffer{}
+var _ execinfra.Operator = &BatchBuffer{}
 
 // NewBatchBuffer creates a new BatchBuffer.
 func NewBatchBuffer() *BatchBuffer {
@@ -54,7 +55,7 @@ func (b *BatchBuffer) Next(context.Context) coldata.Batch {
 
 // RepeatableBatchSource is an Operator that returns the same batch forever.
 type RepeatableBatchSource struct {
-	ZeroInputNode
+	execinfra.ZeroInputNode
 
 	colVecs  []coldata.Vec
 	typs     []*types.T
@@ -70,7 +71,7 @@ type RepeatableBatchSource struct {
 	batchesReturned int
 }
 
-var _ Operator = &RepeatableBatchSource{}
+var _ execinfra.Operator = &RepeatableBatchSource{}
 
 // NewRepeatableBatchSource returns a new Operator initialized to return its
 // input batch forever. Note that it stores the contents of the input batch and
@@ -141,7 +142,7 @@ func (s *RepeatableBatchSource) ResetBatchesToReturn(b int) {
 // CallbackOperator is a testing utility struct that delegates Next calls to a
 // callback provided by the user.
 type CallbackOperator struct {
-	ZeroInputNode
+	execinfra.ZeroInputNode
 	NextCb func(ctx context.Context) coldata.Batch
 }
 

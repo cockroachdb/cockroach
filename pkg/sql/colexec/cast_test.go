@@ -113,7 +113,7 @@ func TestRandomizedCast(t *testing.T) {
 				output = append(output, tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
 			}
 			runTests(t, []tuples{input}, output, orderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				func(input []execinfra.Operator) (execinfra.Operator, error) {
 					return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
 				})
 		})
@@ -174,10 +174,10 @@ func BenchmarkCastOp(b *testing.B) {
 func createTestCastOperator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	fromTyp *types.T,
 	toTyp *types.T,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	// We currently don't support casting to decimal type (other than when
 	// casting from decimal with the same precision), so we will allow falling
 	// back to row-by-row engine.

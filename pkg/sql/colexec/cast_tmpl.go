@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -159,12 +159,12 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 func GetCastOperator(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	colIdx int,
 	resultIdx int,
 	fromType *types.T,
 	toType *types.T,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{
@@ -211,7 +211,7 @@ type castOpNullAny struct {
 	outputIdx int
 }
 
-var _ colexecbase.Operator = &castOpNullAny{}
+var _ execinfra.Operator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.input.Init()
@@ -260,7 +260,7 @@ type castOp struct {
 	outputIdx int
 }
 
-var _ colexecbase.Operator = &castOp{}
+var _ execinfra.Operator = &castOp{}
 
 func (c *castOp) Init() {
 	c.input.Init()

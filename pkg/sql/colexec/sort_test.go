@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -138,7 +138,7 @@ func init() {
 func TestSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, tc := range sortAllTestCases {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []execinfra.Operator) (execinfra.Operator, error) {
 			return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
 		})
 	}
@@ -164,7 +164,7 @@ func TestSortRandomized(t *testing.T) {
 					if topK {
 						expected = expected[:k]
 					}
-					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []execinfra.Operator) (execinfra.Operator, error) {
 						if topK {
 							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
 						}
@@ -250,7 +250,7 @@ func TestAllSpooler(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithFn(t, []tuples{tc.tuples}, nil /* typs */, func(t *testing.T, input []colexecbase.Operator) {
+		runTestsWithFn(t, []tuples{tc.tuples}, nil /* typs */, func(t *testing.T, input []execinfra.Operator) {
 			allSpooler := newAllSpooler(testAllocator, input[0], tc.typ)
 			allSpooler.init()
 			allSpooler.spool(context.Background())
@@ -305,7 +305,7 @@ func BenchmarkSort(b *testing.B) {
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						source := newFiniteBatchSource(batch, typs, nBatches)
-						var sorter colexecbase.Operator
+						var sorter execinfra.Operator
 						if topK {
 							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
 						} else {

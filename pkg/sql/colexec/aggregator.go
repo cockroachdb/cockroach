@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -157,7 +157,7 @@ type orderedAggregator struct {
 	seenNonEmptyBatch bool
 }
 
-var _ colexecbase.Operator = &orderedAggregator{}
+var _ execinfra.Operator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
 // columns. aggCols is a slice where each index represents a new aggregation
@@ -165,13 +165,13 @@ var _ colexecbase.Operator = &orderedAggregator{}
 // that the aggregate function should work on.
 func NewOrderedAggregator(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	typs []*types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
 	isScalar bool,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	if len(aggFns) != len(aggCols) {
 		return nil,
 			errors.Errorf(

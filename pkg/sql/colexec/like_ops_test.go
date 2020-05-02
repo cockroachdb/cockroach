@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -91,7 +92,7 @@ func TestLikeOperators(t *testing.T) {
 	} {
 		runTests(
 			t, []tuples{tc.tups}, tc.expected, orderedVerifier,
-			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			func(input []execinfra.Operator) (execinfra.Operator, error) {
 				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
 			})
@@ -143,7 +144,7 @@ func BenchmarkLikeOps(b *testing.B) {
 
 	testCases := []struct {
 		name string
-		op   colexecbase.Operator
+		op   execinfra.Operator
 	}{
 		{name: "selPrefixBytesBytesConstOp", op: prefixOp},
 		{name: "selSuffixBytesBytesConstOp", op: suffixOp},

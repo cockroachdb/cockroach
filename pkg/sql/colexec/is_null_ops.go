@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -31,8 +31,8 @@ type isNullProjOp struct {
 }
 
 func newIsNullProjOp(
-	allocator *colmem.Allocator, input colexecbase.Operator, colIdx, outputIdx int, negate bool,
-) colexecbase.Operator {
+	allocator *colmem.Allocator, input execinfra.Operator, colIdx, outputIdx int, negate bool,
+) execinfra.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	return &isNullProjOp{
 		OneInputNode: NewOneInputNode(input),
@@ -43,7 +43,7 @@ func newIsNullProjOp(
 	}
 }
 
-var _ colexecbase.Operator = &isNullProjOp{}
+var _ execinfra.Operator = &isNullProjOp{}
 
 func (o *isNullProjOp) Init() {
 	o.input.Init()
@@ -103,7 +103,7 @@ type isNullSelOp struct {
 	negate bool
 }
 
-func newIsNullSelOp(input colexecbase.Operator, colIdx int, negate bool) colexecbase.Operator {
+func newIsNullSelOp(input execinfra.Operator, colIdx int, negate bool) execinfra.Operator {
 	return &isNullSelOp{
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
@@ -111,7 +111,7 @@ func newIsNullSelOp(input colexecbase.Operator, colIdx int, negate bool) colexec
 	}
 }
 
-var _ colexecbase.Operator = &isNullSelOp{}
+var _ execinfra.Operator = &isNullSelOp{}
 
 func (o *isNullSelOp) Init() {
 	o.input.Init()

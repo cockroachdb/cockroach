@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -23,7 +23,7 @@ import (
 // occurred. The check happens on every batch.
 type CancelChecker struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 
 	// Number of times check() has been called since last context cancellation
 	// check.
@@ -35,10 +35,10 @@ func (c *CancelChecker) Init() {
 	c.input.Init()
 }
 
-var _ colexecbase.Operator = &CancelChecker{}
+var _ execinfra.Operator = &CancelChecker{}
 
 // NewCancelChecker creates a new CancelChecker.
-func NewCancelChecker(op colexecbase.Operator) *CancelChecker {
+func NewCancelChecker(op execinfra.Operator) *CancelChecker {
 	return &CancelChecker{OneInputNode: NewOneInputNode(op)}
 }
 
