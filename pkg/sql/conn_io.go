@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -640,6 +641,8 @@ type ClientComm interface {
 	// communication can be unlocked (i.e. results can be delivered to the client
 	// again).
 	LockCommunication() ClientLock
+
+	notify.NotificationSender
 
 	// Flush delivers all the previous results to the client. The results might
 	// have been buffered, in which case this flushes the buffer.

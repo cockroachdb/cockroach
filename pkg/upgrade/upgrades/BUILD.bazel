@@ -11,6 +11,7 @@ go_library(
         "ensure_no_draining_names.go",
         "insert_missing_public_schema_namespace_entry.go",
         "migrate_span_configs.go",
+        "pg_notifications_table.go",
         "public_schema_migration.go",
         "raft_applied_index_term.go",
         "remove_grant_migration.go",

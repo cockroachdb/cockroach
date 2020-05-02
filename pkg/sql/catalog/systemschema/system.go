@@ -676,6 +676,15 @@ CREATE TABLE system.span_count (
 	CONSTRAINT single_row CHECK (singleton),
 	FAMILY "primary" (singleton, span_count)
 );`
+
+	PGNotificationsTableSchema = `
+CREATE TABLE system.pg_notifications(
+  chan_name STRING PRIMARY KEY,
+  message STRING NOT NULL,
+  node_id INT4 NOT NULL,
+
+  FAMILY "primary" (chan_name, message, node_id)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2396,6 +2405,26 @@ var (
 			}}
 		},
 	)
+
+	PGNotificationsTable = registerSystemTable(
+		PGNotificationsTableSchema,
+		systemTable(
+			catconstants.PGNotificationsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "chan_name", ID: 1, Type: types.String, Nullable: false},
+				{Name: "message", ID: 2, Type: types.String, Nullable: false},
+				{Name: "node_id", ID: 3, Type: types.Int4, Nullable: false},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ColumnNames: []string{"chan_name", "message", "node_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			pk("chan_name"),
+		))
 )
 
 type descRefByName struct {

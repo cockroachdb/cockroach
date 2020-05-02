@@ -60,6 +60,7 @@ go_library(
         "interval.go",
         "name_part.go",
         "name_resolution.go",
+        "notify.go",
         "object_name.go",
         "overload.go",
         "parse_array.go",

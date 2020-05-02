@@ -18,6 +18,7 @@ func _() {
 	_ = x[ServerMsgEmptyQuery-73]
 	_ = x[ServerMsgErrorResponse-69]
 	_ = x[ServerMsgNoticeResponse-78]
+	_ = x[ServerMsgNotificationResponse-65]
 	_ = x[ServerMsgNoData-110]
 	_ = x[ServerMsgParameterDescription-116]
 	_ = x[ServerMsgParameterStatus-83]
@@ -27,53 +28,32 @@ func _() {
 	_ = x[ServerMsgRowDescription-84]
 }
 
-const (
-	_ServerMessageType_name_0 = "ServerMsgParseCompleteServerMsgBindCompleteServerMsgCloseComplete"
-	_ServerMessageType_name_1 = "ServerMsgCommandCompleteServerMsgDataRowServerMsgErrorResponse"
-	_ServerMessageType_name_2 = "ServerMsgCopyInResponse"
-	_ServerMessageType_name_3 = "ServerMsgEmptyQuery"
-	_ServerMessageType_name_4 = "ServerMsgBackendKeyData"
-	_ServerMessageType_name_5 = "ServerMsgNoticeResponse"
-	_ServerMessageType_name_6 = "ServerMsgAuthServerMsgParameterStatusServerMsgRowDescription"
-	_ServerMessageType_name_7 = "ServerMsgReady"
-	_ServerMessageType_name_8 = "ServerMsgNoData"
-	_ServerMessageType_name_9 = "ServerMsgPortalSuspendedServerMsgParameterDescription"
-)
+const _ServerMessageType_name = "ServerMsgParseCompleteServerMsgBindCompleteServerMsgCloseCompleteServerMsgNotificationResponseServerMsgCommandCompleteServerMsgDataRowServerMsgErrorResponseServerMsgCopyInResponseServerMsgEmptyQueryServerMsgBackendKeyDataServerMsgNoticeResponseServerMsgAuthServerMsgParameterStatusServerMsgRowDescriptionServerMsgReadyServerMsgNoDataServerMsgPortalSuspendedServerMsgParameterDescription"
 
-var (
-	_ServerMessageType_index_0 = [...]uint8{0, 22, 43, 65}
-	_ServerMessageType_index_1 = [...]uint8{0, 24, 40, 62}
-	_ServerMessageType_index_6 = [...]uint8{0, 13, 37, 60}
-	_ServerMessageType_index_9 = [...]uint8{0, 24, 53}
-)
+var _ServerMessageType_map = map[ServerMessageType]string{
+	49:  _ServerMessageType_name[0:22],
+	50:  _ServerMessageType_name[22:43],
+	51:  _ServerMessageType_name[43:65],
+	65:  _ServerMessageType_name[65:94],
+	67:  _ServerMessageType_name[94:118],
+	68:  _ServerMessageType_name[118:134],
+	69:  _ServerMessageType_name[134:156],
+	71:  _ServerMessageType_name[156:179],
+	73:  _ServerMessageType_name[179:198],
+	75:  _ServerMessageType_name[198:221],
+	78:  _ServerMessageType_name[221:244],
+	82:  _ServerMessageType_name[244:257],
+	83:  _ServerMessageType_name[257:281],
+	84:  _ServerMessageType_name[281:304],
+	90:  _ServerMessageType_name[304:318],
+	110: _ServerMessageType_name[318:333],
+	115: _ServerMessageType_name[333:357],
+	116: _ServerMessageType_name[357:386],
+}
 
 func (i ServerMessageType) String() string {
-	switch {
-	case 49 <= i && i <= 51:
-		i -= 49
-		return _ServerMessageType_name_0[_ServerMessageType_index_0[i]:_ServerMessageType_index_0[i+1]]
-	case 67 <= i && i <= 69:
-		i -= 67
-		return _ServerMessageType_name_1[_ServerMessageType_index_1[i]:_ServerMessageType_index_1[i+1]]
-	case i == 71:
-		return _ServerMessageType_name_2
-	case i == 73:
-		return _ServerMessageType_name_3
-	case i == 75:
-		return _ServerMessageType_name_4
-	case i == 78:
-		return _ServerMessageType_name_5
-	case 82 <= i && i <= 84:
-		i -= 82
-		return _ServerMessageType_name_6[_ServerMessageType_index_6[i]:_ServerMessageType_index_6[i+1]]
-	case i == 90:
-		return _ServerMessageType_name_7
-	case i == 110:
-		return _ServerMessageType_name_8
-	case 115 <= i && i <= 116:
-		i -= 115
-		return _ServerMessageType_name_9[_ServerMessageType_index_9[i]:_ServerMessageType_index_9[i+1]]
-	default:
-		return "ServerMessageType(" + strconv.FormatInt(int64(i), 10) + ")"
+	if str, ok := _ServerMessageType_map[i]; ok {
+		return str
 	}
+	return "ServerMessageType(" + strconv.FormatInt(int64(i), 10) + ")"
 }

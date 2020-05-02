@@ -1,0 +1,6 @@
+listen_notify_stmt ::=
+	'NOTIFY' name
+	| 'NOTIFY' name ',' 'SCONST'
+	| 'LISTEN' name
+	| 'UNLISTEN' name
+	| 'UNLISTEN' '*'

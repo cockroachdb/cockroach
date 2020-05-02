@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1310,6 +1311,9 @@ type ExecutorConfig struct {
 
 	// RangeProber is used in calls to crdb_internal.probe_ranges.
 	RangeProber eval.RangeProber
+
+	// PgListenerRegistry manages listeners for LISTEN/NOTIFY.
+	PgListenerRegistry *notify.ListenersRegistry
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

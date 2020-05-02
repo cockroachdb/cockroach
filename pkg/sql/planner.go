@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -235,10 +236,18 @@ type planner struct {
 	// instead.
 	noticeSender noticeSender
 
+	// notificationSender allows the sending of LISTEN/NOTIFY notifications.
+	notificationSender notify.NotificationSender
+
 	queryCacheSession querycache.Session
 
 	// evalCatalogBuiltins is used as part of the eval.Context.
 	evalCatalogBuiltins evalcatalog.Builtins
+
+	// sessionLifetimeContext is a context that gets canceled exactly when the
+	// session ends. It's suitable for processes that must outlast a single
+	// statement, but not outlast the session that they were created from.
+	sessionLifetimeContext context.Context
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
@@ -341,6 +350,7 @@ func newInternalPlanner(
 	}
 
 	p := &planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}}
+	p.sessionLifetimeContext = ctx
 
 	p.txn = txn
 	p.stmt = Statement{}

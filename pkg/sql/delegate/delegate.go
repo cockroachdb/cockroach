@@ -183,6 +183,9 @@ func TryDelegate(
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot use SHOW TRANSFER STATE as a statement source")
 
+	case *tree.Notify:
+		return d.delegateNotify(t)
+
 	default:
 		return nil, nil
 	}

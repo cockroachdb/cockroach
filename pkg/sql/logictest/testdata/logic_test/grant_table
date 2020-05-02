@@ -913,6 +913,14 @@ system         public        span_configurations              root     DELETE   
 system         public        span_configurations              root     INSERT          true
 system         public        span_configurations              root     SELECT          true
 system         public        span_configurations              root     UPDATE          true
+system         public        pg_notifications                 admin    DELETE          true
+system         public        pg_notifications                 admin    INSERT          true
+system         public        pg_notifications                 admin    SELECT          true
+system         public        pg_notifications                 admin    UPDATE          true
+system         public        pg_notifications                 root     DELETE          true
+system         public        pg_notifications                 root     INSERT          true
+system         public        pg_notifications                 root     SELECT          true
+system         public        pg_notifications                 root     UPDATE          true
 system         public        tenant_settings                  admin    DELETE          true
 system         public        tenant_settings                  admin    INSERT          true
 system         public        tenant_settings                  admin    SELECT          true
@@ -1305,6 +1313,10 @@ system         public       migrations                       root     INSERT    
 system         public       migrations                       root     SELECT          true
 system         public       migrations                       root     UPDATE          true
 system         public       namespace                        root     SELECT          true
+system         public       pg_notifications                 root     DELETE          true
+system         public       pg_notifications                 root     INSERT          true
+system         public       pg_notifications                 root     SELECT          true
+system         public       pg_notifications                 root     UPDATE          true
 system         public       protected_ts_meta                root     SELECT          true
 system         public       protected_ts_records             root     SELECT          true
 system         public       rangelog                         root     DELETE          true
