@@ -203,9 +203,9 @@ List certificates and keys found in the certificate directory.
 
 // runListCerts loads and lists all certs.
 func runListCerts(cmd *cobra.Command, args []string) error {
-	cm, err := baseCfg.GetCertificateManager()
+	cm, err := security.NewCertificateManager(baseCfg.SSLCertsDir)
 	if err != nil {
-		return errors.Wrap(err, "could not get certificate manager")
+		return errors.Wrap(err, "cannot load certificates")
 	}
 
 	fmt.Fprintf(os.Stdout, "Certificate directory: %s\n", baseCfg.SSLCertsDir)

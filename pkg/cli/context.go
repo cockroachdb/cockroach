@@ -77,6 +77,7 @@ func initCLIDefaults() {
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = ""
 	cliCtx.clientConnPort = base.DefaultPort
+	cliCtx.certPrincipalMap = nil
 	cliCtx.sqlConnURL = ""
 	cliCtx.sqlConnUser = ""
 	cliCtx.sqlConnPasswd = ""
@@ -213,6 +214,9 @@ type cliContext struct {
 
 	// clientConnPort is the port name/number to use to connect to a server.
 	clientConnPort string
+
+	// certPrincipalMap is the cert-principal:db-principal map.
+	certPrincipalMap []string
 
 	// for CLI commands that use the SQL interface, these parameters
 	// determine how to connect to the server.
