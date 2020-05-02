@@ -74,8 +74,12 @@ func makeFkExistenceCheckHelperForInsert(
 		}
 		mutatedIdx, err := sqlbase.FindFKOriginIndex(table.TableDesc(), ref.OriginColumnIDs)
 		if err != nil {
-			return h, errors.NewAssertionErrorWithWrappedErrf(err,
+			// TODO (rohany): Remove once #48224 is resolved.
+			assertionError := errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to find suitable search index for fk %q", ref.Name)
+			issueLink := errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/48224"}
+			withLink := errors.WithIssueLink(assertionError, issueLink)
+			return h, withLink
 		}
 		fk, err := makeFkExistenceCheckBaseHelper(txn, codec, otherTables, ref, searchIdx, mutatedIdx, colMap, alloc, CheckInserts)
 		if err == errSkipUnusedFK {
