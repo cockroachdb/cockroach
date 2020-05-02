@@ -22,7 +22,6 @@ package colexec
 import (
 	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -43,9 +42,6 @@ var _ tree.Datum
 
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.

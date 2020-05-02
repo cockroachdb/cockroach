@@ -811,20 +811,20 @@ CREATE TABLE dec2 (d decimal null, index (d))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d IS NaN
 ----
-·     distributed  false            ·            ·
-·     vectorized   true             ·            ·
-scan  ·            ·                (d decimal)  ·
-·     table        dec2@dec2_d_idx  ·            ·
-·     spans        /NaN-/-Infinity  ·            ·
+·     distributed  false                ·            ·
+·     vectorized   true                 ·            ·
+scan  ·            ·                    (d decimal)  ·
+·     table        dec2@dec2_d_idx      ·            ·
+·     spans        /NaN-/NaN/PrefixEnd  ·            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d = 'NaN'
 ----
-·     distributed  false            ·            ·
-·     vectorized   true             ·            ·
-scan  ·            ·                (d decimal)  ·
-·     table        dec2@dec2_d_idx  ·            ·
-·     spans        /NaN-/-Infinity  ·            ·
+·     distributed  false                ·            ·
+·     vectorized   true                 ·            ·
+scan  ·            ·                    (d decimal)  ·
+·     table        dec2@dec2_d_idx      ·            ·
+·     spans        /NaN-/NaN/PrefixEnd  ·            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)

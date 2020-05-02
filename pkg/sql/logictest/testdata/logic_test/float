@@ -20,41 +20,31 @@ query RBBB
 SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p@{FORCE_INDEX=primary} ORDER BY 1
 ----
 NULL  NULL   NULL   NULL
-NaN   true   true   true
 -Inf  false  false  false
 -1    false  false  false
 0     false  false  false
 1     false  false  false
 +Inf  false  false  false
+NaN   true   true   true
 
 query RBBB
 SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p@{FORCE_INDEX=p_f_key} ORDER BY 1
 ----
 NULL  NULL   NULL   NULL
-NaN   true   true   true
 -Inf  false  false  false
 -1    false  false  false
 0     false  false  false
 1     false  false  false
 +Inf  false  false  false
+NaN   true   true   true
 
 query RB
 select f, f > 'NaN' from p@{FORCE_INDEX=primary} where f > 'NaN' ORDER BY f
 ----
--Inf  true
--1    true
-0     true
-1     true
-+Inf  true
 
 query RB
 select f, f > 'NaN' from p@{FORCE_INDEX=p_f_key} where f > 'NaN' ORDER BY f
 ----
--Inf  true
--1    true
-0     true
-1     true
-+Inf  true
 
 statement ok
 CREATE TABLE i (f float)

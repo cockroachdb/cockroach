@@ -23,7 +23,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/apd"
@@ -59,9 +58,6 @@ var _ duration.Duration
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
 // will be replaced by the Go slice representation for each type in coltypes.T, for

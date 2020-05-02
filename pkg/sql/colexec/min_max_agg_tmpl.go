@@ -21,7 +21,6 @@ package colexec
 
 import (
 	"bytes"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/apd"
@@ -60,9 +59,6 @@ var _ duration.Duration
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // Dummy import to pull in "coltypes" package.
 var _ = coltypes.T

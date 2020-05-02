@@ -22,7 +22,6 @@ package colexec
 import (
 	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -45,9 +44,6 @@ var _ bytes.Buffer
 
 // Dummy import to pull in "tree" package.
 var _ tree.Operator
-
-// Dummy import to pull in "math" package.
-var _ int = math.MaxInt16
 
 // _TYPES_T is the template type variable for coltypes.T. It will be replaced by
 // coltypes.Foo for each type Foo in the coltypes.T type.

@@ -707,38 +707,20 @@ func (c floatCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
-func getFloatCmpOpCompareFunc(checkLeftNan, checkRightNan bool) compareFunc {
+func getFloatCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		args := map[string]interface{}{
-			"Target":        target,
-			"Left":          l,
-			"Right":         r,
-			"CheckLeftNan":  checkLeftNan,
-			"CheckRightNan": checkRightNan}
+			"Target": target,
+			"Left":   l,
+			"Right":  r}
 		buf := strings.Builder{}
 		// In SQL, NaN is treated as less than all other float values. In Go, any
 		// comparison with NaN returns false. To allow floats of different sizes to
-		// be compared, always upcast to float64. The CheckLeftNan and CheckRightNan
-		// flags skip NaN checks when the input is an int (which is necessary to
-		// pass linting.)
+		// be compared, always upcast to float64.
 		t := template.Must(template.New("").Parse(`
 			{
 				a, b := float64({{.Left}}), float64({{.Right}})
-				if a < b {
-					{{.Target}} = -1
-				} else if a > b {
-					{{.Target}} = 1
-				}	else if a == b {
-					{{.Target}} = 0
-				}	else if {{if .CheckLeftNan}} math.IsNaN(a) {{else}} false {{end}} {
-					if {{if .CheckRightNan}} math.IsNaN(b) {{else}} false {{end}} {
-						{{.Target}} = 0
-					} else {
-						{{.Target}} = -1
-					}
-				}	else {
-					{{.Target}} = 1
-				}
+				{{.Target}} = tree.CompareFloats(a, b)
 			}
 		`))
 
@@ -750,7 +732,7 @@ func getFloatCmpOpCompareFunc(checkLeftNan, checkRightNan bool) compareFunc {
 }
 
 func (c floatCustomizer) getCmpOpCompareFunc() compareFunc {
-	return getFloatCmpOpCompareFunc(true /* checkLeftNan */, true /* checkRightNan */)
+	return getFloatCmpOpCompareFunc()
 }
 
 func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
@@ -1053,13 +1035,13 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c floatIntCustomizer) getCmpOpCompareFunc() compareFunc {
 	// floatCustomizer's comparison function can be reused since float-int
 	// comparison works by casting the int.
-	return getFloatCmpOpCompareFunc(true /* checkLeftNan */, false /* checkRightNan */)
+	return getFloatCmpOpCompareFunc()
 }
 
 func (c intFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 	// floatCustomizer's comparison function can be reused since int-float
 	// comparison works by casting the int.
-	return getFloatCmpOpCompareFunc(false /* checkLeftNan */, true /* checkRightNan */)
+	return getFloatCmpOpCompareFunc()
 }
 
 func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {

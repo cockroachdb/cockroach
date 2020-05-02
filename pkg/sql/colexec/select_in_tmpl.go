@@ -22,7 +22,6 @@ package colexec
 import (
 	"bytes"
 	"context"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/apd"
@@ -64,9 +63,6 @@ var _ coltypes.T
 
 // Dummy import to pull in "bytes" package
 var _ bytes.Buffer
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 func _ASSIGN_EQ(_, _, _ interface{}) int {
 	colexecerror.InternalError("")
