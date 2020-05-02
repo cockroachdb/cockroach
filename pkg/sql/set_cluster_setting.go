@@ -173,6 +173,20 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			case "false":
 				telemetry.Inc(sqltelemetry.TurnAutoStatsOffUseCounter)
 			}
+		case ConnAuditingClusterSettingName:
+			switch expectedEncodedValue {
+			case "true":
+				telemetry.Inc(sqltelemetry.TurnConnAuditingOnUseCounter)
+			case "false":
+				telemetry.Inc(sqltelemetry.TurnConnAuditingOffUseCounter)
+			}
+		case AuthAuditingClusterSettingName:
+			switch expectedEncodedValue {
+			case "true":
+				telemetry.Inc(sqltelemetry.TurnAuthAuditingOnUseCounter)
+			case "false":
+				telemetry.Inc(sqltelemetry.TurnAuthAuditingOffUseCounter)
+			}
 		case ReorderJoinsLimitClusterSettingName:
 			val, err := strconv.ParseInt(expectedEncodedValue, 10, 64)
 			if err != nil {
