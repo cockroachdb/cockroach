@@ -77,8 +77,12 @@ func makeFkExistenceCheckHelperForDelete(
 		}
 		searchIdx, err := sqlbase.FindFKOriginIndex(originTable.Desc.TableDesc(), ref.OriginColumnIDs)
 		if err != nil {
-			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
+			// TODO (rohany): Remove once #48224 is resolved.
+			assertionError := errors.NewAssertionErrorWithWrappedErrf(
 				err, "failed to find a suitable index on table %d for deletion", ref.OriginTableID)
+			issueLink := errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/48224"}
+			withLink := errors.WithIssueLink(assertionError, issueLink)
+			return fkExistenceCheckForDelete{}, withLink
 		}
 		mutatedIdx, err := sqlbase.FindFKReferencedIndex(table.TableDesc(), ref.ReferencedColumnIDs)
 		if err != nil {

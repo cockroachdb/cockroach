@@ -1153,7 +1153,10 @@ func (c *cascader) cascadeAll(
 			}
 			referencingIndex, err := sqlbase.FindFKOriginIndex(referencingTable.Desc.TableDesc(), ref.OriginColumnIDs)
 			if err != nil {
-				return err
+				// TODO (rohany): Remove once #48224 is resolved.
+				issueLink := errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/48224"}
+				withLink := errors.WithIssueLink(err, issueLink)
+				return withLink
 			}
 			if elem.updatedValues == nil {
 				// Deleting a row.
