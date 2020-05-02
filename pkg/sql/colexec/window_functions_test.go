@@ -282,7 +282,7 @@ func TestWindowFunctions(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String()), func(t *testing.T) {
 				var semsToCheck []semaphore.Semaphore
-				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []execinfra.Operator) (execinfra.Operator, error) {
 					tc.init()
 					ct := make([]*types.T, len(tc.tuples[0]))
 					for i := range ct {

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -31,7 +30,7 @@ import (
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
 	execinfra.ProcessorBase
-	NonExplainable
+	execinfra.NonExplainable
 
 	// mu is used to protect against concurrent DrainMeta and Next calls, which
 	// are currently allowed.
@@ -51,7 +50,7 @@ type Columnarizer struct {
 	typs            []*types.T
 }
 
-var _ colexecbase.Operator = &Columnarizer{}
+var _ execinfra.Operator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
@@ -142,7 +141,7 @@ func (c *Columnarizer) Run(context.Context) {
 	colexecerror.InternalError("Columnarizer should not be Run")
 }
 
-var _ colexecbase.Operator = &Columnarizer{}
+var _ execinfra.Operator = &Columnarizer{}
 var _ execinfrapb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.

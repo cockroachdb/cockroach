@@ -210,7 +210,7 @@ func TestEval(t *testing.T) {
 						RenderExprs: []execinfrapb.Expression{{Expr: d.Input}},
 					},
 				},
-				Inputs: []colexecbase.Operator{
+				Inputs: []execinfra.Operator{
 					&colexecbase.CallbackOperator{
 						NextCb: func(_ context.Context) coldata.Batch {
 							if batchesReturned > 0 {
@@ -239,7 +239,7 @@ func TestEval(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			mat, err := colexec.NewMaterializer(
+			mat, err := execinfra.NewMaterializer(
 				flowCtx,
 				0, /* processorID */
 				result.Op,

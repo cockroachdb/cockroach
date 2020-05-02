@@ -72,7 +72,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				func(input []execinfra.Operator) (execinfra.Operator, error) {
 					return createTestProjectingOperator(
 						ctx, flowCtx, input[0], tc.inputTypes,
 						tc.expr, false, /* canFallbackToRowexec */
@@ -168,7 +168,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		eCol[i] = 4
 	}
 	batch.SetLength(coldata.BatchSize())
-	var source colexecbase.Operator
+	var source execinfra.Operator
 	source = colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source = newVectorTypeEnforcer(testAllocator, source, types.Bytes, outputIdx)
 

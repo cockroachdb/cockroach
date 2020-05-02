@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -159,7 +158,7 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-var _ colexecbase.Operator = &routerOutputOp{}
+var _ execinfra.Operator = &routerOutputOp{}
 
 // newRouterOutputOp creates a new router output. The caller must ensure that
 // unblockedEventsChan is a buffered channel, as the router output will write to
@@ -436,19 +435,19 @@ type HashRouter struct {
 // needs to have a separate disk account.
 func NewHashRouter(
 	unlimitedAllocators []*colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	types []*types.T,
 	hashCols []uint32,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
-) (*HashRouter, []colexecbase.Operator) {
+) (*HashRouter, []execinfra.Operator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	outputs := make([]routerOutput, len(unlimitedAllocators))
-	outputsAsOps := make([]colexecbase.Operator, len(unlimitedAllocators))
+	outputsAsOps := make([]execinfra.Operator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
 	// writing to it to block.
 	// Unblock events only happen after a corresponding block event. Since these
@@ -471,7 +470,7 @@ func NewHashRouter(
 }
 
 func newHashRouterWithOutputs(
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	types []*types.T,
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},

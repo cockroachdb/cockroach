@@ -206,7 +206,7 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
-type testRunner func(*testing.T, []tuples, [][]*types.T, tuples, interface{}, func([]colexecbase.Operator) (colexecbase.Operator, error))
+type testRunner func(*testing.T, []tuples, [][]*types.T, tuples, interface{}, func([]execinfra.Operator) (execinfra.Operator, error))
 
 // variableOutputBatchSizeInitializer is implemented by operators that can be
 // initialized with variable output size batches. This allows runTests to
@@ -226,7 +226,7 @@ func runTests(
 	tups []tuples,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []colexecbase.Operator) (colexecbase.Operator, error),
+	constructor func(inputs []execinfra.Operator) (execinfra.Operator, error),
 ) {
 	runTestsWithTyps(t, tups, nil /* typs */, expected, verifier, constructor)
 }
@@ -242,7 +242,7 @@ func runTestsWithTyps(
 	typs [][]*types.T,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []colexecbase.Operator) (colexecbase.Operator, error),
+	constructor func(inputs []execinfra.Operator) (execinfra.Operator, error),
 ) {
 	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, constructor)
 
@@ -262,8 +262,8 @@ func runTestsWithTyps(
 				}
 			}
 		}
-		opConstructor := func(injectAllNulls bool) colexecbase.Operator {
-			inputSources := make([]colexecbase.Operator, len(tups))
+		opConstructor := func(injectAllNulls bool) execinfra.Operator {
+			inputSources := make([]execinfra.Operator, len(tups))
 			var inputTypes []*types.T
 			for i, tup := range tups {
 				if typs != nil {
@@ -315,10 +315,10 @@ func runTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		if c, ok := originalOp.(IdempotentCloser); ok {
+		if c, ok := originalOp.(execinfra.IdempotentCloser); ok {
 			require.NoError(t, c.IdempotentClose(ctx))
 		}
-		if c, ok := opWithNulls.(IdempotentCloser); ok {
+		if c, ok := opWithNulls.(execinfra.IdempotentCloser); ok {
 			require.NoError(t, c.IdempotentClose(ctx))
 		}
 	})
@@ -335,7 +335,7 @@ func runTestsWithoutAllNullsInjection(
 	typs [][]*types.T,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []colexecbase.Operator) (colexecbase.Operator, error),
+	constructor func(inputs []execinfra.Operator) (execinfra.Operator, error),
 ) {
 	skipVerifySelAndNullsResets := true
 	var verifyFn verifierFn
@@ -356,7 +356,7 @@ func runTestsWithoutAllNullsInjection(
 	case verifierFn:
 		verifyFn = v
 	}
-	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []colexecbase.Operator) {
+	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []execinfra.Operator) {
 		op, err := constructor(inputs)
 		if err != nil {
 			t.Fatal(err)
@@ -384,7 +384,7 @@ func runTestsWithoutAllNullsInjection(
 				inputTypes                                   []*types.T
 			)
 			for round := 0; round < 2; round++ {
-				inputSources := make([]colexecbase.Operator, len(tups))
+				inputSources := make([]execinfra.Operator, len(tups))
 				for i, tup := range tups {
 					if typs != nil {
 						inputTypes = typs[i]
@@ -442,7 +442,7 @@ func runTestsWithoutAllNullsInjection(
 						assert.False(t, maybeHasNulls(b))
 					}
 				}
-				if c, ok := op.(IdempotentCloser); ok {
+				if c, ok := op.(execinfra.IdempotentCloser); ok {
 					// Some operators need an explicit Close if not drained completely of
 					// input.
 					assert.NoError(t, c.IdempotentClose(ctx))
@@ -454,7 +454,7 @@ func runTestsWithoutAllNullsInjection(
 	t.Run("randomNullsInjection", func(t *testing.T) {
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
-		inputSources := make([]colexecbase.Operator, len(tups))
+		inputSources := make([]execinfra.Operator, len(tups))
 		var inputTypes []*types.T
 		for i, tup := range tups {
 			if typs != nil {
@@ -493,7 +493,7 @@ func runTestsWithFn(
 	t *testing.T,
 	tups []tuples,
 	typs [][]*types.T,
-	test func(t *testing.T, inputs []colexecbase.Operator),
+	test func(t *testing.T, inputs []execinfra.Operator),
 ) {
 	// Run tests over batchSizes of 1, (sometimes) a batch size that is small but
 	// greater than 1, and a full coldata.BatchSize().
@@ -508,7 +508,7 @@ func runTestsWithFn(
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
-				inputSources := make([]colexecbase.Operator, len(tups))
+				inputSources := make([]execinfra.Operator, len(tups))
 				var inputTypes []*types.T
 				if useSel {
 					for i, tup := range tups {
@@ -537,11 +537,11 @@ func runTestsWithFn(
 // function that takes a list of input Operators, which will give back the
 // tuples provided in batches.
 func runTestsWithFixedSel(
-	t *testing.T, tups []tuples, sel []int, test func(t *testing.T, inputs []colexecbase.Operator),
+	t *testing.T, tups []tuples, sel []int, test func(t *testing.T, inputs []execinfra.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
 		t.Run(fmt.Sprintf("batchSize=%d/fixedSel", batchSize), func(t *testing.T) {
-			inputSources := make([]colexecbase.Operator, len(tups))
+			inputSources := make([]execinfra.Operator, len(tups))
 			for i, tup := range tups {
 				inputSources[i] = newOpFixedSelTestInput(sel, batchSize, tup)
 			}
@@ -601,7 +601,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 //     t.Fatal(err)
 // }
 type opTestInput struct {
-	colexecbase.ZeroInputNode
+	execinfra.ZeroInputNode
 
 	typs []*types.T
 
@@ -621,7 +621,7 @@ type opTestInput struct {
 	injectRandomNulls bool
 }
 
-var _ colexecbase.Operator = &opTestInput{}
+var _ execinfra.Operator = &opTestInput{}
 
 // newOpTestInput returns a new opTestInput with the given input tuples and the
 // given type schema. If typs is nil, the input tuples are translated into
@@ -785,7 +785,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 }
 
 type opFixedSelTestInput struct {
-	colexecbase.ZeroInputNode
+	execinfra.ZeroInputNode
 
 	typs []*types.T
 
@@ -799,7 +799,7 @@ type opFixedSelTestInput struct {
 	idx int
 }
 
-var _ colexecbase.Operator = &opFixedSelTestInput{}
+var _ execinfra.Operator = &opFixedSelTestInput{}
 
 // newOpFixedSelTestInput returns a new opFixedSelTestInput with the given
 // input tuples and selection vector. The input tuples are translated into
@@ -917,7 +917,7 @@ type opTestOutput struct {
 
 // newOpTestOutput returns a new opTestOutput, initialized with the given input
 // to verify that the output is exactly equal to the expected tuples.
-func newOpTestOutput(input colexecbase.Operator, expected tuples) *opTestOutput {
+func newOpTestOutput(input execinfra.Operator, expected tuples) *opTestOutput {
 	input.Init()
 
 	return &opTestOutput{
@@ -1100,14 +1100,14 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {
-	colexecbase.ZeroInputNode
+	execinfra.ZeroInputNode
 
 	repeatableBatch *colexecbase.RepeatableBatchSource
 
 	usableCount int
 }
 
-var _ colexecbase.Operator = &finiteBatchSource{}
+var _ execinfra.Operator = &finiteBatchSource{}
 
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
@@ -1141,7 +1141,7 @@ func (f *finiteBatchSource) reset(usableCount int) {
 // (except for the first) the batch is returned to emulate source that is
 // already ordered on matchLen columns.
 type finiteChunksSource struct {
-	colexecbase.ZeroInputNode
+	execinfra.ZeroInputNode
 	repeatableBatch *colexecbase.RepeatableBatchSource
 
 	usableCount int
@@ -1149,7 +1149,7 @@ type finiteChunksSource struct {
 	adjustment  []int64
 }
 
-var _ colexecbase.Operator = &finiteChunksSource{}
+var _ execinfra.Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(
 	batch coldata.Batch, typs []*types.T, usableCount int, matchLen int,
@@ -1209,7 +1209,7 @@ func TestOpTestInputOutput(t *testing.T) {
 			{1, 5, 0},
 		},
 	}
-	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []colexecbase.Operator) {
+	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []execinfra.Operator) {
 		out := newOpTestOutput(sources[0], inputs[0])
 
 		if err := out.Verify(); err != nil {
@@ -1298,7 +1298,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
 // chunks them into BatchSize()-sized chunks when Nexted.
 type chunkingBatchSource struct {
-	colexecbase.ZeroInputNode
+	execinfra.ZeroInputNode
 	typs []*types.T
 	cols []coldata.Vec
 	len  int
@@ -1307,7 +1307,7 @@ type chunkingBatchSource struct {
 	batch  coldata.Batch
 }
 
-var _ colexecbase.Operator = &chunkingBatchSource{}
+var _ execinfra.Operator = &chunkingBatchSource{}
 
 // newChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
@@ -1493,11 +1493,11 @@ func (p *mockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func createTestProjectingOperator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	projectingExpr string,
 	canFallbackToRowexec bool,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	expr, err := parser.ParseExpr(projectingExpr)
 	if err != nil {
 		return nil, err
@@ -1523,7 +1523,7 @@ func createTestProjectingOperator(
 	}
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecbase.Operator{input},
+		Inputs:              []execinfra.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	if canFallbackToRowexec {

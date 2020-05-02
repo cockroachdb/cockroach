@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -88,12 +88,12 @@ const (
 func GetInProjectionOperator(
 	allocator *colmem.Allocator,
 	t *types.T,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	colIdx int,
 	resultIdx int,
 	datumTuple *tree.DTuple,
 	negate bool,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	var err error
 	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
@@ -122,8 +122,8 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	t *types.T, input colexecbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
-) (colexecbase.Operator, error) {
+	t *types.T, input execinfra.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+) (execinfra.Operator, error) {
 	var err error
 	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
@@ -159,7 +159,7 @@ type selectInOp_TYPE struct {
 	negate    bool
 }
 
-var _ colexecbase.Operator = &selectInOp_TYPE{}
+var _ execinfra.Operator = &selectInOp_TYPE{}
 
 type projectInOp_TYPE struct {
 	OneInputNode
@@ -171,7 +171,7 @@ type projectInOp_TYPE struct {
 	negate    bool
 }
 
-var _ colexecbase.Operator = &projectInOp_TYPE{}
+var _ execinfra.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
 	conv := getDatumToPhysicalFn(t)

@@ -161,7 +161,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					numInboxes                  = numHashRouterOutputs + 3
 					inboxes                     = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh           = make([]chan error, numInboxes+1)
-					synchronizerInputs          = make([]colexecbase.Operator, 0, numInboxes)
+					synchronizerInputs          = make([]execinfra.Operator, 0, numInboxes)
 					materializerMetadataSources = make([]execinfrapb.MetadataSource, 0, numInboxes+1)
 					streamID                    = 0
 					addAnotherRemote            = rng.Float64() < 0.5
@@ -191,7 +191,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
-					synchronizerInputs = append(synchronizerInputs, colexecbase.Operator(inbox))
+					synchronizerInputs = append(synchronizerInputs, execinfra.Operator(inbox))
 				}
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -206,7 +206,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					ctx context.Context,
 					cancelFn context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
-					outboxInput colexecbase.Operator,
+					outboxInput execinfra.Operator,
 					inbox *colrpc.Inbox,
 					id int,
 					outboxMetadataSources []execinfrapb.MetadataSource,
@@ -220,7 +220,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 								return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
 							},
 						},
-					), []colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
+					), []execinfra.IdempotentCloser{callbackCloser{closeCb: func() error {
 						idToClosed.Lock()
 						idToClosed.mapping[id] = true
 						idToClosed.Unlock()
@@ -272,7 +272,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					streamID++
 				}
 
-				var materializerInput colexecbase.Operator
+				var materializerInput execinfra.Operator
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
@@ -298,7 +298,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				ctxLocal, cancelLocal := context.WithCancel(ctxLocal)
 				materializerCalledClose := false
-				materializer, err := colexec.NewMaterializer(
+				materializer, err := execinfra.NewMaterializer(
 					flowCtx,
 					1, /* processorID */
 					materializerInput,
@@ -306,7 +306,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					&execinfrapb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,
-					[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
+					[]execinfra.IdempotentCloser{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
 						return nil
 					}}}, /* toClose */

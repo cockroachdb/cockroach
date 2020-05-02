@@ -197,7 +197,7 @@ func TestAndOrOps(t *testing.T) {
 					[][]*types.T{{types.Bool, types.Bool}},
 					tc.expected,
 					orderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					func(input []execinfra.Operator) (execinfra.Operator, error) {
 						projOp, err := createTestProjectingOperator(
 							ctx, flowCtx, input[0], []*types.T{types.Bool, types.Bool},
 							fmt.Sprintf("@1 %s @2", test.operation), false, /* canFallbackToRowexec */

@@ -16,9 +16,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -33,11 +33,11 @@ const (
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k int,
-) colexecbase.Operator {
+) execinfra.Operator {
 	return &topKSorter{
 		allocator:    allocator,
 		OneInputNode: NewOneInputNode(input),
@@ -262,7 +262,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (t *topKSorter) ExportBuffered(execinfra.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {

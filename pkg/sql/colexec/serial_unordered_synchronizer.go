@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -26,12 +25,12 @@ import (
 // undesirable - for example when the whole query is planned on the gateway and
 // we want to run it in the RootTxn.
 type SerialUnorderedSynchronizer struct {
-	inputs []colexecbase.Operator
+	inputs []execinfra.Operator
 	// curSerialInputIdx indicates the index of the current input being consumed.
 	curSerialInputIdx int
 }
 
-var _ colexecbase.Operator = &SerialUnorderedSynchronizer{}
+var _ execinfra.Operator = &SerialUnorderedSynchronizer{}
 var _ execinfra.OpNode = &SerialUnorderedSynchronizer{}
 
 // ChildCount implements the execinfra.OpNode interface.
@@ -46,7 +45,7 @@ func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpN
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
 func NewSerialUnorderedSynchronizer(
-	inputs []colexecbase.Operator, typs []*types.T,
+	inputs []execinfra.Operator, typs []*types.T,
 ) *SerialUnorderedSynchronizer {
 	return &SerialUnorderedSynchronizer{
 		inputs:            inputs,

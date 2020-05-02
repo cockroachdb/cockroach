@@ -13,7 +13,7 @@ package colexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -35,7 +35,7 @@ func TestCount(t *testing.T) {
 	for _, tc := range tcs {
 		// The tuples consisting of all nulls still count as separate rows, so if
 		// we replace all values with nulls, we should get the same output.
-		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, orderedVerifier, func(input []execinfra.Operator) (execinfra.Operator, error) {
 			return NewCountOp(testAllocator, input[0]), nil
 		})
 	}

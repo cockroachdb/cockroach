@@ -135,7 +135,7 @@ func NewProcessor(
 		if core.TableReader.IsCheck {
 			return newScrubTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 		}
-		return newTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
+		return execinfra.NewTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 	}
 	if core.JoinReader != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {

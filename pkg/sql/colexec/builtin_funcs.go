@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,7 +39,7 @@ type defaultBuiltinFuncOperator struct {
 	da  sqlbase.DatumAlloc
 }
 
-var _ colexecbase.Operator = &defaultBuiltinFuncOperator{}
+var _ execinfra.Operator = &defaultBuiltinFuncOperator{}
 
 func (b *defaultBuiltinFuncOperator) Init() {
 	b.input.Init()
@@ -72,7 +72,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 				for j := range b.argumentCols {
 					col := batch.ColVec(b.argumentCols[j])
-					b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, &b.da, b.columnTypes[b.argumentCols[j]])
+					b.row[j] = execinfra.PhysicalTypeColElemToDatum(col, rowIdx, &b.da, b.columnTypes[b.argumentCols[j]])
 					hasNulls = hasNulls || b.row[j] == tree.DNull
 				}
 
@@ -117,8 +117,8 @@ func NewBuiltinFunctionOperator(
 	columnTypes []*types.T,
 	argumentCols []int,
 	outputIdx int,
-	input colexecbase.Operator,
-) (colexecbase.Operator, error) {
+	input execinfra.Operator,
+) (execinfra.Operator, error) {
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
 		input = newVectorTypeEnforcer(allocator, input, types.String, outputIdx)

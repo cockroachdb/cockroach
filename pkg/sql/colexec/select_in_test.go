@@ -74,7 +74,7 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			opConstructor := func(input []execinfra.Operator) (execinfra.Operator, error) {
 				op := selectInOpInt64{
 					OneInputNode: NewOneInputNode(input[0]),
 					colIdx:       0,
@@ -216,7 +216,7 @@ func TestProjectInInt64(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				func(input []execinfra.Operator) (execinfra.Operator, error) {
 					expr, err := parser.ParseExpr(fmt.Sprintf("@1 %s", c.inClause))
 					if err != nil {
 						return nil, err

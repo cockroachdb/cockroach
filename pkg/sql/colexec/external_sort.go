@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -111,7 +111,7 @@ const externalSorterMinPartitions = 3
 // maxNumberPartitions variable.
 type externalSorter struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 	closerHelper
 
 	// mu is used to protect against concurrent IdempotentClose and Next calls,
@@ -140,7 +140,7 @@ type externalSorter struct {
 		acquiredFDs int
 	}
 
-	emitter colexecbase.Operator
+	emitter execinfra.Operator
 
 	testingKnobs struct {
 		// delegateFDAcquisitions if true, means that a test wants to force the
@@ -175,7 +175,7 @@ func newExternalSorter(
 	ctx context.Context,
 	unlimitedAllocator *colmem.Allocator,
 	standaloneMemAccount *mon.BoundAccount,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
@@ -184,7 +184,7 @@ func newExternalSorter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
-) colexecbase.Operator {
+) execinfra.Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeReuseCache {
 		colexecerror.InternalError(errors.Errorf("external sorter instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
@@ -415,8 +415,8 @@ func (s *externalSorter) IdempotentClose(ctx context.Context) error {
 // partitions in [firstIdx, firstIdx+numPartitions) range.
 func (s *externalSorter) createMergerForPartitions(
 	firstIdx, numPartitions int,
-) (colexecbase.Operator, error) {
-	syncInputs := make([]colexecbase.Operator, numPartitions)
+) (execinfra.Operator, error) {
+	syncInputs := make([]execinfra.Operator, numPartitions)
 	for i := range syncInputs {
 		syncInputs[i] = newPartitionerToOperator(
 			s.unlimitedAllocator, s.inputTypes, s.partitioner, firstIdx+i,
@@ -431,7 +431,7 @@ func (s *externalSorter) createMergerForPartitions(
 }
 
 func newInputPartitioningOperator(
-	input colexecbase.Operator, standaloneMemAccount *mon.BoundAccount, memoryLimit int64,
+	input execinfra.Operator, standaloneMemAccount *mon.BoundAccount, memoryLimit int64,
 ) resettableOperator {
 	return &inputPartitioningOperator{
 		OneInputNode:         NewOneInputNode(input),
@@ -445,7 +445,7 @@ func newInputPartitioningOperator(
 // point, the operator returns a zero-length batch (until it is reset).
 type inputPartitioningOperator struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 
 	standaloneMemAccount *mon.BoundAccount
 	memoryLimit          int64

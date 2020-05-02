@@ -13,7 +13,7 @@ package colexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -66,7 +66,7 @@ func TestTopKSorter(t *testing.T) {
 
 	for _, tc := range topKSortTestCases {
 		t.Run(tc.description, func(t *testing.T) {
-			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []execinfra.Operator) (execinfra.Operator, error) {
 				return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k), nil
 			})
 		})

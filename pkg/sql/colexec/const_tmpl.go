@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -65,11 +65,11 @@ const _TYPE_WIDTH = 0
 // type t at index outputIdx.
 func NewConstOp(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	t *types.T,
 	constVal interface{},
 	outputIdx int,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, t, outputIdx)
 	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
@@ -142,8 +142,8 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
 func NewConstNullOp(
-	allocator *colmem.Allocator, input colexecbase.Operator, outputIdx int, typ *types.T,
-) colexecbase.Operator {
+	allocator *colmem.Allocator, input execinfra.Operator, outputIdx int, typ *types.T,
+) execinfra.Operator {
 	input = newVectorTypeEnforcer(allocator, input, typ, outputIdx)
 	return &constNullOp{
 		OneInputNode: NewOneInputNode(input),
@@ -158,7 +158,7 @@ type constNullOp struct {
 	outputIdx int
 }
 
-var _ colexecbase.Operator = &constNullOp{}
+var _ execinfra.Operator = &constNullOp{}
 
 func (c constNullOp) Init() {
 	c.input.Init()

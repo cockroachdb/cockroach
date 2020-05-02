@@ -104,7 +104,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	acc := evalCtx.Mon.MakeBoundAccount()
 	defer acc.Close(ctx)
 	testAllocator := colmem.NewAllocator(ctx, &acc)
-	columnarizers := make([]colexecbase.Operator, len(args.inputs))
+	columnarizers := make([]execinfra.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
 		c, err := colexec.NewColumnarizer(ctx, testAllocator, flowCtx, int32(i)+1, input)
 		if err != nil {
@@ -139,7 +139,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		}
 	}()
 
-	outColOp, err := colexec.NewMaterializer(
+	outColOp, err := execinfra.NewMaterializer(
 		flowCtx,
 		int32(len(args.inputs))+2,
 		result.Op,

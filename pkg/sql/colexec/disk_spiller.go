@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,7 +25,7 @@ import (
 // in memory and knows how to export them once the memory limit has been
 // reached.
 type bufferingInMemoryOperator interface {
-	colexecbase.Operator
+	execinfra.Operator
 
 	// ExportBuffered returns all the batches that have been buffered up from the
 	// input and have not yet been processed by the operator. It needs to be
@@ -36,7 +35,7 @@ type bufferingInMemoryOperator interface {
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	ExportBuffered(input colexecbase.Operator) coldata.Batch
+	ExportBuffered(input execinfra.Operator) coldata.Batch
 }
 
 // oneInputDiskSpiller is an Operator that manages the fallback from a one
@@ -89,15 +88,15 @@ type bufferingInMemoryOperator interface {
 // - spillingCallbackFn will be called when the spilling from in-memory to disk
 //   backed operator occurs. It should only be set in tests.
 func newOneInputDiskSpiller(
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inMemoryOp bufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
-	diskBackedOpConstructor func(input colexecbase.Operator) colexecbase.Operator,
+	diskBackedOpConstructor func(input execinfra.Operator) execinfra.Operator,
 	spillingCallbackFn func(),
-) colexecbase.Operator {
+) execinfra.Operator {
 	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
 	return &diskSpillerBase{
-		inputs:                 []colexecbase.Operator{input},
+		inputs:                 []execinfra.Operator{input},
 		inMemoryOp:             inMemoryOp,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInput),
@@ -156,16 +155,16 @@ func newOneInputDiskSpiller(
 // - spillingCallbackFn will be called when the spilling from in-memory to disk
 //   backed operator occurs. It should only be set in tests.
 func newTwoInputDiskSpiller(
-	inputOne, inputTwo colexecbase.Operator,
+	inputOne, inputTwo execinfra.Operator,
 	inMemoryOp bufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
-	diskBackedOpConstructor func(inputOne, inputTwo colexecbase.Operator) colexecbase.Operator,
+	diskBackedOpConstructor func(inputOne, inputTwo execinfra.Operator) execinfra.Operator,
 	spillingCallbackFn func(),
-) colexecbase.Operator {
+) execinfra.Operator {
 	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne)
 	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo)
 	return &diskSpillerBase{
-		inputs:                 []colexecbase.Operator{inputOne, inputTwo},
+		inputs:                 []execinfra.Operator{inputOne, inputTwo},
 		inMemoryOp:             inMemoryOp,
 		inMemoryOpInitStatus:   OperatorNotInitialized,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
@@ -178,17 +177,17 @@ func newTwoInputDiskSpiller(
 // diskSpillerBase is the common base for the one-input and two-input disk
 // spillers.
 type diskSpillerBase struct {
-	NonExplainable
+	execinfra.NonExplainable
 
 	closerHelper
 
-	inputs  []colexecbase.Operator
+	inputs  []execinfra.Operator
 	spilled bool
 
 	inMemoryOp             bufferingInMemoryOperator
 	inMemoryOpInitStatus   OperatorInitStatus
 	inMemoryMemMonitorName string
-	diskBackedOp           colexecbase.Operator
+	diskBackedOp           execinfra.Operator
 	distBackedOpInitStatus OperatorInitStatus
 	spillingCallbackFn     func()
 }
@@ -263,7 +262,7 @@ func (d *diskSpillerBase) IdempotentClose(ctx context.Context) error {
 	if !d.close() {
 		return nil
 	}
-	if c, ok := d.diskBackedOp.(IdempotentCloser); ok {
+	if c, ok := d.diskBackedOp.(execinfra.IdempotentCloser); ok {
 		return c.IdempotentClose(ctx)
 	}
 	return nil
@@ -309,19 +308,19 @@ func (d *diskSpillerBase) Child(nth int, verbose bool) execinfra.OpNode {
 // initialized when bufferExportingOperator.Init() is called.
 // NOTE: it is assumed that secondSource is the input to firstSource.
 type bufferExportingOperator struct {
-	colexecbase.ZeroInputNode
-	NonExplainable
+	execinfra.ZeroInputNode
+	execinfra.NonExplainable
 
 	firstSource     bufferingInMemoryOperator
-	secondSource    colexecbase.Operator
+	secondSource    execinfra.Operator
 	firstSourceDone bool
 }
 
 var _ resettableOperator = &bufferExportingOperator{}
 
 func newBufferExportingOperator(
-	firstSource bufferingInMemoryOperator, secondSource colexecbase.Operator,
-) colexecbase.Operator {
+	firstSource bufferingInMemoryOperator, secondSource execinfra.Operator,
+) execinfra.Operator {
 	return &bufferExportingOperator{
 		firstSource:  firstSource,
 		secondSource: secondSource,

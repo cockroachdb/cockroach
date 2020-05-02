@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +34,7 @@ const (
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tups := tuples{{0}, {1}, {2}, {nil}}
-	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []execinfra.Operator) (execinfra.Operator, error) {
 		return &selLTInt64Int64ConstOp{
 			selConstOpBase: selConstOpBase{
 				OneInputNode: NewOneInputNode(input[0]),
@@ -55,7 +56,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{-1, nil},
 		{nil, nil},
 	}
-	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, func(input []execinfra.Operator) (execinfra.Operator, error) {
 		return &selLTInt64Int64Op{
 			selOpBase: selOpBase{
 				OneInputNode: NewOneInputNode(input[0]),
@@ -69,7 +70,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 func TestGetSelectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cmpOp := tree.LT
-	var input colexecbase.Operator
+	var input execinfra.Operator
 	colIdx := 3
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
@@ -92,7 +93,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cmpOp := tree.LT
-	var input colexecbase.Operator
+	var input execinfra.Operator
 	colIdx := 3
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
@@ -116,7 +117,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ct := types.Int2
 	cmpOp := tree.GE
-	var input colexecbase.Operator
+	var input execinfra.Operator
 	col1Idx := 5
 	col2Idx := 7
 	op, err := GetSelectionOperator(ct, ct, cmpOp, input, col1Idx, col2Idx)

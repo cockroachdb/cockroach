@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -41,8 +41,8 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.Operator, []bool, error) {
+	input execinfra.Operator, distinctCols []uint32, typs []*types.T,
+) (execinfra.Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
 	input = fnOp{
@@ -55,7 +55,7 @@ func OrderedDistinctColsToOperators(
 		ok  bool
 	)
 	for i := range distinctCols {
-		input, err = newSingleDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
+		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -78,8 +78,8 @@ var _ resettableOperator = &distinctChainOps{}
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given types.
 func NewOrderedDistinct(
-	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.Operator, error) {
+	input execinfra.Operator, distinctCols []uint32, typs []*types.T,
+) (execinfra.Operator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
 		return nil, err
@@ -135,9 +135,9 @@ const _TYPE_WIDTH = 0
 
 // */}}
 
-func newSingleDistinct(
-	input colexecbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
-) (colexecbase.Operator, error) {
+func newSingleOrderedDistinct(
+	input execinfra.Operator, distinctColIdx int, outputCol []bool, t *types.T,
+) (execinfra.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:

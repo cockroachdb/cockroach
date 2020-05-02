@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -143,7 +144,7 @@ func TestOrderedSync(t *testing.T) {
 		for i := range typs {
 			typs[i] = types.Int
 		}
-		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []execinfra.Operator) (execinfra.Operator, error) {
 			return NewOrderedSynchronizer(testAllocator, inputs, typs, tc.ordering)
 		})
 	}
@@ -179,7 +180,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		}
 		sources[sourceIdx] = append(sources[sourceIdx], t)
 	}
-	inputs := make([]colexecbase.Operator, numInputs)
+	inputs := make([]execinfra.Operator, numInputs)
 	for i := range inputs {
 		inputs[i] = newOpTestInput(batchSize, sources[i], typs)
 	}
@@ -208,7 +209,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		batch.ColVec(0).Int64()[i/numInputs] = i
 	}
 
-	inputs := make([]colexecbase.Operator, len(batches))
+	inputs := make([]execinfra.Operator, len(batches))
 	for i := range batches {
 		inputs[i] = colexecbase.NewRepeatableBatchSource(testAllocator, batches[i], typs)
 	}

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -80,7 +79,7 @@ func TestCaseOp(t *testing.T) {
 			inputTypes: []*types.T{types.Int, types.Int},
 		},
 	} {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(inputs []execinfra.Operator) (execinfra.Operator, error) {
 			spec.Input[0].ColumnTypes = tc.inputTypes
 			spec.Post.RenderExprs[0].Expr = tc.renderExpr
 			args := NewColOperatorArgs{

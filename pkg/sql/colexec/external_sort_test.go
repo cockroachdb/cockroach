@@ -76,7 +76,7 @@ func TestExternalSort(t *testing.T) {
 						[]tuples{tc.tuples},
 						tc.expected,
 						orderedVerifier,
-						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+						func(input []execinfra.Operator) (execinfra.Operator, error) {
 							// A sorter should never exceed externalSorterMinPartitions, even
 							// during repartitioning. A panic will happen if a sorter requests
 							// more than this number of file descriptors.
@@ -194,7 +194,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						[]tuples{tups},
 						expected,
 						orderedVerifier,
-						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+						func(input []execinfra.Operator) (execinfra.Operator, error) {
 							sem := colexecbase.NewTestingSemaphore(externalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
@@ -274,7 +274,7 @@ func BenchmarkExternalSort(b *testing.B) {
 						source := newFiniteBatchSource(batch, typs, nBatches)
 						var spilled bool
 						sorter, accounts, monitors, _, err := createDiskBackedSorter(
-							ctx, flowCtx, []colexecbase.Operator{source}, typs, ordCols,
+							ctx, flowCtx, []execinfra.Operator{source}, typs, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
 							0 /* numForcedRepartitions */, false /* delegateFDAcquisitions */, queueCfg, &colexecbase.TestingSemaphore{},
 						)
@@ -310,7 +310,7 @@ func BenchmarkExternalSort(b *testing.B) {
 func createDiskBackedSorter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colexecbase.Operator,
+	input []execinfra.Operator,
 	typs []*types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
@@ -320,7 +320,13 @@ func createDiskBackedSorter(
 	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
+) (
+	execinfra.Operator,
+	[]*mon.BoundAccount,
+	[]*mon.BytesMonitor,
+	[]execinfra.IdempotentCloser,
+	error,
+) {
 	sorterSpec := &execinfrapb.SorterSpec{
 		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		OrderingMatchLen: uint32(matchLen),

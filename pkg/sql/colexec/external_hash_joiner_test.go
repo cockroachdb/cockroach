@@ -75,7 +75,7 @@ func TestExternalHashJoiner(t *testing.T) {
 						}(tc.skipAllNullsInjection)
 						tc.skipAllNullsInjection = true
 					}
-					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+					runHashJoinTestCase(t, tc, func(sources []execinfra.Operator) (execinfra.Operator, error) {
 						sem := colexecbase.NewTestingSemaphore(externalHJMinPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						spec := createSpecForHashJoiner(tc)
@@ -159,7 +159,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.
 	hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-		ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
+		ctx, flowCtx, spec, []execinfra.Operator{leftSource, rightSource},
 		func() { spilled = true }, queueCfg, 0 /* numForcedRepartitions */, true, /* delegateFDAcquisitions */
 		sem,
 	)
@@ -264,7 +264,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 							leftSource.reset(nBatches)
 							rightSource.reset(nBatches)
 							hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-								ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
+								ctx, flowCtx, spec, []execinfra.Operator{leftSource, rightSource},
 								func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
 								colexecbase.NewTestingSemaphore(VecMaxOpenFDsLimit),
 							)
@@ -297,13 +297,19 @@ func createDiskBackedHashJoiner(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
-	inputs []colexecbase.Operator,
+	inputs []execinfra.Operator,
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
+) (
+	execinfra.Operator,
+	[]*mon.BoundAccount,
+	[]*mon.BytesMonitor,
+	[]execinfra.IdempotentCloser,
+	error,
+) {
 	args := NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              inputs,

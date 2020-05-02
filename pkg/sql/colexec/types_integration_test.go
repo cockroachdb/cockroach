@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -85,7 +84,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)
 
 			output := distsqlutils.NewRowBuffer(typs, nil /* rows */, distsqlutils.RowBufferArgs{})
-			materializer, err := NewMaterializer(
+			materializer, err := execinfra.NewMaterializer(
 				flowCtx,
 				1, /* processorID */
 				arrowOp,
@@ -129,14 +128,14 @@ type arrowTestOperator struct {
 	typs []*types.T
 }
 
-var _ colexecbase.Operator = &arrowTestOperator{}
+var _ execinfra.Operator = &arrowTestOperator{}
 
 func newArrowTestOperator(
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	c *colserde.ArrowBatchConverter,
 	r *colserde.RecordBatchSerializer,
 	typs []*types.T,
-) colexecbase.Operator {
+) execinfra.Operator {
 	return &arrowTestOperator{
 		OneInputNode: NewOneInputNode(input),
 		c:            c,

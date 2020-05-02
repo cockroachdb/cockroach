@@ -23,9 +23,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -42,13 +42,13 @@ var _ = colexecerror.InternalError
 // output (if there is no such column, a new column is appended).
 func NewRankOperator(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
 	partitionColIdx int,
 	peersColIdx int,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	if len(orderingCols) == 0 {
 		return NewConstOp(allocator, input, types.Int, int64(1), outputColIdx)
 	}
@@ -139,7 +139,7 @@ type _RANK_STRINGOp struct {
 	rankIncrement int64
 }
 
-var _ colexecbase.Operator = &_RANK_STRINGOp{}
+var _ execinfra.Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
 	r.Input().Init()

@@ -8,16 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package execinfra
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -26,10 +24,10 @@ import (
 
 // Materializer converts an Operator input into a execinfra.RowSource.
 type Materializer struct {
-	execinfra.ProcessorBase
+	ProcessorBase
 	NonExplainable
 
-	input colexecbase.Operator
+	input Operator
 
 	da sqlbase.DatumAlloc
 
@@ -40,6 +38,7 @@ type Materializer struct {
 	curIdx int
 	// batch is the current Batch the Materializer is processing.
 	batch coldata.Batch
+	typs  []*types.T
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
@@ -75,12 +74,12 @@ const materializerProcName = "materializer"
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
 // source).
 func NewMaterializer(
-	flowCtx *execinfra.FlowCtx,
+	flowCtx *FlowCtx,
 	processorID int32,
-	input colexecbase.Operator,
+	input Operator,
 	typs []*types.T,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
+	output RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []IdempotentCloser,
 	outputStatsToTrace func(),
@@ -88,6 +87,7 @@ func NewMaterializer(
 ) (*Materializer, error) {
 	m := &Materializer{
 		input:   input,
+		typs:    typs,
 		row:     make(sqlbase.EncDatumRow, len(typs)),
 		closers: toClose,
 	}
@@ -100,7 +100,7 @@ func NewMaterializer(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{
+		ProcStateOpts{
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				var trailingMeta []execinfrapb.ProducerMetadata
 				for _, src := range metadataSourcesQueue {
@@ -118,7 +118,7 @@ func NewMaterializer(
 	return m, nil
 }
 
-var _ execinfra.OpNode = &Materializer{}
+var _ OpNode = &Materializer{}
 
 // ChildCount is part of the exec.OpNode interface.
 func (m *Materializer) ChildCount(verbose bool) int {
@@ -126,7 +126,7 @@ func (m *Materializer) ChildCount(verbose bool) int {
 }
 
 // Child is part of the exec.OpNode interface.
-func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
+func (m *Materializer) Child(nth int, verbose bool) OpNode {
 	if nth == 0 {
 		return m.input
 	}
@@ -151,7 +151,7 @@ func (m *Materializer) nextAdapter() {
 // next is the logic of Next() extracted in a separate method to be used by an
 // adapter to be able to wrap the latter with a catcher.
 func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if m.State == execinfra.StateRunning {
+	if m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
 			m.batch = m.input.Next(m.Ctx)
@@ -170,10 +170,10 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 		}
 		m.curIdx++
 
-		typs := m.OutputTypes()
-		for colIdx := 0; colIdx < len(typs); colIdx++ {
+		//typs := m.OutputTypes()
+		for colIdx := 0; colIdx < len(m.typs); colIdx++ {
 			col := m.batch.ColVec(colIdx)
-			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, &m.da, typs[colIdx])
+			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, &m.da, m.typs[colIdx])
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
@@ -186,6 +186,9 @@ func (m *Materializer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 		m.MoveToDraining(err)
 		return nil, m.DrainHelper()
 	}
+	//if m.outputRow == nil && m.outputMetadata == nil {
+	//	m.InternalClose()
+	//}
 	return m.outputRow, m.outputMetadata
 }
 

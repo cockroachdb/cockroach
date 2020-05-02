@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -186,14 +187,14 @@ func TestRouterOutputNext(t *testing.T) {
 	data, typs, fullSelection := getDataAndFullSelection()
 
 	testCases := []struct {
-		unblockEvent func(in colexecbase.Operator, o *routerOutputOp)
+		unblockEvent func(in execinfra.Operator, o *routerOutputOp)
 		expected     tuples
 		name         string
 	}{
 		{
 			// ReaderWaitsForData verifies that a reader blocks in Next(ctx) until there
 			// is data available.
-			unblockEvent: func(in colexecbase.Operator, o *routerOutputOp) {
+			unblockEvent: func(in execinfra.Operator, o *routerOutputOp) {
 				for {
 					b := in.Next(ctx)
 					o.addBatch(ctx, b, fullSelection)
@@ -208,7 +209,7 @@ func TestRouterOutputNext(t *testing.T) {
 		{
 			// ReaderWaitsForZeroBatch verifies that a reader blocking on Next will
 			// also get unblocked with no data other than the zero batch.
-			unblockEvent: func(_ colexecbase.Operator, o *routerOutputOp) {
+			unblockEvent: func(_ execinfra.Operator, o *routerOutputOp) {
 				o.addBatch(ctx, coldata.ZeroBatch, nil /* selection */)
 			},
 			expected: tuples{},
@@ -217,7 +218,7 @@ func TestRouterOutputNext(t *testing.T) {
 		{
 			// CancelUnblocksReader verifies that calling cancel on an output unblocks
 			// a reader.
-			unblockEvent: func(_ colexecbase.Operator, o *routerOutputOp) {
+			unblockEvent: func(_ execinfra.Operator, o *routerOutputOp) {
 				o.cancel(ctx)
 			},
 			expected: tuples{},
@@ -401,7 +402,7 @@ func TestRouterOutputRandom(t *testing.T) {
 	)
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf("%s/memoryLimit=%s", testName, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colexecbase.Operator) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []execinfra.Operator) {
 				var wg sync.WaitGroup
 				unblockedEventsChans := make(chan struct{}, 2)
 				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, colexecbase.NewTestingSemaphore(2), blockedThreshold, outputSize, testDiskAcc)
@@ -508,7 +509,7 @@ func TestRouterOutputRandom(t *testing.T) {
 }
 
 type callbackRouterOutput struct {
-	colexecbase.ZeroInputNode
+	execinfra.ZeroInputNode
 	addBatchCb func(coldata.Batch, []int) bool
 	cancelCb   func()
 }
@@ -833,10 +834,10 @@ func TestHashRouterRandom(t *testing.T) {
 	var expectedDistribution []int
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf(testName+"/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colexecbase.Operator) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []execinfra.Operator) {
 				unblockEventsChan := make(chan struct{}, 2*numOutputs)
 				outputs := make([]routerOutput, numOutputs)
-				outputsAsOps := make([]colexecbase.Operator, numOutputs)
+				outputsAsOps := make([]execinfra.Operator, numOutputs)
 				memoryLimitPerOutput := mtc.bytes / int64(len(outputs))
 				for i := range outputs {
 					// Create separate monitoring infrastructure as well as

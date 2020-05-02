@@ -23,8 +23,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -39,12 +39,12 @@ import (
 // NOTE: the input *must* already be ordered on ordCols.
 func NewWindowPeerGrouper(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	typs []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
 	outputColIdx int,
-) (op colexecbase.Operator, err error) {
+) (op execinfra.Operator, err error) {
 	allPeers := len(orderingCols) == 0
 	var distinctCol []bool
 	if !allPeers {
@@ -108,7 +108,7 @@ type _PEER_GROUPER_STRINGOp struct {
 	// {{end}}
 }
 
-var _ colexecbase.Operator = &_PEER_GROUPER_STRINGOp{}
+var _ execinfra.Operator = &_PEER_GROUPER_STRINGOp{}
 
 func (p *_PEER_GROUPER_STRINGOp) Init() {
 	p.input.Init()

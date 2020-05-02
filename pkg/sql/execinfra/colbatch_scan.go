@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package execinfra
 
 import (
 	"context"
@@ -16,48 +16,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(yuzefovich): reading the data through a pair of colBatchScan and
-// materializer turns out to be more efficient than through a table reader (at
-// the moment, the exception is the case of reading very small number of rows
-// because we still pre-allocate batches of 1024 size). Once we can control the
-// initial size of pre-allocated batches (probably via a batch allocator), we
-// should get rid off table readers entirely. We will have to be careful about
-// propagating the metadata though.
-
-// colBatchScan is the exec.Operator implementation of TableReader. It reads a table
+// ColBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
-type colBatchScan struct {
-	colexecbase.ZeroInputNode
+type ColBatchScan struct {
+	ZeroInputNode
 	spans     roachpb.Spans
-	flowCtx   *execinfra.FlowCtx
+	flowCtx   *FlowCtx
 	rf        *cFetcher
 	limitHint int64
 	ctx       context.Context
 	// maxResults is non-zero if there is a limit on the total number of rows
-	// that the colBatchScan will read.
+	// that the ColBatchScan will read.
 	maxResults uint64
 	// init is true after Init() has been called.
 	init bool
 }
 
-var _ colexecbase.Operator = &colBatchScan{}
+var _ Operator = &ColBatchScan{}
 
-func (s *colBatchScan) Init() {
+func (s *ColBatchScan) Init() {
 	s.ctx = context.Background()
 	s.init = true
 
-	limitBatches := execinfra.ScanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
+	limitBatches := ScanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
 
 	if err := s.rf.StartScan(
 		s.ctx, s.flowCtx.Txn, s.spans,
@@ -67,7 +58,7 @@ func (s *colBatchScan) Init() {
 	}
 }
 
-func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
+func (s *ColBatchScan) Next(ctx context.Context) coldata.Batch {
 	bat, err := s.rf.NextBatch(ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
@@ -79,7 +70,7 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	if !s.init {
 		// In some pathological queries like `SELECT 1 FROM t HAVING true`, Init()
 		// and Next() may never get called. Return early to avoid using an
@@ -90,35 +81,35 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	if !s.flowCtx.Local {
 		nodeID, ok := s.flowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(ctx, s.rf.GetRangesInfo(), nodeID)
+			ranges := MisplannedRanges(ctx, s.rf.GetRangesInfo(), nodeID)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, s.flowCtx.Txn); tfs != nil {
+	if tfs := GetLeafTxnFinalState(ctx, s.flowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
 }
 
-// newColBatchScan creates a new colBatchScan operator.
-func newColBatchScan(
+// NewColBatchScan creates a new ColBatchScan operator.
+func NewColBatchScan(
 	allocator *colmem.Allocator,
-	flowCtx *execinfra.FlowCtx,
+	flowCtx *FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
-) (*colBatchScan, error) {
+) (*ColBatchScan, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
-		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
+		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
 
-	limitHint := execinfra.LimitHint(spec.LimitHint, post)
+	limitHint := LimitHint(spec.LimitHint, post)
 
 	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
-	helper := execinfra.ProcOutputHelper{}
+	helper := ProcOutputHelper{}
 	if err := helper.Init(
 		post,
 		typs,
@@ -144,7 +135,7 @@ func newColBatchScan(
 	for i := range spans {
 		spans[i] = spec.Spans[i].Span
 	}
-	return &colBatchScan{
+	return &ColBatchScan{
 		spans:      spans,
 		flowCtx:    flowCtx,
 		rf:         &fetcher,
@@ -192,4 +183,47 @@ func initCRowFetcher(
 	}
 
 	return index, isSecondaryIndex, nil
+}
+
+type accCloser struct {
+	acc *mon.BoundAccount
+}
+
+var _ IdempotentCloser = &accCloser{}
+
+func (c *accCloser) IdempotentClose(ctx context.Context) error {
+	if c.acc != nil {
+		c.acc.Close(ctx)
+		c.acc = nil
+	}
+	return nil
+}
+
+func NewTableReader(
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec *execinfrapb.TableReaderSpec,
+	post *execinfrapb.PostProcessSpec,
+	output RowReceiver,
+) (Processor, error) {
+	acc := flowCtx.EvalCtx.Mon.MakeBoundAccount()
+	scanOp, err := NewColBatchScan(colmem.NewAllocator(context.TODO(), &acc), flowCtx, spec, post)
+	if err != nil {
+		return nil, err
+	}
+
+	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	return NewMaterializer(
+		flowCtx,
+		processorID,
+		scanOp,
+		types,
+		post,
+		output,
+		[]execinfrapb.MetadataSource{scanOp},
+		[]IdempotentCloser{&accCloser{acc: &acc}},
+		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
+	)
 }

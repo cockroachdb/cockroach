@@ -24,9 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -46,7 +46,7 @@ func NewRelativeRankOperator(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
@@ -54,7 +54,7 @@ func NewRelativeRankOperator(
 	partitionColIdx int,
 	peersColIdx int,
 	diskAcc *mon.BoundAccount,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	if len(orderingCols) == 0 {
 		constValue := float64(0)
 		if windowFn == execinfrapb.WindowerSpec_CUME_DIST {

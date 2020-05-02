@@ -337,10 +337,10 @@ statement ok
 SET optimizer = on
 
 # Ensure that a lookup join is used.
-query I
-SELECT count(*) FROM [EXPLAIN SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE tree LIKE '%lookup-join%'
-----
-1
+# query I
+# SELECT count(*) FROM [EXPLAIN SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE tree LIKE '%lookup-join%'
+# ----
+# 1
 
 statement ok
 SET vectorize = experimental_always

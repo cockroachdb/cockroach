@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,13 +61,13 @@ type aggregatorTestCase struct {
 type aggType struct {
 	new func(
 		allocator *colmem.Allocator,
-		input colexecbase.Operator,
+		input execinfra.Operator,
 		typs []*types.T,
 		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
 		isScalar bool,
-	) (colexecbase.Operator, error)
+	) (execinfra.Operator, error)
 	name string
 }
 
@@ -77,13 +77,13 @@ var aggTypes = []aggType{
 		// with orderedAggregator.
 		new: func(
 			allocator *colmem.Allocator,
-			input colexecbase.Operator,
+			input execinfra.Operator,
 			typs []*types.T,
 			aggFns []execinfrapb.AggregatorSpec_Func,
 			groupCols []uint32,
 			aggCols [][]uint32,
 			_ bool,
-		) (colexecbase.Operator, error) {
+		) (execinfra.Operator, error) {
 			return NewHashAggregator(
 				allocator, input, typs, aggFns, groupCols, aggCols)
 		},
@@ -331,7 +331,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 					}
 					t.Run(agg.name, func(t *testing.T) {
 						runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
-							func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+							func(input []execinfra.Operator) (execinfra.Operator, error) {
 								return agg.new(
 									testAllocator,
 									input[0],
@@ -481,7 +481,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 					t.Fatal(err)
 				}
 				runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					func(input []execinfra.Operator) (execinfra.Operator, error) {
 						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
@@ -573,7 +573,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					[]tuples{tc.input},
 					tc.expected,
 					verifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					func(input []execinfra.Operator) (execinfra.Operator, error) {
 						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
@@ -926,7 +926,7 @@ func TestHashAggregator(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Run(fmt.Sprintf("numOfHashBuckets=%d", numOfHashBuckets), func(t *testing.T) {
-				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []execinfra.Operator) (execinfra.Operator, error) {
 					a, err := NewHashAggregator(testAllocator, sources[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols)
 					a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
 					return a, err

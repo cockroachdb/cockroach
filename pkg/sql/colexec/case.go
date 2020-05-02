@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -26,8 +25,8 @@ type caseOp struct {
 	allocator *colmem.Allocator
 	buffer    *bufferOp
 
-	caseOps []colexecbase.Operator
-	elseOp  colexecbase.Operator
+	caseOps []execinfra.Operator
+	elseOp  execinfra.Operator
 
 	thenIdxs  []int
 	outputIdx int
@@ -82,13 +81,13 @@ func (c *caseOp) InternalMemoryUsage() int {
 // typ is the type of the CASE expression.
 func NewCaseOp(
 	allocator *colmem.Allocator,
-	buffer colexecbase.Operator,
-	caseOps []colexecbase.Operator,
-	elseOp colexecbase.Operator,
+	buffer execinfra.Operator,
+	caseOps []execinfra.Operator,
+	elseOp execinfra.Operator,
 	thenIdxs []int,
 	outputIdx int,
 	typ *types.T,
-) colexecbase.Operator {
+) execinfra.Operator {
 	return &caseOp{
 		allocator: allocator,
 		buffer:    buffer.(*bufferOp),

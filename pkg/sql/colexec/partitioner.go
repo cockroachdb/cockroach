@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -27,13 +27,13 @@ import (
 // every tuple that is the first within its partition.
 func NewWindowSortingPartitioner(
 	allocator *colmem.Allocator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTyps []*types.T,
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
-	createDiskBackedSorter func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecbase.Operator, error),
-) (op colexecbase.Operator, err error) {
+	createDiskBackedSorter func(input execinfra.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (execinfra.Operator, error),
+) (op execinfra.Operator, err error) {
 	partitionAndOrderingCols := make([]execinfrapb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {
 		partitionAndOrderingCols[i] = execinfrapb.Ordering_Column{ColIdx: idx}

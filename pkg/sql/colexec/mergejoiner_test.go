@@ -1541,7 +1541,7 @@ func TestMergeJoiner(t *testing.T) {
 					runner(t, []tuples{tc.leftTuples, tc.rightTuples},
 						[][]*types.T{tc.leftTypes, tc.rightTypes},
 						tc.expected, mergeJoinVerifier,
-						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+						func(input []execinfra.Operator) (execinfra.Operator, error) {
 							spec := createSpecForMergeJoiner(tc)
 							args := NewColOperatorArgs{
 								Spec:                spec,

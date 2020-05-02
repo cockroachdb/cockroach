@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -34,7 +33,7 @@ import (
 	"github.com/marusama/semaphore"
 )
 
-func checkNumIn(inputs []colexecbase.Operator, numIn int) error {
+func checkNumIn(inputs []execinfra.Operator, numIn int) error {
 	if len(inputs) != numIn {
 		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
 	}
@@ -46,7 +45,7 @@ func checkNumIn(inputs []colexecbase.Operator, numIn int) error {
 func wrapRowSources(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	inputs []colexecbase.Operator,
+	inputs []execinfra.Operator,
 	inputTypes [][]*types.T,
 	acc *mon.BoundAccount,
 	processorID int32,
@@ -61,7 +60,7 @@ func wrapRowSources(
 			// to this operator (e.g. streamIDToOp).
 			toWrapInputs = append(toWrapInputs, c.input)
 		} else {
-			toWrapInput, err := NewMaterializer(
+			toWrapInput, err := execinfra.NewMaterializer(
 				flowCtx,
 				processorID,
 				input,
@@ -92,7 +91,7 @@ func wrapRowSources(
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
 	Spec                 *execinfrapb.ProcessorSpec
-	Inputs               []colexecbase.Operator
+	Inputs               []execinfra.Operator
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	DiskQueueCfg         colcontainer.DiskQueueCfg
@@ -133,13 +132,13 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op               colexecbase.Operator
+	Op               execinfra.Operator
 	ColumnTypes      []*types.T
 	InternalMemUsage int
 	MetadataSources  []execinfrapb.MetadataSource
 	// ToClose is a slice of components that need to be Closed. Close should be
 	// idempotent.
-	ToClose     []IdempotentCloser
+	ToClose     []execinfra.IdempotentCloser
 	IsStreaming bool
 	OpMonitors  []*mon.BytesMonitor
 	OpAccounts  []*mon.BoundAccount
@@ -320,7 +319,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args NewColOperatorArgs,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
 	matchLen uint32,
@@ -328,12 +327,12 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 	processorID int32,
 	post *execinfrapb.PostProcessSpec,
 	memMonitorNamePrefix string,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	streamingMemAccount := args.StreamingMemAccount
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	var (
 		sorterMemMonitorName string
-		inMemorySorter       colexecbase.Operator
+		inMemorySorter       execinfra.Operator
 		err                  error
 	)
 	if len(ordering.Columns) == int(matchLen) {
@@ -406,7 +405,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 	return newOneInputDiskSpiller(
 		input, inMemorySorter.(bufferingInMemoryOperator),
 		sorterMemMonitorName,
-		func(input colexecbase.Operator) colexecbase.Operator {
+		func(input execinfra.Operator) execinfra.Operator {
 			monitorNamePrefix := fmt.Sprintf("%sexternal-sorter", memMonitorNamePrefix)
 			// We are using an unlimited memory monitor here because external
 			// sort itself is responsible for making sure that we stay within
@@ -440,7 +439,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 				args.FDSemaphore,
 				diskAccount,
 			)
-			r.ToClose = append(r.ToClose, es.(IdempotentCloser))
+			r.ToClose = append(r.ToClose, es.(execinfra.IdempotentCloser))
 			return es
 		},
 		args.TestingKnobs.SpillingCallbackFn,
@@ -459,7 +458,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 func (r *NewColOperatorResult) createAndWrapRowSource(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	inputs []colexecbase.Operator,
+	inputs []execinfra.Operator,
 	inputTypes [][]*types.T,
 	streamingMemAccount *mon.BoundAccount,
 	spec *execinfrapb.ProcessorSpec,
@@ -630,19 +629,19 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return result, err
 			}
-			var scanOp *colBatchScan
-			scanOp, err = newColBatchScan(colmem.NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
+			var scanOp *execinfra.ColBatchScan
+			scanOp, err = execinfra.NewColBatchScan(colmem.NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
 			if err != nil {
 				return result, err
 			}
 			result.Op, result.IsStreaming = scanOp, true
 			result.MetadataSources = append(result.MetadataSources, scanOp)
-			// colBatchScan is wrapped with a cancel checker below, so we need to
+			// ColBatchScan is wrapped with a cancel checker below, so we need to
 			// log its creation separately.
 			log.VEventf(ctx, 1, "made op %T\n", result.Op)
 
 			// We want to check for cancellation once per input batch, and wrapping
-			// only colBatchScan with a CancelChecker allows us to do just that.
+			// only ColBatchScan with a CancelChecker allows us to do just that.
 			// It's sufficient for most of the operators since they are extremely fast.
 			// However, some of the long-running operators (for example, sorter) are
 			// still responsible for doing the cancellation check on their own while
@@ -663,7 +662,7 @@ func NewColOperator(
 				// zero-length batches. The actual "data" will be added by projections
 				// below.
 				// TODO(solon): The distsql plan for this case includes a TableReader, so
-				// we end up creating an orphaned colBatchScan. We should avoid that.
+				// we end up creating an orphaned ColBatchScan. We should avoid that.
 				// Ideally the optimizer would not plan a scan in this unusual case.
 				result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(colmem.NewAllocator(ctx, streamingMemAccount)), true, nil
 				// We make ColumnTypes non-nil so that sanity check doesn't panic.
@@ -838,7 +837,7 @@ func NewColOperator(
 				result.Op = newTwoInputDiskSpiller(
 					inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
 					hashJoinerMemMonitorName,
-					func(inputOne, inputTwo colexecbase.Operator) colexecbase.Operator {
+					func(inputOne, inputTwo execinfra.Operator) execinfra.Operator {
 						monitorNamePrefix := "external-hash-joiner"
 						unlimitedAllocator := colmem.NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
@@ -856,7 +855,7 @@ func NewColOperator(
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							diskQueueCfg,
 							args.FDSemaphore,
-							func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colexecbase.Operator, error) {
+							func(input execinfra.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (execinfra.Operator, error) {
 								sortArgs := args
 								if !args.TestingKnobs.DelegateFDAcquisitions {
 									// Set the FDSemaphore to nil. This indicates that no FDs
@@ -874,7 +873,7 @@ func NewColOperator(
 							args.TestingKnobs.DelegateFDAcquisitions,
 							diskAccount,
 						)
-						result.ToClose = append(result.ToClose, ehj.(IdempotentCloser))
+						result.ToClose = append(result.ToClose, ehj.(execinfra.IdempotentCloser))
 						return ehj
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -942,7 +941,7 @@ func NewColOperator(
 			}
 
 			result.Op = mj
-			result.ToClose = append(result.ToClose, mj.(IdempotentCloser))
+			result.ToClose = append(result.ToClose, mj.(execinfra.IdempotentCloser))
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
 			copy(result.ColumnTypes[len(leftTypes):], rightTypes)
@@ -997,7 +996,7 @@ func NewColOperator(
 					input, err = NewWindowSortingPartitioner(
 						colmem.NewAllocator(ctx, streamingMemAccount), input, typs,
 						core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
-						func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecbase.Operator, error) {
+						func(input execinfra.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (execinfra.Operator, error) {
 							return result.createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
 								execinfrapb.Ordering{Columns: orderingCols}, 0, /* matchLen */
@@ -1063,7 +1062,7 @@ func NewColOperator(
 					// NewRelativeRankOperator sometimes returns a constOp when there
 					// are no ordering columns, so we check that the returned operator
 					// is an IdempotentCloser.
-					if c, ok := result.Op.(IdempotentCloser); ok {
+					if c, ok := result.Op.(execinfra.IdempotentCloser); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
 				default:
@@ -1208,7 +1207,7 @@ func (r *NewColOperatorResult) wrapPostProcessSpec(
 		Post: *post,
 	}
 	return r.createAndWrapRowSource(
-		ctx, flowCtx, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes}, streamingMemAccount, noopSpec, processorConstructor,
+		ctx, flowCtx, []execinfra.Operator{r.Op}, [][]*types.T{r.ColumnTypes}, streamingMemAccount, noopSpec, processorConstructor,
 	)
 }
 
@@ -1355,7 +1354,7 @@ func (r *NewColOperatorResult) createDiskAccount(
 }
 
 type postProcessResult struct {
-	Op               colexecbase.Operator
+	Op               execinfra.Operator
 	ColumnTypes      []*types.T
 	InternalMemUsage int
 }
@@ -1424,9 +1423,9 @@ func planSelectionOperators(
 	evalCtx *tree.EvalContext,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	acc *mon.BoundAccount,
-) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
+) (op execinfra.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, internalMemUsed, nil
@@ -1435,7 +1434,7 @@ func planSelectionOperators(
 		// First we select out the tuples that are true on the left side, and then,
 		// only among the matched tuples, we select out the tuples that are true on
 		// the right side.
-		var leftOp, rightOp colexecbase.Operator
+		var leftOp, rightOp execinfra.Operator
 		var internalMemUsedLeft, internalMemUsedRight int
 		leftOp, _, typs, internalMemUsedLeft, err = planSelectionOperators(
 			ctx, evalCtx, t.TypedLeft(), columnTypes, input, acc,
@@ -1540,9 +1539,9 @@ func planTypedMaybeNullProjectionOperators(
 	expr tree.TypedExpr,
 	exprTyp *types.T,
 	columnTypes []*types.T,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	acc *mon.BoundAccount,
-) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
+) (op execinfra.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
 	if expr == tree.DNull {
 		resultIdx = len(columnTypes)
 		op = NewConstNullOp(colmem.NewAllocator(ctx, acc), input, resultIdx, exprTyp)
@@ -1577,11 +1576,11 @@ func planCastOperator(
 	ctx context.Context,
 	acc *mon.BoundAccount,
 	columnTypes []*types.T,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	inputIdx int,
 	fromType *types.T,
 	toType *types.T,
-) (op colexecbase.Operator, resultIdx int, typs []*types.T, err error) {
+) (op execinfra.Operator, resultIdx int, typs []*types.T, err error) {
 	if err := checkCastSupported(fromType, toType); err != nil {
 		return op, resultIdx, typs, err
 	}
@@ -1602,9 +1601,9 @@ func planProjectionOperators(
 	evalCtx *tree.EvalContext,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	acc *mon.BoundAccount,
-) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
+) (op execinfra.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
@@ -1689,7 +1688,7 @@ func planProjectionOperators(
 		// instantiating caseOp.
 		schemaEnforcer := newBatchSchemaPrefixEnforcer(allocator, input, nil /* typs */)
 		buffer := NewBufferOp(schemaEnforcer)
-		caseOps := make([]colexecbase.Operator, len(t.Whens))
+		caseOps := make([]execinfra.Operator, len(t.Whens))
 		caseOutputType := t.ResolvedType()
 		if typeconv.TypeFamilyToCanonicalTypeFamily[caseOutputType.Family()] == types.BytesFamily {
 			// Currently, there is a contradiction between the way CASE operator
@@ -1760,7 +1759,7 @@ func planProjectionOperators(
 			}
 		}
 		var elseInternalMemUsed int
-		var elseOp colexecbase.Operator
+		var elseOp execinfra.Operator
 		elseExpr := t.Else
 		if elseExpr == nil {
 			// If there's no ELSE arm, we write NULLs.
@@ -1832,9 +1831,9 @@ func planProjectionExpr(
 	outputType *types.T,
 	left, right tree.TypedExpr,
 	columnTypes []*types.T,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	acc *mon.BoundAccount,
-) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
+) (op execinfra.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
 	if err := checkSupportedProjectionExpr(projOp, left, right); err != nil {
 		return nil, resultIdx, typs, internalMemUsed, err
 	}
@@ -1991,9 +1990,9 @@ func planLogicalProjectionOp(
 	evalCtx *tree.EvalContext,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	acc *mon.BoundAccount,
-) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
+) (op execinfra.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
 	// Add a new boolean column that will store the result of the projection.
 	resultIdx = len(columnTypes)
 	typs = make([]*types.T, resultIdx+1)
@@ -2001,7 +2000,7 @@ func planLogicalProjectionOp(
 	typs[resultIdx] = types.Bool
 	var (
 		typedLeft, typedRight                       tree.TypedExpr
-		leftProjOpChain, rightProjOpChain, outputOp colexecbase.Operator
+		leftProjOpChain, rightProjOpChain, outputOp execinfra.Operator
 		leftIdx, rightIdx                           int
 		internalMemUsedLeft, internalMemUsedRight   int
 		leftFeedOp, rightFeedOp                     feedOperator

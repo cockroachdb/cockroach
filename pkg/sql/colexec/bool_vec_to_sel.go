@@ -14,21 +14,21 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
 // boolVecToSelOp transforms a boolean column into a selection vector by adding
 // an index to the selection for each true value in the boolean column.
 type boolVecToSelOp struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 
 	// outputCol is the boolean output column. It should be shared by other
 	// operators that write to it.
 	outputCol []bool
 }
 
-var _ colexecbase.Operator = &boolVecToSelOp{}
+var _ execinfra.Operator = &boolVecToSelOp{}
 
 func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 	// Loop until we have non-zero amount of output to return, or our input's been
@@ -102,7 +102,7 @@ func boolVecToSel64(vec []bool, sel []int) []int {
 // For internal use cases that just need a way to create a selection vector
 // based on a boolean column that *isn't* in a batch, just create a
 // boolVecToSelOp directly with the desired boolean slice.
-func NewBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Operator {
+func NewBoolVecToSelOp(input execinfra.Operator, colIdx int) execinfra.Operator {
 	d := selBoolOp{OneInputNode: NewOneInputNode(input), colIdx: colIdx}
 	ret := &boolVecToSelOp{OneInputNode: NewOneInputNode(&d)}
 	d.boolVecToSelOp = ret
@@ -113,7 +113,7 @@ func NewBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Opera
 // an operator that can see the inside of its input batch for NewBoolVecToSelOp.
 type selBoolOp struct {
 	OneInputNode
-	NonExplainable
+	execinfra.NonExplainable
 	boolVecToSelOp *boolVecToSelOp
 	colIdx         int
 }

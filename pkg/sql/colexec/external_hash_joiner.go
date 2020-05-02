@@ -17,9 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -157,7 +157,7 @@ const (
 // using the combination of disk-backed sort and merge join operators.
 type externalHashJoiner struct {
 	twoInputNode
-	NonExplainable
+	execinfra.NonExplainable
 	closerHelper
 
 	// mu is used to protect against concurrent IdempotentClose and Next calls,
@@ -271,15 +271,15 @@ const (
 func newExternalHashJoiner(
 	unlimitedAllocator *colmem.Allocator,
 	spec hashJoinerSpec,
-	leftInput, rightInput colexecbase.Operator,
+	leftInput, rightInput execinfra.Operator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	createReusableDiskBackedSorter func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colexecbase.Operator, error),
+	createReusableDiskBackedSorter func(input execinfra.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (execinfra.Operator, error),
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	diskAcc *mon.BoundAccount,
-) colexecbase.Operator {
+) execinfra.Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeClearAndReuseCache {
 		colexecerror.InternalError(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
@@ -728,7 +728,7 @@ func (hj *externalHashJoiner) idempotentCloseLocked(ctx context.Context) error {
 	if err := hj.rightPartitioner.Close(ctx); err != nil && retErr == nil {
 		retErr = err
 	}
-	if c, ok := hj.diskBackedSortMerge.(IdempotentCloser); ok {
+	if c, ok := hj.diskBackedSortMerge.(execinfra.IdempotentCloser); ok {
 		if err := c.IdempotentClose(ctx); err != nil && retErr == nil {
 			retErr = err
 		}

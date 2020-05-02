@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,7 +44,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		numBatches = rng.Intn(maxBatches) + 1
 	)
 
-	inputs := make([]colexecbase.Operator, numInputs)
+	inputs := make([]execinfra.Operator, numInputs)
 	for i := range inputs {
 		source := colexecbase.NewRepeatableBatchSource(
 			testAllocator,
@@ -102,7 +103,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	const expectedErr = "first input error"
 
-	inputs := make([]colexecbase.Operator, 6)
+	inputs := make([]execinfra.Operator, 6)
 	inputs[0] = &colexecbase.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
 		colexecerror.InternalError(expectedErr)
 		// This code is unreachable, but the compiler cannot infer that.
@@ -134,7 +135,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
 	typs := []*types.T{types.Int}
-	inputs := make([]colexecbase.Operator, numInputs)
+	inputs := make([]execinfra.Operator, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithSize(typs, coldata.BatchSize())
 		batch.SetLength(coldata.BatchSize())

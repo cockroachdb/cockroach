@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -305,10 +305,10 @@ func GetSelectionConstOperator(
 	leftType *types.T,
 	constType *types.T,
 	cmpOp tree.ComparisonOperator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	colIdx int,
 	constArg tree.Datum,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	c, err := getDatumToPhysicalFn(constType)(constArg)
 	if err != nil {
 		return nil, err
@@ -352,10 +352,10 @@ func GetSelectionOperator(
 	leftType *types.T,
 	rightType *types.T,
 	cmpOp tree.ComparisonOperator,
-	input colexecbase.Operator,
+	input execinfra.Operator,
 	col1Idx int,
 	col2Idx int,
-) (colexecbase.Operator, error) {
+) (execinfra.Operator, error) {
 	selOpBase := selOpBase{
 		OneInputNode: NewOneInputNode(input),
 		col1Idx:      col1Idx,

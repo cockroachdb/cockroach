@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -57,7 +58,7 @@ func TestOffset(t *testing.T) {
 	for _, tc := range tcs {
 		// The tuples consisting of all nulls still count as separate rows, so if
 		// we replace all values with nulls, we should get the same output.
-		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, unorderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, unorderedVerifier, func(input []execinfra.Operator) (execinfra.Operator, error) {
 			return NewOffsetOp(input[0], tc.offset), nil
 		})
 	}
