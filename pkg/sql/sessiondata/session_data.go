@@ -47,6 +47,9 @@ type SessionData struct {
 	// OptimizerFKCascades indicates whether we should use the new paths to plan foreign
 	// key cascades in the optimizer.
 	OptimizerFKCascades bool
+	// OptimizerFKCascadesLimit is the maximum number of cascading operations that
+	// are run for a single query.
+	OptimizerFKCascadesLimit int
 	// OptimizerUseHistograms indicates whether we should use histograms for
 	// cardinality estimation in the optimizer.
 	OptimizerUseHistograms bool

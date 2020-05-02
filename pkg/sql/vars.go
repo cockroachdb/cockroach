@@ -542,6 +542,29 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`foreign_key_cascades_limit`: {
+		GetStringVal: makeIntGetStringValFn(`foreign_key_cascades_limit`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set foreign_key_cascades_limit to a negative value: %d", b)
+			}
+			m.SetOptimizerFKCascadesLimit(int(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(int64(evalCtx.SessionData.OptimizerFKCascadesLimit), 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(optDrivenFKCascadesClusterLimit.Get(sv), 10)
+		},
+	},
+
+	// CockroachDB extension.
 	`optimizer_use_histograms`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_histograms`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
