@@ -108,6 +108,7 @@ func TestSRV(t *testing.T) {
 		srvs := []*net.SRV{
 			{Target: "node1", Port: 26222},
 			{Target: "node2", Port: 35222},
+			{Target: "node3", Port: 0},
 		}
 
 		return "cluster", srvs, nil
@@ -125,7 +126,8 @@ func TestSRV(t *testing.T) {
 		{"some.host", true, lookupWithErr(dnsErr), nil},
 		{"some.host", false, lookupWithErr(errors.New("another error")), nil},
 		{"some.host", true, lookupSuccess, expectedAddrs},
-		{"some.host:26222", true, lookupSuccess, expectedAddrs},
+		{"some.host:26222", true, lookupSuccess, nil},
+		{"some.host:" + base.DefaultPort, true, lookupSuccess, nil},
 		// "real" `lookupSRV` returns "no such host" when resolving IP addresses
 		{"127.0.0.1", true, lookupWithErr(dnsErr), nil},
 		{"127.0.0.1:26222", true, lookupWithErr(dnsErr), nil},
