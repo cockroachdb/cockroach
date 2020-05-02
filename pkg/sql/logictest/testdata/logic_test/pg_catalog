@@ -1083,6 +1083,7 @@ ORDER BY indexrelid
 ----
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey         indcollation               indclass     indoption    indexprs  indpred                                                                                                                       indnkeyatts
 144368028   32        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+190763692   48        1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
 404104299   39        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 543291288   23        1         false        false         false           false         false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
 543291289   23        1         false        false         false           false         false           true        false         false       true       false           2              3403232968                 0            2            NULL      NULL                                                                                                                          1
@@ -1144,6 +1145,7 @@ ORDER BY indexrelid, operator_argument_position
 ----
 indexrelid  operator_argument_type_oid  operator_argument_position
 144368028   0                           1
+190763692   0                           1
 404104299   0                           1
 543291288   0                           1
 543291289   0                           1

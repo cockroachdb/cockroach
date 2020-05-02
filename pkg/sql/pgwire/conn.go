@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -738,6 +739,20 @@ func (c *conn) bufferParamStatus(param, value string) error {
 	c.msgBuilder.writeTerminatedString(param)
 	c.msgBuilder.writeTerminatedString(value)
 	return c.msgBuilder.finishMsg(&c.writerState.buf)
+}
+
+// SendNotification is part of the notify.NotificationSender interface.
+func (c *conn) SendNotification(ctx context.Context, payload notify.Payload) {
+	if log.V(2) {
+		log.Infof(ctx, "buffering notification %v", payload)
+	}
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
+	c.msgBuilder.putInt32(payload.NodeID)
+	c.msgBuilder.writeTerminatedString(payload.ChannelName)
+	c.msgBuilder.writeTerminatedString(payload.Message)
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		log.Errorf(ctx, "got error while sending async notif")
+	}
 }
 
 func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) error {

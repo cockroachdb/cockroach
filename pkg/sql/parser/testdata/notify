@@ -1,0 +1,47 @@
+parse
+LISTEN foo
+----
+LISTEN foo
+LISTEN foo -- fully parenthesized
+LISTEN foo -- literals removed
+LISTEN foo -- identifiers removed
+
+parse
+NOTIFY foo
+----
+NOTIFY foo
+NOTIFY foo -- fully parenthesized
+NOTIFY foo -- literals removed
+NOTIFY foo -- identifiers removed
+
+parse
+NOTIFY "fOo"
+----
+NOTIFY "fOo"
+NOTIFY "fOo" -- fully parenthesized
+NOTIFY "fOo" -- literals removed
+NOTIFY "fOo" -- identifiers removed
+
+parse
+NOTIFY foo, 'blah'
+----
+NOTIFY foo, 'blah'
+NOTIFY foo, 'blah' -- fully parenthesized
+NOTIFY foo, 'blah' -- literals removed
+NOTIFY foo, 'blah' -- identifiers removed
+
+parse
+UNLISTEN foo
+----
+UNLISTEN foo
+UNLISTEN foo -- fully parenthesized
+UNLISTEN foo -- literals removed
+UNLISTEN foo -- identifiers removed
+
+parse
+UNLISTEN *
+----
+UNLISTEN *
+UNLISTEN * -- fully parenthesized
+UNLISTEN * -- literals removed
+UNLISTEN * -- identifiers removed

@@ -154,6 +154,8 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *limitNode:
 		n.plan = v.visit(n.plan)
 
+	case *listenNode:
+
 	case *max1RowNode:
 		n.plan = v.visit(n.plan)
 
@@ -407,6 +409,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&invertedJoinNode{}):                 "inverted join",
 	reflect.TypeOf(&joinNode{}):                         "join",
 	reflect.TypeOf(&limitNode{}):                        "limit",
+	reflect.TypeOf(&listenNode{}):                       "listen",
 	reflect.TypeOf(&lookupJoinNode{}):                   "lookup join",
 	reflect.TypeOf(&max1RowNode{}):                      "max1row",
 	reflect.TypeOf(&ordinalityNode{}):                   "ordinality",

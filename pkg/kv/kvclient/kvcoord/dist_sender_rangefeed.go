@@ -82,6 +82,8 @@ func maxConcurrentCatchupScans(sv *settings.Values) int {
 //
 // NB: the given startAfter timestamp is exclusive, i.e. the first possible
 // emitted event (including catchup scans) will be at startAfter.Next().
+//
+// RangeFeed blocks forever, or until the range feed terminates.
 func (ds *DistSender) RangeFeed(
 	ctx context.Context,
 	spans []roachpb.Span,

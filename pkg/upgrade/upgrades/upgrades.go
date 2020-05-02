@@ -131,6 +131,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		seedSpanCountTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"add the system.pg_notifications table",
+		toCV(clusterversion.PGNotificationsTable),
+		NoPrecondition,
+		pgNotificationTableMigration,
+	),
 }
 
 func init() {

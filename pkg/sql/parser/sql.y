@@ -854,7 +854,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
-%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
+%token <str> LIST LISTEN LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
@@ -863,7 +863,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
-%token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
+%token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTIFY NOTNULL
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD_KMS ON ONLY OPT OPTION OPTIONS OR
@@ -897,7 +897,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
-%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
+%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
@@ -1091,6 +1091,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.Statement> reassign_owned_by_stmt
 %type <tree.Statement> drop_owned_by_stmt
 %type <tree.Statement> release_stmt
+%type <tree.Statement> listen_notify_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt resume_all_jobs_stmt
 %type <tree.Statement> drop_schedule_stmt
@@ -1586,6 +1587,7 @@ stmt:
 | reassign_owned_by_stmt    // EXTEND WITH HELP: REASSIGN OWNED BY
 | drop_owned_by_stmt        // EXTEND WITH HELP: DROP OWNED BY
 | release_stmt              // EXTEND WITH HELP: RELEASE
+| listen_notify_stmt
 | refresh_stmt              // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt    // help texts in sub-rule
 | transaction_stmt          // help texts in sub-rule
@@ -9221,6 +9223,28 @@ opt_set_data:
   SET DATA {}
 | /* EMPTY */ {}
 
+listen_notify_stmt:
+  NOTIFY name
+  {
+    $$.val = &tree.Notify{ChanName: tree.Name($2), Message: tree.NewStrVal("")}
+  }
+| NOTIFY name ',' SCONST
+  {
+    $$.val = &tree.Notify{ChanName: tree.Name($2), Message: tree.NewStrVal($4)}
+  }
+| LISTEN name
+  {
+    $$.val = &tree.Listen{ChanName: tree.Name($2)}
+  }
+| UNLISTEN name
+  {
+    $$.val = &tree.Listen{ChanName: tree.Name($2), Unlisten: true}
+  }
+| UNLISTEN '*'
+  {
+    $$.val = &tree.Listen{Unlisten: true, UnlistenAll: true}
+  }
+
 // %Help: RELEASE - complete a sub-transaction
 // %Category: Txn
 // %Text: RELEASE [SAVEPOINT] <savepoint name>
@@ -14201,6 +14225,7 @@ unreserved_keyword:
 | LINESTRINGZ
 | LINESTRINGZM
 | LIST
+| LISTEN
 | LOCAL
 | LOCKED
 | LOGIN
@@ -14250,6 +14275,7 @@ unreserved_keyword:
 | NOMODIFYCLUSTERSETTING
 | NONVOTERS
 | NOSQLLOGIN
+| NOTIFY
 | NOVIEWACTIVITY
 | NOVIEWACTIVITYREDACTED
 | NOVIEWCLUSTERSETTING
@@ -14410,6 +14436,7 @@ unreserved_keyword:
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN
+| UNLISTEN
 | UNLOGGED
 | UNSET
 | UNSPLIT
