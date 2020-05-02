@@ -65,12 +65,12 @@ var connResultsBufferSize = settings.RegisterPublicByteSizeSetting(
 )
 
 var logConnAuth = settings.RegisterPublicBoolSetting(
-	"server.auth_log.sql_connections.enabled",
+	sql.ConnAuditingClusterSettingName,
 	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
 	false)
 
 var logSessionAuth = settings.RegisterPublicBoolSetting(
-	"server.auth_log.sql_sessions.enabled",
+	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false)
 
@@ -491,9 +491,6 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	connStart := timeutil.Now()
 	if s.connLogEnabled() {
 		s.execCfg.AuthLogger.Logf(ctx, "received connection")
-		telemetry.Inc(sqltelemetry.LoggedConnections)
-	} else {
-		telemetry.Inc(sqltelemetry.UnloggedConnections)
 	}
 	defer func() {
 		// The duration of the session is logged at the end so that the
