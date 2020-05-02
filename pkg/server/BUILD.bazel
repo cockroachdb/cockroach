@@ -120,6 +120,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/gcjob",
         "//pkg/sql/gcjob/gcjobnotifier",
+        "//pkg/sql/notify",
         "//pkg/sql/optionalnodeliveness",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire",

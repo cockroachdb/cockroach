@@ -156,6 +156,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:
 		return p.RefreshMaterializedView(ctx, n)
+	case *tree.Listen:
+		return p.Listen(ctx, n)
 	case *tree.RenameColumn:
 		return p.RenameColumn(ctx, n)
 	case *tree.RenameDatabase:
@@ -252,6 +254,8 @@ func init() {
 		&tree.DropView{},
 		&tree.Grant{},
 		&tree.GrantRole{},
+		&tree.Listen{},
+		&tree.Notify{},
 		&tree.ReassignOwnedBy{},
 		&tree.RefreshMaterializedView{},
 		&tree.RenameColumn{},

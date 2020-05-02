@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -887,6 +888,11 @@ func (icc *internalClientComm) CreateCopyInResult(pos CmdPos) CopyInResult {
 
 // CreateDrainResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
+	panic("unimplemented")
+}
+
+// SendNotification is part of the notify.NotificationSender interface.
+func (icc *internalClientComm) SendNotification(context.Context, notify.Payload) {
 	panic("unimplemented")
 }
 

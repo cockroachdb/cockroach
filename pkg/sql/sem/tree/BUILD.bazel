@@ -57,6 +57,7 @@ go_library(
         "name_part.go",
         "name_resolution.go",
         "normalize.go",
+        "notify.go",
         "object_name.go",
         "operators.go",
         "overload.go",

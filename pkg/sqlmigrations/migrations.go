@@ -328,6 +328,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name: "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
 	},
+	{
+		// Introduced in v20.2.
+		// TODO(jordan): Bake this migration into v21.1.
+		name:                "add system.pg_notifications table for LISTEN/NOTIFY",
+		workFn:              createPGNotificationSystemTable,
+		includedInBootstrap: clusterversion.ByKey(clusterversion.PGNotificationsTable),
+		newDescriptorIDs:    staticIDs(keys.PGNotificationsTableID),
+	},
 }
 
 func staticIDs(
@@ -798,6 +806,13 @@ func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
 	return r.execAsRootWithRetry(ctx,
 		"add CREATELOGIN where a role already has CREATEROLE",
 		upsertCreateRoleStmt)
+}
+
+func createPGNotificationSystemTable(ctx context.Context, r runner) error {
+	if err := createSystemTable(ctx, r, systemschema.PGNotificationsTable); err != nil {
+		return errors.Wrap(err, "failed to create system.pg_notifications")
+	}
+	return nil
 }
 
 // SettingsDefaultOverrides documents the effect of several migrations that add

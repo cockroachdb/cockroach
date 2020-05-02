@@ -275,6 +275,16 @@ const (
 	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
 	// privileges of the protected_ts_meta system table.
 	ProtectedTsMetaPrivilegesMigration
+	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
+	V21_1
+
+	// v21.2 versions.
+	//
+	// Start21_2 demarcates work towards CockroachDB v21.2.
+	Start21_2
+	// PGNotificationsTable is for the migration that adds the pg_notifications
+	// system table.
+	PGNotificationsTable
 
 	// Step (1): Add new versions here.
 )
@@ -477,6 +487,20 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     ProtectedTsMetaPrivilegesMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
 	},
+	{
+		Key:     V21_1,
+		Version: roachpb.Version{Major: 21, Minor: 1},
+	},
+
+	// v21.2 versions.
+	{
+		Key:     Start21_2,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 2},
+	},
+	{
+		Key:     PGNotificationsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 4},
+	},
 	// Step (2): Add new versions here.
 })
 
@@ -488,7 +512,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error.
-	binaryMinSupportedVersion = ByKey(V20_2)
+	binaryMinSupportedVersion = ByKey(V21_1)
 
 	// binaryVersion is the version of this binary.
 	//

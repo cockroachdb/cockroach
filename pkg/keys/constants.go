@@ -404,6 +404,8 @@ const (
 	SqllivenessID                       = 39
 	MigrationsID                        = 40
 
+	PGNotificationsTableID = 41
+
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
 	TableCommentType    = 1

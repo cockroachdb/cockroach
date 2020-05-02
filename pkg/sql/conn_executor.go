@@ -1319,6 +1319,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 
 	switch ev {
 	case txnCommit, txnRollback:
+		for _, notif := range ex.planner.execCfg.PgListenerRegistry.DrainNotifications(
+			ctx, ex.sessionID.Uint128) {
+			ex.clientComm.SendNotification(ctx, notif)
+		}
 		ex.extraTxnState.savepoints.clear()
 		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
 		if ex.extraTxnState.onTxnFinish != nil {
@@ -1438,6 +1442,7 @@ func (ex *connExecutor) run(
 	ex.sessionID = ex.generateID()
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
+	defer ex.server.cfg.PgListenerRegistry.UnlistenAll(ex.sessionID.Uint128)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
 	for {
@@ -2273,10 +2278,12 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	p.sessionDataMutator = ex.dataMutator
 	p.noticeSender = nil
+	p.notificationSender = ex.clientComm
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.sessionLifetimeContext = ctx
 }
 
 func (ex *connExecutor) resetPlanner(

@@ -16,6 +16,7 @@ import (
 	"context"
 	"crypto/md5"
 	gosql "database/sql"
+	"database/sql/driver"
 	"flag"
 	"fmt"
 	gobuild "go/build"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotify"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -209,9 +211,12 @@ import (
 //            if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the
 //            results will be filtered to contain messages starting with
 //            CPut /Table/54, CPut /Table/55, Del /Table/54, Del /Table/55.
-//            Cannot be combined with noticetrace.
+//            Cannot be combined with noticetrace or notificationtrace.
 //      - noticetrace: runs the query and compares only the notices that
-//						appear. Cannot be combined with kvtrace.
+//						appear. Cannot be combined with kvtrace or notificationtrace.
+//      - notificationtrace: runs the query and compares only the LISTEN/NOTIFY
+//            notifications that appear. Cannot be combined with noticetrace or
+//            kvtrace
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -1059,6 +1064,9 @@ type logicQuery struct {
 	// noticetrace indicates we're comparing the output of a notice trace.
 	noticetrace bool
 
+	// notificationtrace indicates we're comparing the output of a notification trace.
+	notificationtrace bool
+
 	// rawOpts are the query options, before parsing. Used to display in error
 	// messages.
 	rawOpts string
@@ -1154,6 +1162,9 @@ type logicTest struct {
 
 	// noticeBuffer retains the notices from the past query.
 	noticeBuffer []string
+
+	// notificationBuffer retains the notifications from the past transaction.
+	notificationBuffer chan *pq.Notification
 
 	rewriteResTestBuf bytes.Buffer
 
@@ -1284,7 +1295,7 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 		t.Fatal(err)
 	}
 
-	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+	var connector driver.Connector = pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
 		t.noticeBuffer = append(t.noticeBuffer, notice.Severity+": "+notice.Message)
 		if notice.Detail != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
@@ -1293,7 +1304,9 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
 		}
 	})
-
+	connector = pq.ConnectorWithNotificationHandler(connector, func(notification *pq.Notification) {
+		t.notificationBuffer <- notification
+	})
 	return gosql.OpenDB(connector)
 }
 
@@ -1805,6 +1818,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	}
 	defer t.printCompletion(path, config)
 
+	t.notificationBuffer = make(chan *pq.Notification, 1024)
 	for _, subtest := range subtests {
 		if *maxErrs > 0 && t.failures >= *maxErrs {
 			break
@@ -2119,6 +2133,9 @@ func (t *logicTest) processSubtest(
 						case "noticetrace":
 							query.noticetrace = true
 
+						case "notificationtrace":
+							query.notificationtrace = true
+
 						default:
 							if strings.HasPrefix(opt, "nodeidx=") {
 								idx, err := strconv.ParseInt(strings.SplitN(opt, "=", 2)[1], 10, 64)
@@ -2138,9 +2155,16 @@ func (t *logicTest) processSubtest(
 				}
 			}
 
-			if query.noticetrace && query.kvtrace {
+			traceCount := 0
+			for _, b := range []bool{query.notificationtrace, query.noticetrace, query.kvtrace} {
+				if b {
+					traceCount++
+				}
+			}
+
+			if traceCount > 1 {
 				return errors.Errorf(
-					"%s: cannot have both noticetrace and kvtrace on at the same time",
+					"%s: can only have one of kvtrace, noticetrace, notificationtrace on at once",
 					query.pos,
 				)
 			}
@@ -2261,7 +2285,7 @@ func (t *logicTest) processSubtest(
 					}
 				}
 
-				if query.noticetrace {
+				if query.noticetrace || query.notificationtrace {
 					query.colTypes = "T"
 				}
 
@@ -2660,6 +2684,18 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 		rows.Close()
 		actualResultsRaw = t.noticeBuffer
+	} else if query.notificationtrace {
+		if len(query.expectedResultsRaw) > 0 {
+			for i := 0; i < len(query.expectedResultsRaw)-1; i++ {
+				// We expect one notification per expected result, minus the last empty
+				// line.
+				select {
+				case notif := <-t.notificationBuffer:
+					actualResultsRaw = append(actualResultsRaw, pgnotify.Stringify(notif))
+				case <-time.After(1 * time.Second):
+				}
+			}
+		}
 	} else {
 		cols, err := rows.Columns()
 		if err != nil {
