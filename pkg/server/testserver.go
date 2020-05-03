@@ -384,8 +384,10 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		ts.Cfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
 	}
 
+	ctx := context.Background()
+
 	// Needs to be called before NewServer to ensure resolvers are initialized.
-	if err := ts.Cfg.InitNode(); err != nil {
+	if err := ts.Cfg.InitNode(ctx); err != nil {
 		return err
 	}
 
@@ -406,7 +408,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg
 
-	return ts.Server.Start(context.Background())
+	return ts.Server.Start(ctx)
 }
 
 type allErrorsFakeLiveness struct{}

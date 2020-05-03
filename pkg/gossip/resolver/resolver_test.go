@@ -11,6 +11,7 @@
 package resolver
 
 import (
+	"context"
 	"errors"
 	"net"
 	"testing"
@@ -117,29 +118,28 @@ func TestSRV(t *testing.T) {
 
 	testCases := []struct {
 		address  string
-		success  bool
 		lookuper lookupFunc
 		want     []string
 	}{
-		{":26222", true, nil, nil},
-		{"some.host", true, lookupWithErr(dnsErr), nil},
-		{"some.host", false, lookupWithErr(errors.New("another error")), nil},
-		{"some.host", true, lookupSuccess, expectedAddrs},
-		{"some.host:26222", true, lookupSuccess, expectedAddrs},
+		{":26222", nil, nil},
+		{"some.host", lookupWithErr(dnsErr), nil},
+		{"some.host", lookupWithErr(errors.New("another error")), nil},
+		{"some.host", lookupSuccess, expectedAddrs},
+		{"some.host:26222", lookupSuccess, expectedAddrs},
 		// "real" `lookupSRV` returns "no such host" when resolving IP addresses
-		{"127.0.0.1", true, lookupWithErr(dnsErr), nil},
-		{"127.0.0.1:26222", true, lookupWithErr(dnsErr), nil},
-		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]", true, lookupWithErr(dnsErr), nil},
-		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:26222", true, lookupWithErr(dnsErr), nil},
+		{"127.0.0.1", lookupWithErr(dnsErr), nil},
+		{"127.0.0.1:26222", lookupWithErr(dnsErr), nil},
+		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]", lookupWithErr(dnsErr), nil},
+		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:26222", lookupWithErr(dnsErr), nil},
 	}
 
 	for tcNum, tc := range testCases {
 		lookupSRV = tc.lookuper
 
-		resolvers, err := SRV(tc.address)
+		resolvers, err := SRV(context.TODO(), tc.address)
 
-		if (err == nil) != tc.success {
-			t.Errorf("#%d: expected success=%t, got err=%v", tcNum, tc.success, err)
+		if err != nil {
+			t.Errorf("#%d: expected success, got err=%v", tcNum, err)
 		}
 
 		require.Equal(t, tc.want, resolvers, "Test #%d failed", tcNum)
