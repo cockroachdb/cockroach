@@ -16,25 +16,21 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type sortOverload struct {
-	*overload
-	Dir       string
-	DirString string
-	Nulls     bool
+type sortDirOverload struct {
+	Dir             string
+	DirString       string
+	FamilyOverloads []*oneArgOverload
 }
 
-type sortOverloads struct {
-	LTyp      coltypes.T
-	Overloads []sortOverload
+type sortDirNullsOverload struct {
+	Nulls        bool
+	DirOverloads []*sortDirOverload
 }
 
-// typesToSortOverloads maps types to whether nulls are handled to
-// the overload representing the sort direction.
-var typesToSortOverloads map[coltypes.T]map[bool]sortOverloads
+var sortOverloads []*sortDirNullsOverload
 
 const sortOpsTmpl = "pkg/sql/colexec/sort_tmpl.go"
 
@@ -46,20 +42,22 @@ func genSortOps(wr io.Writer) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{$typ}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{$typ}}", -1)
-	s = strings.Replace(s, "_DIR_ENUM", "{{.Dir}}", -1)
-	s = strings.Replace(s, "_DIR", "{{.DirString}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_ISNULL", "{{$isNull}}", -1)
-	s = strings.Replace(s, "_HANDLES_NULLS", "{{if .Nulls}}WithNulls{{else}}{{end}}", -1)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+
+	s = strings.ReplaceAll(s, "_DIR_ENUM", "{{.Dir}}")
+	s = strings.ReplaceAll(s, "_DIR", "{{$dir}}")
+	s = strings.ReplaceAll(s, "_ISNULL", "{{$nulls}}")
+	s = strings.ReplaceAll(s, "_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}")
 
 	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 3)
 	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("sort_op").Parse(s)
@@ -67,7 +65,7 @@ func genSortOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, typesToSortOverloads)
+	return tmpl.Execute(wr, sortOverloads)
 }
 
 const quickSortTmpl = "pkg/sql/colexec/quicksort_tmpl.go"
@@ -80,10 +78,9 @@ func genQuickSortOps(wr io.Writer) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_DIR", "{{.DirString}}", -1)
-	s = strings.Replace(s, "_HANDLES_NULLS", "{{if .Nulls}}WithNulls{{else}}{{end}}", -1)
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "_DIR", "{{$dir}}")
+	s = strings.ReplaceAll(s, "_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}")
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("quicksort").Parse(s)
@@ -91,28 +88,28 @@ func genQuickSortOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, typesToSortOverloads)
+	return tmpl.Execute(wr, sortOverloads)
 }
 
 func init() {
 	registerGenerator(genSortOps, "sort.eg.go", sortOpsTmpl)
 	registerGenerator(genQuickSortOps, "quicksort.eg.go", quickSortTmpl)
-	typesToSortOverloads = make(map[coltypes.T]map[bool]sortOverloads)
-	for _, o := range sameTypeComparisonOpToOverloads[tree.LT] {
-		typesToSortOverloads[o.LTyp] = make(map[bool]sortOverloads)
-		for _, b := range []bool{true, false} {
-			typesToSortOverloads[o.LTyp][b] = sortOverloads{
-				LTyp: o.LTyp,
-				Overloads: []sortOverload{
-					{overload: o, Dir: "execinfrapb.Ordering_Column_ASC", DirString: "Asc", Nulls: b},
-					{}},
-			}
+	for _, nulls := range []bool{true, false} {
+		nullsOverload := &sortDirNullsOverload{
+			Nulls: nulls,
+			DirOverloads: []*sortDirOverload{
+				{
+					Dir:             "execinfrapb.Ordering_Column_ASC",
+					DirString:       "Asc",
+					FamilyOverloads: sameTypeComparisonOpToOverloads[tree.LT],
+				},
+				{
+					Dir:             "execinfrapb.Ordering_Column_DESC",
+					DirString:       "Desc",
+					FamilyOverloads: sameTypeComparisonOpToOverloads[tree.GT],
+				},
+			},
 		}
-	}
-	for _, o := range sameTypeComparisonOpToOverloads[tree.GT] {
-		for _, b := range []bool{true, false} {
-			typesToSortOverloads[o.LTyp][b].Overloads[1] = sortOverload{
-				overload: o, Dir: "execinfrapb.Ordering_Column_DESC", DirString: "Desc", Nulls: b}
-		}
+		sortOverloads = append(sortOverloads, nullsOverload)
 	}
 }

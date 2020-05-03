@@ -202,7 +202,7 @@ func newExternalSorter(
 	// memoryLimit of the partitions to sort in memory by those cache sizes. To be
 	// safe, we also estimate the size of the output batch and subtract that as
 	// well.
-	batchMemSize := colmem.EstimateBatchSizeBytesFromSQLTypes(inputTypes, coldata.BatchSize())
+	batchMemSize := colmem.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
 	// Reserve a certain amount of memory for the partition caches.
 	memoryLimit -= int64((maxNumberPartitions * diskQueueCfg.BufferSizeBytes) + batchMemSize)
 	if memoryLimit < 1 {

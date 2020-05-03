@@ -18,8 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -298,8 +297,7 @@ func (rf *cFetcher) Init(
 	typs := make([]types.T, len(colDescriptors))
 	for i := range typs {
 		typs[i] = colDescriptors[i].Type
-		physType := typeconv.FromColumnType(&typs[i])
-		if physType == coltypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
+		if !typeconv.IsTypeSupported(&typs[i]) && tableArgs.ValNeededForCol.Contains(i) {
 			// Only return an error if the type is unhandled and needed. If not needed,
 			// a placeholder Vec will be created.
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)

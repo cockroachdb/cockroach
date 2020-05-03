@@ -23,7 +23,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -426,7 +425,6 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					vec.Copy(
 						coldata.CopySliceArgs{
 							SliceArgs: coldata.SliceArgs{
-								ColType:   typeconv.FromColumnType(&r.inputTypes[colIdx]),
 								Src:       batch.ColVec(colIdx),
 								Sel:       sel,
 								SrcEndIdx: n,
@@ -517,7 +515,6 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					vec.Copy(
 						coldata.CopySliceArgs{
 							SliceArgs: coldata.SliceArgs{
-								ColType:   typeconv.FromColumnType(&r.inputTypes[colIdx]),
 								Src:       r.scratch.ColVec(colIdx),
 								SrcEndIdx: n,
 							},

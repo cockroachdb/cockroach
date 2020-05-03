@@ -16,8 +16,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -49,18 +47,18 @@ func TestBatchReset(t *testing.T) {
 		for i, vec := range b.ColVecs() {
 			assert.False(t, vec.MaybeHasNulls())
 			assert.False(t, vec.Nulls().NullAt(0))
-			assert.Equal(t, typeconv.FromColumnType(&typs[i]), vec.Type())
+			assert.True(t, typs[i].Identical(vec.Type()))
 			// Sanity check that we can actually use the column. This is mostly for
 			// making sure a flat bytes column gets reset.
 			vec.Nulls().SetNull(0)
 			assert.True(t, vec.Nulls().NullAt(0))
-			switch vec.Type() {
-			case coltypes.Int64:
+			switch vec.CanonicalTypeFamily() {
+			case types.IntFamily:
 				x := vec.Int64()
 				assert.True(t, len(x) >= n)
 				assert.True(t, cap(x) >= selCap)
 				x[0] = 1
-			case coltypes.Bytes:
+			case types.BytesFamily:
 				x := vec.Bytes()
 				assert.True(t, x.Len() >= n)
 				x.Set(0, []byte{1})

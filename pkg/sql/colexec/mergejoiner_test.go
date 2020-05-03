@@ -1695,9 +1695,9 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 					groupsLeft[i] = int64(leftGroupIdx)
 					groupsRight[i] = int64(rightGroupIdx)
 				}
-				for i, typ := range typs[1:] {
-					coldatatestutils.RandomVec(rng, &typ, 0 /* bytesFixedLength */, colsLeft[i+1], nTuples, nullProbability)
-					coldatatestutils.RandomVec(rng, &typ, 0 /* bytesFixedLength */, colsRight[i+1], nTuples, nullProbability)
+				for i := range typs[1:] {
+					coldatatestutils.RandomVec(rng, 0 /* bytesFixedLength */, colsLeft[i+1], nTuples, nullProbability)
+					coldatatestutils.RandomVec(rng, 0 /* bytesFixedLength */, colsRight[i+1], nTuples, nullProbability)
 				}
 				leftMJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
 				rightMJSource := newChunkingBatchSource(typs, colsRight, nTuples)
@@ -1907,12 +1907,12 @@ type expectedGroup struct {
 }
 
 func newBatchesOfRandIntRows(
-	nTuples int, typs []types.T, maxRunLength int64, skipValues bool, randomIncrement int64,
+	nTuples int, maxRunLength int64, skipValues bool, randomIncrement int64,
 ) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
 	rng, _ := randutil.NewPseudoRand()
-	lCols := []coldata.Vec{testAllocator.NewMemColumn(&typs[0], nTuples)}
+	lCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}
 	lCol := lCols[0].Int64()
-	rCols := []coldata.Vec{testAllocator.NewMemColumn(&typs[0], nTuples)}
+	rCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}
 	rCol := rCols[0].Int64()
 	exp := make([]expectedGroup, nTuples)
 	val := int64(0)
@@ -1974,11 +1974,11 @@ func TestMergeJoinerRandomized(t *testing.T) {
 		for _, maxRunLength := range []int64{2, 3, 100} {
 			for _, skipValues := range []bool{false, true} {
 				for _, randomIncrement := range []int64{0, 1} {
-					t.Run(fmt.Sprintf("numInputBatches=%dmaxRunLength=%dskipValues=%trandomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement),
+					t.Run(fmt.Sprintf("numInputBatches=%d/maxRunLength=%d/skipValues=%t/randomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement),
 						func(t *testing.T) {
 							nTuples := coldata.BatchSize() * numInputBatches
 							typs := []types.T{*types.Int}
-							lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, typs, maxRunLength, skipValues, randomIncrement)
+							lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, maxRunLength, skipValues, randomIncrement)
 							leftSource := newChunkingBatchSource(typs, lCols, nTuples)
 							rightSource := newChunkingBatchSource(typs, rCols, nTuples)
 

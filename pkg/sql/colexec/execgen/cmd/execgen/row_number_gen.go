@@ -32,7 +32,7 @@ func genRowNumberOp(wr io.Writer) error {
 
 	s := string(d)
 
-	s = strings.Replace(s, "_ROW_NUMBER_STRING", "{{.String}}", -1)
+	s = strings.ReplaceAll(s, "_ROW_NUMBER_STRING", "{{.String}}")
 
 	computeRowNumberRe := makeFunctionRegex("_COMPUTE_ROW_NUMBER", 0)
 	s = computeRowNumberRe.ReplaceAllString(s, `{{template "computeRowNumber" buildDict "HasPartition" .HasPartition}}`)

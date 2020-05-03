@@ -29,9 +29,11 @@ func genHashAggregator(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = replaceManipulationFuncs(".Global.LTyp", s)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+
+	s = replaceManipulationFuncsAmbiguous(".Global", s)
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_NE", 3)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))

@@ -29,22 +29,22 @@ func genDistinctOps(wr io.Writer) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
+	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
 	innerLoopRe := makeFunctionRegex("_CHECK_DISTINCT", 5)
-	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" buildDict "Global" . "LTyp" .LTyp}}`)
+	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" buildDict "Global" .}}`)
 
 	innerLoopNullsRe := makeFunctionRegex("_CHECK_DISTINCT_WITH_NULLS", 7)
-	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" buildDict "Global" . "LTyp" .LTyp}}`)
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" buildDict "Global" .}}`)
+	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("distinct_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

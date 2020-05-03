@@ -80,21 +80,18 @@ func _L_SLICE(col, i, j interface{}) interface{} {
 
 // */}}
 
-// TODO(yuzefovich): we can remove fromType and toType parameters since
-// vectors store the types.
-func cast(fromType, toType *types.T, inputVec, outputVec coldata.Vec, n int, sel []int) {
+func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 	castPerformed := false
-	leftType, rightType := fromType, toType
-	switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+	switch inputVec.CanonicalTypeFamily() {
 	// {{range .LeftFamilies}}
 	case _LEFT_CANONICAL_TYPE_FAMILY:
-		switch leftType.Width() {
+		switch inputVec.Type().Width() {
 		// {{range .LeftWidths}}
 		case _LEFT_TYPE_WIDTH:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily[rightType.Family()] {
+			switch outputVec.CanonicalTypeFamily() {
 			// {{range .RightFamilies}}
 			case _RIGHT_CANONICAL_TYPE_FAMILY:
-				switch rightType.Width() {
+				switch outputVec.Type().Width() {
 				// {{range .RightWidths}}
 				case _RIGHT_TYPE_WIDTH:
 					inputCol := inputVec._L_TYP()
@@ -156,7 +153,7 @@ func cast(fromType, toType *types.T, inputVec, outputVec coldata.Vec, n int, sel
 		// {{end}}
 	}
 	if !castPerformed {
-		colexecerror.InternalError(fmt.Sprintf("unhandled cast %s -> %s", fromType, toType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled cast %s -> %s", inputVec.Type(), outputVec.Type()))
 	}
 }
 
@@ -195,8 +192,6 @@ func GetCastOperator(
 						allocator:    allocator,
 						colIdx:       colIdx,
 						outputIdx:    resultIdx,
-						fromType:     fromType,
-						toType:       toType,
 					}, nil
 					// {{end}}
 				}
@@ -263,8 +258,6 @@ type castOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
-	fromType  *types.T
-	toType    *types.T
 }
 
 var _ colexecbase.Operator = &castOp{}
@@ -287,7 +280,7 @@ func (c *castOp) Next(ctx context.Context) coldata.Batch {
 		projVec.Nulls().UnsetNulls()
 	}
 	c.allocator.PerformOperation(
-		[]coldata.Vec{projVec}, func() { cast(c.fromType, c.toType, vec, projVec, n, batch.Selection()) },
+		[]coldata.Vec{projVec}, func() { cast(vec, projVec, n, batch.Selection()) },
 	)
 	return batch
 }

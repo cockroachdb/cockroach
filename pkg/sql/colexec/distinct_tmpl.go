@@ -27,8 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -56,7 +55,7 @@ func OrderedDistinctColsToOperators(
 		ok  bool
 	)
 	for i := range distinctCols {
-		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, &typs[distinctCols[i]])
+		input, err = newSingleDistinct(input, int(distinctCols[i]), distinctCol, &typs[distinctCols[i]])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -77,7 +76,7 @@ type distinctChainOps struct {
 var _ resettableOperator = &distinctChainOps{}
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
-// input columns with the given coltypes.
+// input columns with the given types.
 func NewOrderedDistinct(
 	input colexecbase.Operator, distinctCols []uint32, typs []types.T,
 ) (colexecbase.Operator, error) {
@@ -116,19 +115,11 @@ var _ tree.Datum
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
-// _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in coltypes.T, for example
-// int64 for coltypes.Int64.
+// _GOTYPE is the template variable.
 type _GOTYPE interface{}
 
-// _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in coltypes.T, for
-// example []int64 for coltypes.Int64.
+// _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
-
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
@@ -136,23 +127,33 @@ func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
 	colexecerror.InternalError("")
 }
 
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
+
 // */}}
 
-func newSingleOrderedDistinct(
+func newSingleDistinct(
 	input colexecbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
 ) (colexecbase.Operator, error) {
-	switch typeconv.FromColumnType(t) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
-	case _TYPES_T:
-		return &sortedDistinct_TYPEOp{
-			OneInputNode:      NewOneInputNode(input),
-			sortedDistinctCol: distinctColIdx,
-			outputCol:         outputCol,
-		}, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported distinct type %s", t)
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &distinct_TYPEOp{
+				OneInputNode:   NewOneInputNode(input),
+				distinctColIdx: distinctColIdx,
+				outputCol:      outputCol,
+			}, nil
+			// {{end}}
+		}
+		// {{end}}
 	}
+	return nil, errors.Errorf("unsupported distinct type %s", t)
 }
 
 // partitioner is a simple implementation of sorted distinct that's useful for
@@ -174,28 +175,31 @@ type partitioner interface {
 
 // newPartitioner returns a new partitioner on type t.
 func newPartitioner(t *types.T) (partitioner, error) {
-	switch typeconv.FromColumnType(t) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
-	case _TYPES_T:
-		return partitioner_TYPE{}, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported partition type %s", t)
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return partitioner_TYPE{}, nil
+			// {{end}}
+		}
+		// {{end}}
 	}
+	return nil, errors.Errorf("unsupported partition type %s", t)
 }
 
 // {{range .}}
+// {{range .WidthOverloads}}
 
-// sortedDistinct_TYPEOp runs a distinct on the column in sortedDistinctCol,
-// writing true to the resultant bool column for every value that differs from
-// the previous one.
-// TODO(solon): Update this name to remove "sorted". The input values are not
-// necessarily in sorted order.
-type sortedDistinct_TYPEOp struct {
+// distinct_TYPEOp runs a distinct on the column in distinctColIdx, writing
+// true to the resultant bool column for every value that differs from the
+// previous one.
+type distinct_TYPEOp struct {
 	OneInputNode
 
-	// sortedDistinctCol is the index of the column to distinct upon.
-	sortedDistinctCol int
+	// distinctColIdx is the index of the column to distinct upon.
+	distinctColIdx int
 
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
@@ -211,13 +215,13 @@ type sortedDistinct_TYPEOp struct {
 	lastValNull bool
 }
 
-var _ resettableOperator = &sortedDistinct_TYPEOp{}
+var _ resettableOperator = &distinct_TYPEOp{}
 
-func (p *sortedDistinct_TYPEOp) Init() {
+func (p *distinct_TYPEOp) Init() {
 	p.input.Init()
 }
 
-func (p *sortedDistinct_TYPEOp) reset(ctx context.Context) {
+func (p *distinct_TYPEOp) reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
 	if resetter, ok := p.input.(resetter); ok {
@@ -225,13 +229,13 @@ func (p *sortedDistinct_TYPEOp) reset(ctx context.Context) {
 	}
 }
 
-func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
+func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	if batch.Length() == 0 {
 		return batch
 	}
 	outputCol := p.outputCol
-	vec := batch.ColVec(p.sortedDistinctCol)
+	vec := batch.ColVec(p.distinctColIdx)
 	var nulls *coldata.Nulls
 	if vec.MaybeHasNulls() {
 		nulls = vec.Nulls()
@@ -354,6 +358,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 }
 
 // {{end}}
+// {{end}}
 
 // {{/*
 // _CHECK_DISTINCT retrieves the value at the ith index of col, compares it
@@ -365,11 +370,13 @@ func _CHECK_DISTINCT(
 ) { // */}}
 
 	// {{define "checkDistinct" -}}
+	// {{with .Global}}
 	v := execgen.UNSAFEGET(col, checkIdx)
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
 	execgen.COPYVAL(lastVal, v)
+	// {{end}}
 	// {{end}}
 
 	// {{/*
@@ -390,6 +397,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 ) { // */}}
 
 	// {{define "checkDistinctWithNulls" -}}
+	// {{with .Global}}
 	null := nulls.NullAt(checkIdx)
 	if null {
 		if !lastValNull {
@@ -410,6 +418,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 		execgen.COPYVAL(lastVal, v)
 	}
 	lastValNull = null
+	// {{end}}
 	// {{end}}
 
 	// {{/*
