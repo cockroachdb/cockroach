@@ -95,6 +95,7 @@ test           information_schema  user_privileges                    public   S
 test           information_schema  views                              public   SELECT
 test           pg_catalog          NULL                               admin    ALL
 test           pg_catalog          NULL                               root     ALL
+test           pg_catalog          pg_aggregate                       public   SELECT
 test           pg_catalog          pg_am                              public   SELECT
 test           pg_catalog          pg_attrdef                         public   SELECT
 test           pg_catalog          pg_attribute                       public   SELECT
