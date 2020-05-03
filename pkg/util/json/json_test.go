@@ -443,6 +443,56 @@ func TestArrayBuilderWithCounter(t *testing.T) {
 	}
 }
 
+func TestNewObjectBuilderWithCounter(t *testing.T) {
+	json := jsonTestShorthand
+
+	testCases := []struct {
+		input    [][]interface{}
+		expected JSON
+	}{
+		{
+			input:    [][]interface{}{},
+			expected: json(`{}`),
+		},
+		{
+			input:    [][]interface{}{{"key1", "val1"}},
+			expected: json(`{"key1": "val1"}`),
+		},
+		{
+			input:    [][]interface{}{{"key1", "val1"}, {"key2", "val2"}},
+			expected: json(`{"key1": "val1", "key2": "val2"}`),
+		},
+		{
+			input:    [][]interface{}{{"key1", []interface{}{1, 2, 3, 4}}},
+			expected: json(`{"key1": [1, 2, 3, 4]}`),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("keys %+v", tc.input), func(t *testing.T) {
+			builder := NewObjectBuilderWithCounter()
+			for _, pair := range tc.input {
+				j, err := MakeJSON(pair[1])
+				if err != nil {
+					t.Fatal(err)
+				}
+				builder.Add(pair[0].(string), j)
+			}
+			result := builder.Build()
+			c, err := result.Compare(tc.expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
+				t.Fatalf("expected %v to equal %v", result, tc.expected)
+			}
+			if builder.Size() != result.Size() {
+				t.Fatalf("expected %v to equal %v", builder.Size(), result.Size())
+			}
+		})
+	}
+}
+
 func TestBuildJSONObject(t *testing.T) {
 	testCases := []struct {
 		input []string

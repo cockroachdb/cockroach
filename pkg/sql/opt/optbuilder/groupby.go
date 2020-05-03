@@ -786,7 +786,12 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructJsonbAgg(args[0])
 	case "string_agg":
 		return b.factory.ConstructStringAgg(args[0], args[1])
+	case "json_object_agg":
+		return b.factory.ConstructJsonbObjectAgg(args[0], args[1])
+	case "jsonb_object_agg":
+		return b.factory.ConstructJsonObjectAgg(args[0], args[1])
 	}
+
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 

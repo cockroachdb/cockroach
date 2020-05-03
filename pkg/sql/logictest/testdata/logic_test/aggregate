@@ -2401,3 +2401,66 @@ CREATE VIEW v46981_0(c0) AS SELECT count_rows() FROM t46981_0
 
 statement error parsing regexp: missing argument to repetition operator: `\+`
 SELECT * FROM v46981_0 WHERE '' !~ '+'
+
+subtest json_object_agg
+
+statement ok
+CREATE TABLE profiles (
+  userid int not null,
+  property string not null,
+  value string not null
+)
+
+statement ok
+INSERT INTO profiles VALUES
+(1, 'email', 'user1@gmail.com'),
+(1, 'phone', '111111111111111'),
+(1, 'home_page', 'user1.org1.com'),
+(2, 'email', 'user2@gmail.com'),
+(2, 'phone', '222222222222222'),
+(2, 'home_page', 'user2.org1.com')
+
+query T
+SELECT json_object_agg(property, value) FROM profiles GROUP BY userid ORDER BY userid
+----
+{"email": "user1@gmail.com", "home_page": "user1.org1.com", "phone": "111111111111111"}
+{"email": "user2@gmail.com", "home_page": "user2.org1.com", "phone": "222222222222222"}
+
+statement ok
+CREATE TABLE users (
+  userid int primary key,
+  user_name string not null
+)
+
+statement ok
+CREATE TABLE user_networks(
+  userid int not null references users(userid),
+  network_name string not null,
+  user_account_id string not null
+)
+
+statement ok
+INSERT INTO users VALUES
+(1, 'Alice'),
+(2, 'Bob')
+
+statement ok
+INSERT INTO user_networks VALUES
+('1', 'Facebook', 'Alice_fb'),
+('1', 'Twitter', '@Alice'),
+('1', 'Instagram', 'AliceInst'),
+('2', 'Facebook', 'Bob_fb'),
+('2', 'LinkedIn', 'Bob The Builder')
+
+query T
+SELECT json_object_agg(user_name, networks) FROM
+  (SELECT u.userid as userid, u.user_name, json_object_agg(un.network_name, un.user_account_id) as networks FROM
+    users u, user_networks un
+      WHERE u.userid = un.userid
+      GROUP BY u.userid
+      ORDER BY u.userid)
+  GROUP BY userid
+  ORDER BY userid
+----
+{"Alice": {"Facebook": "Alice_fb", "Instagram": "AliceInst", "Twitter": "@Alice"}}
+{"Bob": {"Facebook": "Bob_fb", "LinkedIn": "Bob The Builder"}}
