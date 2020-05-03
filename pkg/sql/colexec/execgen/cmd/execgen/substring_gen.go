@@ -11,12 +11,13 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 const substringTmpl = "pkg/sql/colexec/substring_tmpl.go"
@@ -29,21 +30,22 @@ func genSubstring(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_StartType_T", "coltypes.{{$startType}}", -1)
-	s = strings.Replace(s, "_LengthType_T", "coltypes.{{$lengthType}}", -1)
-	s = strings.Replace(s, "_StartType", "{{$startType}}", -1)
-	s = strings.Replace(s, "_LengthType", "{{$lengthType}}", -1)
+	s = strings.ReplaceAll(s, "_START_WIDTH", fmt.Sprintf("{{$startWidth}}{{if eq $startWidth %d}}: default{{end}}", anyWidth))
+	s = strings.ReplaceAll(s, "_LENGTH_WIDTH", fmt.Sprintf("{{$lengthWidth}}{{if eq $lengthWidth %d}}: default{{end}}", anyWidth))
+	s = strings.ReplaceAll(s, "_StartType", fmt.Sprintf("Int{{if eq $startWidth %d}}64{{else}}{{$startWidth}}{{end}}", anyWidth))
+	s = strings.ReplaceAll(s, "_LengthType", fmt.Sprintf("Int{{if eq $lengthWidth %d}}64{{else}}{{$lengthWidth}}{{end}}", anyWidth))
 
 	tmpl, err := template.New("substring").Parse(s)
 	if err != nil {
 		return err
 	}
 
-	intToInts := make(map[coltypes.T][]coltypes.T)
-	for _, intType := range coltypes.IntTypes {
-		intToInts[intType] = coltypes.IntTypes
+	supportedIntWidths := supportedWidthsByCanonicalTypeFamily[types.IntFamily]
+	intWidthsToIntWidths := make(map[int32][]int32)
+	for _, intWidth := range supportedIntWidths {
+		intWidthsToIntWidths[intWidth] = supportedIntWidths
 	}
-	return tmpl.Execute(wr, intToInts)
+	return tmpl.Execute(wr, intWidthsToIntWidths)
 }
 
 func init() {

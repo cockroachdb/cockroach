@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -125,7 +124,6 @@ func TestFileIndexing(t *testing.T) {
 		require.NoError(t, d.GetBatch(batchIdx, b))
 		require.Equal(t, batchSize, b.Length())
 		require.Equal(t, 1, b.Width())
-		require.Equal(t, coltypes.Int64, b.ColVec(0).Type())
 		require.Equal(t, int64(batchIdx), b.ColVec(0).Int64()[0])
 	}
 }

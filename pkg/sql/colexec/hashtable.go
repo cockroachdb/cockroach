@@ -132,10 +132,6 @@ type hashTable struct {
 	// makes up the equality columns. The ID of a key at any index of vals is
 	// index + 1.
 	vals *appendOnlyBufferedBatch
-	// valTypes stores the corresponding types of the val columns.
-	valTypes []types.T
-	// keyCols stores the corresponding types of key columns.
-	keyTypes []types.T
 	// keyCols stores the indices of vals which are key columns.
 	keyCols []uint32
 
@@ -164,10 +160,6 @@ func newHashTable(
 	allowNullEquality bool,
 	mode hashTableMode,
 ) *hashTable {
-	keyTypes := make([]types.T, len(eqCols))
-	for i, colIdx := range eqCols {
-		keyTypes[i] = sourceTypes[colIdx]
-	}
 	ht := &hashTable{
 		allocator: allocator,
 
@@ -184,13 +176,9 @@ func newHashTable(
 			differs: make([]bool, coldata.BatchSize()),
 		},
 
-		vals:     newAppendOnlyBufferedBatch(allocator, sourceTypes, 0 /* initialSize */),
-		valTypes: sourceTypes,
-		keyCols:  eqCols,
-		keyTypes: keyTypes,
-
-		numBuckets: numBuckets,
-
+		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes, 0 /* initialSize */),
+		keyCols:           eqCols,
+		numBuckets:        numBuckets,
 		allowNullEquality: allowNullEquality,
 		mode:              mode,
 	}
@@ -231,7 +219,7 @@ func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 
 		// ht.next is used to store the computed hash value of each key.
 		ht.buildScratch.next = maybeAllocateUint64Array(ht.buildScratch.next, ht.vals.Length()+1)
-		ht.computeBuckets(ctx, ht.buildScratch.next[1:], ht.keyTypes, keyCols, ht.vals.Length(), nil)
+		ht.computeBuckets(ctx, ht.buildScratch.next[1:], keyCols, ht.vals.Length(), nil)
 		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, ht.vals.Length())
 	case hashTableDistinctMode:
 		for {
@@ -246,8 +234,7 @@ func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 				ht.probeScratch.keys[i] = srcVecs[ht.keyCols[i]]
 			}
 
-			ht.computeBuckets(
-				ctx, ht.probeScratch.next[1:], ht.keyTypes, ht.probeScratch.keys, batch.Length(), batch.Selection())
+			ht.computeBuckets(ctx, ht.probeScratch.next[1:], ht.probeScratch.keys, batch.Length(), batch.Selection())
 			copy(ht.probeScratch.hashBuffer, ht.probeScratch.next[1:])
 
 			// We should not zero out the entire `first` buffer here since the size of
@@ -320,17 +307,13 @@ func (ht *hashTable) removeDuplicates(
 // checkCols performs a column by column checkCol on the key columns.
 func (ht *hashTable) checkCols(
 	probeVecs, buildVecs []coldata.Vec,
-	probeKeyTypes []types.T,
 	buildKeyCols []uint32,
 	nToCheck uint64,
 	probeSel []int,
 	buildSel []int,
 ) {
 	for i := range ht.keyCols {
-		probeType := probeKeyTypes[i]
-		buildType := ht.keyTypes[i]
-		ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], &probeType, &buildType,
-			i, nToCheck, probeSel, buildSel)
+		ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel, buildSel)
 	}
 }
 
@@ -343,21 +326,15 @@ func (ht *hashTable) checkColsForDistinctTuples(
 	for i := range ht.keyCols {
 		probeVec := probeVecs[i]
 		buildVec := buildVecs[ht.keyCols[i]]
-		probeType := ht.keyTypes[i]
 
-		ht.checkColForDistinctTuples(probeVec, buildVec, &probeType, nToCheck, probeSel)
+		ht.checkColForDistinctTuples(probeVec, buildVec, nToCheck, probeSel)
 	}
 }
 
 // computeBuckets computes the hash value of each key and stores the result in
 // buckets.
 func (ht *hashTable) computeBuckets(
-	ctx context.Context,
-	buckets []uint64,
-	keyTypes []types.T,
-	keys []coldata.Vec,
-	nKeys int,
-	sel []int,
+	ctx context.Context, buckets []uint64, keys []coldata.Vec, nKeys int, sel []int,
 ) {
 	initHash(buckets, nKeys, defaultInitHashValue)
 
@@ -367,7 +344,7 @@ func (ht *hashTable) computeBuckets(
 	}
 
 	for i := range ht.keyCols {
-		rehash(ctx, buckets, &keyTypes[i], keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch)
+		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)
@@ -438,10 +415,8 @@ func (ht *hashTable) maybeAllocateSameAndVisited() {
 // lookupInitial finds the corresponding hash table buckets for the equality
 // column of the batch and stores the results in groupID. It also initializes
 // toCheck with all indices in the range [0, batchSize).
-func (ht *hashTable) lookupInitial(
-	ctx context.Context, keyTypes []types.T, batchSize int, sel []int,
-) {
-	ht.computeBuckets(ctx, ht.probeScratch.buckets, keyTypes, ht.probeScratch.keys, batchSize, sel)
+func (ht *hashTable) lookupInitial(ctx context.Context, batchSize int, sel []int) {
+	ht.computeBuckets(ctx, ht.probeScratch.buckets, ht.probeScratch.keys, batchSize, sel)
 	for i := 0; i < batchSize; i++ {
 		ht.probeScratch.groupID[i] = ht.buildScratch.first[ht.probeScratch.buckets[i]]
 		ht.probeScratch.toCheck[i] = uint64(i)

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 const constTmpl = "pkg/sql/colexec/const_tmpl.go"
@@ -29,12 +29,13 @@ func genConstOps(wr io.Writer) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPE", "{{.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.}}", -1)
-	s = replaceManipulationFuncs("", s)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+
+	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("const_op").Parse(s)
@@ -42,7 +43,7 @@ func genConstOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, coltypes.AllTypes)
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
 }
 func init() {
 	registerGenerator(genConstOps, "const.eg.go", constTmpl)

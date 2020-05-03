@@ -32,7 +32,7 @@ func genWindowPeerGrouperOps(wr io.Writer) error {
 	}
 
 	s := string(d)
-	s = strings.Replace(s, "_PEER_GROUPER_STRING", "{{.String}}", -1)
+	s = strings.ReplaceAll(s, "_PEER_GROUPER_STRING", "{{.String}}")
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("peer_grouper_op").Parse(s)

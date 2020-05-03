@@ -16,7 +16,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -459,7 +458,6 @@ func (hj *externalHashJoiner) partitionBatch(
 				for i, colvec := range colVecs {
 					colvec.Copy(coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:   typeconv.FromColumnType(&sourceSpec.sourceTypes[i]),
 							Src:       batch.ColVec(i),
 							Sel:       sel,
 							SrcEndIdx: len(sel),

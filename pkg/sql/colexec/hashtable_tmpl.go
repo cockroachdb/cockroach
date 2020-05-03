@@ -24,7 +24,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -200,29 +199,22 @@ func _CHECK_COL_WITH_NULLS(
 // to differs. If the bucket has reached the end, the key is rejected. If the
 // hashTable disallows null equality, then if any element in the key is null,
 // there is no match.
-// TODO(yuzefovich): removes types.T arguments.
 func (ht *hashTable) checkCol(
-	probeVec, buildVec coldata.Vec,
-	probeType, buildType *types.T,
-	keyColIdx int,
-	nToCheck uint64,
-	probeSel []int,
-	buildSel []int,
+	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int, buildSel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// `decimalScratch` local variable of type `decimalOverloadScratch`.
 	decimalScratch := ht.decimalScratch
-	leftType, rightType := probeType, buildType
-	switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+	switch probeVec.CanonicalTypeFamily() {
 	// {{range .LeftFamilies}}
 	case _LEFT_CANONICAL_TYPE_FAMILY:
-		switch leftType.Width() {
+		switch probeVec.Type().Width() {
 		// {{range .LeftWidths}}
 		case _LEFT_TYPE_WIDTH:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily[rightType.Family()] {
+			switch buildVec.CanonicalTypeFamily() {
 			// {{range .RightFamilies}}
 			case _RIGHT_CANONICAL_TYPE_FAMILY:
-				switch rightType.Width() {
+				switch buildVec.Type().Width() {
 				// {{range .RightWidths}}
 				case _RIGHT_TYPE_WIDTH:
 					probeKeys := probeVec._ProbeType()
@@ -255,7 +247,6 @@ func (ht *hashTable) checkCol(
 func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
-	probeType *types.T,
 	nToCheck uint16,
 	probeSel []uint16,
 	_USE_PROBE_SEL bool,
@@ -280,31 +271,30 @@ func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(
 	// {{/*
 } // */}}
 
-// TODO(yuzefovich): remove types.T arguments.
 func (ht *hashTable) checkColForDistinctTuples(
-	probeVec, buildVec coldata.Vec, probeType *types.T, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, nToCheck uint64, probeSel []int,
 ) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily[probeType.Family()] {
+	switch probeVec.CanonicalTypeFamily() {
 	// {{range .LeftFamilies}}
 	// {{$leftFamily := .LeftCanonicalFamilyStr}}
 	case _LEFT_CANONICAL_TYPE_FAMILY:
-		switch probeType.Width() {
+		switch probeVec.Type().Width() {
 		// {{range .LeftWidths}}
 		// {{$leftWidth := .Width}}
 		case _LEFT_TYPE_WIDTH:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily[probeType.Family()] {
+			switch probeVec.CanonicalTypeFamily() {
 			// {{range .RightFamilies}}
 			// {{$rightFamily := .RightCanonicalFamilyStr}}
 			case _RIGHT_CANONICAL_TYPE_FAMILY:
-				switch probeType.Width() {
+				switch probeVec.Type().Width() {
 				// {{range .RightWidths}}
 				// {{$rightWidth := .Width}}
 				// {{if and (eq $leftFamily $rightFamily) (eq $leftWidth $rightWidth)}}
 				// {{/* We're being this tricky with code generation because we
 				//      know that both probeVec and buildVec are of the same
-				//      probeType, so we need to iterate over one level of
-				//      type family - width. But, the checkCol function above
-				//      needs two layers, so in order to keep these templated
+				//      type, so we need to iterate over one level of type
+				//      family - width. But, the checkCol function above needs
+				//      two layers, so in order to keep these templated
 				//      functions in a single file we make sure that we
 				//      generate the code only if the "second" level is the
 				//      same as the "first" one */}}
@@ -313,9 +303,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 					buildKeys := buildVec._ProbeType()
 
 					if probeSel != nil {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, probeType, nToCheck, probeSel, true, false)
+						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, nToCheck, probeSel, true, false)
 					} else {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, probeType, nToCheck, probeSel, false, false)
+						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, nToCheck, probeSel, false, false)
 					}
 					// {{end}}
 					// {{end}}
@@ -416,13 +406,9 @@ func (ht *hashTable) checkBuildForDistinct(
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of toCheck is returned by this function.
 func (ht *hashTable) check(
-	probeVecs []coldata.Vec,
-	probeKeyTypes []types.T,
-	buildKeyCols []uint32,
-	nToCheck uint64,
-	probeSel []int,
+	probeVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
 ) uint64 {
-	ht.checkCols(probeVecs, ht.vals.ColVecs(), probeKeyTypes, buildKeyCols, nToCheck, probeSel, nil /* buildSel */)
+	ht.checkCols(probeVecs, ht.vals.ColVecs(), buildKeyCols, nToCheck, probeSel, nil /* buildSel */)
 
 	nDiffers := uint64(0)
 	_CHECK_BODY(ht, nDiffers, true)
@@ -434,7 +420,7 @@ func (ht *hashTable) check(
 // in the probe table.
 func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
 	for i := range ht.keyCols {
-		ht.checkCol(vecs[i], vecs[i], &ht.keyTypes[i], &ht.keyTypes[i], i, nToCheck, sel, sel)
+		ht.checkCol(vecs[i], vecs[i], i, nToCheck, sel, sel)
 	}
 
 	nDiffers := uint64(0)
@@ -500,14 +486,12 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 // toCheck. If the bucket has reached the end, the key is rejected. The toCheck
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
-func (ht *hashTable) distinctCheck(
-	probeKeyTypes []types.T, nToCheck uint64, probeSel []int,
-) uint64 {
+func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	probeVecs := ht.probeScratch.keys
 	buildVecs := ht.vals.ColVecs()
 	buildKeyCols := ht.keyCols
 	var buildSel []int
-	ht.checkCols(probeVecs, buildVecs, probeKeyTypes, buildKeyCols, nToCheck, probeSel, buildSel)
+	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel, buildSel)
 
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)

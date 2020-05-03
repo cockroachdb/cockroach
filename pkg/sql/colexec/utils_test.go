@@ -24,8 +24,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -96,7 +95,7 @@ func (t tuple) less(other tuple) bool {
 			}
 		}
 
-		// coltypes.Bytes is represented as []uint8.
+		// types.Bytes is represented as []uint8.
 		if lhsVal.Type().String() == "[]uint8" {
 			lhsStr := string(lhsVal.Interface().([]uint8))
 			rhsStr := string(rhsVal.Interface().([]uint8))
@@ -554,7 +553,8 @@ func runTestsWithFixedSel(
 // setColVal is a test helper function to set the given value at the equivalent
 // col[idx]. This function is slow due to reflection.
 func setColVal(vec coldata.Vec, idx int, val interface{}) {
-	if vec.Type() == coltypes.Bytes {
+	canonicalTypeFamily := vec.CanonicalTypeFamily()
+	if canonicalTypeFamily == types.BytesFamily {
 		var (
 			bytesVal []byte
 			ok       bool
@@ -564,7 +564,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 			bytesVal = []byte(val.(string))
 		}
 		vec.Bytes().Set(idx, bytesVal)
-	} else if vec.Type() == coltypes.Decimal {
+	} else if canonicalTypeFamily == types.DecimalFamily {
 		// setColVal is used in multiple places, therefore val can be either a float
 		// or apd.Decimal.
 		if decimalVal, ok := val.(apd.Decimal); ok {
@@ -586,9 +586,9 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 	}
 }
 
-// opTestInput is an Operator that columnarizes test input in the form of tuples
-// of arbitrary Go coltypes. It's meant to be used in Operator unit tests in
-// conjunction with opTestOutput like the following:
+// opTestInput is an Operator that columnarizes test input in the form of
+// tuples of arbitrary Go types. It's meant to be used in Operator unit tests
+// in conjunction with opTestOutput like the following:
 //
 // inputTuples := tuples{
 //   {1,2,3.3,true},
@@ -661,10 +661,7 @@ func (s *opTestInput) Init() {
 			s.typs[i] = *types.Int
 			for _, tup := range s.tuples {
 				if tup[i] != nil {
-					t, err := typeconv.UnsafeToSQLType(coltypes.FromGoType(tup[i]))
-					if err != nil {
-						colexecerror.InternalError(err)
-					}
+					t := typeconv.UnsafeFromGoType(tup[i])
 					s.typs[i] = *t
 					break
 				}
@@ -735,7 +732,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 
 	// Reset nulls for all columns in this batch.
 	for _, colVec := range s.batch.ColVecs() {
-		if colVec.Type() != coltypes.Unhandled {
+		if colVec.CanonicalTypeFamily() != types.UnknownFamily {
 			colVec.Nulls().UnsetNulls()
 		}
 	}
@@ -744,7 +741,6 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
-		typ := vec.Type()
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
@@ -761,21 +757,22 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 					// NULL. For the other 50% of cases we leave the data unset which
 					// exercises other scenarios (like division by zero when the value is
 					// actually NULL).
-					if typ == coltypes.Decimal {
+					canonicalTypeFamily := vec.CanonicalTypeFamily()
+					if canonicalTypeFamily == types.DecimalFamily {
 						d := apd.Decimal{}
 						_, err := d.SetFloat64(rng.Float64())
 						if err != nil {
 							colexecerror.InternalError(fmt.Sprintf("%v", err))
 						}
 						col.Index(outputIdx).Set(reflect.ValueOf(d))
-					} else if typ == coltypes.Bytes {
+					} else if canonicalTypeFamily == types.BytesFamily {
 						newBytes := make([]byte, rng.Intn(16)+1)
 						rng.Read(newBytes)
 						setColVal(vec, outputIdx, newBytes)
 					} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
 						setColVal(vec, outputIdx, val.Interface())
 					} else {
-						colexecerror.InternalError(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
+						colexecerror.InternalError(fmt.Sprintf("could not generate a random value of type %s", vec.Type()))
 					}
 				}
 			} else {
@@ -829,10 +826,7 @@ func (s *opFixedSelTestInput) Init() {
 		s.typs[i] = *types.Int
 		for _, tup := range s.tuples {
 			if tup[i] != nil {
-				t, err := typeconv.UnsafeToSQLType(coltypes.FromGoType(tup[i]))
-				if err != nil {
-					colexecerror.InternalError(err)
-				}
+				t := typeconv.UnsafeFromGoType(tup[i])
 				s.typs[i] = *t
 				break
 			}
@@ -950,7 +944,7 @@ func getTupleFromBatch(batch coldata.Batch, tupleIdx int) tuple {
 			var val reflect.Value
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
 				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(tupleIdx)...))
-			} else if vec.Type() == coltypes.Decimal {
+			} else if vec.CanonicalTypeFamily() == types.DecimalFamily {
 				colDec := vec.Decimal()
 				var newDec apd.Decimal
 				newDec.Set(&colDec[tupleIdx])
@@ -1347,7 +1341,7 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 		lastIdx = c.len
 	}
 	for i, vec := range c.batch.ColVecs() {
-		vec.SetCol(c.cols[i].Window(typeconv.FromColumnType(&c.typs[i]), c.curIdx, lastIdx).Col())
+		vec.SetCol(c.cols[i].Window(c.curIdx, lastIdx).Col())
 		nullsSlice := c.cols[i].Nulls().Slice(c.curIdx, lastIdx)
 		vec.SetNulls(&nullsSlice)
 	}
@@ -1442,12 +1436,12 @@ func (tc *joinTestCase) mutateTypes() []*joinTestCase {
 					if tups[i][j] == nil {
 						continue
 					}
-					switch typeconv.FromColumnType(&typ) {
-					case coltypes.Decimal:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily[typ.Family()] {
+					case types.DecimalFamily:
 						var d apd.Decimal
 						_, _ = d.SetFloat64(float64(tups[i][j].(int)))
 						tups[i][j] = d
-					case coltypes.Bytes:
+					case types.BytesFamily:
 						tups[i][j] = fmt.Sprintf("%.10d", tups[i][j].(int))
 					}
 				}

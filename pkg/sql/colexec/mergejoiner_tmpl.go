@@ -602,11 +602,11 @@ EqLoop:
 				}
 			}
 			if castLeftToRight {
-				cast(leftType, rightType, lVec, tempVec, o.proberState.lBatch.Length(), lSel)
+				cast(lVec, tempVec, o.proberState.lBatch.Length(), lSel)
 				lVec = tempVec
 				colType = rightType
 			} else {
-				cast(rightType, leftType, rVec, tempVec, o.proberState.rBatch.Length(), rSel)
+				cast(rVec, tempVec, o.proberState.rBatch.Length(), rSel)
 				rVec = tempVec
 			}
 		}

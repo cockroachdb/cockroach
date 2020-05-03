@@ -27,9 +27,10 @@ func genHashUtils(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 2)
 	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.UnaryAssign", 2))
@@ -37,7 +38,7 @@ func genHashUtils(wr io.Writer) error {
 	rehash := makeFunctionRegex("_REHASH_BODY", 8)
 	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "HasSel" $7 "HasNulls" $8}}`)
 
-	s = replaceManipulationFuncs(".Global.LTyp", s)
+	s = replaceManipulationFuncsAmbiguous(".Global", s)
 
 	tmpl, err := template.New("hash_utils").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {

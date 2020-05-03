@@ -14,8 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -27,15 +26,14 @@ import (
 
 type defaultBuiltinFuncOperator struct {
 	OneInputNode
-	allocator      *colmem.Allocator
-	evalCtx        *tree.EvalContext
-	funcExpr       *tree.FuncExpr
-	columnTypes    []types.T
-	argumentCols   []int
-	outputIdx      int
-	outputType     *types.T
-	outputPhysType coltypes.T
-	converter      func(tree.Datum) (interface{}, error)
+	allocator    *colmem.Allocator
+	evalCtx      *tree.EvalContext
+	funcExpr     *tree.FuncExpr
+	columnTypes  []types.T
+	argumentCols []int
+	outputIdx    int
+	outputType   *types.T
+	converter    func(tree.Datum) (interface{}, error)
 
 	row tree.Datums
 	da  sqlbase.DatumAlloc
@@ -100,7 +98,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
-					coldata.SetValueAt(output, converted, rowIdx, b.outputPhysType)
+					coldata.SetValueAt(output, converted, rowIdx)
 				}
 			}
 		},
@@ -129,8 +127,7 @@ func NewBuiltinFunctionOperator(
 		), nil
 	default:
 		outputType := funcExpr.ResolvedType()
-		outputPhysType := typeconv.FromColumnType(outputType)
-		if outputPhysType == coltypes.Unhandled {
+		if !typeconv.IsTypeSupported(outputType) {
 			return nil, errors.Errorf(
 				"unsupported output type %q of %s",
 				outputType.String(), funcExpr.String(),
@@ -138,17 +135,16 @@ func NewBuiltinFunctionOperator(
 		}
 		input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
-			OneInputNode:   NewOneInputNode(input),
-			allocator:      allocator,
-			evalCtx:        evalCtx,
-			funcExpr:       funcExpr,
-			outputIdx:      outputIdx,
-			columnTypes:    columnTypes,
-			outputType:     outputType,
-			outputPhysType: outputPhysType,
-			converter:      getDatumToPhysicalFn(outputType),
-			row:            make(tree.Datums, len(argumentCols)),
-			argumentCols:   argumentCols,
+			OneInputNode: NewOneInputNode(input),
+			allocator:    allocator,
+			evalCtx:      evalCtx,
+			funcExpr:     funcExpr,
+			outputIdx:    outputIdx,
+			columnTypes:  columnTypes,
+			outputType:   outputType,
+			converter:    getDatumToPhysicalFn(outputType),
+			row:          make(tree.Datums, len(argumentCols)),
+			argumentCols: argumentCols,
 		}, nil
 	}
 }

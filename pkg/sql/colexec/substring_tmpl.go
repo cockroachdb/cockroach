@@ -21,10 +21,9 @@ package colexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -33,10 +32,12 @@ import (
 )
 
 // {{/*
-// Declarations to make the template compile properly.
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// _START_WIDTH is the template variable.
+const _START_WIDTH = 0
+
+// _LENGTH_WIDTH is the template variable.
+const _LENGTH_WIDTH = 0
 
 // */}}
 
@@ -55,25 +56,26 @@ func newSubstringOperator(
 		argumentCols: argumentCols,
 		outputIdx:    outputIdx,
 	}
-	switch typeconv.FromColumnType(startType) {
-	// {{range $startType, $lengthTypes := .}}
-	case _StartType_T:
-		switch typeconv.FromColumnType(lengthType) {
-		// {{range $lengthType := $lengthTypes}}
-		case _LengthType_T:
-			return &substring_StartType_LengthTypeOperator{base}
-		// {{end}}
-		default:
-			colexecerror.InternalError(errors.Errorf("unsupported length argument type %s", lengthType))
-			// This code is unreachable, but the compiler cannot infer that.
-			return nil
-		}
-	// {{end}}
-	default:
-		colexecerror.InternalError(errors.Errorf("unsupported start argument type %s", startType))
-		// This code is unreachable, but the compiler cannot infer that.
-		return nil
+	if startType.Family() != types.IntFamily {
+		colexecerror.InternalError(fmt.Sprintf("non-int start argument type %s", startType))
 	}
+	if lengthType.Family() != types.IntFamily {
+		colexecerror.InternalError(fmt.Sprintf("non-int length argument type %s", lengthType))
+	}
+	switch startType.Width() {
+	// {{range $startWidth, $lengthWidths := .}}
+	case _START_WIDTH:
+		switch lengthType.Width() {
+		// {{range $lengthWidth := $lengthWidths}}
+		case _LENGTH_WIDTH:
+			return &substring_StartType_LengthTypeOperator{base}
+			// {{end}}
+		}
+		// {{end}}
+	}
+	colexecerror.InternalError(errors.Errorf("unsupported substring argument types: %s %s", startType, lengthType))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 type substringFunctionBase struct {
@@ -87,8 +89,8 @@ func (s *substringFunctionBase) Init() {
 	s.input.Init()
 }
 
-// {{range $startType, $lengthTypes := .}}
-// {{range $lengthType := $lengthTypes}}
+// {{range $startWidth, $lengthWidths := .}}
+// {{range $lengthWidth := $lengthWidths}}
 
 type substring_StartType_LengthTypeOperator struct {
 	substringFunctionBase

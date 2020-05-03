@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -177,7 +176,6 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 				outputCol.Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:     typeconv.FromColumnType(c.typ),
 							Src:         inputCol,
 							Sel:         toSubtract,
 							SrcStartIdx: 0,
@@ -244,7 +242,6 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 			outputCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     typeconv.FromColumnType(c.typ),
 						Src:         inputCol,
 						Sel:         batch.Selection(),
 						SrcStartIdx: 0,

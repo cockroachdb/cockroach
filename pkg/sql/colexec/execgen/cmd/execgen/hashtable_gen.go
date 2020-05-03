@@ -54,9 +54,9 @@ func genHashTable(wr io.Writer) error {
 	s = checkColWithNulls.ReplaceAllString(s,
 		`{{template "checkColWithNulls" buildDict "Global" . "UseProbeSel" $7 "UseBuildSel" $8}}`)
 
-	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 8)
+	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 7)
 	s = checkColForDistinctWithNulls.ReplaceAllString(s,
-		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $7 "UseBuildSel" $8}}`)
+		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $6 "UseBuildSel" $7}}`)
 
 	checkBody := makeFunctionRegex("_CHECK_BODY", 3)
 	s = checkBody.ReplaceAllString(s,

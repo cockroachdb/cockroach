@@ -309,7 +309,7 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 // satisfies the desired schema. It needs to wrap the input to a "projecting"
 // operator that internally uses other "projecting" operators (for example,
 // caseOp and logical projection operators). This operator supports type
-// schemas with coltypes.Unhandled type in which case in the corresponding
+// schemas with unsupported types in which case in the corresponding
 // position an "unknown" vector can be appended.
 //
 // NOTE: the type schema passed into batchSchemaPrefixEnforcer *must* include
@@ -343,8 +343,8 @@ func (e *batchSchemaPrefixEnforcer) Next(ctx context.Context) coldata.Batch {
 	if b.Length() == 0 {
 		return b
 	}
-	for i, typ := range e.typs {
-		e.allocator.MaybeAppendColumn(b, &typ, i)
+	for i := range e.typs {
+		e.allocator.MaybeAppendColumn(b, &e.typs[i], i)
 	}
 	return b
 }

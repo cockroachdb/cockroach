@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -293,7 +292,6 @@ func TestOutboxInbox(t *testing.T) {
 						for i := range typs {
 							batchCopy.ColVec(i).Append(
 								coldata.SliceArgs{
-									ColType:   typeconv.FromColumnType(&typs[i]),
 									Src:       outputBatch.ColVec(i),
 									SrcEndIdx: outputBatch.Length(),
 								},
@@ -336,8 +334,8 @@ func TestOutboxInbox(t *testing.T) {
 				for i := range typs {
 					require.Equal(
 						t,
-						inputBatch.ColVec(i).Window(typeconv.FromColumnType(&typs[i]), 0, inputBatch.Length()),
-						outputBatch.ColVec(i).Window(typeconv.FromColumnType(&typs[i]), 0, outputBatch.Length()),
+						inputBatch.ColVec(i).Window(0, inputBatch.Length()),
+						outputBatch.ColVec(i).Window(0, outputBatch.Length()),
 						"batchNum: %d", batchNum,
 					)
 				}

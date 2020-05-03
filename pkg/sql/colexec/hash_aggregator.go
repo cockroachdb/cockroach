@@ -312,7 +312,6 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b c
 	for _, colIdx := range op.groupCols {
 		rehash(ctx,
 			hashBuffer,
-			&op.inputTypes[colIdx],
 			b.ColVec(int(colIdx)),
 			nKeys,
 			b.Selection(),

@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -24,18 +24,23 @@ import (
 )
 
 func columnByteSize(col coldata.Vec) int64 {
-	switch col.Type() {
-	case coltypes.Int64:
-		return int64(len(col.Int64()) * 8)
-	case coltypes.Int16:
-		return int64(len(col.Int16()) * 2)
-	case coltypes.Float64:
+	switch t := col.Type(); col.CanonicalTypeFamily() {
+	case types.IntFamily:
+		switch t.Width() {
+		case 0, 64:
+			return int64(len(col.Int64()) * 8)
+		case 16:
+			return int64(len(col.Int16()) * 2)
+		default:
+			panic(fmt.Sprintf("unexpected int width: %d", t.Width()))
+		}
+	case types.FloatFamily:
 		return int64(len(col.Float64()) * 8)
-	case coltypes.Bytes:
+	case types.BytesFamily:
 		// We subtract the overhead to be in line with Int64 and Float64 cases.
 		return int64(col.Bytes().Size() - coldata.FlatBytesOverhead)
 	default:
-		panic(fmt.Sprintf(`unhandled type %s`, col.Type().GoTypeName()))
+		panic(fmt.Sprintf(`unhandled type %s`, t))
 	}
 }
 

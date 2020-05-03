@@ -22,8 +22,7 @@ package colexec
 import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,8 +38,11 @@ var _ apd.Decimal
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // _ASSIGN_DIV_INT64 is the template division function for assigning the first
 // input to the result of the second input / the third input, where the third
@@ -58,17 +60,22 @@ func _ASSIGN_ADD(_, _, _ string) {
 // */}}
 
 func newAvgAgg(t *types.T) (aggregateFunc, error) {
-	switch typeconv.FromColumnType(t) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
-	case _TYPES_T:
-		return &avg_TYPEAgg{}, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported avg agg type %s", t)
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &avg_TYPEAgg{}, nil
+			// {{end}}
+		}
+		// {{end}}
 	}
+	return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
 }
 
 // {{range .}}
+// {{range .WidthOverloads}}
 
 type avg_TYPEAgg struct {
 	done bool
@@ -173,6 +180,7 @@ func (a *avg_TYPEAgg) HandleEmptyInputScalar() {
 	a.scratch.nulls.SetNull(0)
 }
 
+// {{end}}
 // {{end}}
 
 // {{/*

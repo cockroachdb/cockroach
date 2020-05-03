@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -97,13 +96,11 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	nSelected = batchEnd - op.outputBatchStart
 
 	op.allocator.PerformOperation(op.output.ColVecs(), func() {
-		for colIdx, typ := range op.ht.valTypes {
+		for colIdx, fromCol := range op.ht.vals.ColVecs() {
 			toCol := op.output.ColVec(colIdx)
-			fromCol := op.ht.vals.ColVec(colIdx)
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     typeconv.FromColumnType(&typ),
 						Src:         fromCol,
 						SrcStartIdx: op.outputBatchStart,
 						SrcEndIdx:   batchEnd,

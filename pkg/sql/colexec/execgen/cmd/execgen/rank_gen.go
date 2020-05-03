@@ -67,7 +67,7 @@ func genRankOps(wr io.Writer) error {
 
 	s := string(d)
 
-	s = strings.Replace(s, "_RANK_STRING", "{{.String}}", -1)
+	s = strings.ReplaceAll(s, "_RANK_STRING", "{{.String}}")
 
 	computeRankRe := makeFunctionRegex("_COMPUTE_RANK", 0)
 	s = computeRankRe.ReplaceAllString(s, `{{template "computeRank" buildDict "Global" . "HasPartition" .HasPartition}}`)

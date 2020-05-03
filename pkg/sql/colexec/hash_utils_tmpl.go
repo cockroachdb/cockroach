@@ -27,8 +27,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,11 +46,14 @@ var _ reflect.SliceHeader
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
-
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
+
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // _ASSIGN_HASH is the template equality function for assigning the first input
 // to the result of the hash value of the second input.
@@ -112,33 +113,36 @@ func _REHASH_BODY(
 func rehash(
 	ctx context.Context,
 	buckets []uint64,
-	t *types.T,
 	col coldata.Vec,
 	nKeys int,
 	sel []int,
 	cancelChecker CancelChecker,
 	decimalScratch decimalOverloadScratch,
 ) {
-	switch typeconv.FromColumnType(t) {
-	// {{range $hashType := .}}
-	case _TYPES_T:
-		keys, nulls := col.TemplateType(), col.Nulls()
-		if col.MaybeHasNulls() {
-			if sel != nil {
-				_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, true)
+	switch col.CanonicalTypeFamily() {
+	// {{range .}}
+	case _CANONICAL_TYPE_FAMILY:
+		switch col.Type().Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			keys, nulls := col.TemplateType(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, true)
+				} else {
+					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, true)
+				}
 			} else {
-				_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, true)
+				if sel != nil {
+					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, false)
+				} else {
+					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, false)
+				}
 			}
-		} else {
-			if sel != nil {
-				_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, false)
-			} else {
-				_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, false)
-			}
+			// {{end}}
 		}
-
-	// {{end}}
+		// {{end}}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", col.Type()))
 	}
 }

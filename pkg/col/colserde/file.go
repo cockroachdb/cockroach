@@ -298,9 +298,6 @@ func (d *FileDeserializer) init() error {
 		return errors.Errorf(`only arrow V1 is supported got %d`, footer.Version())
 	}
 
-	// TODO(yuzefovich): we used to populate types here from the schema. Do we
-	// actually need it?
-
 	var block arrowserde.Block
 	d.recordBatches = d.recordBatches[:0]
 	for blockIdx := 0; blockIdx < footer.RecordBatchesLength(); blockIdx++ {

@@ -94,7 +94,7 @@ func TestMaterializeTypes(t *testing.T) {
 
 	// TODO(andyk): Make sure to add more types here. Consider iterating over
 	// types.OidToTypes list and also using randomly generated EncDatums.
-	types := []types.T{
+	typs := []types.T{
 		*types.Bool,
 		*types.Int,
 		*types.Float,
@@ -116,7 +116,7 @@ func TestMaterializeTypes(t *testing.T) {
 		sqlbase.EncDatum{Datum: tree.NewDName("aloha")},
 		sqlbase.EncDatum{Datum: tree.NewDOid(59)},
 	}
-	input := execinfra.NewRepeatableRowSource(types, sqlbase.EncDatumRows{inputRow})
+	input := execinfra.NewRepeatableRowSource(typs, sqlbase.EncDatumRows{inputRow})
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -131,7 +131,7 @@ func TestMaterializeTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	outputToInputColIdx := make([]int, len(types))
+	outputToInputColIdx := make([]int, len(typs))
 	for i := range outputToInputColIdx {
 		outputToInputColIdx[i] = i
 	}
@@ -139,7 +139,7 @@ func TestMaterializeTypes(t *testing.T) {
 		flowCtx,
 		1, /* processorID */
 		c,
-		types,
+		typs,
 		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
