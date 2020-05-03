@@ -3,11 +3,11 @@
 statement ok
 SET optimizer_foreign_keys = true
 
-# Tests for the experimental opt-driven cascades.
-subtest OptDriven
-
 statement ok
 SET experimental_optimizer_foreign_key_cascades = true
+
+# Tests for the experimental opt-driven cascades.
+subtest OptDriven
 
 # Single delete cascade.
 statement ok
@@ -262,10 +262,6 @@ DELETE FROM self WHERE a = 1
 
 statement ok
 RESET foreign_key_cascades_limit
-
-# TODO(radu): enable when we support Cascades.
-statement ok
-SET experimental_optimizer_foreign_key_cascades = false
 
 statement ok
 DROP TABLE self
@@ -767,7 +763,7 @@ INSERT INTO c2 VALUES
 INSERT INTO d VALUES ('d-pk1-c2-pk4-b1-pk2', 'c2-pk4-b1-pk2');
 
 # ON DELETE CASCADE
-statement error pq: foreign key violation: values \['c2-pk4-b1-pk2'\] in columns \[id\] referenced in table "d"
+statement error delete on table "c2" violates foreign key constraint "fk_delete_restrict_ref_c2" on table "d"\nDETAIL: Key \(id\)=\('c2-pk4-b1-pk2'\) is still referenced from table "d"\.
 DELETE FROM a WHERE id = 'a-pk1';
 
 # Clean up after the test.
@@ -938,7 +934,7 @@ SELECT
 2 1 2 1 1 2
 
 # ON DELETE CASCADE
-statement error pq: foreign key violation: values \['pk1'\] in columns \[id\] referenced in table "c3"
+statement error delete on table "b2" violates foreign key constraint "fk_id_ref_b2" on table "c3"\nDETAIL: Key \(id\)=\('pk1'\) is still referenced from table "c3"\.
 DELETE FROM a WHERE id = 'pk1';
 
 # Clean up after the test.
