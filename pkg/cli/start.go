@@ -565,7 +565,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// Initialize the node's configuration from startup parameters.
 	// This also reads the part of the configuration that comes from
 	// environment variables.
-	if err := serverCfg.InitNode(); err != nil {
+	if err := serverCfg.InitNode(ctx); err != nil {
 		return errors.Wrap(err, "failed to initialize node")
 	}
 
