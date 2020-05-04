@@ -2546,6 +2546,30 @@ func (desc *TableDescriptor) FindColumnByName(name tree.Name) (*ColumnDescriptor
 	return nil, false, NewUndefinedColumnError(string(name))
 }
 
+// FindActiveOrNewColumnByName finds the column with the specified name.
+// It returns either an active column or a column that was added in the
+// same transaction that is currently running.
+func (desc *MutableTableDescriptor) FindActiveOrNewColumnByName(
+	name tree.Name,
+) (*ColumnDescriptor, error) {
+	for i := range desc.Columns {
+		c := &desc.Columns[i]
+		if c.Name == string(name) {
+			return c, nil
+		}
+	}
+	currentMutationID := desc.ClusterVersion.NextMutationID
+	for i := range desc.Mutations {
+		mut := &desc.Mutations[i]
+		if col := mut.GetColumn(); col != nil &&
+			mut.MutationID == currentMutationID &&
+			mut.Direction == DescriptorMutation_ADD {
+			return col, nil
+		}
+	}
+	return nil, NewUndefinedColumnError(string(name))
+}
+
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
 // column.
 func (desc *TableDescriptor) ColumnIdxMap() map[ColumnID]int {

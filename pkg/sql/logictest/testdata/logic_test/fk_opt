@@ -2769,12 +2769,6 @@ BEGIN; ALTER TABLE parentid ADD id INT NOT NULL AS (k + 2) STORED; ALTER TABLE c
 statement ok
 ROLLBACK;
 
-statement error adding a REFERENCES constraint while the column is being added not supported
-BEGIN; ALTER TABLE childid ADD id2 INT UNIQUE NOT NULL DEFAULT 0; ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id2) REFERENCES parentid (k);
-
-statement ok
-ROLLBACK;
-
 subtest dont_check_nulls
 # Make sure that nulls are never checked while executing FK constraints.
 

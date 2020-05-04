@@ -141,10 +141,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
-			if d.HasFKConstraint() {
-				return unimplemented.NewWithIssue(32917,
-					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
-			}
 			version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
 			toType, err := tree.ResolveType(d.Type, params.p.semaCtx.GetTypeResolver())
 			if err != nil {
@@ -322,12 +318,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
-					col, err := n.tableDesc.FindActiveColumnByName(string(colName))
+					col, err := n.tableDesc.FindActiveOrNewColumnByName(colName)
 					if err != nil {
-						if _, dropped, inactiveErr := n.tableDesc.FindColumnByName(colName); inactiveErr == nil && !dropped {
-							return unimplemented.NewWithIssue(32917,
-								"adding a REFERENCES constraint while the column is being added not supported")
-						}
 						return err
 					}
 

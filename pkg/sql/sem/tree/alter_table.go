@@ -160,6 +160,26 @@ func (node *AlterTable) HoistAddColumnConstraints() {
 				)
 			}
 			d.CheckExprs = nil
+			if d.HasFKConstraint() {
+				var targetCol NameList
+				if d.References.Col != "" {
+					targetCol = append(targetCol, d.References.Col)
+				}
+				fk := &ForeignKeyConstraintTableDef{
+					Table:    *d.References.Table,
+					FromCols: NameList{d.Name},
+					ToCols:   targetCol,
+					Name:     d.References.ConstraintName,
+					Actions:  d.References.Actions,
+					Match:    d.References.Match,
+				}
+				constraint := &AlterTableAddConstraint{
+					ConstraintDef:      fk,
+					ValidationBehavior: ValidationDefault,
+				}
+				normalizedCmds = append(normalizedCmds, constraint)
+				d.References.Table = nil
+			}
 		}
 	}
 	node.Cmds = normalizedCmds
