@@ -159,13 +159,13 @@ func TestIndexSkipTableReader(t *testing.T) {
 		10,
 		sqlutils.ToRowFn(xFnt7, nullt7, nullt7))
 
-	td1 := sqlbase.GetTableDescriptor(kvDB, "test", "t1")
-	td2 := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
-	td3 := sqlbase.GetTableDescriptor(kvDB, "test", "t3")
-	td4 := sqlbase.GetTableDescriptor(kvDB, "test", "t4")
-	td5 := sqlbase.GetTableDescriptor(kvDB, "test", "t5")
-	td6 := sqlbase.GetTableDescriptor(kvDB, "test", "t6")
-	td7 := sqlbase.GetTableDescriptor(kvDB, "test", "t7")
+	td1 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t1")
+	td2 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	td3 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
+	td4 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t4")
+	td5 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t5")
+	td6 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t6")
+	td7 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t7")
 
 	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
@@ -490,7 +490,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	}
 
 	kvDB := tc.Server(0).DB()
-	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	td := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	st := tc.Server(0).ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -600,7 +600,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				expectedCount++
 			}
 
-			tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+			tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 
 			runner := func(reader execinfra.RowSource, b *testing.B) {
 				reader.Start(ctx)

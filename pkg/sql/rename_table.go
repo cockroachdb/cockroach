@@ -115,9 +115,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.ParentID = targetDbDesc.ID
 
 	newTbKey := sqlbase.MakePublicTableNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.ID, newTn.Table()).Key()
+		targetDbDesc.ID, newTn.Table()).Key(p.ExecCfg().Codec)
 
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
 	}
 
@@ -143,13 +143,13 @@ func (n *renameTableNode) startExec(params runParams) error {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
 	err = writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.EvalContext().Settings, b, descID, tableDesc.TableDesc())
+		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc.TableDesc())
 	if err != nil {
 		return err
 	}
 
 	exists, _, err := sqlbase.LookupPublicTableID(
-		params.ctx, params.p.txn, targetDbDesc.ID, newTn.Table(),
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.ID, newTn.Table(),
 	)
 	if err == nil && exists {
 		return sqlbase.NewRelationAlreadyExistsError(newTn.Table())
@@ -170,7 +170,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 func (p *planner) dependentViewRenameError(
 	ctx context.Context, typeName, objName string, parentID, viewID sqlbase.ID,
 ) error {
-	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, viewID)
+	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, viewID)
 	if err != nil {
 		return err
 	}

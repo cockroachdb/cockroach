@@ -545,7 +545,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	ts := s.(*TestServer)
 	ctx := context.TODO()
 
-	key := sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
+	key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 	valAt := func(i int) *sqlbase.DatabaseDescriptor {
 		return &sqlbase.DatabaseDescriptor{Name: "foo", ID: sqlbase.ID(i)}
 	}

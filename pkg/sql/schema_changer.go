@@ -353,8 +353,9 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 		func(txn *kv.Txn) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
-				err := sqlbase.RemoveObjectNamespaceEntry(ctx, txn, drain.ParentID, drain.ParentSchemaID,
-					drain.Name, false /* KVTrace */)
+				err := sqlbase.RemoveObjectNamespaceEntry(
+					ctx, txn, sc.execCfg.Codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
+				)
 				if err != nil {
 					return err
 				}
@@ -573,7 +574,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -726,7 +727,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 		interleaveParents = make(map[sqlbase.ID]struct{})
 
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -993,7 +994,7 @@ func (sc *SchemaChanger) notFirstInLine(
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		notFirst = false
 		var err error
-		desc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		desc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -1053,7 +1054,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 		var err error
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -1164,7 +1165,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// Read the table descriptor from the store. The Version of the
 		// descriptor has already been incremented in the transaction and
 		// this descriptor can be modified without incrementing the version.
-		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		if err != nil {
 			return err
 		}

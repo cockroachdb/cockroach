@@ -53,9 +53,9 @@ func TestGetAllNamesInternal(t *testing.T) {
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
-		batch.Put(sqlbase.NewTableKey(999, 444, "bob").Key(), 9999)
-		batch.Put(sqlbase.NewDeprecatedTableKey(1000, "alice").Key(), 10000)
-		batch.Put(sqlbase.NewDeprecatedTableKey(999, "overwrite_me_old_value").Key(), 9999)
+		batch.Put(sqlbase.NewTableKey(999, 444, "bob").Key(keys.SystemSQLCodec), 9999)
+		batch.Put(sqlbase.NewDeprecatedTableKey(1000, "alice").Key(keys.SystemSQLCodec), 10000)
+		batch.Put(sqlbase.NewDeprecatedTableKey(999, "overwrite_me_old_value").Key(keys.SystemSQLCodec), 9999)
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)
@@ -180,7 +180,7 @@ CREATE TABLE t.test (k INT);
 	// We now want to create a pre-2.1 table descriptor with an
 	// old-style bit column. We're going to edit the table descriptor
 	// manually, without going through SQL.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].Name == "k" {
 			tableDesc.Columns[i].Type.InternalType.VisibleType = 4 // Pre-2.1 BIT.
@@ -216,7 +216,7 @@ CREATE TABLE t.test (k INT);
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 	}
 
 	// And verify that this has re-set the fields.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	found := false
 	for i := range tableDesc.Columns {
 		col := &tableDesc.Columns[i]

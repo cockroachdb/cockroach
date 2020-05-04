@@ -161,7 +161,7 @@ type FetcherTableArgs struct {
 //      // Process res.row
 //   }
 type Fetcher struct {
-	// codec is used to encode and decode SQL keys.
+	// codec is used to encode and decode sql keys.
 	codec keys.SQLCodec
 
 	// tables is a slice of all the tables and their descriptors for which

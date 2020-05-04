@@ -2400,7 +2400,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table *TableDescriptor
 			if zs.Database != "" {
-				database, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, sqlbase.ID(id))
+				database, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
 				if err != nil {
 					return err
 				}
@@ -2408,7 +2408,7 @@ CREATE TABLE crdb_internal.zones (
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				table, err = sqlbase.GetTableDescFromID(ctx, p.txn, sqlbase.ID(id))
+				table, err = sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
 				if err != nil {
 					return err
 				}

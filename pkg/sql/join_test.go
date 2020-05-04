@@ -22,7 +22,7 @@ import (
 )
 
 func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
-	desc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+	desc := sqlbase.GetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
 	p := planner{}
 	scan := p.Scan()

@@ -95,10 +95,12 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	require.NoError(
 		t,
 		kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			execCfg := s.ExecutorConfig().(ExecutorConfig)
 			err = cleanupSchemaObjects(
 				ctx,
-				s.ExecutorConfig().(ExecutorConfig).Settings,
+				execCfg.Settings,
 				txn,
+				execCfg.Codec,
 				s.InternalExecutor().(*InternalExecutor),
 				namesToID["defaultdb"],
 				schemaName,
