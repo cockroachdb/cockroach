@@ -87,7 +87,7 @@ func updateStatusForGCElements(
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
 
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+		table, err := sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, tableID)
 		if err != nil {
 			return err
 		}

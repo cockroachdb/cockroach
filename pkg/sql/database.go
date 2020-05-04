@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -42,13 +43,17 @@ type databaseCache struct {
 	// databases is really a map of string -> sqlbase.ID
 	databases sync.Map
 
+	// codec is used to encode and decode sql keys.
+	codec keys.SQLCodec
+
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
 	systemConfig *config.SystemConfig
 }
 
-func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
+func newDatabaseCache(codec keys.SQLCodec, cfg *config.SystemConfig) *databaseCache {
 	return &databaseCache{
+		codec:        codec,
 		systemConfig: cfg,
 	}
 }
@@ -75,12 +80,12 @@ func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 // getDatabaseID resolves a database name into a database ID.
 // Returns InvalidID on failure.
 func getDatabaseID(
-	ctx context.Context, txn *kv.Txn, name string, required bool,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string, required bool,
 ) (sqlbase.ID, error) {
 	if name == sqlbase.SystemDB.Name {
 		return sqlbase.SystemDB.ID, nil
 	}
-	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, name)
+	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {
 		return sqlbase.InvalidID, err
 	}
@@ -94,10 +99,10 @@ func getDatabaseID(
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func getDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc := &sqlbase.DatabaseDescriptor{}
-	if err := getDescriptorByID(ctx, txn, id, desc); err != nil {
+	if err := getDescriptorByID(ctx, txn, codec, id, desc); err != nil {
 		return nil, err
 	}
 	return desc, nil
@@ -106,9 +111,9 @@ func getDatabaseDescByID(
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := getDatabaseDescByID(ctx, txn, id)
+	desc, err := getDatabaseDescByID(ctx, txn, codec, id)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +147,7 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 		return &sysDB, nil
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(id)
+	descKey := sqlbase.MakeDescMetadataKey(dc.codec, id)
 	descVal := dc.systemConfig.GetValue(descKey)
 	if descVal == nil {
 		return nil, nil
@@ -188,7 +193,7 @@ func (dc *databaseCache) getDatabaseDesc(
 				return err
 			}
 			a := UncachedPhysicalAccessor{}
-			desc, err = a.GetDatabaseDesc(ctx, txn, name,
+			desc, err = a.GetDatabaseDesc(ctx, txn, dc.codec, name,
 				tree.DatabaseLookupFlags{Required: required})
 			return err
 		}); err != nil {
@@ -211,7 +216,7 @@ func (dc *databaseCache) getDatabaseDescByID(
 		if err != nil {
 			log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
 		}
-		desc, err = MustGetDatabaseDescByID(ctx, txn, id)
+		desc, err = MustGetDatabaseDescByID(ctx, txn, dc.codec, id)
 	}
 	return desc, err
 }
@@ -240,7 +245,7 @@ func (dc *databaseCache) getDatabaseID(
 				return err
 			}
 			var err error
-			dbID, err = getDatabaseID(ctx, txn, name, required)
+			dbID, err = getDatabaseID(ctx, txn, dc.codec, name, required)
 			return err
 		}); err != nil {
 			return sqlbase.InvalidID, err
@@ -264,12 +269,12 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 	}
 
 	var nameKey sqlbase.DescriptorKey = sqlbase.NewDatabaseKey(name)
-	nameVal := dc.systemConfig.GetValue(nameKey.Key())
+	nameVal := dc.systemConfig.GetValue(nameKey.Key(dc.codec))
 	if nameVal == nil {
 		// Try the deprecated system.namespace before returning InvalidID.
 		// TODO(solon): This can be removed in 20.2.
 		nameKey = sqlbase.NewDeprecatedDatabaseKey(name)
-		nameVal = dc.systemConfig.GetValue(nameKey.Key())
+		nameVal = dc.systemConfig.GetValue(nameKey.Key(dc.codec))
 		if nameVal == nil {
 			return sqlbase.InvalidID, nil
 		}
@@ -289,17 +294,17 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, newName); err == nil && exists {
+	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, newName); err == nil && exists {
 		return pgerror.Newf(pgcode.DuplicateDatabase,
 			"the new database name %q already exists", newName)
 	} else if err != nil {
 		return err
 	}
 
-	newKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key()
+	newKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key(p.ExecCfg().Codec)
 
 	descID := oldDesc.GetID()
-	descKey := sqlbase.MakeDescMetadataKey(descID)
+	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
 	descDesc := sqlbase.WrapDescriptor(oldDesc)
 
 	b := &kv.Batch{}
@@ -310,7 +315,7 @@ func (p *planner) renameDatabase(
 	b.CPut(newKey, descID, nil)
 	b.Put(descKey, descDesc)
 	err := sqlbase.RemoveDatabaseNamespaceEntry(
-		ctx, p.txn, oldName, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		ctx, p.txn, p.ExecCfg().Codec, oldName, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return err

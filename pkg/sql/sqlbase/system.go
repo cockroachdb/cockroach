@@ -1457,13 +1457,15 @@ var (
 )
 
 // Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(keyID int, zoneConfig *zonepb.ZoneConfig) roachpb.KeyValue {
+func createZoneConfigKV(
+	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
+) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(zoneConfig); err != nil {
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
-		Key:   keys.TODOSQLCodec.ZoneKey(uint32(keyID)),
+		Key:   codec.ZoneKey(uint32(keyID)),
 		Value: value,
 	}
 }
@@ -1529,7 +1531,8 @@ func addSystemDatabaseToSchema(
 	// and also created as a migration for older cluster. The includedInBootstrap
 	// field should be set on the migration.
 
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, defaultZoneConfig))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.RootNamespaceID, target.codec, defaultZoneConfig))
 
 	systemZoneConf := defaultSystemZoneConfig
 	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
@@ -1537,7 +1540,8 @@ func addSystemDatabaseToSchema(
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, metaRangeZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.MetaRangesID, target.codec, metaRangeZoneConf))
 
 	// Some reporting tables have shorter GC times.
 	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
@@ -1549,13 +1553,16 @@ func addSystemDatabaseToSchema(
 
 	// Liveness zone config entry with a shorter GC time.
 	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, livenessZoneConf))
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, systemZoneConf))
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemDatabaseID, systemZoneConf))
 	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, replicationConstraintStatsZoneConf))
+		createZoneConfigKV(keys.LivenessRangesID, target.codec, livenessZoneConf))
 	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.ReplicationStatsTableID, replicationStatsZoneConf))
+		createZoneConfigKV(keys.SystemRangesID, target.codec, systemZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.SystemDatabaseID, target.codec, systemZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.ReplicationStatsTableID, target.codec, replicationStatsZoneConf))
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.

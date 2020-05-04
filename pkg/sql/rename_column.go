@@ -71,7 +71,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
 	}
 

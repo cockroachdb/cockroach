@@ -586,7 +586,9 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 func ExpectedInitialRangeCount(
 	db *kv.DB, defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (int, error) {
-	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db, defaultZoneConfig, defaultSystemZoneConfig)
+	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(
+		context.Background(), db, keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig,
+	)
 	if err != nil {
 		return 0, err
 	}

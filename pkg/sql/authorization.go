@@ -222,7 +222,8 @@ func (p *planner) MemberOfWithAdminOption(
 	roleMembersCache := p.execCfg.RoleMemberCache
 
 	// Lookup table version.
-	objDesc, err := p.PhysicalSchemaAccessor().GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings, &roleMembersTableName,
+	objDesc, err := p.PhysicalSchemaAccessor().GetObjectDesc(
+		ctx, p.txn, p.ExecCfg().Settings, p.ExecCfg().Codec, &roleMembersTableName,
 		p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
 	if err != nil {
 		return nil, err

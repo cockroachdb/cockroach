@@ -322,7 +322,7 @@ func (e virtualDefEntry) getPlanInfo(
 		var dbDesc *DatabaseDescriptor
 		if dbName != "" {
 			var err error
-			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn,
+			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec,
 				dbName, tree.DatabaseLookupFlags{Required: true, AvoidCached: p.avoidCachedDescriptors})
 			if err != nil {
 				return nil, err

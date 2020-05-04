@@ -224,7 +224,7 @@ func allocateTableRewrites(
 		maxExpectedDB := keys.MinUserDescID + sql.MaxDefaultDescriptorID
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			found, foundID, err := sqlbase.LookupDatabaseID(ctx, txn, name)
+			found, foundID, err := sqlbase.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, name)
 			if err != nil {
 				return err
 			}
@@ -242,11 +242,11 @@ func allocateTableRewrites(
 			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < sql.MaxDefaultDescriptorID {
 				// This is a table that is in a database that already existed at
 				// cluster creation time.
-				defaultDBID, err := lookupDatabaseID(ctx, txn, sessiondata.DefaultDatabaseName)
+				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sessiondata.DefaultDatabaseName)
 				if err != nil {
 					return err
 				}
-				postgresDBID, err := lookupDatabaseID(ctx, txn, sessiondata.PgDatabaseName)
+				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sessiondata.PgDatabaseName)
 				if err != nil {
 					return err
 				}
@@ -281,7 +281,7 @@ func allocateTableRewrites(
 			} else {
 				var parentID sqlbase.ID
 				{
-					found, newParentID, err := sqlbase.LookupDatabaseID(ctx, txn, targetDB)
+					found, newParentID, err := sqlbase.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, targetDB)
 					if err != nil {
 						return err
 					}
@@ -293,13 +293,13 @@ func allocateTableRewrites(
 				}
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
-				if err := CheckTableExists(ctx, txn, parentID, table.Name); err != nil {
+				if err := CheckTableExists(ctx, txn, p.ExecCfg().Codec, parentID, table.Name); err != nil {
 					return err
 				}
 
 				// Check privileges.
 				{
-					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
+					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, p.ExecCfg().Codec, parentID)
 					if err != nil {
 						return errors.Wrapf(err,
 							"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -390,7 +390,10 @@ func allocateTableRewrites(
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeTableDescsInBackupManifests(
-	ctx context.Context, backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
+	ctx context.Context,
+	backupManifests []BackupManifest,
+	codec keys.SQLCodec,
+	skipFKsWithNoMatchingTable bool,
 ) error {
 	protoGetter := sqlbase.MapProtoGetter{
 		Protos: make(map[interface{}]protoutil.Message),
@@ -400,7 +403,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
 			if table := desc.Table(hlc.Timestamp{}); table != nil {
-				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(table.ID))] =
+				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(codec, table.ID))] =
 					sqlbase.WrapDescriptor(protoutil.Clone(table).(*sqlbase.TableDescriptor))
 			}
 		}
@@ -410,7 +413,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 		backupManifest := &backupManifests[i]
 		for j := range backupManifest.Descriptors {
 			if table := backupManifest.Descriptors[j].Table(hlc.Timestamp{}); table != nil {
-				if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, skipFKsWithNoMatchingTable); err != nil {
+				if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, codec, skipFKsWithNoMatchingTable); err != nil {
 					return err
 				}
 				// TODO(lucy): Is this necessary?
@@ -713,7 +716,7 @@ func doRestorePlan(
 
 	// Ensure that no user table descriptors exist for a full cluster restore.
 	txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
-	descCount, err := sql.CountUserDescriptors(ctx, txn)
+	descCount, err := sql.CountUserDescriptors(ctx, txn, p.ExecCfg().Codec)
 	if err != nil {
 		return errors.Wrap(err, "looking up user descriptors during restore")
 	}
@@ -725,7 +728,7 @@ func doRestorePlan(
 	}
 
 	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
-	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, skipMissingFKs); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, p.ExecCfg().Codec, skipMissingFKs); err != nil {
 		return err
 	}
 

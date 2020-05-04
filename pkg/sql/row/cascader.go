@@ -954,13 +954,19 @@ func (c *cascader) updateRows(
 									return nil, nil, nil, 0, err
 								}
 								if !column.Nullable {
-									database, err := sqlbase.GetDatabaseDescFromID(ctx, c.txn, referencingTable.ParentID)
+									database, err := sqlbase.GetDatabaseDescFromID(
+										ctx,
+										c.txn,
+										c.evalCtx.Codec,
+										referencingTable.ParentID,
+									)
 									if err != nil {
 										return nil, nil, nil, 0, err
 									}
 									schema, err := schema.ResolveNameByID(
 										ctx,
 										c.txn,
+										c.evalCtx.Codec,
 										referencingTable.ParentID,
 										referencingTable.GetParentSchemaID(),
 									)

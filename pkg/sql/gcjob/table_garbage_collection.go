@@ -45,7 +45,7 @@ func gcTables(
 		var table *sqlbase.TableDescriptor
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
-			table, err = sqlbase.GetTableDescFromID(ctx, txn, droppedTable.ID)
+			table, err = sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, droppedTable.ID)
 			return err
 		}); err != nil {
 			return false, errors.Wrapf(err, "fetching table %d", droppedTable.ID)
@@ -62,7 +62,7 @@ func gcTables(
 		}
 
 		// Finished deleting all the table data, now delete the table meta data.
-		if err := dropTableDesc(ctx, execCfg.DB, table); err != nil {
+		if err := dropTableDesc(ctx, execCfg.DB, execCfg.Codec, table); err != nil {
 			return false, errors.Wrapf(err, "dropping table descriptor for table %d", table.ID)
 		}
 

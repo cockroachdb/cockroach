@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -140,8 +141,10 @@ func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicasTrigger) {
 		// There is a node of older version which could be the coordinator.
 		// So we communicate the finished work by writing to the jobs row.
-		err = WriteResumeSpan(ctx,
+		err = WriteResumeSpan(
+			ctx,
 			b.flowCtx.Cfg.DB,
+			b.flowCtx.Codec(),
 			b.spec.Table.ID,
 			b.spec.Table.Mutations[0].MutationID,
 			b.filter,
@@ -237,11 +240,12 @@ func GetResumeSpans(
 	ctx context.Context,
 	jobsRegistry *jobs.Registry,
 	txn *kv.Txn,
+	codec keys.SQLCodec,
 	tableID sqlbase.ID,
 	mutationID sqlbase.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
-	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, codec, tableID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -317,6 +321,7 @@ func SetResumeSpansInJob(
 func WriteResumeSpan(
 	ctx context.Context,
 	db *kv.DB,
+	codec keys.SQLCodec,
 	id sqlbase.ID,
 	mutationID sqlbase.MutationID,
 	filter backfill.MutationFilter,
@@ -327,7 +332,9 @@ func WriteResumeSpan(
 	defer tracing.FinishSpan(traceSpan)
 
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resumeSpans, job, mutationIdx, error := GetResumeSpans(ctx, jobsRegistry, txn, id, mutationID, filter)
+		resumeSpans, job, mutationIdx, error := GetResumeSpans(
+			ctx, jobsRegistry, txn, codec, id, mutationID, filter,
+		)
 		if error != nil {
 			return error
 		}

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,8 +62,8 @@ func TestIndexJoiner(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
-	tdf := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
+	td := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tdf := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {

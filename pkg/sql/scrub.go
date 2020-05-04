@@ -164,7 +164,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	var tbNames TableNames
 	for _, schema := range schemas {
-		toAppend, err := GetObjectNames(ctx, p.txn, p, dbDesc, schema, true /*explicitPrefix*/)
+		toAppend, err := GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true /*explicitPrefix*/)
 		if err != nil {
 			return err
 		}
@@ -174,7 +174,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 	for i := range tbNames {
 		tableName := &tbNames[i]
 		objDesc, err := p.LogicalSchemaAccessor().GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings,
-			tableName, p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
+			p.ExecCfg().Codec, tableName, p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
 		if err != nil {
 			return err
 		}
@@ -410,7 +410,7 @@ func createConstraintCheckOperations(
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
-	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn)
+	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn, p.ExecCfg().Codec)
 	if err != nil {
 		return nil, err
 	}

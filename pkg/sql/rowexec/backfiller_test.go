@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -71,11 +72,11 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	registry := server.JobRegistry().(*jobs.Registry)
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	if err := kvDB.Put(
 		ctx,
-		sqlbase.MakeDescMetadataKey(tableDesc.ID),
+		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
 		sqlbase.WrapDescriptor(tableDesc),
 	); err != nil {
 		t.Fatal(err)
@@ -142,7 +143,7 @@ func TestWriteResumeSpan(t *testing.T) {
 			finished.EndKey = test.resume.Key
 		}
 		if err := rowexec.WriteResumeSpan(
-			ctx, kvDB, tableDesc.ID, mutationID, backfill.IndexMutationFilter, roachpb.Spans{finished}, registry,
+			ctx, kvDB, keys.SystemSQLCodec, tableDesc.ID, mutationID, backfill.IndexMutationFilter, roachpb.Spans{finished}, registry,
 		); err != nil {
 			t.Error(err)
 		}
@@ -174,7 +175,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		got, _, _, err = rowexec.GetResumeSpans(
-			ctx, registry, txn, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
+			ctx, registry, txn, keys.SystemSQLCodec, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
 		return err
 	}); err != nil {
 		t.Error(err)

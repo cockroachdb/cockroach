@@ -635,7 +635,7 @@ func (m *pgDumpReader) readFile(
 			if seq == nil {
 				break
 			}
-			key, val, err := sql.MakeSequenceKeyVal(seq.Desc, val, isCalled)
+			key, val, err := sql.MakeSequenceKeyVal(keys.TODOSQLCodec, seq.Desc, val, isCalled)
 			if err != nil {
 				return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 			}

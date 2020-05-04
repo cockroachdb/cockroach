@@ -82,7 +82,7 @@ func (p *planner) createDatabase(
 		shouldCreatePublicSchema = false
 	}
 
-	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, desc.Name); err == nil && exists {
+	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, desc.Name); err == nil && exists {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -97,7 +97,7 @@ func (p *planner) createDatabase(
 		return false, err
 	}
 
-	if err := p.createDescriptorWithID(ctx, dKey.Key(), id, desc, nil, jobDesc); err != nil {
+	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return true, err
 	}
 
@@ -105,7 +105,7 @@ func (p *planner) createDatabase(
 	// be created in every database in >= 20.2.
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
-		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(), keys.PublicSchemaID); err != nil {
+		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
 			return true, err
 		}
 	}
@@ -138,7 +138,15 @@ func (p *planner) createDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 	b.CPut(idKey, descID, nil)
-	if err := WriteNewDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), st, b, descID, descriptor); err != nil {
+	if err := WriteNewDescToBatch(
+		ctx,
+		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		st,
+		b,
+		p.ExecCfg().Codec,
+		descID,
+		descriptor,
+	); err != nil {
 		return err
 	}
 
@@ -171,9 +179,9 @@ func (p *planner) createDescriptorWithID(
 // getDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
 func getDescriptorID(
-	ctx context.Context, txn *kv.Txn, plainKey sqlbase.DescriptorKey,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey sqlbase.DescriptorKey,
 ) (sqlbase.ID, error) {
-	key := plainKey.Key()
+	key := plainKey.Key(codec)
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", key)
 	gr, err := txn.Get(ctx, key)
 	if err != nil {
@@ -187,7 +195,7 @@ func getDescriptorID(
 
 // resolveSchemaID resolves a schema's ID based on db and name.
 func resolveSchemaID(
-	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, scName string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
 	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
 	// checking for public schema.
@@ -196,7 +204,7 @@ func resolveSchemaID(
 	}
 
 	sKey := sqlbase.NewSchemaKey(dbID, scName)
-	schemaID, err := getDescriptorID(ctx, txn, sKey)
+	schemaID, err := getDescriptorID(ctx, txn, codec, sKey)
 	if err != nil || schemaID == sqlbase.InvalidID {
 		return false, sqlbase.InvalidID, err
 	}
@@ -209,15 +217,15 @@ func resolveSchemaID(
 // Returns the descriptor (if found), a bool representing whether the
 // descriptor was found and an error if any.
 func lookupDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (sqlbase.DescriptorProto, bool, error) {
 	var desc sqlbase.DescriptorProto
 	for _, lookupFn := range []func() (sqlbase.DescriptorProto, error){
 		func() (sqlbase.DescriptorProto, error) {
-			return sqlbase.GetTableDescFromID(ctx, txn, id)
+			return sqlbase.GetTableDescFromID(ctx, txn, codec, id)
 		},
 		func() (sqlbase.DescriptorProto, error) {
-			return sqlbase.GetDatabaseDescFromID(ctx, txn, id)
+			return sqlbase.GetDatabaseDescFromID(ctx, txn, codec, id)
 		},
 	} {
 		var err error
@@ -239,10 +247,14 @@ func lookupDescriptorByID(
 // In most cases you'll want to use wrappers: `getDatabaseDescByID` or
 // `getTableDescByID`.
 func getDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	id sqlbase.ID,
+	descriptor sqlbase.DescriptorProto,
 ) error {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
-	descKey := sqlbase.MakeDescMetadataKey(id)
+	descKey := sqlbase.MakeDescMetadataKey(codec, id)
 	desc := &sqlbase.Descriptor{}
 	ts, err := txn.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
@@ -255,11 +267,11 @@ func getDescriptorByID(
 			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a table", desc.String())
 		}
-		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return err
 		}
 
-		if err := table.Validate(ctx, txn); err != nil {
+		if err := table.Validate(ctx, txn, codec); err != nil {
 			return err
 		}
 		*t = *table
@@ -286,8 +298,8 @@ func IsDefaultCreatedDescriptor(descID sqlbase.ID) bool {
 
 // CountUserDescriptors returns the number of descriptors present that were
 // created by the user (i.e. not present when the cluster started).
-func CountUserDescriptors(ctx context.Context, txn *kv.Txn) (int, error) {
-	allDescs, err := GetAllDescriptors(ctx, txn)
+func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
+	allDescs, err := GetAllDescriptors(ctx, txn, codec)
 	if err != nil {
 		return 0, err
 	}
@@ -303,9 +315,11 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn) (int, error) {
 }
 
 // GetAllDescriptors looks up and returns all available descriptors.
-func GetAllDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.DescriptorProto, error) {
+func GetAllDescriptors(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) ([]sqlbase.DescriptorProto, error) {
 	log.Eventf(ctx, "fetching all descriptors")
-	descsKey := sqlbase.MakeAllDescsMetadataKey()
+	descsKey := sqlbase.MakeAllDescsMetadataKey(codec)
 	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -320,7 +334,7 @@ func GetAllDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.DescriptorPr
 		switch t := desc.Union.(type) {
 		case *sqlbase.Descriptor_Table:
 			table := desc.Table(kv.Value.Timestamp)
-			if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+			if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 				return nil, err
 			}
 			descs = append(descs, table)
@@ -335,9 +349,11 @@ func GetAllDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.DescriptorPr
 
 // GetAllDatabaseDescriptorIDs looks up and returns all available database
 // descriptor IDs.
-func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *kv.Txn) ([]sqlbase.ID, error) {
+func GetAllDatabaseDescriptorIDs(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) ([]sqlbase.ID, error) {
 	log.Eventf(ctx, "fetching all database descriptor IDs")
-	nameKey := sqlbase.NewDatabaseKey("" /* name */).Key()
+	nameKey := sqlbase.NewDatabaseKey("" /* name */).Key(codec)
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /*maxRows */)
 	if err != nil {
 		return nil, err
@@ -346,7 +362,7 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *kv.Txn) ([]sqlbase.ID
 	// func (a UncachedPhysicalAccessor) GetObjectNames. Same concept
 	// applies here.
 	// TODO(solon): This complexity can be removed in 20.2.
-	nameKey = sqlbase.NewDeprecatedDatabaseKey("" /* name */).Key()
+	nameKey = sqlbase.NewDeprecatedDatabaseKey("" /* name */).Key(codec)
 	dkvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
@@ -374,10 +390,11 @@ func writeDescToBatch(
 	kvTrace bool,
 	s *cluster.Settings,
 	b *kv.Batch,
+	codec keys.SQLCodec,
 	descID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
 ) (err error) {
-	descKey := sqlbase.MakeDescMetadataKey(descID)
+	descKey := sqlbase.MakeDescMetadataKey(codec, descID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
@@ -395,10 +412,11 @@ func WriteNewDescToBatch(
 	kvTrace bool,
 	s *cluster.Settings,
 	b *kv.Batch,
+	codec keys.SQLCodec,
 	tableID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
 ) (err error) {
-	descKey := sqlbase.MakeDescMetadataKey(tableID)
+	descKey := sqlbase.MakeDescMetadataKey(codec, tableID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {
 		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)

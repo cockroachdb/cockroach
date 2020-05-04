@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -337,12 +338,12 @@ type tableLookupFn func(ID) (*TableDescriptor, error)
 
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc *TableDescriptor) GetConstraintInfo(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) (map[string]ConstraintDetail, error) {
 	var tableLookup tableLookupFn
 	if txn != nil {
 		tableLookup = func(id ID) (*TableDescriptor, error) {
-			return GetTableDescFromID(ctx, txn, id)
+			return GetTableDescFromID(ctx, txn, codec, id)
 		}
 	}
 	return desc.collectConstraintInfo(tableLookup)
@@ -578,9 +579,9 @@ func FindFKOriginIndexInTxn(
 // because the marshaling is not guaranteed to be stable and also because it's
 // sensitive to things like missing vs default values of fields.
 func ConditionalGetTableDescFromTxn(
-	ctx context.Context, txn *kv.Txn, expectation *TableDescriptor,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation *TableDescriptor,
 ) (*roachpb.Value, error) {
-	key := MakeDescMetadataKey(expectation.ID)
+	key := MakeDescMetadataKey(codec, expectation.ID)
 	existingKV, err := txn.Get(ctx, key)
 	if err != nil {
 		return nil, err

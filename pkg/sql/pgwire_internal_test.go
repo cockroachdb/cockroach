@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,7 +63,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify that there are no leases held.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	lm := s.LeaseManager().(*LeaseManager)
 	// Looking for a table state validates that there used to be a lease on the
 	// table.

@@ -118,7 +118,7 @@ func doCreateSequence(
 		dbDesc.ID,
 		schemaID,
 		name.Table(),
-	).Key()
+	).Key(params.ExecCfg().Codec)
 	if err = params.p.createDescriptorWithID(
 		params.ctx, key, id, &desc, params.EvalContext().Settings, jobDesc,
 	); err != nil {
@@ -133,7 +133,7 @@ func doCreateSequence(
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 

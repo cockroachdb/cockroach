@@ -431,7 +431,7 @@ func visitAncestors(
 ) (bool, error) {
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(sqlbase.ID(id)))
+	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(keys.TODOSQLCodec, sqlbase.ID(id)))
 	if descVal == nil {
 		// Couldn't find a descriptor. This is not expected to happen.
 		// Let's just look at the default zone config.

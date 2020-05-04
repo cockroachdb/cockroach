@@ -76,7 +76,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	tempSchemasToDelete := make(map[ClusterWideID]struct{})
 	for _, schema := range schemas {
 		toAppend, err := GetObjectNames(
-			ctx, p.txn, p, dbDesc, schema, true, /*explicitPrefix*/
+			ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true, /*explicitPrefix*/
 		)
 		if err != nil {
 			return nil, err
@@ -203,7 +203,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(n.dbDesc.ID)
+	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.ID)
 
 	b := &kv.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
@@ -215,6 +215,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		if err := sqlbase.RemoveSchemaNamespaceEntry(
 			ctx,
 			p.txn,
+			p.ExecCfg().Codec,
 			n.dbDesc.ID,
 			schemaToDelete,
 		); err != nil {
@@ -223,7 +224,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	err := sqlbase.RemoveDatabaseNamespaceEntry(
-		ctx, p.txn, n.dbDesc.Name, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.Name, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return err
