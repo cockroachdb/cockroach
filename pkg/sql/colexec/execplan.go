@@ -466,9 +466,9 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 	spec *execinfrapb.ProcessorSpec,
 	processorConstructor execinfra.ProcessorConstructor,
 ) error {
-	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
 		spec.Core.JoinReader == nil {
-		return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=auto mode")
+		return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
 	}
 	c, err := wrapRowSources(
 		ctx,

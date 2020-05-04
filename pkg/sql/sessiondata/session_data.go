@@ -243,12 +243,13 @@ type VectorizeExecMode int64
 const (
 	// VectorizeOff means that columnar execution is disabled.
 	VectorizeOff VectorizeExecMode = iota
-	// VectorizeAuto means that that any supported queries that use only
+	// Vectorize201Auto means that that any supported queries that use only
 	// streaming operators (i.e. those that do not require any buffering) will
 	// be run using the columnar execution. If any part of a query is not
 	// supported by the vectorized execution engine, the whole query will fall
 	// back to row execution.
-	VectorizeAuto
+	// This is the default setting in 20.1.
+	Vectorize201Auto
 	// VectorizeOn means that any supported queries will be run using the
 	// columnar execution.
 	VectorizeOn
@@ -261,8 +262,8 @@ func (m VectorizeExecMode) String() string {
 	switch m {
 	case VectorizeOff:
 		return "off"
-	case VectorizeAuto:
-		return "auto"
+	case Vectorize201Auto:
+		return "201auto"
 	case VectorizeOn:
 		return "on"
 	case VectorizeExperimentalAlways:
@@ -279,8 +280,8 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	switch strings.ToUpper(val) {
 	case "OFF":
 		m = VectorizeOff
-	case "AUTO":
-		m = VectorizeAuto
+	case "201AUTO":
+		m = Vectorize201Auto
 	case "ON":
 		m = VectorizeOn
 	case "EXPERIMENTAL_ALWAYS":

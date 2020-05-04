@@ -1,5 +1,3 @@
-# LogicTest: local local-vec fakedist fakedist-vec-disk fakedist-disk
-
 statement ok
 CREATE TABLE bools (a INT, b BOOL)
 

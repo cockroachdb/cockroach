@@ -235,11 +235,11 @@ const VectorizeClusterSettingName = "sql.defaults.vectorize"
 var VectorizeClusterMode = settings.RegisterEnumSetting(
 	VectorizeClusterSettingName,
 	"default vectorize mode",
-	"auto",
+	"on",
 	map[int64]string{
-		int64(sessiondata.VectorizeOff):  "off",
-		int64(sessiondata.VectorizeAuto): "auto",
-		int64(sessiondata.VectorizeOn):   "on",
+		int64(sessiondata.VectorizeOff):     "off",
+		int64(sessiondata.Vectorize201Auto): "201auto",
+		int64(sessiondata.VectorizeOn):      "on",
 	},
 )
 

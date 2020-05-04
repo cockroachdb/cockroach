@@ -1042,7 +1042,7 @@ query TTT
 EXPLAIN SELECT * FROM t, u FOR UPDATE
 ----
 ·           distributed       false
-·           vectorized        false
+·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
@@ -1058,7 +1058,7 @@ query TTT
 EXPLAIN SELECT * FROM t, u FOR UPDATE OF t
 ----
 ·           distributed       false
-·           vectorized        false
+·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
@@ -1073,7 +1073,7 @@ query TTT
 EXPLAIN SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
 ·           distributed       false
-·           vectorized        false
+·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
@@ -1089,7 +1089,7 @@ query TTT
 EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
 ·           distributed       false
-·           vectorized        false
+·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
@@ -1108,7 +1108,7 @@ query TTT
 EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
 ·           distributed       false
-·           vectorized        false
+·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
