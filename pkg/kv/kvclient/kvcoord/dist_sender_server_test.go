@@ -34,11 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -2883,98 +2883,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	}
 }
 
-type pushExpectation int
-
-const (
-	// expectPusheeTxnRecovery means we're expecting transaction recovery to be
-	// performed (after finding a STAGING txn record).
-	expectPusheeTxnRecovery pushExpectation = iota
-	// expectPusheeTxnRecordNotFound means we're expecting the push to not find the
-	// pushee txn record.
-	expectPusheeTxnRecordNotFound
-	// dontExpectAnything means we're not going to check the state in which the
-	// pusher found the pushee's txn record.
-	dontExpectAnything
-)
-
-type expectedTxnResolution int
-
-const (
-	expectAborted expectedTxnResolution = iota
-	expectCommitted
-)
-
-// checkPushResult pushes the specified txn and checks that the pushee's
-// resolution is the expected one.
-func checkPushResult(
-	ctx context.Context,
-	db *kv.DB,
-	txn roachpb.Transaction,
-	expResolution expectedTxnResolution,
-	pushExpectation pushExpectation,
-) error {
-	pushReq := roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: txn.Key,
-		},
-		PusheeTxn: txn.TxnMeta,
-		PushTo:    hlc.Timestamp{},
-		PushType:  roachpb.PUSH_ABORT,
-		// We're going to Force the push in order to not wait for the pushee to
-		// expire.
-		Force: true,
-	}
-	ba := roachpb.BatchRequest{}
-	ba.Add(&pushReq)
-
-	recCtx, collectRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test trace")
-	defer cancel()
-
-	resp, pErr := db.NonTransactionalSender().Send(recCtx, ba)
-	if pErr != nil {
-		return pErr.GoError()
-	}
-
-	var statusErr error
-	pusheeStatus := resp.Responses[0].GetPushTxn().PusheeTxn.Status
-	switch pusheeStatus {
-	case roachpb.ABORTED:
-		if expResolution != expectAborted {
-			statusErr = errors.Errorf("transaction unexpectedly aborted")
-		}
-	case roachpb.COMMITTED:
-		if expResolution != expectCommitted {
-			statusErr = errors.Errorf("transaction unexpectedly committed")
-		}
-	default:
-		return errors.Errorf("unexpected txn status: %s", pusheeStatus)
-	}
-
-	// Verify that we're not fooling ourselves and that checking for the implicit
-	// commit actually caused the txn recovery procedure to run.
-	recording := collectRec()
-	var resolutionErr error
-	switch pushExpectation {
-	case expectPusheeTxnRecovery:
-		expMsg := fmt.Sprintf("recovered txn %s", txn.ID.Short())
-		if _, ok := recording.FindLogMessage(expMsg); !ok {
-			resolutionErr = errors.Errorf(
-				"recovery didn't run as expected (missing \"%s\"). recording: %s",
-				expMsg, recording)
-		}
-	case expectPusheeTxnRecordNotFound:
-		expMsg := "pushee txn record not found"
-		if _, ok := recording.FindLogMessage(expMsg); !ok {
-			resolutionErr = errors.Errorf(
-				"push didn't run as expected (missing \"%s\"). recording: %s",
-				expMsg, recording)
-		}
-	case dontExpectAnything:
-	}
-
-	return errors.CombineErrors(statusErr, resolutionErr)
-}
-
 // Test that, even though at the kvserver level requests are not idempotent
 // across an EndTxn, a TxnCoordSender retry of the final batch after a refresh
 // still works fine. We check that a transaction is not considered implicitly
@@ -3024,7 +2932,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 		// WriteTooOldError on the first attempt.
 		sidePushedOnFirstAttempt    side
 		sideRejectedOnSecondAttempt side
-		txnRecExpectation           pushExpectation
+		txnRecExpectation           kvclientutils.PushExpectation
 	}{
 		{
 			// On the first attempt, the left side succeeds in laying down an intent,
@@ -3051,7 +2959,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			// EndTxn), but fails. The 2nd attempt of the right side will no longer
 			// contain an EndTxn, as explained above. So we expect the txn record to
 			// not exist.
-			txnRecExpectation: expectPusheeTxnRecordNotFound,
+			txnRecExpectation: kvclientutils.ExpectPusheeTxnRecordNotFound,
 		},
 		{
 			// On the first attempt, the right side succeed in writing a STAGING txn
@@ -3070,7 +2978,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			sideRejectedOnSecondAttempt: right,
 			// The first attempt of the right side writes a STAGING txn record, so we
 			// expect to perform txn recovery.
-			txnRecExpectation: expectPusheeTxnRecovery,
+			txnRecExpectation: kvclientutils.ExpectPusheeTxnRecovery,
 		},
 	}
 
@@ -3151,7 +3059,9 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			})
 
 			require.Error(t, txn.CommitInBatch(ctx, b), "injected")
-			require.NoError(t, checkPushResult(ctx, db, *origTxn, expectAborted, tc.txnRecExpectation))
+			err = kvclientutils.CheckPushResult(
+				ctx, db, *origTxn, kvclientutils.ExpectAborted, tc.txnRecExpectation)
+			require.NoError(t, err)
 		})
 	}
 }

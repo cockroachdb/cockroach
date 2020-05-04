@@ -839,7 +839,7 @@ func ContextWithRecordingSpan(
 ) (retCtx context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
 	sp := tr.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
-	StartRecording(sp, SingleNodeRecording)
+	StartRecording(sp, SnowballRecording)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 

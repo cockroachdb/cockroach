@@ -2813,7 +2813,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 	blockedRangeLookups := int32(0)
 	rangeLookupIsBlocked := make(chan struct{}, 1)
 	unblockRangeLookups := make(chan struct{})
-	respFilter := func(ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+	respFilter := func(ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		select {
 		case <-blockRangeLookups:
 			if kv.TestingIsRangeLookup(ba) &&

@@ -137,7 +137,9 @@ func TestCheckConsistencyReplay(t *testing.T) {
 	}
 
 	// Arrange to trigger a retry when a ComputeChecksum request arrives.
-	storeCfg.TestingKnobs.TestingResponseFilter = func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingResponseFilter = func(
+		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+	) *roachpb.Error {
 		state.Lock()
 		defer state.Unlock()
 		if ba.IsSingleComputeChecksumRequest() && !state.forcedRetry {
