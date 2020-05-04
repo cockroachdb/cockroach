@@ -31,60 +31,69 @@ func TestDWithin(t *testing.T) {
 			b, err := geo.ParseGeography(tc.b)
 			require.NoError(t, err)
 
-			t.Run("sphere", func(t *testing.T) {
-				if tc.expectedSphereDistance == 0 {
-					zeroValue := float64(0)
-					// Allow a 1cm margin of error for close to zero cases.
-					if _, ok := closeToZeroCases[tc.desc]; ok {
-						zeroValue = 0.01
-					}
-					for _, val := range []float64{zeroValue, 1, 10, 10000} {
-						t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-							dwithin, err := DWithin(a, b, val)
-							require.NoError(t, err)
-							require.True(t, dwithin)
+			for _, subTC := range []struct {
+				desc                string
+				expected            float64
+				useSphereOrSpheroid useSphereOrSpheroid
+			}{
+				{"sphere", tc.expectedSphereDistance, UseSphere},
+				{"spheroid", tc.expectedSpheroidDistance, UseSpheroid},
+			} {
+				t.Run(subTC.desc, func(t *testing.T) {
+					if subTC.expected == 0 {
+						zeroValue := float64(0)
+						// Allow a 1cm margin of error for close to zero cases.
+						if _, ok := closeToZeroCases[tc.desc]; ok {
+							zeroValue = 0.01
+						}
+						for _, val := range []float64{zeroValue, 1, 10, 10000} {
+							t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid)
+								require.NoError(t, err)
+								require.True(t, dwithin)
 
-							dwithin, err = DWithin(b, a, val)
-							require.NoError(t, err)
-							require.True(t, dwithin)
-						})
-					}
-				} else {
-					for _, val := range []float64{
-						tc.expectedSphereDistance + 0.01, // allow 1cm margin of error
-						tc.expectedSphereDistance + 0.02,
-						tc.expectedSphereDistance + 1,
-						tc.expectedSphereDistance * 2,
-					} {
-						t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-							dwithin, err := DWithin(a, b, val)
-							require.NoError(t, err)
-							require.True(t, dwithin)
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid)
+								require.NoError(t, err)
+								require.True(t, dwithin)
+							})
+						}
+					} else {
+						for _, val := range []float64{
+							subTC.expected + 0.01, // allow 1cm margin of error
+							subTC.expected + 0.02,
+							subTC.expected + 1,
+							subTC.expected * 2,
+						} {
+							t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid)
+								require.NoError(t, err)
+								require.True(t, dwithin)
 
-							dwithin, err = DWithin(b, a, val)
-							require.NoError(t, err)
-							require.True(t, dwithin)
-						})
-					}
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid)
+								require.NoError(t, err)
+								require.True(t, dwithin)
+							})
+						}
 
-					for _, val := range []float64{
-						tc.expectedSphereDistance - 0.01, // allow 1cm margin of error
-						tc.expectedSphereDistance - 0.02,
-						tc.expectedSphereDistance - 1,
-						tc.expectedSphereDistance / 2,
-					} {
-						t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-							dwithin, err := DWithin(a, b, val)
-							require.NoError(t, err)
-							require.False(t, dwithin)
+						for _, val := range []float64{
+							subTC.expected - 0.01, // allow 1cm margin of error
+							subTC.expected - 0.02,
+							subTC.expected - 1,
+							subTC.expected / 2,
+						} {
+							t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid)
+								require.NoError(t, err)
+								require.False(t, dwithin)
 
-							dwithin, err = DWithin(b, a, val)
-							require.NoError(t, err)
-							require.False(t, dwithin)
-						})
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid)
+								require.NoError(t, err)
+								require.False(t, dwithin)
+							})
+						}
 					}
-				}
-			})
+				})
+			}
 		})
 	}
 }
