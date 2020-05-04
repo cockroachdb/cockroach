@@ -106,10 +106,11 @@ interface StatementDetailsOwnProps {
   diagnosticsCount: number;
 }
 
-type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
+export type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
 
 interface StatementDetailsState {
   sortSetting: SortSetting;
+  currentTab?: string;
 }
 
 interface NumericStatRow {
@@ -213,11 +214,13 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
 
   constructor(props: StatementDetailsProps) {
     super(props);
+    const searchParams = new URLSearchParams(props.history.location.search);
     this.state = {
       sortSetting: {
         sortKey: 5,  // Latency
         ascending: false,
       },
+      currentTab: searchParams.get("tab") || "overview",
     };
   }
 
@@ -238,6 +241,20 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
   }
 
   prevPage = () => this.props.history.goBack();
+
+  onTabChange = (tabId: string) => {
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    searchParams.set("tab", tabId);
+    trackSubnavSelection(tabId);
+    history.replace({
+      ...history.location,
+      search: searchParams.toString(),
+    });
+    this.setState({
+      currentTab: tabId,
+    });
+  }
 
   render() {
     const app = getMatchParamByName(this.props.match, appAttr);
@@ -281,6 +298,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
 
   renderContent = () => {
     const { diagnosticsCount } = this.props;
+    const { currentTab } = this.state;
 
     if (!this.props.statement) {
       return null;
@@ -324,7 +342,8 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
       <Tabs
         defaultActiveKey="1"
         className={styles[`cockroach--tabs`]}
-        onChange={trackSubnavSelection}
+        onChange={this.onTabChange}
+        activeKey={currentTab}
       >
         <TabPane tab="Overview" key="overview">
           <Row gutter={16}>
