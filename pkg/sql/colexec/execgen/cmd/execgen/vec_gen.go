@@ -29,14 +29,15 @@ func genVec(wr io.Writer) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 6)
-	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "LTyp" .LTyp "SelOnDest" $6}}`)
+	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "Global" . "SelOnDest" $6}}`)
+
+	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("vec_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

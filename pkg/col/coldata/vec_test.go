@@ -16,8 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -47,7 +45,7 @@ func TestMemColumnWindow(t *testing.T) {
 		endWindow = 1 + rng.Intn(coldata.BatchSize())
 	}
 
-	window := c.Window(coltypes.Int64, startWindow, endWindow)
+	window := c.Window(startWindow, endWindow)
 	windowInts := window.Int64()
 	// Verify that every other value is null.
 	for i, j := startWindow, 0; i < endWindow; i, j = i+1, j+1 {
@@ -207,7 +205,6 @@ func TestAppend(t *testing.T) {
 
 	for _, tc := range testCases {
 		tc.args.Src = src
-		tc.args.ColType = typeconv.FromColumnType(typ)
 		if tc.args.SrcEndIdx == 0 {
 			// SrcEndIdx is always required.
 			tc.args.SrcEndIdx = coldata.BatchSize()
@@ -281,7 +278,6 @@ func TestCopy(t *testing.T) {
 
 	for _, tc := range testCases {
 		tc.args.Src = src
-		tc.args.ColType = typeconv.FromColumnType(typ)
 		t.Run(tc.name, func(t *testing.T) {
 			dest := coldata.NewMemColumn(typ, coldata.BatchSize())
 			dest.Copy(tc.args)
@@ -327,7 +323,6 @@ func TestCopyNulls(t *testing.T) {
 
 	copyArgs := coldata.CopySliceArgs{
 		SliceArgs: coldata.SliceArgs{
-			ColType:     typeconv.FromColumnType(typ),
 			Src:         src,
 			DestIdx:     3,
 			SrcStartIdx: 3,
@@ -383,7 +378,6 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 	copyArgs := coldata.CopySliceArgs{
 		SelOnDest: true,
 		SliceArgs: coldata.SliceArgs{
-			ColType:     typeconv.FromColumnType(typ),
 			Src:         src,
 			SrcStartIdx: 1,
 			SrcEndIdx:   3,
@@ -428,10 +422,9 @@ func BenchmarkAppend(b *testing.B) {
 	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
 			src := coldata.NewMemColumn(&typ, coldata.BatchSize())
-			coldatatestutils.RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
+			coldatatestutils.RandomVec(rng, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
-				bc.args.ColType = typeconv.FromColumnType(&typ)
 				bc.args.SrcEndIdx = coldata.BatchSize()
 				dest := coldata.NewMemColumn(&typ, coldata.BatchSize())
 				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {
@@ -472,10 +465,9 @@ func BenchmarkCopy(b *testing.B) {
 	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
 			src := coldata.NewMemColumn(&typ, coldata.BatchSize())
-			coldatatestutils.RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
+			coldatatestutils.RandomVec(rng, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
-				bc.args.ColType = typeconv.FromColumnType(&typ)
 				bc.args.SrcEndIdx = coldata.BatchSize()
 				dest := coldata.NewMemColumn(&typ, coldata.BatchSize())
 				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {

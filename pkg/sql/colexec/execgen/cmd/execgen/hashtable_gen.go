@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -30,13 +30,20 @@ func genHashTable(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_PROBE_TYPE", "coltypes.{{$lTyp}}", -1)
-	s = strings.Replace(s, "_BUILD_TYPE", "coltypes.{{$rTyp}}", -1)
-	s = strings.Replace(s, "_ProbeType", "{{$lTyp}}", -1)
-	s = strings.Replace(s, "_BuildType", "{{$rTyp}}", -1)
+	s = strings.ReplaceAll(s, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
+	s = strings.ReplaceAll(s, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
+	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_ProbeType", "{{.Left.VecMethod}}")
+	s = strings.ReplaceAll(s, "_BuildType", "{{.Right.VecMethod}}")
+
+	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
+	s = replaceManipulationFuncsAmbiguous(".Global.Left", s)
+	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
+	s = replaceManipulationFuncsAmbiguous(".Global.Right", s)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
+	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Right.Assign", 3))
 
 	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 12)
 	s = checkColBody.ReplaceAllString(
@@ -47,9 +54,9 @@ func genHashTable(wr io.Writer) error {
 	s = checkColWithNulls.ReplaceAllString(s,
 		`{{template "checkColWithNulls" buildDict "Global" . "UseProbeSel" $7 "UseBuildSel" $8}}`)
 
-	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 8)
+	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 7)
 	s = checkColForDistinctWithNulls.ReplaceAllString(s,
-		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $7 "UseBuildSel" $8}}`)
+		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $6 "UseBuildSel" $7}}`)
 
 	checkBody := makeFunctionRegex("_CHECK_BODY", 3)
 	s = checkBody.ReplaceAllString(s,
@@ -59,25 +66,22 @@ func genHashTable(wr io.Writer) error {
 	s = updateSelBody.ReplaceAllString(s,
 		`{{template "updateSelBody" buildDict "Global" . "UseSel" $4}}`)
 
-	s = replaceManipulationFuncs(".Global.LTyp", s)
-
 	tmpl, err := template.New("hashtable").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	lTypToRTypToOverload := make(map[coltypes.T]map[coltypes.T]*overload)
-	for _, ov := range anyTypeComparisonOpToOverloads[tree.NE] {
-		lTyp := ov.LTyp
-		rTyp := ov.RTyp
-		rTypToOverload := lTypToRTypToOverload[lTyp]
-		if rTypToOverload == nil {
-			rTypToOverload = make(map[coltypes.T]*overload)
-			lTypToRTypToOverload[lTyp] = rTypToOverload
+	var data *twoArgsResolvedOverloadInfo
+	for _, ov := range twoArgsResolvedOverloadsInfo.CmpOps {
+		if ov.Name == comparisonOpName[tree.NE] {
+			data = ov
+			break
 		}
-		rTypToOverload[rTyp] = ov
 	}
-	return tmpl.Execute(wr, lTypToRTypToOverload)
+	if data == nil {
+		colexecerror.InternalError("unexpectedly didn't find overload for tree.NE")
+	}
+	return tmpl.Execute(wr, data)
 }
 
 func init() {

@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -346,7 +346,6 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				vec.Append(
 					coldata.SliceArgs{
 						Src:         vec,
-						ColType:     typeconv.FromColumnType(&a.outputTypes[i]),
 						DestIdx:     0,
 						SrcStartIdx: a.scratch.outputSize,
 						SrcEndIdx:   a.scratch.resumeIdx + 1,
@@ -367,7 +366,6 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 						coldata.CopySliceArgs{
 							SliceArgs: coldata.SliceArgs{
 								Src:         a.scratch.ColVec(i),
-								ColType:     typeconv.FromColumnType(&a.outputTypes[i]),
 								SrcStartIdx: 0,
 								SrcEndIdx:   a.scratch.Length(),
 							},
@@ -422,7 +420,6 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
 							Src:         a.scratch.ColVec(i),
-							ColType:     typeconv.FromColumnType(&a.outputTypes[i]),
 							SrcStartIdx: 0,
 							SrcEndIdx:   a.scratch.Length(),
 						},
@@ -476,8 +473,7 @@ func extractAggTypes(aggCols [][]uint32, typs []types.T) [][]types.T {
 func isAggregateSupported(
 	aggFn execinfrapb.AggregatorSpec_Func, inputTypes []types.T,
 ) (bool, error) {
-	_, err := typeconv.FromColumnTypes(inputTypes)
-	if err != nil {
+	if err := typeconv.AreTypesSupported(inputTypes); err != nil {
 		return false, err
 	}
 	switch aggFn {
@@ -495,7 +491,7 @@ func isAggregateSupported(
 			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
 		}
 	}
-	_, err = makeAggregateFuncs(
+	_, err := makeAggregateFuncs(
 		nil, /* allocator */
 		[][]types.T{inputTypes},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},

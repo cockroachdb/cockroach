@@ -34,7 +34,7 @@ func genRelativeRankOps(wr io.Writer) error {
 
 	s := string(d)
 
-	s = strings.Replace(s, "_RELATIVE_RANK_STRING", "{{.String}}", -1)
+	s = strings.ReplaceAll(s, "_RELATIVE_RANK_STRING", "{{.String}}")
 
 	computePartitionsSizesRe := makeFunctionRegex("_COMPUTE_PARTITIONS_SIZES", 0)
 	s = computePartitionsSizesRe.ReplaceAllString(s, `{{template "computePartitionsSizes"}}`)

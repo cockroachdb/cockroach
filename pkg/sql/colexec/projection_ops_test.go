@@ -19,8 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -239,7 +238,7 @@ func TestRandomComparisons(t *testing.T) {
 			// TODO(jordan): #40354 tracks failure to compare infinite dates.
 			continue
 		}
-		if typeconv.FromColumnType(typ) == coltypes.Unhandled {
+		if !typeconv.IsTypeSupported(typ) {
 			continue
 		}
 		typs := []types.T{*typ, *typ, *types.Bool}
@@ -251,8 +250,8 @@ func TestRandomComparisons(t *testing.T) {
 		lVec := b.ColVec(0)
 		rVec := b.ColVec(1)
 		ret := b.ColVec(2)
-		coldatatestutils.RandomVec(rng, typ, bytesFixedLength, lVec, numTuples, 0)
-		coldatatestutils.RandomVec(rng, typ, bytesFixedLength, rVec, numTuples, 0)
+		coldatatestutils.RandomVec(rng, bytesFixedLength, lVec, numTuples, 0)
+		coldatatestutils.RandomVec(rng, bytesFixedLength, rVec, numTuples, 0)
 		for i := range lDatums {
 			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, da, typ)
 			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, da, typ)
@@ -341,15 +340,15 @@ func benchmarkProjOp(
 
 	typs := []types.T{*intType, *intType}
 	batch := testAllocator.NewMemBatch(typs)
-	switch typeconv.FromColumnType(intType) {
-	case coltypes.Int64:
+	switch intType.Width() {
+	case 64:
 		col1 := batch.ColVec(0).Int64()
 		col2 := batch.ColVec(1).Int64()
 		for i := 0; i < coldata.BatchSize(); i++ {
 			col1[i] = 1
 			col2[i] = 1
 		}
-	case coltypes.Int32:
+	case 32:
 		col1 := batch.ColVec(0).Int32()
 		col2 := batch.ColVec(1).Int32()
 		for i := 0; i < coldata.BatchSize(); i++ {

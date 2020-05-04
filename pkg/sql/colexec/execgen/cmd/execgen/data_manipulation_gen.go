@@ -30,6 +30,11 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 		replaceWith:         "Get",
 	},
 	{
+		templatePlaceholder: "execgen.RETURNUNSAFEGET",
+		numArgs:             2,
+		replaceWith:         "ReturnGet",
+	},
+	{
 		templatePlaceholder: "execgen.COPYVAL",
 		numArgs:             2,
 		replaceWith:         "CopyVal",
@@ -79,26 +84,33 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 func init() {
 	for i, dmri := range dataManipulationReplacementInfos {
 		placeHolderArgs := make([]string, dmri.numArgs)
-		templResultArgs := make([]string, dmri.numArgs)
+		tmplResultArgs := make([]string, dmri.numArgs)
 		for j := 0; j < dmri.numArgs; j++ {
 			placeHolderArgs[j] = `(.*)`
-			templResultArgs[j] = fmt.Sprintf("\"$%d\"", j+1)
+			tmplResultArgs[j] = fmt.Sprintf("\"$%d\"", j+1)
 		}
 		dataManipulationReplacementInfos[i].templatePlaceholder += `\(` + strings.Join(placeHolderArgs, ",") + `\)`
-		dataManipulationReplacementInfos[i].replaceWith += " " + strings.Join(templResultArgs, " ")
+		dataManipulationReplacementInfos[i].replaceWith += " " + strings.Join(tmplResultArgs, " ")
 		dataManipulationReplacementInfos[i].re = regexp.MustCompile(dataManipulationReplacementInfos[i].templatePlaceholder)
 	}
 }
 
 // replaceManipulationFuncs replaces commonly used template placeholders for
-// data manipulation. typeIdent is the types.T struct used in the template
-// (e.g. "" if using a types.T struct in templates directly or ".Type" if
-// stored in the "Type" field of the template struct. body is the template body,
-// which is returned with all the replacements. Refer to the init function in
-// this file for a list of replacements done.
-func replaceManipulationFuncs(typeIdent string, body string) string {
+// data manipulation. The cursor of the template (i.e. ".") should be pointing
+// at the overload struct. body is the template body, which is returned with
+// all the replacements. Refer to the init function in this file for a list of
+// replacements done.
+func replaceManipulationFuncs(body string) string {
+	return replaceManipulationFuncsAmbiguous("", body)
+}
+
+// replaceManipulationFuncsAmbiguous is similar to replaceManipulationFuncs
+// except for the cursor pointing at something other than the overload struct.
+// overloadField should specify the path from the cursor to the overload struct
+// that should be used for the replacements.
+func replaceManipulationFuncsAmbiguous(overloadField string, body string) string {
 	for _, dmri := range dataManipulationReplacementInfos {
-		body = dmri.re.ReplaceAllString(body, fmt.Sprintf("{{%s.%s}}", typeIdent, dmri.replaceWith))
+		body = dmri.re.ReplaceAllString(body, fmt.Sprintf("{{%s.%s}}", overloadField, dmri.replaceWith))
 	}
 	return body
 }

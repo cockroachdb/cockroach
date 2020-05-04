@@ -16,8 +16,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -713,7 +712,7 @@ func NewColOperator(
 			}
 			typs := make([]types.T, len(spec.Input[0].ColumnTypes))
 			copy(typs, spec.Input[0].ColumnTypes)
-			if _, err = typeconv.FromColumnTypes(typs); err != nil {
+			if err = typeconv.AreTypesSupported(typs); err != nil {
 				return result, err
 			}
 			if needHash {
@@ -745,7 +744,7 @@ func NewColOperator(
 			}
 			result.ColumnTypes = make([]types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
-			if _, err = typeconv.FromColumnTypes(result.ColumnTypes); err != nil {
+			if err = typeconv.AreTypesSupported(result.ColumnTypes); err != nil {
 				return result, err
 			}
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
@@ -792,12 +791,12 @@ func NewColOperator(
 			}
 			leftTypes := make([]types.T, len(spec.Input[0].ColumnTypes))
 			copy(leftTypes, spec.Input[0].ColumnTypes)
-			if _, err := typeconv.FromColumnTypes(leftTypes); err != nil {
+			if err := typeconv.AreTypesSupported(leftTypes); err != nil {
 				return result, err
 			}
 			rightTypes := make([]types.T, len(spec.Input[1].ColumnTypes))
 			copy(rightTypes, spec.Input[1].ColumnTypes)
-			if _, err := typeconv.FromColumnTypes(rightTypes); err != nil {
+			if err := typeconv.AreTypesSupported(rightTypes); err != nil {
 				return result, err
 			}
 
@@ -901,12 +900,12 @@ func NewColOperator(
 
 			leftTypes := make([]types.T, len(spec.Input[0].ColumnTypes))
 			copy(leftTypes, spec.Input[0].ColumnTypes)
-			if _, err := typeconv.FromColumnTypes(leftTypes); err != nil {
+			if err := typeconv.AreTypesSupported(leftTypes); err != nil {
 				return result, err
 			}
 			rightTypes := make([]types.T, len(spec.Input[1].ColumnTypes))
 			copy(rightTypes, spec.Input[1].ColumnTypes)
-			if _, err := typeconv.FromColumnTypes(rightTypes); err != nil {
+			if err := typeconv.AreTypesSupported(rightTypes); err != nil {
 				return result, err
 			}
 
@@ -961,7 +960,7 @@ func NewColOperator(
 			input := inputs[0]
 			result.ColumnTypes = make([]types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
-			if _, err = typeconv.FromColumnTypes(result.ColumnTypes); err != nil {
+			if err = typeconv.AreTypesSupported(result.ColumnTypes); err != nil {
 				return result, err
 			}
 			ordering := core.Sorter.OutputOrdering
@@ -984,7 +983,7 @@ func NewColOperator(
 				// temporary columns that can be appended below.
 				typs := make([]types.T, len(result.ColumnTypes), len(result.ColumnTypes)+2)
 				copy(typs, result.ColumnTypes)
-				if _, err = typeconv.FromColumnTypes(typs); err != nil {
+				if err = typeconv.AreTypesSupported(typs); err != nil {
 					return result, err
 				}
 				tempColOffset, partitionColIdx := uint32(0), columnOmitted
@@ -1562,6 +1561,8 @@ func checkCastSupported(fromType, toType *types.T) error {
 		// decimal of the same precision due to the fact that we're losing
 		// precision information once we start operating on coltypes.T. For
 		// such casts we will fallback to row-by-row engine.
+		// TODO(yuzefovich): coltypes.T type system has been removed,
+		// reevaluate the situation.
 		if !fromType.Identical(toType) {
 			return errors.New("decimal casts with rounding unsupported")
 		}
@@ -1690,15 +1691,15 @@ func planProjectionOperators(
 		buffer := NewBufferOp(schemaEnforcer)
 		caseOps := make([]colexecbase.Operator, len(t.Whens))
 		caseOutputType := t.ResolvedType()
-		switch typeconv.FromColumnType(caseOutputType) {
-		case coltypes.Bytes:
+		if typeconv.TypeFamilyToCanonicalTypeFamily[caseOutputType.Family()] == types.BytesFamily {
 			// Currently, there is a contradiction between the way CASE operator
 			// works (which populates its output in arbitrary order) and the flat
 			// bytes implementation of Bytes type (which prohibits sets in arbitrary
 			// order), so we reject such scenario to fall back to row-by-row engine.
 			return nil, resultIdx, typs, internalMemUsed, errors.Newf(
 				"unsupported type %s in CASE operator", caseOutputType)
-		case coltypes.Unhandled:
+		}
+		if !typeconv.IsTypeSupported(caseOutputType) {
 			return nil, resultIdx, typs, internalMemUsed, errors.Newf(
 				"unsupported type %s", caseOutputType)
 		}
@@ -1723,7 +1724,7 @@ func planProjectionOperators(
 			// result of the case projection.
 			whenTyped := when.Cond.(tree.TypedExpr)
 			whenResolvedType := whenTyped.ResolvedType()
-			if typeconv.FromColumnType(whenResolvedType) == coltypes.Unhandled {
+			if !typeconv.IsTypeSupported(whenResolvedType) {
 				return nil, resultIdx, typs, internalMemUsed, errors.Newf(
 					"unsupported type %s in CASE WHEN expression", whenResolvedType)
 			}
@@ -1797,7 +1798,7 @@ func planProjectionOperators(
 	}
 }
 
-func checkSupportedProjectionExpr(binOp tree.Operator, left, right tree.TypedExpr) error {
+func checkSupportedProjectionExpr(projOp tree.Operator, left, right tree.TypedExpr) error {
 	leftTyp := left.ResolvedType()
 	rightTyp := right.ResolvedType()
 	if leftTyp.Equivalent(rightTyp) {
@@ -1814,7 +1815,7 @@ func checkSupportedProjectionExpr(binOp tree.Operator, left, right tree.TypedExp
 
 	// Because we want to be conservative, we allow specialized mixed-type
 	// operators with simple types and deny all else.
-	switch binOp {
+	switch projOp {
 	case tree.Like, tree.NotLike:
 	case tree.In, tree.NotIn:
 	case tree.IsDistinctFrom, tree.IsNotDistinctFrom:

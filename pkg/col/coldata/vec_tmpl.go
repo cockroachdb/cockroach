@@ -24,21 +24,23 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // {{/*
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
-
-// _GOTYPESLICE is a template Go type slice variable.
+// _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
+
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
@@ -52,47 +54,52 @@ var _ duration.Duration
 // */}}
 
 func (m *memColumn) Append(args SliceArgs) {
-	switch args.ColType {
+	switch m.CanonicalTypeFamily() {
 	// {{range .}}
-	case _TYPES_T:
-		fromCol := args.Src.TemplateType()
-		toCol := m.TemplateType()
-		// NOTE: it is unfortunate that we always append whole slice without paying
-		// attention to whether the values are NULL. However, if we do start paying
-		// attention, the performance suffers dramatically, so we choose to copy
-		// over "actual" as well as "garbage" values.
-		if args.Sel == nil {
-			execgen.APPENDSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
-		} else {
-			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-			// {{if eq .LTyp.String "Bytes"}}
-			// We need to truncate toCol before appending to it, so in case of Bytes,
-			// we append an empty slice.
-			execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
-			// We will be getting all values below to be appended, regardless of
-			// whether the value is NULL. It is possible that Bytes' invariant of
-			// non-decreasing offsets on the source is currently not maintained, so
-			// we explicitly enforce it.
-			maxIdx := 0
-			for _, selIdx := range sel {
-				if selIdx > maxIdx {
-					maxIdx = selIdx
+	case _CANONICAL_TYPE_FAMILY:
+		switch m.t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			fromCol := args.Src.TemplateType()
+			toCol := m.TemplateType()
+			// NOTE: it is unfortunate that we always append whole slice without paying
+			// attention to whether the values are NULL. However, if we do start paying
+			// attention, the performance suffers dramatically, so we choose to copy
+			// over "actual" as well as "garbage" values.
+			if args.Sel == nil {
+				execgen.APPENDSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
+			} else {
+				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
+				// {{if eq .VecMethod "Bytes"}}
+				// We need to truncate toCol before appending to it, so in case of Bytes,
+				// we append an empty slice.
+				execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
+				// We will be getting all values below to be appended, regardless of
+				// whether the value is NULL. It is possible that Bytes' invariant of
+				// non-decreasing offsets on the source is currently not maintained, so
+				// we explicitly enforce it.
+				maxIdx := 0
+				for _, selIdx := range sel {
+					if selIdx > maxIdx {
+						maxIdx = selIdx
+					}
+				}
+				fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
+				// {{else}}
+				toCol = execgen.SLICE(toCol, 0, args.DestIdx)
+				// {{end}}
+				for _, selIdx := range sel {
+					val := execgen.UNSAFEGET(fromCol, selIdx)
+					execgen.APPENDVAL(toCol, val)
 				}
 			}
-			fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
-			// {{else}}
-			toCol = execgen.SLICE(toCol, 0, args.DestIdx)
+			m.nulls.set(args)
+			m.col = toCol
 			// {{end}}
-			for _, selIdx := range sel {
-				val := execgen.UNSAFEGET(fromCol, selIdx)
-				execgen.APPENDVAL(toCol, val)
-			}
 		}
-		m.nulls.set(args)
-		m.col = toCol
-	// {{end}}
+		// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", args.ColType))
+		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}
 }
 
@@ -113,12 +120,18 @@ func _COPY_WITH_SEL(
 				m.nulls.SetNull(i + args.DestIdx)
 				// {{end}}
 			} else {
+				// {{with .Global}}
 				v := execgen.UNSAFEGET(fromCol, selIdx)
+				// {{end}}
 				// {{if .SelOnDest}}
 				m.nulls.UnsetNull(selIdx)
+				// {{with .Global}}
 				execgen.SET(toCol, selIdx, v)
+				// {{end}}
 				// {{else}}
+				// {{with .Global}}
 				execgen.SET(toCol, i+args.DestIdx, v)
+				// {{end}}
 				// {{end}}
 			}
 		}
@@ -127,11 +140,17 @@ func _COPY_WITH_SEL(
 	// No Nulls.
 	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 		selIdx := sel[args.SrcStartIdx+i]
+		// {{with .Global}}
 		v := execgen.UNSAFEGET(fromCol, selIdx)
+		// {{end}}
 		// {{if .SelOnDest}}
+		// {{with .Global}}
 		execgen.SET(toCol, selIdx, v)
+		// {{end}}
 		// {{else}}
+		// {{with .Global}}
 		execgen.SET(toCol, i+args.DestIdx, v)
+		// {{end}}
 		// {{end}}
 	}
 	// {{end}}
@@ -150,70 +169,90 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	// into the output vector as well. We'll set the non-nulls by hand below.
 	// }
 
-	switch args.ColType {
+	switch m.CanonicalTypeFamily() {
 	// {{range .}}
-	case _TYPES_T:
-		fromCol := args.Src.TemplateType()
-		toCol := m.TemplateType()
-		if args.Sel != nil {
-			sel := args.Sel
-			if args.SelOnDest {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
-			} else {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
+	case _CANONICAL_TYPE_FAMILY:
+		switch m.t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			fromCol := args.Src.TemplateType()
+			toCol := m.TemplateType()
+			if args.Sel != nil {
+				sel := args.Sel
+				if args.SelOnDest {
+					_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
+				} else {
+					_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
+				}
+				return
 			}
-			return
+			// No Sel.
+			execgen.COPYSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
+			m.nulls.set(args.SliceArgs)
+			// {{end}}
 		}
-		// No Sel.
-		execgen.COPYSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
-		m.nulls.set(args.SliceArgs)
-	// {{end}}
+		// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", args.ColType))
+		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}
 }
 
-func (m *memColumn) Window(colType coltypes.T, start int, end int) Vec {
-	switch colType {
+func (m *memColumn) Window(start int, end int) Vec {
+	switch m.CanonicalTypeFamily() {
 	// {{range .}}
-	case _TYPES_T:
-		col := m.TemplateType()
-		return &memColumn{
-			t:     colType,
-			col:   execgen.WINDOW(col, start, end),
-			nulls: m.nulls.Slice(start, end),
+	case _CANONICAL_TYPE_FAMILY:
+		switch m.t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			col := m.TemplateType()
+			return &memColumn{
+				t:                   m.t,
+				canonicalTypeFamily: m.canonicalTypeFamily,
+				col:                 execgen.WINDOW(col, start, end),
+				nulls:               m.nulls.Slice(start, end),
+			}
+			// {{end}}
 		}
-	// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		// {{end}}
 	}
+	panic(fmt.Sprintf("unhandled type %s", m.t))
 }
 
 // SetValueAt is an inefficient helper to set the value in a Vec when the type
 // is unknown.
-func SetValueAt(v Vec, elem interface{}, rowIdx int, colType coltypes.T) {
-	switch colType {
+func SetValueAt(v Vec, elem interface{}, rowIdx int) {
+	switch t := v.Type(); v.CanonicalTypeFamily() {
 	// {{range .}}
-	case _TYPES_T:
-		target := v.TemplateType()
-		newVal := elem.(_GOTYPE)
-		execgen.SET(target, rowIdx, newVal)
-	// {{end}}
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			target := v.TemplateType()
+			newVal := elem.(_GOTYPE)
+			execgen.SET(target, rowIdx, newVal)
+			// {{end}}
+		}
+		// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		panic(fmt.Sprintf("unhandled type %s", t))
 	}
 }
 
 // GetValueAt is an inefficient helper to get the value in a Vec when the type
 // is unknown.
-func GetValueAt(v Vec, rowIdx int, colType coltypes.T) interface{} {
-	switch colType {
+func GetValueAt(v Vec, rowIdx int) interface{} {
+	t := v.Type()
+	switch v.CanonicalTypeFamily() {
 	// {{range .}}
-	case _TYPES_T:
-		target := v.TemplateType()
-		return execgen.UNSAFEGET(target, rowIdx)
-	// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			target := v.TemplateType()
+			return execgen.UNSAFEGET(target, rowIdx)
+			// {{end}}
+		}
+		// {{end}}
 	}
+	panic(fmt.Sprintf("unhandled type %s", t))
 }

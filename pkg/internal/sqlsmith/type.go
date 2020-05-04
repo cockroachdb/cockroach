@@ -11,8 +11,7 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -67,7 +66,7 @@ func (s *Smither) randType() *types.T {
 // vectorization).
 func (s *Smither) allowedType(types ...*types.T) bool {
 	for _, t := range types {
-		if s.vectorizable && typeconv.FromColumnType(t) == coltypes.Unhandled {
+		if s.vectorizable && !typeconv.IsTypeSupported(t) {
 			return false
 		}
 	}

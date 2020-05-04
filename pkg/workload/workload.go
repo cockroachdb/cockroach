@@ -25,8 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -215,10 +214,7 @@ func TypedTuples(count int, typs []types.T, fn func(int) []interface{}) BatchedT
 							case time.Time:
 								typs[i] = *types.Bytes
 							default:
-								t, err := typeconv.UnsafeToSQLType(coltypes.FromGoType(datum))
-								if err != nil {
-									panic(err)
-								}
+								t := typeconv.UnsafeFromGoType(datum)
 								typs[i] = *t
 							}
 						}
@@ -270,34 +266,39 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 	datums := make([]interface{}, numRows*numCols)
 	for colIdx, col := range cb.ColVecs() {
 		nulls := col.Nulls()
-		switch col.Type() {
-		case coltypes.Bool:
+		switch col.CanonicalTypeFamily() {
+		case types.BoolFamily:
 			for rowIdx, datum := range col.Bool()[:numRows] {
 				if !nulls.NullAt(rowIdx) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
-		case coltypes.Int64:
-			for rowIdx, datum := range col.Int64()[:numRows] {
-				if !nulls.NullAt(rowIdx) {
-					datums[rowIdx*numCols+colIdx] = datum
+		case types.IntFamily:
+			switch col.Type().Width() {
+			case 0, 64:
+				for rowIdx, datum := range col.Int64()[:numRows] {
+					if !nulls.NullAt(rowIdx) {
+						datums[rowIdx*numCols+colIdx] = datum
+					}
 				}
-			}
-		case coltypes.Int16:
-			for rowIdx, datum := range col.Int16()[:numRows] {
-				if !nulls.NullAt(rowIdx) {
-					datums[rowIdx*numCols+colIdx] = datum
+			case 16:
+				for rowIdx, datum := range col.Int16()[:numRows] {
+					if !nulls.NullAt(rowIdx) {
+						datums[rowIdx*numCols+colIdx] = datum
+					}
 				}
+			default:
+				panic(fmt.Sprintf(`unhandled type %s`, col.Type()))
 			}
-		case coltypes.Float64:
+		case types.FloatFamily:
 			for rowIdx, datum := range col.Float64()[:numRows] {
 				if !nulls.NullAt(rowIdx) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
-		case coltypes.Bytes:
+		case types.BytesFamily:
 			// HACK: workload's Table schemas are SQL schemas, but the initial data is
-			// returned as a coldata.Batch, which has a more limited set of coltypes.
+			// returned as a coldata.Batch, which has a more limited set of types.
 			// (Or, in the case of simple workloads that return a []interface{}, it's
 			// roundtripped through coldata.Batch by the `Tuples` helper.)
 			//
@@ -316,7 +317,7 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 				}
 			}
 		default:
-			panic(fmt.Sprintf(`unhandled type %s`, col.Type().GoTypeName()))
+			panic(fmt.Sprintf(`unhandled type %s`, col.Type()))
 		}
 	}
 	rows := make([][]interface{}, numRows)

@@ -16,8 +16,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -56,7 +54,7 @@ type Batch interface {
 	// NOTE: Reset can allocate a new Batch, so when calling from the vectorized
 	// engine consider either allocating a new Batch explicitly via
 	// colexec.Allocator or calling ResetInternalBatch.
-	Reset(types []types.T, length int)
+	Reset(typs []types.T, length int)
 	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
@@ -97,19 +95,19 @@ func ResetBatchSizeForTests() {
 	atomic.SwapInt64(&batchSize, defaultBatchSize)
 }
 
-// NewMemBatch allocates a new in-memory Batch. A coltypes.Unknown type
-// will create a placeholder Vec that may not be accessed.
+// NewMemBatch allocates a new in-memory Batch. An unsupported type will create
+// a placeholder Vec that may not be accessed.
 // TODO(jordan): pool these allocations.
-func NewMemBatch(types []types.T) Batch {
-	return NewMemBatchWithSize(types, BatchSize())
+func NewMemBatch(typs []types.T) Batch {
+	return NewMemBatchWithSize(typs, BatchSize())
 }
 
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
 // size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithSize(types []types.T, size int) Batch {
-	b := NewMemBatchNoCols(types, size).(*MemBatch)
-	for i, t := range types {
-		b.b[i] = NewMemColumn(&t, size)
+func NewMemBatchWithSize(typs []types.T, size int) Batch {
+	b := NewMemBatchNoCols(typs, size).(*MemBatch)
+	for i := range typs {
+		b.b[i] = NewMemColumn(&typs[i], size)
 	}
 	return b
 }
@@ -117,12 +115,12 @@ func NewMemBatchWithSize(types []types.T, size int) Batch {
 // NewMemBatchNoCols creates a "skeleton" of new in-memory Batch. It allocates
 // memory for the selection vector but does *not* allocate any memory for the
 // column vectors - those will have to be added separately.
-func NewMemBatchNoCols(types []types.T, size int) Batch {
+func NewMemBatchNoCols(typs []types.T, size int) Batch {
 	if max := math.MaxUint16; size > max {
 		panic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
 	}
 	b := &MemBatch{}
-	b.b = make([]Vec, len(types))
+	b.b = make([]Vec, len(typs))
 	b.sel = make([]int, size)
 	return b
 }
@@ -211,7 +209,7 @@ func (m *MemBatch) SetSelection(b bool) {
 func (m *MemBatch) SetLength(n int) {
 	m.n = n
 	for _, v := range m.b {
-		if v != nil && v.Type() == coltypes.Bytes {
+		if v != nil && v.CanonicalTypeFamily() == types.BytesFamily {
 			v.Bytes().UpdateOffsetsToBeNonDecreasing(n)
 		}
 	}
@@ -228,20 +226,23 @@ func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
 }
 
 // Reset implements the Batch interface.
-func (m *MemBatch) Reset(types []types.T, length int) {
+func (m *MemBatch) Reset(typs []types.T, length int) {
 	// The columns are always sized the same as the selection vector, so use it as
 	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
 	// shorter than the capacity). We could be more defensive and type switch
 	// every column to verify its capacity, but that doesn't seem necessary yet.
-	cannotReuse := m == nil || len(m.sel) < length || m.Width() < len(types)
-	for i := 0; i < len(types) && !cannotReuse; i++ {
-		// TODO(yuzefovich): change this when coltypes.Datum is introduced.
-		if m.ColVec(i).Type() != typeconv.FromColumnType(&types[i]) {
+	cannotReuse := m == nil || len(m.sel) < length || m.Width() < len(typs)
+	for i := 0; i < len(typs) && !cannotReuse; i++ {
+		// TODO(yuzefovich): change this when DatumVec is introduced.
+		// TODO(yuzefovich): requiring that types are "identical" might be an
+		// overkill - the vectors could have the same physical representation
+		// but non-identical types. Think through this more.
+		if !m.ColVec(i).Type().Identical(&typs[i]) {
 			cannotReuse = true
 		}
 	}
 	if cannotReuse {
-		*m = *NewMemBatchWithSize(types, length).(*MemBatch)
+		*m = *NewMemBatchWithSize(typs, length).(*MemBatch)
 		m.SetLength(length)
 		return
 	}
@@ -249,7 +250,7 @@ func (m *MemBatch) Reset(types []types.T, length int) {
 	// probably a good idea to keep all modifications below this line.
 	m.SetLength(length)
 	m.sel = m.sel[:length]
-	m.b = m.b[:len(types)]
+	m.b = m.b[:len(typs)]
 	m.ResetInternalBatch()
 }
 
@@ -257,10 +258,11 @@ func (m *MemBatch) Reset(types []types.T, length int) {
 func (m *MemBatch) ResetInternalBatch() {
 	m.SetSelection(false)
 	for _, v := range m.b {
-		if v.Type() != coltypes.Unhandled {
+		canonicalTypeFamily := v.CanonicalTypeFamily()
+		if canonicalTypeFamily != types.UnknownFamily {
 			v.Nulls().UnsetNulls()
 		}
-		if v.Type() == coltypes.Bytes {
+		if canonicalTypeFamily == types.BytesFamily {
 			v.Bytes().Reset()
 		}
 	}
@@ -276,7 +278,7 @@ func (m *MemBatch) String() string {
 	for i := 0; i < m.Length(); i++ {
 		builder.WriteString("\n[")
 		for colIdx, v := range m.ColVecs() {
-			strs[colIdx] = fmt.Sprintf("%v", GetValueAt(v, i, v.Type()))
+			strs[colIdx] = fmt.Sprintf("%v", GetValueAt(v, i))
 		}
 		builder.WriteString(strings.Join(strs, ", "))
 		builder.WriteString("]")

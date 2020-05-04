@@ -14,8 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -60,9 +59,8 @@ type hashAggregator struct {
 	aggTypes [][]types.T
 	aggFuncs []execinfrapb.AggregatorSpec_Func
 
-	inputTypes     []types.T
-	inputPhysTypes []coltypes.T
-	outputTypes    []types.T
+	inputTypes  []types.T
+	outputTypes []types.T
 
 	// aggFuncMap stores the mapping from hash code to a vector of aggregation
 	// functions. Each aggregation function is stored along with keys that
@@ -157,7 +155,8 @@ type hashAggregator struct {
 	groupCols []uint32
 
 	// groupCols stores the types of the grouping columns.
-	groupTypes []types.T
+	groupTypes                 []types.T
+	groupCanonicalTypeFamilies []types.Family
 
 	// hashBuffer stores hash values for each tuple in the buffered batch.
 	hashBuffer []uint64
@@ -193,7 +192,6 @@ func NewHashAggregator(
 		groupTypes[i] = typs[colIdx]
 	}
 
-	inputPhysTypes, err := typeconv.FromColumnTypes(typs)
 	return &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -203,13 +201,13 @@ func NewHashAggregator(
 		aggTypes:   aggTyps,
 		aggFuncMap: make(hashAggFuncMap),
 
-		state:          hashAggregatorAggregating,
-		inputTypes:     typs,
-		inputPhysTypes: inputPhysTypes,
-		outputTypes:    outputTypes,
+		state:       hashAggregatorAggregating,
+		inputTypes:  typs,
+		outputTypes: outputTypes,
 
-		groupCols:  groupCols,
-		groupTypes: groupTypes,
+		groupCols:                  groupCols,
+		groupTypes:                 groupTypes,
+		groupCanonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(groupTypes),
 	}, err
 }
 
@@ -314,7 +312,6 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b c
 	for _, colIdx := range op.groupCols {
 		rehash(ctx,
 			hashBuffer,
-			&op.inputTypes[colIdx],
 			b.ColVec(int(colIdx)),
 			nKeys,
 			b.Selection(),
@@ -349,7 +346,8 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 				// underlying memory allocated for 'sel' to avoid extra
 				// allocation and copying.
 				anyMatched, remaining = aggFunc.match(
-					remaining, b, op.groupCols, op.groupTypes, op.keyMapping,
+					remaining, b, op.groupCols, op.groupTypes,
+					op.groupCanonicalTypeFamilies, op.keyMapping,
 					op.scratch.group[:len(remaining)], false, /* firstDefiniteMatch */
 				)
 				if anyMatched {
@@ -382,7 +380,6 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 					// performance.
 					op.keyMapping.ColVec(keyIdx).Append(coldata.SliceArgs{
 						Src:         b.ColVec(int(colIdx)),
-						ColType:     op.inputPhysTypes[colIdx],
 						DestIdx:     aggFunc.keyIdx,
 						SrcStartIdx: groupStartIdx,
 						SrcEndIdx:   groupStartIdx + 1,
@@ -398,7 +395,8 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 			// to check if there is any match since 'remaining[0]' will always be
 			// matched.
 			_, remaining = aggFunc.match(
-				remaining, b, op.groupCols, op.groupTypes, op.keyMapping,
+				remaining, b, op.groupCols, op.groupTypes,
+				op.groupCanonicalTypeFamilies, op.keyMapping,
 				op.scratch.group[:len(remaining)], true, /* firstDefiniteMatch */
 			)
 
