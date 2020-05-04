@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 )
@@ -144,11 +145,12 @@ func (s *Server) ServeWith(
 
 // IsClosedConnection returns true if err is cmux.ErrListenerClosed,
 // grpc.ErrServerStopped, io.EOF, or the net package's errClosed.
-func IsClosedConnection(err error) bool {
+func IsClosedConnection(origErr error) bool {
+	err := errors.Cause(origErr)
 	return err == cmux.ErrListenerClosed ||
 		err == grpc.ErrServerStopped ||
 		err == io.EOF ||
-		strings.Contains(err.Error(), "use of closed network connection")
+		strings.Contains(origErr.Error(), "use of closed network connection")
 }
 
 // FatalIfUnexpected calls Log.Fatal(err) unless err is nil,

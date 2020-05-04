@@ -821,26 +821,6 @@ func (li listenerInfo) Iter() map[string]string {
 	}
 }
 
-type singleListener struct {
-	conn net.Conn
-}
-
-func (s *singleListener) Accept() (net.Conn, error) {
-	if c := s.conn; c != nil {
-		s.conn = nil
-		return c, nil
-	}
-	return nil, io.EOF
-}
-
-func (s *singleListener) Close() error {
-	return nil
-}
-
-func (s *singleListener) Addr() net.Addr {
-	return s.conn.LocalAddr()
-}
-
 // startMonitoringForwardClockJumps starts a background task to monitor forward
 // clock jumps based on a cluster setting
 func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
@@ -1267,22 +1247,16 @@ func (s *Server) Start(ctx context.Context) error {
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
-	// Setup HTTP<->gRPC handlers.
-	c1, c2 := net.Pipe()
+	// loopback handles the HTTP <-> RPC loopback connection.
+	loopback := newLoopbackListener(workersCtx, s.stopper)
 
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
-		for _, c := range []net.Conn{c1, c2} {
-			if err := c.Close(); err != nil {
-				log.Fatal(workersCtx, err)
-			}
-		}
+		_ = loopback.Close()
 	})
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		netutil.FatalIfUnexpected(s.grpc.Serve(&singleListener{
-			conn: c1,
-		}))
+		netutil.FatalIfUnexpected(s.grpc.Serve(loopback))
 	})
 
 	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
@@ -1294,7 +1268,7 @@ func (s *Server) Start(ctx context.Context) error {
 	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
 		dialOpts,
 		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
-			return c2, nil
+			return loopback.Connect(context.Background())
 		}),
 	)...)
 	if err != nil {
