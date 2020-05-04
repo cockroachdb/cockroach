@@ -103,7 +103,7 @@ build-with-dep-files := $(or $(if $(MAKECMDGOALS),,implicit-all),$(filter-out he
 ## Which package to run tests against, e.g. "./pkg/foo".
 PKG := ./pkg/...
 
-## Tests to run for use with `make test` or `make check-libroach`.
+## Tests to run for use with `make test` or `make check-libroach`. Default: '.'
 TESTS := .
 
 ## Benchmarks to run for use with `make bench`.
@@ -112,35 +112,31 @@ BENCHES :=
 ## Space delimited list of logic test files to run, for make testlogic/testccllogic/testoptlogic.
 FILES :=
 
-## Name of a logic test configuration to run, for make testlogic/testccllogic/testoptlogic.
-## (default: all configs. It's not possible yet to specify multiple configs in this way.)
+## Name of a logic test configuration to run, for make testlogic/testccllogic/testoptlogic. (default: all configs. It's not possible yet to specify multiple configs in this way.)
 TESTCONFIG :=
 
-## Regex for matching logic test subtests. This is always matched after "FILES"
-## if they are provided.
+## Regex for matching logic test subtests. This is always matched after "FILES" if they are provided.
 SUBTESTS :=
 
-## Test timeout to use for the linter.
+## Test timeout to use for the linter. Default: 20m
 LINTTIMEOUT := 20m
 
-## Test timeout to use for regular tests.
+## Test timeout to use for regular tests. Default: 30m
 TESTTIMEOUT := 30m
 
-## Test timeout to use for race tests.
+## Test timeout to use for race tests. Default: 30m
 RACETIMEOUT := 30m
 
-## Test timeout to use for acceptance tests.
+## Test timeout to use for acceptance tests. Default: 30m
 ACCEPTANCETIMEOUT := 30m
 
-## Test timeout to use for benchmarks.
+## Test timeout to use for benchmarks. Default: 5m
 BENCHTIMEOUT := 5m
 
 ## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
 TESTFLAGS :=
 
-## Flags to pass to `go test` invocations that actually run tests, but not
-## elsewhere. Used for the -json flag which we'll only want to pass
-## selectively.  There's likely a better solution.
+## Flags to pass to `go test` invocations that actually run tests, but not elsewhere. Used for the -json flag which we'll only want to pass selectively.  There's likely a better solution.
 GOTESTFLAGS :=
 
 ## Extra flags to pass to `stress` during `make stress`.
@@ -201,6 +197,7 @@ help: ## Print help for targets with comments.
 		"make fuzz PKG=./pkg/sql/sem/tree TESTS=Decimal TESTTIMEOUT=1m" "Run the Decimal fuzz tests in the tree directory for 1m." \
 		"make check-libroach TESTS=ccl" "Run the libroach tests matching .*ccl.*"
 
+## The type of build to perform. Default: development. Options: development, release.
 BUILDTYPE := development
 
 # Build C/C++ with basic debugging information.
