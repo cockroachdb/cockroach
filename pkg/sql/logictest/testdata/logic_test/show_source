@@ -77,7 +77,7 @@ transaction_isolation                        serializable
 transaction_priority                         normal
 transaction_read_only                        off
 transaction_status                           NoTxn
-vectorize                                    auto
+vectorize                                    on
 vectorize_row_count_threshold                0
 
 query T colnames

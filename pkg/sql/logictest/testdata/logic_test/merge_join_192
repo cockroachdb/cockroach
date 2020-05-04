@@ -1,9 +1,9 @@
-# LogicTest: local-vec
+# LogicTest: local
 
 # Test to make sure that vectorized engine is used when merge joiner is
-# streaming when vectorize=auto.
+# streaming when vectorize=201auto.
 statement ok
-SET vectorize='auto'; SET vectorize_row_count_threshold=0
+SET vectorize='201auto'; SET vectorize_row_count_threshold=0
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY)

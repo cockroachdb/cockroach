@@ -7,7 +7,7 @@ statement ok
 SET CLUSTER SETTING sql.defaults.vectorize='on'
 
 statement ok
-SET CLUSTER SETTING sql.defaults.vectorize='auto'
+SET CLUSTER SETTING sql.defaults.vectorize='201auto'
 
 statement ok
 SET CLUSTER SETTING sql.defaults.vectorize='off'
@@ -19,7 +19,7 @@ CREATE VIEW cur_telemetry as SELECT feature_name, usage_count FROM crdb_internal
 query T rowsort
 SELECT feature_name FROM cur_telemetry
 ----
-sql.exec.vectorized-setting.auto
+sql.exec.vectorized-setting.201auto
 sql.exec.vectorized-setting.off
 sql.exec.vectorized-setting.on
 

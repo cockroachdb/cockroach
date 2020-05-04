@@ -59,7 +59,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT ntile(1) OVER () FROM kv
 ----
 ·                    distributed  false                                                               ·                      ·
-·                    vectorized   false                                                               ·                      ·
+·                    vectorized   true                                                                ·                      ·
 render               ·            ·                                                                   (ntile)                ·
  │                   render 0     ntile                                                               ·                      ·
  └── window          ·            ·                                                                   (ntile_1_arg1, ntile)  ·
@@ -75,7 +75,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT nth_value(1, 2) OVER () FROM kv
 ----
 ·                    distributed  false                                                                       ·                                                ·
-·                    vectorized   false                                                                       ·                                                ·
+·                    vectorized   true                                                                        ·                                                ·
 render               ·            ·                                                                           (nth_value)                                      ·
  │                   render 0     nth_value                                                                   ·                                                ·
  └── window          ·            ·                                                                           (nth_value_1_arg1, nth_value_1_arg2, nth_value)  ·
@@ -95,7 +95,7 @@ query TTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
 ·                         distributed  false
-·                         vectorized   false
+·                         vectorized   true
 render                    ·            ·
  └── sort                 ·            ·
       │                   order        +variance,+k
@@ -109,7 +109,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
 ·                         distributed  false                                                                                                               ·                                                            ·
-·                         vectorized   false                                                                                                               ·                                                            ·
+·                         vectorized   true                                                                                                                ·                                                            ·
 render                    ·            ·                                                                                                                   (k int, stddev decimal)                                      ·
  │                        render 0     (k)[int]                                                                                                            ·                                                            ·
  │                        render 1     (stddev)[decimal]                                                                                                   ·                                                            ·
@@ -132,7 +132,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
 ·                              distributed  false                                                                                                               ·                                                            ·
-·                              vectorized   false                                                                                                               ·                                                            ·
+·                              vectorized   true                                                                                                                ·                                                            ·
 render                         ·            ·                                                                                                                   (k int, stddev decimal)                                      ·
  │                             render 0     (k)[int]                                                                                                            ·                                                            ·
  │                             render 1     (stddev)[decimal]                                                                                                   ·                                                            ·
@@ -156,7 +156,7 @@ query TTTTT
 EXPLAIN (TYPES,NONORMALIZE) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
 ----
 ·                    distributed  false                                                                                                             ·                                          ·
-·                    vectorized   false                                                                                                             ·                                          ·
+·                    vectorized   true                                                                                                              ·                                          ·
 sort                 ·            ·                                                                                                                 (k int, stddev decimal)                    +k
  │                   order        +k                                                                                                                ·                                          ·
  └── render          ·            ·                                                                                                                 (k int, stddev decimal)                    ·
@@ -173,7 +173,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
 ·                              distributed  false                                                                                                               ·                                                            ·
-·                              vectorized   false                                                                                                               ·                                                            ·
+·                              vectorized   true                                                                                                                ·                                                            ·
 render                         ·            ·                                                                                                                   (k int, "?column?" decimal)                                  ·
  │                             render 0     (k)[int]                                                                                                            ·                                                            ·
  │                             render 1     ("?column?")[decimal]                                                                                               ·                                                            ·
@@ -197,7 +197,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY variance(d) OVER (PARTITION BY v, 100)
 ----
 ·                                   distributed  false                                                                                                               ·                                                              ·
-·                                   vectorized   false                                                                                                               ·                                                              ·
+·                                   vectorized   true                                                                                                                ·                                                              ·
 render                              ·            ·                                                                                                                   (max int, "?column?" decimal)                                  ·
  │                                  render 0     (max)[int]                                                                                                          ·                                                              ·
  │                                  render 1     ("?column?")[decimal]                                                                                               ·                                                              ·
@@ -226,7 +226,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
 ----
 ·                         distributed  false                                                                                                             ·                                            ·
-·                         vectorized   false                                                                                                             ·                                            ·
+·                         vectorized   true                                                                                                              ·                                            ·
 sort                      ·            ·                                                                                                                 (max int, stddev decimal)                    +max
  │                        order        +max                                                                                                              ·                                            ·
  └── render               ·            ·                                                                                                                 (max int, stddev decimal)                    ·
@@ -250,7 +250,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT lag(1) OVER (PARTITION BY 2), lead(2) OVER (PARTITION BY 1) FROM kv
 ----
 ·                              distributed  false                                                                      ·                                                       ·
-·                              vectorized   false                                                                      ·                                                       ·
+·                              vectorized   true                                                                       ·                                                       ·
 render                         ·            ·                                                                          (lag, lead)                                             ·
  │                             render 0     lag                                                                        ·                                                       ·
  │                             render 1     lead                                                                       ·                                                       ·
@@ -279,7 +279,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
 ----
 ·               distributed  false                                                                            ·             ·
-·               vectorized   false                                                                            ·             ·
+·               vectorized   true                                                                             ·             ·
 sort            ·            ·                                                                                (k, v, rank)  +k
  │              order        +k                                                                               ·             ·
  └── window     ·            ·                                                                                (k, v, rank)  ·
@@ -296,7 +296,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER () FROM kv
 ----
 ·               distributed  false                                                             ·         ·
-·               vectorized   false                                                             ·         ·
+·               vectorized   true                                                              ·         ·
 render          ·            ·                                                                 (avg)     ·
  │              render 0     avg                                                               ·         ·
  └── window     ·            ·                                                                 (k, avg)  ·
@@ -310,7 +310,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM kv
 ----
 ·               distributed  false                                                                     ·         ·
-·               vectorized   false                                                                     ·         ·
+·               vectorized   true                                                                      ·         ·
 render          ·            ·                                                                         (avg)     ·
  │              render 0     avg                                                                       ·         ·
  └── window     ·            ·                                                                         (k, avg)  ·
@@ -324,7 +324,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM kv
 ----
 ·               distributed  false                                                             ·         ·
-·               vectorized   false                                                             ·         ·
+·               vectorized   true                                                              ·         ·
 render          ·            ·                                                                 (avg)     ·
  │              render 0     avg                                                               ·         ·
  └── window     ·            ·                                                                 (k, avg)  ·
@@ -353,7 +353,7 @@ EXPLAIN (VERBOSE)
         kv
 ----
 ·                    distributed  false                                                                                      ·                                                                ·
-·                    vectorized   false                                                                                      ·                                                                ·
+·                    vectorized   true                                                                                       ·                                                                ·
 render               ·            ·                                                                                          (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)     ·
  │                   render 0     avg                                                                                        ·                                                                ·
  │                   render 1     avg                                                                                        ·                                                                ·
@@ -442,7 +442,7 @@ EXPLAIN (VERBOSE)
         kv
 ----
 ·               distributed  false                                                                                 ·                        ·
-·               vectorized   false                                                                                 ·                        ·
+·               vectorized   true                                                                                  ·                        ·
 render          ·            ·                                                                                     (avg, avg, avg, avg)     ·
  │              render 0     avg                                                                                   ·                        ·
  │              render 1     avg                                                                                   ·                        ·
