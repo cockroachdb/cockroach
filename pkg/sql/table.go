@@ -604,6 +604,15 @@ func (tc *TableCollection) getTablesWithNewVersion() []IDVersion {
 	return tables
 }
 
+func (tc *TableCollection) getNewTables() (newTables []*ImmutableTableDescriptor) {
+	for _, table := range tc.uncommittedTables {
+		if mut := table.MutableTableDescriptor; mut.IsNewTable() {
+			newTables = append(newTables, table.ImmutableTableDescriptor)
+		}
+	}
+	return newTables
+}
+
 type dbAction bool
 
 const (
