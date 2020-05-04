@@ -25,6 +25,7 @@ import (
 //
 // Supported commands:
 //  - INJECT STATISTICS: imports table statistics from a JSON object.
+//  - ADD CONSTRAINT FOREIGN KEY: add a foreign key reference.
 //
 func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 	tn := stmt.Table.ToTableName()
@@ -36,6 +37,15 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 		switch t := cmd.(type) {
 		case *tree.AlterTableInjectStats:
 			injectTableStats(tab, t.Stats)
+
+		case *tree.AlterTableAddConstraint:
+			switch d := t.ConstraintDef.(type) {
+			case *tree.ForeignKeyConstraintTableDef:
+				tc.resolveFK(tab, d)
+
+			default:
+				panic(fmt.Sprintf("unsupported constraint type %v", d))
+			}
 
 		default:
 			panic(fmt.Sprintf("unsupported ALTER TABLE command %T", t))
