@@ -28,7 +28,7 @@ interface StdDev {
   stddevPlus2: number;
 }
 
-interface ILegendProps {
+export interface ILatencyProps {
   displayIdentities: Identity[];
   staleIDs: Set<number>;
   multipleHeader: boolean;
@@ -238,7 +238,7 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
 };
 
 // tslint:disable-next-line: variable-name
-export const Latency: React.SFC <ILegendProps> = ({
+export const Latency: React.SFC <ILatencyProps> = ({
   displayIdentities,
   staleIDs,
   multipleHeader,
