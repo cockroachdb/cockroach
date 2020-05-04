@@ -15,8 +15,6 @@ import (
 	"io/ioutil"
 	"strings"
 	"text/template"
-
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 const selectionOpsTmpl = "pkg/sql/colexec/selection_ops_tmpl.go"
@@ -28,24 +26,28 @@ func getSelectionOpsTmpl() (*template.Template, error) {
 	}
 
 	s := string(t)
-	s = strings.Replace(s, "_OP_CONST_NAME", "sel{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp", -1)
-	s = strings.Replace(s, "_OP_NAME", "sel{{.Name}}{{.LTyp}}{{.RTyp}}Op", -1)
-	s = strings.Replace(s, "_R_GO_TYPE", "{{.RGoType}}", -1)
-	s = strings.Replace(s, "_L_TYP_VAR", "{{$lTyp}}", -1)
-	s = strings.Replace(s, "_R_TYP_VAR", "{{$rTyp}}", -1)
-	s = strings.Replace(s, "_L_TYP", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_R_TYP", "{{.RTyp}}", -1)
-	s = strings.Replace(s, "_NAME", "{{.Name}}", -1)
+
+	s = strings.ReplaceAll(s, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
+	s = strings.ReplaceAll(s, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
+	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
+
+	s = strings.ReplaceAll(s, "_OP_CONST_NAME", "sel{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}ConstOp")
+	s = strings.ReplaceAll(s, "_OP_NAME", "sel{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}Op")
+	s = strings.ReplaceAll(s, "_NAME", "{{.Name}}")
+	s = strings.ReplaceAll(s, "_R_GO_TYPE", "{{.Right.GoType}}")
+	s = strings.ReplaceAll(s, "_L_TYP", "{{.Left.VecMethod}}")
+	s = strings.ReplaceAll(s, "_R_TYP", "{{.Right.VecMethod}}")
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 3)
-	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 3))
 
-	s = replaceManipulationFuncs(".LTyp", s)
-	s = strings.Replace(s, "_R_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	s = strings.Replace(s, "_R_SLICE", "execgen.SLICE", -1)
-	s = replaceManipulationFuncs(".RTyp", s)
+	s = replaceManipulationFuncsAmbiguous(".Left", s)
+	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
+	s = strings.ReplaceAll(s, "_R_SLICE", "execgen.SLICE")
+	s = replaceManipulationFuncsAmbiguous(".Right", s)
 
-	s = strings.Replace(s, "_HAS_NULLS", "$hasNulls", -1)
+	s = strings.ReplaceAll(s, "_HAS_NULLS", "$hasNulls")
 	selConstLoop := makeFunctionRegex("_SEL_CONST_LOOP", 1)
 	s = selConstLoop.ReplaceAllString(s, `{{template "selConstLoop" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
 	selLoop := makeFunctionRegex("_SEL_LOOP", 1)
@@ -59,18 +61,7 @@ func genSelectionOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
-	for _, ov := range comparisonOpOverloads {
-		lTyp := ov.LTyp
-		rTyp := ov.RTyp
-		rTypToOverloads := lTypToRTypToOverloads[lTyp]
-		if rTypToOverloads == nil {
-			rTypToOverloads = make(map[coltypes.T][]*overload)
-			lTypToRTypToOverloads[lTyp] = rTypToOverloads
-		}
-		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)
-	}
-	return tmpl.Execute(wr, lTypToRTypToOverloads)
+	return tmpl.Execute(wr, twoArgsResolvedOverloadsInfo)
 }
 
 func init() {

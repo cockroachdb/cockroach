@@ -13,7 +13,7 @@ package coldata
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,14 +53,14 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 		// fail.
 		expectedVec := expected.ColVec(colIdx)
 		actualVec := actual.ColVec(colIdx)
-		typ := expectedVec.Type()
-		require.Equal(t, typ, actualVec.Type())
+		require.Equal(t, expectedVec.Type(), actualVec.Type())
 		require.Equal(
 			t,
 			expectedVec.Nulls().Slice(0, expected.Length()),
 			actualVec.Nulls().Slice(0, actual.Length()),
 		)
-		if typ == coltypes.Bytes {
+		canonicalTypeFamily := expectedVec.CanonicalTypeFamily()
+		if canonicalTypeFamily == types.BytesFamily {
 			// Cannot use require.Equal for this type.
 			// TODO(asubiotto): Again, why not?
 			expectedBytes := expectedVec.Bytes().Window(0, expected.Length())
@@ -71,7 +71,7 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 					t.Fatalf("bytes mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedBytes, resultBytes)
 				}
 			}
-		} else if typ == coltypes.Timestamp {
+		} else if canonicalTypeFamily == types.TimestampTZFamily {
 			// Cannot use require.Equal for this type.
 			// TODO(yuzefovich): Again, why not?
 			expectedTimestamp := expectedVec.Timestamp()[0:expected.Length()]
@@ -82,7 +82,7 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 					t.Fatalf("Timestamp mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedTimestamp[i], resultTimestamp[i])
 				}
 			}
-		} else if typ == coltypes.Interval {
+		} else if canonicalTypeFamily == types.IntervalFamily {
 			// Cannot use require.Equal for this type.
 			// TODO(yuzefovich): Again, why not?
 			expectedInterval := expectedVec.Interval()[0:expected.Length()]
@@ -96,8 +96,8 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 		} else {
 			require.Equal(
 				t,
-				expectedVec.Window(expectedVec.Type(), 0, expected.Length()),
-				actualVec.Window(actualVec.Type(), 0, actual.Length()),
+				expectedVec.Window(0, expected.Length()),
+				actualVec.Window(0, actual.Length()),
 			)
 		}
 	}

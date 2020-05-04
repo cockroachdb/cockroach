@@ -25,8 +25,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,9 +47,11 @@ var _ tree.Operator
 // Dummy import to pull in "math" package.
 var _ int = math.MaxInt16
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // _ASSIGN_NE is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
@@ -169,6 +169,7 @@ func (v hashAggFuncs) match(
 	b coldata.Batch,
 	keyCols []uint32,
 	keyTypes []types.T,
+	keyCanonicalTypeFamilies []types.Family,
 	keyMapping coldata.Batch,
 	diff []bool,
 	firstDefiniteMatch bool,
@@ -194,26 +195,31 @@ func (v hashAggFuncs) match(
 			rhs := b.ColVec(int(colIdx))
 			rhsHasNull := rhs.MaybeHasNulls()
 
-			switch typeconv.FromColumnType(&keyTypes[keyIdx]) {
+			switch keyCanonicalTypeFamilies[keyIdx] {
 			// {{range .}}
-			case _TYPES_T:
-				lhsCol := lhs.TemplateType()
-				rhsCol := rhs.TemplateType()
-				if lhsHasNull {
-					lhsNull := lhs.Nulls().NullAt(v.keyIdx)
-					if rhsHasNull {
-						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, true)
+			case _CANONICAL_TYPE_FAMILY:
+				switch keyTypes[keyIdx].Width() {
+				// {{range .WidthOverloads}}
+				case _TYPE_WIDTH:
+					lhsCol := lhs.TemplateType()
+					rhsCol := rhs.TemplateType()
+					if lhsHasNull {
+						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
+						if rhsHasNull {
+							_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, true)
+						} else {
+							_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, false)
+						}
 					} else {
-						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, false)
+						if rhsHasNull {
+							_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, true)
+						} else {
+							_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, false)
+						}
 					}
-				} else {
-					if rhsHasNull {
-						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, true)
-					} else {
-						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, false)
-					}
+					// {{end}}
 				}
-			// {{end}}
+				// {{end}}
 			default:
 				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", keyTypes[keyIdx].String()))
 			}

@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -185,17 +184,16 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
-		OneInputNode:   NewOneInputNode(source),
-		allocator:      testAllocator,
-		evalCtx:        tctx,
-		funcExpr:       typedExpr.(*tree.FuncExpr),
-		outputIdx:      outputIdx,
-		columnTypes:    typs,
-		outputType:     types.String,
-		outputPhysType: coltypes.Bytes,
-		converter:      getDatumToPhysicalFn(types.String),
-		row:            make(tree.Datums, outputIdx),
-		argumentCols:   inputCols,
+		OneInputNode: NewOneInputNode(source),
+		allocator:    testAllocator,
+		evalCtx:      tctx,
+		funcExpr:     typedExpr.(*tree.FuncExpr),
+		outputIdx:    outputIdx,
+		columnTypes:  typs,
+		outputType:   types.String,
+		converter:    getDatumToPhysicalFn(types.String),
+		row:          make(tree.Datums, outputIdx),
+		argumentCols: inputCols,
 	}
 	defaultOp.Init()
 

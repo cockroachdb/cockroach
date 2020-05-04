@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -78,8 +77,8 @@ func makeWindowIntoBatch(
 	} else {
 		windowedBatch.SetSelection(false)
 	}
-	for i, typ := range inputTypes {
-		window := inputBatch.ColVec(i).Window(typeconv.FromColumnType(&typ), windowStart, windowEnd)
+	for i := range inputTypes {
+		window := inputBatch.ColVec(i).Window(windowStart, windowEnd)
 		windowedBatch.ReplaceCol(window, i)
 	}
 	windowedBatch.SetLength(inputBatchLen - startIdx)
@@ -185,7 +184,6 @@ func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx i
 	for i, colVec := range b.colVecs {
 		colVec.Append(
 			coldata.SliceArgs{
-				ColType:     typeconv.FromColumnType(&b.typs[i]),
 				Src:         batch.ColVec(i),
 				Sel:         batch.Selection(),
 				DestIdx:     b.length,

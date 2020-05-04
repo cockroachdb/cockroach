@@ -29,15 +29,16 @@ func genMergeJoinBase(wr io.Writer) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
 	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = replaceManipulationFuncs(s)
 
 	tmpl, err := template.New("mergejoinbase").Parse(s)
 	if err != nil {

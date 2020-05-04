@@ -18,7 +18,6 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -426,7 +425,6 @@ func TestAppendBytesWithLastNull(t *testing.T) {
 	src.Nulls().SetNull(3)
 	sliceArgs := SliceArgs{
 		Src:         src,
-		ColType:     coltypes.Bytes,
 		DestIdx:     0,
 		SrcStartIdx: 0,
 		SrcEndIdx:   len(sel),

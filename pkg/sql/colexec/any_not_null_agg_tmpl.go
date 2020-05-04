@@ -24,25 +24,13 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
-
-func newAnyNotNullAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
-	switch typeconv.FromColumnType(t) {
-	// {{range .}}
-	case _TYPES_T:
-		return &anyNotNull_TYPEAgg{allocator: allocator}, nil
-		// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported any not null agg type %s", t)
-	}
-}
 
 // Remove unused warning.
 var _ = execgen.UNSAFEGET
@@ -60,18 +48,34 @@ var _ time.Time
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-// _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in coltypes.T, for
-// example []int64 for coltypes.Int64.
+// _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // */}}
 
+func newAnyNotNullAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+	// {{range .}}
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &anyNotNull_TYPEAgg{allocator: allocator}, nil
+			// {{end}}
+		}
+		// {{end}}
+	}
+	return nil, errors.Errorf("unsupported any not null agg type %s", t.Name())
+}
+
 // {{range .}}
+// {{range .WidthOverloads}}
 
 // anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
@@ -170,6 +174,7 @@ func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
 }
 
 // {{end}}
+// {{end}}
 
 // {{/*
 // _FIND_ANY_NOT_NULL finds a non-null value for the group that contains the ith
@@ -188,7 +193,9 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
+				// {{with .Global}}
 				execgen.SET(a.col, a.curIdx, a.curAgg)
+				// {{end}}
 			}
 		}
 		a.curIdx++
@@ -204,8 +211,10 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be the
 		// output.
+		// {{with .Global}}
 		val := execgen.UNSAFEGET(col, i)
 		execgen.COPYVAL(a.curAgg, val)
+		// {{end}}
 		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}

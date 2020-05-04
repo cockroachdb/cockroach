@@ -16,7 +16,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -216,7 +215,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
-	for i, typ := range t.inputTypes {
+	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
 		// At this point, we have already fully sorted the input. It is ok to do
 		// this Copy outside of the allocator - the work has been done, but
@@ -226,7 +225,6 @@ func (t *topKSorter) emit() coldata.Batch {
 		vec.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:     typeconv.FromColumnType(&typ),
 					Src:         t.topK.ColVec(i),
 					Sel:         t.sel,
 					SrcStartIdx: t.emitted,
@@ -272,8 +270,8 @@ func (t *topKSorter) ExportBuffered(colexecbase.Operator) coldata.Batch {
 		if newExportedFromTopK > topKLen {
 			newExportedFromTopK = topKLen
 		}
-		for i, typ := range t.inputTypes {
-			window := t.topK.ColVec(i).Window(typeconv.FromColumnType(&typ), t.exportedFromTopK, newExportedFromTopK)
+		for i := range t.inputTypes {
+			window := t.topK.ColVec(i).Window(t.exportedFromTopK, newExportedFromTopK)
 			t.windowedBatch.ReplaceCol(window, i)
 		}
 		t.windowedBatch.SetSelection(false)

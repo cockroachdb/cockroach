@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const ordSyncTmpl = "pkg/sql/colexec/orderedsynchronizer_tmpl.go"
+const ordSyncTmpl = "pkg/sql/colexec/ordered_synchronizer_tmpl.go"
 
 func genOrderedSynchronizer(wr io.Writer) error {
 	d, err := ioutil.ReadFile(ordSyncTmpl)
@@ -29,14 +29,14 @@ func genOrderedSynchronizer(wr io.Writer) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
 
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = replaceManipulationFuncs(s)
 
-	tmpl, err := template.New("orderedsynchronizer").Parse(s)
+	tmpl, err := template.New("ordered_synchronizer").Parse(s)
 	if err != nil {
 		return err
 	}
@@ -48,5 +48,5 @@ func genOrderedSynchronizer(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genOrderedSynchronizer, "orderedsynchronizer.eg.go", ordSyncTmpl)
+	registerGenerator(genOrderedSynchronizer, "ordered_synchronizer.eg.go", ordSyncTmpl)
 }

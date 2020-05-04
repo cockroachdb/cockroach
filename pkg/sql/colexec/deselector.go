@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,7 +35,7 @@ type deselectorOp struct {
 var _ colexecbase.Operator = &deselectorOp{}
 
 // NewDeselectorOp creates a new deselector operator on the given input
-// operator with the given column coltypes.
+// operator with the given column types.
 func NewDeselectorOp(
 	allocator *colmem.Allocator, input colexecbase.Operator, typs []types.T,
 ) colexecbase.Operator {
@@ -60,13 +59,12 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 
 	sel := batch.Selection()
 	p.allocator.PerformOperation(p.output.ColVecs(), func() {
-		for i, t := range p.inputTypes {
+		for i := range p.inputTypes {
 			toCol := p.output.ColVec(i)
 			fromCol := batch.ColVec(i)
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:   typeconv.FromColumnType(&t),
 						Src:       fromCol,
 						Sel:       sel,
 						SrcEndIdx: batch.Length(),

@@ -15,8 +15,6 @@ import (
 	"io/ioutil"
 	"strings"
 	"text/template"
-
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 const projConstOpsTmpl = "pkg/sql/colexec/proj_const_ops_tmpl.go"
@@ -39,30 +37,30 @@ func getProjConstOpTmplString(isConstLeft bool) (string, error) {
 // Note that not all template variables can be present in the template, and it
 // is ok - such replacements will be noops.
 func replaceProjTmplVariables(tmpl string) string {
-	tmpl = strings.Replace(tmpl, "_L_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	tmpl = replaceManipulationFuncs(".LTyp", tmpl)
-	tmpl = strings.Replace(tmpl, "_R_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	tmpl = replaceManipulationFuncs(".RTyp", tmpl)
-	tmpl = strings.Replace(tmpl, "_RET_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	tmpl = replaceManipulationFuncs(".RetTyp", tmpl)
+	tmpl = strings.ReplaceAll(tmpl, "_L_UNSAFEGET", "execgen.UNSAFEGET")
+	tmpl = replaceManipulationFuncsAmbiguous(".Left", tmpl)
+	tmpl = strings.ReplaceAll(tmpl, "_R_UNSAFEGET", "execgen.UNSAFEGET")
+	tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
+	tmpl = strings.ReplaceAll(tmpl, "_RETURN_UNSAFEGET", "execgen.RETURNUNSAFEGET")
+	tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
 
-	// The order in which variables are replaced is important - since some
-	// variable names are prefixes of others, we need to replace the longer names
-	// first.
-	tmpl = strings.Replace(tmpl, "_OP_NAME", "proj{{.Name}}{{.LTyp}}{{.RTyp}}Op", -1)
-	tmpl = strings.Replace(tmpl, "_NAME", "{{.Name}}", -1)
-	tmpl = strings.Replace(tmpl, "_L_GO_TYPE", "{{.LGoType}}", -1)
-	tmpl = strings.Replace(tmpl, "_R_GO_TYPE", "{{.RGoType}}", -1)
-	tmpl = strings.Replace(tmpl, "_L_TYP_VAR", "{{$lTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_R_TYP_VAR", "{{$rTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_L_TYP", "{{.LTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_R_TYP", "{{.RTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_RET_TYP", "{{.RetTyp}}", -1)
+	tmpl = strings.ReplaceAll(tmpl, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
+	tmpl = strings.ReplaceAll(tmpl, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
+	tmpl = strings.ReplaceAll(tmpl, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
+	tmpl = strings.ReplaceAll(tmpl, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
+
+	tmpl = strings.ReplaceAll(tmpl, "_OP_NAME", "proj{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}Op")
+	tmpl = strings.ReplaceAll(tmpl, "_NAME", "{{.Name}}")
+	tmpl = strings.ReplaceAll(tmpl, "_L_GO_TYPE", "{{.Left.GoType}}")
+	tmpl = strings.ReplaceAll(tmpl, "_R_GO_TYPE", "{{.Right.GoType}}")
+	tmpl = strings.ReplaceAll(tmpl, "_L_TYP", "{{.Left.VecMethod}}")
+	tmpl = strings.ReplaceAll(tmpl, "_R_TYP", "{{.Right.VecMethod}}")
+	tmpl = strings.ReplaceAll(tmpl, "_RET_TYP", "{{.Right.RetVecMethod}}")
 
 	assignRe := makeFunctionRegex("_ASSIGN", 3)
-	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Assign", 3))
+	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Right.Assign", 3))
 
-	tmpl = strings.Replace(tmpl, "_HAS_NULLS", "$hasNulls", -1)
+	tmpl = strings.ReplaceAll(tmpl, "_HAS_NULLS", "$hasNulls")
 	setProjectionRe := makeFunctionRegex("_SET_PROJECTION", 1)
 	tmpl = setProjectionRe.ReplaceAllString(tmpl, `{{template "setProjection" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
 	setSingleTupleProjectionRe := makeFunctionRegex("_SET_SINGLE_TUPLE_PROJECTION", 1)
@@ -76,17 +74,17 @@ func replaceProjTmplVariables(tmpl string) string {
 // the constant is on the left side. It should only be used within this file.
 func replaceProjConstTmplVariables(tmpl string, isConstLeft bool) string {
 	if isConstLeft {
-		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "L", -1)
-		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "true", -1)
-		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}Const{{.RTyp}}Op", -1)
-		tmpl = strings.Replace(tmpl, "_NON_CONST_GOTYPESLICE", "{{.RTyp.GoTypeSliceName}}", -1)
-		tmpl = replaceManipulationFuncs(".RTyp", tmpl)
+		tmpl = strings.ReplaceAll(tmpl, "_CONST_SIDE", "L")
+		tmpl = strings.ReplaceAll(tmpl, "_IS_CONST_LEFT", "true")
+		tmpl = strings.ReplaceAll(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.Left.VecMethod}}Const{{.Right.VecMethod}}Op")
+		tmpl = strings.ReplaceAll(tmpl, "_NON_CONST_GOTYPESLICE", "{{.Right.GoTypeSliceName}}")
+		tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
 	} else {
-		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "R", -1)
-		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "false", -1)
-		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp", -1)
-		tmpl = strings.Replace(tmpl, "_NON_CONST_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-		tmpl = replaceManipulationFuncs(".LTyp", tmpl)
+		tmpl = strings.ReplaceAll(tmpl, "_CONST_SIDE", "R")
+		tmpl = strings.ReplaceAll(tmpl, "_IS_CONST_LEFT", "false")
+		tmpl = strings.ReplaceAll(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}ConstOp")
+		tmpl = strings.ReplaceAll(tmpl, "_NON_CONST_GOTYPESLICE", "{{.Left.GoTypeSliceName}}")
+		tmpl = replaceManipulationFuncsAmbiguous(".Left", tmpl)
 	}
 	return replaceProjTmplVariables(tmpl)
 }
@@ -108,26 +106,7 @@ func genProjNonConstOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, getLTypToRTypToOverloads())
-}
-
-func getLTypToRTypToOverloads() map[coltypes.T]map[coltypes.T][]*overload {
-	var allOverloads []*overload
-	allOverloads = append(allOverloads, binaryOpOverloads...)
-	allOverloads = append(allOverloads, comparisonOpOverloads...)
-
-	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
-	for _, ov := range allOverloads {
-		lTyp := ov.LTyp
-		rTyp := ov.RTyp
-		rTypToOverloads := lTypToRTypToOverloads[lTyp]
-		if rTypToOverloads == nil {
-			rTypToOverloads = make(map[coltypes.T][]*overload)
-			lTypToRTypToOverloads[lTyp] = rTypToOverloads
-		}
-		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)
-	}
-	return lTypToRTypToOverloads
+	return tmpl.Execute(wr, twoArgsResolvedOverloadsInfo)
 }
 
 func init() {
@@ -141,7 +120,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			return tmpl.Execute(wr, getLTypToRTypToOverloads())
+			return tmpl.Execute(wr, twoArgsResolvedOverloadsInfo)
 		}
 	}
 

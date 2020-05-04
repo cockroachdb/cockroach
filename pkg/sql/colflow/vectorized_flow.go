@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -726,7 +726,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
 				return nil, nil, err
 			}
-			if _, err := typeconv.FromColumnTypes(input.ColumnTypes); err != nil {
+			if err := typeconv.AreTypesSupported(input.ColumnTypes); err != nil {
 				return nil, nil, err
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
@@ -757,7 +757,7 @@ func (s *vectorizedFlowCreator) setupInput(
 	if len(inputStreamOps) > 1 {
 		var err error
 		statsInputs := inputStreamOps
-		if _, err = typeconv.FromColumnTypes(input.ColumnTypes); err != nil {
+		if err = typeconv.AreTypesSupported(input.ColumnTypes); err != nil {
 			return nil, nil, err
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
@@ -1018,7 +1018,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// disk. vectorize=on does support this.
 			return nil, errors.Errorf("hash router encountered when vectorize=201auto")
 		}
-		if _, err := typeconv.FromColumnTypes(result.ColumnTypes); err != nil {
+		if err := typeconv.AreTypesSupported(result.ColumnTypes); err != nil {
 			return nil, err
 		}
 		if err = s.setupOutput(

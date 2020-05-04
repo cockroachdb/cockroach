@@ -27,8 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -59,14 +58,17 @@ var _ time.Time
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-// Dummy import to pull in "coltypes" package
-var _ coltypes.T
-
 // Dummy import to pull in "bytes" package
 var _ bytes.Buffer
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 func _ASSIGN_EQ(_, _, _ interface{}) int {
 	colexecerror.InternalError("")
@@ -74,7 +76,7 @@ func _ASSIGN_EQ(_, _, _ interface{}) int {
 
 // */}}
 
-// Enum used to represent comparison results
+// Enum used to represent comparison results.
 type comparisonResult int
 
 const (
@@ -85,7 +87,7 @@ const (
 
 func GetInProjectionOperator(
 	allocator *colmem.Allocator,
-	typ *types.T,
+	t *types.T,
 	input colexecbase.Operator,
 	colIdx int,
 	resultIdx int,
@@ -94,51 +96,60 @@ func GetInProjectionOperator(
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	var err error
-	switch typeconv.FromColumnType(typ) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
-	case coltypes._TYPE:
-		obj := &projectInOp_TYPE{
-			OneInputNode: NewOneInputNode(input),
-			allocator:    allocator,
-			colIdx:       colIdx,
-			outputIdx:    resultIdx,
-			negate:       negate,
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			obj := &projectInOp_TYPE{
+				OneInputNode: NewOneInputNode(input),
+				allocator:    allocator,
+				colIdx:       colIdx,
+				outputIdx:    resultIdx,
+				negate:       negate,
+			}
+			obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(t, datumTuple)
+			if err != nil {
+				return nil, err
+			}
+			return obj, nil
+			// {{end}}
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(typ, datumTuple)
-		if err != nil {
-			return nil, err
-		}
-		return obj, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unhandled type: %s", typ)
+		// {{end}}
 	}
+	return nil, errors.Errorf("unhandled type: %s", t.Name())
 }
 
 func GetInOperator(
-	typ *types.T, input colexecbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+	t *types.T, input colexecbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (colexecbase.Operator, error) {
 	var err error
-	switch typeconv.FromColumnType(typ) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
-	case coltypes._TYPE:
-		obj := &selectInOp_TYPE{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			negate:       negate,
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			obj := &selectInOp_TYPE{
+				OneInputNode: NewOneInputNode(input),
+				colIdx:       colIdx,
+				negate:       negate,
+			}
+			obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(t, datumTuple)
+			if err != nil {
+				return nil, err
+			}
+			return obj, nil
+			// {{end}}
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(typ, datumTuple)
-		if err != nil {
-			return nil, err
-		}
-		return obj, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unhandled type: %s", typ)
+		// {{end}}
 	}
+	return nil, errors.Errorf("unhandled type: %s", t.Name())
 }
 
 // {{range .}}
+// {{range .WidthOverloads}}
 
 type selectInOp_TYPE struct {
 	OneInputNode
@@ -147,6 +158,8 @@ type selectInOp_TYPE struct {
 	hasNulls  bool
 	negate    bool
 }
+
+var _ colexecbase.Operator = &selectInOp_TYPE{}
 
 type projectInOp_TYPE struct {
 	OneInputNode
@@ -160,8 +173,8 @@ type projectInOp_TYPE struct {
 
 var _ colexecbase.Operator = &projectInOp_TYPE{}
 
-func fillDatumRow_TYPE(typ *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := getDatumToPhysicalFn(typ)
+func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
+	conv := getDatumToPhysicalFn(t)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -359,4 +372,5 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
+// {{end}}
 // {{end}}

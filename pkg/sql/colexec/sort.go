@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -168,8 +167,8 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 	// We don't need to worry about selection vectors here because if these were
 	// present on the original input batches, they have been removed when we were
 	// buffering up tuples.
-	for i, t := range p.inputTypes {
-		window := p.bufferedTuples.ColVec(i).Window(typeconv.FromColumnType(&t), startIdx, endIdx)
+	for i := range p.inputTypes {
+		window := p.bufferedTuples.ColVec(i).Window(startIdx, endIdx)
 		p.windowedBatch.ReplaceCol(window, i)
 	}
 	p.windowedBatch.SetSelection(false)
@@ -283,7 +282,6 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 			p.output.ColVec(j).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     typeconv.FromColumnType(&p.inputTypes[j]),
 						Sel:         p.order,
 						Src:         p.input.getValues(j),
 						SrcStartIdx: p.emitted,

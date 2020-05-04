@@ -25,8 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -51,14 +50,14 @@ var _ time.Time
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
-
-// _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in coltypes.T, for example
-// int64 for coltypes.Int64.
+// _GOTYPE is the template variable.
 type _GOTYPE interface{}
+
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // */}}
 
@@ -72,22 +71,27 @@ func NewConstOp(
 	outputIdx int,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, t, outputIdx)
-	switch typeconv.FromColumnType(t) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
-	case _TYPES_T:
-		return &const_TYPEOp{
-			OneInputNode: NewOneInputNode(input),
-			allocator:    allocator,
-			outputIdx:    outputIdx,
-			constVal:     constVal.(_GOTYPE),
-		}, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported const type %s", t)
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &const_TYPEOp{
+				OneInputNode: NewOneInputNode(input),
+				allocator:    allocator,
+				outputIdx:    outputIdx,
+				constVal:     constVal.(_GOTYPE),
+			}, nil
+			// {{end}}
+		}
+		// {{end}}
 	}
+	return nil, errors.Errorf("unsupported const type %s", t.Name())
 }
 
 // {{range .}}
+// {{range .WidthOverloads}}
 
 type const_TYPEOp struct {
 	OneInputNode
@@ -132,6 +136,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
+// {{end}}
 // {{end}}
 
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL

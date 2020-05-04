@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // invariantsChecker is a helper Operator that will check that invariants that
@@ -46,7 +46,7 @@ func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
 	}
 	for colIdx := 0; colIdx < b.Width(); colIdx++ {
 		v := b.ColVec(colIdx)
-		if v.Type() == coltypes.Bytes {
+		if v.CanonicalTypeFamily() == types.BytesFamily {
 			v.Bytes().AssertOffsetsAreNonDecreasing(n)
 		}
 	}

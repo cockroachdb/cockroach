@@ -27,11 +27,10 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -59,13 +58,13 @@ var _ duration.Duration
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 
-// _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in coltypes.T, for example
-// int64 for coltypes.Int64.
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
+
+// _GOTYPE is the template variable.
 type _GOTYPE interface{}
 
 // _ASSIGN_EQ is the template equality function for assigning the first input
@@ -97,29 +96,34 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	// Check all equality columns in the first row of batch to make sure we're in
 	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
-		switch typeconv.FromColumnType(&input.sourceTypes[colIdx]) {
+		switch input.canonicalTypeFamilies[colIdx] {
 		// {{range .}}
-		case _TYPES_T:
-			// We perform this null check on every equality column of the first
-			// buffered tuple regardless of the join type since it is done only once
-			// per batch. In some cases (like INNER JOIN, or LEFT OUTER JOIN with the
-			// right side being an input) this check will always return false since
-			// nulls couldn't be buffered up though.
-			if bufferedGroup.firstTuple[colIdx].Nulls().NullAt(0) {
-				return true
-			}
-			bufferedCol := bufferedGroup.firstTuple[colIdx].TemplateType()
-			prevVal := execgen.UNSAFEGET(bufferedCol, 0)
-			var curVal _GOTYPE
-			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx) {
-				return true
-			}
-			col := batch.ColVec(int(colIdx)).TemplateType()
-			curVal = execgen.UNSAFEGET(col, tupleToLookAtIdx)
-			var match bool
-			_ASSIGN_EQ(match, prevVal, curVal)
-			if !match {
-				return true
+		case _CANONICAL_TYPE_FAMILY:
+			switch input.sourceTypes[colIdx].Width() {
+			// {{range .WidthOverloads}}
+			case _TYPE_WIDTH:
+				// We perform this null check on every equality column of the first
+				// buffered tuple regardless of the join type since it is done only once
+				// per batch. In some cases (like INNER JOIN, or LEFT OUTER JOIN with the
+				// right side being an input) this check will always return false since
+				// nulls couldn't be buffered up though.
+				if bufferedGroup.firstTuple[colIdx].Nulls().NullAt(0) {
+					return true
+				}
+				bufferedCol := bufferedGroup.firstTuple[colIdx].TemplateType()
+				prevVal := execgen.UNSAFEGET(bufferedCol, 0)
+				var curVal _GOTYPE
+				if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx) {
+					return true
+				}
+				col := batch.ColVec(int(colIdx)).TemplateType()
+				curVal = execgen.UNSAFEGET(col, tupleToLookAtIdx)
+				var match bool
+				_ASSIGN_EQ(match, prevVal, curVal)
+				if !match {
+					return true
+				}
+				// {{end}}
 			}
 		// {{end}}
 		default:

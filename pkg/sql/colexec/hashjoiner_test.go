@@ -458,7 +458,7 @@ func init() {
 			},
 		},
 		{
-			// Test handling of various output column coltypes.
+			// Test handling of various output column types.
 			description: "12",
 			leftTypes:   []types.T{*types.Bool, *types.Int, *types.Bytes, *types.Int},
 			rightTypes:  []types.T{*types.Int, *types.Float, *types.Int4},
@@ -638,7 +638,7 @@ func init() {
 			leftTypes:   []types.T{*types.Bytes, *types.Bool, *types.Int2, *types.Int4, *types.Int, *types.Bytes},
 			rightTypes:  []types.T{*types.Int, *types.Int4, *types.Int2, *types.Bool, *types.Bytes},
 
-			// Test multiple equality columns of different coltypes.
+			// Test multiple equality columns of different types.
 			leftTuples: tuples{
 				{"foo", false, int16(100), int32(1000), int64(10000), "aaa"},
 				{"foo", true, 100, 1000, 10000, "bbb"},

@@ -14,8 +14,6 @@ import (
 	"io"
 	"io/ioutil"
 	"text/template"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 const countAggTmpl = "pkg/sql/colexec/count_agg_tmpl.go"
@@ -36,7 +34,7 @@ func genCountAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, sameTypeBinaryOpToOverloads[tree.Plus])
+	return tmpl.Execute(wr, struct{}{})
 }
 
 func init() {

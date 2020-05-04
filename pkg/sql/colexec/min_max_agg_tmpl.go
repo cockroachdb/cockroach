@@ -26,8 +26,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -64,13 +63,14 @@ var _ tree.Datum
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
-// Dummy import to pull in "coltypes" package.
-var _ = coltypes.T
-
-// _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in coltypes.T, for
-// example []int64 for coltypes.Int64.
+// _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
+
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // _ASSIGN_CMP is the template function for assigning true to the first input
 // if the second input compares successfully to the third input. The comparison
@@ -87,17 +87,22 @@ func _ASSIGN_CMP(_, _, _ string) bool {
 // {{$agg := .AggNameLower}}
 
 func new_AGG_TITLEAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
-	switch typeconv.FromColumnType(t) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .Overloads}}
-	case _TYPES_T:
-		return &_AGG_TYPEAgg{allocator: allocator}, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported min agg type %s", t)
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &_AGG_TYPEAgg{allocator: allocator}, nil
+			// {{end}}
+		}
+		// {{end}}
 	}
+	return nil, errors.Errorf("unsupported _AGG agg type %s", t.Name())
 }
 
 // {{range .Overloads}}
+// {{range .WidthOverloads}}
 
 type _AGG_TYPEAgg struct {
 	allocator *colmem.Allocator
@@ -210,6 +215,7 @@ func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
 
 // {{end}}
 // {{end}}
+// {{end}}
 
 // {{/*
 // _ACCUMULATE_MINMAX sets the output for the current group to be the value of
@@ -227,7 +233,9 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
+				// {{with .Global}}
 				execgen.SET(a.col, a.curIdx, a.curAgg)
+				// {{end}}
 			}
 		}
 		a.curIdx++
@@ -239,6 +247,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	// {{else}}
 	isNull = false
 	// {{end}}
+	// {{with .Global}}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
 			val := execgen.UNSAFEGET(col, i)
@@ -253,6 +262,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 			}
 		}
 	}
+	// {{end}}
 	// {{end}}
 
 	// {{/*

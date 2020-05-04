@@ -19,8 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -95,7 +94,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							aggregations[i].ColIdx = []uint32{}
 							aggInputTypes = aggInputTypes[:0]
 						}
-						if isSupportedType(aggTyp) {
+						if typeconv.IsTypeSupported(aggTyp) {
 							if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
 								outputTypes[i] = *outputType
 								break
@@ -907,18 +906,13 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	}
 }
 
-func isSupportedType(typ *types.T) bool {
-	converted := typeconv.FromColumnType(typ)
-	return converted != coltypes.Unhandled
-}
-
 // generateRandomSupportedTypes generates nCols random types that are supported
 // by the vectorized engine.
 func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
 	typs := make([]types.T, 0, nCols)
 	for len(typs) < nCols {
 		typ := sqlbase.RandType(rng)
-		if isSupportedType(typ) {
+		if typeconv.IsTypeSupported(typ) {
 			typs = append(typs, *typ)
 		}
 	}
@@ -933,7 +927,7 @@ func generateRandomComparableTypes(rng *rand.Rand, inputTypes []types.T) []types
 	for i, inputType := range inputTypes {
 		for {
 			typ := sqlbase.RandType(rng)
-			if isSupportedType(typ) {
+			if typeconv.IsTypeSupported(typ) {
 				comparable := false
 				for _, cmpOverloads := range tree.CmpOps[tree.LT] {
 					o := cmpOverloads.(*tree.CmpOp)

@@ -84,7 +84,7 @@ func newSpillingQueue(
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	itemsLen := memoryLimit / int64(colmem.EstimateBatchSizeBytesFromSQLTypes(typs, batchSize))
+	itemsLen := memoryLimit / int64(colmem.EstimateBatchSizeBytes(typs, batchSize))
 	if itemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice

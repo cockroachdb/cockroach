@@ -26,8 +26,7 @@ import (
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,8 +56,8 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	}
 
 	var builder array.Builder
-	switch typeconv.FromColumnType(t) {
-	case coltypes.Bool:
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+	case types.BoolFamily:
 		builder = array.NewBooleanBuilder(memory.DefaultAllocator)
 		data := make([]bool, n)
 		for i := range data {
@@ -67,35 +66,40 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			}
 		}
 		builder.(*array.BooleanBuilder).AppendValues(data, valid)
-	case coltypes.Int16:
-		builder = array.NewInt16Builder(memory.DefaultAllocator)
-		data := make([]int16, n)
-		for i := range data {
-			data[i] = int16(rng.Uint64())
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			builder = array.NewInt16Builder(memory.DefaultAllocator)
+			data := make([]int16, n)
+			for i := range data {
+				data[i] = int16(rng.Uint64())
+			}
+			builder.(*array.Int16Builder).AppendValues(data, valid)
+		case 32:
+			builder = array.NewInt32Builder(memory.DefaultAllocator)
+			data := make([]int32, n)
+			for i := range data {
+				data[i] = int32(rng.Uint64())
+			}
+			builder.(*array.Int32Builder).AppendValues(data, valid)
+		case 0, 64:
+			builder = array.NewInt64Builder(memory.DefaultAllocator)
+			data := make([]int64, n)
+			for i := range data {
+				data[i] = int64(rng.Uint64())
+			}
+			builder.(*array.Int64Builder).AppendValues(data, valid)
+		default:
+			panic(fmt.Sprintf("unexpected int width: %d", t.Width()))
 		}
-		builder.(*array.Int16Builder).AppendValues(data, valid)
-	case coltypes.Int32:
-		builder = array.NewInt32Builder(memory.DefaultAllocator)
-		data := make([]int32, n)
-		for i := range data {
-			data[i] = int32(rng.Uint64())
-		}
-		builder.(*array.Int32Builder).AppendValues(data, valid)
-	case coltypes.Int64:
-		builder = array.NewInt64Builder(memory.DefaultAllocator)
-		data := make([]int64, n)
-		for i := range data {
-			data[i] = int64(rng.Uint64())
-		}
-		builder.(*array.Int64Builder).AppendValues(data, valid)
-	case coltypes.Float64:
+	case types.FloatFamily:
 		builder = array.NewFloat64Builder(memory.DefaultAllocator)
 		data := make([]float64, n)
 		for i := range data {
 			data[i] = rng.Float64() * math.MaxFloat64
 		}
 		builder.(*array.Float64Builder).AppendValues(data, valid)
-	case coltypes.Bytes:
+	case types.BytesFamily:
 		// Bytes can be represented 3 different ways. As variable-length bytes,
 		// variable-length strings, or fixed-width bytes.
 		representation := rng.Intn(3)
@@ -139,7 +143,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			}
 			builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
 		}
-	case coltypes.Decimal:
+	case types.DecimalFamily:
 		var err error
 		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 		data := make([][]byte, n)
@@ -153,7 +157,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			}
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
-	case coltypes.Timestamp:
+	case types.TimestampTZFamily:
 		var err error
 		now := timeutil.Now()
 		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
@@ -167,7 +171,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			}
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
-	case coltypes.Interval:
+	case types.IntervalFamily:
 		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 		data := make([][]byte, n)
 		sizeOfInt64 := int(unsafe.Sizeof(int64(0)))

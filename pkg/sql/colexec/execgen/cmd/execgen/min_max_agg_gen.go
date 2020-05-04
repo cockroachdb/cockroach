@@ -21,7 +21,7 @@ import (
 
 type aggOverloads struct {
 	Agg       string
-	Overloads []*overload
+	Overloads []*oneArgOverload
 }
 
 // AggNameLower returns the aggregation name in lower case, e.g. "min".
@@ -47,20 +47,23 @@ func genMinMaxAgg(wr io.Writer) error {
 	}
 
 	s := string(t)
-	s = strings.Replace(s, "_AGG_TITLE", "{{.AggNameTitle}}", -1)
-	s = strings.Replace(s, "_AGG", "{{$agg}}", -1)
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
+
+	s = strings.ReplaceAll(s, "_AGG_TITLE", "{{.AggNameTitle}}")
+	s = strings.ReplaceAll(s, "_AGG", "{{$agg}}")
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 3)
-	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
+	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
 	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
-	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "LTyp" .LTyp "HasNulls" $4}}`)
+	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)
 
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = replaceManipulationFuncs(s)
 
 	tmpl, err := template.New("min_max_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 
