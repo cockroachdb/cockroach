@@ -425,19 +425,25 @@ func registerQuitAllNodes(r *testRegistry) {
 			// everywhere for system ranges.
 			q.waitForUpReplication(ctx)
 
-			// Shut three nodes down gracefully with a very long wait (longer
+			// Shut one nodes down gracefully with a very long wait (longer
 			// than the test timeout). This is guaranteed to work - we still
 			// have quorum at that point.
 			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 5, "--drain-wait=1h") })
-			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 4, "--drain-wait=1h") })
-			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 3, "--drain-wait=1h") })
 
-			// Now shut down the remaining 3 nodes less gracefully, with a
-			// short wait. The drain should be stuck server-side, because
-			// the liveness record doesn't have quorum. So we're expecting
-			// quit to stop waiting due to the lower --drain-wait, but still
-			// issue a hard shutdown afterwards and then succeed. We can
-			// also expect the node to exit successfully.
+			// Now shut down the remaining 4 nodes less gracefully, with a
+			// short wait.
+
+			// For the next two nodes, we may or may not observe that
+			// the graceful shutdown succeed. It may succeed if every
+			// range has enough quorum on the last 2 nodes (shut down later below).
+			// It may fail if some ranges have a quorum composed of n3, n4, n5.
+			// See: https://github.com/cockroachdb/cockroach/issues/48339
+			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 4, "--drain-wait=4s") })
+			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 3, "--drain-wait=4s") })
+
+			// For the lat two nodes, we are always under quorum. In this
+			// case we can expect `quit` to always report a hard shutdown
+			// was required.
 			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 2, "--drain-wait=4s")) })
 			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 1, "--drain-wait=4s")) })
 
