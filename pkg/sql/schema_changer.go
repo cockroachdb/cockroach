@@ -373,22 +373,8 @@ func startGCJob(
 	details jobspb.SchemaChangeGCDetails,
 ) error {
 	var sj *jobs.StartableJob
-	descriptorIDs := make([]sqlbase.ID, 0)
-	if len(details.Indexes) > 0 {
-		if len(descriptorIDs) == 0 {
-			descriptorIDs = []sqlbase.ID{details.ParentID}
-		}
-	} else if len(details.Tables) > 0 {
-		for _, table := range details.Tables {
-			descriptorIDs = append(descriptorIDs, table.ID)
-		}
-	} else {
-		// Nothing to GC.
-		return nil
-	}
-
+	jobRecord := CreateGCJobRecord(schemaChangeDescription, username, details)
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		jobRecord := CreateGCJobRecord(schemaChangeDescription, username, descriptorIDs, details)
 		var err error
 		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultCh */); err != nil {
 			return err
@@ -401,16 +387,6 @@ func startGCJob(
 		return err
 	}
 	return nil
-}
-
-func (sc *SchemaChanger) startGCJob(
-	ctx context.Context, details jobspb.SchemaChangeGCDetails, isRollback bool,
-) error {
-	description := sc.job.Payload().Description
-	if isRollback {
-		description = "ROLLBACK of " + description
-	}
-	return startGCJob(ctx, sc.db, sc.jobRegistry, sc.job.Payload().Username, description, details)
 }
 
 // Execute the entire schema change in steps.
@@ -464,7 +440,9 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				},
 			},
 		}
-		if err := sc.startGCJob(ctx, gcDetails, false /* isRollback */); err != nil {
+		if err := startGCJob(
+			ctx, sc.db, sc.jobRegistry, sc.job.Payload().Username, sc.job.Payload().Description, gcDetails,
+		); err != nil {
 			return err
 		}
 	}
@@ -799,9 +777,13 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		}
 	}
 
+	// Jobs (for GC, etc.) that need to be started immediately after the table
+	// descriptor updates are published.
+	var childJobs []*jobs.StartableJob
 	update := func(txn *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
 		// Reset vars here because update function can be called multiple times in a retry.
 		isRollback = false
+		childJobs = nil
 
 		i := 0
 		scDesc, ok := descs[sc.tableID]
@@ -837,9 +819,18 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						},
 						ParentID: sc.tableID,
 					}
-					if err := sc.startGCJob(ctx, indexGCDetails, isRollback); err != nil {
+
+					description := sc.job.Payload().Description
+					if isRollback {
+						description = "ROLLBACK of " + description
+					}
+					gcJobRecord := CreateGCJobRecord(description, sc.job.Payload().Username, indexGCDetails)
+					indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn, nil /* resultsCh */)
+					if err != nil {
 						return err
 					}
+					log.VEventf(ctx, 2, "created index GC job %d", *indexGCJob.ID())
+					childJobs = append(childJobs, indexGCJob)
 				}
 			}
 			if constraint := mutation.GetConstraint(); constraint != nil &&
@@ -921,10 +912,12 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						Progress:      jobspb.SchemaChangeProgress{},
 						NonCancelable: true,
 					}
-					job, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn)
+					job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultsCh */)
 					if err != nil {
 						return err
 					}
+					log.VEventf(ctx, 2, "created job %d to drop previous indexes", *job.ID())
+					childJobs = append(childJobs, job)
 					scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 						MutationID: mutationID,
 						JobID:      *job.ID(),
@@ -973,7 +966,18 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		)
 	})
 	if err != nil {
+		for _, job := range childJobs {
+			if rollbackErr := job.CleanupOnRollback(ctx); rollbackErr != nil {
+				log.Warningf(ctx, "failed to clean up job: %v", rollbackErr)
+			}
+		}
 		return nil, err
+	}
+	for _, job := range childJobs {
+		if _, err := job.Start(ctx); err != nil {
+			log.Warningf(ctx, "starting job %d failed with error: %v", *job.ID(), err)
+		}
+		log.VEventf(ctx, 2, "started job %d", *job.ID())
 	}
 	return descs[sc.tableID], nil
 }
@@ -1379,14 +1383,21 @@ func (sc *SchemaChanger) reverseMutation(
 	return mutation, columns
 }
 
-// CreateGCJobRecord creates the job record for a GC job setting some properties
-// which are common for all GC job.
+// CreateGCJobRecord creates the job record for a GC job, setting some
+// properties which are common for all GC jobs.
 func CreateGCJobRecord(
-	originalDescription string,
-	username string,
-	descriptorIDs sqlbase.IDs,
-	details jobspb.SchemaChangeGCDetails,
+	originalDescription string, username string, details jobspb.SchemaChangeGCDetails,
 ) jobs.Record {
+	descriptorIDs := make([]sqlbase.ID, 0)
+	if len(details.Indexes) > 0 {
+		if len(descriptorIDs) == 0 {
+			descriptorIDs = []sqlbase.ID{details.ParentID}
+		}
+	} else {
+		for _, table := range details.Tables {
+			descriptorIDs = append(descriptorIDs, table.ID)
+		}
+	}
 	return jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", originalDescription),
 		Username:      username,
@@ -1605,6 +1616,12 @@ func (r schemaChangeResumer) Resume(
 				return err
 			}
 		}
+		return nil
+	}
+
+	// For an empty database, the zone config for it was already GC'ed and there's
+	// nothing left to do.
+	if details.DroppedDatabaseID != sqlbase.InvalidID && len(details.DroppedTables) == 0 {
 		return nil
 	}
 
