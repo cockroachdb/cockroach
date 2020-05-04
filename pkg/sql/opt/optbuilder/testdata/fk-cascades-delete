@@ -6,22 +6,7 @@ exec-ddl
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
 ----
 
-build
-DELETE FROM parent WHERE p > 1
-----
-delete parent
- ├── columns: <none>
- ├── fetch columns: p:2
- ├── input binding: &1
- ├── cascades
- │    └── fk_p_ref_parent
- └── select
-      ├── columns: p:2!null
-      ├── scan parent
-      │    └── columns: p:2!null
-      └── filters
-           └── p:2 > 1
-
+# Simple cascade.
 build-cascades
 DELETE FROM parent WHERE p > 1
 ----
@@ -57,6 +42,7 @@ exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE CASCADE)
 ----
 
+# Two-level cascade.
 build-cascades
 DELETE FROM parent WHERE p > 1
 ----
@@ -105,6 +91,60 @@ root
                      └── filters
                           └── grandchild.c:11 = c:12
 
+# Cascade with check query.
+exec-ddl
+DROP TABLE grandchild
+----
+
+exec-ddl
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c))
+----
+
+build-cascades
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:2!null
+ │         ├── scan parent
+ │         │    └── columns: p:2!null
+ │         └── filters
+ │              └── p:2 > 1
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: child.c:5 child.p:6
+           ├── input binding: &2
+           ├── semi-join (hash)
+           │    ├── columns: child.c:5!null child.p:6!null
+           │    ├── scan child
+           │    │    └── columns: child.c:5!null child.p:6!null
+           │    ├── with-scan &1
+           │    │    ├── columns: p:7!null
+           │    │    └── mapping:
+           │    │         └──  parent.p:2 => p:7
+           │    └── filters
+           │         └── child.p:6 = p:7
+           └── f-k-checks
+                └── f-k-checks-item: grandchild(c) -> child(c)
+                     └── semi-join (hash)
+                          ├── columns: c:8!null
+                          ├── with-scan &2
+                          │    ├── columns: c:8!null
+                          │    └── mapping:
+                          │         └──  child.c:5 => c:8
+                          ├── scan grandchild
+                          │    └── columns: grandchild.c:10
+                          └── filters
+                               └── c:8 = grandchild.c:10
+
+# Self-reference with cascade.
 exec-ddl
 CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE)
 ----
@@ -176,3 +216,96 @@ root
                           │         └──  self.a:12 => a:19
                           └── filters
                                └── b:18 = a:19
+
+# Cascade cycle.
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+----
+
+exec-ddl
+CREATE TABLE cd (c INT PRIMARY KEY, d INT)
+----
+
+exec-ddl
+CREATE TABLE ef (e INT PRIMARY KEY, f INT)
+----
+
+exec-ddl
+ALTER TABLE ab ADD CONSTRAINT ab_cd FOREIGN KEY (b) REFERENCES cd(c) ON DELETE CASCADE
+----
+
+exec-ddl
+ALTER TABLE cd ADD CONSTRAINT cd_ef FOREIGN KEY (d) REFERENCES ef(e) ON DELETE CASCADE
+----
+
+exec-ddl
+ALTER TABLE ef ADD CONSTRAINT ef_ab FOREIGN KEY (f) REFERENCES ab(a) ON DELETE CASCADE
+----
+
+build-cascades cascade-levels=3
+DELETE FROM ab WHERE a = 1
+----
+root
+ ├── delete ab
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:3 b:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── ef_ab
+ │    └── select
+ │         ├── columns: a:3!null b:4
+ │         ├── scan ab
+ │         │    └── columns: a:3!null b:4
+ │         └── filters
+ │              └── a:3 = 1
+ └── cascade
+      ├── delete ef
+      │    ├── columns: <none>
+      │    ├── fetch columns: e:7 f:8
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── cd_ef
+      │    └── semi-join (hash)
+      │         ├── columns: e:7!null f:8
+      │         ├── scan ef
+      │         │    └── columns: e:7!null f:8
+      │         ├── with-scan &1
+      │         │    ├── columns: a:9!null
+      │         │    └── mapping:
+      │         │         └──  ab.a:3 => a:9
+      │         └── filters
+      │              └── f:8 = a:9
+      └── cascade
+           ├── delete cd
+           │    ├── columns: <none>
+           │    ├── fetch columns: c:12 d:13
+           │    ├── input binding: &3
+           │    ├── cascades
+           │    │    └── ab_cd
+           │    └── semi-join (hash)
+           │         ├── columns: c:12!null d:13
+           │         ├── scan cd
+           │         │    └── columns: c:12!null d:13
+           │         ├── with-scan &2
+           │         │    ├── columns: e:14!null
+           │         │    └── mapping:
+           │         │         └──  ef.e:7 => e:14
+           │         └── filters
+           │              └── d:13 = e:14
+           └── cascade
+                └── delete ab
+                     ├── columns: <none>
+                     ├── fetch columns: ab.a:17 b:18
+                     ├── input binding: &4
+                     ├── cascades
+                     │    └── ef_ab
+                     └── semi-join (hash)
+                          ├── columns: ab.a:17!null b:18
+                          ├── scan ab
+                          │    └── columns: ab.a:17!null b:18
+                          ├── with-scan &3
+                          │    ├── columns: c:19!null
+                          │    └── mapping:
+                          │         └──  cd.c:12 => c:19
+                          └── filters
+                               └── b:18 = c:19
