@@ -1044,3 +1044,19 @@ eval
 cast(B'11011' || B'00' as bit(6))
 ----
 B'110110'
+
+# Test that decimals are correctly cast when the original value is negative.
+eval
+'-2020-10-10'::timestamp::decimal
+----
+-125887824000.000000
+
+eval
+'-2020-10-10-2020 10:10:00.11111111111111111'::timestamptz::decimal
+----
+-125887714199.888889
+
+eval
+'-10'::interval::decimal
+----
+-10.000000000
