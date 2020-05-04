@@ -104,6 +104,21 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 		return err
 	}
 
+	// We don't allow rollback to savepoint after errors (except after
+	// ConditionFailedError which is special-cased elsewhere and doesn't move the
+	// txn to the txnError state). In particular, we cannot allow rollbacks to
+	// savepoint after ambiguous errors where it's possible for a
+	// previously-successfully written intent to have been pushed at a timestamp
+	// higher than the coordinator's WriteTimestamp. Doing so runs the risk that
+	// we'll commit at the lower timestamp, at which point the respective intent
+	// will be discarded. See
+	// https://github.com/cockroachdb/cockroach/issues/47587.
+	//
+	// TODO(andrei): White-list more errors.
+	if tc.mu.txnState == txnError {
+		return unimplemented.New("rollback_error", "cannot rollback to savepoint after error")
+	}
+
 	sp := s.(*savepoint)
 	err := tc.checkSavepointLocked(sp)
 	if err != nil {
@@ -116,10 +131,6 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 			)
 		}
 		return err
-	}
-
-	if tc.mu.txnState == txnFinalized {
-		return unimplemented.New("rollback_error", "savepoint rollback finalized txn")
 	}
 
 	// Restore the transaction's state, in case we're rewiding after an error.
