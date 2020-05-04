@@ -67,7 +67,7 @@ send "$argv start-single-node --insecure --store=$storedir\r"
 eexpect "encryption was used on this store before, but no encryption flags specified."
 # Try with the wrong key.
 send "$argv start-single-node --insecure --store=$storedir --enterprise-encryption=path=$storedir,key=$keydir/aes-192.key,old-key=plain\r"
-eexpect "key_manager does not have a key with ID"
+eexpect "store key ID * was not found"
 end_test
 
 start_test "Restart with AES-256."
@@ -86,5 +86,5 @@ send "$argv start-single-node --insecure --store=$storedir\r"
 eexpect "encryption was used on this store before, but no encryption flags specified."
 # Try with the wrong key.
 send "$argv start-single-node --insecure --store=$storedir --enterprise-encryption=path=$storedir,key=$keydir/aes-192.key,old-key=plain\r"
-eexpect "key_manager does not have a key with ID"
+eexpect "store key ID * was not found"
 end_test
