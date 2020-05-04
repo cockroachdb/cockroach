@@ -154,6 +154,17 @@ import (
 //
 // When these types are themselves made into arrays, the Oids become T__int2vector and
 // T__oidvector, respectively.
+//
+// See types.proto for the corresponding proto definition. Its automatic
+// type declaration is suppressed in the proto so that it is possible to
+// add additional fields to T without serializing them.
+type T struct {
+	// InternalType should never be directly referenced outside this package. The
+	// only reason it is exported is because gogoproto panics when printing the
+	// string representation of an unexported field. This is a problem when this
+	// struct is embedded in a larger struct (like a ColumnDescriptor).
+	InternalType InternalType
+}
 
 // Convenience list of pre-constructed types. Caller code can use any of these
 // types, or use the MakeXXX methods to construct a custom type that is not
