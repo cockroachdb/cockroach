@@ -1,5 +1,3 @@
-zip
-----
 requesting list of SQL databases... 8 found
 requesting database details for ../system... writing: debug/schema/___system@details.json
 0 tables found

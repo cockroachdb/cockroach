@@ -16,6 +16,7 @@ import (
 	"context"
 	enc_hex "encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -42,10 +43,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestZipContainsAllInternalTables verifies that we don't add new internal tables
@@ -128,11 +129,9 @@ func TestZip(t *testing.T) {
 	// Strip any non-deterministic messages.
 	out = eraseNonDeterministicZipOutput(out)
 
-	// We use datadriven simply to read the golden output file; we don't actually
-	// run any commands.
-	datadriven.RunTest(t, "testdata/zip/testzip", func(t *testing.T, td *datadriven.TestData) string {
-		return out
-	})
+	exp, err := ioutil.ReadFile("testdata/zip/testzip")
+	require.NoError(t, err)
+	require.Equal(t, string(exp), out)
 }
 
 func TestZipSpecialNames(t *testing.T) {
@@ -167,12 +166,11 @@ create table defaultdb."../system"(x int);
 	}
 
 	re := regexp.MustCompile(`(?m)^.*(table|database).*$`)
-	out = strings.Join(re.FindAllString(out, -1), "\n")
+	out = strings.Join(re.FindAllString(out, -1), "\n") + "\n"
 
-	datadriven.RunTest(t, "testdata/zip/specialnames",
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
-		})
+	exp, err := ioutil.ReadFile("testdata/zip/specialnames")
+	require.NoError(t, err)
+	require.Equal(t, string(exp), out)
 }
 
 // This tests the operation of zip over unavailable clusters.
@@ -249,10 +247,9 @@ func TestUnavailableZip(t *testing.T) {
 	re := regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
 	out = re.ReplaceAllString(out, ``)
 
-	datadriven.RunTest(t, "testdata/zip/unavailable",
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
-		})
+	exp, err := ioutil.ReadFile("testdata/zip/unavailable")
+	require.NoError(t, err)
+	require.Equal(t, string(exp), out)
 }
 
 func eraseNonDeterministicZipOutput(out string) string {
@@ -317,11 +314,9 @@ func TestPartialZip(t *testing.T) {
 
 	// Strip any non-deterministic messages.
 	out = eraseNonDeterministicZipOutput(out)
-
-	datadriven.RunTest(t, "testdata/zip/partial1",
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
-		})
+	exp, err := ioutil.ReadFile("testdata/zip/partial1")
+	require.NoError(t, err)
+	require.Equal(t, string(exp), out)
 
 	// Now do it again and exclude the down node explicitly.
 	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2")
@@ -330,10 +325,9 @@ func TestPartialZip(t *testing.T) {
 	}
 
 	out = eraseNonDeterministicZipOutput(out)
-	datadriven.RunTest(t, "testdata/zip/partial1_excluded",
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
-		})
+	exp, err = ioutil.ReadFile("testdata/zip/partial1_excluded")
+	require.NoError(t, err)
+	require.Equal(t, string(exp), out)
 
 	// Now mark the stopped node as decommissioned, and check that zip
 	// skips over it automatically.
@@ -357,34 +351,32 @@ func TestPartialZip(t *testing.T) {
 	// because this setting is not otherwise set in the test cluster.
 	kvserver.TimeUntilStoreDead.Override(&s.ClusterSettings().SV, kvserver.TestTimeUntilStoreDead)
 
-	datadriven.RunTest(t, "testdata/zip/partial2",
-		func(t *testing.T, td *datadriven.TestData) string {
+	exp, err = ioutil.ReadFile("testdata/zip/partial2")
+	require.NoError(t, err)
+	exps := string(exp)
+	testutils.SucceedsSoon(t, func() error {
+		out, err := c.RunWithCapture("debug zip " + os.DevNull)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			testutils.SucceedsSoon(t, func() error {
-				out, err = c.RunWithCapture("debug zip " + os.DevNull)
-				if err != nil {
-					t.Fatal(err)
-				}
+		// Strip any non-deterministic messages.
+		out = eraseNonDeterministicZipOutput(out)
 
-				// Strip any non-deterministic messages.
-				out = eraseNonDeterministicZipOutput(out)
-
-				if out != td.Expected {
-					diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-						A:        difflib.SplitLines(td.Expected),
-						B:        difflib.SplitLines(out),
-						FromFile: "Expected",
-						FromDate: "",
-						ToFile:   "Actual",
-						ToDate:   "",
-						Context:  1,
-					})
-					return errors.Newf("Diff:\n%s", diff)
-				}
-				return nil
+		if out != exps {
+			diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+				A:        difflib.SplitLines(exps),
+				B:        difflib.SplitLines(out),
+				FromFile: "Expected",
+				FromDate: "",
+				ToFile:   "Actual",
+				ToDate:   "",
+				Context:  1,
 			})
-			return out
-		})
+			return errors.Newf("Diff:\n%s", diff)
+		}
+		return nil
+	})
 }
 
 // This checks that SQL retry errors are properly handled.
