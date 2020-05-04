@@ -413,6 +413,7 @@ message GeoMetadata {
 
 // T is a wrapper around InternalType.
 message T {
+    option (gogoproto.typedecl) = false;
     option (gogoproto.marshaler) = false;
     option (gogoproto.unmarshaler) = false;
     option (gogoproto.sizer) = false;
