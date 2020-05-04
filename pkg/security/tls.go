@@ -222,5 +222,12 @@ func newBaseTLSConfig(caPEM []byte) (*tls.Config, error) {
 		},
 
 		MinVersion: tls.VersionTLS12,
+		// The go and java implementations of TLS 1.3 do not interoperate (until
+		// Java version 11.0.7, which was released only a couple of weeks before
+		// CRDB 20.1). Disable TLS 1.3 in version 20.1 to avoid pain during the
+		// transition period; it should be enabled in 20.2 once the java patch
+		// has had time to be deployed.
+		// https://github.com/cockroachdb/cockroach/issues/48294
+		MaxVersion: tls.VersionTLS12,
 	}, nil
 }
