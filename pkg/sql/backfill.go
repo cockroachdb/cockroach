@@ -511,7 +511,7 @@ func (sc *SchemaChanger) validateConstraints(
 	var tableDesc *sqlbase.TableDescriptor
 
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		return err
 	}); err != nil {
 		return err
@@ -785,7 +785,7 @@ func (sc *SchemaChanger) distBackfill(
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
-			ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
+			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.tableID, sc.mutationID, filter)
 		return err
 	}); err != nil {
 		return err
@@ -901,7 +901,7 @@ func (sc *SchemaChanger) distBackfill(
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
 				resumeSpans, _, _, err = rowexec.GetResumeSpans(
-					ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
+					ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.tableID, sc.mutationID, filter)
 				return err
 			}); err != nil {
 				return err
@@ -932,7 +932,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 	var tableDesc *sqlbase.TableDescriptor
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -995,7 +995,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	readAsOf := sc.clock.Now()
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		return err
 	}); err != nil {
 		return err
@@ -1322,8 +1322,8 @@ func runSchemaChangesInTxn(
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.
 		for _, drain := range tableDesc.DrainingNames {
-			err := sqlbase.RemoveObjectNamespaceEntry(ctx, planner.Txn(), drain.ParentID,
-				drain.ParentSchemaID, drain.Name, false /* KVTrace */)
+			err := sqlbase.RemoveObjectNamespaceEntry(ctx, planner.Txn(), planner.ExecCfg().Codec,
+				drain.ParentID, drain.ParentSchemaID, drain.Name, false /* KVTrace */)
 			if err != nil {
 				return err
 			}
@@ -1647,7 +1647,7 @@ func validateFkInTxn(
 		return errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
 
-	return validateForeignKey(ctx, tableDesc.TableDesc(), fk, ie, txn)
+	return validateForeignKey(ctx, tableDesc.TableDesc(), fk, ie, txn, evalCtx.Codec)
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in

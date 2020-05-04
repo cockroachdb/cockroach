@@ -40,7 +40,7 @@ func gcIndexes(
 	var parentTable *sqlbase.TableDescriptor
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		parentTable, err = sqlbase.GetTableDescFromID(ctx, txn, parentID)
+		parentTable, err = sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, parentID)
 		return err
 	}); err != nil {
 		return false, errors.Wrapf(err, "fetching parent table %d", parentID)

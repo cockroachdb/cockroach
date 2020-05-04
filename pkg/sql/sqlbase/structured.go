@@ -335,10 +335,10 @@ type protoGetter interface {
 // ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a database.
 func GetDatabaseDescFromID(
-	ctx context.Context, protoGetter protoGetter, id ID,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
 ) (*DatabaseDescriptor, error) {
 	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(id)
+	descKey := MakeDescMetadataKey(codec, id)
 	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
 		return nil, err
@@ -356,14 +356,14 @@ func GetDatabaseDescFromID(
 // NB: If this function changes, make sure to update GetTableDescFromIDWithFKsChanged
 // in a similar way.
 func GetTableDescFromID(
-	ctx context.Context, protoGetter protoGetter, id ID,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
 ) (*TableDescriptor, error) {
-	table, err := getTableDescFromIDRaw(ctx, protoGetter, id)
+	table, err := getTableDescFromIDRaw(ctx, protoGetter, codec, id)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := table.MaybeFillInDescriptor(ctx, protoGetter); err != nil {
+	if err := table.MaybeFillInDescriptor(ctx, protoGetter, codec); err != nil {
 		return nil, err
 	}
 
@@ -375,15 +375,15 @@ func GetTableDescFromID(
 // GetTableDescFromID but additionally returns whether or not the table descriptor
 // was changed during the foreign key upgrade process.
 func GetTableDescFromIDWithFKsChanged(
-	ctx context.Context, protoGetter protoGetter, id ID,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
 ) (*TableDescriptor, bool, error) {
-	table, err := getTableDescFromIDRaw(ctx, protoGetter, id)
+	table, err := getTableDescFromIDRaw(ctx, protoGetter, codec, id)
 	if err != nil {
 		return nil, false, err
 	}
 	table.maybeUpgradeFormatVersion()
 	table.Privileges.MaybeFixPrivileges(table.ID)
-	changed, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable */)
+	changed, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, codec, false /* skipFKsWithNoMatchingTable */)
 	if err != nil {
 		return nil, false, err
 	}
@@ -397,10 +397,10 @@ func GetTableDescFromIDWithFKsChanged(
 // migrations and is *required* before ordinary presentation to other code. This
 // method is for internal use only and shouldn't get exposed.
 func getTableDescFromIDRaw(
-	ctx context.Context, protoGetter protoGetter, id ID,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
 ) (*TableDescriptor, error) {
 	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(id)
+	descKey := MakeDescMetadataKey(codec, id)
 	ts, err := protoGetter.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
 		return nil, err
@@ -417,9 +417,9 @@ func getTableDescFromIDRaw(
 // descriptor doesn't exist or if it exists and is not a table.
 // Otherwise a mutable copy of the table is returned.
 func GetMutableTableDescFromID(
-	ctx context.Context, protoGetter protoGetter, id ID,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
 ) (*MutableTableDescriptor, error) {
-	table, err := GetTableDescFromID(ctx, protoGetter, id)
+	table, err := GetTableDescFromID(ctx, protoGetter, codec, id)
 	if err != nil {
 		return nil, err
 	}
@@ -885,12 +885,12 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // NB: If this function changes, make sure to update GetTableDescFromIDWithFKsChanged
 // in a similar way.
 func (desc *TableDescriptor) MaybeFillInDescriptor(
-	ctx context.Context, protoGetter protoGetter,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec,
 ) error {
 	desc.maybeUpgradeFormatVersion()
 	desc.Privileges.MaybeFixPrivileges(desc.ID)
 	if protoGetter != nil {
-		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
+		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, codec, false /* skipFKsWithNoMatchingTable*/); err != nil {
 			return err
 		}
 	}
@@ -941,7 +941,10 @@ func (m MapProtoGetter) GetProtoTs(
 // is dropped from the table and no error is returned.
 // TODO(lucy): Write tests for when skipFKsWithNoMatchingTable is true.
 func (desc *TableDescriptor) MaybeUpgradeForeignKeyRepresentation(
-	ctx context.Context, protoGetter protoGetter, skipFKsWithNoMatchingTable bool,
+	ctx context.Context,
+	protoGetter protoGetter,
+	codec keys.SQLCodec,
+	skipFKsWithNoMatchingTable bool,
 ) (bool, error) {
 	if desc.Dropped() {
 		// If the table has been dropped, it's permitted to have corrupted foreign
@@ -954,7 +957,7 @@ func (desc *TableDescriptor) MaybeUpgradeForeignKeyRepresentation(
 	// cluster (after finalizing the upgrade) have foreign key mutations.
 	for i := range desc.Indexes {
 		newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-			ctx, protoGetter, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
+			ctx, protoGetter, codec, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
 		)
 		if err != nil {
 			return false, err
@@ -962,7 +965,7 @@ func (desc *TableDescriptor) MaybeUpgradeForeignKeyRepresentation(
 		changed = changed || newChanged
 	}
 	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-		ctx, protoGetter, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
+		ctx, protoGetter, codec, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
 	)
 	if err != nil {
 		return false, err
@@ -977,6 +980,7 @@ func (desc *TableDescriptor) MaybeUpgradeForeignKeyRepresentation(
 func maybeUpgradeForeignKeyRepOnIndex(
 	ctx context.Context,
 	protoGetter protoGetter,
+	codec keys.SQLCodec,
 	otherUnupgradedTables map[ID]*TableDescriptor,
 	desc *TableDescriptor,
 	idx *IndexDescriptor,
@@ -986,7 +990,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	if idx.ForeignKey.IsSet() {
 		ref := &idx.ForeignKey
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, ref.Table)
+			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, codec, ref.Table)
 			if err != nil {
 				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
@@ -1025,7 +1029,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	for refIdx := range idx.ReferencedBy {
 		ref := &(idx.ReferencedBy[refIdx])
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, ref.Table)
+			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, codec, ref.Table)
 			if err != nil {
 				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
@@ -1563,7 +1567,7 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn) error {
+func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error {
 	err := desc.ValidateTable()
 	if err != nil {
 		return err
@@ -1571,15 +1575,17 @@ func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn) error {
 	if desc.Dropped() {
 		return nil
 	}
-	return desc.validateCrossReferences(ctx, txn)
+	return desc.validateCrossReferences(ctx, txn, codec)
 }
 
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
-func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *kv.Txn) error {
+func (desc *TableDescriptor) validateCrossReferences(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) error {
 	// Check that parent DB exists.
 	{
-		res, err := txn.Get(ctx, MakeDescMetadataKey(desc.ParentID))
+		res, err := txn.Get(ctx, MakeDescMetadataKey(codec, desc.ParentID))
 		if err != nil {
 			return err
 		}
@@ -1593,7 +1599,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *k
 		if table, ok := tablesByID[id]; ok {
 			return table, nil
 		}
-		table, err := GetTableDescFromID(ctx, txn, id)
+		table, err := GetTableDescFromID(ctx, txn, codec, id)
 		if err != nil {
 			return nil, err
 		}
@@ -4076,8 +4082,8 @@ func NewDatabaseKey(name string) DatabaseKey {
 }
 
 // Key implements DescriptorKey interface.
-func (dk DatabaseKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(keys.RootNamespaceID, keys.RootNamespaceID, dk.name)
+func (dk DatabaseKey) Key(codec keys.SQLCodec) roachpb.Key {
+	return MakeNameMetadataKey(codec, keys.RootNamespaceID, keys.RootNamespaceID, dk.name)
 }
 
 // Name implements DescriptorKey interface.
@@ -4103,8 +4109,8 @@ func NewTableKey(parentID ID, parentSchemaID ID, name string) TableKey {
 }
 
 // Key implements DescriptorKey interface.
-func (tk TableKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(tk.parentID, tk.parentSchemaID, tk.name)
+func (tk TableKey) Key(codec keys.SQLCodec) roachpb.Key {
+	return MakeNameMetadataKey(codec, tk.parentID, tk.parentSchemaID, tk.name)
 }
 
 // Name implements DescriptorKey interface.
@@ -4129,8 +4135,8 @@ func NewPublicSchemaKey(parentID ID) SchemaKey {
 }
 
 // Key implements DescriptorKey interface.
-func (sk SchemaKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(sk.parentID, keys.RootNamespaceID, sk.name)
+func (sk SchemaKey) Key(codec keys.SQLCodec) roachpb.Key {
+	return MakeNameMetadataKey(codec, sk.parentID, keys.RootNamespaceID, sk.name)
 }
 
 // Name implements DescriptorKey interface.
@@ -4150,8 +4156,8 @@ func NewDeprecatedTableKey(parentID ID, name string) DeprecatedTableKey {
 }
 
 // Key implements DescriptorKey interface.
-func (dtk DeprecatedTableKey) Key() roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(dtk.parentID, dtk.name)
+func (dtk DeprecatedTableKey) Key(codec keys.SQLCodec) roachpb.Key {
+	return MakeDeprecatedNameMetadataKey(codec, dtk.parentID, dtk.name)
 }
 
 // Name implements DescriptorKey interface.
@@ -4170,8 +4176,8 @@ func NewDeprecatedDatabaseKey(name string) DeprecatedDatabaseKey {
 }
 
 // Key implements DescriptorKey interface.
-func (ddk DeprecatedDatabaseKey) Key() roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(keys.RootNamespaceID, ddk.name)
+func (ddk DeprecatedDatabaseKey) Key(codec keys.SQLCodec) roachpb.Key {
+	return MakeDeprecatedNameMetadataKey(codec, keys.RootNamespaceID, ddk.name)
 }
 
 // Name implements DescriptorKey interface.

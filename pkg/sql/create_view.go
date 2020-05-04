@@ -87,7 +87,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := getDescriptorID(params.ctx, params.p.txn, tKey)
+			id, err := getDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, tKey)
 			if err != nil {
 				return err
 			}
@@ -157,7 +157,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
 		// do some basic string formatting (not accurate in the general case).
 		if err = params.p.createDescriptorWithID(
-			params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings,
+			params.ctx, tKey.Key(params.ExecCfg().Codec), id, &desc, params.EvalContext().Settings,
 			fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
 		); err != nil {
 			return err
@@ -195,7 +195,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := newDesc.Validate(params.ctx, params.p.txn); err != nil {
+	if err := newDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 

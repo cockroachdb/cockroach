@@ -137,7 +137,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	dbNameKey := sqlbase.NewDatabaseKey("t").Key()
+	dbNameKey := sqlbase.NewDatabaseKey("t").Key(keys.SystemSQLCodec)
 	r, err := kvDB.Get(ctx, dbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -145,14 +145,14 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
-	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
+	dbDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(r.ValueInt()))
 	desc := &sqlbase.Descriptor{}
 	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
 	dbDesc := desc.GetDatabase()
 
-	tbNameKey := sqlbase.NewPublicTableKey(dbDesc.ID, "kv").Key()
+	tbNameKey := sqlbase.NewPublicTableKey(dbDesc.ID, "kv").Key(keys.SystemSQLCodec)
 	gr, err := kvDB.Get(ctx, tbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !gr.Exists() {
 		t.Fatalf(`table "kv" does not exist`)
 	}
-	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	tbDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(gr.ValueInt()))
 	ts, err := kvDB.GetProtoTs(ctx, tbDescKey, desc)
 	if err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ CREATE DATABASE t;
 	}
 
 	dKey := sqlbase.NewDatabaseKey("t")
-	r, err := kvDB.Get(ctx, dKey.Key())
+	r, err := kvDB.Get(ctx, dKey.Key(keys.SystemSQLCodec))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,14 +316,14 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 
 	dKey := sqlbase.NewDatabaseKey("t")
-	r, err := kvDB.Get(ctx, dKey.Key())
+	r, err := kvDB.Get(ctx, dKey.Key(keys.SystemSQLCodec))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
-	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
+	dbDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(r.ValueInt()))
 	desc := &sqlbase.Descriptor{}
 	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
 		t.Fatal(err)
@@ -331,14 +331,14 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	dbDesc := desc.GetDatabase()
 
 	tKey := sqlbase.NewPublicTableKey(dbDesc.ID, "kv")
-	gr, err := kvDB.Get(ctx, tKey.Key())
+	gr, err := kvDB.Get(ctx, tKey.Key(keys.SystemSQLCodec))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !gr.Exists() {
 		t.Fatalf(`table "kv" does not exist`)
 	}
-	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	tbDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(gr.ValueInt()))
 	ts, err := kvDB.GetProtoTs(ctx, tbDescKey, desc)
 	if err != nil {
 		t.Fatal(err)
@@ -346,14 +346,14 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tbDesc := desc.Table(ts)
 
 	t2Key := sqlbase.NewPublicTableKey(dbDesc.ID, "kv2")
-	gr2, err := kvDB.Get(ctx, t2Key.Key())
+	gr2, err := kvDB.Get(ctx, t2Key.Key(keys.SystemSQLCodec))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !gr2.Exists() {
 		t.Fatalf(`table "kv2" does not exist`)
 	}
-	tb2DescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr2.ValueInt()))
+	tb2DescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(gr2.ValueInt()))
 	ts, err = kvDB.GetProtoTs(ctx, tb2DescKey, desc)
 	if err != nil {
 		t.Fatal(err)
@@ -537,7 +537,7 @@ func TestDropIndex(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
 	idx, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
@@ -549,7 +549,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -575,7 +575,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	newIdx, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -637,7 +637,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	indexDesc, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -676,7 +676,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
 	// declares column families.
 
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -697,7 +697,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	numRows := 2*chunkSize + 1
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
@@ -708,7 +708,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	tests.CheckKeyCount(t, kvDB, tableSpan, 2*numRows)
 
 	// Ensure that index is not active.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
 	if _, _, err := tableDesc.FindIndexByName("intlv_idx"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -728,8 +728,8 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, "kv").Key()
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, "kv").Key(keys.SystemSQLCodec)
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -826,9 +826,9 @@ func TestDropTableDeleteData(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descs = append(descs, sqlbase.GetTableDescriptor(kvDB, "t", tableName))
+		descs = append(descs, sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName))
 
-		nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, tableName).Key()
+		nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, tableName).Key(keys.SystemSQLCodec)
 		gr, err := kvDB.Get(ctx, nameKey)
 		if err != nil {
 			t.Fatal(err)
@@ -943,7 +943,7 @@ func writeTableDesc(ctx context.Context, db *kv.DB, tableDesc *sqlbase.TableDesc
 			return err
 		}
 		tableDesc.ModificationTime = txn.CommitTimestamp()
-		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
 }
 
@@ -978,7 +978,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	sqlutils.CreateTable(t, sqlDBRaw, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
 	// Give the table an old format version.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
 	tableDesc.Version++
 	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
@@ -993,7 +993,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
 	var err error
-	tableDesc, err = sqlbase.GetTableDescFromID(ctx, kvDB.NewTxn(ctx, ""), tableDesc.ID)
+	tableDesc, err = sqlbase.GetTableDescFromID(ctx, kvDB.NewTxn(ctx, ""), keys.SystemSQLCodec, tableDesc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1033,8 +1033,8 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	tableDescInterleaved := sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDescInterleaved := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
@@ -1118,7 +1118,7 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)

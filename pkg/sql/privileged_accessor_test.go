@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -36,7 +37,7 @@ func TestLookupNamespaceIDFallback(t *testing.T) {
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(
 			ctx,
-			sqlbase.NewDeprecatedTableKey(999, "bob").Key(),
+			sqlbase.NewDeprecatedTableKey(999, "bob").Key(keys.SystemSQLCodec),
 			9999,
 		)
 	})

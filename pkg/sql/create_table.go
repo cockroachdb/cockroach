@@ -180,7 +180,7 @@ func getTableCreateParams(
 		tempSchemaName := params.p.TemporarySchemaName()
 		sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
 		var err error
-		schemaID, err = getDescriptorID(params.ctx, params.p.txn, sKey)
+		schemaID, err = getDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, sKey)
 		if err != nil {
 			return nil, 0, err
 		} else if schemaID == sqlbase.InvalidID {
@@ -193,7 +193,7 @@ func getTableCreateParams(
 		tKey = sqlbase.NewTableKey(dbID, schemaID, tableName)
 	}
 
-	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, dbID, schemaID, tableName)
+	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName)
 	if err == nil && exists {
 		// Still return data in this case.
 		return tKey, schemaID, sqlbase.NewRelationAlreadyExistsError(tableName)
@@ -321,7 +321,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
-		params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings,
+		params.ctx, tKey.Key(params.ExecCfg().Codec), id, &desc, params.EvalContext().Settings,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
@@ -344,7 +344,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 
@@ -502,18 +502,18 @@ func (p *planner) resolveFK(
 }
 
 func qualifyFKColErrorWithDB(
-	ctx context.Context, txn *kv.Txn, tbl *sqlbase.TableDescriptor, col string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, tbl *sqlbase.TableDescriptor, col string,
 ) string {
 	if txn == nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
 
 	// TODO(solon): this ought to use a database cache.
-	db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
+	db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, codec, tbl.ParentID)
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
-	schema, err := schema.ResolveNameByID(ctx, txn, db.ID, tbl.GetParentSchemaID())
+	schema, err := schema.ResolveNameByID(ctx, txn, codec, db.ID, tbl.GetParentSchemaID())
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
@@ -545,7 +545,7 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 	maybeUpgradeFKRepresentation := func(id sqlbase.ID) error {
 		// Read the referenced table and see if the foreign key representation has changed. If it has, write
 		// the upgraded descriptor back to disk.
-		tbl, didUpgrade, err := sqlbase.GetTableDescFromIDWithFKsChanged(ctx, p.txn, id)
+		tbl, didUpgrade, err := sqlbase.GetTableDescFromIDWithFKsChanged(ctx, p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
 			return err
 		}
@@ -693,7 +693,7 @@ func ResolveFK(
 	// or else we can hit other checks that break things with
 	// undesired error codes, e.g. #42858.
 	// It may be removable after #37255 is complete.
-	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil, evalCtx.Codec)
 	if err != nil {
 		return err
 	}
@@ -722,7 +722,7 @@ func ResolveFK(
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
 		for _, originColumn := range originCols {
 			if !originColumn.Nullable {
-				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), originColumn.Name)
+				col := qualifyFKColErrorWithDB(ctx, txn, evalCtx.Codec, tbl.TableDesc(), originColumn.Name)
 				return pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", col,
 				)
@@ -737,7 +737,7 @@ func ResolveFK(
 			// Having a default expression of NULL, and a constraint of NOT NULL is a
 			// contradiction and should never be allowed.
 			if originColumn.DefaultExpr == nil && !originColumn.Nullable {
-				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), originColumn.Name)
+				col := qualifyFKColErrorWithDB(ctx, txn, evalCtx.Codec, tbl.TableDesc(), originColumn.Name)
 				return pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET DEFAULT cascading action on column %q which has a "+
 						"NOT NULL constraint and a NULL default expression", col,

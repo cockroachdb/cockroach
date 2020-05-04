@@ -1073,7 +1073,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc sqlbase.TableDescri
 		panic(fmt.Sprintf("parent not set for table %q", tableDesc.Name))
 	}
 	// Write the table to the SystemConfig, in the descriptors table.
-	k := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
+	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(id))
 	desc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Table{
 			Table: &tableDesc,
@@ -1092,7 +1092,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc sqlbase.TableDescri
 // addTableDesc adds a database descriptor to the SystemConfig.
 func (b *systemConfigBuilder) addDBDesc(id int, dbDesc sqlbase.DatabaseDescriptor) {
 	// Write the table to the SystemConfig, in the descriptors table.
-	k := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
+	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(id))
 	desc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Database{
 			Database: &dbDesc,

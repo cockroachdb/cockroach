@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -235,8 +236,9 @@ func validateForeignKey(
 	fk *sqlbase.ForeignKeyConstraint,
 	ie *InternalExecutor,
 	txn *kv.Txn,
+	codec keys.SQLCodec,
 ) error {
-	targetTable, err := sqlbase.GetTableDescFromID(ctx, txn, fk.ReferencedTableID)
+	targetTable, err := sqlbase.GetTableDescFromID(ctx, txn, codec, fk.ReferencedTableID)
 	if err != nil {
 		return err
 	}

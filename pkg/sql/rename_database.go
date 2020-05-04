@@ -94,6 +94,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		tbNames, err := phyAccessor.GetObjectNames(
 			ctx,
 			p.txn,
+			p.ExecCfg().Codec,
 			dbDesc,
 			schema,
 			tree.DatabaseListFlags{
@@ -106,8 +107,14 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		}
 		lookupFlags.Required = false
 		for i := range tbNames {
-			objDesc, err := phyAccessor.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings,
-				&tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags})
+			objDesc, err := phyAccessor.GetObjectDesc(
+				ctx,
+				p.txn,
+				p.ExecCfg().Settings,
+				p.ExecCfg().Codec,
+				&tbNames[i],
+				tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
+			)
 			if err != nil {
 				return err
 			}
@@ -116,7 +123,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 			}
 			tbDesc := objDesc.TableDesc()
 			for _, dependedOn := range tbDesc.DependedOnBy {
-				dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, dependedOn.ID)
+				dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)
 				if err != nil {
 					return err
 				}

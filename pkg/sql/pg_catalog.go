@@ -1053,7 +1053,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					resolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					scName, err := schema.ResolveNameByID(ctx, p.txn, db.ID, table.Desc.GetParentSchemaID())
+					scName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, table.Desc.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -156,7 +157,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				return
 			default:
 				// Split the table at a random row.
-				desc := sqlbase.GetTableDescriptor(cdb, "test", "t")
+				desc := sqlbase.GetTableDescriptor(cdb, keys.SystemSQLCodec, "test", "t")
 
 				val := rng.Intn(n)
 				t.Logf("splitting at %d", val)

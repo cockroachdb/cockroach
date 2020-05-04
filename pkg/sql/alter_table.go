@@ -244,7 +244,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAddConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
 			if err != nil {
 				return err
 			}
@@ -579,12 +579,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
-			if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
 				return err
 			}
 
 		case *tree.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
 			if err != nil {
 				return err
 			}
@@ -606,12 +606,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-			if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
 				return err
 			}
 
 		case *tree.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
 			if err != nil {
 				return err
 			}
@@ -742,7 +742,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
 			if err != nil {
 				return err
 			}
@@ -1008,7 +1008,7 @@ func applyColumnMutation(
 			}
 		}
 
-		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		info, err := tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
 		if err != nil {
 			return err
 		}
@@ -1043,7 +1043,7 @@ func applyColumnMutation(
 					"constraint in the middle of being dropped")
 			}
 		}
-		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		info, err := tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
 		if err != nil {
 			return err
 		}

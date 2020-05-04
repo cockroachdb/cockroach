@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
@@ -187,7 +188,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	var initialValues []roachpb.KeyValue
 	var splits []roachpb.RKey
 	if !ltc.DontCreateSystemRanges {
-		schema := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig)
+		schema := sqlbase.MakeMetadataSchema(
+			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
+		)
 		var tableSplits []roachpb.RKey
 		bootstrapVersion := clusterversion.TestingClusterVersion
 		initialValues, tableSplits = schema.GetInitialValues(bootstrapVersion)
