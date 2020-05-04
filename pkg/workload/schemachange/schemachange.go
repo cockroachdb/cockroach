@@ -244,63 +244,102 @@ type schemaChangeWorker struct {
 	seqNum          *int64
 }
 
-func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
-	var log strings.Builder
+// handleOpError returns an error if the op error is considered serious and
+// we should terminate the workload.
+func handleOpError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if pgErr := (pgx.PgError{}); errors.As(err, &pgErr) {
+		sqlstate := pgErr.SQLState()
+		class := sqlstate[0:2]
+		switch class {
+		case "09":
+			return errors.Wrap(err, "Class 09 - Triggered Action Exception")
+		case "XX":
+			return errors.Wrap(err, "Class XX - Internal Error")
+		}
+	} else {
+		return errors.Wrapf(err, "unexpected error %v", err)
+	}
+	return nil
+}
+
+func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, bool, error) {
+	var opsBuf strings.Builder
+	var rollback bool
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	n := 1 + w.rng.Intn(w.maxOpsPerWorker)
 	for i := 0; i < n; i++ {
 		op, noops, err := w.randOp(tx)
 		if err != nil {
-			return noops, errors.Wrap(err, "randOp")
+			return noops, true, errors.Wrap(err, "could not generate a random operation")
 		}
-		log.WriteString(noops)
-		log.WriteString(fmt.Sprintf("  %s;\n", op))
+		if w.verbose >= 2 {
+			// Print the failed attempts to produce a random operation.
+			opsBuf.WriteString(noops)
+		}
+		var errMsg string
 		if !w.dryRun {
-			if _, err := tx.Exec(op); err != nil {
-				return log.String(), errors.Wrapf(err, "%s failed", op)
+			histBin := "opOk"
+			start := timeutil.Now()
+			if _, err = tx.Exec(op); err != nil {
+				rollback = true
+				errMsg = fmt.Sprintf("%v", err)
+				histBin = "opErr"
 			}
+			elapsed := timeutil.Since(start)
+			w.hists.Get(histBin).Record(elapsed)
+		}
+		if err != nil {
+			opsBuf.WriteString("***FAIL:")
+		}
+		opsBuf.WriteString(fmt.Sprintf("  %s;  %s\n", op, errMsg))
+		if fatalErr := handleOpError(err); fatalErr != nil {
+			return opsBuf.String(), rollback, fatalErr
 		}
 	}
-	return log.String(), nil
+	return opsBuf.String(), rollback, nil
 }
 
 func (w *schemaChangeWorker) run(_ context.Context) error {
-	start := timeutil.Now()
 	tx, err := w.pool.Get().Begin()
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
 
-	var histBin string
-	log, err := w.runInTxn(tx)
-	elapsed := timeutil.Since(start)
+	start := timeutil.Now()
+	logs, rollback, err := w.runInTxn(tx)
 	if err != nil {
-		rbkErr := tx.Rollback()
-		if rbkErr != nil {
-			w.hists.Get("rbk").Record(elapsed)
-			err = errors.Wrapf(err, "ROLLBACK: %v", rbkErr)
-		}
-		log = log + "ROLLBACK;\n"
-		histBin = "err"
-		// TODO(spaskob): should we log the ROLLBACK error as well?
-	} else {
-		log = log + "COMMIT;\n"
-		if err = tx.Commit(); err != nil {
-			histBin = "cmt_err"
-			err = errors.Wrap(err, "COMMIT")
-		} else {
-			histBin = "ok"
-		}
+		// runInTxn returns an error only if we should abort the workload.``
+		fmt.Printf("serious failure in txn:\nBEGIN\n%s\n\nABORTING", logs)
+		return err
 	}
+
+	var histBin string
+	if rollback {
+		if rbkErr := tx.Rollback(); rbkErr != nil {
+			return errors.Wrapf(err, "ROLLBACK: %v", rbkErr)
+		}
+		logs = logs + "ROLLBACK;\n"
+		histBin = "txnRbk"
+	} else {
+		var cmtErrMsg string
+		if err = tx.Commit(); err != nil {
+			histBin = "txnCmtErr"
+			logs = logs + "***FAIL: "
+			cmtErrMsg = fmt.Sprintf("%v", err)
+		} else {
+			histBin = "txnOk"
+		}
+		logs = logs + fmt.Sprintf("COMMIT;  %s\n", cmtErrMsg)
+	}
+	elapsed := timeutil.Since(start)
 	w.hists.Get(histBin).Record(elapsed)
 	if w.verbose >= 1 {
 		fmt.Print("BEGIN\n")
-		fmt.Print(log)
-		if err != nil {
-			fmt.Printf("%v\n", err)
-		}
+		fmt.Print(logs)
 	}
-	// TODO(spaskob): what to do with the error instead dropping it?
 	return nil
 }
 
@@ -391,9 +430,7 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		// TODO(spaskob): use more fine-grained error reporting.
 		if stmt == "" || err == pgx.ErrNoRows {
-			if w.verbose >= 2 {
-				log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
-			}
+			log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
 			continue
 		}
 		return stmt, log.String(), err
