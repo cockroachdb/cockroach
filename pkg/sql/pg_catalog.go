@@ -2994,7 +2994,7 @@ CREATE TABLE pg_catalog.pg_aggregate (
 								sortOperatorOid = h.OperatorOid("<", argType, argType, returnType)
 
 							// Cases to determine aggregate kind.
-							case "rank", "percent_rank", "cume_dict", "dense_rank":
+							case "rank", "percent_rank", "cume_dist", "dense_rank":
 								aggregateKind = tree.NewDString("h")
 								aggNumDirectArgs = tree.NewDInt(1)
 							case "mode":
