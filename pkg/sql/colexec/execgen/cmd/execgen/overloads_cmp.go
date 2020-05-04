@@ -15,19 +15,11 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
-
-var comparisonOpName = map[tree.ComparisonOperator]string{
-	tree.EQ: "EQ",
-	tree.NE: "NE",
-	tree.LT: "LT",
-	tree.LE: "LE",
-	tree.GT: "GT",
-	tree.GE: "GE",
-}
 
 var comparisonOpInfix = map[tree.ComparisonOperator]string{
 	tree.EQ: "==",
@@ -51,7 +43,7 @@ var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
 // sameTypeComparisonOpToOverloads maps a comparison operator to all of the
 // overloads that implement that comparison between two values of the same type
 // (meaning they have the same family and width).
-var sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*oneArgOverload, len(comparisonOpName))
+var sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*oneArgOverload, len(execgen.ComparisonOpName))
 
 // cmpOpOutputTypes contains a types.Bool entry for each type pair that we
 // support.
@@ -74,7 +66,7 @@ func populateCmpOpOverloads() {
 	for _, op := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 		base := &overloadBase{
 			kind:  comparisonOverload,
-			Name:  comparisonOpName[op],
+			Name:  execgen.ComparisonOpName[op],
 			CmpOp: op,
 			OpStr: comparisonOpInfix[op],
 		}

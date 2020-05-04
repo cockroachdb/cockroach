@@ -240,14 +240,21 @@ func (a *Allocator) ReleaseMemory(size int64) {
 }
 
 const (
-	sizeOfBool     = int(unsafe.Sizeof(true))
-	sizeOfInt      = int(unsafe.Sizeof(int(0)))
-	sizeOfInt16    = int(unsafe.Sizeof(int16(0)))
-	sizeOfInt32    = int(unsafe.Sizeof(int32(0)))
-	sizeOfInt64    = int(unsafe.Sizeof(int64(0)))
-	sizeOfFloat64  = int(unsafe.Sizeof(float64(0)))
-	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
-	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
+	// SizeOfBool is the size of a single bool value.
+	SizeOfBool = int(unsafe.Sizeof(true))
+	sizeOfInt  = int(unsafe.Sizeof(int(0)))
+	// SizeOfInt16 is the size of a single int16 value.
+	SizeOfInt16 = int(unsafe.Sizeof(int16(0)))
+	// SizeOfInt32 is the size of a single int32 value.
+	SizeOfInt32 = int(unsafe.Sizeof(int32(0)))
+	// SizeOfInt64 is the size of a single int64 value.
+	SizeOfInt64 = int(unsafe.Sizeof(int64(0)))
+	// SizeOfFloat64 is the size of a single float64 value.
+	SizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
+	// SizeOfTime is the size of a single time.Time value.
+	SizeOfTime = int(unsafe.Sizeof(time.Time{}))
+	// SizeOfDuration is the size of a single duration.Duration value.
+	SizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
 )
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
@@ -265,7 +272,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 		case types.BoolFamily:
-			acc += sizeOfBool
+			acc += SizeOfBool
 		case types.BytesFamily:
 			// For byte arrays, we initially allocate BytesInitialAllocationFactor
 			// number of bytes (plus an int32 for the offset) for each row, so we use
@@ -273,18 +280,18 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// memory footprint will be used: whenever a modification of Bytes takes
 			// place, the Allocator will measure the old footprint and the updated
 			// one and will update the memory account accordingly.
-			acc += coldata.BytesInitialAllocationFactor + sizeOfInt32
+			acc += coldata.BytesInitialAllocationFactor + SizeOfInt32
 		case types.IntFamily:
 			switch t.Width() {
 			case 16:
-				acc += sizeOfInt16
+				acc += SizeOfInt16
 			case 32:
-				acc += sizeOfInt32
+				acc += SizeOfInt32
 			default:
-				acc += sizeOfInt64
+				acc += SizeOfInt64
 			}
 		case types.FloatFamily:
-			acc += sizeOfFloat64
+			acc += SizeOfFloat64
 		case types.DecimalFamily:
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects.
@@ -297,9 +304,9 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// timestamps, so if we were to include that in the estimation, we would
 			// significantly overestimate.
 			// TODO(yuzefovich): figure out whether the caching does take place.
-			acc += sizeOfTime
+			acc += SizeOfTime
 		case types.IntervalFamily:
-			acc += sizeOfDuration
+			acc += SizeOfDuration
 		case types.UnknownFamily:
 			// Placeholder coldata.Vecs of unknown types are allowed.
 		default:

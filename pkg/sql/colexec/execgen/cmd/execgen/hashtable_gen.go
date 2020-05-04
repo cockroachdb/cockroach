@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -73,7 +74,7 @@ func genHashTable(wr io.Writer) error {
 
 	var data *twoArgsResolvedOverloadInfo
 	for _, ov := range twoArgsResolvedOverloadsInfo.CmpOps {
-		if ov.Name == comparisonOpName[tree.NE] {
+		if ov.Name == execgen.ComparisonOpName[tree.NE] {
 			data = ov
 			break
 		}

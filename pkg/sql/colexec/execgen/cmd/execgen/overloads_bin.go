@@ -15,17 +15,11 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
-
-var binaryOpName = map[tree.BinaryOperator]string{
-	tree.Plus:  "Plus",
-	tree.Minus: "Minus",
-	tree.Mult:  "Mult",
-	tree.Div:   "Div",
-}
 
 var binaryOpInfix = map[tree.BinaryOperator]string{
 	tree.Plus:  "+",
@@ -61,12 +55,12 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 // sameTypeBinaryOpToOverloads maps a binary operator to all of the overloads
 // that implement that comparison between two values of the same type (meaning
 // they have the same family and width).
-var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*oneArgOverload, len(binaryOpName))
+var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*oneArgOverload, len(execgen.BinaryOpName))
 
 var binOpOutputTypes = make(map[tree.BinaryOperator]map[typePair]*types.T)
 
 func registerBinOpOutputTypes() {
-	for binOp := range binaryOpName {
+	for binOp := range execgen.BinaryOpName {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
 		for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -126,7 +120,7 @@ func populateBinOpOverloads() {
 	for _, op := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
 		ob := &overloadBase{
 			kind:  binaryOverload,
-			Name:  binaryOpName[op],
+			Name:  execgen.BinaryOpName[op],
 			BinOp: op,
 			OpStr: binaryOpInfix[op],
 		}

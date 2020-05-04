@@ -1696,8 +1696,14 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 					groupsRight[i] = int64(rightGroupIdx)
 				}
 				for i := range typs[1:] {
-					coldatatestutils.RandomVec(rng, 0 /* bytesFixedLength */, colsLeft[i+1], nTuples, nullProbability)
-					coldatatestutils.RandomVec(rng, 0 /* bytesFixedLength */, colsRight[i+1], nTuples, nullProbability)
+					for _, vecs := range [][]coldata.Vec{colsLeft, colsRight} {
+						coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+							Rand:            rng,
+							Vec:             vecs[i+1],
+							N:               nTuples,
+							NullProbability: nullProbability,
+						})
+					}
 				}
 				leftMJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
 				rightMJSource := newChunkingBatchSource(typs, colsRight, nTuples)
