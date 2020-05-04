@@ -1127,13 +1127,6 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		return errors.Wrap(err, "publishing tables")
 	}
 
-	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
-	// rows affected per table, so we use a large number because we want to make
-	// sure that stats always get created/refreshed here.
-	for i := range details.Tables {
-		r.statsRefresher.NotifyMutation(details.Tables[i].Desc.ID, math.MaxInt32 /* rowsAffected */)
-	}
-
 	return nil
 }
 
@@ -1142,6 +1135,17 @@ func (r *importResumer) OnTerminal(
 	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
 	if status == jobs.StatusSucceeded {
+
+		// Initiate a run of CREATE STATISTICS. We don't know the actual number of
+		// rows affected per table, so we use a large number because we want to make
+		// sure that stats always get created/refreshed here.
+		payload := r.job.Payload()
+		details := payload.GetImport()
+		for i := range details.Tables {
+			id := details.Tables[i].Desc.ID
+			r.statsRefresher.NotifyMutation(id, math.MaxInt32 /* rowsAffected */)
+		}
+
 		telemetry.CountBucketed("import.rows", r.res.Rows)
 		const mb = 1 << 20
 		telemetry.CountBucketed("import.size-mb", r.res.DataSize/mb)
