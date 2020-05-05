@@ -1104,7 +1104,7 @@ lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-lint: bin/returncheck bin/roachvet
+lint: bin/returncheck bin/roachvet bin/optfmt
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	@# Run 'go build -i' to ensure we have compiled object files available for all
 	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
@@ -1115,7 +1115,7 @@ lint: bin/returncheck bin/roachvet
 .PHONY: lintshort
 lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
-lintshort: bin/roachvet
+lintshort: bin/roachvet bin/optfmt
 	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
 
 .PHONY: protobuf
@@ -1661,6 +1661,7 @@ bins = \
   bin/protoc-gen-gogoroach \
   bin/publish-artifacts \
   bin/publish-provisional-artifacts \
+  bin/optfmt \
   bin/optgen \
   bin/returncheck \
   bin/roachvet \
@@ -1681,6 +1682,7 @@ testbins = \
 # Mappings for binaries that don't live in pkg/cmd.
 execgen-package = ./pkg/sql/colexec/execgen/cmd/execgen
 langgen-package = ./pkg/sql/opt/optgen/cmd/langgen
+optfmt-package = ./pkg/sql/opt/optgen/cmd/optfmt
 optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
 logictest-package = ./pkg/sql/logictest
 logictestccl-package = ./pkg/ccl/logictestccl

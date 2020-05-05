@@ -23,11 +23,10 @@
 #          type of slice elements. For example:
 #            [Slice] define Slice { Element Expr }
 
-
 # Root expression is always the top-most node in the AST.
 define Root {
     Defines DefineSet
-    Rules   RuleSet
+    Rules RuleSet
 }
 
 # type DefineSetExpr []*DefineExpr
@@ -44,9 +43,9 @@ define RuleSet {
 
 define Define {
     Comments Comments
-    Tags     Tags
-    Name     String
-    Fields   DefineFields
+    Tags Tags
+    Name String
+    Fields DefineFields
 }
 
 # type CommentsExpr []CommentExpr
@@ -81,16 +80,16 @@ define DefineFields {
 
 define DefineField {
     Comments Comments
-    Name     String
-    Type     String
+    Name String
+    Type String
 }
 
 define Rule {
     Comments Comments
-    Name     String
-    Tags     Tags
-    Match    Func
-    Replace  Expr
+    Name String
+    Tags Tags
+    Match Func
+    Replace Expr
 }
 
 [HasType]
@@ -113,7 +112,7 @@ define Name {
 
 [HasType]
 define And {
-    Left  Expr
+    Left Expr
     Right Expr
 }
 
@@ -132,7 +131,7 @@ define ListAny {
 
 [HasType]
 define Bind {
-    Label  String
+    Label String
     Target Expr
 }
 

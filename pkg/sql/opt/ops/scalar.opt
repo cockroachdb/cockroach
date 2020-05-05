@@ -7,7 +7,6 @@
 # Scalar - All operators in this file are marked with the Scalar tag, so they
 #          can be easily distinguished from Relational and Enforcer operators.
 
-
 # Subquery is a subquery in a single-row context. Here are some examples:
 #
 #   SELECT 1 = (SELECT 1)
@@ -28,7 +27,6 @@
 [Scalar]
 define Subquery {
     Input RelExpr
-
     _ SubqueryPrivate
 }
 
@@ -76,9 +74,8 @@ define SubqueryPrivate {
 # operator.
 [Scalar, Bool]
 define Any {
-    Input  RelExpr
+    Input RelExpr
     Scalar ScalarExpr
-
     _ SubqueryPrivate
 }
 
@@ -87,7 +84,6 @@ define Any {
 [Scalar, Bool]
 define Exists {
     Input RelExpr
-
     _ SubqueryPrivate
 }
 
@@ -148,7 +144,7 @@ define Placeholder {
 [Scalar]
 define Tuple {
     Elems ScalarListExpr
-    Typ   Type
+    Typ Type
 }
 
 # Projections is a set of ProjectionsItem expressions that specify the ColumnIDs
@@ -175,7 +171,7 @@ define Projections {
 [Scalar, ListItem, ScalarProps]
 define ProjectionsItem {
     Element ScalarExpr
-    Col     ColumnID
+    Col ColumnID
 }
 
 # Aggregations is a set of AggregationsItem expressions that specify the
@@ -262,7 +258,7 @@ define Zip {
 # See the Zip header for more details.
 [Scalar, ListItem, ScalarProps]
 define ZipItem {
-    Fn   ScalarExpr
+    Fn ScalarExpr
     Cols ColList
 }
 
@@ -270,7 +266,7 @@ define ZipItem {
 # its conditions evaluate to true.
 [Scalar, Bool]
 define And {
-    Left  ScalarExpr
+    Left ScalarExpr
     Right ScalarExpr
 }
 
@@ -278,7 +274,7 @@ define And {
 # its conditions evaluates to true.
 [Scalar, Bool]
 define Or {
-    Left  ScalarExpr
+    Left ScalarExpr
     Right ScalarExpr
 }
 
@@ -304,264 +300,263 @@ define Not {
 
 [Scalar, Bool, Comparison]
 define Eq {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Lt {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Gt {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Le {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Ge {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Ne {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define In {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define NotIn {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Like {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define NotLike {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define ILike {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define NotILike {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define SimilarTo {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define NotSimilarTo {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define RegMatch {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define NotRegMatch {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define RegIMatch {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define NotRegIMatch {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Is {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define IsNot {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Contains {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define JsonExists {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define JsonAllExists {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define JsonSomeExists {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Bool, Comparison]
 define Overlaps {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 # AnyScalar is the form of ANY which refers to an ANY operation on a
 # tuple or array, as opposed to Any which operates on a subquery.
 [Scalar, Bool]
 define AnyScalar {
-   Left  ScalarExpr
-   Right ScalarExpr
-
-   Cmp   Operator
+    Left ScalarExpr
+    Right ScalarExpr
+    Cmp Operator
 }
 
 [Scalar, Binary]
 define Bitand {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Bitor {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Bitxor {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Plus {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Minus {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Mult {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Div {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define FloorDiv {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Mod {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Pow {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Concat {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define LShift {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define RShift {
-   Left  ScalarExpr
-   Right ScalarExpr
+    Left ScalarExpr
+    Right ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchVal {
-   Json  ScalarExpr
-   Index ScalarExpr
+    Json ScalarExpr
+    Index ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchText {
-   Json  ScalarExpr
-   Index ScalarExpr
+    Json ScalarExpr
+    Index ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchValPath {
-   Json ScalarExpr
-   Path ScalarExpr
+    Json ScalarExpr
+    Path ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchTextPath {
-   Json ScalarExpr
-   Path ScalarExpr
+    Json ScalarExpr
+    Path ScalarExpr
 }
 
 [Scalar, Unary]
@@ -596,7 +591,7 @@ define UnaryCbrt {
 [Scalar]
 define Cast {
     Input ScalarExpr
-    Typ   Type
+    Typ Type
 }
 
 # IfErr is roughly a runtime try-catch operator. It has different semantics
@@ -616,9 +611,10 @@ define Cast {
 [Scalar]
 define IfErr {
     Cond ScalarExpr
+
     # OrElse and ErrCode will be lists with a single element if their respective
     # values are set, and empty lists otherwise.
-    OrElse  ScalarListExpr
+    OrElse ScalarListExpr
     ErrCode ScalarListExpr
 }
 
@@ -643,8 +639,8 @@ define IfErr {
 #
 [Scalar]
 define Case {
-    Input  ScalarExpr
-    Whens  ScalarListExpr
+    Input ScalarExpr
+    Whens ScalarListExpr
     OrElse ScalarExpr
 }
 
@@ -654,14 +650,14 @@ define Case {
 [Scalar]
 define When {
     Condition ScalarExpr
-    Value     ScalarExpr
+    Value ScalarExpr
 }
 
 # Array is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
 [Scalar]
 define Array {
     Elems ScalarListExpr
-    Typ   Type
+    Typ Type
 }
 
 # Indirection is a subscripting expression of the form <expr>[<index>].
@@ -680,7 +676,6 @@ define Indirection {
 [Scalar]
 define ArrayFlatten {
     Input RelExpr
-
     _ SubqueryPrivate
 }
 
@@ -690,16 +685,15 @@ define ArrayFlatten {
 [Scalar]
 define Function {
     Args ScalarListExpr
-
     _ FunctionPrivate
 }
 
 [Private]
 define FunctionPrivate {
-    Name       string
-    Typ        Type
+    Name string
+    Typ Type
     Properties FuncProps
-    Overload   FuncOverload
+    Overload FuncOverload
 }
 
 # Collate is an expression of the form
@@ -710,7 +704,7 @@ define FunctionPrivate {
 # and y is a locale. It evaluates to the string collated to the given locale.
 [Scalar]
 define Collate {
-    Input  ScalarExpr
+    Input ScalarExpr
     Locale string
 }
 
@@ -725,7 +719,6 @@ define Coalesce {
 [Scalar]
 define ColumnAccess {
     Input ScalarExpr
-
     Idx TupleOrdinal
 }
 
@@ -901,7 +894,7 @@ define AggDistinct {
 # always occur on top of AggDistinct if they are both present.
 [Scalar]
 define AggFilter {
-    Input  ScalarExpr
+    Input ScalarExpr
     Filter ScalarExpr
 }
 
@@ -910,8 +903,8 @@ define AggFilter {
 # window frame, if the lower bound uses OFFSET mode.
 [Scalar]
 define WindowFromOffset {
-    Input      ScalarExpr
-    Offset     ScalarExpr
+    Input ScalarExpr
+    Offset ScalarExpr
 }
 
 # WindowToOffset is used as a modifier that wraps the input of a window
@@ -919,8 +912,8 @@ define WindowFromOffset {
 # window frame, if the upper bound uses OFFSET mode.
 [Scalar]
 define WindowToOffset {
-    Input      ScalarExpr
-    Offset     ScalarExpr
+    Input ScalarExpr
+    Offset ScalarExpr
 }
 
 # Windows is a set of window functions to be computed in the context of a
@@ -943,7 +936,6 @@ define WindowsItem {
     # strip off the additional layers. The benefit is that we have additional data
     # without having a bunch of fields that are empty in the common case.
     Function ScalarExpr
-
     _ WindowsItemPrivate
 }
 
@@ -955,7 +947,7 @@ define WindowsItemPrivate {
     # TODO(justin): at this point we should probably just have a separate opt
     # version of this structure.
     Frame WindowFrame
-    Col   ColumnID
+    Col ColumnID
 }
 
 # Rank computes the position of a row relative to an ordering, with same-valued
@@ -997,17 +989,18 @@ define Ntile {
 # such row exists, returns Def.
 [Scalar, Window]
 define Lag {
-    Value  ScalarExpr
+    Value ScalarExpr
     Offset ScalarExpr
+
     # Def is the default value.
-    Def    ScalarExpr
+    Def ScalarExpr
 }
 
 # Lead returns Value evaluated at the row Offset rows after this one. If no
 # such row exists, returns Def.
 [Scalar, Window]
 define Lead {
-    Value  ScalarExpr
+    Value ScalarExpr
     Offset ScalarExpr
 
     # Def is the default value.
@@ -1032,7 +1025,7 @@ define LastValue {
 [Scalar, Window]
 define NthValue {
     Value ScalarExpr
-    Nth   ScalarExpr
+    Nth ScalarExpr
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values
@@ -1047,7 +1040,7 @@ define KVOptions {
 [Scalar, ListItem]
 define KVOptionsItem {
     Value ScalarExpr
-    Key   string
+    Key string
 }
 
 # ScalarList is a list expression that has scalar expression items of type

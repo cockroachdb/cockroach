@@ -2,7 +2,6 @@
 # scalar.opt contains scalar normalization rules that aren't handled elsewhere.
 # =============================================================================
 
-
 # CommuteVar ensures that variable references are on the left side of
 # commutative comparison and binary operators. Other patterns don't need to
 # handle both combinations.
@@ -42,18 +41,24 @@
 
 # EliminateCoalesce discards the Coalesce operator if it has a single operand.
 [EliminateCoalesce, Normalize]
-(Coalesce [ $item:* ]) => $item
+(Coalesce [ $item:* ])
+=>
+$item
 
 # SimplifyCoalesce discards any leading null operands, and then if the next
 # operand is a constant, replaces with that constant. Note that ConstValue
 # matches nulls as well as other constants.
 [SimplifyCoalesce, Normalize]
-(Coalesce $args:[ $arg:* & (IsConstValueOrTuple $arg) ... ]) => (SimplifyCoalesce $args)
+(Coalesce $args:[ $arg:* & (IsConstValueOrTuple $arg) ... ])
+=>
+(SimplifyCoalesce $args)
 
 # EliminateCast discards the cast operator if its input already has a type
 # that's equivalent to the desired static type.
 [EliminateCast, Normalize]
-(Cast $input:* $targetTyp:* & (HasColType $input $targetTyp)) => $input
+(Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
+=>
+$input
 
 # NormalizeInConst ensures that the In operator's tuple operand is sorted with
 # duplicates removed (since duplicates do not change the result).
@@ -69,10 +74,7 @@
 # contains null. The NormalizeInConst pattern will reduce multiple nulls to a
 # single null when it removes duplicates, so this pattern will match that.
 [FoldInNull, Normalize]
-(In | NotIn
-    $left:*
-    (Tuple [ (Null) ])
-)
+(In | NotIn $left:* (Tuple [ (Null) ]))
 =>
 (Null (BoolType))
 
@@ -82,24 +84,26 @@
 [UnifyComparisonTypes, Normalize]
 (Comparison
     $left:(Variable)
-    $right:(Const) & (Succeeded $result:(UnifyComparison $left $right))
+    $right:(Const) &
+        (Succeeded $result:(UnifyComparison $left $right))
 )
 =>
-((OpName)
-    $left
-    $result
-)
+((OpName) $left $result)
 
 # EliminateExistsZeroRows converts an Exists subquery to False when it's known
 # that the input produces zero rows.
 [EliminateExistsZeroRows, Normalize]
-(Exists $input:* & (HasZeroRows $input)) => (False)
+(Exists $input:* & (HasZeroRows $input))
+=>
+(False)
 
 # EliminateExistsProject discards a Project input to the Exists operator. The
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.
 [EliminateExistsProject, Normalize]
-(Exists (Project $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
+(Exists (Project $input:*) $subqueryPrivate:*)
+=>
+(Exists $input $subqueryPrivate)
 
 # EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
 # operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
@@ -110,7 +114,9 @@
 # NOTE: EnsureDistinctOn has the side effect of error'ing if the input has
 # duplicates, so do not eliminate it.
 [EliminateExistsGroupBy, Normalize]
-(Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
+(Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*)
+=>
+(Exists $input $subqueryPrivate)
 
 # IntroduceExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
 # to make the EXISTS determination.
@@ -178,17 +184,11 @@
 # because containment is not equivalent to equality for non-scalar types.
 [NormalizeJSONFieldAccess, Normalize]
 (Eq
-    (FetchVal
-        $val:*
-        $key:(Const) & (IsString $key)
-    )
+    (FetchVal $val:* $key:(Const) & (IsString $key))
     $right:(Const) & (IsJSONScalar $right)
 )
 =>
-(Contains
-  $val
-  (MakeSingleKeyJSONObject $key $right)
-)
+(Contains $val (MakeSingleKeyJSONObject $key $right))
 
 # NormalizeJSONContains contains transforms a field access containment into one
 # with a simpler LHS.  This transformation is only valid if the RHS is not a
@@ -203,17 +203,11 @@
 #
 [NormalizeJSONContains, Normalize]
 (Contains
-    (FetchVal
-        $val:*
-        $key:(Const) & (IsString $key)
-    )
+    (FetchVal $val:* $key:(Const) & (IsString $key))
     $right:(Const) & ^(IsJSONScalar $right)
 )
 =>
-(Contains
-    $val
-    (MakeSingleKeyJSONObject $key $right)
-)
+(Contains $val (MakeSingleKeyJSONObject $key $right))
 
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions
@@ -230,11 +224,7 @@
 [SimplifyCaseWhenConstValue, Normalize]
 (Case
     $condition:(ConstValue)
-    $whens:[
-        ...
-        (When (ConstValue))
-        ...
-    ]
+    $whens:[ ... (When (ConstValue)) ... ]
     $orElse:*
 )
 =>
@@ -243,17 +233,9 @@
 # InlineAnyValuesSingleCol converts Any with Values input to AnyScalar.
 # This version handles the case where there is a single column.
 [InlineAnyValuesSingleCol, Normalize]
-(Any
-    $values:(Values)
-    $scalar:*
-    $private:*
-)
+(Any $values:(Values) $scalar:* $private:*)
 =>
-(AnyScalar
-    $scalar
-    (InlineValues $values)
-    (SubqueryCmp $private)
-)
+(AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
 
 # InlineAnyValuesMultiCol converts Any with Values input to AnyScalar.
 # This version handles the case where there are multiple columns; in this case,
@@ -262,18 +244,15 @@
 (Any
     (Project
         $values:(Values * $valuesPrivate:*)
-        [ (ProjectionsItem $tuple:(Tuple)) ] & (IsTupleOfVars $tuple (ValuesCols $valuesPrivate))
+        [ (ProjectionsItem $tuple:(Tuple)) ] &
+            (IsTupleOfVars $tuple (ValuesCols $valuesPrivate))
         $passthrough:* & (ColsAreEmpty $passthrough)
     )
     $scalar:*
     $private:*
 )
 =>
-(AnyScalar
-    $scalar
-    (InlineValues $values)
-    (SubqueryCmp $private)
-)
+(AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
 
 # SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
 # It transforms
@@ -286,40 +265,22 @@
 #
 # Which allows scans to be constrained.
 [SimplifyEqualsAnyTuple, Normalize]
-(AnyScalar
-    $input:*
-    $tuple:(Tuple)
-    $cmp:* & (OpsAreSame $cmp Eq)
-)
+(AnyScalar $input:* $tuple:(Tuple) $cmp:* & (OpsAreSame $cmp Eq))
 =>
-(In
-    $input
-    $tuple
-)
+(In $input $tuple)
 
 # SimplifyAnyScalarArray converts a scalar ANY operation on a constant ARRAY to a scalar
 # ANY operation on a tuple. In particular, this allows SimplifyEqualsAnyTuple to be
 # triggered, which allows constraints to be generated.
 [SimplifyAnyScalarArray, Normalize]
-(AnyScalar
-    $input:*
-    $ary:(Const) & (IsConstArray $ary)
-    $cmp:*
-)
+(AnyScalar $input:* $ary:(Const) & (IsConstArray $ary) $cmp:*)
 =>
-(AnyScalar
-    $input
-    (ConvertConstArrayToTuple $ary)
-    $cmp
-)
+(AnyScalar $input (ConvertConstArrayToTuple $ary) $cmp)
 
 # FoldCollate converts a Collate expr over an uncollated string into a collated
 # string constant.
 [FoldCollate, Normalize]
-(Collate
-    $input:(Const)
-    $locale:*
-)
+(Collate $input:(Const) $locale:*)
 =>
 (CastToCollatedString $input $locale)
 
@@ -340,10 +301,7 @@
 # Max1Row operator we introduce is guaranteed to be eliminated as
 # MakeArrayAggForFlatten will return a ScalarGroupBy.
 [NormalizeArrayFlattenToAgg, Normalize]
-(ArrayFlatten
-  $input:(HasOuterCols $input)
-  $subquery:*
-)
+(ArrayFlatten $input:(HasOuterCols $input) $subquery:*)
 =>
 (Coalesce
     [
@@ -352,8 +310,16 @@
                 $input
                 [
                     (AggregationsItem
-                        (ArrayAgg (Variable $requestedCol:(SubqueryRequestedCol $subquery)))
-                        (MakeArrayAggCol (ArrayType $requestedCol))
+                        (ArrayAgg
+                            (Variable
+                                $requestedCol:(SubqueryRequestedCol
+                                    $subquery
+                                )
+                            )
+                        )
+                        (MakeArrayAggCol
+                            (ArrayType $requestedCol)
+                        )
                     )
                 ]
                 (MakeGrouping
@@ -376,10 +342,7 @@
     $right:(Variable) & (VarsAreSame $left $right)
 )
 =>
-(Or
-    (IsNot $left (Null (TypeOf $left)))
-    (Null (BoolType))
-)
+(Or (IsNot $left (Null (TypeOf $left))) (Null (BoolType)))
 
 # SimplifySameVarInequalities converts `x != x` and other inequality
 # comparisons into `x IS NULL AND NULL`. The `AND NULL` is necessary
@@ -390,7 +353,4 @@
     $right:(Variable) & (VarsAreSame $left $right)
 )
 =>
-(And
-    (Is $left (Null (TypeOf $left)))
-    (Null (BoolType))
-)
+(And (Is $left (Null (TypeOf $left))) (Null (BoolType)))

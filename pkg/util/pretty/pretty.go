@@ -35,6 +35,7 @@ type docBestType int
 const (
 	textB docBestType = iota
 	lineB
+	hardlineB
 	spacesB
 	keywordB
 )
@@ -151,6 +152,12 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 			i:   d.i,
 			d:   b.be(d.i, z),
 		})
+	case hardline:
+		res = b.newDocBest(docBest{
+			tag: hardlineB,
+			i:   d.i,
+			d:   b.be(d.i, z),
+		})
 	case *union:
 		res = b.better(k,
 			b.be(k, b.iDoc(d.i, t.x, z)),
@@ -248,6 +255,8 @@ func fits(w int16, x *docBest) bool {
 		return fits(w-int16(len(x.s)), x.d)
 	case lineB:
 		return true
+	case hardlineB:
+		return false
 	case spacesB:
 		return fits(w-x.i.spaces, x.d)
 	default:
@@ -266,7 +275,7 @@ func (b *beExec) layout(sb *strings.Builder, useTabs bool, d *docBest) {
 			} else {
 				sb.WriteString(d.s)
 			}
-		case lineB:
+		case lineB, hardlineB:
 			sb.WriteByte('\n')
 			// Fill the tabs first.
 			padTabs := d.i.tabs * b.tabWidth

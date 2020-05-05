@@ -35,7 +35,6 @@
 # details on how this works.
 # =============================================================================
 
-
 # RejectNullsLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
 # FullJoin to a RightJoin) when there is a null-rejecting filter on any column
 # from the right side. The effect of the null-rejecting filter is that output
@@ -64,7 +63,8 @@
         $on:*
         $private:*
     )
-    $filters:* & (HasNullRejectingFilter $filters (OutputCols $right))
+    $filters:* &
+        (HasNullRejectingFilter $filters (OutputCols $right))
 )
 =>
 (Select
@@ -86,24 +86,12 @@
 # RejectNullsLeftJoin.
 [RejectNullsRightJoin, Normalize, HighPriority]
 (Select
-    $input:(FullJoin
-        $left:*
-        $right:*
-        $on:*
-        $private:*
-    )
-    $filters:* & (HasNullRejectingFilter $filters (OutputCols $left))
+    $input:(FullJoin $left:* $right:* $on:* $private:*)
+    $filters:* &
+        (HasNullRejectingFilter $filters (OutputCols $left))
 )
 =>
-(Select
-    (LeftJoin
-        $left
-        $right
-        $on
-        $private
-    )
-    $filters
-)
+(Select (LeftJoin $left $right $on $private) $filters)
 
 # RejectNullsGroupBy pushes a "col IS NOT NULL" null-rejecting filter below the
 # GroupBy operator if it allows null rejection for that column (i.e. if it's in
@@ -133,14 +121,28 @@
         $aggregations:*
         $groupingPrivate:*
     )
-    $filters:* & (HasNullRejectingFilter $filters $rejectCols:(RejectNullCols $input))
+    $filters:* &
+        (HasNullRejectingFilter
+            $filters
+            $rejectCols:(RejectNullCols $input)
+        )
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $innerInput
-            [ (FiltersItem (IsNot (NullRejectAggVar $aggregations $rejectCols) (Null (AnyType)))) ]
+            [
+                (FiltersItem
+                    (IsNot
+                        (NullRejectAggVar
+                            $aggregations
+                            $rejectCols
+                        )
+                        (Null (AnyType))
+                    )
+                )
+            ]
         )
         $aggregations
         $groupingPrivate

@@ -2,14 +2,14 @@
 # project.opt contains normalization rules for the Project operator.
 # =============================================================================
 
-
 # EliminateProject discards a Project operator which is not adding or removing
 # columns.
 [EliminateProject, Normalize]
 (Project
     $input:*
     $projections:[]
-    $passthrough:* & (ColsAreEqual $passthrough (OutputCols $input))
+    $passthrough:* &
+        (ColsAreEqual $passthrough (OutputCols $input))
 )
 =>
 $input
@@ -20,14 +20,22 @@ $input
 [MergeProjects, Normalize]
 (Project
     $input:(Project $innerInput:* $innerProjections:*)
-    $projections:* & (CanMergeProjections $projections $innerProjections)
+    $projections:* &
+        (CanMergeProjections $projections $innerProjections)
     $passthrough:*
 )
 =>
 (Project
     $innerInput
-    (MergeProjections $projections $innerProjections $passthrough)
-    (DifferenceCols $passthrough (ProjectionCols $innerProjections))
+    (MergeProjections
+        $projections
+        $innerProjections
+        $passthrough
+    )
+    (DifferenceCols
+        $passthrough
+        (ProjectionCols $innerProjections)
+    )
 )
 
 # MergeProjectWithValues merges an outer Project operator with an inner Values
@@ -44,7 +52,11 @@ $input
 [MergeProjectWithValues, Normalize]
 (Project
     $input:(Values [ * ])
-    $projections:* & ^(AreProjectionsCorrelated $projections (OutputCols $input))
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            (OutputCols $input)
+        )
     $passthrough:*
 )
 =>
@@ -70,12 +82,18 @@ $input
 (Project
     $input:(Values) & (CanUnnestTuplesFromValues $input)
     $projections:* &
-        (OnlyTupleColumnsAccessed $projections $col:(SingleColFromSet (OutputCols $input)))
+        (OnlyTupleColumnsAccessed
+            $projections
+            $col:(SingleColFromSet (OutputCols $input))
+        )
     $passthrough:* & (ColsAreEmpty $passthrough)
 )
 =>
 (Project
-    (UnnestTuplesFromValues $input $tuplecols:(MakeColsForUnnestTuples $col))
+    (UnnestTuplesFromValues
+        $input
+        $tuplecols:(MakeColsForUnnestTuples $col)
+    )
     (FoldTupleColumnAccess $projections $tuplecols $col)
     $passthrough
 )

@@ -1,0 +1,142 @@
+pretty
+# Com1
+# More com1
+# Blah 1
+
+# Yes
+
+# Def 1
+# Def 2
+define And {
+	# Before
+	# Second
+	Left ScalarExpr # Left input
+	Right ScalarExpr
+
+	# Two in a row.
+	# Another
+	L E
+	R E
+	# 2
+	M E
+} # PostDef
+
+
+# Even more com1
+
+# Com2
+[
+Blah
+]
+(Select
+$a:*
+b
+)
+=>
+(
+False $a
+)
+
+# End com
+# More end com
+
+# End com 3
+
+
+
+----
+----
+# Com1
+# More com1
+# Blah 1
+
+# Yes
+
+# Def 1
+# Def 2
+define And {
+    # Before
+    # Second
+    Left ScalarExpr
+
+    # Left input
+    Right ScalarExpr
+
+    # Two in a row.
+    # Another
+    L E
+    R E
+
+    # 2
+    M E
+}
+
+# PostDef
+
+# Even more com1
+
+# Com2
+[Blah]
+(Select $a:* b)
+=>
+(False $a)
+
+# End com
+# More end com
+
+# End com 3
+----
+----
+
+# Comments not allowed at end of a define.
+pretty
+define D {
+	N E
+	# After
+}
+----
+ERROR: .:4:1: comments not allowed before closing }: [# After]
+
+# Comments within tags or between tags and defines are pushed above
+# the tag.
+pretty
+# C1
+[T
+# CT
+]
+# C2
+define D {
+	N E
+}
+----
+ERROR: .:4:1: comments not allowed before ]
+
+# Comments anywhere in a rule are pushed to the top of the rule.
+pretty
+# C0
+[R]
+# C1R
+(S
+)
+=>
+# C4
+(
+# C5
+S
+) # C7
+----
+----
+# C0
+[R]
+# C1R
+(S)
+=>
+# C4
+(
+    # C5
+    S
+)
+
+# C7
+----
+----

@@ -11,8 +11,4 @@
     $withPrivate:* & (CanInlineWith $binding $input $withPrivate)
 )
 =>
-(InlineWith
-    $binding
-    $input
-    $withPrivate
-)
+(InlineWith $binding $input $withPrivate)

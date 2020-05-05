@@ -2,7 +2,6 @@
 # select.opt contains exploration rules for the Select operator.
 # =============================================================================
 
-
 # GenerateConstrainedScans generates a set of constrained Scan expressions, one
 # for each matching index on the scanned table. The expressions consist of
 # either a standalone Scan operator (if no remaining filter), or else a Scan
@@ -22,7 +21,11 @@
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
 (Select
-    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
+    (Scan
+        $scanPrivate:* &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+    )
     $filters:*
 )
 =>
@@ -47,30 +50,50 @@
 [SplitDisjunction, Explore]
 (Select
     $input:(Scan
-        $scanPrivate:* & (IsCanonicalScan $scanPrivate)
-    ) & (HasStrictKey $input)
-    $filters:* & (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $scanPrivate $filters))
+            $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+        ) &
+        (HasStrictKey $input)
+    $filters:* &
+        (ExprPairSucceeded
+            $pair:(ExprPairForSplitDisjunction
+                $scanPrivate
+                $filters
+            )
+        )
 )
 =>
 (DistinctOn
     (UnionAll
         (Select
             $input
-            (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairLeft $pair))
+            (ReplaceFiltersItem
+                $filters
+                (ExprPairFiltersItemToReplace $pair)
+                (ExprPairLeft $pair)
+            )
         )
         (Select
-            (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
+            (Scan
+                $rightScanPrivate:(DuplicateScanPrivate
+                    $scanPrivate
+                )
+            )
             (MapScanFilterCols
-                (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairRight $pair))
+                (ReplaceFiltersItem
+                    $filters
+                    (ExprPairFiltersItemToReplace $pair)
+                    (ExprPairRight $pair)
+                )
                 $scanPrivate
                 $rightScanPrivate
             )
         )
-        (MakeSetPrivateForSplitDisjunction $scanPrivate $rightScanPrivate)
+        (MakeSetPrivateForSplitDisjunction
+            $scanPrivate
+            $rightScanPrivate
+        )
     )
-    (MakeAggCols
-        ConstAgg (NonKeyCols $input)
-    )
+    (MakeAggCols ConstAgg (NonKeyCols $input))
     (MakeGrouping (KeyCols $input) (EmptyOrdering))
 )
 
@@ -107,31 +130,55 @@
 [SplitDisjunctionAddKey, Explore]
 (Select
     $input:(Scan
-        $scanPrivate:* & (IsCanonicalScan $scanPrivate)
-    ) & ^(HasStrictKey $input)
-    $filters:* & (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $scanPrivate $filters))
+            $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+        ) &
+        ^(HasStrictKey $input)
+    $filters:* &
+        (ExprPairSucceeded
+            $pair:(ExprPairForSplitDisjunction
+                $scanPrivate
+                $filters
+            )
+        )
 )
 =>
 (Project
     (DistinctOn
         (UnionAll
             (Select
-                $leftScan:(Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
-                (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairLeft $pair))
+                $leftScan:(Scan
+                    $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate
+                        $scanPrivate
+                    )
+                )
+                (ReplaceFiltersItem
+                    $filters
+                    (ExprPairFiltersItemToReplace $pair)
+                    (ExprPairLeft $pair)
+                )
             )
             (Select
-                (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
+                (Scan
+                    $rightScanPrivate:(DuplicateScanPrivate
+                        $leftScanPrivate
+                    )
+                )
                 (MapScanFilterCols
-                    (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairRight $pair))
+                    (ReplaceFiltersItem
+                        $filters
+                        (ExprPairFiltersItemToReplace $pair)
+                        (ExprPairRight $pair)
+                    )
                     $leftScanPrivate
                     $rightScanPrivate
                 )
             )
-            (MakeSetPrivateForSplitDisjunction $leftScanPrivate $rightScanPrivate)
+            (MakeSetPrivateForSplitDisjunction
+                $leftScanPrivate
+                $rightScanPrivate
+            )
         )
-        (MakeAggCols
-            ConstAgg (NonKeyCols $leftScan)
-        )
+        (MakeAggCols ConstAgg (NonKeyCols $leftScan))
         (MakeGrouping (KeyCols $leftScan) (EmptyOrdering))
     )
     []

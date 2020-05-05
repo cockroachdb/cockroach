@@ -5,12 +5,16 @@
 # FoldNullCast discards the cast operator if it has a null input. The resulting
 # null value has the same type as the Cast operator would have had.
 [FoldNullCast, Normalize]
-(Cast $input:(Null) $targetTyp:*) => (Null $targetTyp)
+(Cast $input:(Null) $targetTyp:*)
+=>
+(Null $targetTyp)
 
 # FoldNullUnary discards any unary operator with a null input, and replaces it
 # with a null value having the same type as the unary expression would have.
 [FoldNullUnary, Normalize]
-(Unary $input:(Null)) => (FoldNullUnary (OpName) $input)
+(Unary $input:(Null))
+=>
+(FoldNullUnary (OpName) $input)
 
 # FoldNullBinaryLeft replaces the binary operator with null if its left input
 # is null and it does not allow null arguments.
@@ -36,10 +40,7 @@
 # null and the right input is not empty. Null is the unknown value, and if the
 # set is non-empty, it is unknown whether it's in/not in the set.
 [FoldNullInNonEmpty, Normalize]
-(In | NotIn
-    (Null)
-    (Tuple ^[])
-)
+(In | NotIn (Null) (Tuple ^[]))
 =>
 (Null (BoolType))
 
@@ -62,10 +63,7 @@
 # FoldArray evaluates an Array expression with constant inputs. It replaces the
 # Array with a Const datum with type TArray.
 [FoldArray, Normalize]
-(Array
-    $elems:* & (IsListOfConstants $elems)
-    $typ:*
-)
+(Array $elems:* & (IsListOfConstants $elems) $typ:*)
 =>
 (FoldArray $elems $typ)
 
@@ -109,7 +107,9 @@ $result
     $left:* & (IsConstValueOrTuple $left)
     $right:* &
         (IsConstValueOrTuple $right) &
-        (Succeeded $result:(FoldComparison (OpName) $left $right))
+        (Succeeded
+            $result:(FoldComparison (OpName) $left $right)
+        )
 )
 =>
 $result
@@ -168,7 +168,8 @@ $result
 [FoldFunction, Normalize]
 (Function
     $args:* & (IsListOfConstants $args)
-    $private:* & (Succeeded $result:(FoldFunction $args $private))
+    $private:* &
+        (Succeeded $result:(FoldFunction $args $private))
 )
 =>
 $result
@@ -176,10 +177,6 @@ $result
 # FoldEqualsAnyNull, conversts a scalar ANY operation to NULL if the right-hand
 # side tuple is NULL, e.g. x = ANY(NULL::int[]). See #42562.
 [FoldEqualsAnyNull, Normalize]
-(AnyScalar
-    *
-    (Null)
-    *
-)
+(AnyScalar * (Null) *)
 =>
 (Null (BoolType))
