@@ -582,7 +582,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 // InitNode parses node attributes and initializes the gossip bootstrap
 // resolvers.
-func (cfg *Config) InitNode() error {
+func (cfg *Config) InitNode(ctx context.Context) error {
 	cfg.readEnvironmentVariables()
 
 	// Initialize attributes.
@@ -593,7 +593,7 @@ func (cfg *Config) InitNode() error {
 	cfg.Config.HistogramWindowInterval = cfg.HistogramWindowInterval()
 
 	// Get the gossip bootstrap resolvers.
-	resolvers, err := cfg.parseGossipBootstrapResolvers()
+	resolvers, err := cfg.parseGossipBootstrapResolvers(ctx)
 	if err != nil {
 		return err
 	}
@@ -644,10 +644,10 @@ func (cfg *Config) readEnvironmentVariables() {
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
-func (cfg *Config) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
+func (cfg *Config) parseGossipBootstrapResolvers(ctx context.Context) ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
 	for _, address := range cfg.JoinList {
-		srvAddrs, err := resolver.SRV(address)
+		srvAddrs, err := resolver.SRV(ctx, address)
 		if err != nil {
 			return nil, err
 		}
