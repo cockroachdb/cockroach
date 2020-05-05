@@ -804,6 +804,16 @@ values
  ├── fd: ()-->(1)
  └── (NULL,)
 
+norm expect=FoldFunction
+SELECT ST_Length(ST_GeomFromText('LINESTRING(743238 2967416,743238 2967450)', 2249));
+----
+values
+ ├── columns: st_length:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (34.0,)
+
 norm expect-not=FoldFunction
 SELECT now(), current_user(), current_database()
 ----
