@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -436,7 +437,7 @@ func TestDistAggregationTable(t *testing.T) {
 	)
 
 	kvDB := tc.Server(0).DB()
-	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	for fn, info := range DistAggregationTable {
 		if fn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {

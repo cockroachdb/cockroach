@@ -894,7 +894,7 @@ func RemoveIndexZoneConfigs(
 	tableID sqlbase.ID,
 	indexDescs []sqlbase.IndexDescriptor,
 ) error {
-	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, tableID)
 	if err != nil {
 		return err
 	}

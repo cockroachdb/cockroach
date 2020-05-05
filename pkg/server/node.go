@@ -188,9 +188,11 @@ func allocateStoreIDs(
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
 func GetBootstrapSchema(
-	defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
+	codec keys.SQLCodec,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) sqlbase.MetadataSchema {
-	return sqlbase.MakeMetadataSchema(defaultZoneConfig, defaultSystemZoneConfig)
+	return sqlbase.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig)
 }
 
 // bootstrapCluster initializes the passed-in engines for a new cluster.
@@ -246,7 +248,7 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			schema := GetBootstrapSchema(defaultZoneConfig, defaultSystemZoneConfig)
+			schema := GetBootstrapSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig)
 			initialValues, tableSplits := schema.GetInitialValues(bootstrapVersion)
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {

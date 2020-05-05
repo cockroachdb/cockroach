@@ -87,7 +87,7 @@ func updateStatusForGCElements(
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
 
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+		table, err := sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, tableID)
 		if err != nil {
 			return err
 		}
@@ -273,7 +273,7 @@ func isProtected(
 func setupConfigWatcher(
 	execCfg *sql.ExecutorConfig,
 ) (gossip.SystemConfigDeltaFilter, <-chan struct{}) {
-	k := keys.TODOSQLCodec.IndexPrefix(uint32(keys.ZonesTableID), uint32(keys.ZonesTablePrimaryIndexID))
+	k := execCfg.Codec.IndexPrefix(uint32(keys.ZonesTableID), uint32(keys.ZonesTablePrimaryIndexID))
 	zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(k)
 	gossipUpdateC := execCfg.Gossip.Deprecated(47150).RegisterSystemConfigChannel()
 	return zoneCfgFilter, gossipUpdateC

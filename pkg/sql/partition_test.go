@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -40,8 +41,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
 	tableDesc.PrimaryIndex.Partitioning = sqlbase.PartitioningDescriptor{
