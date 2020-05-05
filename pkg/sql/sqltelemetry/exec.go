@@ -29,3 +29,7 @@ var VecExecCounter = telemetry.GetCounterOnce("sql.exec.query.is-vectorized")
 func VecModeCounter(mode string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("sql.exec.vectorized-setting.%s", mode))
 }
+
+// CascadesLimitReached is to be incremented whenever the limit of foreign key
+// cascade for a single query is exceeded.
+var CascadesLimitReached = telemetry.GetCounterOnce("sql.exec.cascade-limit-reached")
