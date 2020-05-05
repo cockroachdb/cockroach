@@ -242,7 +242,7 @@ func BenchmarkWindower(b *testing.B) {
 
 			b.Run(runName, func(b *testing.B) {
 				post := &execinfrapb.PostProcessSpec{}
-				disposer := &execinfra.RowDisposer{}
+				disposer := &rowDisposer{}
 				input := execinfra.NewRepeatableRowSource(sqlbase.ThreeIntCols, rowsGenerator(numRows, numCols))
 
 				b.SetBytes(int64(8 * numRows * numCols))

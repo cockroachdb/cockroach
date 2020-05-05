@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -704,56 +706,193 @@ func TestJoinReaderDrain(t *testing.T) {
 	})
 }
 
-// BenchmarkJoinReader benchmarks an index join where there is a 1:1
-// relationship between the two sides.
+// BenchmarkJoinReader benchmarks different lookup join match ratios against a
+// table with half a million rows. A match ratio specifies how many rows are
+// returned for a single lookup row. Some cases will cause the join reader to
+// spill to disk, in which case the benchmark logs that the join spilled.
 func BenchmarkJoinReader(b *testing.B) {
-	logScope := log.Scope(b)
-	defer logScope.Close(b)
-	ctx := context.Background()
-
-	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	st := s.ClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
-	defer diskMonitor.Stop(ctx)
-
-	flowCtx := execinfra.FlowCtx{
-		EvalCtx: &evalCtx,
-		Cfg: &execinfra.ServerConfig{
-			DiskMonitor: diskMonitor,
-			Settings:    st,
-		},
-		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
+	if testing.Short() {
+		b.Skip()
 	}
 
-	const numCols = 2
-	const numInputCols = 1
-	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		tableName := fmt.Sprintf("t%d", numRows)
-		sqlutils.CreateTable(
-			b, sqlDB, tableName, "k INT PRIMARY KEY, v INT", numRows,
-			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn),
-		)
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+	var (
+		logScope       = log.Scope(b)
+		ctx            = context.Background()
+		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{})
+		st             = s.ClusterSettings()
+		evalCtx        = tree.MakeTestingEvalContext(st)
+		diskMonitor    = execinfra.NewTestDiskMonitor(ctx, st)
+		flowCtx        = execinfra.FlowCtx{
+			EvalCtx: &evalCtx,
+			Cfg: &execinfra.ServerConfig{
+				DiskMonitor: diskMonitor,
+				Settings:    st,
+			},
+		}
+		path, cleanupTempDir = testutils.TempDir(b)
+	)
+	defer logScope.Close(b)
+	defer s.Stopper().Stop(ctx)
+	defer evalCtx.Stop(ctx)
+	defer diskMonitor.Stop(ctx)
+	defer cleanupTempDir()
 
-		spec := execinfrapb.JoinReaderSpec{Table: *tableDesc}
-		input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numInputCols))
-		post := execinfrapb.PostProcessSpec{}
-		output := execinfra.RowDisposer{}
+	// Create an *on-disk* temp engine for benchmark iterations that spill to
+	// disk.
+	storeSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", path))
+	require.NoError(b, err)
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.TempStorageConfig{Path: path, Mon: diskMonitor}, storeSpec)
+	require.NoError(b, err)
+	defer tempEngine.Close()
+	flowCtx.Cfg.TempStorage = tempEngine
 
-		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			b.SetBytes(int64(numRows * (numCols + numInputCols) * 8))
-			for i := 0; i < b.N; i++ {
-				jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
-				if err != nil {
-					b.Fatal(err)
-				}
-				jr.Run(ctx)
-				input.Reset()
+	// rightSideColumnDef is the definition of a column in the table that is being
+	// looked up.
+	type rightSideColumnDef struct {
+		// name is the name of the column.
+		name string
+		// matchesPerLookupRow is the number of rows with the same column value.
+		matchesPerLookupRow int
+	}
+	rightSideColumnDefs := []rightSideColumnDef{
+		{name: "one", matchesPerLookupRow: 1},
+		{name: "four", matchesPerLookupRow: 4},
+		{name: "sixteen", matchesPerLookupRow: 16},
+		{name: "thirtytwo", matchesPerLookupRow: 32},
+		{name: "sixtyfour", matchesPerLookupRow: 64},
+	}
+	tableSizeToName := func(sz int) string {
+		return fmt.Sprintf("t%d", sz)
+	}
+
+	createRightSideTable := func(sz int) {
+		colDefs := make([]string, 0, len(rightSideColumnDefs))
+		indexDefs := make([]string, 0, len(rightSideColumnDefs))
+		genValueFns := make([]sqlutils.GenValueFn, 0, len(rightSideColumnDefs))
+		for _, columnDef := range rightSideColumnDefs {
+			if columnDef.matchesPerLookupRow > sz {
+				continue
 			}
-		})
+			colDefs = append(colDefs, fmt.Sprintf("%s INT", columnDef.name))
+			indexDefs = append(indexDefs, fmt.Sprintf("INDEX (%s)", columnDef.name))
+
+			curValue := -1
+			// Capture matchesPerLookupRow for use in the generating function later
+			// on.
+			matchesPerLookupRow := columnDef.matchesPerLookupRow
+			genValueFns = append(genValueFns, func(row int) tree.Datum {
+				idx := row - 1
+				if idx%matchesPerLookupRow == 0 {
+					// Increment curValue every columnDef.matchesPerLookupRow values. The
+					// first value will be 0.
+					curValue++
+				}
+				return tree.NewDInt(tree.DInt(curValue))
+			})
+		}
+		tableName := tableSizeToName(sz)
+
+		sqlutils.CreateTable(
+			b, sqlDB, tableName, strings.Join(append(colDefs, indexDefs...), ", "), sz,
+			sqlutils.ToRowFn(genValueFns...),
+		)
+	}
+
+	rightSz := 1 << 19 /* 524,288 rows */
+	createRightSideTable(rightSz)
+	// Create a new txn after the table has been created.
+	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), s.NodeID())
+	for columnIdx, columnDef := range rightSideColumnDefs {
+		for _, numLookupRows := range []int{1, 1 << 4 /* 16 */, 1 << 8 /* 256 */, 1 << 10 /* 1024 */, 1 << 12 /* 4096 */, 1 << 13 /* 8192 */, 1 << 14 /* 16384 */, 1 << 15 /* 32768 */, 1 << 16 /* 65,536 */, 1 << 19 /* 524,288 */} {
+			if rightSz/columnDef.matchesPerLookupRow < numLookupRows {
+				// This case does not make sense since we won't have distinct lookup
+				// rows. We don't currently merge spans which could make this an
+				// interesting case to benchmark, but we probably should.
+				continue
+			}
+
+			eqColsAreKey := []bool{false}
+			if numLookupRows == 1 {
+				// For this case, execute the parallel lookup case as well.
+				eqColsAreKey = []bool{true, false}
+			}
+			for _, parallel := range eqColsAreKey {
+				benchmarkName := fmt.Sprintf("matchratio=oneto%s/lookuprows=%d", columnDef.name, numLookupRows)
+				if parallel {
+					benchmarkName += "/parallel=true"
+				}
+				b.Run(benchmarkName, func(b *testing.B) {
+					tableName := tableSizeToName(rightSz)
+
+					// Get the table descriptor and find the index that will provide us with
+					// the expected match ratio.
+					tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+					indexIdx := uint32(0)
+					for i := range tableDesc.Indexes {
+						require.Equal(b, 1, len(tableDesc.Indexes[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
+						if tableDesc.Indexes[i].ColumnNames[0] == columnDef.name {
+							// Found indexIdx.
+							indexIdx = uint32(i + 1)
+							break
+						}
+					}
+					if indexIdx == 0 {
+						b.Fatalf("failed to find secondary index for column %s", columnDef.name)
+					}
+
+					input := newRowGeneratingSource(sqlbase.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
+						// Convert to 0-based.
+						return tree.NewDInt(tree.DInt(rowIdx - 1))
+					}), numLookupRows)
+					output := rowDisposer{}
+
+					spec := execinfrapb.JoinReaderSpec{
+						Table:               *tableDesc,
+						LookupColumns:       []uint32{0},
+						LookupColumnsAreKey: parallel,
+						IndexIdx:            indexIdx,
+					}
+					// Post specifies that only the columns contained in the secondary index
+					// need to be output.
+					post := execinfrapb.PostProcessSpec{
+						Projection:    true,
+						OutputColumns: []uint32{uint32(columnIdx + 1)},
+					}
+
+					expectedNumOutputRows := numLookupRows * columnDef.matchesPerLookupRow
+					b.ResetTimer()
+					// The number of bytes processed in this benchmark is the number of
+					// lookup bytes processed + the number of result bytes. We only look
+					// up using a single int column and the request only a single int column
+					// contained in the index.
+					b.SetBytes(int64((numLookupRows * 8) + (expectedNumOutputRows * 8)))
+
+					spilled := false
+					for i := 0; i < b.N; i++ {
+						jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+						if err != nil {
+							b.Fatal(err)
+						}
+						jr.Run(ctx)
+						if !spilled && jr.(*joinReader).Spilled() {
+							spilled = true
+						}
+						meta := output.DrainMeta(ctx)
+						if meta != nil {
+							b.Fatalf("unexpected metadata: %v", meta)
+						}
+						if output.NumRowsDisposed() != expectedNumOutputRows {
+							b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), expectedNumOutputRows)
+						}
+						output.ResetNumRowsDisposed()
+						input.Reset()
+					}
+
+					if spilled {
+						b.Log("joinReader spilled to disk in at least one of the benchmark iterations")
+					}
+				})
+			}
+		}
 	}
 }

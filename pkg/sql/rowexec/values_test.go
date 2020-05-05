@@ -107,7 +107,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 		EvalCtx: &evalCtx,
 	}
 	post := execinfrapb.PostProcessSpec{}
-	output := execinfra.RowDisposer{}
+	output := rowDisposer{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for _, rowsPerChunk := range []int{1, 4, 16} {
 			b.Run(fmt.Sprintf("rows=%d,chunkSize=%d", numRows, rowsPerChunk), func(b *testing.B) {
