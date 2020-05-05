@@ -534,7 +534,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
-	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip.Deprecated(47150))
+	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
 	leaseMgr.PeriodicallyRefreshSomeLeases()
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
