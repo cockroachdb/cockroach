@@ -58,74 +58,12 @@ interrupt
 eexpect root@
 end_test
 
-start_test "Test that BEGIN .. without COMMIT begins a multi-line statement."
-send "begin; select 1;\r"
-eexpect " ->"
-end_test
-
 start_test "Test that \show does what it says."
+send "select\r"
+eexpect " ->"
 send "\\show\r"
-eexpect "begin; select 1;\r\n*->"
-end_test
-
-start_test "Test that a COMMIT is detected properly."
-send "commit;\r"
-eexpect "1 row"
-eexpect "root@"
-end_test
-
-start_test "Test that BEGIN .. without COMMIT begins a multi-line stmt even when ROLLBACK TO SAVEPOINT is present."
-send "begin; select 1; savepoint foo; rollback to savepoint foo;\r"
-eexpect " ->"
-
-send "commit;\r"
-eexpect "1 row"
-eexpect "root@"
-end_test
-
-start_test "Test that BEGIN .. without COMMIT does not begin a multi-line statement with smart_prompt disabled."
-send "\\unset smart_prompt\r"
-send "begin;\r"
-eexpect "BEGIN"
-eexpect root@
-send "select 1;\r"
-eexpect "1 row"
-eexpect root@
-send "commit;\r"
-eexpect COMMIT
-eexpect root@
-send "\\set smart_prompt\rselect 1;\r"
-eexpect "1 row"
-eexpect root@
-end_test
-
-start_test "Test that BEGIN .. without COMMIT does not begin a multi-line statement in open txns. #16833"
-
-# trigger the error state
-send "begin; select nonexistent;\r\r"
-eexpect "does not exist"
-eexpect ERROR
-
-# Try to send a txn prefix, expect no multiline entry
-send "begin; select 1;\r"
-eexpect "commands ignored"
-eexpect "root@"
-
-# clear status for next test
-send "commit;\r"
-eexpect ROLLBACK
-eexpect "root@"
-end_test
-
-start_test "Test that an invalid statement inside a multi-line txn does not go to the server."
-send "begin;\r"
-eexpect " ->"
-send "selec t1;\r"
-eexpect "invalid syntax"
-eexpect " ->"
-send "select 1; commit;\r"
-eexpect "1 row"
-eexpect root@
+eexpect "select\r\n*->"
+interrupt
 end_test
 
 start_test "Test that a dangling table creation can be committed, and that other non-DDL, non-DML statements can be issued in the same txn. (#15283)"
