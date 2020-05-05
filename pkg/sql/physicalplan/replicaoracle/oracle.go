@@ -44,7 +44,7 @@ var (
 type Config struct {
 	NodeDesc         roachpb.NodeDescriptor
 	Settings         *cluster.Settings
-	Gossip           *gossip.Gossip
+	Gossip           gossip.DeprecatedOracleGossip
 	RPCContext       *rpc.Context
 	LeaseHolderCache *kvcoord.LeaseHolderCache
 }
@@ -117,7 +117,7 @@ func MakeQueryState() QueryState {
 // randomOracle is a Oracle that chooses the lease holder randomly
 // among the replicas in a range descriptor.
 type randomOracle struct {
-	gossip *gossip.Gossip
+	gossip gossip.DeprecatedOracleGossip
 }
 
 var _ OracleFactory = &randomOracle{}
@@ -141,7 +141,7 @@ func (o *randomOracle) ChoosePreferredReplica(
 }
 
 type closestOracle struct {
-	gossip      *gossip.Gossip
+	gossip      gossip.DeprecatedOracleGossip
 	latencyFunc kvcoord.LatencyFunc
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
@@ -189,7 +189,7 @@ const maxPreferredRangesPerLeaseHolder = 10
 type binPackingOracle struct {
 	leaseHolderCache                 *kvcoord.LeaseHolderCache
 	maxPreferredRangesPerLeaseHolder int
-	gossip                           *gossip.Gossip
+	gossip                           gossip.DeprecatedOracleGossip
 	latencyFunc                      kvcoord.LatencyFunc
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
@@ -268,7 +268,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 // is available in gossip. If no nodes are available, a RangeUnavailableError is
 // returned.
 func replicaSliceOrErr(
-	desc roachpb.RangeDescriptor, gsp *gossip.Gossip,
+	desc roachpb.RangeDescriptor, gsp gossip.DeprecatedOracleGossip,
 ) (kvcoord.ReplicaSlice, error) {
 	// Learner replicas won't serve reads/writes, so send only to the `Voters`
 	// replicas. This is just an optimization to save a network hop, everything

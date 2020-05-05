@@ -1638,12 +1638,9 @@ type DeprecatedGossip struct {
 	w errorutil.TenantSQLDeprecatedWrapper
 }
 
-// Deprecated trades a Github issue tracking the removal of the call for the
+// deprecated trades a Github issue tracking the removal of the call for the
 // wrapped Gossip instance.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) Deprecated(issueNo int) *Gossip {
+func (dg DeprecatedGossip) deprecated(issueNo int) *Gossip {
 	// NB: some tests use a nil Gossip.
 	g, _ := dg.w.Deprecated(issueNo).(*Gossip)
 	return g
@@ -1654,11 +1651,29 @@ func (dg DeprecatedGossip) Deprecated(issueNo int) *Gossip {
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemConfig {
-	g := dg.Deprecated(issueNo)
+	g := dg.deprecated(issueNo)
 	if g == nil {
 		return nil // a few unit tests
 	}
 	return g.GetSystemConfig()
+}
+
+// DeprecatedOracleGossip trims down *gossip.Gossip for use in the Oracle.
+//
+// NB: we're trying to get rid of this dep altogether, see:
+// https://github.com/cockroachdb/cockroach/issues/48432
+type DeprecatedOracleGossip interface {
+	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
+	GetNodeIDForStoreID(roachpb.StoreID) (roachpb.NodeID, error)
+}
+
+// DeprecatedOracleGossip returns an DeprecatedOracleGossip (a Gossip for use with the
+// replicaoracle package).
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) DeprecatedOracleGossip(issueNo int) DeprecatedOracleGossip {
+	return dg.deprecated(issueNo)
 }
 
 // DeprecatedRegisterSystemConfigChannel calls RegisterSystemConfigChannel on
@@ -1667,7 +1682,7 @@ func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemCon
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 func (dg DeprecatedGossip) DeprecatedRegisterSystemConfigChannel(issueNo int) <-chan struct{} {
-	g := dg.Deprecated(issueNo)
+	g := dg.deprecated(issueNo)
 	return g.RegisterSystemConfigChannel()
 }
 
