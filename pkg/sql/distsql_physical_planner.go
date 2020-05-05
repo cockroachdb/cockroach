@@ -87,7 +87,7 @@ type DistSQLPlanner struct {
 
 	// gossip handle used to check node version compatibility and to construct
 	// the spanResolver.
-	gossip *gossip.Gossip
+	gossip gossip.DeprecatedGossip
 
 	nodeDialer *nodedialer.Dialer
 
@@ -146,7 +146,7 @@ func NewDistSQLPlanner(
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsql.ServerImpl,
 	distSender *kvcoord.DistSender,
-	g *gossip.Gossip,
+	gw gossip.DeprecatedGossip,
 	stopper *stop.Stopper,
 	liveness livenessProvider,
 	nodeDialer *nodedialer.Dialer,
@@ -160,10 +160,10 @@ func NewDistSQLPlanner(
 		nodeDesc:    nodeDesc,
 		stopper:     stopper,
 		distSQLSrv:  distSQLSrv,
-		gossip:      g,
+		gossip:      gw,
 		nodeDialer:  nodeDialer,
 		nodeHealth: distSQLNodeHealth{
-			gossip:     g,
+			gossip:     gw,
 			connHealth: nodeDialer.ConnHealth,
 		},
 		distSender:            distSender,
@@ -656,7 +656,7 @@ type SpanPartition struct {
 }
 
 type distSQLNodeHealth struct {
-	gossip     *gossip.Gossip
+	gossip     gossip.DeprecatedGossip
 	isLive     func(roachpb.NodeID) (bool, error)
 	connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
 }
@@ -692,22 +692,24 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 	}
 
 	// Check that the node is not draining.
-	drainingInfo := &execinfrapb.DistSQLDrainingInfo{}
-	if err := h.gossip.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
-		// Because draining info has no expiration, an error
-		// implies that we have not yet received a node's
-		// draining information. Since this information is
-		// written on startup, the most likely scenario is
-		// that the node is ready. We therefore return no
-		// error.
-		// TODO(ajwerner): Determine the expected error types and only filter those.
-		return nil //nolint:returnerrcheck
-	}
+	if g, ok := h.gossip.Optional(distsql.MultiTenancyIssueNo); ok {
+		drainingInfo := &execinfrapb.DistSQLDrainingInfo{}
+		if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
+			// Because draining info has no expiration, an error
+			// implies that we have not yet received a node's
+			// draining information. Since this information is
+			// written on startup, the most likely scenario is
+			// that the node is ready. We therefore return no
+			// error.
+			// TODO(ajwerner): Determine the expected error types and only filter those.
+			return nil //nolint:returnerrcheck
+		}
 
-	if drainingInfo.Draining {
-		err := errors.Newf("not using n%d because it is draining", log.Safe(nodeID))
-		log.VEventf(ctx, 1, "%v", err)
-		return err
+		if drainingInfo.Draining {
+			err := errors.Newf("not using n%d because it is draining", log.Safe(nodeID))
+			log.VEventf(ctx, 1, "%v", err)
+			return err
+		}
 	}
 
 	return nil
@@ -861,8 +863,12 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 	nodeID roachpb.NodeID, planVer execinfrapb.DistSQLVersion,
 ) bool {
+	g, ok := dsp.gossip.Optional(distsql.MultiTenancyIssueNo)
+	if !ok {
+		return true // no gossip - always compatible; only a single gateway running in Phase 2
+	}
 	var v execinfrapb.DistSQLVersionGossipInfo
-	if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(nodeID), &v); err != nil {
+	if err := g.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(nodeID), &v); err != nil {
 		return false
 	}
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
