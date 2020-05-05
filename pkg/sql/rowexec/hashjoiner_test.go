@@ -558,7 +558,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 						// hashJoiner Run()s to omit instantiation time from benchmarks.
 						h, err := newHashJoiner(
 							flowCtx, 0 /* processorID */, spec, leftInput, rightInput,
-							post, &execinfra.RowDisposer{}, false, /* disableTempStorage */
+							post, &rowDisposer{}, false, /* disableTempStorage */
 						)
 						if err != nil {
 							b.Fatal(err)

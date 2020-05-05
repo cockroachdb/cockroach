@@ -432,7 +432,7 @@ func BenchmarkAggregation(b *testing.B) {
 				},
 			}
 			post := &execinfrapb.PostProcessSpec{}
-			disposer := &execinfra.RowDisposer{}
+			disposer := &rowDisposer{}
 			input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
@@ -459,7 +459,7 @@ func BenchmarkCountRows(b *testing.B) {
 		},
 	}
 	post := &execinfrapb.PostProcessSpec{}
-	disposer := &execinfra.RowDisposer{}
+	disposer := &rowDisposer{}
 	const numCols = 1
 	const numRows = 100000
 	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
@@ -503,7 +503,7 @@ func BenchmarkGrouping(b *testing.B) {
 		GroupCols: []uint32{0},
 	}
 	post := &execinfrapb.PostProcessSpec{}
-	disposer := &execinfra.RowDisposer{}
+	disposer := &rowDisposer{}
 	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 	b.SetBytes(int64(8 * numRows * numCols))
@@ -561,7 +561,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 			}
 			spec.OrderedGroupCols = allOrderedGroupCols[:numOrderedCols]
 			post := &execinfrapb.PostProcessSpec{}
-			disposer := &execinfra.RowDisposer{}
+			disposer := &rowDisposer{}
 			input := execinfra.NewRepeatableRowSource(sqlbase.ThreeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
 
 			b.SetBytes(int64(8 * intPow(groupSize, len(groupedCols)+1) * numCols))

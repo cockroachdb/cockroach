@@ -420,7 +420,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		defer flowCtx.EvalCtx.Stop(ctx)
 
 		input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(10, 1))
-		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &execinfra.RowDisposer{})
+		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &rowDisposer{})
 		if err != nil {
 			t.Fatal(err)
 		}

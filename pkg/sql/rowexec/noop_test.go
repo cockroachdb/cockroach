@@ -36,7 +36,7 @@ func BenchmarkNoop(b *testing.B) {
 		EvalCtx: &evalCtx,
 	}
 	post := &execinfrapb.PostProcessSpec{}
-	disposer := &execinfra.RowDisposer{}
+	disposer := &rowDisposer{}
 	for _, numCols := range []int{1, 1 << 1, 1 << 2, 1 << 4, 1 << 8} {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
 			cols := make([]types.T, numCols)
