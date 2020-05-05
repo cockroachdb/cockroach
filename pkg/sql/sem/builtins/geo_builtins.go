@@ -106,6 +106,7 @@ var geographyFromText = makeBuiltin(
 	},
 )
 
+// geoBuiltins must be kept in sync with sql/opt/norm/fold_constants.go.
 var geoBuiltins = map[string]builtinDefinition{
 	//
 	// Input (Geometry)
