@@ -25,9 +25,10 @@ import (
 )
 
 var (
-	write  = flag.Bool("w", false, "write result to (source) file instead of stdout")
-	list   = flag.Bool("l", false, "list files whose formatting differs from optfmt's")
-	verify = flag.Bool("verify", false, "verify output order")
+	write   = flag.Bool("w", false, "write result to (source) file instead of stdout")
+	list    = flag.Bool("l", false, "list files whose formatting differs from optfmt's")
+	verify  = flag.Bool("verify", false, "verify output order")
+	exprgen = flag.Bool("e", false, "format an exprgen expression")
 )
 
 func main() {
@@ -45,7 +46,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		s, err := prettyify(bytes.NewReader(orig), defaultWidth)
+		s, err := prettyify(bytes.NewReader(orig), defaultWidth, *exprgen)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -139,22 +140,31 @@ func prettyFile(name string) (orig []byte, pretty string, err error) {
 	if err != nil {
 		return orig, "", err
 	}
-	pretty, err = prettyify(bytes.NewReader(orig), defaultWidth)
+	pretty, err = prettyify(bytes.NewReader(orig), defaultWidth, *exprgen)
 	return orig, pretty, err
 }
 
-func prettyify(r io.Reader, n int) (string, error) {
+func prettyify(r io.Reader, n int, exprgen bool) (string, error) {
 	parser := lang.NewParser("")
 	parser.SetFileResolver(func(name string) (io.Reader, error) {
+		if exprgen {
+			return io.MultiReader(strings.NewReader(exprgenPrefix), r), nil
+		}
 		return r, nil
 	})
-	_ = parser.Parse()
+	parsed := parser.Parse()
 	errs := parser.Errors()
 	if len(errs) > 0 {
 		return "", errs[0]
 	}
 	p := pp{p: parser}
-	d := p.toDoc(parser.Exprs())
+	var exprs []lang.Expr
+	if exprgen {
+		exprs = []lang.Expr{parsed.Rules[0].Replace}
+	} else {
+		exprs = parser.Exprs()
+	}
+	d := p.toDoc(exprs)
 	s := pretty.Pretty(d, n, false, 4, nil)
 
 	// Remove any whitespace at EOL. This can happen in define rules where
@@ -175,6 +185,12 @@ func prettyify(r io.Reader, n int) (string, error) {
 	}
 	return sb.String(), nil
 }
+
+const exprgenPrefix = `
+[R]
+(F)
+=>
+`
 
 func (p *pp) toDoc(exprs []lang.Expr) pretty.Doc {
 	doc := pretty.Nil
@@ -387,6 +403,8 @@ func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 		return p.docDefine(e)
 	case *lang.CommentsExpr:
 		return p.docComments(e, pretty.Line)
+	case *lang.StringExpr:
+		return pretty.Text(fmt.Sprintf(`"%s"`, string(*e)))
 	default:
 		panic(fmt.Errorf("unknown: %T)", e))
 	}

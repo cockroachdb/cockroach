@@ -1,0 +1,37 @@
+pretty expr
+(Scan
+	[
+		(Table "lineitem")
+		(Cols "l_suppkey")
+		(Index "lineitem@l_sk")
+		(HardLimit $lineitem_rows)
+	]
+)
+----
+(Scan
+    [
+        (Table "lineitem")
+        (Cols "l_suppkey")
+        (Index "lineitem@l_sk")
+        (HardLimit $lineitem_rows)
+    ]
+)
+
+pretty expr
+(Root
+	(Scan
+		[
+			(Table "%s")
+			(Cols "$cols")
+			(HardLimit $rows)
+		]
+	)
+	(Presentation "$cols")
+	(NoOrdering)
+)
+----
+(Root
+    (Scan [ (Table "%s") (Cols "$cols") (HardLimit $rows) ])
+    (Presentation "$cols")
+    (NoOrdering)
+)
