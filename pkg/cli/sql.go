@@ -283,7 +283,8 @@ var options = map[string]struct {
 	set                       func(c *cliState, val string) error
 	reset                     func(c *cliState) error
 	// display is used to retrieve the current value.
-	display func(c *cliState) string
+	display    func(c *cliState) string
+	deprecated bool
 }{
 	`auto_trace`: {
 		description:               "automatically run statement tracing on each executed statement",
@@ -369,6 +370,7 @@ var options = map[string]struct {
 		set:                       func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
 		reset:                     func(c *cliState) error { c.smartPrompt = false; return nil },
 		display:                   func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
+		deprecated:                true,
 	},
 	`prompt1`: {
 		description:               "prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
@@ -402,6 +404,9 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	if len(args) == 0 {
 		optData := make([][]string, 0, len(options))
 		for _, n := range optionNames {
+			if options[n].deprecated {
+				continue
+			}
 			optData = append(optData, []string{n, options[n].display(c), options[n].description})
 		}
 		err := printQueryOutput(os.Stdout,
@@ -568,7 +573,7 @@ func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliState
 		}
 		fmt.Println()
 	} else {
-		_, helpText, _ := c.serverSideParse(fmt.Sprintf("select %s(??", funcName))
+		helpText, _ := c.serverSideParse(fmt.Sprintf("select %s(??", funcName))
 		if helpText != "" {
 			fmt.Println(helpText)
 		} else {
@@ -682,12 +687,8 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
 	wantDbStateInPrompt := rePromptDbState.MatchString(c.customPromptPattern)
-	if wantDbStateInPrompt || c.smartPrompt {
-		// Even if the prompt does not need it, the transaction status is needed
-		// for the multi-line smart prompt.
-		c.refreshTransactionStatus()
-	}
 	if wantDbStateInPrompt {
+		c.refreshTransactionStatus()
 		// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
 		// even when %/ appears before %x in the prompt format.
 		// This is because the database name should not be queried during
@@ -829,7 +830,7 @@ func (c *cliState) GetCompletions(_ string) []string {
 		fmt.Fprintf(c.ins.Stdout(),
 			"\ntab completion not supported; append '??' and press tab for contextual help\n\n")
 	} else {
-		_, helpText, err := c.serverSideParse(sql)
+		helpText, err := c.serverSideParse(sql)
 		if helpText != "" {
 			// We have a completion suggestion. Use that.
 			fmt.Fprintf(c.ins.Stdout(), "\nSuggestion:\n%s\n", helpText)
@@ -1148,7 +1149,7 @@ func (c *cliState) doPrepareStatementLine(
 
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
 	// From here on, client-side syntax checking is enabled.
-	parsedStmts, helpText, err := c.serverSideParse(c.concatLines)
+	helpText, err := c.serverSideParse(c.concatLines)
 	if err != nil {
 		if helpText != "" {
 			// There was a help text included. Use it.
@@ -1177,20 +1178,6 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	}
 
 	nextState := execState
-
-	// When the smart prompt is enabled, we make some additional effort
-	// to help the user: if the entry so far is starting an incomplete
-	// transaction, push the user to enter input over multiple lines.
-	if c.smartPrompt &&
-		c.lastKnownTxnStatus == "" && endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
-		if c.partialStmtsLen == 0 {
-			fmt.Fprintln(stderr, "Now adding input for a multi-line SQL transaction client-side (smart_prompt enabled).\n"+
-				"Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel.\n"+
-				"You can also use \\show to display the statements entered so far.")
-		}
-
-		nextState = contState
-	}
 
 	c.partialStmtsLen = len(c.partialLines)
 
@@ -1355,11 +1342,6 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 		// If results are shown on a terminal also enable printing of
 		// times by default.
 		sqlCtx.showTimes = true
-	}
-	if cliCtx.isInteractive && !sqlCtx.debugMode {
-		// If the terminal is interactive and this was not explicitly
-		// disabled by setting the debug mode, enable the smart prompt.
-		c.smartPrompt = true
 	}
 
 	if cliCtx.isInteractive {
@@ -1574,17 +1556,17 @@ func (c *cliState) tryEnableCheckSyntax() {
 // If the syntax is correct, the function returns the statement
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
-func (c *cliState) serverSideParse(sql string) (stmts []string, helpText string, err error) {
+func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 	cols, rows, err := runQuery(c.conn, makeQuery("SHOW SYNTAX "+lex.EscapeSQLString(sql)), true)
 	if err != nil {
 		// The query failed with some error. This is not a syntax error
 		// detected by SHOW SYNTAX (those show up as valid rows) but
 		// instead something else.
-		return nil, "", errors.Wrap(err, "unexpected error")
+		return "", errors.Wrap(err, "unexpected error")
 	}
 
 	if len(cols) < 2 {
-		return nil, "", errors.Newf(
+		return "", errors.Newf(
 			"invalid results for SHOW SYNTAX: %q %q", cols, rows)
 	}
 
@@ -1618,17 +1600,7 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, helpText string,
 		if detail != "" {
 			err = errors.WithDetail(err, detail)
 		}
-		return nil, helpText, err
+		return helpText, err
 	}
-
-	// Otherwise, hopefully we got some SQL statements.
-	stmts = make([]string, len(rows))
-	for i := range rows {
-		if rows[i][0] != "sql" {
-			return nil, "", errors.Newf(
-				"invalid results for SHOW SYNTAX: %q %q", cols, rows)
-		}
-		stmts[i] = rows[i][1]
-	}
-	return stmts, "", nil
+	return "", nil
 }
