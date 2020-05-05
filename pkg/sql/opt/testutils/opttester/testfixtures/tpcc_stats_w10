@@ -483,6 +483,18 @@ ALTER TABLE district INJECT STATISTICS '[
         "name": "__auto__",
         "null_count": 0,
         "row_count": 100
+    },
+    {
+        "columns": [
+            "d_w_id",
+            "d_id"
+        ],
+        "created_at": "2019-07-29 14:56:50.028642+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 100
     }
 ]';
 ----
@@ -707,6 +719,55 @@ ALTER TABLE history INJECT STATISTICS '[
         ],
         "created_at": "2019-07-29 14:56:54.830587+00:00",
         "distinct_count": 806,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "h_w_id",
+            "rowid"
+        ],
+        "created_at": "2019-07-29 14:56:54.830587+00:00",
+        "distinct_count": 300385,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "h_c_w_id",
+            "h_c_d_id"
+        ],
+        "created_at": "2019-07-29 14:56:54.830587+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "h_c_w_id",
+            "h_c_d_id",
+            "h_c_id"
+        ],
+        "created_at": "2019-07-29 14:56:54.830587+00:00",
+        "distinct_count": 295745,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "h_w_id",
+            "h_d_id"
+        ],
+        "created_at": "2019-07-29 14:56:54.830587+00:00",
+        "distinct_count": 100,
         "histo_col_type": "",
         "name": "__auto__",
         "null_count": 0,
@@ -2073,6 +2134,31 @@ ALTER TABLE new_order INJECT STATISTICS '[
         "name": "__auto__",
         "null_count": 0,
         "row_count": 90000
+    },
+    {
+        "columns": [
+            "no_w_id",
+            "no_d_id"
+        ],
+        "created_at": "2019-07-29 14:57:13.695475+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 90000
+    },
+    {
+        "columns": [
+            "no_w_id",
+            "no_d_id",
+            "no_o_id"
+        ],
+        "created_at": "2019-07-29 14:57:13.695475+00:00",
+        "distinct_count": 91157,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 90000
     }
 ]';
 ----
@@ -2224,6 +2310,58 @@ ALTER TABLE "order" INJECT STATISTICS '[
         ],
         "created_at": "2019-07-29 14:57:13.540867+00:00",
         "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "o_w_id",
+            "o_d_id"
+        ],
+        "created_at": "2019-07-29 14:57:13.540867+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "o_w_id",
+            "o_d_id",
+            "o_id"
+        ],
+        "created_at": "2019-07-29 14:57:13.540867+00:00",
+        "distinct_count": 295745,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "o_w_id",
+            "o_d_id",
+            "o_c_id"
+        ],
+        "created_at": "2019-07-29 14:57:13.540867+00:00",
+        "distinct_count": 295745,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "columns": [
+            "o_w_id",
+            "o_d_id",
+            "o_c_id",
+            "o_id"
+        ],
+        "created_at": "2019-07-29 14:57:13.540867+00:00",
+        "distinct_count": 298416,
         "histo_col_type": "",
         "name": "__auto__",
         "null_count": 0,
@@ -2463,6 +2601,56 @@ ALTER TABLE order_line INJECT STATISTICS '[
         ],
         "created_at": "2019-07-29 14:57:02.922665+00:00",
         "distinct_count": 398,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3001222
+    },
+    {
+        "columns": [
+            "ol_w_id",
+            "ol_d_id"
+        ],
+        "created_at": "2019-07-29 14:57:02.922665+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3001222},
+    {
+        "columns": [
+            "ol_w_id",
+            "ol_d_id",
+            "ol_o_id"
+        ],
+        "created_at": "2019-07-29 14:57:02.922665+00:00",
+        "distinct_count": 295745,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3001222
+    },
+    {
+        "columns": [
+            "ol_w_id",
+            "ol_d_id",
+            "ol_o_id",
+            "ol_number"
+        ],
+        "created_at": "2019-07-29 14:57:02.922665+00:00",
+        "distinct_count": 2986292,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3001222
+    },
+    {
+        "columns": [
+            "ol_supply_w_id",
+            "ol_i_id"
+        ],
+        "created_at": "2019-07-29 14:57:02.922665+00:00",
+        "distinct_count": 946191,
         "histo_col_type": "",
         "name": "__auto__",
         "null_count": 0,
@@ -3919,6 +4107,18 @@ ALTER TABLE stock INJECT STATISTICS '[
         ],
         "created_at": "2019-07-29 14:57:08.255234+00:00",
         "distinct_count": 44179,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000000
+    },
+    {
+        "columns": [
+            "s_w_id",
+            "s_i_id"
+        ],
+        "created_at": "2019-07-29 14:57:08.255234+00:00",
+        "distinct_count": 1000240,
         "histo_col_type": "",
         "name": "__auto__",
         "null_count": 0,

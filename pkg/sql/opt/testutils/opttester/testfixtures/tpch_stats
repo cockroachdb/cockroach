@@ -8834,6 +8834,30 @@ ALTER TABLE lineitem INJECT STATISTICS '[
         "name": "__auto__",
         "null_count": 0,
         "row_count": 6001215
+    },
+    {
+        "columns": [
+            "l_orderkey",
+            "l_linenumber"
+        ],
+        "created_at": "2019-07-30 15:55:56.745539+00:00",
+        "distinct_count": 5986645,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 6001215
+    },
+    {
+        "columns": [
+            "l_partkey",
+            "l_suppkey"
+        ],
+        "created_at": "2019-07-30 15:55:56.745539+00:00",
+        "distinct_count": 797888,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 6001215
     }
 ]'
 ----
@@ -16543,6 +16567,18 @@ ALTER TABLE partsupp INJECT STATISTICS '[
         ],
         "created_at": "2019-07-30 15:54:53.267923+00:00",
         "distinct_count": 799641,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 800000
+    },
+    {
+        "columns": [
+            "ps_partkey",
+            "ps_suppkey"
+        ],
+        "created_at": "2019-07-30 15:54:53.267923+00:00",
+        "distinct_count": 798302,
         "histo_col_type": "",
         "name": "__auto__",
         "null_count": 0,
