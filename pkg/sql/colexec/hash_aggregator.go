@@ -56,11 +56,11 @@ type hashAggregator struct {
 	allocator *colmem.Allocator
 
 	aggCols  [][]uint32
-	aggTypes [][]types.T
+	aggTypes [][]*types.T
 	aggFuncs []execinfrapb.AggregatorSpec_Func
 
-	inputTypes  []types.T
-	outputTypes []types.T
+	inputTypes  []*types.T
+	outputTypes []*types.T
 
 	// aggFuncMap stores the mapping from hash code to a vector of aggregation
 	// functions. Each aggregation function is stored along with keys that
@@ -154,8 +154,8 @@ type hashAggregator struct {
 	// groupCols stores the indices of the grouping columns.
 	groupCols []uint32
 
-	// groupCols stores the types of the grouping columns.
-	groupTypes                 []types.T
+	// groupTypes stores the types of the grouping columns.
+	groupTypes                 []*types.T
 	groupCanonicalTypeFamilies []types.Family
 
 	// hashBuffer stores hash values for each tuple in the buffered batch.
@@ -174,7 +174,7 @@ var _ colexecbase.Operator = &hashAggregator{}
 func NewHashAggregator(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	typs []types.T,
+	typs []*types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
@@ -187,7 +187,7 @@ func NewHashAggregator(
 		)
 	}
 
-	groupTypes := make([]types.T, len(groupCols))
+	groupTypes := make([]*types.T, len(groupCols))
 	for i, colIdx := range groupCols {
 		groupTypes[i] = typs[colIdx]
 	}

@@ -205,7 +205,7 @@ func statisticsMutator(
 			seen := map[string]bool{}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
 			h := stats.HistogramData{
-				ColumnType: *colType,
+				ColumnType: colType,
 			}
 			for i := 0; i < n; i++ {
 				upper := sqlbase.RandDatumWithNullChance(rng, colType, 0)

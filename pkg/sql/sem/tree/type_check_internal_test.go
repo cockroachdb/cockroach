@@ -142,11 +142,7 @@ func tuple(exprs ...copyableExpr) copyableExpr {
 	}
 }
 func ttuple(tys ...*types.T) *types.T {
-	contents := make([]types.T, len(tys))
-	for i := range tys {
-		contents[i] = *tys[i]
-	}
-	return types.MakeTuple(contents)
+	return types.MakeTuple(tys)
 }
 
 func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {

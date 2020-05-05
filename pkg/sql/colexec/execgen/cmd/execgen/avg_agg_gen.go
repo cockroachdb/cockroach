@@ -80,7 +80,7 @@ func genAvgAgg(wr io.Writer) error {
 	}
 
 	// TODO(asubiotto): support more types.
-	supportedTypes := []types.T{*types.Decimal, *types.Float}
+	supportedTypes := []*types.T{types.Decimal, types.Float}
 	tmplInfos := make([]*oneArgOverload, len(supportedTypes))
 	for i, typ := range supportedTypes {
 		var overload *oneArgOverload

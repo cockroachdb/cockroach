@@ -484,9 +484,9 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Construct tuple type of columns in the row.
-	contents := make([]types.T, plan.numOutputCols())
+	contents := make([]*types.T, plan.numOutputCols())
 	plan.outputCols.ForEach(func(key, val int) {
-		contents[val] = *b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
+		contents[val] = b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
 	})
 	typs := types.MakeTuple(contents)
 	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, typs, plan.root, any.OriginalExpr)

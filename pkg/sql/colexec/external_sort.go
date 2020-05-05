@@ -122,7 +122,7 @@ type externalSorter struct {
 
 	unlimitedAllocator *colmem.Allocator
 	state              externalSorterState
-	inputTypes         []types.T
+	inputTypes         []*types.T
 	ordering           execinfrapb.Ordering
 	inMemSorter        resettableOperator
 	inMemSorterInput   *inputPartitioningOperator
@@ -176,7 +176,7 @@ func newExternalSorter(
 	unlimitedAllocator *colmem.Allocator,
 	standaloneMemAccount *mon.BoundAccount,
 	input colexecbase.Operator,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,

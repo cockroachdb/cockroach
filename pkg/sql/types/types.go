@@ -49,7 +49,7 @@ import (
 //   Width         - maximum size or scale of the type (numeric)
 //   Locale        - location which governs sorting, formatting, etc. (string)
 //   ArrayContents - array element type (T)
-//   TupleContents - slice of types of each tuple field ([]T)
+//   TupleContents - slice of types of each tuple field ([]*T)
 //   TupleLabels   - slice of labels of each tuple field ([]string)
 //
 // Some types are not currently allowed as the type of a column (e.g. nested
@@ -400,7 +400,7 @@ var (
 	// type that matches a tuple with any number of fields of any type (including
 	// tuple types). Execution-time values should never have this type.
 	AnyTuple = &T{InternalType: InternalType{
-		Family: TupleFamily, TupleContents: []T{*Any}, Oid: oid.T_record, Locale: &emptyLocale}}
+		Family: TupleFamily, TupleContents: []*T{Any}, Oid: oid.T_record, Locale: &emptyLocale}}
 
 	// AnyCollatedString is a special type used only during static analysis as a
 	// wildcard type that matches a collated string with any locale. Execution-
@@ -890,7 +890,7 @@ func MakeArray(typ *T) *T {
 //
 // Warning: the contents slice is used directly; the caller should not modify it
 // after calling this function.
-func MakeTuple(contents []T) *T {
+func MakeTuple(contents []*T) *T {
 	return &T{InternalType: InternalType{
 		Family: TupleFamily, Oid: oid.T_record, TupleContents: contents, Locale: &emptyLocale,
 	}}
@@ -898,7 +898,7 @@ func MakeTuple(contents []T) *T {
 
 // MakeLabeledTuple constructs a new instance of a TupleFamily type with the
 // given field types and labels.
-func MakeLabeledTuple(contents []T, labels []string) *T {
+func MakeLabeledTuple(contents []*T, labels []string) *T {
 	if len(contents) != len(labels) && labels != nil {
 		panic(errors.AssertionFailedf(
 			"tuple contents and labels must be of same length: %v, %v", contents, labels))
@@ -1012,7 +1012,7 @@ func (t *T) ArrayContents() *T {
 
 // TupleContents returns a slice containing the type of each tuple field. This
 // is nil for non-TupleFamily types.
-func (t *T) TupleContents() []T {
+func (t *T) TupleContents() []*T {
 	return t.InternalType.TupleContents
 }
 
@@ -1484,7 +1484,7 @@ func (t *T) Equivalent(other *T) bool {
 			return false
 		}
 		for i := range t.TupleContents() {
-			if !t.TupleContents()[i].Equivalent(&other.TupleContents()[i]) {
+			if !t.TupleContents()[i].Equivalent(other.TupleContents()[i]) {
 				return false
 			}
 		}
@@ -1587,7 +1587,7 @@ func (t *InternalType) Identical(other *InternalType) bool {
 		return false
 	}
 	for i := range t.TupleContents {
-		if !t.TupleContents[i].Identical(&other.TupleContents[i]) {
+		if !t.TupleContents[i].Identical(other.TupleContents[i]) {
 			return false
 		}
 	}

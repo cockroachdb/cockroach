@@ -222,7 +222,7 @@ func TestMarshalColumnValueRoundtrip(t *testing.T) {
 				}
 				datum := d.(tree.Datum)
 				desc := ColumnDescriptor{
-					Type: *typ,
+					Type: typ,
 				}
 				value, err := MarshalColumnValue(&desc, datum)
 				if err != nil {

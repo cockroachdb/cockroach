@@ -33,9 +33,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var csvOutputTypes = []types.T{
-	*types.Bytes,
-	*types.Bytes,
+var csvOutputTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
 }
 
 type readImportDataProcessor struct {
@@ -46,7 +46,7 @@ type readImportDataProcessor struct {
 
 var _ execinfra.Processor = &readImportDataProcessor{}
 
-func (cp *readImportDataProcessor) OutputTypes() []types.T {
+func (cp *readImportDataProcessor) OutputTypes() []*types.T {
 	return csvOutputTypes
 }
 

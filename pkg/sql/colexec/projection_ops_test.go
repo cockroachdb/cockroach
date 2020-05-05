@@ -47,7 +47,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return createTestProjectingOperator(
-				ctx, flowCtx, input[0], []types.T{*types.Int},
+				ctx, flowCtx, input[0], []*types.T{types.Int},
 				"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
 			)
 		})
@@ -69,7 +69,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		orderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return createTestProjectingOperator(
-				ctx, flowCtx, input[0], []types.T{*types.Int, *types.Int},
+				ctx, flowCtx, input[0], []*types.T{types.Int, types.Int},
 				"@1 + @2" /* projectingExpr */, false, /* canFallbackToRowexec */
 			)
 		})
@@ -91,7 +91,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 		orderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return createTestProjectingOperator(
-				ctx, flowCtx, input[0], []types.T{*types.Float, *types.Float},
+				ctx, flowCtx, input[0], []*types.T{types.Float, types.Float},
 				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */
 			)
 		})
@@ -108,7 +108,7 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 			Settings: st,
 		},
 	}
-	typs := []types.T{*types.Int, *types.Int}
+	typs := []*types.T{types.Int, types.Int}
 	batch := testAllocator.NewMemBatch(typs)
 	col := batch.ColVec(0).Int64()
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -131,7 +131,7 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 	}
 	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	plusOp, err := createTestProjectingOperator(
-		ctx, flowCtx, source, []types.T{*types.Int},
+		ctx, flowCtx, source, []*types.T{types.Int},
 		"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
 	)
 	require.NoError(b, err)
@@ -241,7 +241,7 @@ func TestRandomComparisons(t *testing.T) {
 		if !typeconv.IsTypeSupported(typ) {
 			continue
 		}
-		typs := []types.T{*typ, *typ, *types.Bool}
+		typs := []*types.T{typ, typ, types.Bool}
 		bytesFixedLength := 0
 		if typ.Family() == types.UuidFamily {
 			bytesFixedLength = 16
@@ -278,7 +278,7 @@ func TestRandomComparisons(t *testing.T) {
 			}
 			input := newChunkingBatchSource(typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
 			op, err := createTestProjectingOperator(
-				ctx, flowCtx, input, []types.T{*typ, *typ},
+				ctx, flowCtx, input, []*types.T{typ, typ},
 				fmt.Sprintf("@1 %s @2", cmpOp), false, /* canFallbackToRowexec */
 			)
 			require.NoError(t, err)
@@ -338,7 +338,7 @@ func benchmarkProjOp(
 ) {
 	ctx := context.Background()
 
-	typs := []types.T{*intType, *intType}
+	typs := []*types.T{intType, intType}
 	batch := testAllocator.NewMemBatch(typs)
 	switch intType.Width() {
 	case 64:
@@ -398,12 +398,12 @@ func BenchmarkProjOp(b *testing.B) {
 			Settings: st,
 		},
 	}
-	getInputTypesForIntWidth := func(width int32) []types.T {
+	getInputTypesForIntWidth := func(width int32) []*types.T {
 		switch width {
 		case 0, 64:
-			return []types.T{*types.Int, *types.Int}
+			return []*types.T{types.Int, types.Int}
 		case 32:
-			return []types.T{*types.Int4, *types.Int4}
+			return []*types.T{types.Int4, types.Int4}
 		default:
 			b.Fatalf("unsupported int width: %d", width)
 			return nil
@@ -437,12 +437,12 @@ func BenchmarkProjOp(b *testing.B) {
 	}
 
 	for projOp, makeProjOp := range projOpMap {
-		for _, intType := range []types.T{*types.Int, *types.Int4} {
+		for _, intType := range []*types.T{types.Int, types.Int4} {
 			for _, useSel := range []bool{true, false} {
 				for _, hasNulls := range []bool{true, false} {
 					b.Run(fmt.Sprintf("op=%s/type=%s/useSel=%t/hasNulls=%t",
-						projOp, &intType, useSel, hasNulls), func(b *testing.B) {
-						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, &intType)
+						projOp, intType, useSel, hasNulls), func(b *testing.B) {
+						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, intType)
 					})
 				}
 			}

@@ -27,7 +27,7 @@ func NewUnorderedDistinct(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
 	distinctCols []uint32,
-	typs []types.T,
+	typs []*types.T,
 	numHashBuckets uint64,
 ) colexecbase.Operator {
 	ht := newHashTable(

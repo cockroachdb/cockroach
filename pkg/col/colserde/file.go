@@ -45,7 +45,7 @@ type FileSerializer struct {
 	scratch [4]byte
 
 	w    *countingWriter
-	typs []types.T
+	typs []*types.T
 	fb   *flatbuffers.Builder
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
@@ -55,7 +55,7 @@ type FileSerializer struct {
 
 // NewFileSerializer creates a FileSerializer for the given types. The caller is
 // responsible for closing the given writer.
-func NewFileSerializer(w io.Writer, typs []types.T) (*FileSerializer, error) {
+func NewFileSerializer(w io.Writer, typs []*types.T) (*FileSerializer, error) {
 	a, err := NewArrowBatchConverter(typs)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ type FileDeserializer struct {
 
 	idx  int
 	end  int
-	typs []types.T
+	typs []*types.T
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
 
@@ -171,13 +171,13 @@ type FileDeserializer struct {
 
 // NewFileDeserializerFromBytes constructs a FileDeserializer for an in-memory
 // buffer.
-func NewFileDeserializerFromBytes(typs []types.T, buf []byte) (*FileDeserializer, error) {
+func NewFileDeserializerFromBytes(typs []*types.T, buf []byte) (*FileDeserializer, error) {
 	return newFileDeserializer(typs, buf, func() error { return nil })
 }
 
 // NewFileDeserializerFromPath constructs a FileDeserializer by reading it from
 // a file.
-func NewFileDeserializerFromPath(typs []types.T, path string) (*FileDeserializer, error) {
+func NewFileDeserializerFromPath(typs []*types.T, path string) (*FileDeserializer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Io, `opening %s`, path)
@@ -195,7 +195,7 @@ func NewFileDeserializerFromPath(typs []types.T, path string) (*FileDeserializer
 }
 
 func newFileDeserializer(
-	typs []types.T, buf []byte, bufCloseFn func() error,
+	typs []*types.T, buf []byte, bufCloseFn func() error,
 ) (*FileDeserializer, error) {
 	d := &FileDeserializer{
 		buf:        buf,
@@ -225,7 +225,7 @@ func (d *FileDeserializer) Close() error {
 }
 
 // Typs returns the in-memory types for the data stored in this file.
-func (d *FileDeserializer) Typs() []types.T {
+func (d *FileDeserializer) Typs() []*types.T {
 	return d.typs
 }
 
@@ -323,7 +323,7 @@ func (w *countingWriter) Write(buf []byte) (int, error) {
 	return n, err
 }
 
-func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
+func schema(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 	fieldOffsets := make([]flatbuffers.UOffsetT, len(typs))
 	for idx, typ := range typs {
 		var fbTyp byte
@@ -381,7 +381,7 @@ func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeInterval
 		default:
-			panic(errors.Errorf(`don't know how to map %s`, typ.String()))
+			panic(errors.Errorf(`don't know how to map %s`, typ))
 		}
 		arrowserde.FieldStart(fb)
 		arrowserde.FieldAddTypeType(fb, fbTyp)
@@ -402,7 +402,7 @@ func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
 	return arrowserde.SchemaEnd(fb)
 }
 
-func schemaMessage(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
+func schemaMessage(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 	schemaOffset := schema(fb, typs)
 	arrowserde.MessageStart(fb)
 	arrowserde.MessageAddVersion(fb, arrowserde.MetadataVersionV1)
@@ -412,7 +412,7 @@ func schemaMessage(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT
 }
 
 func fileFooter(
-	fb *flatbuffers.Builder, typs []types.T, recordBatches []fileBlock,
+	fb *flatbuffers.Builder, typs []*types.T, recordBatches []fileBlock,
 ) flatbuffers.UOffsetT {
 	schemaOffset := schema(fb, typs)
 	arrowserde.FooterStartRecordBatchesVector(fb, len(recordBatches))

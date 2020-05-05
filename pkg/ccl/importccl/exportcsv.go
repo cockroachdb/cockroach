@@ -166,10 +166,10 @@ type csvWriter struct {
 
 var _ execinfra.Processor = &csvWriter{}
 
-func (sp *csvWriter) OutputTypes() []types.T {
-	res := make([]types.T, len(sqlbase.ExportColumns))
+func (sp *csvWriter) OutputTypes() []*types.T {
+	res := make([]*types.T, len(sqlbase.ExportColumns))
 	for i := range res {
-		res[i] = *sqlbase.ExportColumns[i].Typ
+		res[i] = sqlbase.ExportColumns[i].Typ
 	}
 	return res
 }
@@ -220,7 +220,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 						csvRow[i] = nullsAs
 						continue
 					}
-					if err := ed.EnsureDecoded(&typs[i], alloc); err != nil {
+					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 						return err
 					}
 					ed.Datum.Format(f)

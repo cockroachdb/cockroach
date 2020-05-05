@@ -188,7 +188,7 @@ func TestOutboxInbox(t *testing.T) {
 	// Do the actual testing.
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
-			typs        = []types.T{*types.Int}
+			typs        = []*types.T{types.Int}
 			inputBuffer = colexecbase.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races). These
@@ -444,7 +444,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			var (
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
-				typs                     = []types.T{*types.Int}
+				typs                     = []*types.T{types.Int}
 				input                    = coldatatestutils.NewRandomDataOp(
 					testAllocator,
 					rng,
@@ -525,7 +525,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	serverStreamNotification := <-mockServer.InboundStreams
 	serverStream := serverStreamNotification.Stream
 
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
@@ -583,7 +583,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	dialer := &execinfrapb.MockDialer{Addr: addr}
 	defer dialer.Close()
 
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 
 	var inTags *logtags.Buffer
 
@@ -660,7 +660,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			rpcLayer := makeMockFlowStreamRPCLayer()
 
-			typs := []types.T{*types.Int}
+			typs := []*types.T{types.Int}
 
 			inbox, err := NewInbox(testAllocator, typs, streamID)
 			require.NoError(t, err)

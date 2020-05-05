@@ -50,8 +50,8 @@ func init() {
 	hjTestCases = []*joinTestCase{
 		{
 			description: "0",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -86,8 +86,8 @@ func init() {
 		},
 		{
 			description: "1",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Test an empty build table.
 			leftTuples: tuples{},
@@ -113,8 +113,8 @@ func init() {
 		},
 		{
 			description: "2",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -148,8 +148,8 @@ func init() {
 		},
 		{
 			description: "3",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Test right outer join.
 			leftTuples: tuples{
@@ -177,8 +177,8 @@ func init() {
 		},
 		{
 			description: "4",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Test right outer join with non-distinct left build table with an
 			// unmatched row from the right followed by a matched one. This is a
@@ -209,8 +209,8 @@ func init() {
 		},
 		{
 			description: "5",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Test null handling only on probe column.
 			leftTuples: tuples{
@@ -235,8 +235,8 @@ func init() {
 		},
 		{
 			description: "6",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Test null handling only on build column.
 			leftTuples: tuples{
@@ -266,8 +266,8 @@ func init() {
 		},
 		{
 			description: "7",
-			leftTypes:   []types.T{*types.Int, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Int},
+			leftTypes:   []*types.T{types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int},
 
 			// Test null handling in output columns.
 			leftTuples: tuples{
@@ -300,8 +300,8 @@ func init() {
 		},
 		{
 			description: "8",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Test null handling in hash join key column.
 			leftTuples: tuples{
@@ -335,8 +335,8 @@ func init() {
 		{
 			// Test handling of multiple column non-distinct equality keys.
 			description: "9",
-			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Int, *types.Int},
+			leftTypes:   []*types.T{types.Int, types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int, types.Int},
 
 			leftTuples: tuples{
 				{0, 0, 1},
@@ -374,8 +374,8 @@ func init() {
 		{
 			// Test handling of duplicate equality keys that map to same buckets.
 			description: "10",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -421,8 +421,8 @@ func init() {
 		{
 			// Test handling of duplicate equality keys.
 			description: "11",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -460,8 +460,8 @@ func init() {
 		{
 			// Test handling of various output column types.
 			description: "12",
-			leftTypes:   []types.T{*types.Bool, *types.Int, *types.Bytes, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Float, *types.Int4},
+			leftTypes:   []*types.T{types.Bool, types.Int, types.Bytes, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Float, types.Int4},
 
 			leftTuples: tuples{
 				{false, 5, "a", 10},
@@ -493,8 +493,8 @@ func init() {
 		},
 		{
 			description: "13",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Reverse engineering hash table hash heuristic to find key values that
 			// hash to the same bucket.
@@ -526,8 +526,8 @@ func init() {
 		},
 		{
 			description: "14",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			// Test a N:1 inner join where the right side key has duplicate values.
 			leftTuples: tuples{
@@ -563,8 +563,8 @@ func init() {
 		},
 		{
 			description: "15",
-			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Int, *types.Int},
+			leftTypes:   []*types.T{types.Int, types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int, types.Int},
 
 			// Test inner join on multiple equality columns.
 			leftTuples: tuples{
@@ -600,8 +600,8 @@ func init() {
 		},
 		{
 			description: "16",
-			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Int},
+			leftTypes:   []*types.T{types.Int, types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int},
 
 			// Test multiple column with values that hash to the same bucket.
 			leftTuples: tuples{
@@ -635,8 +635,8 @@ func init() {
 		},
 		{
 			description: "17",
-			leftTypes:   []types.T{*types.Bytes, *types.Bool, *types.Int2, *types.Int4, *types.Int, *types.Bytes},
-			rightTypes:  []types.T{*types.Int, *types.Int4, *types.Int2, *types.Bool, *types.Bytes},
+			leftTypes:   []*types.T{types.Bytes, types.Bool, types.Int2, types.Int4, types.Int, types.Bytes},
+			rightTypes:  []*types.T{types.Int, types.Int4, types.Int2, types.Bool, types.Bytes},
 
 			// Test multiple equality columns of different types.
 			leftTuples: tuples{
@@ -673,8 +673,8 @@ func init() {
 		},
 		{
 			description: "18",
-			leftTypes:   []types.T{*types.Float},
-			rightTypes:  []types.T{*types.Float},
+			leftTypes:   []*types.T{types.Float},
+			rightTypes:  []*types.T{types.Float},
 
 			// Test equality columns of type float.
 			leftTuples: tuples{
@@ -706,8 +706,8 @@ func init() {
 		},
 		{
 			description: "19",
-			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
+			leftTypes:   []*types.T{types.Int, types.Int, types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int, types.Int, types.Int},
 
 			// Test use right side as build table.
 			leftTuples: tuples{
@@ -738,10 +738,10 @@ func init() {
 		},
 		{
 			description: "20",
-			leftTypes:   []types.T{*types.Decimal},
-			rightTypes:  []types.T{*types.Decimal},
+			leftTypes:   []*types.T{types.Decimal},
+			rightTypes:  []*types.T{types.Decimal},
 
-			// Test *types.Decimal type as equality column.
+			// Test types.Decimal type as equality column.
 			leftTuples: tuples{
 				{decs[0]},
 				{decs[1]},
@@ -768,8 +768,8 @@ func init() {
 		},
 		{
 			description: "21",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			joinType: sqlbase.JoinType_LEFT_SEMI,
 
@@ -801,8 +801,8 @@ func init() {
 		},
 		{
 			description: "22",
-			leftTypes:   []types.T{*types.Int},
-			rightTypes:  []types.T{*types.Int},
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
 
 			joinType: sqlbase.JoinType_LEFT_ANTI,
 
@@ -832,8 +832,8 @@ func init() {
 		},
 		{
 			description: "23",
-			leftTypes:   []types.T{*types.Int, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Int},
+			leftTypes:   []*types.T{types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int},
 
 			// Test ON expression.
 			leftTuples: tuples{
@@ -865,8 +865,8 @@ func init() {
 		},
 		{
 			description: "24",
-			leftTypes:   []types.T{*types.Int, *types.Int},
-			rightTypes:  []types.T{*types.Int, *types.Int},
+			leftTypes:   []*types.T{types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int},
 
 			// Test ON expression.
 			leftTuples: tuples{
@@ -941,7 +941,7 @@ func runHashJoinTestCase(
 ) {
 	tc.init()
 	inputs := []tuples{tc.leftTuples, tc.rightTuples}
-	typs := [][]types.T{tc.leftTypes, tc.rightTypes}
+	typs := [][]*types.T{tc.leftTypes, tc.rightTypes}
 	var runner testRunner
 	if tc.skipAllNullsInjection {
 		// We're omitting all nulls injection test. See comments for each such
@@ -1002,10 +1002,10 @@ func TestHashJoiner(t *testing.T) {
 func BenchmarkHashJoiner(b *testing.B) {
 	ctx := context.Background()
 	nCols := 4
-	sourceTypes := make([]types.T, nCols)
+	sourceTypes := make([]*types.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = *types.Int
+		sourceTypes[colIdx] = types.Int
 	}
 
 	batch := testAllocator.NewMemBatch(sourceTypes)
@@ -1130,8 +1130,8 @@ func TestHashJoinerProjection(t *testing.T) {
 		},
 	}
 
-	leftTypes := []types.T{*types.Bool, *types.Int, *types.Bytes}
-	rightTypes := []types.T{*types.Int, *types.Float, *types.Decimal}
+	leftTypes := []*types.T{types.Bool, types.Int, types.Bytes}
+	rightTypes := []*types.T{types.Int, types.Float, types.Decimal}
 	leftTuples := tuples{{false, 1, "foo"}}
 	rightTuples := tuples{{1, 1.1, decs[1]}}
 

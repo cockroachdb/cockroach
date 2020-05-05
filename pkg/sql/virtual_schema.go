@@ -314,7 +314,7 @@ func (e virtualDefEntry) getPlanInfo(
 		col := &e.desc.Columns[i]
 		columns = append(columns, sqlbase.ResultColumn{
 			Name: col.Name,
-			Typ:  &col.Type,
+			Typ:  col.Type,
 		})
 	}
 

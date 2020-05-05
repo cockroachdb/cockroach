@@ -76,7 +76,7 @@ type RowReceiver interface {
 
 	// Types returns the types of the EncDatumRow that this RowReceiver expects
 	// to be pushed.
-	Types() []types.T
+	Types() []*types.T
 
 	// ProducerDone is called when the producer has pushed all the rows and
 	// metadata; it causes the RowReceiver to process all rows and clean up.
@@ -96,7 +96,7 @@ type RowReceiver interface {
 // goroutine).
 type RowSource interface {
 	// OutputTypes returns the schema for the rows in this source.
-	OutputTypes() []types.T
+	OutputTypes() []*types.T
 
 	// Start prepares the RowSource for future Next() calls and takes in the
 	// context in which these future calls should operate. Start needs to be
@@ -404,7 +404,7 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 type RowChannel struct {
 	rowSourceBase
 
-	types []types.T
+	types []*types.T
 
 	// The channel on which rows are delivered.
 	C <-chan RowChannelMsg
@@ -424,13 +424,13 @@ var _ RowSource = &RowChannel{}
 // numSenders is the number of producers that will be pushing to this channel.
 // RowChannel will not be closed until it receives numSenders calls to
 // ProducerDone().
-func (rc *RowChannel) InitWithNumSenders(types []types.T, numSenders int) {
+func (rc *RowChannel) InitWithNumSenders(types []*types.T, numSenders int) {
 	rc.InitWithBufSizeAndNumSenders(types, RowChannelBufSize, numSenders)
 }
 
 // InitWithBufSizeAndNumSenders initializes the RowChannel with a given buffer
 // size and number of senders.
-func (rc *RowChannel) InitWithBufSizeAndNumSenders(types []types.T, chanBufSize, numSenders int) {
+func (rc *RowChannel) InitWithBufSizeAndNumSenders(types []*types.T, chanBufSize, numSenders int) {
 	rc.types = types
 	rc.dataChan = make(chan RowChannelMsg, chanBufSize)
 	rc.C = rc.dataChan
@@ -469,7 +469,7 @@ func (rc *RowChannel) ProducerDone() {
 }
 
 // OutputTypes is part of the RowSource interface.
-func (rc *RowChannel) OutputTypes() []types.T {
+func (rc *RowChannel) OutputTypes() []*types.T {
 	return rc.types
 }
 
@@ -509,6 +509,6 @@ func (rc *RowChannel) ConsumerClosed() {
 }
 
 // Types is part of the RowReceiver interface.
-func (rc *RowChannel) Types() []types.T {
+func (rc *RowChannel) Types() []*types.T {
 	return rc.types
 }

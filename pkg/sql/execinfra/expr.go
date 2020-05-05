@@ -104,7 +104,7 @@ type ExprHelper struct {
 
 	evalCtx *tree.EvalContext
 
-	Types      []types.T
+	Types      []*types.T
 	Row        sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
 }
@@ -121,12 +121,12 @@ var _ tree.IndexedVarContainer = &ExprHelper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
 func (eh *ExprHelper) IndexedVarResolvedType(idx int) *types.T {
-	return &eh.Types[idx]
+	return eh.Types[idx]
 }
 
 // IndexedVarEval is part of the tree.IndexedVarContainer interface.
 func (eh *ExprHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	err := eh.Row[idx].EnsureDecoded(&eh.Types[idx], &eh.datumAlloc)
+	err := eh.Row[idx].EnsureDecoded(eh.Types[idx], &eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
-	expr execinfrapb.Expression, types []types.T, evalCtx *tree.EvalContext,
+	expr execinfrapb.Expression, types []*types.T, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil

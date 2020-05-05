@@ -34,80 +34,80 @@ func init() {
 		{
 			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{1, nil}, {1, 1}, {1, 2}, {2, nil}, {2, nil}, {2, 3}, {5, 1}},
-			typs:     []types.T{*types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{5, 1}, {2, 3}, {2, nil}, {2, nil}, {1, 2}, {1, 1}, {1, nil}},
-			typs:     []types.T{*types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_DESC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 		},
 		{
 			tuples:   tuples{{nil, nil}, {nil, 3}, {1, nil}, {nil, 1}, {1, 2}, {nil, nil}, {5, nil}},
 			expected: tuples{{nil, nil}, {nil, nil}, {nil, 1}, {nil, 3}, {1, nil}, {1, 2}, {5, nil}},
-			typs:     []types.T{*types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expected: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
 			expected: tuples{{1, 1}, {2, 3}, {3, 2}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
-			typs:     []types.T{*types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
 			expected: tuples{{1, 1}, {2, 5}, {3, 3}, {4, 7}, {5, 2}, {6, 6}, {7, 4}},
-			typs:     []types.T{*types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
 			expected: tuples{{1}, {2}, {3}, {3}, {4}, {5}, {6}},
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{false}, {true}},
 			expected: tuples{{false}, {true}},
-			typs:     []types.T{*types.Bool},
+			typs:     []*types.T{types.Bool},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{true}, {false}},
 			expected: tuples{{false}, {true}},
-			typs:     []types.T{*types.Bool},
+			typs:     []*types.T{types.Bool},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{3.2}, {2.0}, {2.4}, {math.NaN()}, {math.Inf(-1)}, {math.Inf(1)}},
 			expected: tuples{{math.NaN()}, {math.Inf(-1)}, {2.0}, {2.4}, {3.2}, {math.Inf(1)}},
-			typs:     []types.T{*types.Float},
+			typs:     []*types.T{types.Float},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 
 		{
 			tuples:   tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
 			expected: tuples{{0, 1, 0}, {1, 2, 0}, {3, 7, 1}, {4, 2, 2}, {2, 3, 2}},
-			typs:     []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}},
 		},
 
@@ -129,7 +129,7 @@ func init() {
 				{0, 1, 0},
 				{0, 1, 1},
 			},
-			typs:    []types.T{*types.Int, *types.Int, *types.Int},
+			typs:    []*types.T{types.Int, types.Int, types.Int},
 			ordCols: []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 		},
 	}
@@ -150,9 +150,9 @@ func TestSortRandomized(t *testing.T) {
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]types.T, maxCols)
+	typs := make([]*types.T, maxCols)
 	for i := range typs {
-		typs[i] = *types.Int
+		typs[i] = types.Int
 	}
 	for nCols := 1; nCols < maxCols; nCols++ {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
@@ -212,31 +212,31 @@ func TestAllSpooler(t *testing.T) {
 
 	tcs := []struct {
 		tuples tuples
-		typ    []types.T
+		typ    []*types.T
 	}{
 		{
 			tuples: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
-			typ:    []types.T{*types.Int},
+			typ:    []*types.T{types.Int},
 		},
 		{
 			tuples: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typ:    []types.T{*types.Int},
+			typ:    []*types.T{types.Int},
 		},
 		{
 			tuples: tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
-			typ:    []types.T{*types.Int, *types.Int},
+			typ:    []*types.T{types.Int, types.Int},
 		},
 		{
 			tuples: tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
-			typ:    []types.T{*types.Int, *types.Int},
+			typ:    []*types.T{types.Int, types.Int},
 		},
 		{
 			tuples: tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
-			typ:    []types.T{*types.Int},
+			typ:    []*types.T{types.Int},
 		},
 		{
 			tuples: tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
-			typ:    []types.T{*types.Int, *types.Int, *types.Int},
+			typ:    []*types.T{types.Int, types.Int, types.Int},
 		},
 		{
 			tuples: tuples{
@@ -246,7 +246,7 @@ func TestAllSpooler(t *testing.T) {
 				{0, 0, 1},
 				{0, 0, 0},
 			},
-			typ: []types.T{*types.Int, *types.Int, *types.Int},
+			typ: []*types.T{types.Int, types.Int, types.Int},
 		},
 	}
 	for _, tc := range tcs {
@@ -286,9 +286,9 @@ func BenchmarkSort(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
 					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
-					typs := make([]types.T, nCols)
+					typs := make([]*types.T, nCols)
 					for i := range typs {
-						typs[i] = *types.Int
+						typs[i] = types.Int
 					}
 					batch := testAllocator.NewMemBatch(typs)
 					batch.SetLength(coldata.BatchSize())
@@ -335,9 +335,9 @@ func BenchmarkAllSpooler(b *testing.B) {
 				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
 				// batch) * nCols (number of columns / row).
 				b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
-				typs := make([]types.T, nCols)
+				typs := make([]*types.T, nCols)
 				for i := range typs {
-					typs[i] = *types.Int
+					typs[i] = types.Int
 				}
 				batch := testAllocator.NewMemBatch(typs)
 				batch.SetLength(coldata.BatchSize())

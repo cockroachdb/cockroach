@@ -447,7 +447,7 @@ type DistSQLReceiver struct {
 	stmtType tree.StatementType
 
 	// outputTypes are the types of the result columns produced by the plan.
-	outputTypes []types.T
+	outputTypes []*types.T
 
 	// resultToStreamColMap maps result columns to columns in the rowexec results
 	// stream.
@@ -729,7 +729,7 @@ func (r *DistSQLReceiver) Push(
 			r.row = make(tree.Datums, len(r.resultToStreamColMap))
 		}
 		for i, resIdx := range r.resultToStreamColMap {
-			err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
+			err := row[resIdx].EnsureDecoded(r.outputTypes[resIdx], &r.alloc)
 			if err != nil {
 				r.resultWriter.SetError(err)
 				r.status = execinfra.ConsumerClosed
@@ -790,7 +790,7 @@ func (r *DistSQLReceiver) ProducerDone() {
 }
 
 // Types is part of the RowReceiver interface.
-func (r *DistSQLReceiver) Types() []types.T {
+func (r *DistSQLReceiver) Types() []*types.T {
 	return r.outputTypes
 }
 
@@ -909,7 +909,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	var rows *rowcontainer.RowContainer
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
 		subqueryRecv.noColsRequired = true
-		typ = sqlbase.ColTypeInfoFromColTypes([]types.T{})
+		typ = sqlbase.ColTypeInfoFromColTypes([]*types.T{})
 	} else {
 		// Apply the PlanToStreamColMap projection to the ResultTypes to get the
 		// final set of output types for the subquery. The reason this is necessary
@@ -917,7 +917,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		// to merge the streams, but that aren't required by the final output of the
 		// query. These get projected out, so we need to similarly adjust the
 		// expected result types of the subquery here.
-		colTypes := make([]types.T, len(subqueryPhysPlan.PlanToStreamColMap))
+		colTypes := make([]*types.T, len(subqueryPhysPlan.PlanToStreamColMap))
 		for i, resIdx := range subqueryPhysPlan.PlanToStreamColMap {
 			colTypes[i] = subqueryPhysPlan.ResultTypes[resIdx]
 		}

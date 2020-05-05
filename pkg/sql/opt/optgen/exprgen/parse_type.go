@@ -36,9 +36,9 @@ func ParseType(typeStr string) (*types.T, error) {
 			return nil, errors.Wrapf(err, "cannot parse %s as a type", typeStr)
 		}
 		colTypesRefs := parsed.AST.(*tree.Prepare).Types
-		colTypes := make([]types.T, len(colTypesRefs))
+		colTypes := make([]*types.T, len(colTypesRefs))
 		for i := range colTypesRefs {
-			colTypes[i] = *tree.MustBeStaticallyKnownType(colTypesRefs[i])
+			colTypes[i] = tree.MustBeStaticallyKnownType(colTypesRefs[i])
 		}
 		return types.MakeTuple(colTypes), nil
 	}

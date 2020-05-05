@@ -27,7 +27,7 @@ type deselectorOp struct {
 	OneInputNode
 	NonExplainable
 	allocator  *colmem.Allocator
-	inputTypes []types.T
+	inputTypes []*types.T
 
 	output coldata.Batch
 }
@@ -37,7 +37,7 @@ var _ colexecbase.Operator = &deselectorOp{}
 // NewDeselectorOp creates a new deselector operator on the given input
 // operator with the given column types.
 func NewDeselectorOp(
-	allocator *colmem.Allocator, input colexecbase.Operator, typs []types.T,
+	allocator *colmem.Allocator, input colexecbase.Operator, typs []*types.T,
 ) colexecbase.Operator {
 	return &deselectorOp{
 		OneInputNode: NewOneInputNode(input),

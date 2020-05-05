@@ -251,7 +251,7 @@ func DistIngest(
 
 	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0, 1}
-	p.ResultTypes = []types.T{*types.Bytes, *types.Bytes}
+	p.ResultTypes = []*types.T{types.Bytes, types.Bytes}
 
 	dsp.FinalizePlan(planCtx, &p)
 

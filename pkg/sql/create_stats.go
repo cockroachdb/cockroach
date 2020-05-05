@@ -387,7 +387,7 @@ func (r *createStatsResumer) Resume(
 	r.tableID = details.Table.ID
 	evalCtx := p.ExtendedEvalContext()
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]types.T{})
+	ci := sqlbase.ColTypeInfoFromColTypes([]*types.T{})
 	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
 	defer func() {
 		if rows != nil {

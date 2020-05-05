@@ -64,7 +64,7 @@ func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Dat
 }
 
 func (j *descContainer) IndexedVarResolvedType(idx int) *types.T {
-	return &j.cols[idx].Type
+	return j.cols[idx].Type
 }
 
 func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
@@ -156,7 +156,7 @@ func MakeComputedExprs(
 			return nil, err
 		}
 
-		typedExpr, err := tree.TypeCheck(expr, &semaCtx, &col.Type)
+		typedExpr, err := tree.TypeCheck(expr, &semaCtx, col.Type)
 		if err != nil {
 			return nil, err
 		}

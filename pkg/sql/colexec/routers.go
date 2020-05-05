@@ -70,7 +70,7 @@ type routerOutputOp struct {
 	// input is a reference to our router.
 	input execinfra.OpNode
 
-	types []types.T
+	types []*types.T
 
 	// unblockedEventsChan is signaled when a routerOutput changes state from
 	// blocked to unblocked.
@@ -168,7 +168,7 @@ var _ colexecbase.Operator = &routerOutputOp{}
 // when it is exceeded.
 func newRouterOutputOp(
 	unlimitedAllocator *colmem.Allocator,
-	types []types.T,
+	types []*types.T,
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
@@ -180,7 +180,7 @@ func newRouterOutputOp(
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	unlimitedAllocator *colmem.Allocator,
-	types []types.T,
+	types []*types.T,
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
@@ -401,7 +401,7 @@ func (o *routerOutputOp) reset(ctx context.Context) {
 type HashRouter struct {
 	OneInputNode
 	// types are the input types.
-	types []types.T
+	types []*types.T
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []uint32
 
@@ -437,7 +437,7 @@ type HashRouter struct {
 func NewHashRouter(
 	unlimitedAllocators []*colmem.Allocator,
 	input colexecbase.Operator,
-	types []types.T,
+	types []*types.T,
 	hashCols []uint32,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
@@ -472,7 +472,7 @@ func NewHashRouter(
 
 func newHashRouterWithOutputs(
 	input colexecbase.Operator,
-	types []types.T,
+	types []*types.T,
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,

@@ -54,9 +54,9 @@ type aggregatorBase struct {
 	runningState aggregatorState
 	input        execinfra.RowSource
 	inputDone    bool
-	inputTypes   []types.T
+	inputTypes   []*types.T
 	funcs        []*aggregateFuncHolder
-	outputTypes  []types.T
+	outputTypes  []*types.T
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
@@ -105,7 +105,7 @@ func (ag *aggregatorBase) init(
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
 	ag.funcs = make([]*aggregateFuncHolder, len(spec.Aggregations))
-	ag.outputTypes = make([]types.T, len(spec.Aggregations))
+	ag.outputTypes = make([]*types.T, len(spec.Aggregations))
 	ag.row = make(sqlbase.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
@@ -130,7 +130,7 @@ func (ag *aggregatorBase) init(
 				)
 			}
 		}
-		argTypes := make([]types.T, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
+		argTypes := make([]*types.T, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
 		for j, c := range aggInfo.ColIdx {
 			if c >= uint32(len(ag.inputTypes)) {
 				return errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
@@ -149,7 +149,7 @@ func (ag *aggregatorBase) init(
 			if err != nil {
 				return errors.Wrapf(err, "%s", argument)
 			}
-			argTypes[len(aggInfo.ColIdx)+j] = *d.ResolvedType()
+			argTypes[len(aggInfo.ColIdx)+j] = d.ResolvedType()
 			if err != nil {
 				return errors.Wrapf(err, "%s", argument)
 			}
@@ -166,7 +166,7 @@ func (ag *aggregatorBase) init(
 			ag.funcs[i].seen = make(map[string]struct{})
 		}
 
-		ag.outputTypes[i] = *retType
+		ag.outputTypes[i] = retType
 	}
 
 	return ag.ProcessorBase.Init(
@@ -444,7 +444,7 @@ func (ag *orderedAggregator) close() {
 func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, error) {
 	for _, colIdx := range ag.orderedGroupCols {
 		res, err := ag.lastOrdGroupCols[colIdx].Compare(
-			&ag.inputTypes[colIdx], &ag.datumAlloc, ag.EvalCtx, &row[colIdx],
+			ag.inputTypes[colIdx], &ag.datumAlloc, ag.EvalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
@@ -593,7 +593,7 @@ func (ag *aggregatorBase) getAggResults(
 			// We can't encode nil into an EncDatum, so we represent it with DNull.
 			result = tree.DNull
 		}
-		ag.row[i] = sqlbase.DatumToEncDatum(&ag.outputTypes[i], result)
+		ag.row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
 	}
 	bucket.close(ag.Ctx)
 
@@ -787,7 +787,7 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 	for i, a := range ag.aggregations {
 		if a.FilterColIdx != nil {
 			col := *a.FilterColIdx
-			if err := row[col].EnsureDecoded(&ag.inputTypes[col], &ag.datumAlloc); err != nil {
+			if err := row[col].EnsureDecoded(ag.inputTypes[col], &ag.datumAlloc); err != nil {
 				return err
 			}
 			if row[*a.FilterColIdx].Datum != tree.DBoolTrue {
@@ -807,7 +807,7 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 		}
 		isFirstArg := true
 		for j, c := range a.ColIdx {
-			if err := row[c].EnsureDecoded(&ag.inputTypes[c], &ag.datumAlloc); err != nil {
+			if err := row[c].EnsureDecoded(ag.inputTypes[c], &ag.datumAlloc); err != nil {
 				return err
 			}
 			if isFirstArg {
@@ -974,7 +974,7 @@ func (ag *aggregatorBase) encode(
 ) (encoding []byte, err error) {
 	for _, colIdx := range ag.groupCols {
 		appendTo, err = row[colIdx].Fingerprint(
-			&ag.inputTypes[colIdx], &ag.datumAlloc, appendTo)
+			ag.inputTypes[colIdx], &ag.datumAlloc, appendTo)
 		if err != nil {
 			return appendTo, err
 		}

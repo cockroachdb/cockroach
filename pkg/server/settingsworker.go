@@ -43,7 +43,7 @@ func (s *Server) refreshSettings() {
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			types := []types.T{tbl.Columns[0].Type}
+			types := []*types.T{tbl.Columns[0].Type}
 			nameRow := make([]sqlbase.EncDatum, 1)
 			_, matches, _, err := sqlbase.DecodeIndexKey(codec, tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
@@ -52,7 +52,7 @@ func (s *Server) refreshSettings() {
 			if !matches {
 				return errors.Errorf("unexpected non-settings KV with settings prefix: %v", kv.Key)
 			}
-			if err := nameRow[0].EnsureDecoded(&types[0], a); err != nil {
+			if err := nameRow[0].EnsureDecoded(types[0], a); err != nil {
 				return err
 			}
 			k = string(tree.MustBeDString(nameRow[0].Datum))
@@ -78,7 +78,7 @@ func (s *Server) refreshSettings() {
 				colID := lastColID + sqlbase.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap[colID]; ok {
-					res, bytes, err = sqlbase.DecodeTableValue(a, &tbl.Columns[idx].Type, bytes)
+					res, bytes, err = sqlbase.DecodeTableValue(a, tbl.Columns[idx].Type, bytes)
 					if err != nil {
 						return err
 					}

@@ -32,17 +32,17 @@ const (
 	cashMoneyType    = "C"
 )
 
-var ledgerCustomerTypes = []types.T{
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bool,
-	*types.Bool,
-	*types.Bytes,
-	*types.Int,
-	*types.Int,
-	*types.Int,
+var ledgerCustomerTypes = []*types.T{
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bool,
+	types.Bool,
+	types.Bytes,
+	types.Int,
+	types.Int,
+	types.Int,
 }
 
 func (w *ledger) ledgerCustomerInitialRow(rowIdx int) []interface{} {
@@ -70,16 +70,16 @@ func (w *ledger) ledgerCustomerSplitRow(splitIdx int) []interface{} {
 	}
 }
 
-var ledgerTransactionColTypes = []types.T{
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
+var ledgerTransactionColTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *ledger) ledgerTransactionInitialRow(rowIdx int) []interface{} {

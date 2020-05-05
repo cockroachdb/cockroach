@@ -3146,9 +3146,9 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 // populated.
 func (d *DTuple) maybePopulateType() {
 	if d.typ == nil {
-		contents := make([]types.T, len(d.D))
+		contents := make([]*types.T, len(d.D))
 		for i, v := range d.D {
-			contents[i] = *v.ResolvedType()
+			contents[i] = v.ResolvedType()
 		}
 		d.typ = types.MakeTuple(contents)
 	}
@@ -4163,7 +4163,7 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 		contents := t.TupleContents()
 		datums := make([]Datum, len(contents))
 		for i, subT := range contents {
-			datums[i], err = NewDefaultDatum(evalCtx, &subT)
+			datums[i], err = NewDefaultDatum(evalCtx, subT)
 			if err != nil {
 				return nil, err
 			}
@@ -4195,7 +4195,7 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 		sz := uintptr(0)
 		variable := false
 		for i := range t.TupleContents() {
-			typsz, typvariable := DatumTypeSize(&t.TupleContents()[i])
+			typsz, typvariable := DatumTypeSize(t.TupleContents()[i])
 			sz += typsz
 			variable = variable || typvariable
 		}

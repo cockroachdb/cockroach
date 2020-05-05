@@ -26,7 +26,7 @@ import (
 // by equality according to the ordering columns.
 type streamGroupAccumulator struct {
 	src   execinfra.RowSource
-	types []types.T
+	types []*types.T
 
 	// srcConsumed is set once src has been exhausted.
 	srcConsumed bool

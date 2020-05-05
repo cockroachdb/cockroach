@@ -361,7 +361,7 @@ func typeSubquery(e opt.ScalarExpr) *types.T {
 func typeColumnAccess(e opt.ScalarExpr) *types.T {
 	colAccess := e.(*ColumnAccessExpr)
 	typ := colAccess.Input.DataType()
-	return &typ.TupleContents()[colAccess.Idx]
+	return typ.TupleContents()[colAccess.Idx]
 }
 
 // FindBinaryOverload finds the correct type signature overload for the

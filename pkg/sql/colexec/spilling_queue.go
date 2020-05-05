@@ -43,7 +43,7 @@ type spillingQueue struct {
 	unlimitedAllocator *colmem.Allocator
 	maxMemoryLimit     int64
 
-	typs             []types.T
+	typs             []*types.T
 	items            []coldata.Batch
 	curHeadIdx       int
 	curTailIdx       int
@@ -71,7 +71,7 @@ type spillingQueue struct {
 // may want to do this if requesting FDs up front.
 func newSpillingQueue(
 	unlimitedAllocator *colmem.Allocator,
-	typs []types.T,
+	typs []*types.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
@@ -110,7 +110,7 @@ func newSpillingQueue(
 // whether memory usage exceeds the given memory limit and use disk if so.
 func newRewindableSpillingQueue(
 	unlimitedAllocator *colmem.Allocator,
-	typs []types.T,
+	typs []*types.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,

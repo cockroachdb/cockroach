@@ -74,14 +74,14 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			v := p.newContainerValuesNode(showHistogramColumns, 0)
 			for _, b := range histogram.Buckets {
 				ed, _, err := sqlbase.EncDatumFromBuffer(
-					&histogram.ColumnType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					histogram.ColumnType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					v.Close(ctx)
 					return nil, err
 				}
 				row := tree.Datums{
-					tree.NewDString(ed.String(&histogram.ColumnType)),
+					tree.NewDString(ed.String(histogram.ColumnType)),
 					tree.NewDInt(tree.DInt(b.NumRange)),
 					tree.NewDFloat(tree.DFloat(b.DistinctRange)),
 					tree.NewDInt(tree.DInt(b.NumEq)),

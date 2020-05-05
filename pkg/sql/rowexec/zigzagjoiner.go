@@ -338,7 +338,7 @@ func valuesSpecToEncDatum(
 	res = make([]sqlbase.EncDatum, len(valuesSpec.Columns))
 	rem := valuesSpec.RawBytes[0]
 	for i, colInfo := range valuesSpec.Columns {
-		res[i], rem, err = sqlbase.EncDatumFromBuffer(&colInfo.Type, colInfo.Encoding, rem)
+		res[i], rem, err = sqlbase.EncDatumFromBuffer(colInfo.Type, colInfo.Encoding, rem)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +362,7 @@ type zigzagJoinerInfo struct {
 	alloc      *sqlbase.DatumAlloc
 	table      *sqlbase.TableDescriptor
 	index      *sqlbase.IndexDescriptor
-	indexTypes []types.T
+	indexTypes []*types.T
 	indexDirs  []sqlbase.IndexDescriptor_Direction
 
 	// Stores one batch of matches at a time. When all the rows are collected
@@ -410,7 +410,7 @@ func (z *zigzagJoiner) setupInfo(
 
 	var columnIDs []sqlbase.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
-	info.indexTypes = make([]types.T, len(columnIDs))
+	info.indexTypes = make([]*types.T, len(columnIDs))
 	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
 	for i, columnID := range columnIDs {
@@ -565,7 +565,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 
 	// Ensure all EncDatums have been decoded.
 	for i, encDatum := range datums {
-		err := encDatum.EnsureDecoded(&info.indexTypes[i], info.alloc)
+		err := encDatum.EnsureDecoded(info.indexTypes[i], info.alloc)
 		if err != nil {
 			return roachpb.Span{}, err
 		}
@@ -627,8 +627,8 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 }
 
 // Returns the column types of the equality columns.
-func (zi *zigzagJoinerInfo) eqColTypes() []types.T {
-	eqColTypes := make([]types.T, len(zi.eqColumns))
+func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
+	eqColTypes := make([]*types.T, len(zi.eqColumns))
 	colTypes := zi.table.ColumnTypes()
 	for i := range eqColTypes {
 		eqColTypes[i] = colTypes[zi.eqColumns[i]]

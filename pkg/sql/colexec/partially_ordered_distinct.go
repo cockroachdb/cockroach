@@ -34,7 +34,7 @@ func newPartiallyOrderedDistinct(
 	input colexecbase.Operator,
 	distinctCols []uint32,
 	orderedCols []uint32,
-	typs []types.T,
+	typs []*types.T,
 ) (colexecbase.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
@@ -118,7 +118,7 @@ func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
 }
 
 func newChunkerOperator(
-	allocator *colmem.Allocator, input *chunker, inputTypes []types.T,
+	allocator *colmem.Allocator, input *chunker, inputTypes []*types.T,
 ) *chunkerOperator {
 	return &chunkerOperator{
 		input:         input,
@@ -136,7 +136,7 @@ func newChunkerOperator(
 // that the input has been fully processed).
 type chunkerOperator struct {
 	input      *chunker
-	inputTypes []types.T
+	inputTypes []*types.T
 	// haveChunksToEmit indicates whether we have spooled input and still there
 	// are more chunks to emit.
 	haveChunksToEmit bool

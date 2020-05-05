@@ -39,9 +39,9 @@ func BenchmarkNoop(b *testing.B) {
 	disposer := &rowDisposer{}
 	for _, numCols := range []int{1, 1 << 1, 1 << 2, 1 << 4, 1 << 8} {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
-			cols := make([]types.T, numCols)
+			cols := make([]*types.T, numCols)
 			for i := range cols {
-				cols[i] = *types.Int
+				cols[i] = types.Int
 			}
 			input := execinfra.NewRepeatableRowSource(cols, sqlbase.MakeIntRows(numRows, numCols))
 

@@ -105,7 +105,7 @@ const (
 
 // PartitionedDiskQueue is a PartitionedQueue whose partitions are on-disk.
 type PartitionedDiskQueue struct {
-	typs     []types.T
+	typs     []*types.T
 	strategy PartitionerStrategy
 	cfg      DiskQueueCfg
 
@@ -134,7 +134,7 @@ var _ PartitionedQueue = &PartitionedDiskQueue{}
 // Note that actual file descriptors open may be less than, but never more than
 // the number acquired through the semaphore.
 func NewPartitionedDiskQueue(
-	typs []types.T,
+	typs []*types.T,
 	cfg DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	partitionerStrategy PartitionerStrategy,

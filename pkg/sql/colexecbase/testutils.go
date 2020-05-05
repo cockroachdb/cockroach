@@ -38,7 +38,7 @@ func NewBatchBuffer() *BatchBuffer {
 }
 
 // Add adds a batch to the buffer.
-func (b *BatchBuffer) Add(batch coldata.Batch, _ []types.T) {
+func (b *BatchBuffer) Add(batch coldata.Batch, _ []*types.T) {
 	b.buffer = append(b.buffer, batch)
 }
 
@@ -57,7 +57,7 @@ type RepeatableBatchSource struct {
 	ZeroInputNode
 
 	colVecs  []coldata.Vec
-	typs     []types.T
+	typs     []*types.T
 	sel      []int
 	batchLen int
 	// numToCopy indicates the number of tuples that needs to be copied. It is
@@ -77,7 +77,7 @@ var _ Operator = &RepeatableBatchSource{}
 // copies them into a separate output batch. The output batch is allowed to be
 // modified whereas the input batch is *not*.
 func NewRepeatableBatchSource(
-	allocator *colmem.Allocator, batch coldata.Batch, typs []types.T,
+	allocator *colmem.Allocator, batch coldata.Batch, typs []*types.T,
 ) *RepeatableBatchSource {
 	sel := batch.Selection()
 	batchLen := batch.Length()

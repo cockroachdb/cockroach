@@ -64,12 +64,12 @@ func (startrek) Tables() []workload.Table {
 	}
 }
 
-var episodesTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Float,
+var episodesTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Float,
 }
 
 // The data that follows was derived from the 'startrek' fortune cookie file.
@@ -155,11 +155,11 @@ var startrekEpisodes = [...][]interface{}{
 	{79, 3, 24, `Turnabout Intruder`, 5928.5},
 }
 
-var quotesTypes = []types.T{
-	*types.Bytes,
-	*types.Bytes,
-	*types.Float,
-	*types.Int,
+var quotesTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Float,
+	types.Int,
 }
 
 var startrekQuotes = [...][]interface{}{

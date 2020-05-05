@@ -34,7 +34,7 @@ type planNodeToRowSource struct {
 
 	node        planNode
 	params      runParams
-	outputTypes []types.T
+	outputTypes []*types.T
 
 	firstNotWrapped planNode
 
@@ -47,9 +47,9 @@ func makePlanNodeToRowSource(
 ) (*planNodeToRowSource, error) {
 	nodeColumns := planColumns(source)
 
-	types := make([]types.T, len(nodeColumns))
+	types := make([]*types.T, len(nodeColumns))
 	for i := range nodeColumns {
-		types[i] = *nodeColumns[i].Typ
+		types[i] = nodeColumns[i].Typ
 	}
 	row := make(sqlbase.EncDatumRow, len(nodeColumns))
 
@@ -176,7 +176,7 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 
 		for i, datum := range p.node.Values() {
 			if datum != nil {
-				p.row[i] = sqlbase.DatumToEncDatum(&p.outputTypes[i], datum)
+				p.row[i] = sqlbase.DatumToEncDatum(p.outputTypes[i], datum)
 			}
 		}
 		// ProcessRow here is required to deal with projections, which won't be

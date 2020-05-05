@@ -52,10 +52,10 @@ var nations = [...]struct {
 	{name: `UNITED STATES`, regionKey: 1},
 }
 
-var regionTypes = []types.T{
-	*types.Int2,
-	*types.Bytes,
-	*types.Bytes,
+var regionTypes = []*types.T{
+	types.Int2,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *tpch) tpchRegionInitialRowBatch(
@@ -73,11 +73,11 @@ func (w *tpch) tpchRegionInitialRowBatch(
 	cb.ColVec(2).Bytes().Set(0, w.textPool.randString(rng, 31, 115)) // r_comment
 }
 
-var nationTypes = []types.T{
-	*types.Int2,
-	*types.Bytes,
-	*types.Int2,
-	*types.Bytes,
+var nationTypes = []*types.T{
+	types.Int2,
+	types.Bytes,
+	types.Int2,
+	types.Bytes,
 }
 
 func (w *tpch) tpchNationInitialRowBatch(
@@ -97,14 +97,14 @@ func (w *tpch) tpchNationInitialRowBatch(
 	cb.ColVec(3).Bytes().Set(0, w.textPool.randString(rng, 31, 115)) // r_comment
 }
 
-var supplierTypes = []types.T{
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Int2,
-	*types.Bytes,
-	*types.Float,
-	*types.Bytes,
+var supplierTypes = []*types.T{
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Int2,
+	types.Bytes,
+	types.Float,
+	types.Bytes,
 }
 
 func (w *tpch) tpchSupplierInitialRowBatch(
@@ -128,16 +128,16 @@ func (w *tpch) tpchSupplierInitialRowBatch(
 	cb.ColVec(6).Bytes().Set(0, w.textPool.randString(rng, 25, 100)) // s_comment
 }
 
-var partTypes = []types.T{
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Int2,
-	*types.Bytes,
-	*types.Float,
-	*types.Bytes,
+var partTypes = []*types.T{
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Int2,
+	types.Bytes,
+	types.Float,
+	types.Bytes,
 }
 
 func makeRetailPriceFromPartKey(partKey int) float32 {
@@ -175,12 +175,12 @@ func (w *tpch) tpchPartInitialRowBatch(batchIdx int, cb coldata.Batch, a *bufall
 	cb.ColVec(8).Bytes().Set(0, w.textPool.randString(rng, 5, 22))
 }
 
-var partSuppTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int2,
-	*types.Float,
-	*types.Bytes,
+var partSuppTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int2,
+	types.Float,
+	types.Bytes,
 }
 
 func (w *tpch) tpchPartSuppInitialRowBatch(
@@ -219,15 +219,15 @@ func (w *tpch) tpchPartSuppInitialRowBatch(
 	}
 }
 
-var customerTypes = []types.T{
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Int2,
-	*types.Bytes,
-	*types.Float,
-	*types.Bytes,
-	*types.Bytes,
+var customerTypes = []*types.T{
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Int2,
+	types.Bytes,
+	types.Float,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *tpch) tpchCustomerInitialRowBatch(
@@ -322,16 +322,16 @@ type orderSharedRandomData struct {
 	allF bool
 }
 
-var ordersTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Float,
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Int2,
-	*types.Bytes,
+var ordersTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Float,
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Int2,
+	types.Bytes,
 }
 
 func populateSharedData(rng *rand.Rand, seed uint64, sf int, data *orderSharedRandomData) {
@@ -424,23 +424,23 @@ func (w *tpch) tpchOrdersInitialRowBatch(
 	}
 }
 
-var lineItemTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Int2,
-	*types.Float,
-	*types.Float,
-	*types.Float,
-	*types.Float,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
+var lineItemTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Int2,
+	types.Float,
+	types.Float,
+	types.Float,
+	types.Float,
+	types.Bytes,
+	types.Bytes,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *tpch) tpchLineItemInitialRowBatch(

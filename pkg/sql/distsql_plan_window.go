@@ -108,7 +108,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	if err != nil {
 		return execinfrapb.WindowerSpec_WindowFn{}, nil, err
 	}
-	argTypes := make([]types.T, len(funcInProgress.argsIdxs))
+	argTypes := make([]*types.T, len(funcInProgress.argsIdxs))
 	for i, argIdx := range funcInProgress.argsIdxs {
 		argTypes[i] = s.plan.ResultTypes[argIdx]
 	}
@@ -195,7 +195,7 @@ func (s *windowPlanState) addRenderingOrProjection() error {
 	// All passed through columns are contiguous and at the beginning of the
 	// output schema.
 	passedThruColIdx := 0
-	renderTypes := make([]types.T, 0, len(s.n.windowRender))
+	renderTypes := make([]*types.T, 0, len(s.n.windowRender))
 	for i, render := range s.n.windowRender {
 		if render != nil {
 			// render contains at least one reference to windowFuncHolder, so we need
@@ -204,11 +204,11 @@ func (s *windowPlanState) addRenderingOrProjection() error {
 			renderExprs[i] = visitor.replace(render)
 		} else {
 			// render is nil meaning that a column is being passed through.
-			renderExprs[i] = tree.NewTypedOrdinalReference(passedThruColIdx, &s.plan.ResultTypes[passedThruColIdx])
+			renderExprs[i] = tree.NewTypedOrdinalReference(passedThruColIdx, s.plan.ResultTypes[passedThruColIdx])
 			passedThruColIdx++
 		}
 		outputType := renderExprs[i].ResolvedType()
-		renderTypes = append(renderTypes, *outputType)
+		renderTypes = append(renderTypes, outputType)
 	}
 	return s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes)
 }

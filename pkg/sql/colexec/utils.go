@@ -54,7 +54,7 @@ type decimalOverloadScratch struct {
 // vectors on inputBatch as well (in which case windowedBatch will also have a
 // "windowed" selection vector).
 func makeWindowIntoBatch(
-	windowedBatch, inputBatch coldata.Batch, startIdx int, inputTypes []types.T,
+	windowedBatch, inputBatch coldata.Batch, startIdx int, inputTypes []*types.T,
 ) {
 	inputBatchLen := inputBatch.Length()
 	windowStart := startIdx
@@ -86,7 +86,7 @@ func makeWindowIntoBatch(
 
 func newPartitionerToOperator(
 	allocator *colmem.Allocator,
-	types []types.T,
+	types []*types.T,
 	partitioner colcontainer.PartitionedQueue,
 	partitionIdx int,
 ) *partitionerToOperator {
@@ -121,7 +121,7 @@ func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 func newAppendOnlyBufferedBatch(
-	allocator *colmem.Allocator, typs []types.T, initialSize int,
+	allocator *colmem.Allocator, typs []*types.T, initialSize int,
 ) *appendOnlyBufferedBatch {
 	batch := allocator.NewMemBatchWithSize(typs, initialSize)
 	return &appendOnlyBufferedBatch{
@@ -135,7 +135,7 @@ func newAppendOnlyBufferedBatch(
 // used by operators that buffer many tuples into a single batch by appending
 // to it. It stores the length of the batch separately and intercepts calls to
 // Length() and SetLength() in order to avoid updating offsets on vectors of
-// *types.Bytes type - which would result in a quadratic behavior - because
+// types.Bytes type - which would result in a quadratic behavior - because
 // it is not necessary since coldata.Vec.Append maintains the correct offsets.
 //
 // Note: "appendOnly" in the name indicates that the tuples should *only* be
@@ -147,7 +147,7 @@ type appendOnlyBufferedBatch struct {
 
 	length  int
 	colVecs []coldata.Vec
-	typs    []types.T
+	typs    []*types.T
 }
 
 var _ coldata.Batch = &appendOnlyBufferedBatch{}

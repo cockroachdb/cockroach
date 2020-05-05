@@ -36,7 +36,7 @@ var _ execinfra.RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []types.T{*types.Int}
+var outputTypes = []*types.T{types.Int}
 
 func newCountAggregator(
 	flowCtx *execinfra.FlowCtx,

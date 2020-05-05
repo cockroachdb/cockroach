@@ -63,7 +63,7 @@ type hashJoinerSourceSpec struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the hash joiner.
-	sourceTypes []types.T
+	sourceTypes []*types.T
 
 	// outer specifies whether an outer join is required over the input.
 	outer bool
@@ -555,7 +555,7 @@ func (hj *hashJoiner) ExportBuffered(input colexecbase.Operator) coldata.Batch {
 
 func (hj *hashJoiner) resetOutput() {
 	if hj.output == nil {
-		outputTypes := append([]types.T{}, hj.spec.left.sourceTypes...)
+		outputTypes := append([]*types.T{}, hj.spec.left.sourceTypes...)
 		if hj.spec.joinType != sqlbase.LeftSemiJoin && hj.spec.joinType != sqlbase.LeftAntiJoin {
 			outputTypes = append(outputTypes, hj.spec.right.sourceTypes...)
 		}
@@ -593,8 +593,8 @@ func makeHashJoinerSpec(
 	joinType sqlbase.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []*types.T,
+	rightTypes []*types.T,
 	rightDistinct bool,
 ) (hashJoinerSpec, error) {
 	var (

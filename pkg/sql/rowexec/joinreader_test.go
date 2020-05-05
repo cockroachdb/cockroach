@@ -103,8 +103,8 @@ func TestJoinReader(t *testing.T) {
 		input       [][]tree.Datum
 		lookupCols  []uint32
 		joinType    sqlbase.JoinType
-		inputTypes  []types.T
-		outputTypes []types.T
+		inputTypes  []*types.T
+		outputTypes []*types.T
 		expected    string
 	}{
 		{
@@ -253,7 +253,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{1, 2, 0},
-			inputTypes:  []types.T{*types.Int, *types.Int, *types.String},
+			inputTypes:  []*types.T{types.Int, types.Int, types.String},
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},
@@ -274,7 +274,7 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0},
 			joinType:    sqlbase.LeftSemiJoin,
-			inputTypes:  []types.T{*types.Int, *types.String},
+			inputTypes:  []*types.T{types.Int, types.String},
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[1 'two'] [1 'two'] [6 'two'] [7 'two'] [1 'two']]",
 		},
@@ -421,7 +421,7 @@ func TestJoinReader(t *testing.T) {
 				for rowIdx, row := range c.input {
 					encRow := make(sqlbase.EncDatumRow, len(row))
 					for i, d := range row {
-						encRow[i] = sqlbase.DatumToEncDatum(&c.inputTypes[i], d)
+						encRow[i] = sqlbase.DatumToEncDatum(c.inputTypes[i], d)
 					}
 					encRows[rowIdx] = encRow
 				}
@@ -568,7 +568,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			break
 		}
 		expected := fmt.Sprintf("['%s']", stringColVal)
-		actual := row.String([]types.T{*types.String})
+		actual := row.String([]*types.T{types.String})
 		require.Equal(t, expected, actual)
 		count++
 	}

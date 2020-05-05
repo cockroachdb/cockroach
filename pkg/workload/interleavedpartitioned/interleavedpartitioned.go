@@ -814,12 +814,12 @@ func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	}
 }
 
-var childTypes = []types.T{
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
+var childTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *interleavedPartitioned) childInitialRowBatchFunc(
@@ -847,17 +847,17 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 	}
 }
 
-var deviceTypes = []types.T{
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
+var deviceTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *interleavedPartitioned) deviceInitialRowBatch(
@@ -893,11 +893,11 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(
 	}
 }
 
-var queryTypes = []types.T{
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
+var queryTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *interleavedPartitioned) queryInitialRowBatch(

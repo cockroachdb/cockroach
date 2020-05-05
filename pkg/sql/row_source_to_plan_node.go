@@ -97,7 +97,7 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 		types := r.source.OutputTypes()
 		for i := range r.planCols {
 			encDatum := r.row[i]
-			err := encDatum.EnsureDecoded(&types[i], &r.da)
+			err := encDatum.EnsureDecoded(types[i], &r.da)
 			if err != nil {
 				return false, err
 			}

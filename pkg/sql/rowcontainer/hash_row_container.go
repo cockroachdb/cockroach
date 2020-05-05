@@ -57,7 +57,7 @@ type HashRowContainer interface {
 	//	- encodeNull indicates whether rows with NULL equality columns should be
 	//	  stored or skipped.
 	Init(
-		ctx context.Context, shouldMark bool, types []types.T, storedEqCols columns,
+		ctx context.Context, shouldMark bool, types []*types.T, storedEqCols columns,
 		encodeNull bool,
 	) error
 	AddRow(context.Context, sqlbase.EncDatumRow) error
@@ -92,13 +92,13 @@ type HashRowContainer interface {
 type columnEncoder struct {
 	scratch []byte
 	// types for the "key" columns (equality columns)
-	keyTypes   []types.T
+	keyTypes   []*types.T
 	datumAlloc sqlbase.DatumAlloc
 	encodeNull bool
 }
 
-func (e *columnEncoder) init(typs []types.T, keyCols columns, encodeNull bool) {
-	e.keyTypes = make([]types.T, len(keyCols))
+func (e *columnEncoder) init(typs []*types.T, keyCols columns, encodeNull bool) {
+	e.keyTypes = make([]*types.T, len(keyCols))
 	for i, c := range keyCols {
 		e.keyTypes[i] = typs[c]
 	}
@@ -114,14 +114,14 @@ func encodeColumnsOfRow(
 	appendTo []byte,
 	row sqlbase.EncDatumRow,
 	cols columns,
-	colTypes []types.T,
+	colTypes []*types.T,
 	encodeNull bool,
 ) (encoding []byte, hasNull bool, err error) {
 	for i, colIdx := range cols {
 		if row[colIdx].IsNull() && !encodeNull {
 			return nil, true, nil
 		}
-		appendTo, err = row[colIdx].Fingerprint(&colTypes[i], da, appendTo)
+		appendTo, err = row[colIdx].Fingerprint(colTypes[i], da, appendTo)
 		if err != nil {
 			return appendTo, false, err
 		}
@@ -204,7 +204,7 @@ func MakeHashMemRowContainer(rowContainer *MemRowContainer) HashMemRowContainer 
 // Init implements the HashRowContainer interface. types is ignored because the
 // schema is inferred from the MemRowContainer.
 func (h *HashMemRowContainer) Init(
-	ctx context.Context, shouldMark bool, _ []types.T, storedEqCols columns, encodeNull bool,
+	ctx context.Context, shouldMark bool, _ []*types.T, storedEqCols columns, encodeNull bool,
 ) error {
 	if h.storedEqCols != nil {
 		return errors.New("HashMemRowContainer has already been initialized")
@@ -422,7 +422,7 @@ func (i *hashMemRowIterator) computeKey() error {
 	i.curKey = i.curKey[:0]
 	for _, col := range i.storedEqCols {
 		var err error
-		i.curKey, err = row[col].Fingerprint(&i.types[col], &i.columnEncoder.datumAlloc, i.curKey)
+		i.curKey, err = row[col].Fingerprint(i.types[col], &i.columnEncoder.datumAlloc, i.curKey)
 		if err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func MakeHashDiskRowContainer(
 
 // Init implements the HashRowContainer interface.
 func (h *HashDiskRowContainer) Init(
-	_ context.Context, shouldMark bool, typs []types.T, storedEqCols columns, encodeNull bool,
+	_ context.Context, shouldMark bool, typs []*types.T, storedEqCols columns, encodeNull bool,
 ) error {
 	h.columnEncoder.init(typs, storedEqCols, encodeNull)
 	// Provide the DiskRowContainer with an ordering on the equality columns of
@@ -505,9 +505,9 @@ func (h *HashDiskRowContainer) Init(
 	storedTypes := typs
 	if h.shouldMark {
 		// Add a boolean column to the end of the rows to implement marking rows.
-		storedTypes = make([]types.T, len(typs)+1)
+		storedTypes = make([]*types.T, len(typs)+1)
 		copy(storedTypes, typs)
-		storedTypes[len(storedTypes)-1] = *types.Bool
+		storedTypes[len(storedTypes)-1] = types.Bool
 
 		h.scratchEncRow = make(sqlbase.EncDatumRow, len(storedTypes))
 		// Initialize the last column of the scratch row we use in AddRow() to
@@ -738,7 +738,7 @@ type HashDiskBackedRowContainer struct {
 
 	// shouldMark specifies whether the caller cares about marking rows.
 	shouldMark   bool
-	types        []types.T
+	types        []*types.T
 	storedEqCols columns
 	encodeNull   bool
 
@@ -786,7 +786,7 @@ func NewHashDiskBackedRowContainer(
 
 // Init implements the hashRowContainer interface.
 func (h *HashDiskBackedRowContainer) Init(
-	ctx context.Context, shouldMark bool, types []types.T, storedEqCols columns, encodeNull bool,
+	ctx context.Context, shouldMark bool, types []*types.T, storedEqCols columns, encodeNull bool,
 ) error {
 	h.shouldMark = shouldMark
 	h.types = types

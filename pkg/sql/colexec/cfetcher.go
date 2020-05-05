@@ -93,8 +93,8 @@ type cTableInfo struct {
 	// id pair at the start of the key.
 	knownPrefixLength int
 
-	keyValTypes []types.T
-	extraTypes  []types.T
+	keyValTypes []*types.T
+	extraTypes  []*types.T
 
 	da sqlbase.DatumAlloc
 }
@@ -294,13 +294,13 @@ func (rf *cFetcher) Init(
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
 
-	typs := make([]types.T, len(colDescriptors))
+	typs := make([]*types.T, len(colDescriptors))
 	for i := range typs {
 		typs[i] = colDescriptors[i].Type
-		if !typeconv.IsTypeSupported(&typs[i]) && tableArgs.ValNeededForCol.Contains(i) {
+		if !typeconv.IsTypeSupported(typs[i]) && tableArgs.ValNeededForCol.Contains(i) {
 			// Only return an error if the type is unhandled and needed. If not needed,
 			// a placeholder Vec will be created.
-			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
+			return errors.Errorf("unhandled type %+v", colDescriptors[i].Type)
 		}
 	}
 
@@ -919,7 +919,7 @@ func (rf *cFetcher) processValue(
 		for _, idx := range rf.table.allIndexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
-				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, &rf.table.cols[idx].Type).String())
+				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
 			} else {
 				buf.WriteByte('?')
 			}
@@ -1013,7 +1013,7 @@ func (rf *cFetcher) processValue(
 					for j := range table.extraTypes {
 						idx := table.allExtraValColOrdinals[j]
 						buf.WriteByte('/')
-						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, &rf.table.cols[idx].Type).String())
+						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
 					}
 					prettyValue = buf.String()
 				}
@@ -1084,7 +1084,7 @@ func (rf *cFetcher) processValueSingle(
 			if len(val.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := &table.cols[idx].Type
+			typ := table.cols[idx].Type
 			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
 			if err != nil {
 				return "", "", err
@@ -1182,7 +1182,7 @@ func (rf *cFetcher) processValueBytes(
 
 		vec := rf.machine.colvecs[idx]
 
-		valTyp := &table.cols[idx].Type
+		valTyp := table.cols[idx].Type
 		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,
 			valueBytes)
 		if err != nil {
@@ -1225,7 +1225,7 @@ func (rf *cFetcher) fillNulls() error {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
-					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx, &rf.table.cols[idx].Type).String())
+					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}

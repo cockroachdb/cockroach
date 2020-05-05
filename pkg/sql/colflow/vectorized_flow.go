@@ -426,11 +426,11 @@ type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colmem.Allocator,
 		input colexecbase.Operator,
-		typs []types.T,
+		typs []*types.T,
 		metadataSources []execinfrapb.MetadataSource,
 		toClose []colexec.IdempotentCloser,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colmem.Allocator, typs []types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -438,7 +438,7 @@ type vectorizedRemoteComponentCreator struct{}
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	typs []types.T,
+	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) (*colrpc.Outbox, error) {
@@ -446,7 +446,7 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInbox(allocator, typs, streamID)
 }
@@ -569,7 +569,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	op colexecbase.Operator,
-	outputTyps []types.T,
+	outputTyps []*types.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
@@ -615,7 +615,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	input colexecbase.Operator,
-	outputTyps []types.T,
+	outputTyps []*types.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
@@ -805,7 +805,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	flowCtx *execinfra.FlowCtx,
 	pspec *execinfrapb.ProcessorSpec,
 	op colexecbase.Operator,
-	opOutputTypes []types.T,
+	opOutputTypes []*types.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) error {
@@ -1076,9 +1076,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 // assertTypesMatch checks whether expected types match with actual types and
 // returns an error if not.
-func assertTypesMatch(expected []types.T, actual []types.T) error {
+func assertTypesMatch(expected []*types.T, actual []*types.T) error {
 	for i := range expected {
-		if !expected[i].Identical(&actual[i]) {
+		if !expected[i].Identical(actual[i]) {
 			return errors.Errorf("mismatched types at index %d: expected %v\tactual %v ",
 				i, expected, actual,
 			)

@@ -925,7 +925,7 @@ func applyColumnMutation(
 			return nil
 		}
 
-		kind, err := schemachange.ClassifyConversion(&col.Type, typ)
+		kind, err := schemachange.ClassifyConversion(col.Type, typ)
 		if err != nil {
 			return err
 		}
@@ -939,7 +939,7 @@ func applyColumnMutation(
 				"the requested type conversion (%s -> %s) requires an explicit USING expression",
 				col.Type.SQLString(), typ.SQLString())
 		case schemachange.ColumnConversionTrivial:
-			col.Type = *typ
+			col.Type = typ
 		case schemachange.ColumnConversionGeneral:
 			return unimplemented.NewWithIssueDetailf(
 				9851,
@@ -963,7 +963,7 @@ func applyColumnMutation(
 		if t.Default == nil {
 			col.DefaultExpr = nil
 		} else {
-			colDatumType := &col.Type
+			colDatumType := col.Type
 			expr, err := sqlbase.SanitizeVarFreeExpr(
 				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, true, /* allowImpure */
 			)
