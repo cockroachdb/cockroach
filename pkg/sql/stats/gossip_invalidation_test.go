@@ -38,7 +38,7 @@ func TestGossipInvalidation(t *testing.T) {
 
 	sc := stats.NewTableStatisticsCache(
 		10, /* cacheSize */
-		tc.Server(0).GossipI().(*gossip.Gossip),
+		gossip.MakeDeprecatedGossip(tc.Server(0).GossipI().(*gossip.Gossip), true /* exposed */),
 		tc.Server(0).DB(),
 		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 	)
