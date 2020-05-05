@@ -1868,7 +1868,7 @@ project
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS INT8) [as="?column?":7, outer=(1)]
+      └── (k:1 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS BOOL) [as="?column?":7, outer=(1)]
 
 # --------------------------------------------------
 # SimplifySameVarInequalities
@@ -1946,4 +1946,4 @@ project
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS INT8) [as="?column?":7, outer=(1)]
+      └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) [as="?column?":7, outer=(1)]
