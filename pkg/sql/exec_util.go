@@ -141,17 +141,10 @@ const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
 
 // ReorderJoinsLimitClusterValue controls the cluster default for the maximum
 // number of joins reordered.
-var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
+var ReorderJoinsLimitClusterValue = settings.RegisterNonNegativeIntSetting(
 	ReorderJoinsLimitClusterSettingName,
 	"default number of joins to reorder",
 	opt.DefaultJoinOrderLimit,
-	func(v int64) error {
-		if v < 0 {
-			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"cannot set sql.defaults.reorder_joins_limit to a negative value: %d", v)
-		}
-		return nil
-	},
 )
 
 var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
@@ -188,6 +181,12 @@ var optDrivenFKCascadesClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled",
 	"default value for experimental_optimizer_foreign_key_cascades session setting; enables optimizer-driven foreign key cascades by default",
 	false,
+)
+
+var optDrivenFKCascadesClusterLimit = settings.RegisterNonNegativeIntSetting(
+	"sql.defaults.foreign_key_cascades_limit",
+	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query",
+	10000,
 )
 
 // optUseHistogramsClusterMode controls the cluster default for whether
@@ -1957,6 +1956,10 @@ func (m *sessionDataMutator) SetOptimizerFKChecks(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerFKCascades(val bool) {
 	m.data.OptimizerFKCascades = val
+}
+
+func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
+	m.data.OptimizerFKCascadesLimit = val
 }
 
 func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {

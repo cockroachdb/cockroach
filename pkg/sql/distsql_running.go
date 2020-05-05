@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1081,14 +1083,22 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 
 		// Queue any new cascades.
 		if len(cp.cascades) > 0 {
-			// TODO(radu): append cascade, effectively making this a queue.
-			recv.SetError(errors.Newf("cascading not implemented yet"))
-			return false
+			plan.cascades = append(plan.cascades, cp.cascades...)
 		}
 
 		// Collect any new checks.
 		if len(cp.checkPlans) > 0 {
 			plan.checkPlans = append(plan.checkPlans, cp.checkPlans...)
+		}
+
+		// In cyclical reference situations, the number of cascading operations can
+		// be arbitrarily large. To avoid OOM, we enforce a limit. This is also a
+		// safeguard in case we have a bug that results in an infinite cascade loop.
+		if limit := evalCtx.SessionData.OptimizerFKCascadesLimit; len(plan.cascades) > limit {
+			telemetry.Inc(sqltelemetry.CascadesLimitReached)
+			err := pgerror.Newf(pgcode.TriggeredActionException, "cascades limit (%d) reached", limit)
+			recv.SetError(err)
+			return false
 		}
 
 		if err := dsp.planAndRunPostquery(
