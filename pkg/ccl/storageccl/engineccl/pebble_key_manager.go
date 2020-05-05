@@ -95,7 +95,7 @@ func (m *StoreKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 	if m.oldKey.Info.KeyId == id {
 		return m.oldKey, nil
 	}
-	return nil, fmt.Errorf("store key with id: %s was not found", id)
+	return nil, fmt.Errorf("store key ID %s was not found", id)
 }
 
 func loadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error) {
