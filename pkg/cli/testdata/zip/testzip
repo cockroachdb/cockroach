@@ -49,7 +49,7 @@ requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginest
 requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
 requesting threads for node 1... writing: debug/nodes/1/threads.txt
 requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
-requesting heap files for node 1... 0 found
+requesting heap files for node 1... ? found
 requesting goroutine files for node 1... 0 found
 requesting log file ...
 requesting ranges... 32 found

@@ -98,9 +98,12 @@ type lookupResult struct {
 // goal of mapping all requests which are inferred to be looking for the same
 // descriptor onto the same request key to establish request coalescing.
 //
-// If the prevDesc is not nil and we had a cache miss, there are three possible
-// events that may have happened. For each of these, we try to coalesce all
-// requests that will end up on the same range post-event together.
+// If the key is part of a descriptor that we previously had cached (but the
+// cache entry is stale), we use that previous descriptor to coalesce all
+// requests for keys within it into a single request. Namely, there are three
+// possible events that may have happened causing our cache to be stale. For
+// each of these, we try to coalesce all requests that will end up on the same
+// range post-event together.
 // - Split:  for a split, only the right half of the split will attempt to evict
 //           the stale descriptor because only the right half will be sending to
 //           the wrong range. Once this stale descriptor is evicted, keys from
@@ -125,7 +128,9 @@ type lookupResult struct {
 //
 // Note that the above description assumes that useReverseScan is false for simplicity.
 // If useReverseScan is true, we need to use the end key of the stale descriptor instead.
-func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool) string {
+func makeLookupRequestKey(
+	key roachpb.RKey, prevDesc *roachpb.RangeDescriptor, useReverseScan bool,
+) string {
 	var ret strings.Builder
 	// We only want meta1, meta2, user range lookups to be coalesced with other
 	// meta1, meta2, user range lookups, respectively. Otherwise, deadlocks could
@@ -137,11 +142,11 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useRevers
 	} else if key.AsRawKey().Compare(keys.Meta2KeyMax) < 0 {
 		ret.Write(keys.Meta2Prefix)
 	}
-	if evictToken != nil {
+	if prevDesc != nil {
 		if useReverseScan {
-			key = evictToken.prevDesc.EndKey
+			key = prevDesc.EndKey
 		} else {
-			key = evictToken.prevDesc.StartKey
+			key = prevDesc.StartKey
 		}
 	}
 	ret.Write(key)
@@ -154,9 +159,9 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useRevers
 	// split again into [a, b) and [b, c), we don't want to the requests on [a,
 	// b) to be coalesced with the retried requests on [c, e). To distinguish the
 	// two cases, we can use the generation of the previous descriptor.
-	if evictToken != nil && evictToken.prevDesc.GetGenerationComparable() {
+	if prevDesc != nil && prevDesc.GetGenerationComparable() {
 		ret.WriteString(":")
-		ret.WriteString(strconv.FormatInt(evictToken.prevDesc.GetGeneration(), 10))
+		ret.WriteString(strconv.FormatInt(prevDesc.GetGeneration(), 10))
 	}
 	return ret.String()
 }
@@ -313,7 +318,11 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		log.Infof(ctx, "lookup range descriptor: key=%s", key)
 	}
 
-	requestKey := makeLookupRequestKey(key, evictToken, useReverseScan)
+	var prevDesc *roachpb.RangeDescriptor
+	if evictToken != nil {
+		prevDesc = evictToken.prevDesc
+	}
+	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
 	resC, leader := rdc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
 		ctx := ctx // disable shadows linter
 		ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
