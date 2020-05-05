@@ -128,6 +128,8 @@ func TestZip(t *testing.T) {
 	// Strip any non-deterministic messages.
 	out = eraseNonDeterministicZipOutput(out)
 
+	// We use datadriven simply to read the golden output file; we don't actually
+	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
 	datadriven.RunTest(t, "testdata/zip/testzip", func(t *testing.T, td *datadriven.TestData) string {
 		return out
 	})
@@ -264,6 +266,12 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `RPC connection to ...`)
 	re = regexp.MustCompile(`(?m)\^- resulted in.*$`)
 	out = re.ReplaceAllString(out, `^- resulted in ...`)
+
+	// The number of memory profiles previously collected is not deterministic.
+	re = regexp.MustCompile(`(?m)requesting heap files for node 1\.\.\..*found$`)
+	out = re.ReplaceAllString(out, `requesting heap files for node 1... ? found`)
+	re = regexp.MustCompile(`(?m)\^writing.*memprof*$`)
+	out = re.ReplaceAllString(out, ``)
 	return out
 }
 
