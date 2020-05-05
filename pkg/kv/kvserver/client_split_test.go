@@ -263,7 +263,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 			return err
 		}
 		// We don't care about the values, just the keys.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MinUserDescID))
+		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(keys.MinUserDescID))
 		return txn.Put(ctx, k, &desc)
 	}); err != nil {
 		t.Fatal(err)
@@ -1279,7 +1279,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	userTableMax := keys.MinUserDescID + 4
 	var exceptions map[int]struct{}
-	schema := sqlbase.MakeMetadataSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	schema := sqlbase.MakeMetadataSchema(
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+	)
 	// Write table descriptors for the tables in the metadata schema as well as
 	// five dummy user tables. This does two things:
 	//   - descriptor IDs are used to determine split keys
@@ -1301,7 +1303,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
-			key := sqlbase.MakeDescMetadataKey(sqlbase.ID(i))
+			key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(i))
 			if err := txn.Put(ctx, key, &sqlbase.Descriptor{}); err != nil {
 				return err
 			}
@@ -1365,7 +1367,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		// This time, only write the last table descriptor. Splits only occur for
 		// the descriptor we add. We don't care about the value, just the key.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(userTableMax))
+		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(userTableMax))
 		return txn.Put(ctx, k, &sqlbase.Descriptor{})
 	}); err != nil {
 		t.Fatal(err)

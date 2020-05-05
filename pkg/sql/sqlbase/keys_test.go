@@ -20,15 +20,23 @@ import (
 
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	tenSysCodec := keys.SystemSQLCodec
+	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
 	testCases := []struct {
 		key roachpb.Key
 	}{
-		{MakeDescMetadataKey(123)},
-		{MakeDescMetadataKey(124)},
-		{NewPublicTableKey(0, "BAR").Key()},
-		{NewPublicTableKey(1, "BAR").Key()},
-		{NewPublicTableKey(1, "foo").Key()},
-		{NewPublicTableKey(2, "foo").Key()},
+		{MakeDescMetadataKey(tenSysCodec, 123)},
+		{MakeDescMetadataKey(tenSysCodec, 124)},
+		{NewPublicTableKey(0, "BAR").Key(tenSysCodec)},
+		{NewPublicTableKey(1, "BAR").Key(tenSysCodec)},
+		{NewPublicTableKey(1, "foo").Key(tenSysCodec)},
+		{NewPublicTableKey(2, "foo").Key(tenSysCodec)},
+		{MakeDescMetadataKey(ten5Codec, 123)},
+		{MakeDescMetadataKey(ten5Codec, 124)},
+		{NewPublicTableKey(0, "BAR").Key(ten5Codec)},
+		{NewPublicTableKey(1, "BAR").Key(ten5Codec)},
+		{NewPublicTableKey(1, "foo").Key(ten5Codec)},
+		{NewPublicTableKey(2, "foo").Key(ten5Codec)},
 	}
 	var lastKey roachpb.Key
 	for i, test := range testCases {

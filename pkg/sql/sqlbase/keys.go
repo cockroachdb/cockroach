@@ -23,8 +23,10 @@ import (
 // versions >= 20.1.
 // Pass name == "" in order to generate the prefix key to use to scan over all
 // of the names for the specified parentID.
-func MakeNameMetadataKey(parentID ID, parentSchemaID ID, name string) roachpb.Key {
-	k := keys.TODOSQLCodec.IndexPrefix(uint32(NamespaceTable.ID), uint32(NamespaceTable.PrimaryIndex.ID))
+func MakeNameMetadataKey(
+	codec keys.SQLCodec, parentID ID, parentSchemaID ID, name string,
+) roachpb.Key {
+	k := codec.IndexPrefix(uint32(NamespaceTable.ID), uint32(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
@@ -36,8 +38,10 @@ func MakeNameMetadataKey(parentID ID, parentSchemaID ID, name string) roachpb.Ke
 
 // DecodeNameMetadataKey returns the components that make up the
 // NameMetadataKey for version >= 20.1.
-func DecodeNameMetadataKey(k roachpb.Key) (parentID ID, parentSchemaID ID, name string, err error) {
-	k, _, err = keys.TODOSQLCodec.DecodeTablePrefix(k)
+func DecodeNameMetadataKey(
+	codec keys.SQLCodec, k roachpb.Key,
+) (parentID ID, parentSchemaID ID, name string, err error) {
+	k, _, err = codec.DecodeTablePrefix(k)
 	if err != nil {
 		return 0, 0, "", err
 	}
@@ -76,8 +80,8 @@ func DecodeNameMetadataKey(k roachpb.Key) (parentID ID, parentSchemaID ID, name 
 // MakeDeprecatedNameMetadataKey returns the key for a name, as expected by
 // versions < 20.1. Pass name == "" in order to generate the prefix key to use
 // to scan over all of the names for the specified parentID.
-func MakeDeprecatedNameMetadataKey(parentID ID, name string) roachpb.Key {
-	k := keys.TODOSQLCodec.IndexPrefix(
+func MakeDeprecatedNameMetadataKey(codec keys.SQLCodec, parentID ID, name string) roachpb.Key {
+	k := codec.IndexPrefix(
 		uint32(DeprecatedNamespaceTable.ID), uint32(DeprecatedNamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
@@ -88,13 +92,13 @@ func MakeDeprecatedNameMetadataKey(parentID ID, name string) roachpb.Key {
 }
 
 // MakeAllDescsMetadataKey returns the key for all descriptors.
-func MakeAllDescsMetadataKey() roachpb.Key {
-	return keys.TODOSQLCodec.DescMetadataPrefix()
+func MakeAllDescsMetadataKey(codec keys.SQLCodec) roachpb.Key {
+	return codec.DescMetadataPrefix()
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
-func MakeDescMetadataKey(descID ID) roachpb.Key {
-	return keys.TODOSQLCodec.DescMetadataKey(uint32(descID))
+func MakeDescMetadataKey(codec keys.SQLCodec, descID ID) roachpb.Key {
+	return codec.DescMetadataKey(uint32(descID))
 }
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the

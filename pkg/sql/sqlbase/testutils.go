@@ -49,12 +49,14 @@ import (
 // This file contains utility functions for tests (in other packages).
 
 // GetTableDescriptor retrieves a table descriptor directly from the KV layer.
-func GetTableDescriptor(kvDB *kv.DB, database string, table string) *TableDescriptor {
+func GetTableDescriptor(
+	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
+) *TableDescriptor {
 	// log.VEventf(context.TODO(), 2, "GetTableDescriptor %q %q", database, table)
 	// testutil, so we pass settings as nil for both database and table name keys.
 	dKey := NewDatabaseKey(database)
 	ctx := context.TODO()
-	gr, err := kvDB.Get(ctx, dKey.Key())
+	gr, err := kvDB.Get(ctx, dKey.Key(codec))
 	if err != nil {
 		panic(err)
 	}
@@ -64,7 +66,7 @@ func GetTableDescriptor(kvDB *kv.DB, database string, table string) *TableDescri
 	dbDescID := ID(gr.ValueInt())
 
 	tKey := NewPublicTableKey(dbDescID, table)
-	gr, err = kvDB.Get(ctx, tKey.Key())
+	gr, err = kvDB.Get(ctx, tKey.Key(codec))
 	if err != nil {
 		panic(err)
 	}
@@ -72,7 +74,7 @@ func GetTableDescriptor(kvDB *kv.DB, database string, table string) *TableDescri
 		panic("table missing")
 	}
 
-	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
+	descKey := MakeDescMetadataKey(codec, ID(gr.ValueInt()))
 	desc := &Descriptor{}
 	ts, err := kvDB.GetProtoTs(ctx, descKey, desc)
 	if err != nil || (*desc == Descriptor{}) {
@@ -82,7 +84,7 @@ func GetTableDescriptor(kvDB *kv.DB, database string, table string) *TableDescri
 	if tableDesc == nil {
 		return nil
 	}
-	err = tableDesc.MaybeFillInDescriptor(ctx, kvDB)
+	err = tableDesc.MaybeFillInDescriptor(ctx, kvDB, codec)
 	if err != nil {
 		log.Fatalf(ctx, "failure to fill in descriptor. err: %v", err)
 	}
@@ -91,9 +93,9 @@ func GetTableDescriptor(kvDB *kv.DB, database string, table string) *TableDescri
 
 // GetImmutableTableDescriptor retrieves an immutable table descriptor directly from the KV layer.
 func GetImmutableTableDescriptor(
-	kvDB *kv.DB, database string, table string,
+	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *ImmutableTableDescriptor {
-	return NewImmutableTableDescriptor(*GetTableDescriptor(kvDB, database, table))
+	return NewImmutableTableDescriptor(*GetTableDescriptor(kvDB, codec, database, table))
 }
 
 // RandDatum generates a random Datum of the given type.

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -97,7 +98,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			if _, err := sqlDB.Exec(sql); err != nil {
 				t.Fatal(err)
 			}
-			desc := sqlbase.GetTableDescriptor(kvDB, "t", "t")
+			desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
 			idx, _, err := desc.FindIndexByName(tc.index)
 			if err != nil {
 				t.Fatal(err)

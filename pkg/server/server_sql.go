@@ -227,6 +227,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.clock,
 		cfg.circularInternalExecutor,
 		cfg.Settings,
+		codec,
 		lmKnobs,
 		cfg.stopper,
 		cfg.LeaseManagerConfig,
@@ -540,6 +541,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
+		codec,
 		cfg.registry,
 		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
 		cfg.statusServer,
@@ -606,6 +608,7 @@ func (s *sqlServer) start(
 	migMgr := sqlmigrations.NewManager(
 		stopper,
 		s.execCfg.DB,
+		s.execCfg.Codec,
 		&migrationsExecutor,
 		s.execCfg.Clock,
 		mmKnobs,

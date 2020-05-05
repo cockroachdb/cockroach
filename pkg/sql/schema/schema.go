@@ -36,7 +36,7 @@ var staticSchemaIDMap = map[sqlbase.ID]string{
 // Instead, we have to rely on a scan of the kv table.
 // TODO(sqlexec): this should probably be cached.
 func ResolveNameByID(
-	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, schemaID sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, schemaID sqlbase.ID,
 ) (string, error) {
 	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
 	for id, schemaName := range staticSchemaIDMap {
@@ -44,7 +44,7 @@ func ResolveNameByID(
 			return schemaName, nil
 		}
 	}
-	schemas, err := GetForDatabase(ctx, txn, dbID)
+	schemas, err := GetForDatabase(ctx, txn, codec, dbID)
 	if err != nil {
 		return "", err
 	}
@@ -57,11 +57,11 @@ func ResolveNameByID(
 // GetForDatabase looks up and returns all available
 // schema ids to names for a given database.
 func GetForDatabase(
-	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID,
 ) (map[sqlbase.ID]string, error) {
 	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
 
-	nameKey := sqlbase.NewSchemaKey(dbID, "" /* name */).Key()
+	nameKey := sqlbase.NewSchemaKey(dbID, "" /* name */).Key(codec)
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func GetForDatabase(
 		if _, ok := ret[id]; ok {
 			continue
 		}
-		_, _, name, err := sqlbase.DecodeNameMetadataKey(kv.Key)
+		_, _, name, err := sqlbase.DecodeNameMetadataKey(codec, kv.Key)
 		if err != nil {
 			return nil, err
 		}

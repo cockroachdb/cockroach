@@ -50,7 +50,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)
 	} else {
-		seqValueKey := keys.TODOSQLCodec.SequenceKey(uint32(descriptor.ID))
+		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.ID))
 		val, err = kv.IncrementValRetryable(
 			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
 		if err != nil {
@@ -135,7 +135,7 @@ func (p *planner) SetSequenceValue(
 			`cannot set the value of virtual sequence %q`, tree.ErrString(seqName))
 	}
 
-	seqValueKey, newVal, err := MakeSequenceKeyVal(descriptor.TableDesc(), newVal, isCalled)
+	seqValueKey, newVal, err := MakeSequenceKeyVal(p.ExecCfg().Codec, descriptor.TableDesc(), newVal, isCalled)
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func (p *planner) SetSequenceValue(
 // MakeSequenceKeyVal returns the key and value of a sequence being set
 // with newVal.
 func MakeSequenceKeyVal(
-	sequence *TableDescriptor, newVal int64, isCalled bool,
+	codec keys.SQLCodec, sequence *TableDescriptor, newVal int64, isCalled bool,
 ) ([]byte, int64, error) {
 	opts := sequence.SequenceOpts
 	if newVal > opts.MaxValue || newVal < opts.MinValue {
@@ -163,18 +163,18 @@ func MakeSequenceKeyVal(
 		newVal = newVal - sequence.SequenceOpts.Increment
 	}
 
-	seqValueKey := keys.TODOSQLCodec.SequenceKey(uint32(sequence.ID))
+	seqValueKey := codec.SequenceKey(uint32(sequence.ID))
 	return seqValueKey, newVal, nil
 }
 
 // GetSequenceValue returns the current value of the sequence.
 func (p *planner) GetSequenceValue(
-	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, codec keys.SQLCodec, desc *sqlbase.ImmutableTableDescriptor,
 ) (int64, error) {
 	if desc.SequenceOpts == nil {
 		return 0, errors.New("descriptor is not a sequence")
 	}
-	keyValue, err := p.txn.Get(ctx, keys.TODOSQLCodec.SequenceKey(uint32(desc.ID)))
+	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(desc.ID)))
 	if err != nil {
 		return 0, err
 	}

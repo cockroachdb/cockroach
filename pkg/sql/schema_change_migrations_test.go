@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -298,9 +299,9 @@ func migrateJobToOldFormat(
 ) error {
 	ctx := context.Background()
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if schemaChangeType == CreateTable {
-		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "new_table")
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "new_table")
 	}
 
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -358,7 +359,9 @@ func migrateJobToOldFormat(
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+			keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+		)
 	})
 }
 
@@ -422,7 +425,7 @@ func migrateGCJobToOldFormat(
 		return nil
 
 	case DropIndex:
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		if l := len(tableDesc.GCMutations); l != 1 {
 			return errors.AssertionFailedf("expected exactly 1 GCMutation, found %d", l)
 		}
@@ -441,7 +444,9 @@ func migrateGCJobToOldFormat(
 			if err := txn.SetSystemConfigTrigger(); err != nil {
 				return err
 			}
-			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+				keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+			)
 		})
 	default:
 		return errors.Errorf("invalid schema change type: %d", schemaChangeType)
@@ -868,7 +873,7 @@ func TestGCJobCreated(t *testing.T) {
 	if _, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test();`); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tableDesc.State = sqlbase.TableDescriptor_DROP
 	tableDesc.Version++
 	tableDesc.DropTime = 1
@@ -876,10 +881,14 @@ func TestGCJobCreated(t *testing.T) {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		if err := sqlbase.RemoveObjectNamespaceEntry(ctx, txn, tableDesc.ID, tableDesc.ParentID, tableDesc.Name, false /* kvTrace */); err != nil {
+		if err := sqlbase.RemoveObjectNamespaceEntry(
+			ctx, txn, keys.SystemSQLCodec, tableDesc.ID, tableDesc.ParentID, tableDesc.Name, false, /* kvTrace */
+		); err != nil {
 			return err
 		}
-		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+			keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+		)
 	}); err != nil {
 		t.Fatal(err)
 	}

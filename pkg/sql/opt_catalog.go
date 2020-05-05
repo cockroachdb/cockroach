@@ -114,8 +114,10 @@ func (os *optSchema) Name() *cat.SchemaName {
 // GetDataSourceNames is part of the cat.Schema interface.
 func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
 	return GetObjectNames(
-		ctx, os.planner.Txn(),
+		ctx,
+		os.planner.Txn(),
 		os.planner,
+		os.planner.ExecCfg().Codec,
 		os.desc,
 		os.name.Schema(),
 		true, /* explicitPrefix */
@@ -290,7 +292,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 
 	dbID := desc.ParentID
-	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, dbID)
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, oc.codec(), dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
@@ -370,7 +372,7 @@ func (oc *optCatalog) dataSourceForTable(
 		return ds, nil
 	}
 
-	ds, err := newOptTable(desc, oc.planner.ExecCfg().Codec, tableStats, zoneConfig)
+	ds, err := newOptTable(desc, oc.codec(), tableStats, zoneConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -402,6 +404,10 @@ func (oc *optCatalog) getZoneConfig(
 		zone = emptyZoneConfig
 	}
 	return zone, err
+}
+
+func (oc *optCatalog) codec() keys.SQLCodec {
+	return oc.planner.ExecCfg().Codec
 }
 
 // optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements

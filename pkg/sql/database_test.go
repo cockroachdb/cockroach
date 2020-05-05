@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,14 +53,14 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
-		if _, err := getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID); err != nil {
+		if _, err := getDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
 			return err
 		}
-		if _, err := MustGetDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID); err != nil {
+		if _, err := MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
 			return err
 		}
 
-		databaseCache := newDatabaseCache(config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
+		databaseCache := newDatabaseCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
 		_, err := databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err
 	}); err != nil {
