@@ -2,7 +2,6 @@
 # limit.opt contains normalization rules for the Limit and Offset operators.
 # =============================================================================
 
-
 # EliminateLimit discards a Limit operator if its constant limit is greater than
 # or equal to the maximum number of rows that can be returned by the input. In
 # this case, the Limit is just a no-op, because the rows are already limited.
@@ -16,10 +15,7 @@ $input
 
 # EliminateOffset discards an Offset operator if its offset value is zero.
 [EliminateOffset, Normalize]
-(Offset
-    $input:*
-    (Const 0)
-)
+(Offset $input:* (Const 0))
 =>
 $input
 
@@ -34,7 +30,11 @@ $input
 )
 =>
 (Project
-    (Limit $input $limit (PruneOrdering $ordering (OutputCols $input)))
+    (Limit
+        $input
+        $limit
+        (PruneOrdering $ordering (OutputCols $input))
+    )
     $projections
     $passthrough
 )
@@ -50,7 +50,11 @@ $input
 )
 =>
 (Project
-    (Offset $input $offset (PruneOrdering $ordering (OutputCols $input)))
+    (Offset
+        $input
+        $offset
+        (PruneOrdering $ordering (OutputCols $input))
+    )
     $projections
     $passthrough
 )
@@ -66,7 +70,8 @@ $input
         $offsetOrdering:*
     )
     (Const $limit:* & (IsPositiveLimit $limit))
-    $limitOrdering:* & (IsSameOrdering $offsetOrdering $limitOrdering) &
+    $limitOrdering:* &
+        (IsSameOrdering $offsetOrdering $limitOrdering) &
         (CanAddConstInts $limit $offset)
 )
 =>
@@ -75,7 +80,7 @@ $input
         $input
         (Const (AddConstInts $offset $limit))
         $limitOrdering
-     )
+    )
     (Const $offset)
     $offsetOrdering
 )
@@ -97,21 +102,24 @@ $input
 # and the ordinality's ordering (see OrderingChoice.Intersection).
 [PushLimitIntoOrdinality, Normalize]
 (Limit
-    (Ordinality
-        $input:*
-        $private:*
-    )
+    (Ordinality $input:* $private:*)
     $limit:*
     $limitOrdering:* &
         (HasColsInOrdering $input $limitOrdering) &
-        (OrderingIntersects (OrdinalityOrdering $private) $limitOrdering)
+        (OrderingIntersects
+            (OrdinalityOrdering $private)
+            $limitOrdering
+        )
 )
 =>
 (Ordinality
     (Limit
         $input
         $limit
-        (OrderingIntersection (OrdinalityOrdering $private) $limitOrdering)
+        (OrderingIntersection
+            (OrdinalityOrdering $private)
+            $limitOrdering
+        )
     )
     $private
 )
@@ -123,13 +131,10 @@ $input
 # input is more than the limit, to prevent repeated applications of the rule.
 [PushLimitIntoLeftJoin, Normalize]
 (Limit
-    $input:(LeftJoin
-        $left:*
-        $right:*
-        $on:*
-        $private:*
-    )
-    (Const $limit:*) & (IsPositiveLimit $limit) & ^(LimitGeMaxRows $limit $left)
+    $input:(LeftJoin $left:* $right:* $on:* $private:*)
+    (Const $limit:*) &
+        (IsPositiveLimit $limit) &
+        ^(LimitGeMaxRows $limit $left)
     $ordering:* & (HasColsInOrdering $left $ordering)
 )
 =>

@@ -22,10 +22,15 @@
 (Limit
     $input:*
     $limit:*
-    $ordering:* & (CanSimplifyLimitOffsetOrdering $input $ordering)
+    $ordering:* &
+        (CanSimplifyLimitOffsetOrdering $input $ordering)
 )
 =>
-(Limit $input $limit (SimplifyLimitOffsetOrdering $input $ordering))
+(Limit
+    $input
+    $limit
+    (SimplifyLimitOffsetOrdering $input $ordering)
+)
 
 # SimplifyOffsetOrdering removes redundant columns from the Offset operator's
 # input ordering.
@@ -33,10 +38,15 @@
 (Offset
     $input:*
     $offset:*
-    $ordering:* & (CanSimplifyLimitOffsetOrdering $input $ordering)
+    $ordering:* &
+        (CanSimplifyLimitOffsetOrdering $input $ordering)
 )
 =>
-(Offset $input $offset (SimplifyLimitOffsetOrdering $input $ordering))
+(Offset
+    $input
+    $offset
+    (SimplifyLimitOffsetOrdering $input $ordering)
+)
 
 # SimplifyGroupByOrdering removes redundant columns from the GroupBy operators'
 # input ordering.
@@ -48,27 +58,37 @@
 (GroupBy | ScalarGroupBy | DistinctOn
     $input:*
     $aggregations:*
-    $groupingPrivate:* & (CanSimplifyGroupingOrdering $input $groupingPrivate)
+    $groupingPrivate:* &
+        (CanSimplifyGroupingOrdering $input $groupingPrivate)
 )
 =>
-((OpName) $input $aggregations (SimplifyGroupingOrdering $input $groupingPrivate))
+((OpName)
+    $input
+    $aggregations
+    (SimplifyGroupingOrdering $input $groupingPrivate)
+)
 
 # SimplifyOrdinalityOrdering removes redundant columns from the Ordinality
 # operator's input ordering.
 [SimplifyOrdinalityOrdering, Normalize]
 (Ordinality
     $input:*
-    $ordinalityPrivate:* & (CanSimplifyOrdinalityOrdering $input $ordinalityPrivate)
+    $ordinalityPrivate:* &
+        (CanSimplifyOrdinalityOrdering $input $ordinalityPrivate)
 )
 =>
-(Ordinality $input (SimplifyOrdinalityOrdering $input $ordinalityPrivate))
+(Ordinality
+    $input
+    (SimplifyOrdinalityOrdering $input $ordinalityPrivate)
+)
 
 # SimplifyExplainOrdering removes redundant columns from the Explain operator's
 # input ordering.
 [SimplifyExplainOrdering, Normalize]
 (Explain
     $input:*
-    $explainPrivate:* & (CanSimplifyExplainOrdering $input $explainPrivate)
+    $explainPrivate:* &
+        (CanSimplifyExplainOrdering $input $explainPrivate)
 )
 =>
 (Explain $input (SimplifyExplainOrdering $input $explainPrivate))
