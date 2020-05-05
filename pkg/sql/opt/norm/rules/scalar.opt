@@ -377,8 +377,8 @@
 )
 =>
 (Or
-    (IsNot $left (Null $typ:(TypeOf $left)))
-    (Null $typ)
+    (IsNot $left (Null (TypeOf $left)))
+    (Null (BoolType))
 )
 
 # SimplifySameVarInequalities converts `x != x` and other inequality
@@ -391,6 +391,6 @@
 )
 =>
 (And
-    (Is $left (Null $typ:(TypeOf $left)))
-    (Null $typ)
+    (Is $left (Null (TypeOf $left)))
+    (Null (BoolType))
 )
