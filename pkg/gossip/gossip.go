@@ -1664,3 +1664,17 @@ func (dg DeprecatedGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
 	g, _ := v.(*Gossip)
 	return g, nil
 }
+
+// Optional is like OptionalErr, but returns false if Gossip is not exposed.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) Optional(issueNos ...int) (*Gossip, bool) {
+	v, ok := dg.w.Optional()
+	if !ok {
+		return nil, false
+	}
+	// NB: some tests use a nil Gossip.
+	g, _ := v.(*Gossip)
+	return g, true
+}
