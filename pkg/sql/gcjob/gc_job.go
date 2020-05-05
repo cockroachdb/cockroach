@@ -126,7 +126,7 @@ func (r schemaChangeGCResumer) Resume(
 			// TTL whenever we get an update on one of the tables/indexes (or the db)
 			// that this job is responsible for, and computing the earliest deadline
 			// from our set of cached TTL values.
-			cfg := execCfg.Gossip.Deprecated(47150).GetSystemConfig()
+			cfg := execCfg.Gossip.DeprecatedSystemConfig(47150)
 			zoneConfigUpdated := false
 			zoneCfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 				zoneConfigUpdated = true

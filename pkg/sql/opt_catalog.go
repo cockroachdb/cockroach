@@ -74,11 +74,7 @@ func (oc *optCatalog) reset() {
 		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
 	}
 
-	g := oc.planner.execCfg.Gossip.Deprecated(47150)
-	// Gossip can be nil in testing scenarios.
-	if g != nil {
-		oc.cfg = g.GetSystemConfig()
-	}
+	oc.cfg = oc.planner.execCfg.Gossip.DeprecatedSystemConfig(47150)
 }
 
 // optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the

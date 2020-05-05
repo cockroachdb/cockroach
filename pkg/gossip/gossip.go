@@ -1649,6 +1649,28 @@ func (dg DeprecatedGossip) Deprecated(issueNo int) *Gossip {
 	return g
 }
 
+// DeprecatedSystemConfig calls GetSystemConfig on the wrapped Gossip instance.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemConfig {
+	g := dg.Deprecated(issueNo)
+	if g == nil {
+		return nil // a few unit tests
+	}
+	return g.GetSystemConfig()
+}
+
+// DeprecatedRegisterSystemConfigChannel calls RegisterSystemConfigChannel on
+// the wrapped Gossip instance.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) DeprecatedRegisterSystemConfigChannel(issueNo int) <-chan struct{} {
+	g := dg.Deprecated(issueNo)
+	return g.RegisterSystemConfigChannel()
+}
+
 // OptionalErr returns the Gossip instance if the wrapper was set up to allow
 // it. Otherwise, it returns an error referring to the optionally passed in
 // issues.
