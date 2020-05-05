@@ -8,22 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+package geogfn
 
-void CR_GEOGRAPHICLIB_Inverse(
-  double radius,
-  double flattening,
-  double aLat,
-  double aLng,
-  double bLat,
-  double bLng,
-  double *s12,
-  double *az1,
-  double *az2
-);
+import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
+	"github.com/golang/geo/s2"
+)
 
-#if defined(__cplusplus)
+// spheroidDistance returns the s12 (meter) component of spheroid.Inverse from s2 Points.
+func spheroidDistance(s geographiclib.Spheroid, a s2.Point, b s2.Point) float64 {
+	inv, _, _ := s.Inverse(s2.LatLngFromPoint(a), s2.LatLngFromPoint(b))
+	return inv
 }
-#endif
