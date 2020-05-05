@@ -243,35 +243,37 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, from, to int64, key 
 func doLookup(
 	ctx context.Context, t *testing.T, rc *RangeDescriptorCache, key string,
 ) (*roachpb.RangeDescriptor, *EvictionToken) {
-	return doLookupWithToken(ctx, t, rc, key, nil, false, nil)
+	return doLookupWithToken(ctx, rc, key, nil, false, nil)
 }
 
 func doLookupConsideringIntents(
 	ctx context.Context, t *testing.T, rc *RangeDescriptorCache, key string,
 ) (*roachpb.RangeDescriptor, *EvictionToken) {
-	return doLookupWithToken(ctx, t, rc, key, nil, false, nil)
+	return doLookupWithToken(ctx, rc, key, nil, false, nil)
 }
 
 func doLookupWithToken(
 	ctx context.Context,
-	t *testing.T,
 	rc *RangeDescriptorCache,
 	key string,
 	evictToken *EvictionToken,
 	useReverseScan bool,
 	wg *sync.WaitGroup,
 ) (*roachpb.RangeDescriptor, *EvictionToken) {
+	// NOTE: This function panics on errors because it is often called from other
+	// goroutines than the test's main one.
+
 	r, returnToken, err := rc.lookupRangeDescriptorInternal(
 		ctx, roachpb.RKey(key), evictToken, useReverseScan, wg)
 	if err != nil {
-		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err)
+		panic(fmt.Sprintf("unexpected error from LookupRangeDescriptor: %s", err))
 	}
 	keyAddr, err := keys.Addr(roachpb.Key(key))
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
 	if (useReverseScan && !r.ContainsKeyInverted(keyAddr)) || (!useReverseScan && !r.ContainsKey(keyAddr)) {
-		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
+		panic(fmt.Sprintf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key))
 	}
 	return r, returnToken
 }
@@ -438,7 +440,7 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 			wg.Add(1)
 			waitJoin.Add(1)
 			go func() {
-				doLookupWithToken(ctx, t, db.cache, key, nil, false, &waitJoin)
+				doLookupWithToken(ctx, db.cache, key, nil, false, &waitJoin)
 				wg.Done()
 			}()
 		}
@@ -564,7 +566,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 			waitJoin.Add(1)
 			go func(id int) {
 				// Each request goes to a different key.
-				doLookupWithToken(ctx, t, db.cache, fmt.Sprintf("%s%d", key, id), evictToken, false, &waitJoin)
+				doLookupWithToken(ctx, db.cache, fmt.Sprintf("%s%d", key, id), evictToken, false, &waitJoin)
 				wg.Done()
 			}(i)
 		}
@@ -621,7 +623,7 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	// A request is sent to the stale descriptor on the right half
 	// such that a RangeKeyMismatchError is returned.
 	useReverseScan := true
-	_, evictToken := doLookupWithToken(ctx, t, db.cache, "az", nil, useReverseScan, nil)
+	_, evictToken := doLookupWithToken(ctx, db.cache, "az", nil, useReverseScan, nil)
 	// mismatchErrRange mocks out a RangeKeyMismatchError.Range response.
 	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false)
 	if pErr != nil {
@@ -653,7 +655,7 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 		wg.Add(1)
 		waitJoin.Add(1)
 		go func(key string, evictToken *EvictionToken) {
-			doLookupWithToken(ctx, t, db.cache, key, evictToken, useReverseScan, &waitJoin)
+			doLookupWithToken(ctx, db.cache, key, evictToken, useReverseScan, &waitJoin)
 			wg.Done()
 		}(lookup.key, lookup.evictToken)
 	}
@@ -663,9 +665,9 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	db.assertLookupCount(t, 2, 3, "a and az")
 
 	// Both are now correctly cached.
-	doLookupWithToken(ctx, t, db.cache, "a", nil, useReverseScan, nil)
+	doLookupWithToken(ctx, db.cache, "a", nil, useReverseScan, nil)
 	db.assertLookupCountEq(t, 0, "a")
-	doLookupWithToken(ctx, t, db.cache, "az", nil, useReverseScan, nil)
+	doLookupWithToken(ctx, db.cache, "az", nil, useReverseScan, nil)
 	db.assertLookupCountEq(t, 0, "az")
 }
 
