@@ -66,6 +66,7 @@ type schemaChange struct {
 	existingPct     int
 	verbose         int
 	dryRun          bool
+	tolerateErrors  bool
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -85,6 +86,7 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times to use existing name`)
 		s.flags.IntVarP(&s.verbose, `verbose`, `v`, 0, ``)
 		s.flags.BoolVarP(&s.dryRun, `dry-run`, `n`, false, ``)
+		s.flags.BoolVar(&s.tolerateErrors, `tolerate-errors`, true, "Keep running on error")
 		return s
 	},
 }
@@ -194,6 +196,7 @@ func (s *schemaChange) Ops(urls []string, reg *histogram.Registry) (workload.Que
 		w := &schemaChangeWorker{
 			verbose:         s.verbose,
 			dryRun:          s.dryRun,
+			tolerateErrors:  s.tolerateErrors,
 			maxOpsPerWorker: s.maxOpsPerWorker,
 			existingPct:     s.existingPct,
 			rng:             rand.New(rand.NewSource(timeutil.Now().UnixNano())),
@@ -235,6 +238,7 @@ SELECT max(regexp_extract(name, '[0-9]+$')::int)
 type schemaChangeWorker struct {
 	verbose         int
 	dryRun          bool
+	tolerateErrors  bool
 	maxOpsPerWorker int
 	existingPct     int
 	rng             *rand.Rand
@@ -295,8 +299,12 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, bool, error) {
 			opsBuf.WriteString("***FAIL:")
 		}
 		opsBuf.WriteString(fmt.Sprintf("  %s;  %s\n", op, errMsg))
-		if fatalErr := handleOpError(err); fatalErr != nil {
-			return opsBuf.String(), rollback, fatalErr
+		if seriousErr := handleOpError(err); seriousErr != nil {
+			if w.tolerateErrors {
+				opsBuf.WriteString(fmt.Sprintf("Serious error: %v\n", seriousErr))
+			} else {
+				return opsBuf.String(), rollback, seriousErr
+			}
 		}
 	}
 	return opsBuf.String(), rollback, nil
