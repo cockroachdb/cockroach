@@ -263,13 +263,12 @@ eexpect "echo,false"
 eexpect "errexit,false"
 eexpect "prompt1,%n@"
 eexpect "show_times,true"
-eexpect "smart_prompt,true"
 eexpect root@
 interrupt
 eexpect ":/# "
 
 # Then verify that the defaults can be overridden.
-send "$argv demo --empty --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false --set=smart_prompt=false\r"
+send "$argv demo --empty --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false\r"
 eexpect root@
 send "\\set display_format csv\r"
 send "\\set\r"
@@ -279,7 +278,6 @@ eexpect "echo,true"
 eexpect "errexit,true"
 eexpect "prompt1,%n@haa"
 eexpect "show_times,false"
-eexpect "smart_prompt,false"
 eexpect root@
 interrupt
 eexpect ":/# "
