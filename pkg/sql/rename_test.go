@@ -48,7 +48,7 @@ func TestRenameTable(t *testing.T) {
 
 	// Check the table descriptor.
 	desc := &sqlbase.Descriptor{}
-	tableDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(counter))
+	tableDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(counter))
 	ts, err := kvDB.GetProtoTs(context.TODO(), tableDescKey, desc)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func isRenamed(
 	expectedVersion sqlbase.DescriptorVersion,
 	cfg *config.SystemConfig,
 ) bool {
-	descKey := sqlbase.MakeDescMetadataKey(tableID)
+	descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
 	val := cfg.GetValue(descKey)
 	if val == nil {
 		return false
@@ -165,7 +165,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	mu.Lock()
 	waitTableID = tableDesc.ID
 	mu.Unlock()
@@ -398,7 +398,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	// The expected version will be the result of two increments for the two
 	// schema changes and one increment for signaling of the completion of the
 	// drain. See the above comment for an explanation of why there's only one
@@ -425,7 +425,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	wg.Wait()
 
 	// Table rename to t3 was successful.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, "test", "t3")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
 	if version := tableDesc.Version; expectedVersion != version {
 		t.Fatalf("version mismatch: expected = %d, current = %d", expectedVersion, version)
 	}

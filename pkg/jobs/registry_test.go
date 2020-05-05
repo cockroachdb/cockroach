@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -207,11 +208,11 @@ func TestRegistryGC(t *testing.T) {
 	muchEarlier := ts.Add(-2 * time.Hour)
 
 	setMutations := func(mutations []sqlbase.DescriptorMutation) sqlbase.ID {
-		desc := sqlbase.GetTableDescriptor(kvDB, "t", "to_be_mutated")
+		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.Mutations = mutations
 		if err := kvDB.Put(
 			context.TODO(),
-			sqlbase.MakeDescMetadataKey(desc.GetID()),
+			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			sqlbase.WrapDescriptor(desc),
 		); err != nil {
 			t.Fatal(err)
@@ -220,11 +221,11 @@ func TestRegistryGC(t *testing.T) {
 	}
 
 	setGCMutations := func(gcMutations []sqlbase.TableDescriptor_GCDescriptorMutation) sqlbase.ID {
-		desc := sqlbase.GetTableDescriptor(kvDB, "t", "to_be_mutated")
+		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.GCMutations = gcMutations
 		if err := kvDB.Put(
 			context.TODO(),
-			sqlbase.MakeDescMetadataKey(desc.GetID()),
+			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			sqlbase.WrapDescriptor(desc),
 		); err != nil {
 			t.Fatal(err)
@@ -233,7 +234,7 @@ func TestRegistryGC(t *testing.T) {
 	}
 
 	setDropJob := func(shouldDrop bool) sqlbase.ID {
-		desc := sqlbase.GetTableDescriptor(kvDB, "t", "to_be_mutated")
+		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		if shouldDrop {
 			desc.DropJobID = 123
 		} else {
@@ -242,7 +243,7 @@ func TestRegistryGC(t *testing.T) {
 		}
 		if err := kvDB.Put(
 			context.TODO(),
-			sqlbase.MakeDescMetadataKey(desc.GetID()),
+			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			sqlbase.WrapDescriptor(desc),
 		); err != nil {
 			t.Fatal(err)

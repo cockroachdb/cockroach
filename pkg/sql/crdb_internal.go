@@ -2213,12 +2213,12 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			var dbName, tableName, indexName string
-			if _, tableID, err := keys.TODOSQLCodec.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
+			if _, tableID, err := p.ExecCfg().Codec.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
 				parent := parents[tableID]
 				if parent != 0 {
 					tableName = tableNames[tableID]
 					dbName = dbNames[parent]
-					if _, _, idxID, err := keys.TODOSQLCodec.DecodeIndexPrefix(desc.StartKey.AsRawKey()); err == nil {
+					if _, _, idxID, err := p.ExecCfg().Codec.DecodeIndexPrefix(desc.StartKey.AsRawKey()); err == nil {
 						indexName = indexNames[tableID][idxID]
 					}
 				} else {
@@ -2400,7 +2400,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table *TableDescriptor
 			if zs.Database != "" {
-				database, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, sqlbase.ID(id))
+				database, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
 				if err != nil {
 					return err
 				}
@@ -2408,7 +2408,7 @@ CREATE TABLE crdb_internal.zones (
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				table, err = sqlbase.GetTableDescFromID(ctx, p.txn, sqlbase.ID(id))
+				table, err = sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
 				if err != nil {
 					return err
 				}

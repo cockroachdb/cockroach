@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -53,9 +54,11 @@ func updateDescriptorGCMutations(
 }
 
 // dropTableDesc removes a descriptor from the KV database.
-func dropTableDesc(ctx context.Context, db *kv.DB, tableDesc *sqlbase.TableDescriptor) error {
+func dropTableDesc(
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *sqlbase.TableDescriptor,
+) error {
 	log.Infof(ctx, "removing table descriptor for table %d", tableDesc.ID)
-	descKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
+	descKey := sqlbase.MakeDescMetadataKey(codec, tableDesc.ID)
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
 
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

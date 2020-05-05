@@ -135,7 +135,7 @@ func showBackupPlanHook(
 		// display them anyway, because we don't have the referenced table names,
 		// etc.
 		if err := maybeUpgradeTableDescsInBackupManifests(
-			ctx, manifests, true, /*skipFKsWithNoMatchingTable*/
+			ctx, manifests, p.ExecCfg().Codec, true, /*skipFKsWithNoMatchingTable*/
 		); err != nil {
 			return err
 		}

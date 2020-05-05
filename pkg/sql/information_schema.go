@@ -1372,7 +1372,7 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				if err != nil || desc == nil {
 					return false, err
 				}
-				schemaName, err := schema.ResolveNameByID(ctx, p.txn, db.ID, desc.GetParentSchemaID())
+				schemaName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, desc.GetParentSchemaID())
 				if err != nil {
 					return false, err
 				}
@@ -1510,7 +1510,7 @@ func forEachDatabaseDesc(
 	} else {
 		// We can't just use dbContext here because we need to fetch the descriptor
 		// with privileges from kv.
-		fetchedDbDesc, err := getDatabaseDescriptorsFromIDs(ctx, p.txn, []sqlbase.ID{dbContext.ID})
+		fetchedDbDesc, err := getDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []sqlbase.ID{dbContext.ID})
 		if err != nil {
 			return err
 		}

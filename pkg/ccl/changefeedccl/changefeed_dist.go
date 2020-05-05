@@ -225,7 +225,7 @@ func fetchSpansForTargets(
 		txn.SetFixedTimestamp(ctx, ts)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range targets {
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, codec, tableID)
 			if err != nil {
 				return err
 			}

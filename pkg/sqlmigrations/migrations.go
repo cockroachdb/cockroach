@@ -314,18 +314,22 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 }
 
-func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
-	return func(ctx context.Context, db db) ([]sqlbase.ID, error) { return ids, nil }
+func staticIDs(
+	ids ...sqlbase.ID,
+) func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) {
+	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) { return ids, nil }
 }
 
-func databaseIDs(names ...string) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
-	return func(ctx context.Context, db db) ([]sqlbase.ID, error) {
+func databaseIDs(
+	names ...string,
+) func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) {
+	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) {
 		var ids []sqlbase.ID
 		for _, name := range names {
 			// This runs as part of an older migration (introduced in 2.1). We use
 			// the DeprecatedDatabaseKey, and let the 20.1 migration handle moving
 			// from the old namespace table into the new one.
-			kv, err := db.Get(ctx, sqlbase.NewDeprecatedDatabaseKey(name).Key())
+			kv, err := db.Get(ctx, sqlbase.NewDeprecatedDatabaseKey(name).Key(codec))
 			if err != nil {
 				return nil, err
 			}
@@ -365,7 +369,7 @@ type migrationDescriptor struct {
 	// descriptors that were added by this migration. This is needed to automate
 	// certain tests, which check the number of ranges/descriptors present on
 	// server bootup.
-	newDescriptorIDs func(ctx context.Context, db db) ([]sqlbase.ID, error)
+	newDescriptorIDs func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error)
 }
 
 func init() {
@@ -382,6 +386,7 @@ func init() {
 
 type runner struct {
 	db          db
+	codec       keys.SQLCodec
 	sqlExecutor *sql.InternalExecutor
 	settings    *cluster.Settings
 }
@@ -436,6 +441,7 @@ type Manager struct {
 	stopper      *stop.Stopper
 	leaseManager leaseManager
 	db           db
+	codec        keys.SQLCodec
 	sqlExecutor  *sql.InternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
 	settings     *cluster.Settings
@@ -446,6 +452,7 @@ type Manager struct {
 func NewManager(
 	stopper *stop.Stopper,
 	db *kv.DB,
+	codec keys.SQLCodec,
 	executor *sql.InternalExecutor,
 	clock *hlc.Clock,
 	testingKnobs MigrationManagerTestingKnobs,
@@ -461,6 +468,7 @@ func NewManager(
 		stopper:      stopper,
 		leaseManager: leasemanager.New(db, clock, opts),
 		db:           db,
+		codec:        codec,
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
 		settings:     settings,
@@ -478,6 +486,7 @@ func NewManager(
 func ExpectedDescriptorIDs(
 	ctx context.Context,
 	db db,
+	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (sqlbase.IDs, error) {
@@ -485,7 +494,7 @@ func ExpectedDescriptorIDs(
 	if err != nil {
 		return nil, err
 	}
-	descriptorIDs := sqlbase.MakeMetadataSchema(defaultZoneConfig, defaultSystemZoneConfig).DescriptorIDs()
+	descriptorIDs := sqlbase.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).DescriptorIDs()
 	for _, migration := range backwardCompatibleMigrations {
 		// Is the migration not creating descriptors?
 		if migration.newDescriptorIDs == nil ||
@@ -494,7 +503,7 @@ func ExpectedDescriptorIDs(
 			continue
 		}
 		if _, ok := completedMigrations[string(migrationKey(migration))]; ok {
-			newIDs, err := migration.newDescriptorIDs(ctx, db)
+			newIDs, err := migration.newDescriptorIDs(ctx, db, codec)
 			if err != nil {
 				return nil, err
 			}
@@ -607,6 +616,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	startTime := timeutil.Now().String()
 	r := runner{
 		db:          m.db,
+		codec:       m.codec,
 		sqlExecutor: m.sqlExecutor,
 		settings:    m.settings,
 	}
@@ -695,6 +705,7 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 		log.Infof(ctx, "starting schema change job migration")
 		r := runner{
 			db:          m.db,
+			codec:       m.codec,
 			sqlExecutor: m.sqlExecutor,
 			settings:    m.settings,
 		}
@@ -789,7 +800,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 			// DroppedTables is always populated in 19.2 for all jobs that drop
 			// tables.
 			if len(details.DroppedTables) > 0 {
-				return migrateDropTablesOrDatabaseJob(ctx, txn, registry, job)
+				return migrateDropTablesOrDatabaseJob(ctx, txn, r.codec, registry, job)
 			}
 
 			descIDs := job.Payload().DescriptorIDs
@@ -800,7 +811,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 					"job %d: could not be migrated due to unexpected descriptor IDs %v", *job.ID(), descIDs)
 			}
 			descID := descIDs[0]
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, descID)
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, r.codec, descID)
 			if err != nil {
 				return err
 			}
@@ -836,7 +847,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 	schemaChangeJobsForDesc := make(map[sqlbase.ID][]int64)
 	gcJobsForDesc := make(map[sqlbase.ID][]int64)
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		descs, err := sql.GetAllDescriptors(ctx, txn)
+		descs, err := sql.GetAllDescriptors(ctx, txn, r.codec)
 		if err != nil {
 			return err
 		}
@@ -1119,7 +1130,7 @@ func migrateMutationJobForTable(
 // dropping a table, including dropping tables, views, sequences, and
 // databases, as well as truncating tables.
 func migrateDropTablesOrDatabaseJob(
-	ctx context.Context, txn *kv.Txn, registry *jobs.Registry, job *jobs.Job,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, registry *jobs.Registry, job *jobs.Job,
 ) error {
 	payload := job.Payload()
 	details := payload.GetSchemaChange()
@@ -1170,7 +1181,7 @@ func migrateDropTablesOrDatabaseJob(
 	for i := range details.DroppedTables {
 		tableID := details.DroppedTables[i].ID
 		tablesToDrop[i].ID = details.DroppedTables[i].ID
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, codec, tableID)
 		if err != nil {
 			return err
 		}
@@ -1225,8 +1236,8 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		tKey := sqlbase.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
-		b.CPut(tKey.Key(), desc.GetID(), nil)
-		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
+		b.CPut(tKey.Key(r.codec), desc.GetID(), nil)
+		b.CPut(sqlbase.MakeDescMetadataKey(r.codec, desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
@@ -1280,7 +1291,6 @@ func createProtectedTimestampsRecordsTable(ctx context.Context, r runner) error 
 }
 
 func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
-
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 
@@ -1288,7 +1298,7 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		// "namespace". This corrects the behavior of this migration as it existed
 		// in 20.1 betas. The old namespace table cannot be edited without breaking
 		// explicit selects from system.namespace in 19.2.
-		deprecatedKey := sqlbase.MakeDescMetadataKey(keys.DeprecatedNamespaceTableID)
+		deprecatedKey := sqlbase.MakeDescMetadataKey(r.codec, keys.DeprecatedNamespaceTableID)
 		deprecatedDesc := &sqlbase.Descriptor{}
 		ts, err := txn.GetProtoTs(ctx, deprecatedKey, deprecatedDesc)
 		if err != nil {
@@ -1310,9 +1320,9 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		//    copied over.
 		nameKey := sqlbase.NewPublicTableKey(
 			sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTableName)
-		b.Put(nameKey.Key(), sqlbase.NamespaceTable.GetID())
+		b.Put(nameKey.Key(r.codec), sqlbase.NamespaceTable.GetID())
 		b.Put(sqlbase.MakeDescMetadataKey(
-			sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable))
+			r.codec, sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable))
 		return txn.Run(ctx, b)
 	})
 }
@@ -1380,12 +1390,12 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 		if parentID == keys.RootNamespaceID {
 			// This row represents a database. Add it to the new namespace table.
 			databaseKey := sqlbase.NewDatabaseKey(name)
-			if err := r.db.Put(ctx, databaseKey.Key(), id); err != nil {
+			if err := r.db.Put(ctx, databaseKey.Key(r.codec), id); err != nil {
 				return err
 			}
 			// Also create a 'public' schema for this database.
 			schemaKey := sqlbase.NewSchemaKey(id, "public")
-			if err := r.db.Put(ctx, schemaKey.Key(), keys.PublicSchemaID); err != nil {
+			if err := r.db.Put(ctx, schemaKey.Key(r.codec), keys.PublicSchemaID); err != nil {
 				return err
 			}
 		} else {
@@ -1398,7 +1408,7 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 				continue
 			}
 			tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
-			if err := r.db.Put(ctx, tableKey.Key(), id); err != nil {
+			if err := r.db.Put(ctx, tableKey.Key(r.codec), id); err != nil {
 				return err
 			}
 		}

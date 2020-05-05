@@ -234,7 +234,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	}
 
 	phyAccessor := UncachedPhysicalAccessor{}
-	obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tn, flags)
+	obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tc.codec(), tn, flags)
 	if obj == nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func (tc *TableCollection) resolveSchemaID(
 	}
 
 	// Next, try lookup the result from KV, storing and returning the value.
-	exists, schemaID, err := resolveSchemaID(ctx, txn, dbID, schemaName)
+	exists, schemaID, err := resolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
 	if err != nil || !exists {
 		return exists, schemaID, err
 	}
@@ -295,7 +295,7 @@ func (tc *TableCollection) getTableVersion(
 
 	readTableFromStore := func() (*sqlbase.ImmutableTableDescriptor, error) {
 		phyAccessor := UncachedPhysicalAccessor{}
-		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tn, flags)
+		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tc.codec(), tn, flags)
 		if obj == nil {
 			return nil, err
 		}
@@ -410,7 +410,7 @@ func (tc *TableCollection) getTableVersionByID(
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
 	if flags.AvoidCached || testDisableTableLeases {
-		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+		table, err := sqlbase.GetTableDescFromID(ctx, txn, tc.codec(), tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -479,7 +479,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 		log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
 		return table, nil
 	}
-	return sqlbase.GetMutableTableDescFromID(ctx, txn, tableID)
+	return sqlbase.GetMutableTableDescFromID(ctx, txn, tc.codec(), tableID)
 }
 
 // releaseTableLeases releases the leases for the tables with ids in
@@ -731,7 +731,7 @@ func (tc *TableCollection) getAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]sqlbase.DescriptorProto, error) {
 	if tc.allDescriptors == nil {
-		descs, err := GetAllDescriptors(ctx, txn)
+		descs, err := GetAllDescriptors(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
 		}
@@ -748,11 +748,11 @@ func (tc *TableCollection) getAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]*sqlbase.DatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
-		dbDescIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn)
+		dbDescIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
 		}
-		dbDescs, err := getDatabaseDescriptorsFromIDs(ctx, txn, dbDescIDs)
+		dbDescs, err := getDatabaseDescriptorsFromIDs(ctx, txn, tc.codec(), dbDescIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -766,11 +766,11 @@ func (tc *TableCollection) getAllDatabaseDescriptors(
 // database. It attempts to perform this operation in a single request,
 // rather than making a round trip for each ID.
 func getDatabaseDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, ids []sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []sqlbase.ID,
 ) ([]*sqlbase.DatabaseDescriptor, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
-		key := sqlbase.MakeDescMetadataKey(id)
+		key := sqlbase.MakeDescMetadataKey(codec, id)
 		b.Get(key)
 	}
 	if err := txn.Run(ctx, b); err != nil {
@@ -816,7 +816,7 @@ func (tc *TableCollection) getSchemasForDatabase(
 	}
 	if _, ok := tc.allSchemasForDatabase[dbID]; !ok {
 		var err error
-		tc.allSchemasForDatabase[dbID], err = schema.GetForDatabase(ctx, txn, dbID)
+		tc.allSchemasForDatabase[dbID], err = schema.GetForDatabase(ctx, txn, tc.codec(), dbID)
 		if err != nil {
 			return nil, err
 		}
@@ -864,6 +864,10 @@ func (tc *TableCollection) validatePrimaryKeys() error {
 		}
 	}
 	return nil
+}
+
+func (tc *TableCollection) codec() keys.SQLCodec {
+	return tc.leaseMgr.codec
 }
 
 // MigrationSchemaChangeRequiredContext flags a schema change as necessary to
@@ -1129,5 +1133,13 @@ func (p *planner) writeTableDescToBatch(
 		return err
 	}
 
-	return writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings, b, tableDesc.GetID(), tableDesc.TableDesc())
+	return writeDescToBatch(
+		ctx,
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		p.ExecCfg().Settings,
+		b,
+		p.ExecCfg().Codec,
+		tableDesc.GetID(),
+		tableDesc.TableDesc(),
+	)
 }

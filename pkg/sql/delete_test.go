@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -105,12 +106,12 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 			defer drop(tableNames...)
 
 			tablesByID := make(map[sqlbase.ID]*ImmutableTableDescriptor)
-			pd := sqlbase.GetImmutableTableDescriptor(kvDB, "defaultdb", "parent")
+			pd := sqlbase.GetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "parent")
 			tablesByID[pd.ID] = pd
 
 			for _, tableName := range tableNames {
 				if tableName != "parent" {
-					cd := sqlbase.GetImmutableTableDescriptor(kvDB, "defaultdb", tableName)
+					cd := sqlbase.GetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
 					tablesByID[cd.ID] = cd
 				}
 			}

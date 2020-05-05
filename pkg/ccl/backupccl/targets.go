@@ -598,8 +598,10 @@ func fullClusterTargets(
 	return fullClusterDescs, fullClusterDBs, nil
 }
 
-func lookupDatabaseID(ctx context.Context, txn *kv.Txn, name string) (sqlbase.ID, error) {
-	found, id, err := sqlbase.LookupDatabaseID(ctx, txn, name)
+func lookupDatabaseID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
+) (sqlbase.ID, error) {
+	found, id, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {
 		return sqlbase.InvalidID, err
 	}
@@ -611,8 +613,10 @@ func lookupDatabaseID(ctx context.Context, txn *kv.Txn, name string) (sqlbase.ID
 
 // CheckTableExists returns an error if a table already exists with given
 // parent and name.
-func CheckTableExists(ctx context.Context, txn *kv.Txn, parentID sqlbase.ID, name string) error {
-	found, _, err := sqlbase.LookupPublicTableID(ctx, txn, parentID, name)
+func CheckTableExists(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID sqlbase.ID, name string,
+) error {
+	found, _, err := sqlbase.LookupPublicTableID(ctx, txn, codec, parentID, name)
 	if err != nil {
 		return err
 	}

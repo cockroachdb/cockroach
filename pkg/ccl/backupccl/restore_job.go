@@ -448,14 +448,14 @@ func WriteTableDescs(
 				desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
 			}
 			wroteDBs[desc.ID] = desc
-			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc); err != nil {
+			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.ID, desc); err != nil {
 				return err
 			}
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
 			dKey := sqlbase.MakeDatabaseNameKey(ctx, settings, desc.Name)
-			b.CPut(dKey.Key(), desc.ID, nil)
+			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.ID, nil)
 		}
 		for i := range tables {
 			// For full cluster restore, keep privileges as they were.
@@ -466,7 +466,7 @@ func WriteTableDescs(
 					tables[i].Privileges = wrote.GetPrivileges()
 				}
 			} else {
-				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tables[i].ParentID)
+				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, keys.SystemSQLCodec, tables[i].ParentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(tables[i].ParentID))
@@ -480,14 +480,14 @@ func WriteTableDescs(
 					tables[i].Privileges = parentDB.GetPrivileges()
 				}
 			}
-			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
+			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, tables[i].ID, tables[i]); err != nil {
 				return err
 			}
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
 			tkey := sqlbase.MakePublicTableNameKey(ctx, settings, tables[i].ParentID, tables[i].Name)
-			b.CPut(tkey.Key(), tables[i].ID, nil)
+			b.CPut(tkey.Key(keys.SystemSQLCodec), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
@@ -500,7 +500,7 @@ func WriteTableDescs(
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn); err != nil {
+			if err := table.Validate(ctx, txn, keys.SystemSQLCodec); err != nil {
 				return errors.Wrapf(err,
 					"validate table %d", errors.Safe(table.ID))
 			}
@@ -757,11 +757,11 @@ func restore(
 // returned an error prior to this.
 func loadBackupSQLDescs(
 	ctx context.Context,
+	p sql.PlanHookState,
 	details jobspb.RestoreDetails,
-	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *roachpb.FileEncryptionOptions,
 ) ([]BackupManifest, BackupManifest, []sqlbase.Descriptor, error) {
-	backupManifests, err := loadBackupManifests(ctx, details.URIs, makeExternalStorageFromURI, encryption)
+	backupManifests, err := loadBackupManifests(ctx, details.URIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
 		return nil, BackupManifest{}, nil, err
 	}
@@ -770,7 +770,7 @@ func loadBackupSQLDescs(
 	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
 	// writing old-style descs in RestoreDetails (unless a job persists across
 	// an upgrade?).
-	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, true /* skipFKsWithNoMatchingTable */); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, p.ExecCfg().Codec, true /* skipFKsWithNoMatchingTable */); err != nil {
 		return nil, BackupManifest{}, nil, err
 	}
 
@@ -951,7 +951,7 @@ func (r *restoreResumer) Resume(
 	p := phs.(sql.PlanHookState)
 
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
-		ctx, details, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, details.Encryption,
+		ctx, p, details, details.Encryption,
 	)
 	if err != nil {
 		return err
@@ -1083,12 +1083,12 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			tableDesc := *tbl
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
+			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
 			if err != nil {
 				return errors.Wrap(err, "validating table descriptor has not changed")
 			}
 			b.CPut(
-				sqlbase.MakeDescMetadataKey(tableDesc.ID),
+				sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
 				sqlbase.WrapDescriptor(&tableDesc),
 				existingDescVal,
 			)
@@ -1158,16 +1158,16 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 		tableDesc := *tbl
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_DROP
-		err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tbl.ParentID, tbl.Name)
+		err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
-		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
+		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
 		b.CPut(
-			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
 			sqlbase.WrapDescriptor(&tableDesc),
 			existingDescVal,
 		)
@@ -1213,9 +1213,9 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 		}
 
 		if isDBEmpty {
-			descKey := sqlbase.MakeDescMetadataKey(dbDesc.ID)
+			descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.ID)
 			b.Del(descKey)
-			b.Del(sqlbase.NewDatabaseKey(dbDesc.Name).Key())
+			b.Del(sqlbase.NewDatabaseKey(dbDesc.Name).Key(keys.SystemSQLCodec))
 		}
 	}
 	if err := txn.Run(ctx, b); err != nil {

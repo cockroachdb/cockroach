@@ -483,7 +483,7 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID

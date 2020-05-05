@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -53,7 +54,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		CREATE VIEW t.vw AS SELECT k, k+1 FROM t.a;`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	descA := sqlbase.GetTableDescriptor(s.DB(), "t", "a")
+	descA := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(10 /* cacheSize */, s.GossipI().(*gossip.Gossip), kvDB, executor)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -92,7 +93,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Ensure that attempt to refresh stats on view does not result in re-
 	// enqueuing the attempt.
 	// TODO(rytaft): Should not enqueue views to begin with.
-	descVW := sqlbase.GetTableDescriptor(s.DB(), "t", "vw")
+	descVW := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descVW.ID, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
@@ -123,7 +124,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		INSERT INTO t.a VALUES (1);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	tableID := sqlbase.GetTableDescriptor(s.DB(), "t", "a").ID
+	tableID := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
 	cache := NewTableStatisticsCache(10 /* cacheSize */, s.GossipI().(*gossip.Gossip), kvDB, executor)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 

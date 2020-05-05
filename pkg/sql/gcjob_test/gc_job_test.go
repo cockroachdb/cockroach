@@ -81,11 +81,11 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			var myOtherTableDesc *sqlbase.TableDescriptor
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
-				myTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, myTableID)
+				myTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myTableID)
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, myOtherTableID)
+				myOtherTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
 				return err
 			}); err != nil {
 				t.Fatal(err)
@@ -145,10 +145,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				descKey := sqlbase.MakeDescMetadataKey(myTableID)
+				descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
 				descDesc := sqlbase.WrapDescriptor(myTableDesc)
 				b.Put(descKey, descDesc)
-				descKey2 := sqlbase.MakeDescMetadataKey(myOtherTableID)
+				descKey2 := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
 				descDesc2 := sqlbase.WrapDescriptor(myOtherTableDesc)
 				b.Put(descKey2, descDesc2)
 				return txn.Run(ctx, b)
@@ -196,13 +196,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
-				myTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, myTableID)
+				myTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myTableID)
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
 				}
-				myOtherTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, myOtherTableID)
+				myOtherTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")

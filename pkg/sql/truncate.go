@@ -196,13 +196,13 @@ func (p *planner) truncateTable(
 		tableDesc.ParentID,
 		tableDesc.GetParentSchemaID(),
 		tableDesc.GetName(),
-	).Key()
+	).Key(p.ExecCfg().Codec)
 	key := sqlbase.MakeObjectNameKey(
 		ctx, p.ExecCfg().Settings,
 		newTableDesc.ParentID,
 		newTableDesc.GetParentSchemaID(),
 		newTableDesc.Name,
-	).Key()
+	).Key(p.ExecCfg().Codec)
 
 	b := &kv.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.

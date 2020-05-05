@@ -59,7 +59,13 @@ import (
 // RemoveObjectNamespaceEntry removes entries from both the deprecated and
 // new system.namespace table (if one exists).
 func RemoveObjectNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, parentID ID, parentSchemaID ID, name string, KVTrace bool,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	parentID ID,
+	parentSchemaID ID,
+	name string,
+	KVTrace bool,
 ) error {
 	b := txn.NewBatch()
 	var toDelete []DescriptorKey
@@ -81,7 +87,7 @@ func RemoveObjectNamespaceEntry(
 		if KVTrace {
 			log.VEventf(ctx, 2, "Del %s", delKey)
 		}
-		b.Del(delKey.Key())
+		b.Del(delKey.Key(codec))
 	}
 	return txn.Run(ctx, b)
 }
@@ -89,23 +95,25 @@ func RemoveObjectNamespaceEntry(
 // RemovePublicTableNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for public tables.
 func RemovePublicTableNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, parentID ID, name string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID ID, name string,
 ) error {
-	return RemoveObjectNamespaceEntry(ctx, txn, parentID, keys.PublicSchemaID, name, false /* KVTrace */)
+	return RemoveObjectNamespaceEntry(ctx, txn, codec, parentID, keys.PublicSchemaID, name, false /* KVTrace */)
 }
 
 // RemoveSchemaNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for schemas.
-func RemoveSchemaNamespaceEntry(ctx context.Context, txn *kv.Txn, parentID ID, name string) error {
-	return RemoveObjectNamespaceEntry(ctx, txn, parentID, keys.RootNamespaceID, name, false /* KVTrace */)
+func RemoveSchemaNamespaceEntry(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID ID, name string,
+) error {
+	return RemoveObjectNamespaceEntry(ctx, txn, codec, parentID, keys.RootNamespaceID, name, false /* KVTrace */)
 }
 
 // RemoveDatabaseNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for databases.
 func RemoveDatabaseNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, name string, KVTrace bool,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string, KVTrace bool,
 ) error {
-	return RemoveObjectNamespaceEntry(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name, KVTrace)
+	return RemoveObjectNamespaceEntry(ctx, txn, codec, keys.RootNamespaceID, keys.RootNamespaceID, name, KVTrace)
 }
 
 // MakeObjectNameKey returns a key in the system.namespace table for
@@ -149,7 +157,12 @@ func MakeDatabaseNameKey(
 // (parentID, parentSchemaID, name) supplied. If cluster version < 20.1,
 // the parentSchemaID is ignored.
 func LookupObjectID(
-	ctx context.Context, txn *kv.Txn, parentID ID, parentSchemaID ID, name string,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	parentID ID,
+	parentSchemaID ID,
+	name string,
 ) (bool, ID, error) {
 	var key DescriptorKey
 	if parentID == keys.RootNamespaceID {
@@ -159,8 +172,8 @@ func LookupObjectID(
 	} else {
 		key = NewTableKey(parentID, parentSchemaID, name)
 	}
-	log.Eventf(ctx, "looking up descriptor ID for name key %q", key.Key())
-	res, err := txn.Get(ctx, key.Key())
+	log.Eventf(ctx, "looking up descriptor ID for name key %q", key.Key(codec))
+	res, err := txn.Get(ctx, key.Key(codec))
 	if err != nil {
 		return false, InvalidID, err
 	}
@@ -190,8 +203,8 @@ func LookupObjectID(
 	} else {
 		dKey = NewDeprecatedTableKey(parentID, name)
 	}
-	log.Eventf(ctx, "looking up descriptor ID for name key %q", dKey.Key())
-	res, err = txn.Get(ctx, dKey.Key())
+	log.Eventf(ctx, "looking up descriptor ID for name key %q", dKey.Key(codec))
+	res, err = txn.Get(ctx, dKey.Key(codec))
 	if err != nil {
 		return false, InvalidID, err
 	}
@@ -203,12 +216,14 @@ func LookupObjectID(
 
 // LookupPublicTableID is a wrapper around LookupObjectID for public tables.
 func LookupPublicTableID(
-	ctx context.Context, txn *kv.Txn, parentID ID, name string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID ID, name string,
 ) (bool, ID, error) {
-	return LookupObjectID(ctx, txn, parentID, keys.PublicSchemaID, name)
+	return LookupObjectID(ctx, txn, codec, parentID, keys.PublicSchemaID, name)
 }
 
 // LookupDatabaseID is  a wrapper around LookupObjectID for databases.
-func LookupDatabaseID(ctx context.Context, txn *kv.Txn, name string) (bool, ID, error) {
-	return LookupObjectID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
+func LookupDatabaseID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
+) (bool, ID, error) {
+	return LookupObjectID(ctx, txn, codec, keys.RootNamespaceID, keys.RootNamespaceID, name)
 }

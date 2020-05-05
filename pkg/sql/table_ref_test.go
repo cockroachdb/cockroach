@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -41,7 +42,7 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Retrieve the numeric descriptors.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tID := tableDesc.ID
 	var aID, bID, cID sqlbase.ColumnID
 	for i := range tableDesc.Columns {
@@ -59,7 +60,7 @@ CREATE INDEX bc ON test.t(b, c);
 	secID := tableDesc.Indexes[0].ID
 
 	// Retrieve the numeric descriptors.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, "test", "hidden")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
 	tIDHidden := tableDesc.ID
 	var rowIDHidden sqlbase.ColumnID
 	for i := range tableDesc.Columns {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -61,11 +62,11 @@ func TestGetDescriptorFromDB(t *testing.T) {
 			return err
 		}
 		batch := txn.NewBatch()
-		batch.Put(sqlbase.NewDatabaseKey("bob").Key(), 9999)
-		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(), 10000)
+		batch.Put(sqlbase.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), 9999)
+		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), 10000)
 
-		batch.Put(sqlbase.MakeDescMetadataKey(9999), sqlbase.WrapDescriptor(bobDesc))
-		batch.Put(sqlbase.MakeDescMetadataKey(10000), sqlbase.WrapDescriptor(aliceDesc))
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 9999), sqlbase.WrapDescriptor(bobDesc))
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 10000), sqlbase.WrapDescriptor(aliceDesc))
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)

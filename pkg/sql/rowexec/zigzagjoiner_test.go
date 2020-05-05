@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -183,17 +184,17 @@ func TestZigzagJoiner(t *testing.T) {
 		true, /* shouldPrint */
 	)
 
-	empty := sqlbase.GetTableDescriptor(kvDB, "test", "empty")
-	single := sqlbase.GetTableDescriptor(kvDB, "test", "single")
-	smallDesc := sqlbase.GetTableDescriptor(kvDB, "test", "small")
-	medDesc := sqlbase.GetTableDescriptor(kvDB, "test", "med")
-	highRangeDesc := sqlbase.GetTableDescriptor(kvDB, "test", "offset")
-	overlappingDesc := sqlbase.GetTableDescriptor(kvDB, "test", "overlapping")
-	compDesc := sqlbase.GetTableDescriptor(kvDB, "test", "comp")
-	revCompDesc := sqlbase.GetTableDescriptor(kvDB, "test", "rev")
-	compUnqDesc := sqlbase.GetTableDescriptor(kvDB, "test", "unq")
-	t2Desc := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
-	nullableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "nullable")
+	empty := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "empty")
+	single := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "single")
+	smallDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "small")
+	medDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "med")
+	highRangeDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "offset")
+	overlappingDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "overlapping")
+	compDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "comp")
+	revCompDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "rev")
+	compUnqDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "unq")
+	t2Desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	nullableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "nullable")
 
 	testCases := []zigzagJoinerTestCase{
 		{
@@ -565,7 +566,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		1, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn, sqlutils.RowIdxFn, sqlutils.RowIdxFn),
 	)
-	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	td := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)

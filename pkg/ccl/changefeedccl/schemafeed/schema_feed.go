@@ -190,7 +190,7 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		txn.SetFixedTimestamp(ctx, initialTableDescTs)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range tf.targets {
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, tableID)
 			if err != nil {
 				return err
 			}

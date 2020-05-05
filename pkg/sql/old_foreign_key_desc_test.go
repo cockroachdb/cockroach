@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -44,8 +45,8 @@ CREATE INDEX ON t.t1 (x);
 `); err != nil {
 		t.Fatal(err)
 	}
-	desc := sqlbase.GetTableDescriptor(kvDB, "t", "t1")
-	desc = sqlbase.GetTableDescriptor(kvDB, "t", "t2")
+	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t1")
+	desc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
 	// Remember the old foreign keys.
 	oldInboundFKs := append([]sqlbase.ForeignKeyConstraint{}, desc.InboundFKs...)
 	// downgradeForeignKey downgrades a table descriptor's foreign key representation
@@ -59,7 +60,7 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			referencedTbl, err := sqlbase.GetTableDescFromID(ctx, kvDB, fk.ReferencedTableID)
+			referencedTbl, err := sqlbase.GetTableDescFromID(ctx, kvDB, keys.SystemSQLCodec, fk.ReferencedTableID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -86,7 +87,7 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			originTbl, err := sqlbase.GetTableDescFromID(ctx, kvDB, fk.OriginTableID)
+			originTbl, err := sqlbase.GetTableDescFromID(ctx, kvDB, keys.SystemSQLCodec, fk.OriginTableID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -107,7 +108,7 @@ CREATE INDEX ON t.t1 (x);
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		newDesc := downgradeForeignKey(desc)
-		if err := writeDescToBatch(ctx, false, s.ClusterSettings(), b, desc.ID, newDesc); err != nil {
+		if err := writeDescToBatch(ctx, false, s.ClusterSettings(), b, keys.SystemSQLCodec, desc.ID, newDesc); err != nil {
 			return err
 		}
 		return txn.Run(ctx, b)
@@ -119,7 +120,7 @@ CREATE INDEX ON t.t1 (x);
 	if _, err := sqlDB.Exec(`DROP INDEX t.t1@t1_auto_index_fk1`); err != nil {
 		t.Fatal(err)
 	}
-	desc = sqlbase.GetTableDescriptor(kvDB, "t", "t2")
+	desc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
 	// Remove the validity field on all the descriptors for comparison, since
 	// foreign keys on the referenced side's validity is not always updated correctly.
 	for i := range desc.InboundFKs {

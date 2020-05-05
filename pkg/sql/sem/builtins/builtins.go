@@ -2822,7 +2822,7 @@ may increase either contention or retry errors, or both.`,
 					return nil, pgerror.Newf(pgcode.DatatypeMismatch, "expected tuple argument for row_tuple, found %s", args[2])
 				}
 
-				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
+				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, ctx.Codec, sqlbase.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
@@ -3217,7 +3217,7 @@ may increase either contention or retry errors, or both.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeography(args[2])
-				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
+				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, ctx.Codec, sqlbase.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
@@ -3250,7 +3250,7 @@ may increase either contention or retry errors, or both.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeometry(args[2])
-				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
+				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, ctx.Codec, sqlbase.ID(tableID))
 				if err != nil {
 					return nil, err
 				}

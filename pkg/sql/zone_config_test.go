@@ -33,7 +33,7 @@ import (
 )
 
 var configID = sqlbase.ID(1)
-var configDescKey = sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
+var configDescKey = sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
