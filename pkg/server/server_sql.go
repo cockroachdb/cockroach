@@ -408,7 +408,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		TableStatsCache: stats.NewTableStatisticsCache(
 			cfg.SQLTableStatCacheSize,
-			cfg.gossip.Deprecated(47925),
+			cfg.gossip,
 			cfg.db,
 			cfg.circularInternalExecutor,
 		),
