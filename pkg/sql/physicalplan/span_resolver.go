@@ -139,7 +139,7 @@ func NewSpanResolver(
 		nodeDesc: nodeDesc,
 		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
 			Settings:         st,
-			Gossip:           gw.Deprecated(48432),
+			Gossip:           gw.DeprecatedOracleGossip(48432),
 			NodeDesc:         nodeDesc,
 			RPCContext:       rpcCtx,
 			LeaseHolderCache: distSender.LeaseHolderCache(),
