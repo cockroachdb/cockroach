@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -104,8 +104,8 @@ type flowEntry struct {
 type FlowRegistry struct {
 	syncutil.Mutex
 
-	// nodeID is the ID of the current node. Used for debugging.
-	nodeID roachpb.NodeID
+	// instID is the instance ID of the current server. Used for debugging.
+	instID base.SQLInstanceID
 
 	// All fields in the flowEntry's are protected by the FlowRegistry mutex,
 	// except flow, whose methods can be called freely.
@@ -126,11 +126,11 @@ type FlowRegistry struct {
 
 // NewFlowRegistry creates a new FlowRegistry.
 //
-// nodeID is the ID of the current node. Used for debugging; pass 0 if you don't
+// instID is the ID of the current node. Used for debugging; pass 0 if you don't
 // care.
-func NewFlowRegistry(nodeID roachpb.NodeID) *FlowRegistry {
+func NewFlowRegistry(instID base.SQLInstanceID) *FlowRegistry {
 	fr := &FlowRegistry{
-		nodeID: nodeID,
+		instID: instID,
 		flows:  make(map[execinfrapb.FlowID]*flowEntry),
 	}
 	fr.flowDone = sync.NewCond(fr)
@@ -196,17 +196,17 @@ func (fr *FlowRegistry) RegisterFlow(
 	}()
 	if fr.draining {
 		return errors.Errorf(
-			"could not register flowID %d on node %d because the registry is draining",
+			"could not register flowID %d on node %s because the registry is draining",
 			id,
-			fr.nodeID,
+			fr.instID,
 		)
 	}
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
 		return errors.Errorf(
-			"flow already registered: current node ID: %d flowID: %s.\n"+
+			"flow already registered: current node ID: %s flowID: %s.\n"+
 				"Current flow: %+v\nExisting flow: %+v",
-			fr.nodeID, f.spec.FlowID, f.spec, entry.flow.spec)
+			fr.instID, f.spec.FlowID, f.spec, entry.flow.spec)
 	}
 	// Take a reference that will be removed by UnregisterFlow.
 	entry.refCount++
