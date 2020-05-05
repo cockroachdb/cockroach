@@ -23,7 +23,13 @@ send "$argv start-single-node -s=path=logs/db --insecure --logtostderr --vmodule
 eexpect "CockroachDB node starting"
 system "killall cat"
 eexpect ":/# "
-system "grep -F 'log: exiting because of error: write /dev/stderr: broken pipe' logs/db/logs/cockroach.log"
+# NB: we can't just grep for the broken pipe output, because it may take
+# a while for the server to initiate the next log line where it will detect
+# the broken pipe error.
+send "tail -f logs/db/logs/cockroach.log\r"
+eexpect "log: exiting because of error: write /dev/stderr: broken pipe"
+interrupt
+eexpect ":/# "
 end_test
 
 start_test "Check that a broken log file prints a message to stderr."
