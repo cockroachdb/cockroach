@@ -257,6 +257,7 @@ func startConnExecutor(
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	gw := gossip.MakeDeprecatedGossip(nil, true /* exposed */)
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
 		Settings:        st,
@@ -279,14 +280,14 @@ func startConnExecutor(
 				NodeID:         nodeID,
 			}),
 			nil, /* distSender */
-			nil, /* gossip */
+			gw,
 			stopper,
 			dummyLivenessProvider{}, /* liveness */
 			nil,                     /* nodeDialer */
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
-		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, gossip.DeprecatedGossip{}, st),
+		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, gw, st),
 	}
 	pool := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,

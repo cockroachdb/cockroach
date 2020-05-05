@@ -400,7 +400,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
-			cfg.gossip.Deprecated(distsql.MultiTenancyIssueNo),
+			cfg.gossip,
 			cfg.stopper,
 			cfg.nodeLiveness,
 			cfg.nodeDialer,
