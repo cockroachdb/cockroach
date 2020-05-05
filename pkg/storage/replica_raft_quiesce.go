@@ -37,6 +37,11 @@ func (r *Replica) quiesceLocked() bool {
 		}
 		return false
 	}
+	// Note that we're not calling r.hasPendingProposalQuotaRLocked(). That has
+	// been checked on the leaseholder before deciding to quiesce. There's no
+	// point in checking it followers since the quota is reset when the lease
+	// changes.
+
 	if !r.mu.quiescent {
 		if log.V(3) {
 			log.Infof(ctx, "quiescing %d", r.RangeID)
@@ -169,6 +174,7 @@ type quiescer interface {
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
+	hasPendingProposalQuotaRLocked() bool
 	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
@@ -187,6 +193,16 @@ func shouldReplicaQuiesce(
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: proposals pending")
+		}
+		return nil, false
+	}
+	// Don't quiesce if there's outstanding quota - it can lead to deadlock. This
+	// condition is largely subsumed by the upcoming replication state check,
+	// except that the conditions for replica availability are different, and the
+	// timing of releasing quota is unrelated to this function.
+	if q.hasPendingProposalQuotaRLocked() {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: replication quota outstanding")
 		}
 		return nil, false
 	}
