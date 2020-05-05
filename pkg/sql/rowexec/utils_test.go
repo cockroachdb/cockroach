@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 // runProcessorTest instantiates a processor with the provided spec, runs it
@@ -90,4 +91,95 @@ type rowsAccessor interface {
 
 func (s *sorterBase) getRows() *rowcontainer.DiskBackedRowContainer {
 	return s.rows.(*rowcontainer.DiskBackedRowContainer)
+}
+
+type rowGeneratingSource struct {
+	types              []types.T
+	fn                 sqlutils.GenRowFn
+	scratchEncDatumRow sqlbase.EncDatumRow
+
+	rowIdx  int
+	maxRows int
+}
+
+// newRowGeneratingSource creates a new rowGeneratingSource with the given fn
+// and a maximum number of rows to generate. Can be reset using Reset.
+func newRowGeneratingSource(
+	types []types.T, fn sqlutils.GenRowFn, maxRows int,
+) *rowGeneratingSource {
+	return &rowGeneratingSource{types: types, fn: fn, rowIdx: 1, maxRows: maxRows}
+}
+
+func (r *rowGeneratingSource) OutputTypes() []types.T { return r.types }
+
+func (r *rowGeneratingSource) Start(ctx context.Context) context.Context { return ctx }
+
+func (r *rowGeneratingSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if r.rowIdx > r.maxRows {
+		// Done.
+		return nil, nil
+	}
+
+	datumRow := r.fn(r.rowIdx)
+	if cap(r.scratchEncDatumRow) < len(datumRow) {
+		r.scratchEncDatumRow = make(sqlbase.EncDatumRow, len(datumRow))
+	} else {
+		r.scratchEncDatumRow = r.scratchEncDatumRow[:len(datumRow)]
+	}
+
+	for i := range r.scratchEncDatumRow {
+		r.scratchEncDatumRow[i] = sqlbase.DatumToEncDatum(&r.types[i], datumRow[i])
+	}
+	r.rowIdx++
+	return r.scratchEncDatumRow, nil
+}
+
+// Reset resets this rowGeneratingSource so that the next rowIdx passed to the
+// generating function is 1.
+func (r *rowGeneratingSource) Reset() {
+	r.rowIdx = 1
+}
+
+func (r *rowGeneratingSource) ConsumerDone() {}
+
+func (r *rowGeneratingSource) ConsumerClosed() {}
+
+// rowDisposer is a RowReceiver that discards any rows Push()ed.
+type rowDisposer struct {
+	bufferedMeta    []execinfrapb.ProducerMetadata
+	numRowsDisposed int
+}
+
+var _ execinfra.RowReceiver = &rowDisposer{}
+
+// Push is part of the distsql.RowReceiver interface.
+func (r *rowDisposer) Push(
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if row != nil {
+		r.numRowsDisposed++
+	} else if meta != nil {
+		r.bufferedMeta = append(r.bufferedMeta, *meta)
+	}
+	return execinfra.NeedMoreRows
+}
+
+// ProducerDone is part of the RowReceiver interface.
+func (r *rowDisposer) ProducerDone() {}
+
+// Types is part of the RowReceiver interface.
+func (r *rowDisposer) Types() []types.T {
+	return nil
+}
+
+func (r *rowDisposer) ResetNumRowsDisposed() {
+	r.numRowsDisposed = 0
+}
+
+func (r *rowDisposer) NumRowsDisposed() int {
+	return r.numRowsDisposed
+}
+
+func (r *rowDisposer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+	return r.bufferedMeta
 }
