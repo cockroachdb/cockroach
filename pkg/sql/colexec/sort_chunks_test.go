@@ -33,7 +33,7 @@ func init() {
 			description: `three chunks`,
 			tuples:      tuples{{1, 2}, {1, 2}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, 1}},
 			expected:    tuples{{1, 1}, {1, 2}, {1, 2}, {1, 3}, {5, 5}, {6, 1}, {6, 6}},
-			typs:        []types.T{*types.Int, *types.Int},
+			typs:        []*types.T{types.Int, types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -41,7 +41,7 @@ func init() {
 			description: `simple nulls asc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, nil}, {1, 1}, {1, 2}, {1, 3}, {5, 5}, {6, nil}, {6, 6}},
-			typs:        []types.T{*types.Int, *types.Int},
+			typs:        []*types.T{types.Int, types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -49,7 +49,7 @@ func init() {
 			description: `simple nulls desc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, 3}, {1, 2}, {1, 1}, {1, nil}, {5, 5}, {6, 6}, {6, nil}},
-			typs:        []types.T{*types.Int, *types.Int},
+			typs:        []*types.T{types.Int, types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 			matchLen:    1,
 		},
@@ -69,7 +69,7 @@ func init() {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typs:     []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -89,7 +89,7 @@ func init() {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typs:     []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -109,7 +109,7 @@ func init() {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typs:     []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -129,7 +129,7 @@ func init() {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typs:     []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -149,7 +149,7 @@ func init() {
 				{1, 1, 1},
 				{0, 1, 2},
 			},
-			typs:     []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}, {ColIdx: 0}},
 			matchLen: 1,
 		},
@@ -173,7 +173,7 @@ func init() {
 				{1, 1, 2},
 				{1, 2, 2},
 			},
-			typs:     []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []*types.T{types.Int, types.Int, types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 0}, {ColIdx: 1}},
 			matchLen: 2,
 		},
@@ -196,9 +196,9 @@ func TestSortChunksRandomized(t *testing.T) {
 	nTups := 8
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]types.T, maxCols)
+	typs := make([]*types.T, maxCols)
 	for i := range typs {
-		typs[i] = *types.Int
+		typs[i] = types.Int
 	}
 
 	for nCols := 1; nCols < maxCols; nCols++ {
@@ -237,9 +237,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*colmem.Allocator, colexecbase.Operator, []types.T, []execinfrapb.Ordering_Column, int) (colexecbase.Operator, error){
+	sorterConstructors := []func(*colmem.Allocator, colexecbase.Operator, []*types.T, []execinfrapb.Ordering_Column, int) (colexecbase.Operator, error){
 		NewSortChunks,
-		func(allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colexecbase.Operator, error) {
+		func(allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colexecbase.Operator, error) {
 			return NewSorter(allocator, input, inputTypes, orderingCols)
 		},
 	}
@@ -259,9 +259,9 @@ func BenchmarkSortChunks(b *testing.B) {
 								// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 								// batch) * nCols (number of columns / row).
 								b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
-								typs := make([]types.T, nCols)
+								typs := make([]*types.T, nCols)
 								for i := range typs {
-									typs[i] = *types.Int
+									typs[i] = types.Int
 								}
 								batch := testAllocator.NewMemBatch(typs)
 								batch.SetLength(coldata.BatchSize())

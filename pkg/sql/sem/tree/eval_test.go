@@ -190,11 +190,11 @@ func TestEval(t *testing.T) {
 				// caught before execution.
 				return strings.TrimSpace(d.Expected)
 			}
-			typs := []types.T{*typedExpr.ResolvedType()}
+			typs := []*types.T{typedExpr.ResolvedType()}
 
 			// inputTyps has no relation to the actual expression result type. Used
 			// for generating a batch.
-			inputTyps := []types.T{*types.Int}
+			inputTyps := []*types.T{types.Int}
 
 			batchesReturned := 0
 			args := colexec.NewColOperatorArgs{

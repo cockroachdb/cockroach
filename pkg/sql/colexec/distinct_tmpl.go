@@ -41,7 +41,7 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input colexecbase.Operator, distinctCols []uint32, typs []types.T,
+	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
 ) (colexecbase.Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
@@ -55,7 +55,7 @@ func OrderedDistinctColsToOperators(
 		ok  bool
 	)
 	for i := range distinctCols {
-		input, err = newSingleDistinct(input, int(distinctCols[i]), distinctCol, &typs[distinctCols[i]])
+		input, err = newSingleDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -78,7 +78,7 @@ var _ resettableOperator = &distinctChainOps{}
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given types.
 func NewOrderedDistinct(
-	input colexecbase.Operator, distinctCols []uint32, typs []types.T,
+	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
 ) (colexecbase.Operator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {

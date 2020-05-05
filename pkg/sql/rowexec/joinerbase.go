@@ -48,8 +48,8 @@ func (jb *joinerBase) init(
 	self execinfra.RowSource,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []*types.T,
+	rightTypes []*types.T,
 	jType sqlbase.JoinType,
 	onExpr execinfrapb.Expression,
 	leftEqColumns []uint32,
@@ -69,11 +69,11 @@ func (jb *joinerBase) init(
 
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(&leftTypes[i], tree.DNull)
+		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], tree.DNull)
 	}
 	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i] = sqlbase.DatumToEncDatum(&rightTypes[i], tree.DNull)
+		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], tree.DNull)
 	}
 
 	jb.eqCols[leftSide] = leftEqColumns
@@ -83,11 +83,11 @@ func (jb *joinerBase) init(
 	size := len(leftTypes) + jb.numMergedEqualityColumns + len(rightTypes)
 	jb.combinedRow = make(sqlbase.EncDatumRow, size)
 
-	condTypes := make([]types.T, 0, size)
+	condTypes := make([]*types.T, 0, size)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
 		ltype := leftTypes[jb.eqCols[leftSide][idx]]
 		rtype := rightTypes[jb.eqCols[rightSide][idx]]
-		var ctype types.T
+		var ctype *types.T
 		if ltype.Family() != types.UnknownFamily {
 			ctype = ltype
 		} else {

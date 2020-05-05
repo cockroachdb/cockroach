@@ -144,7 +144,7 @@ func newChangeAggregatorProcessor(
 	return ca, nil
 }
 
-func (ca *changeAggregator) OutputTypes() []types.T {
+func (ca *changeAggregator) OutputTypes() []*types.T {
 	return changefeedResultTypes
 }
 
@@ -532,7 +532,7 @@ func newChangeFrontierProcessor(
 	return cf, nil
 }
 
-func (cf *changeFrontier) OutputTypes() []types.T {
+func (cf *changeFrontier) OutputTypes() []*types.T {
 	return changefeedResultTypes
 }
 
@@ -699,7 +699,7 @@ func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMeta
 }
 
 func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
-	if err := d.EnsureDecoded(&changefeedResultTypes[0], &cf.a); err != nil {
+	if err := d.EnsureDecoded(changefeedResultTypes[0], &cf.a); err != nil {
 		return err
 	}
 	raw, ok := d.Datum.(*tree.DBytes)

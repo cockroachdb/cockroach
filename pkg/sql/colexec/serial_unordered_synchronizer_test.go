@@ -31,7 +31,7 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	const numInputs = 3
 	const numBatches = 4
 
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	inputs := make([]colexecbase.Operator, numInputs)
 	for i := range inputs {
 		batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())

@@ -302,7 +302,7 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 
 		// Decode the histogram data so that it's usable by the opt catalog.
 		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
-		typ := &res.HistogramData.ColumnType
+		typ := res.HistogramData.ColumnType
 		var a sqlbase.DatumAlloc
 		for i := range res.Histogram {
 			bucket := &res.HistogramData.Buckets[i]

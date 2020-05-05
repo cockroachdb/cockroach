@@ -82,7 +82,7 @@ type joinReader struct {
 	shouldLimitBatches bool
 
 	input      execinfra.RowSource
-	inputTypes []types.T
+	inputTypes []*types.T
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
 	lookupCols []uint32

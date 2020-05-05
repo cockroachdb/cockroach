@@ -63,7 +63,7 @@ func TestSpillingQueue(t *testing.T) {
 					NumBatches: cap(batches),
 					BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 					Nulls:      true,
-					BatchAccumulator: func(b coldata.Batch, typs []types.T) {
+					BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
 						batches = append(batches, coldatatestutils.CopyBatch(b, typs))
 					},
 				})

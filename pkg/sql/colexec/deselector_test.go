@@ -26,37 +26,37 @@ import (
 func TestDeselector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
-		typs     []types.T
+		typs     []*types.T
 		tuples   []tuple
 		sel      []int
 		expected []tuple
 	}{
 		{
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      nil,
 			expected: tuples{{0}, {1}, {2}},
 		},
 		{
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{},
 			expected: tuples{},
 		},
 		{
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{1},
 			expected: tuples{{1}},
 		},
 		{
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{0, 2},
 			expected: tuples{{0}, {2}},
 		},
 		{
-			typs:     []types.T{*types.Int},
+			typs:     []*types.T{types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{0, 1, 2},
 			expected: tuples{{0}, {1}, {2}},
@@ -80,10 +80,10 @@ func BenchmarkDeselector(b *testing.B) {
 	ctx := context.Background()
 
 	nCols := 1
-	inputTypes := make([]types.T, nCols)
+	inputTypes := make([]*types.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		inputTypes[colIdx] = *types.Int
+		inputTypes[colIdx] = types.Int
 	}
 
 	batch := testAllocator.NewMemBatch(inputTypes)

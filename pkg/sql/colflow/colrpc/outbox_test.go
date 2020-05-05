@@ -32,7 +32,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 	var (
 		input    = colexecbase.NewBatchBuffer()
-		typs     = []types.T{*types.Int}
+		typs     = []*types.T{types.Int}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	outbox, err := NewOutbox(testAllocator, input, typs, nil /* metadataSources */, nil /* toClose */)
@@ -82,7 +82,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 	var (
 		input = colexecbase.NewBatchBuffer()
-		typs  = []types.T{*types.Int}
+		typs  = []*types.T{types.Int}
 	)
 
 	// Define common function that returns both an Outbox and a pointer to a

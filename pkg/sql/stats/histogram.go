@@ -69,7 +69,7 @@ func EquiDepthHistogram(
 		Buckets: make([]HistogramData_Bucket, 0, numBuckets),
 	}
 	lowerBound := samples[0]
-	h.ColumnType = *lowerBound.ResolvedType()
+	h.ColumnType = lowerBound.ResolvedType()
 	var distinctCountRange, distinctCountEq float64
 
 	// i keeps track of the current sample and advances as we form buckets.

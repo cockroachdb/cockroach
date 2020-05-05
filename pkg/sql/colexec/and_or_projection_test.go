@@ -194,12 +194,12 @@ func TestAndOrOps(t *testing.T) {
 				runner(
 					t,
 					[]tuples{tc.tuples},
-					[][]types.T{{*types.Bool, *types.Bool}},
+					[][]*types.T{{types.Bool, types.Bool}},
 					tc.expected,
 					orderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						projOp, err := createTestProjectingOperator(
-							ctx, flowCtx, input[0], []types.T{*types.Bool, *types.Bool},
+							ctx, flowCtx, input[0], []*types.T{types.Bool, types.Bool},
 							fmt.Sprintf("@1 %s @2", test.operation), false, /* canFallbackToRowexec */
 						)
 						if err != nil {
@@ -229,7 +229,7 @@ func benchmarkLogicalProjOp(
 	}
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := testAllocator.NewMemBatch([]types.T{*types.Bool, *types.Bool})
+	batch := testAllocator.NewMemBatch([]*types.T{types.Bool, types.Bool})
 	col1 := batch.ColVec(0).Bool()
 	col2 := batch.ColVec(0).Bool()
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -256,7 +256,7 @@ func benchmarkLogicalProjOp(
 			sel[i] = i
 		}
 	}
-	typs := []types.T{*types.Bool, *types.Bool}
+	typs := []*types.T{types.Bool, types.Bool}
 	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	logicalProjOp, err := createTestProjectingOperator(
 		ctx, flowCtx, input, typs,

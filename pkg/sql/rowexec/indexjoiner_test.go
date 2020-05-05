@@ -74,7 +74,7 @@ func TestIndexJoiner(t *testing.T) {
 		desc        *sqlbase.TableDescriptor
 		post        execinfrapb.PostProcessSpec
 		input       sqlbase.EncDatumRows
-		outputTypes []types.T
+		outputTypes []*types.T
 		expected    sqlbase.EncDatumRows
 	}{
 		{
@@ -116,7 +116,7 @@ func TestIndexJoiner(t *testing.T) {
 				{v[5], v[1]},
 				{v[5], v[0]},
 			},
-			outputTypes: []types.T{*types.String},
+			outputTypes: []*types.T{types.String},
 			expected: sqlbase.EncDatumRows{
 				{sqlbase.StrEncDatum("one")},
 				{sqlbase.StrEncDatum("five")},

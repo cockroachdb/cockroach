@@ -123,10 +123,10 @@ func (b *bank) Hooks() workload.Hooks {
 	}
 }
 
-var bankTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
+var bankTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Bytes,
 }
 
 // Tables implements the Generator interface.

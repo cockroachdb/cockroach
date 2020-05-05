@@ -65,12 +65,12 @@ type generateLocals struct {
 	uuidAlloc uuid.UUID
 }
 
-var itemTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Float,
-	*types.Bytes,
+var itemTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Float,
+	types.Bytes,
 }
 
 func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -102,16 +102,16 @@ func (w *tpcc) tpccItemStats() []workload.JSONStatistic {
 	}
 }
 
-var warehouseTypes = []types.T{
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Float,
-	*types.Float,
+var warehouseTypes = []*types.T{
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Float,
+	types.Float,
 }
 
 func (w *tpcc) tpccWarehouseInitialRowBatch(
@@ -154,24 +154,24 @@ func (w *tpcc) tpccWarehouseStats() []workload.JSONStatistic {
 	}
 }
 
-var stockTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
+var stockTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
 }
 
 func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -230,18 +230,18 @@ func (w *tpcc) tpccStockStats() []workload.JSONStatistic {
 	}
 }
 
-var districtTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Float,
-	*types.Float,
-	*types.Int,
+var districtTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Float,
+	types.Float,
+	types.Int,
 }
 
 func (w *tpcc) tpccDistrictInitialRowBatch(
@@ -293,28 +293,28 @@ func (w *tpcc) tpccDistrictStats() []workload.JSONStatistic {
 	}
 }
 
-var customerTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Bytes,
-	*types.Float,
-	*types.Float,
-	*types.Float,
-	*types.Float,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
+var customerTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Float,
+	types.Float,
+	types.Float,
+	types.Float,
+	types.Int,
+	types.Int,
+	types.Bytes,
 }
 
 func (w *tpcc) tpccCustomerInitialRowBatch(
@@ -405,16 +405,16 @@ func (w *tpcc) tpccCustomerStats() []workload.JSONStatistic {
 	}
 }
 
-var historyTypes = []types.T{
-	*types.Bytes,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Float,
-	*types.Bytes,
+var historyTypes = []*types.T{
+	types.Bytes,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Float,
+	types.Bytes,
 }
 
 func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -468,15 +468,15 @@ func (w *tpcc) tpccHistoryStats() []workload.JSONStatistic {
 	}
 }
 
-var orderTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Int,
-	*types.Int,
-	*types.Int,
+var orderTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Int,
+	types.Int,
+	types.Int,
 }
 
 func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -555,10 +555,10 @@ func (w *tpcc) tpccOrderStats() []workload.JSONStatistic {
 	}
 }
 
-var newOrderTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int,
+var newOrderTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
 }
 
 func (w *tpcc) tpccNewOrderInitialRowBatch(
@@ -585,17 +585,17 @@ func (w *tpcc) tpccNewOrderStats() []workload.JSONStatistic {
 	}
 }
 
-var orderLineTypes = []types.T{
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Int,
-	*types.Bytes,
-	*types.Int,
-	*types.Float,
-	*types.Bytes,
+var orderLineTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Int,
+	types.Float,
+	types.Bytes,
 }
 
 func (w *tpcc) tpccOrderLineInitialRowBatch(

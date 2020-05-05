@@ -145,7 +145,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				var (
 					err             error
 					wg              sync.WaitGroup
-					typs            = []types.T{*types.Int}
+					typs            = []*types.T{types.Int}
 					hashRouterInput = coldatatestutils.NewRandomDataOp(
 						testAllocator,
 						rng,

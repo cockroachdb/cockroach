@@ -132,10 +132,10 @@ func BenchmarkCastOp(b *testing.B) {
 		},
 	}
 	rng, _ := randutil.NewPseudoRand()
-	for _, typePair := range [][]types.T{
-		{*types.Int, *types.Float},
-		{*types.Int, *types.Decimal},
-		{*types.Float, *types.Decimal},
+	for _, typePair := range [][]*types.T{
+		{types.Int, types.Float},
+		{types.Int, types.Decimal},
+		{types.Float, types.Decimal},
 	} {
 		for _, useSel := range []bool{true, false} {
 			for _, hasNulls := range []bool{true, false} {
@@ -151,13 +151,13 @@ func BenchmarkCastOp(b *testing.B) {
 						if !useSel {
 							selectivity = 1.0
 						}
-						typs := []types.T{typePair[0]}
+						typs := []*types.T{typePair[0]}
 						batch := coldatatestutils.RandomBatchWithSel(
 							testAllocator, rng, typs,
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
 						source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-						op, err := createTestCastOperator(ctx, flowCtx, source, &typePair[0], &typePair[1])
+						op, err := createTestCastOperator(ctx, flowCtx, source, typePair[0], typePair[1])
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))
 						b.ResetTimer()
@@ -182,7 +182,7 @@ func createTestCastOperator(
 	// casting from decimal with the same precision), so we will allow falling
 	// back to row-by-row engine.
 	return createTestProjectingOperator(
-		ctx, flowCtx, input, []types.T{*fromTyp},
+		ctx, flowCtx, input, []*types.T{fromTyp},
 		fmt.Sprintf("@1::%s", toTyp.Name()), true, /* canFallbackToRowexec */
 	)
 }

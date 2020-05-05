@@ -68,7 +68,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 		},
 	}
 
-	types := make([]types.T, 0)
+	types := make([]*types.T, 0)
 	rb := distsqlutils.NewRowBuffer(types, nil /* rows */, distsqlutils.RowBufferArgs{})
 	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &distSQLSrv.memMonitor, &req, rb)
 	if err != nil {

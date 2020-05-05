@@ -600,7 +600,7 @@ func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		subq := &tree.Subquery{
 			Select: &tree.ParenSelect{Select: selectStmt},
 		}
-		subq.SetType(types.MakeTuple([]types.T{*t}))
+		subq.SetType(types.MakeTuple([]*types.T{t}))
 		rhs = subq
 	}
 	op := tree.In
@@ -651,7 +651,7 @@ func makeTuple(s *Smither, typ *types.T, refs colRefs) *tree.Tuple {
 			exprs[i] = makeScalar(s, typ, refs)
 		}
 	}
-	return tree.NewTypedTuple(types.MakeTuple([]types.T{*typ}), exprs)
+	return tree.NewTypedTuple(types.MakeTuple([]*types.T{typ}), exprs)
 }
 
 func makeScalarSubquery(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {

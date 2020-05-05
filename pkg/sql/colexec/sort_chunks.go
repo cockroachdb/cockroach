@@ -30,7 +30,7 @@ import (
 func NewSortChunks(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
 ) (colexecbase.Operator, error) {
@@ -203,7 +203,7 @@ type chunker struct {
 
 	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []types.T
+	inputTypes []*types.T
 	// inputDone indicates whether input has been fully consumed.
 	inputDone bool
 	// alreadySortedCols indicates the columns on which the input is already
@@ -254,13 +254,13 @@ var _ spooler = &chunker{}
 func newChunker(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	alreadySortedCols []uint32,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))
 	for i, col := range alreadySortedCols {
-		partitioners[i], err = newPartitioner(&inputTypes[col])
+		partitioners[i], err = newPartitioner(inputTypes[col])
 		if err != nil {
 			return nil, err
 		}

@@ -867,7 +867,6 @@ type Column struct {
 	Nullable     bool
 	Name         string
 	Type         *types.T
-	ColType      types.T
 	DefaultExpr  *string
 	ComputedExpr *string
 }
@@ -896,29 +895,29 @@ func (tc *Column) DatumType() *types.T {
 
 // ColTypePrecision is part of the cat.Column interface.
 func (tc *Column) ColTypePrecision() int {
-	if tc.ColType.Family() == types.ArrayFamily {
-		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
+	if tc.Type.Family() == types.ArrayFamily {
+		if tc.Type.ArrayContents().Family() == types.ArrayFamily {
 			panic(errors.AssertionFailedf("column type should never be a nested array"))
 		}
-		return int(tc.ColType.ArrayContents().Precision())
+		return int(tc.Type.ArrayContents().Precision())
 	}
-	return int(tc.ColType.Precision())
+	return int(tc.Type.Precision())
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (tc *Column) ColTypeWidth() int {
-	if tc.ColType.Family() == types.ArrayFamily {
-		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
+	if tc.Type.Family() == types.ArrayFamily {
+		if tc.Type.ArrayContents().Family() == types.ArrayFamily {
 			panic(errors.AssertionFailedf("column type should never be a nested array"))
 		}
-		return int(tc.ColType.ArrayContents().Width())
+		return int(tc.Type.ArrayContents().Width())
 	}
-	return int(tc.ColType.Width())
+	return int(tc.Type.Width())
 }
 
 // ColTypeStr is part of the cat.Column interface.
 func (tc *Column) ColTypeStr() string {
-	return tc.ColType.SQLString()
+	return tc.Type.SQLString()
 }
 
 // IsHidden is part of the cat.Column interface.

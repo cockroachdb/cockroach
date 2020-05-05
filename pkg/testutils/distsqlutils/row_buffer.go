@@ -53,7 +53,7 @@ type RowBuffer struct {
 	ConsumerStatus execinfra.ConsumerStatus
 
 	// Schema of the rows in this buffer.
-	types []types.T
+	types []*types.T
 
 	args RowBufferArgs
 }
@@ -83,7 +83,7 @@ type RowBufferArgs struct {
 }
 
 // NewRowBuffer creates a RowBuffer with the given schema and initial rows.
-func NewRowBuffer(types []types.T, rows sqlbase.EncDatumRows, hooks RowBufferArgs) *RowBuffer {
+func NewRowBuffer(types []*types.T, rows sqlbase.EncDatumRows, hooks RowBufferArgs) *RowBuffer {
 	if types == nil {
 		panic("types required")
 	}
@@ -150,12 +150,12 @@ func (rb *RowBuffer) ProducerDone() {
 }
 
 // Types is part of the RowReceiver interface.
-func (rb *RowBuffer) Types() []types.T {
+func (rb *RowBuffer) Types() []*types.T {
 	return rb.types
 }
 
 // OutputTypes is part of the RowSource interface.
-func (rb *RowBuffer) OutputTypes() []types.T {
+func (rb *RowBuffer) OutputTypes() []*types.T {
 	if rb.types == nil {
 		panic("not initialized")
 	}

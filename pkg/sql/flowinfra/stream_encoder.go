@@ -71,7 +71,7 @@ func (se *StreamEncoder) SetHeaderFields(flowID execinfrapb.FlowID, streamID exe
 }
 
 // Init initializes the encoder.
-func (se *StreamEncoder) Init(types []types.T) {
+func (se *StreamEncoder) Init(types []*types.T) {
 	se.infos = make([]execinfrapb.DatumInfo, len(types))
 	for i := range types {
 		se.infos[i].Type = types[i]
@@ -121,7 +121,7 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 	}
 	for i := range row {
 		var err error
-		se.rowBuf, err = row[i].Encode(&se.infos[i].Type, &se.alloc, se.infos[i].Encoding, se.rowBuf)
+		se.rowBuf, err = row[i].Encode(se.infos[i].Type, &se.alloc, se.infos[i].Encoding, se.rowBuf)
 		if err != nil {
 			return err
 		}

@@ -89,7 +89,7 @@ func TestIsNullProjOp(t *testing.T) {
 					projExpr = "IS NOT NULL"
 				}
 				return createTestProjectingOperator(
-					ctx, flowCtx, input[0], []types.T{*types.Int},
+					ctx, flowCtx, input[0], []*types.T{types.Int},
 					fmt.Sprintf("@1 %s", projExpr), false, /* canFallbackToRowexec */
 				)
 			}
@@ -163,7 +163,7 @@ func TestIsNullSelOp(t *testing.T) {
 					selExpr = "IS NOT NULL"
 				}
 				spec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []types.T{*types.Int}}},
+					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},
 					Core: execinfrapb.ProcessorCoreUnion{
 						Noop: &execinfrapb.NoopCoreSpec{},
 					},

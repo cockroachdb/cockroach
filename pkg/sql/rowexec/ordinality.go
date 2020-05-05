@@ -47,9 +47,9 @@ func newOrdinalityProcessor(
 	ctx := flowCtx.EvalCtx.Ctx()
 	o := &ordinalityProcessor{input: input, curCnt: 1}
 
-	colTypes := make([]types.T, len(input.OutputTypes())+1)
+	colTypes := make([]*types.T, len(input.OutputTypes())+1)
 	copy(colTypes, input.OutputTypes())
-	colTypes[len(colTypes)-1] = *types.Int
+	colTypes[len(colTypes)-1] = types.Int
 	if err := o.Init(
 		o,
 		post,

@@ -282,7 +282,7 @@ func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 
 func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) sqlbase.EncDatum {
 	generatedColIdx := colIdx - len(ps.input.OutputTypes())
-	ctyp := &ps.spec.GeneratedColumns[generatedColIdx]
+	ctyp := ps.spec.GeneratedColumns[generatedColIdx]
 	return sqlbase.DatumToEncDatum(ctyp, d)
 }
 

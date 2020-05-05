@@ -33,14 +33,14 @@ type RepeatableRowSource struct {
 	nextRowIdx int
 	rows       sqlbase.EncDatumRows
 	// Schema of rows.
-	types []types.T
+	types []*types.T
 }
 
 var _ RowSource = &RepeatableRowSource{}
 
 // NewRepeatableRowSource creates a RepeatableRowSource with the given schema
 // and rows. types is optional if at least one row is provided.
-func NewRepeatableRowSource(types []types.T, rows sqlbase.EncDatumRows) *RepeatableRowSource {
+func NewRepeatableRowSource(types []*types.T, rows sqlbase.EncDatumRows) *RepeatableRowSource {
 	if types == nil {
 		panic("types required")
 	}
@@ -48,7 +48,7 @@ func NewRepeatableRowSource(types []types.T, rows sqlbase.EncDatumRows) *Repeata
 }
 
 // OutputTypes is part of the RowSource interface.
-func (r *RepeatableRowSource) OutputTypes() []types.T {
+func (r *RepeatableRowSource) OutputTypes() []*types.T {
 	return r.types
 }
 
@@ -116,7 +116,7 @@ func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 // GenerateValuesSpec generates a ValuesCoreSpec that encodes the given rows.
 // We pass the types as well because zero rows are allowed.
 func GenerateValuesSpec(
-	colTypes []types.T, rows sqlbase.EncDatumRows, rowsPerChunk int,
+	colTypes []*types.T, rows sqlbase.EncDatumRows, rowsPerChunk int,
 ) (execinfrapb.ValuesCoreSpec, error) {
 	var spec execinfrapb.ValuesCoreSpec
 	spec.Columns = make([]execinfrapb.DatumInfo, len(colTypes))
@@ -131,7 +131,7 @@ func GenerateValuesSpec(
 		for end := i + rowsPerChunk; i < len(rows) && i < end; i++ {
 			for j, info := range spec.Columns {
 				var err error
-				buf, err = rows[i][j].Encode(&colTypes[j], &a, info.Encoding, buf)
+				buf, err = rows[i][j].Encode(colTypes[j], &a, info.Encoding, buf)
 				if err != nil {
 					return execinfrapb.ValuesCoreSpec{}, err
 				}

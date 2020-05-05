@@ -279,7 +279,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 	expected := strings.Join(results, " ")
 	expected = "[" + expected + "]"
-	if rowStr := rows.String([]types.T{*types.String}); rowStr != expected {
+	if rowStr := rows.String([]*types.T{types.String}); rowStr != expected {
 		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
 	}
 }
@@ -369,13 +369,13 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// value.
 
 	// All our rows have a single integer column.
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 
 	// The left values rows are consecutive values.
 	leftRows := make(sqlbase.EncDatumRows, 20)
 	for i := range leftRows {
 		leftRows[i] = sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
+			sqlbase.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
 		}
 	}
 	leftValuesSpec, err := execinfra.GenerateValuesSpec(typs, leftRows, 10 /* rows per chunk */)
@@ -389,7 +389,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		for j := 1; j <= 4*execinfra.RowChannelBufSize; j++ {
 			rightRows = append(rightRows, sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
+				sqlbase.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
 			})
 		}
 	}

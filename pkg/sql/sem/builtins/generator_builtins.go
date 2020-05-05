@@ -73,7 +73,7 @@ func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 }
 
 var aclexplodeGeneratorType = types.MakeLabeledTuple(
-	[]types.T{*types.Oid, *types.Oid, *types.String, *types.Bool},
+	[]*types.T{types.Oid, types.Oid, types.String, types.Bool},
 	[]string{"grantor", "grantee", "privilege_type", "is_grantable"},
 )
 
@@ -175,13 +175,13 @@ var generators = map[string]builtinDefinition{
 				VarType:    types.AnyArray,
 			},
 			func(args []tree.TypedExpr) *types.T {
-				returnTypes := make([]types.T, len(args))
+				returnTypes := make([]*types.T, len(args))
 				labels := make([]string, len(args))
 				for i, arg := range args {
 					if arg.ResolvedType().Family() == types.UnknownFamily {
 						return tree.UnknownReturnType
 					}
-					returnTypes[i] = *arg.ResolvedType().ArrayContents()
+					returnTypes[i] = arg.ResolvedType().ArrayContents()
 					labels[i] = "unnest"
 				}
 				return types.MakeLabeledTuple(returnTypes, labels)
@@ -199,7 +199,7 @@ var generators = map[string]builtinDefinition{
 					return tree.UnknownReturnType
 				}
 				t := args[0].ResolvedType().ArrayContents()
-				return types.MakeLabeledTuple([]types.T{*t, *types.Int}, expandArrayValueGeneratorLabels)
+				return types.MakeLabeledTuple([]*types.T{t, types.Int}, expandArrayValueGeneratorLabels)
 			},
 			makeExpandArrayGenerator,
 			"Returns the input array as a set of rows with an index",
@@ -306,7 +306,7 @@ type keywordsValueGenerator struct {
 }
 
 var keywordsValueGeneratorType = types.MakeLabeledTuple(
-	[]types.T{*types.String, *types.String, *types.String},
+	[]*types.T{types.String, types.String, types.String},
 	[]string{"word", "catcode", "catdesc"},
 )
 
@@ -502,10 +502,10 @@ type multipleArrayValueGenerator struct {
 // ResolvedType implements the tree.ValueGenerator interface.
 func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
 	arraysN := len(s.arrays)
-	returnTypes := make([]types.T, arraysN)
+	returnTypes := make([]*types.T, arraysN)
 	labels := make([]string, arraysN)
 	for i, arr := range s.arrays {
-		returnTypes[i] = *arr.ParamTyp
+		returnTypes[i] = arr.ParamTyp
 		labels[i] = "unnest"
 	}
 	return types.MakeLabeledTuple(returnTypes, labels)
@@ -605,7 +605,7 @@ var expandArrayValueGeneratorLabels = []string{"x", "n"}
 // ResolvedType implements the tree.ValueGenerator interface.
 func (s *expandArrayValueGenerator) ResolvedType() *types.T {
 	return types.MakeLabeledTuple(
-		[]types.T{*s.avg.array.ParamTyp, *types.Int},
+		[]*types.T{s.avg.array.ParamTyp, types.Int},
 		expandArrayValueGeneratorLabels,
 	)
 }
@@ -936,12 +936,12 @@ var jsonEachTextImpl = makeGeneratorOverload(
 var jsonEachGeneratorLabels = []string{"key", "value"}
 
 var jsonEachGeneratorType = types.MakeLabeledTuple(
-	[]types.T{*types.String, *types.Jsonb},
+	[]*types.T{types.String, types.Jsonb},
 	jsonEachGeneratorLabels,
 )
 
 var jsonEachTextGeneratorType = types.MakeLabeledTuple(
-	[]types.T{*types.String, *types.String},
+	[]*types.T{types.String, types.String},
 	jsonEachGeneratorLabels,
 )
 
@@ -1075,7 +1075,7 @@ func makeCheckConsistencyGenerator(
 }
 
 var checkConsistencyGeneratorType = types.MakeLabeledTuple(
-	[]types.T{*types.Int, *types.Bytes, *types.String, *types.String, *types.String},
+	[]*types.T{types.Int, types.Bytes, types.String, types.String, types.String},
 	[]string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
 )
 

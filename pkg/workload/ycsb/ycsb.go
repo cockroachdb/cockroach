@@ -267,9 +267,9 @@ func preferColumnFamilies(workload string) bool {
 	}
 }
 
-var usertableTypes = []types.T{
-	*types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes,
-	*types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes,
+var usertableTypes = []*types.T{
+	types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes,
+	types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes,
 }
 
 // Tables implements the Generator interface.

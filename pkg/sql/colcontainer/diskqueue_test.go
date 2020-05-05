@@ -67,7 +67,7 @@ func TestDiskQueue(t *testing.T) {
 						NumBatches: cap(batches),
 						BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 						Nulls:      true,
-						BatchAccumulator: func(b coldata.Batch, typs []types.T) {
+						BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
 							batches = append(batches, coldatatestutils.CopyBatch(b, typs))
 						},
 					})
@@ -200,7 +200,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 	queueCfg.MaxFileSizeBytes = int(blockSize)
 
 	rng, _ := randutil.NewPseudoRand()
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0, 0)
 	op := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	ctx := context.Background()

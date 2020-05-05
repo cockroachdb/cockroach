@@ -284,9 +284,9 @@ func TestWindowFunctions(t *testing.T) {
 				var semsToCheck []semaphore.Semaphore
 				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 					tc.init()
-					ct := make([]types.T, len(tc.tuples[0]))
+					ct := make([]*types.T, len(tc.tuples[0]))
 					for i := range ct {
-						ct[i] = *types.Int
+						ct[i] = types.Int
 					}
 					spec := &execinfrapb.ProcessorSpec{
 						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},

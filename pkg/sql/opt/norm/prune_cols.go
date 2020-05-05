@@ -348,7 +348,7 @@ func (c *CustomFuncs) pruneValuesCols(values *memo.ValuesExpr, neededCols opt.Co
 		tuple := row.(*memo.TupleExpr)
 		typ := tuple.DataType()
 
-		newContents := make([]types.T, len(newCols))
+		newContents := make([]*types.T, len(newCols))
 		newElems := make(memo.ScalarListExpr, len(newCols))
 		nelem := 0
 		for ielem, elem := range tuple.Elems {

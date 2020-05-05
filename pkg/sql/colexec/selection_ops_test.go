@@ -138,7 +138,7 @@ func TestGetSelectionOperator(t *testing.T) {
 func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatch(typs)
 	col := batch.ColVec(0).Int64()
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -195,7 +195,7 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	typs := []types.T{*types.Int, *types.Int}
+	typs := []*types.T{types.Int, types.Int}
 	batch := testAllocator.NewMemBatch(typs)
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()

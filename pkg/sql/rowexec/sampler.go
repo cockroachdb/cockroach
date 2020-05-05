@@ -51,7 +51,7 @@ type samplerProcessor struct {
 	memAcc          mon.BoundAccount
 	sr              stats.SampleReservoir
 	sketches        []sketchInfo
-	outTypes        []types.T
+	outTypes        []*types.T
 	maxFractionIdle float64
 
 	// Output column indices for special columns.
@@ -130,31 +130,31 @@ func newSamplerProcessor(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes(), &s.memAcc, sampleCols)
 
 	inTypes := input.OutputTypes()
-	outTypes := make([]types.T, 0, len(inTypes)+5)
+	outTypes := make([]*types.T, 0, len(inTypes)+5)
 
 	// First columns are the same as the input.
 	outTypes = append(outTypes, inTypes...)
 
 	// An INT column for the rank of each row.
 	s.rankCol = len(outTypes)
-	outTypes = append(outTypes, *types.Int)
+	outTypes = append(outTypes, types.Int)
 
 	// An INT column indicating the sketch index.
 	s.sketchIdxCol = len(outTypes)
-	outTypes = append(outTypes, *types.Int)
+	outTypes = append(outTypes, types.Int)
 
 	// An INT column indicating the number of rows processed.
 	s.numRowsCol = len(outTypes)
-	outTypes = append(outTypes, *types.Int)
+	outTypes = append(outTypes, types.Int)
 
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
 	s.numNullsCol = len(outTypes)
-	outTypes = append(outTypes, *types.Int)
+	outTypes = append(outTypes, types.Int)
 
 	// A BYTES column with the sketch data.
 	s.sketchCol = len(outTypes)
-	outTypes = append(outTypes, *types.Bytes)
+	outTypes = append(outTypes, types.Bytes)
 	s.outTypes = outTypes
 
 	if err := s.Init(
@@ -309,7 +309,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				var hasNull bool
 				buf = buf[:0]
 				for _, col := range s.sketches[i].spec.Columns {
-					buf, err = row[col].Fingerprint(&s.outTypes[col], &da, buf)
+					buf, err = row[col].Fingerprint(s.outTypes[col], &da, buf)
 					hasNull = hasNull || row[col].IsNull()
 					if err != nil {
 						return false, err
@@ -346,7 +346,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(&s.outTypes[i], tree.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 	// Emit the sampled rows.
 	for _, sample := range s.sr.Get() {
@@ -361,7 +361,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	// Emit the sketch rows.
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(&s.outTypes[i], tree.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 
 	for i, si := range s.sketches {

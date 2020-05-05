@@ -20,7 +20,7 @@ import (
 
 type setOpTestCase struct {
 	setOpType   sqlbase.JoinType
-	columnTypes []types.T
+	columnTypes []*types.T
 	leftInput   sqlbase.EncDatumRows
 	rightInput  sqlbase.EncDatumRows
 	expected    sqlbase.EncDatumRows

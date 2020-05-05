@@ -103,7 +103,7 @@ type PhysicalPlan struct {
 	//
 	// This is aliased with InputSyncSpec.ColumnTypes, so it must not be modified
 	// in-place during planning.
-	ResultTypes []types.T
+	ResultTypes []*types.T
 
 	// MergeOrdering is the ordering guarantee for the result streams that must be
 	// maintained when the streams eventually merge. The column indexes refer to
@@ -161,7 +161,7 @@ func (p *PhysicalPlan) SetMergeOrdering(o execinfrapb.Ordering) {
 func (p *PhysicalPlan) AddNoGroupingStage(
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
-	outputTypes []types.T,
+	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
 ) {
 	p.AddNoGroupingStageWithCoreFunc(
@@ -177,7 +177,7 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 	coreFunc func(int, *Processor) execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
-	outputTypes []types.T,
+	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
 ) {
 	stageID := p.NewStageID()
@@ -249,7 +249,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	nodeID roachpb.NodeID,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
-	outputTypes []types.T,
+	outputTypes []*types.T,
 ) {
 	proc := Processor{
 		Node: nodeID,
@@ -322,7 +322,7 @@ func (p *PhysicalPlan) GetLastStagePost() execinfrapb.PostProcessSpec {
 // SetLastStagePost changes the PostProcess spec of the processors in the last
 // stage (ResultRouters).
 // The caller must update the ordering via SetOrdering.
-func (p *PhysicalPlan) SetLastStagePost(post execinfrapb.PostProcessSpec, outputTypes []types.T) {
+func (p *PhysicalPlan) SetLastStagePost(post execinfrapb.PostProcessSpec, outputTypes []*types.T) {
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post = post
 	}
@@ -380,7 +380,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 		p.MergeOrdering.Columns = newOrdering
 	}
 
-	newResultTypes := make([]types.T, len(columns))
+	newResultTypes := make([]*types.T, len(columns))
 	for i, c := range columns {
 		newResultTypes[i] = p.ResultTypes[c]
 	}
@@ -433,7 +433,7 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []types.T,
+	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []*types.T,
 ) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -518,7 +518,7 @@ func (p *PhysicalPlan) AddRendering(
 				}
 				newExpr, err := MakeExpression(tree.NewTypedOrdinalReference(
 					int(internalColIdx),
-					&p.ResultTypes[c.ColIdx]),
+					p.ResultTypes[c.ColIdx]),
 					exprCtx, nil /* indexVarMap */)
 				if err != nil {
 					return err
@@ -653,7 +653,7 @@ func (p *PhysicalPlan) AddFilter(
 
 // emptyPlan creates a plan with a single processor that generates no rows; the
 // output stream has the given types.
-func emptyPlan(types []types.T, node roachpb.NodeID) PhysicalPlan {
+func emptyPlan(types []*types.T, node roachpb.NodeID) PhysicalPlan {
 	s := execinfrapb.ValuesCoreSpec{
 		Columns: make([]execinfrapb.DatumInfo, len(types)),
 	}
@@ -913,19 +913,19 @@ func MergePlans(
 // that each pair of ColumnTypes must either match or be null, in which case the
 // non-null type is used. This logic is necessary for cases like
 // SELECT NULL UNION SELECT 1.
-func MergeResultTypes(left, right []types.T) ([]types.T, error) {
+func MergeResultTypes(left, right []*types.T) ([]*types.T, error) {
 	if len(left) != len(right) {
 		return nil, errors.Errorf("ResultTypes length mismatch: %d and %d", len(left), len(right))
 	}
-	merged := make([]types.T, len(left))
+	merged := make([]*types.T, len(left))
 	for i := range left {
-		leftType, rightType := &left[i], &right[i]
+		leftType, rightType := left[i], right[i]
 		if rightType.Family() == types.UnknownFamily {
-			merged[i] = *leftType
+			merged[i] = leftType
 		} else if leftType.Family() == types.UnknownFamily {
-			merged[i] = *rightType
+			merged[i] = rightType
 		} else if equivalentTypes(leftType, rightType) {
-			merged[i] = *leftType
+			merged[i] = leftType
 		} else {
 			return nil, errors.Errorf(
 				"conflicting ColumnTypes: %s and %s", leftType.DebugString(), rightType.DebugString())
@@ -948,7 +948,7 @@ func (p *PhysicalPlan) AddJoinStage(
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	leftEqCols, rightEqCols []uint32,
-	leftTypes, rightTypes []types.T,
+	leftTypes, rightTypes []*types.T,
 	leftMergeOrd, rightMergeOrd execinfrapb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
@@ -1020,12 +1020,12 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	distinctCores []execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	eqCols []uint32,
-	leftTypes, rightTypes []types.T,
+	leftTypes, rightTypes []*types.T,
 	leftMergeOrd, rightMergeOrd execinfrapb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
 	const numSides = 2
-	inputResultTypes := [numSides][]types.T{leftTypes, rightTypes}
+	inputResultTypes := [numSides][]*types.T{leftTypes, rightTypes}
 	inputMergeOrderings := [numSides]execinfrapb.Ordering{leftMergeOrd, rightMergeOrd}
 	inputResultRouters := [numSides][]ProcessorIdx{leftRouters, rightRouters}
 

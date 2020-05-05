@@ -157,7 +157,7 @@ type diskQueue struct {
 	// dirName is the directory in cfg.Path that holds this queue's files.
 	dirName string
 
-	typs  []types.T
+	typs  []*types.T
 	cfg   DiskQueueCfg
 	files []file
 	seqNo int
@@ -327,14 +327,14 @@ func (cfg *DiskQueueCfg) SetDefaultBufferSizeBytesForCacheMode() {
 
 // NewDiskQueue creates a Queue that spills to disk.
 func NewDiskQueue(
-	ctx context.Context, typs []types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+	ctx context.Context, typs []*types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
 ) (Queue, error) {
 	return newDiskQueue(ctx, typs, cfg, diskAcc)
 }
 
 // NewRewindableDiskQueue creates a RewindableQueue that spills to disk.
 func NewRewindableDiskQueue(
-	ctx context.Context, typs []types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+	ctx context.Context, typs []*types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
 ) (RewindableQueue, error) {
 	d, err := newDiskQueue(ctx, typs, cfg, diskAcc)
 	if err != nil {
@@ -345,7 +345,7 @@ func NewRewindableDiskQueue(
 }
 
 func newDiskQueue(
-	ctx context.Context, typs []types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+	ctx context.Context, typs []*types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
 ) (*diskQueue, error) {
 	if err := cfg.EnsureDefaults(); err != nil {
 		return nil, err

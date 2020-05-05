@@ -38,7 +38,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	var (
 		rng, _     = randutil.NewPseudoRand()
-		typs       = []types.T{*types.Int}
+		typs       = []*types.T{types.Int}
 		numInputs  = rng.Intn(maxInputs) + 1
 		numBatches = rng.Intn(maxBatches) + 1
 	)
@@ -123,7 +123,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		ctx = context.Background()
 		wg  sync.WaitGroup
 	)
-	s := NewParallelUnorderedSynchronizer(inputs, []types.T{*types.Int}, &wg)
+	s := NewParallelUnorderedSynchronizer(inputs, []*types.T{types.Int}, &wg)
 	err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
@@ -133,7 +133,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	inputs := make([]colexecbase.Operator, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithSize(typs, coldata.BatchSize())

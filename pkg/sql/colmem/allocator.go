@@ -43,7 +43,7 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 	if vec.CanonicalTypeFamily() == types.BytesFamily {
 		return int64(vec.Bytes().Size())
 	}
-	return int64(EstimateBatchSizeBytes([]types.T{*vec.Type()}, vec.Capacity()))
+	return int64(EstimateBatchSizeBytes([]*types.T{vec.Type()}, vec.Capacity()))
 }
 
 func getVecsMemoryFootprint(vecs []coldata.Vec) int64 {
@@ -82,13 +82,13 @@ func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
 }
 
 // NewMemBatch allocates a new in-memory coldata.Batch.
-func (a *Allocator) NewMemBatch(typs []types.T) coldata.Batch {
+func (a *Allocator) NewMemBatch(typs []*types.T) coldata.Batch {
 	return a.NewMemBatchWithSize(typs, coldata.BatchSize())
 }
 
 // NewMemBatchWithSize allocates a new in-memory coldata.Batch with the given
 // column size.
-func (a *Allocator) NewMemBatchWithSize(typs []types.T, size int) coldata.Batch {
+func (a *Allocator) NewMemBatchWithSize(typs []*types.T, size int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(size) + int64(EstimateBatchSizeBytes(typs, size))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
@@ -99,7 +99,7 @@ func (a *Allocator) NewMemBatchWithSize(typs []types.T, size int) coldata.Batch 
 // NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
 // allocates memory for the selection vector but does *not* allocate any memory
 // for the column vectors - those will have to be added separately.
-func (a *Allocator) NewMemBatchNoCols(types []types.T, size int) coldata.Batch {
+func (a *Allocator) NewMemBatchNoCols(types []*types.T, size int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(size)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
@@ -154,7 +154,7 @@ func (a *Allocator) ReleaseBatch(b coldata.Batch) {
 
 // NewMemColumn returns a new coldata.Vec, initialized with a length.
 func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
-	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]types.T{*t}, n))
+	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, n))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -196,7 +196,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 			t, colIdx, width,
 		))
 	}
-	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]types.T{*t}, coldata.BatchSize()))
+	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, coldata.BatchSize()))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -259,7 +259,7 @@ var SizeOfBatchSizeSelVector = coldata.BatchSize() * sizeOfInt
 // WARNING: This only is correct for fixed width types, and returns an
 // estimate for non fixed width types. In future it might be possible to
 // remove the need for estimation by specifying batch sizes in terms of bytes.
-func EstimateBatchSizeBytes(vecTypes []types.T, batchLength int) int {
+func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	// acc represents the number of bytes to represent a row in the batch.
 	acc := 0
 	for _, t := range vecTypes {

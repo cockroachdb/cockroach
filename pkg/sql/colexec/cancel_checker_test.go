@@ -28,7 +28,7 @@ import (
 func TestCancelChecker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatch(typs)
 	op := NewCancelChecker(NewNoop(colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)))
 	cancel()

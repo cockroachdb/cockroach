@@ -36,7 +36,7 @@ func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 	for i := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
 		colDesc := &colDescs[i]
-		typ := &colDesc.Type
+		typ := colDesc.Type
 		if typ == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Family()))
 		}

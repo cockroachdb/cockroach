@@ -45,11 +45,11 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	}
 
 	oneInput := []execinfrapb.InputSyncSpec{
-		{ColumnTypes: []types.T{*types.Int}},
+		{ColumnTypes: []*types.T{types.Int}},
 	}
 	twoInputs := []execinfrapb.InputSyncSpec{
-		{ColumnTypes: []types.T{*types.Int}},
-		{ColumnTypes: []types.T{*types.Int}},
+		{ColumnTypes: []*types.T{types.Int}},
+		{ColumnTypes: []*types.T{types.Int}},
 	}
 
 	testCases := []struct {
@@ -132,11 +132,11 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	}
 
 	oneInput := []execinfrapb.InputSyncSpec{
-		{ColumnTypes: []types.T{*types.Int}},
+		{ColumnTypes: []*types.T{types.Int}},
 	}
 	twoInputs := []execinfrapb.InputSyncSpec{
-		{ColumnTypes: []types.T{*types.Int}},
-		{ColumnTypes: []types.T{*types.Int}},
+		{ColumnTypes: []*types.T{types.Int}},
+		{ColumnTypes: []*types.T{types.Int}},
 	}
 
 	testCases := []struct {
@@ -194,7 +194,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		},
 	}
 
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithSize(typs, 1 /* size */)
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {

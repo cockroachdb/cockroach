@@ -190,7 +190,7 @@ const (
 // intended to be easier to use than directly specifying a BatchedTuples, but
 // the tradeoff is some bit of performance. If typs is nil, an attempt is
 // made to infer them.
-func TypedTuples(count int, typs []types.T, fn func(int) []interface{}) BatchedTuples {
+func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) BatchedTuples {
 	// The FillBatch we create has to be concurrency safe, so we can't let it do
 	// the one-time initialization of typs without this protection.
 	var typesOnce sync.Once
@@ -204,7 +204,7 @@ func TypedTuples(count int, typs []types.T, fn func(int) []interface{}) BatchedT
 
 			typesOnce.Do(func() {
 				if typs == nil {
-					typs = make([]types.T, len(row))
+					typs = make([]*types.T, len(row))
 					for i, datum := range row {
 						if datum == nil {
 							panic(fmt.Sprintf(
@@ -212,10 +212,9 @@ func TypedTuples(count int, typs []types.T, fn func(int) []interface{}) BatchedT
 						} else {
 							switch datum.(type) {
 							case time.Time:
-								typs[i] = *types.Bytes
+								typs[i] = types.Bytes
 							default:
-								t := typeconv.UnsafeFromGoType(datum)
-								typs[i] = *t
+								typs[i] = typeconv.UnsafeFromGoType(datum)
 							}
 						}
 					}

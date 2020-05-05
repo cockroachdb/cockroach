@@ -142,7 +142,7 @@ func DecodePartitionTuple(
 			t.SpecialCount++
 		} else {
 			var datum tree.Datum
-			datum, valueEncBuf, err = DecodeTableValue(a, &col.Type, valueEncBuf)
+			datum, valueEncBuf, err = DecodeTableValue(a, col.Type, valueEncBuf)
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "decoding")
 			}

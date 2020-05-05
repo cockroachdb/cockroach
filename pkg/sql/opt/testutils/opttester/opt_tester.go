@@ -1290,7 +1290,6 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 			Ordinal:  i,
 			Name:     colName,
 			Type:     colMeta.Type,
-			ColType:  *colMeta.Type,
 			Nullable: !relProps.NotNullCols.Contains(col),
 		}
 

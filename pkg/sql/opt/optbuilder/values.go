@@ -56,13 +56,13 @@ func (b *Builder) buildValuesClause(
 	elems := make(memo.ScalarListExpr, numRows*numCols+numRows)
 	tuples, elems := elems[:numRows], elems[numRows:]
 
-	colTypes := make([]types.T, numCols)
+	colTypes := make([]*types.T, numCols)
 	for colIdx := range colTypes {
 		desired := types.Any
 		if colIdx < len(desiredTypes) {
 			desired = desiredTypes[colIdx]
 		}
-		colTypes[colIdx] = *types.Unknown
+		colTypes[colIdx] = types.Unknown
 
 		elemPos := colIdx
 		for _, tuple := range values.Rows {
@@ -77,10 +77,10 @@ func (b *Builder) buildValuesClause(
 			}
 			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
 				if colTypes[colIdx].Family() == types.UnknownFamily {
-					colTypes[colIdx] = *typ
-				} else if !typ.Equivalent(&colTypes[colIdx]) {
+					colTypes[colIdx] = typ
+				} else if !typ.Equivalent(colTypes[colIdx]) {
 					panic(pgerror.Newf(pgcode.DatatypeMismatch,
-						"VALUES types %s and %s cannot be matched", typ, &colTypes[colIdx]))
+						"VALUES types %s and %s cannot be matched", typ, colTypes[colIdx]))
 				}
 			}
 			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)
@@ -89,7 +89,7 @@ func (b *Builder) buildValuesClause(
 
 		// If we still don't have a type for the column, set it to the desired type.
 		if colTypes[colIdx].Family() == types.UnknownFamily && desired.Family() != types.AnyFamily {
-			colTypes[colIdx] = *desired
+			colTypes[colIdx] = desired
 		}
 
 		// Add casts to NULL values if necessary.
@@ -97,7 +97,7 @@ func (b *Builder) buildValuesClause(
 			elemPos := colIdx
 			for range values.Rows {
 				if elems[elemPos].DataType().Family() == types.UnknownFamily {
-					elems[elemPos] = b.factory.ConstructCast(elems[elemPos], &colTypes[colIdx])
+					elems[elemPos] = b.factory.ConstructCast(elems[elemPos], colTypes[colIdx])
 				}
 				elemPos += numCols
 			}
@@ -115,7 +115,7 @@ func (b *Builder) buildValuesClause(
 	for colIdx := 0; colIdx < numCols; colIdx++ {
 		// The column names for VALUES are column1, column2, etc.
 		alias := fmt.Sprintf("column%d", colIdx+1)
-		b.synthesizeColumn(outScope, alias, &colTypes[colIdx], nil, nil /* scalar */)
+		b.synthesizeColumn(outScope, alias, colTypes[colIdx], nil, nil /* scalar */)
 	}
 
 	colList := colsToColList(outScope.cols)

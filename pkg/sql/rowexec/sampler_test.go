@@ -35,13 +35,13 @@ func runSampler(
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
 	}
 	in := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, rows, distsqlutils.RowBufferArgs{})
-	outTypes := []types.T{
-		*types.Int, // original column
-		*types.Int, // rank
-		*types.Int, // sketch index
-		*types.Int, // num rows
-		*types.Int, // null vals
-		*types.Bytes,
+	outTypes := []*types.T{
+		types.Int, // original column
+		types.Int, // rank
+		types.Int, // sketch index
+		types.Int, // num rows
+		types.Int, // null vals
+		types.Bytes,
 	}
 
 	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
@@ -198,14 +198,14 @@ func TestSamplerSketch(t *testing.T) {
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)
 	in := distsqlutils.NewRowBuffer(sqlbase.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
-	outTypes := []types.T{
-		*types.Int,   // original column
-		*types.Int,   // original column
-		*types.Int,   // rank
-		*types.Int,   // sketch index
-		*types.Int,   // num rows
-		*types.Int,   // null vals
-		*types.Bytes, // sketch data
+	outTypes := []*types.T{
+		types.Int,   // original column
+		types.Int,   // original column
+		types.Int,   // rank
+		types.Int,   // sketch index
+		types.Int,   // num rows
+		types.Int,   // null vals
+		types.Bytes, // sketch data
 	}
 
 	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})

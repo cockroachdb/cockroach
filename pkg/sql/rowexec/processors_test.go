@@ -63,7 +63,7 @@ func TestPostProcess(t *testing.T) {
 
 	testCases := []struct {
 		post          execinfrapb.PostProcessSpec
-		outputTypes   []types.T
+		outputTypes   []*types.T
 		expNeededCols []int
 		expected      string
 	}{
@@ -163,7 +163,7 @@ func TestPostProcess(t *testing.T) {
 					{Expr: "@1 = @2 - 1 AND @1 = @3 - 2"},
 				},
 			},
-			outputTypes:   []types.T{*types.Int, *types.Int, *types.Bool, *types.Bool, *types.Bool, *types.Bool},
+			outputTypes:   []*types.T{types.Int, types.Int, types.Bool, types.Bool, types.Bool, types.Bool},
 			expNeededCols: []int{0, 1, 2},
 			expected: "[" + strings.Join([]string{
 				/* 0 1 2 */ "[-1 2 false true true true]",

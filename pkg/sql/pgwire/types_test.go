@@ -356,7 +356,7 @@ func benchmarkWriteTuple(b *testing.B, format pgwirebase.FormatCode) {
 	i := tree.NewDInt(1234)
 	f := tree.NewDFloat(12.34)
 	s := tree.NewDString("testing")
-	typ := types.MakeTuple([]types.T{*types.Int, *types.Float, *types.String})
+	typ := types.MakeTuple([]*types.T{types.Int, types.Float, types.String})
 	t := tree.NewDTuple(typ, i, f, s)
 	benchmarkWriteType(b, t, format)
 }

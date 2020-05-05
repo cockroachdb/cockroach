@@ -93,7 +93,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 
 	var (
 		ctx   = context.Background()
-		typs  = []types.T{*types.Int}
+		typs  = []*types.T{types.Int}
 		batch = testAllocator.NewMemBatch(typs)
 		sem   = &colexecbase.TestingSemaphore{}
 	)
@@ -144,7 +144,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 
 	var (
 		ctx    = context.Background()
-		typs   = []types.T{*types.Int}
+		typs   = []*types.T{types.Int}
 		batch  = testAllocator.NewMemBatch(typs)
 		rng, _ = randutil.NewPseudoRand()
 		// maxPartitions is in [1, 10]. The maximum partitions on a single level.

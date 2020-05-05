@@ -99,7 +99,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	var mc MemRowContainer
 	mc.InitWithMon(
 		sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
-		[]types.T{*types.Int, *types.String}, evalCtx, &m, 0, /* rowCapacity */
+		[]*types.T{types.Int, types.String}, evalCtx, &m, 0, /* rowCapacity */
 	)
 	defer mc.Close(ctx)
 
@@ -343,7 +343,7 @@ func verifyOrdering(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	src SortableRowContainer,
-	types []types.T,
+	types []*types.T,
 	ordering sqlbase.ColumnOrdering,
 ) error {
 	var datumAlloc sqlbase.DatumAlloc
@@ -648,7 +648,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, typs)
 			}
-			storedTypes := make([]types.T, len(typs)+1)
+			storedTypes := make([]*types.T, len(typs)+1)
 			copy(storedTypes, typs)
 			// The container will add an extra int column for indices.
 			storedTypes[len(typs)] = sqlbase.OneIntCol[0]
@@ -689,7 +689,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, typs)
 			}
-			storedTypes := make([]types.T, len(typs)+1)
+			storedTypes := make([]*types.T, len(typs)+1)
 			copy(storedTypes, typs)
 			// The container will add an extra int column for indices.
 			storedTypes[len(typs)] = sqlbase.OneIntCol[0]

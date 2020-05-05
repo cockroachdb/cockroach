@@ -25,7 +25,7 @@ func TestBufferOp(t *testing.T) {
 
 	ctx := context.Background()
 	inputTuples := tuples{{int64(1)}, {int64(2)}, {int64(3)}}
-	input := newOpTestInput(coldata.BatchSize(), inputTuples, []types.T{*types.Int})
+	input := newOpTestInput(coldata.BatchSize(), inputTuples, []*types.T{types.Int})
 	buffer := NewBufferOp(input).(*bufferOp)
 	buffer.Init()
 

@@ -47,7 +47,7 @@ func NewRelativeRankOperator(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	input colexecbase.Operator,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
@@ -144,7 +144,7 @@ func _COMPUTE_PARTITIONS_SIZES() { // */}}
 			// TODO(yuzefovich): do not instantiate a new batch here once
 			// spillingQueues actually copy the batches when those are kept
 			// in-memory.
-			r.partitionsState.runningSizes = r.allocator.NewMemBatch([]types.T{*types.Int})
+			r.partitionsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
 			runningPartitionsSizesCol = r.partitionsState.runningSizes.ColVec(0).Int64()
 		}
 		if r.numTuplesInPartition > 0 {
@@ -182,7 +182,7 @@ func _COMPUTE_PEER_GROUPS_SIZES() { // */}}
 			// TODO(yuzefovich): do not instantiate a new batch here once
 			// spillingQueues actually copy the batches when those are kept
 			// in-memory.
-			r.peerGroupsState.runningSizes = r.allocator.NewMemBatch([]types.T{*types.Int})
+			r.peerGroupsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
 			runningPeerGroupsSizesCol = r.peerGroupsState.runningSizes.ColVec(0).Int64()
 		}
 		if r.numPeers > 0 {
@@ -213,7 +213,7 @@ type relativeRankInitFields struct {
 	memoryLimit  int64
 	diskQueueCfg colcontainer.DiskQueueCfg
 	fdSemaphore  semaphore.Semaphore
-	inputTypes   []types.T
+	inputTypes   []*types.T
 
 	diskAcc *mon.BoundAccount
 }
@@ -287,7 +287,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 	usedMemoryLimitFraction := 0.0
 	// {{if .HasPartition}}
 	r.partitionsState.spillingQueue = newSpillingQueue(
-		r.allocator, []types.T{*types.Int},
+		r.allocator, []*types.T{types.Int},
 		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
 		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
 	)
@@ -295,7 +295,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 	// {{end}}
 	// {{if .IsCumeDist}}
 	r.peerGroupsState.spillingQueue = newSpillingQueue(
-		r.allocator, []types.T{*types.Int},
+		r.allocator, []*types.T{types.Int},
 		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
 		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
 	)
@@ -306,7 +306,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
 		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
 	)
-	r.output = r.allocator.NewMemBatch(append(r.inputTypes, *types.Float))
+	r.output = r.allocator.NewMemBatch(append(r.inputTypes, types.Float))
 	// {{if .IsPercentRank}}
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
@@ -366,7 +366,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.partitionsState.runningSizes = r.allocator.NewMemBatch([]types.T{*types.Int})
+					r.partitionsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
 				}
 				runningPartitionsSizesCol := r.partitionsState.runningSizes.ColVec(0).Int64()
 				runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
@@ -386,7 +386,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.peerGroupsState.runningSizes = r.allocator.NewMemBatch([]types.T{*types.Int})
+					r.peerGroupsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
 				}
 				runningPeerGroupsSizesCol := r.peerGroupsState.runningSizes.ColVec(0).Int64()
 				runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
