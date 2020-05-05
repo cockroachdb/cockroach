@@ -606,23 +606,31 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 
 	atomic.StoreInt64(&trapRead, 1)
 
-	// Run with the default vectorize mode and the explicit "on" mode.
+	// Run with the vectorize off and on.
 	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
 		// We're going to run the test twice in each vectorize configuration. Once
 		// in "dummy" node, which just verifies that the test is not fooling itself
 		// by increasing the limit from 5 to 6 and checking that we get the injected
 		// error in that case.
 		testutils.RunTrueAndFalse(t, "dummy", func(t *testing.T, dummy bool) {
+			// Reset the blocking condition.
+			blockedRead.Lock()
+			blockedRead.shouldUnblock = false
+			blockedRead.Unlock()
 			// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
 			// to convince it to distribute a query that uses an index.
 			if _, err := conn.Exec("set distsql='always'"); err != nil {
 				t.Fatal(err)
 			}
+			vectorizeMode := "off"
 			if vectorize {
-				if _, err := conn.Exec("set vectorize='on'"); err != nil {
-					t.Fatal(err)
-				}
+				vectorizeMode = "on"
 			}
+
+			if _, err := conn.Exec(fmt.Sprintf("set vectorize='%s'; set vectorize_row_count_threshold=0", vectorizeMode)); err != nil {
+				t.Fatal(err)
+			}
+
 			limit := 5
 			if dummy {
 				limit = 6
