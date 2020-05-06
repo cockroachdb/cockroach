@@ -88,9 +88,11 @@
         (DistinctOn
             $right
             []
-            (MakeGrouping (IntersectionCols
-                (OutputCols $right)
-                (FilterOuterCols $on))
+            (MakeGrouping
+                (IntersectionCols
+                    (OutputCols $right)
+                    (FilterOuterCols $on)
+                )
             )
         )
         $on
@@ -126,10 +128,7 @@
 # distsqlrun/zigzagjoiner.go for more details on when a zigzag join can be
 # planned.
 [GenerateZigzagJoins, Explore]
-(Select
-    (Scan $scan:*) & (IsCanonicalScan $scan)
-    $filters:*
-)
+(Select (Scan $scan:*) & (IsCanonicalScan $scan) $filters:*)
 =>
 (GenerateZigzagJoins $scan $filters)
 
@@ -141,7 +140,9 @@
 # at any two of the JSON paths we are querying for.
 [GenerateInvertedIndexZigzagJoins, Explore]
 (Select
-    (Scan $scan:*) & (IsCanonicalScan $scan) & (HasInvertedIndexes $scan)
+    (Scan $scan:*) &
+        (IsCanonicalScan $scan) &
+        (HasInvertedIndexes $scan)
     $filters:*
 )
 =>
@@ -161,7 +162,13 @@
     $private:*
 )
 =>
-(GenerateLookupJoins (OpName) $left $scanPrivate (ConcatFilters $on $filters) $private)
+(GenerateLookupJoins
+    (OpName)
+    $left
+    $scanPrivate
+    (ConcatFilters $on $filters)
+    $private
+)
 
 # AssociateJoin applies the rule of join associativity. It converts an
 # expression like:
@@ -188,12 +195,18 @@
     (InnerJoin
         $innerRight
         $right
-        (ExtractBoundConditions $on (OutputCols2 $innerRight $right))
+        (ExtractBoundConditions
+            $on
+            (OutputCols2 $innerRight $right)
+        )
         (EmptyJoinPrivate)
     )
     (SortFilters
         (ConcatFilters
-            (ExtractUnboundConditions $on (OutputCols2 $innerRight $right))
+            (ExtractUnboundConditions
+                $on
+                (OutputCols2 $innerRight $right)
+            )
             $innerOn
         )
     )

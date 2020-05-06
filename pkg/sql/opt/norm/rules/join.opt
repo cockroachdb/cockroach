@@ -2,23 +2,18 @@
 # join.opt contains normalization rules for Join operators.
 # =============================================================================
 
-
 # SimplifyJoinFilters works like SimplifySelectFilters, except that it operates
 # on Join filters rather than Select filters.
 [SimplifyJoinFilters, Normalize, HighPriority]
 (Join
     $left:*
     $right:*
-    $on:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $on)
+    $on:[ ... (FiltersItem (And | True | False | Null)) ... ] &
+        ^(IsFilterFalse $on)
     $private:*
 )
 =>
-((OpName)
-    $left
-    $right
-    (SimplifyFilters $on)
-    $private
-)
+((OpName) $left $right (SimplifyFilters $on) $private)
 
 # DetectJoinContradiction replaces a Join condition with False if it detects a
 # contradiction in the filter.
@@ -30,12 +25,7 @@
     $private:*
 )
 =>
-((OpName)
-    $left
-    $right
-    [ (FiltersItem (False)) ]
-    $private
-)
+((OpName) $left $right [ (FiltersItem (False)) ] $private)
 
 # PushFilterIntoJoinLeftAndRight pushes a filter into both the left and right
 # sides of an InnerJoin or SemiJoin if it can be mapped to use the columns of
@@ -101,7 +91,8 @@
 #       be ordered before PushFilterIntoJoinLeft (otherwise,
 #       PushFilterIntoJoinLeft might need to be applied multiple times).
 [MapFilterIntoJoinLeft, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | SemiJoin | SemiJoinApply
+(InnerJoin | InnerJoinApply | RightJoin | SemiJoin
+        | SemiJoinApply
     $left:* & ^(HasOuterCols $left)
     $right:*
     $on:[
@@ -118,7 +109,11 @@
 ((OpName)
     $left
     $right
-    (ReplaceFiltersItem $on $item (MapJoinOpFilter $on $item $left))
+    (ReplaceFiltersItem
+        $on
+        $item
+        (MapJoinOpFilter $on $item $left)
+    )
     $private
 )
 
@@ -126,8 +121,8 @@
 # Join filter conditions to use columns from the right side of the join rather
 # than the left side. See that rule's comments for more details.
 [MapFilterIntoJoinRight, Normalize]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
- SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
+        | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
     $right:* & ^(HasOuterCols $right)
     $on:[
@@ -144,7 +139,11 @@
 ((OpName)
     $left
     $right
-    (ReplaceFiltersItem $on $item (MapJoinOpFilter $on $item $right))
+    (ReplaceFiltersItem
+        $on
+        $item
+        (MapJoinOpFilter $on $item $right)
+    )
     $private
 )
 
@@ -171,7 +170,8 @@
 #
 # Citations: [1]
 [PushFilterIntoJoinLeft, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | SemiJoin | SemiJoinApply
+(InnerJoin | InnerJoinApply | RightJoin | SemiJoin
+        | SemiJoinApply
     $left:* & ^(HasOuterCols $left)
     $right:*
     $on:[
@@ -183,10 +183,7 @@
 )
 =>
 ((OpName)
-    (Select
-        $left
-        (ExtractBoundConditions $on $leftCols)
-    )
+    (Select $left (ExtractBoundConditions $on $leftCols))
     $right
     (ExtractUnboundConditions $on $leftCols)
     $private
@@ -196,13 +193,14 @@
 # Join filter conditions into the right side of the join rather than into the
 # left side. See that rule's comments for more details.
 [PushFilterIntoJoinRight, Normalize]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
- SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
+        | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
     $right:* & ^(HasOuterCols $right)
     $on:[
         ...
-        $item:* & (IsBoundBy $item $rightCols:(OutputCols $right))
+        $item:* &
+            (IsBoundBy $item $rightCols:(OutputCols $right))
         ...
     ]
     $private:*
@@ -210,10 +208,7 @@
 =>
 ((OpName)
     $left
-    (Select
-        $right
-        (ExtractBoundConditions $on $rightCols)
-    )
+    (Select $right (ExtractBoundConditions $on $rightCols))
     (ExtractUnboundConditions $on $rightCols)
     $private
 )
@@ -231,13 +226,7 @@
     $private:*
 )
 =>
-(ConstructNonLeftJoin
-    (OpName)
-    $left
-    $right
-    $on
-    $private
-)
+(ConstructNonLeftJoin (OpName) $left $right $on $private)
 
 # SimplifyRightJoinWithoutFilters reduces a RightJoin operator to an InnerJoin
 # operator (or a FullJoin to a LeftJoin) when it's known that the join's left
@@ -252,13 +241,7 @@
     $private:*
 )
 =>
-(ConstructNonRightJoin
-    (OpName)
-    $left
-    $right
-    $on
-    $private
-)
+(ConstructNonRightJoin (OpName) $left $right $on $private)
 
 # SimplifyLeftJoinWithFilters reduces a LeftJoin operator to an InnerJoin
 # operator (or a FullJoin to a RightJoin) when it's known that every row in the
@@ -285,13 +268,7 @@
     $private:*
 )
 =>
-(ConstructNonLeftJoin
-    (OpName)
-    $left
-    $right
-    $on
-    $private
-)
+(ConstructNonLeftJoin (OpName) $left $right $on $private)
 
 # SimplifyRightJoinWithFilters reduces a RightJoin operator to an InnerJoin
 # operator (or a FullJoin to a LeftJoin) when it's known that every row in the
@@ -306,13 +283,7 @@
     $private:*
 )
 =>
-(ConstructNonRightJoin
-    (OpName)
-    $left
-    $right
-    $on
-    $private
-)
+(ConstructNonRightJoin (OpName) $left $right $on $private)
 
 # EliminateSemiJoin discards a SemiJoin operator when it's known that the right
 # input never returns zero rows, and there is no join condition.
@@ -367,10 +338,7 @@ $left
     $on:*
 )
 =>
-(Select
-    $right
-    $on
-)
+(Select $right $on)
 
 # EliminateJoinNoColsRight eliminates an InnerJoin with a one row, zero column
 # right input set. These can be produced when a Values, scalar GroupBy, or other
@@ -382,10 +350,7 @@ $left
     $on:*
 )
 =>
-(Select
-    $left
-    $on
-)
+(Select $left $on)
 
 # HoistJoinProjectRight lifts a passthrough Project operator from within a Join
 # operator's right input to outside the join. This often allows the Project
@@ -404,12 +369,7 @@ $left
 )
 =>
 (Project
-    ((OpName)
-        $left
-        $input
-        $on
-        $private
-    )
+    ((OpName) $left $input $on $private)
     $projections
     (OutputCols2 $left $right)
 )
@@ -425,12 +385,7 @@ $left
 )
 =>
 (Project
-    ((OpName)
-        $input
-        $right
-        $on
-        $private
-    )
+    ((OpName) $input $right $on $private)
     $projections
     (OutputCols2 $left $right)
 )
@@ -457,8 +412,14 @@ $left
             $condition:(Is | IsNot
                 $eq:(Eq
                     # Check whether variable is a not-null column of left or right input.
-                    (Variable $col1:* & (IsColNotNull2 $col1 $left $right))
-                    (Variable $col2:* & (IsColNotNull2 $col2 $left $right))
+                    (Variable
+                        $col1:* &
+                            (IsColNotNull2 $col1 $left $right)
+                    )
+                    (Variable
+                        $col2:* &
+                            (IsColNotNull2 $col2 $left $right)
+                    )
                 )
                 $cnst:(True | False | Null)
             )
@@ -505,10 +466,13 @@ $left
     $on:[
         ...
         $item:(FiltersItem
-            (Eq
-                $a:^(ConstValue)
-                $b:^(ConstValue)
-            ) & (CanExtractJoinEquality $a $b (OutputCols $left) (OutputCols $right))
+            (Eq $a:^(ConstValue) $b:^(ConstValue)) &
+                (CanExtractJoinEquality
+                    $a
+                    $b
+                    (OutputCols $left)
+                    (OutputCols $right)
+                )
         )
         ...
     ]
@@ -527,9 +491,4 @@ $left
     $private:*
 )
 =>
-(InnerJoin
-    $left
-    $right
-    (SortFilters $on)
-    $private
-)
+(InnerJoin $left $right (SortFilters $on) $private)

@@ -21,7 +21,6 @@
 #             step in some important transformations (like eliminating
 #             subqueries).
 
-
 # Scan returns a result set containing every row in a table by scanning one of
 # the table's indexes according to its ordering. The ScanPrivate field
 # identifies the table and index to scan, as well as the subset of columns to
@@ -111,11 +110,11 @@ define SequenceSelect {
 
 [Private]
 define SequenceSelectPrivate {
-  # Sequence identifies the sequence to read from.
-  Sequence SequenceID
+    # Sequence identifies the sequence to read from.
+    Sequence SequenceID
 
-  # Cols is the 3 element list of column IDs returned by the operator.
-  Cols ColList
+    # Cols is the 3 element list of column IDs returned by the operator.
+    Cols ColList
 }
 
 # Values returns a manufactured result set containing a constant number of rows.
@@ -130,8 +129,7 @@ define SequenceSelectPrivate {
 [Relational]
 define Values {
     Rows ScalarListExpr
-
-    _    ValuesPrivate
+    _ ValuesPrivate
 }
 
 [Private]
@@ -152,7 +150,7 @@ define ValuesPrivate {
 # matching easier.
 [Relational]
 define Select {
-    Input   RelExpr
+    Input RelExpr
     Filters FiltersExpr
 }
 
@@ -165,9 +163,8 @@ define Select {
 # output columns.
 [Relational]
 define Project {
-    Input       RelExpr
+    Input RelExpr
     Projections ProjectionsExpr
-
     Passthrough ColSet
 }
 
@@ -178,55 +175,49 @@ define Project {
 # allowed to refer to the other's projected columns.
 [Relational, Join, JoinNonApply, Telemetry]
 define InnerJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply, Telemetry]
 define LeftJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
-   _ JoinPrivate
+    On FiltersExpr
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply, Telemetry]
 define RightJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply, Telemetry]
 define FullJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply, Telemetry]
 define SemiJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply, Telemetry]
 define AntiJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
@@ -248,7 +239,6 @@ define JoinPrivate {
 [Relational]
 define IndexJoin {
     Input RelExpr
-
     _ IndexJoinPrivate
 }
 
@@ -268,8 +258,7 @@ define IndexJoinPrivate {
 [Relational, Telemetry]
 define LookupJoin {
     Input RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ LookupJoinPrivate
 }
 
@@ -316,7 +305,6 @@ define LookupJoinPrivate {
     # conditions on the KeyCols. These filters are needed by the statistics code to
     # correctly estimate selectivity.
     ConstFilters FiltersExpr
-
     _ JoinPrivate
 }
 
@@ -326,10 +314,9 @@ define LookupJoinPrivate {
 # It can be any type of join (identified in the MergeJoinPrivate field).
 [Relational, Telemetry]
 define MergeJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ MergeJoinPrivate
 }
 
@@ -347,16 +334,15 @@ define MergeJoinPrivate {
     # Examples of valid settings for abc JOIN def ON a=d,b=e:
     #   LeftEq: a+,b+   RightEq: d+,e+
     #   LeftEq: b-,a+   RightEq: e-,d+
-    LeftEq  Ordering
+    LeftEq Ordering
     RightEq Ordering
 
     # LeftOrdering and RightOrdering are "simplified" versions of LeftEq/RightEq,
     # taking into account the functional dependencies of each side. We need both
     # versions because we need to configure execution with specific equality
     # columns and orderings.
-    LeftOrdering  OrderingChoice
+    LeftOrdering OrderingChoice
     RightOrdering OrderingChoice
-
     _ JoinPrivate
 }
 
@@ -368,8 +354,7 @@ define MergeJoinPrivate {
 # TODO(itsbilal): Add support for representing multi-way zigzag joins.
 [Relational, Telemetry]
 define ZigzagJoin {
-    On   FiltersExpr
-
+    On FiltersExpr
     _ ZigzagJoinPrivate
 }
 
@@ -422,37 +407,33 @@ define ZigzagJoinPrivate {
 # left input.
 [Relational, Join, JoinApply, Telemetry]
 define InnerJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinApply, Telemetry]
 define LeftJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinApply, Telemetry]
 define SemiJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinApply, Telemetry]
 define AntiJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
@@ -476,9 +457,8 @@ define AntiJoinApply {
 # ordering (but note that this is not required by the operator).
 [Relational, Grouping, Telemetry]
 define GroupBy {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -520,9 +500,8 @@ define GroupingPrivate {
 # empty.
 [Relational, Grouping, Telemetry]
 define ScalarGroupBy {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -562,9 +541,8 @@ define ScalarGroupBy {
 # ConstAgg.
 [Relational, Grouping, Telemetry]
 define DistinctOn {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -575,9 +553,8 @@ define DistinctOn {
 # details.
 [Relational, Set]
 define Union {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -605,9 +582,9 @@ define Union {
 # must have matching types.
 [Private]
 define SetPrivate {
-    LeftCols  ColList
+    LeftCols ColList
     RightCols ColList
-    OutCols   ColList
+    OutCols ColList
 }
 
 # Intersect is an operator used to perform an intersection between the Left
@@ -619,9 +596,8 @@ define SetPrivate {
 # details.
 [Relational, Set]
 define Intersect {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -632,9 +608,8 @@ define Intersect {
 # with the output columns. See the comment above SetPrivate for more details.
 [Relational, Set]
 define Except {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -657,9 +632,8 @@ define Except {
 # details.
 [Relational, Set]
 define UnionAll {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -684,9 +658,8 @@ define UnionAll {
 # details.
 [Relational, Set]
 define IntersectAll {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -710,9 +683,8 @@ define IntersectAll {
 # details.
 [Relational, Set]
 define ExceptAll {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -725,7 +697,6 @@ define ExceptAll {
 define Limit {
     Input RelExpr
     Limit ScalarExpr
-
     Ordering OrderingChoice
 }
 
@@ -733,9 +704,8 @@ define Limit {
 # conjunction with Limit.
 [Relational]
 define Offset {
-    Input  RelExpr
+    Input RelExpr
     Offset ScalarExpr
-
     Ordering OrderingChoice
 }
 
@@ -752,7 +722,6 @@ define Max1Row {
 [Relational]
 define Ordinality {
     Input RelExpr
-
     _ OrdinalityPrivate
 }
 
@@ -783,7 +752,7 @@ define OrdinalityPrivate {
 [Relational, Telemetry]
 define ProjectSet {
     Input RelExpr
-    Zip   ZipExpr
+    Zip ZipExpr
 }
 
 # Window represents a window function. Window functions are operators which
@@ -799,11 +768,10 @@ define ProjectSet {
 # cumulative sum, or something else.
 [Relational]
 define Window {
-    Input    RelExpr
+    Input RelExpr
 
     # Windows is the set of window functions to be computed for this operator.
     Windows WindowsExpr
-
     _ WindowPrivate
 }
 
@@ -832,8 +800,7 @@ define WindowPrivate {
 [Relational]
 define With {
     Binding RelExpr
-    Main    RelExpr
-
+    Main RelExpr
     _ WithPrivate
 }
 
