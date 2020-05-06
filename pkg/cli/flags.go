@@ -537,6 +537,13 @@ func init() {
 		}
 	}
 
+	// Zip command.
+	{
+		f := debugZipCmd.Flags()
+		VarFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
+		VarFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
+	}
+
 	// Decommission command.
 	VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 

@@ -15,17 +15,22 @@ import (
 	"bytes"
 	"context"
 	enc_hex "encoding/hex"
+	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -301,8 +306,20 @@ func TestPartialZip(t *testing.T) {
 			return out
 		})
 
+	// Now do it again and exclude the down node explicitly.
+	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out = eraseNonDeterministicZipOutput(out)
+	datadriven.RunTest(t, "testdata/zip/partial1_excluded",
+		func(td *datadriven.TestData) string {
+			return out
+		})
+
 	// Now mark the stopped node as decommissioned, and check that zip
-	// skips over it.
+	// skips over it automatically.
 	s := tc.Server(0)
 	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())
@@ -351,6 +368,70 @@ func TestPartialZip(t *testing.T) {
 			})
 			return out
 		})
+}
+
+// This checks that SQL retry errors are properly handled.
+func TestZipRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer s.Stopper().Stop(context.Background())
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	zipName := filepath.Join(dir, "test.zip")
+
+	func() {
+		out, err := os.Create(zipName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		z := newZipper(out)
+		defer func() {
+			if err := z.close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		sqlURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(security.RootUser),
+			Host:     s.ServingSQLAddr(),
+			RawQuery: "sslmode=disable",
+		}
+		sqlConn := makeSQLConn(sqlURL.String())
+		defer sqlConn.Close()
+
+		if err := dumpTableDataForZip(
+			z, sqlConn, 3*time.Second,
+			"test", `generate_series(1,15000) as t(x)`,
+			`if(x<11000,x,crdb_internal.force_retry('1h'))`); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	r, err := zip.OpenReader(zipName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	var fileList bytes.Buffer
+	for _, f := range r.File {
+		fmt.Fprintln(&fileList, f.Name)
+	}
+	const expected = `test/generate_series(1,15000) as t(x).txt
+test/generate_series(1,15000) as t(x).txt.err.txt
+test/generate_series(1,15000) as t(x).1.txt
+test/generate_series(1,15000) as t(x).1.txt.err.txt
+test/generate_series(1,15000) as t(x).2.txt
+test/generate_series(1,15000) as t(x).2.txt.err.txt
+test/generate_series(1,15000) as t(x).3.txt
+test/generate_series(1,15000) as t(x).3.txt.err.txt
+test/generate_series(1,15000) as t(x).4.txt
+test/generate_series(1,15000) as t(x).4.txt.err.txt
+`
+	assert.Equal(t, expected, fileList.String())
 }
 
 // This test the operation of zip over secure clusters.
@@ -439,5 +520,44 @@ func TestToHex(t *testing.T) {
 	}
 	if err = r.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestNodeRangeSelection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	testData := []struct {
+		args         []string
+		wantIncluded []int
+		wantExcluded []int
+	}{
+		{[]string{""}, []int{1, 200, 3}, nil},
+		{[]string{"--nodes=1"}, []int{1}, []int{2, 3, 100}},
+		{[]string{"--nodes=1,3"}, []int{1, 3}, []int{2, 4, 100}},
+		{[]string{"--nodes=1-3"}, []int{1, 2, 3}, []int{4, 100}},
+		{[]string{"--nodes=1-3,5"}, []int{1, 2, 3, 5}, []int{4, 100}},
+		{[]string{"--nodes=1-3,5,10-20"}, []int{2, 5, 15}, []int{7}},
+		{[]string{"--nodes=1,1-2"}, []int{1, 2}, []int{3, 100}},
+		{[]string{"--nodes=1-3", "--exclude-nodes=2"}, []int{1, 3}, []int{2, 4, 100}},
+		{[]string{"--nodes=1,3", "--exclude-nodes=3"}, []int{1}, []int{2, 3, 4, 100}},
+		{[]string{"--exclude-nodes=2-7"}, []int{1, 8, 9, 10}, []int{2, 3, 4, 5, 6, 7}},
+	}
+
+	f := debugZipCmd.Flags()
+	for _, tc := range testData {
+		initCLIDefaults()
+		if err := f.Parse(tc.args); err != nil {
+			t.Fatalf("Parse(%#v) got unexpected error: %v", tc.args, err)
+		}
+
+		for _, wantIncluded := range tc.wantIncluded {
+			assert.True(t, zipCtx.nodes.isIncluded(roachpb.NodeID(wantIncluded)))
+		}
+		for _, wantExcluded := range tc.wantExcluded {
+			assert.False(t, zipCtx.nodes.isIncluded(roachpb.NodeID(wantExcluded)))
+		}
 	}
 }
