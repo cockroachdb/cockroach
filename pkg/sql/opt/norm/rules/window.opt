@@ -24,7 +24,12 @@ $input
     $input:*
     $fn:*
     $private:* &
-        ^(ColsAreEmpty $redundantCols:(RedundantCols $input (WindowPartition $private)))
+        ^(ColsAreEmpty
+            $redundantCols:(RedundantCols
+                $input
+                (WindowPartition $private)
+            )
+        )
 )
 =>
 (Window
@@ -41,11 +46,7 @@ $input
     $private:* & (CanSimplifyWindowOrdering $input $private)
 )
 =>
-(Window
-    $input
-    $fn
-    (SimplifyWindowOrdering $input $private)
-)
+(Window $input $fn (SimplifyWindowOrdering $input $private))
 
 # PushSelectIntoWindow pushes down a Select which can be satisfied by only the
 # functional closure of the columns being partitioned over. This is valid
@@ -53,14 +54,15 @@ $input
 # don't eliminate it at all.
 [PushSelectIntoWindow, Normalize]
 (Select
-    (Window
-      $input:*
-      $fn:*
-      $private:*
-    )
+    (Window $input:* $fn:* $private:*)
     $filters:[
         ...
-        $item:* & (IsDeterminedBy $item $partitionCols:(WindowPartition $private) $input)
+        $item:* &
+            (IsDeterminedBy
+                $item
+                $partitionCols:(WindowPartition $private)
+                $input
+            )
         ...
     ]
 )
@@ -69,12 +71,20 @@ $input
     (Window
         (Select
             $input
-            (ExtractDeterminedConditions $filters $partitionCols $input)
+            (ExtractDeterminedConditions
+                $filters
+                $partitionCols
+                $input
+            )
         )
         $fn
         $private
     )
-    (ExtractUndeterminedConditions $filters $partitionCols $input)
+    (ExtractUndeterminedConditions
+        $filters
+        $partitionCols
+        $input
+    )
 )
 
 # PushLimitIntoWindow moves a Limit below a Window when able. This is
@@ -138,28 +148,21 @@ $input
 # SELECT rank() OVER (ORDER BY f) rnk FROM (SELECT * FROM a ORDER BY f LIMIT 10)
 [PushLimitIntoWindow, Normalize]
 (Limit
-    (Window
-        $input:*
-        $fns:* & (AllArePrefixSafe $fns)
-        $private:*
-    )
+    (Window $input:* $fns:* & (AllArePrefixSafe $fns) $private:*)
     $limit:*
     $ordering:* &
-        (OrderingSucceeded $newOrdering:(MakeSegmentedOrdering
-            $input
-            (WindowPartition $private)
-            (WindowOrdering $private)
-            $ordering
+        (OrderingSucceeded
+            $newOrdering:(MakeSegmentedOrdering
+                $input
+                (WindowPartition $private)
+                (WindowOrdering $private)
+                $ordering
+            )
         )
-    )
 )
 =>
 (Window
-    (Limit
-        $input
-        $limit
-        (DerefOrderingChoice $newOrdering)
-    )
+    (Limit $input $limit (DerefOrderingChoice $newOrdering))
     $fns
     $private
 )

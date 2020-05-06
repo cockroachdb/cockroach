@@ -315,31 +315,30 @@ var HashJoinSpec = &opbench.Spec{
 	Name: "tpch-hash-join",
 	Plan: `
 (Root
-	(InnerJoin
-		(Scan
-			[
-				(Table "supplier")
-				(Cols "s_suppkey")
-				(Index "supplier@s_nk")
-				(HardLimit $supplier_rows)
-			]
-		)
-		(Scan
-			[
-				(Table "lineitem")
-				(Cols "l_suppkey")
-				(Index "lineitem@l_sk")
-				(HardLimit $lineitem_rows)
-			]
-		)
-		[
-			(Eq (Var "l_suppkey") (Var "s_suppkey"))
-		]
-		[ ]
-	)
-	(Presentation "l_suppkey")
-	(NoOrdering)
-)`,
+    (InnerJoin
+        (Scan
+            [
+                (Table "supplier")
+                (Cols "s_suppkey")
+                (Index "supplier@s_nk")
+                (HardLimit $supplier_rows)
+            ]
+        )
+        (Scan
+            [
+                (Table "lineitem")
+                (Cols "l_suppkey")
+                (Index "lineitem@l_sk")
+                (HardLimit $lineitem_rows)
+            ]
+        )
+        [ (Eq (Var "l_suppkey") (Var "s_suppkey")) ]
+        []
+    )
+    (Presentation "l_suppkey")
+    (NoOrdering)
+)
+`,
 
 	Inputs: []opbench.Options{
 		{Field: "lineitem_rows", Values: []float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000}},
@@ -362,34 +361,35 @@ var MergeJoinSpec = &opbench.Spec{
 	Name: "tpch-merge-join",
 	Plan: `
 (Root
-	(MergeJoin
-		(Scan
-			[
-				(Table "lineitem")
-				(Cols "l_suppkey")
-				(Index "lineitem@l_sk")
-				(HardLimit $lineitem_rows)
-			]
-		)
-		(Scan
-			[
-				(Table "supplier")
-				(Cols "s_suppkey")
-				(HardLimit $supplier_rows)
-			]
-		)
-		[ ]
-		[
-			(JoinType "inner-join")
-			(LeftEq "+l_suppkey")
-			(RightEq "+s_suppkey")
-			(LeftOrdering "+l_suppkey")
-			(RightOrdering "+s_suppkey")
-		]
-	)
-	(Presentation "l_suppkey")
-	(NoOrdering)
-)`,
+    (MergeJoin
+        (Scan
+            [
+                (Table "lineitem")
+                (Cols "l_suppkey")
+                (Index "lineitem@l_sk")
+                (HardLimit $lineitem_rows)
+            ]
+        )
+        (Scan
+            [
+                (Table "supplier")
+                (Cols "s_suppkey")
+                (HardLimit $supplier_rows)
+            ]
+        )
+        []
+        [
+            (JoinType "inner-join")
+            (LeftEq "+l_suppkey")
+            (RightEq "+s_suppkey")
+            (LeftOrdering "+l_suppkey")
+            (RightOrdering "+s_suppkey")
+        ]
+    )
+    (Presentation "l_suppkey")
+    (NoOrdering)
+)
+`,
 
 	Inputs: []opbench.Options{
 		{Field: "lineitem_rows", Values: []float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000}},
@@ -412,29 +412,29 @@ var LookupJoinSpec = &opbench.Spec{
 	Name: "tpch-lookup-join",
 	Plan: `
 (Root
-	(MakeLookupJoin
-		(Scan
-			[
-				(Table "supplier")
-				(Index "supplier@s_nk")
-				(Cols "s_suppkey")
-				(HardLimit $supplier_rows)
-			]
-		)
-		[
-			(JoinType "inner-join")
-			(Table "lineitem")
-			(Index "lineitem@l_sk")
-			(KeyCols "s_suppkey")
-			(Cols "l_suppkey")
-			(LookupColsAreTableKey "true")
-		]
-		[
-		]
-	)
-	(Presentation "l_suppkey")
-	(NoOrdering)
-)`,
+    (MakeLookupJoin
+        (Scan
+            [
+                (Table "supplier")
+                (Index "supplier@s_nk")
+                (Cols "s_suppkey")
+                (HardLimit $supplier_rows)
+            ]
+        )
+        [
+            (JoinType "inner-join")
+            (Table "lineitem")
+            (Index "lineitem@l_sk")
+            (KeyCols "s_suppkey")
+            (Cols "l_suppkey")
+            (LookupColsAreTableKey "true")
+        ]
+        []
+    )
+    (Presentation "l_suppkey")
+    (NoOrdering)
+)
+`,
 
 	Inputs: []opbench.Options{
 		{Field: "supplier_rows", Values: []float64{1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000}},

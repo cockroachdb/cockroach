@@ -6,8 +6,6 @@
 # EliminateAggDistinct removes AggDistinct for aggregations where DISTINCT
 # never modifies the result; for example: min(DISTINCT x).
 [EliminateAggDistinct, Normalize]
-(AggDistinct
-    $input:(Min | Max | BoolAnd | BoolOr)
-)
+(AggDistinct $input:(Min | Max | BoolAnd | BoolOr))
 =>
 $input

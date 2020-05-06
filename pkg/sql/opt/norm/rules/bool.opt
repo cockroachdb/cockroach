@@ -3,7 +3,6 @@
 # operators.
 # =============================================================================
 
-
 # NormalizeNestedAnds ensures that And expressions are normalized into a left-
 # deep tree. For example, the expression:
 #
@@ -22,95 +21,66 @@
 # This normalization makes conjuncts easier to traverse for other rules, such as
 # the ExtractRedundantConjunct rule.
 [NormalizeNestedAnds, Normalize]
-(And
-    $left:*
-    (And $innerLeft:* $innerRight:*)
-)
+(And $left:* (And $innerLeft:* $innerRight:*))
 =>
 (And (ConcatLeftDeepAnds $left $innerLeft) $innerRight)
 
 # SimplifyTrueAnd simplifies the And operator by discarding a True condition on
 # the left side.
 [SimplifyTrueAnd, Normalize]
-(And
-    (True)
-    $right:*
-)
+(And (True) $right:*)
 =>
 $right
 
 # SimplifyAndTrue simplifies the And operator by discarding a True condition on
 # the right side.
 [SimplifyAndTrue, Normalize]
-(And
-    $left:*
-    (True)
-)
+(And $left:* (True))
 =>
 $left
 
 # SimplifyFalseAnd maps the And operator to False if its left input is False.
 [SimplifyFalseAnd, Normalize]
-(And
-    $left:(False)
-    *
-)
+(And $left:(False) *)
 =>
 $left
 
 # SimplifyAndFalse maps the And operator to False if its right input is False.
 [SimplifyAndFalse, Normalize]
-(And
-    *
-    $right:(False)
-)
+(And * $right:(False))
 =>
 $right
 
 # SimplifyTrueOr maps the Or operator to True if its left input is True.
 [SimplifyTrueOr, Normalize]
-(Or
-    $left:(True)
-    *
-)
+(Or $left:(True) *)
 =>
 $left
 
 # SimplifyOrTrue maps the Or operator to True if its righht input is True.
 [SimplifyOrTrue, Normalize]
-(Or
-    *
-    $right:(True)
-)
+(Or * $right:(True))
 =>
 $right
 
 # SimplifyFalseOr simplifies the Or operator by discarding a False condition on
 # the left side.
 [SimplifyFalseOr, Normalize]
-(Or
-    (False)
-    $right:*
-)
+(Or (False) $right:*)
 =>
 $right
 
 # SimplifyOrFalse simplifies the Or operator by discarding a False condition on
 # the right side.
 [SimplifyOrFalse, Normalize]
-(Or
-    $left:*
-    (False)
-)
+(Or $left:* (False))
 =>
 $left
 
 # SimplifyRange simplifies a Range operator for which the input is no longer an
 # And expression, likely due to simplification of the And operator itself.
 [SimplifyRange, Normalize]
-(Range
-    $input:^(And)
-)
+(Range $input:^(And))
 =>
 $input
 
@@ -122,27 +92,40 @@ $input
 
 # FoldNotTrue replaces NOT(True) with False.
 [FoldNotTrue, Normalize]
-(Not (True)) => (False)
+(Not (True))
+=>
+(False)
 
 # FoldNotFalse replaces NOT(False) with True.
 [FoldNotFalse, Normalize]
-(Not (False)) => (True)
+(Not (False))
+=>
+(True)
 
 # FoldNotNull replaces NOT(Null) with Null.
 [FoldNotNull, Normalize]
-(Not (Null)) => (Null (BoolType))
+(Not (Null))
+=>
+(Null (BoolType))
 
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
 # comparisons can be negated except for the JSON comparisons.
 [NegateComparison, Normalize]
-(Not $input:(Comparison $left:* $right:*) & ^(Contains|JsonExists|JsonSomeExists|JsonAllExists|Overlaps))
+(Not
+    $input:(Comparison $left:* $right:*) &
+        ^(Contains | JsonExists | JsonSomeExists | JsonAllExists
+                | Overlaps
+        )
+)
 =>
 (NegateComparison (OpName $input) $left $right)
 
 # EliminateNot discards a doubled Not operator.
 [EliminateNot, Normalize]
-(Not (Not $input:*)) => $input
+(Not (Not $input:*))
+=>
+$input
 
 # NegateAnd converts the negation of a conjunction into a disjunction of
 # negations.
@@ -170,6 +153,12 @@ $input
 # in the query tree. For example, if the redundant conjunct A is fully bound by
 # one side of a join, it can be pushed through the join, even if B AND C cannot.
 [ExtractRedundantConjunct, Normalize]
-(Or $left:^(Or) $right:^(Or) & (Succeeded $conjunct:(FindRedundantConjunct $left $right)))
+(Or
+    $left:^(Or)
+    $right:^(Or) &
+        (Succeeded
+            $conjunct:(FindRedundantConjunct $left $right)
+        )
+)
 =>
 (ExtractRedundantConjunct $conjunct $left $right)
