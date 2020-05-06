@@ -2,7 +2,6 @@
 # select.opt contains normalization rules for the Select operator.
 # =============================================================================
 
-
 # SimplifySelectFilters simplifies the Filters operator in several possible
 # ways:
 #   - Removes True operands
@@ -15,13 +14,15 @@
 [SimplifySelectFilters, Normalize, HighPriority]
 (Select
     $input:*
-    $filters:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $filters)
+    $filters:[
+            ...
+            (FiltersItem (And | True | False | Null))
+            ...
+        ] &
+        ^(IsFilterFalse $filters)
 )
 =>
-(Select
-    $input
-    (SimplifyFilters $filters)
-)
+(Select $input (SimplifyFilters $filters))
 
 # ConsolidateSelectFilters consolidates filters that constrain a single
 # variable. For example, filters x >= 5 and x <= 10 would be combined into a
@@ -37,15 +38,9 @@
 # This rule is low priority so other rules in this file such as
 # RemoveNotNullCondition can run first.
 [ConsolidateSelectFilters, Normalize, LowPriority]
-(Select
-    $input:*
-    $filters:* & (CanConsolidateFilters $filters)
-)
+(Select $input:* $filters:* & (CanConsolidateFilters $filters))
 =>
-(Select
-    $input
-    (ConsolidateFilters $filters)
-)
+(Select $input (ConsolidateFilters $filters))
 
 # DetectSelectContradiction replaces a Select with an empty Values if it detects
 # a contradiction in the filter.
@@ -61,23 +56,16 @@
 # filter is always true. Keep this near the top of the file so that it tends to
 # be checked early.
 [EliminateSelect, Normalize]
-(Select $input:* []) => $input
+(Select $input:* [])
+=>
+$input
 
 # MergeSelects combines two nested Select operators into a single Select that
 # ANDs the filter conditions of the two Selects.
 [MergeSelects, Normalize]
-(Select
-    (Select
-        $input:*
-        $innerFilters:*
-    )
-    $filters:*
-)
+(Select (Select $input:* $innerFilters:*) $filters:*)
 =>
-(Select
-    $input
-    (ConcatFilters $innerFilters $filters)
-)
+(Select $input (ConcatFilters $innerFilters $filters))
 
 # PushSelectIntoProject pushes the Select operator into its Project input. This
 # is typically preferable because it minimizes the number of rows which Project
@@ -85,14 +73,11 @@
 # computed columns.
 [PushSelectIntoProject, Normalize]
 (Select
-    (Project
-        $input:*
-        $projections:*
-        $passthrough:*
-    )
+    (Project $input:* $projections:* $passthrough:*)
     $filters:[
         ...
-        $item:* & (IsBoundBy $item $inputCols:(OutputCols $input))
+        $item:* &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
         ...
     ]
 )
@@ -159,7 +144,8 @@
 # the right side.
 [PushSelectCondLeftIntoJoinLeftAndRight, Normalize]
 (Select
-    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply
+            | AntiJoin | AntiJoinApply
         $left:*
         $right:*
         $on:*
@@ -180,13 +166,14 @@
 =>
 (Select
     ((OpName $input)
-        (Select
-            $left
-            [ (FiltersItem $condition) ]
-        )
+        (Select $left [ (FiltersItem $condition) ])
         (Select
             $right
-            [ (FiltersItem (MapJoinOpFilter $item $rightCols $equivFD)) ]
+            [
+                (FiltersItem
+                    (MapJoinOpFilter $item $rightCols $equivFD)
+                )
+            ]
         )
         $on
         $private
@@ -210,7 +197,8 @@
 # Citations: [1]
 [PushSelectIntoJoinLeft, Normalize]
 (Select
-    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply
+            | AntiJoin | AntiJoinApply
         $left:*
         $right:*
         $on:*
@@ -258,10 +246,14 @@
     )
     $filters:[
         ...
-        $item:* & (IsBoundBy
-            $item
-            $passthrough:(GroupingAndConstCols $groupingPrivate $aggregations)
-        )
+        $item:* &
+            (IsBoundBy
+                $item
+                $passthrough:(GroupingAndConstCols
+                    $groupingPrivate
+                    $aggregations
+                )
+            )
         ...
     ]
 )
@@ -295,10 +287,7 @@
     ]
 )
 =>
-(Select
-    $input
-    (RemoveFiltersItem $filters $item)
-)
+(Select $input (RemoveFiltersItem $filters $item))
 
 # InlineConstVar inlines variables which are restricted to be constant, as in
 #   SELECT * FROM foo WHERE a = 4 AND a IN (1, 2, 3, 4).
@@ -307,15 +296,9 @@
 # Note that a single iteration of this rule might not be sufficient to inline
 # all variables, in which case it will trigger itself again.
 [InlineConstVar, Normalize]
-(Select
-    $input:*
-    $filters:* & (CanInlineConstVar $filters)
-)
+(Select $input:* $filters:* & (CanInlineConstVar $filters))
 =>
-(Select
-    $input
-    (InlineConstVar $filters)
-)
+(Select $input (InlineConstVar $filters))
 
 # PushSelectIntoProjectSet pushes filters into a ProjectSet. In particular,
 # the filters that are bound to the input columns of the ProjectSet are
@@ -323,13 +306,11 @@
 # and scans underneath the ProjectSet.
 [PushSelectIntoProjectSet, Normalize]
 (Select
-    (ProjectSet
-        $input:*
-        $zip:*
-    )
+    (ProjectSet $input:* $zip:*)
     $filters:[
         ...
-        $item:* & (IsBoundBy $item $inputCols:(OutputCols $input))
+        $item:* &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
         ...
     ]
 )

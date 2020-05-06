@@ -2,15 +2,11 @@
 # comp.opt contains normalization rules for comparison operators.
 # =============================================================================
 
-
 # CommuteVarInequality is similar to CommuteVar (in scalar.opt), except it
 # handles inequality comparison operators that need special handling to commute
 # operands.
 [CommuteVarInequality, Normalize]
-(Le | Lt | Ge | Gt
-    $left:^(Variable)
-    $right:(Variable)
-)
+(Le | Lt | Ge | Gt $left:^(Variable) $right:(Variable))
 =>
 (CommuteInequality (OpName) $left $right)
 
@@ -18,10 +14,7 @@
 # that it handles inequality comparison operators that need special handling to
 # commute operands.
 [CommuteConstInequality, Normalize]
-(Le | Lt | Ge | Gt
-    $left:(ConstValue)
-    $right:^(ConstValue)
-)
+(Le | Lt | Ge | Gt $left:(ConstValue) $right:^(ConstValue))
 =>
 (CommuteInequality (OpName) $left $right)
 
@@ -42,17 +35,12 @@
 #       normalize.go either. We can add once we've proved it's OK to do so.
 [NormalizeCmpPlusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Plus
-        $leftLeft:^(ConstValue)
-        $leftRight:(ConstValue)
-    )
-    $right:(ConstValue) & (CanConstructBinary Minus $right $leftRight)
+    (Plus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
+    $right:(ConstValue) &
+        (CanConstructBinary Minus $right $leftRight)
 )
 =>
-((OpName)
-    $leftLeft
-    (Minus $right $leftRight)
-)
+((OpName) $leftLeft (Minus $right $leftRight))
 
 # NormalizeCmpMinusConst builds up constant expression trees on one side of the
 # comparison, in cases like this:
@@ -66,17 +54,12 @@
 # tree. Other patterns will fold new constant expressions further.
 [NormalizeCmpMinusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Minus
-        $leftLeft:^(ConstValue)
-        $leftRight:(ConstValue)
-    )
-    $right:(ConstValue) & (CanConstructBinary Plus $right $leftRight)
+    (Minus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
+    $right:(ConstValue) &
+        (CanConstructBinary Plus $right $leftRight)
 )
 =>
-((OpName)
-    $leftLeft
-    (Plus $right $leftRight)
-)
+((OpName) $leftLeft (Plus $right $leftRight))
 
 # NormalizeCmpConstMinus builds up constant expression trees on one side of the
 # comparison, in cases like this:
@@ -91,17 +74,12 @@
 # constant expression if possible.
 [NormalizeCmpConstMinus, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Minus
-        $leftLeft:(ConstValue)
-        $leftRight:^(ConstValue)
-    )
-    $right:(ConstValue) & (CanConstructBinary Minus $leftLeft $right)
+    (Minus $leftLeft:(ConstValue) $leftRight:^(ConstValue))
+    $right:(ConstValue) &
+        (CanConstructBinary Minus $leftLeft $right)
 )
 =>
-((OpName)
-    (Minus $leftLeft $right)
-    $leftRight
-)
+((OpName) (Minus $leftLeft $right) $leftRight)
 
 # NormalizeTupleEquality breaks up expressions like:
 #   (a, b, c) = (x, y, z)
@@ -118,9 +96,10 @@
 # FoldNullComparisonLeft replaces the comparison operator with null if its
 # left input is null.
 [FoldNullComparisonLeft, Normalize]
-(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
-    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
-    Contains | Overlaps | JsonExists | JsonSomeExists | JsonAllExists
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike
+        | SimilarTo | NotSimilarTo | RegMatch | NotRegMatch
+        | RegIMatch | NotRegIMatch | Contains | Overlaps
+        | JsonExists | JsonSomeExists | JsonAllExists
     $left:(Null)
     *
 )
@@ -130,9 +109,10 @@
 # FoldNullComparisonRight replaces the comparison operator with null if its
 # right input is null.
 [FoldNullComparisonRight, Normalize]
-(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
-    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
-    Contains | Overlaps | JsonExists | JsonSomeExists | JsonAllExists
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike
+        | SimilarTo | NotSimilarTo | RegMatch | NotRegMatch
+        | RegIMatch | NotRegIMatch | Contains | Overlaps
+        | JsonExists | JsonSomeExists | JsonAllExists
     *
     $right:(Null)
 )
@@ -141,35 +121,30 @@
 
 # FoldIsNull replaces NULL IS NULL with True.
 [FoldIsNull, Normalize]
-(Is (Null) (Null)) => (True)
+(Is (Null) (Null))
+=>
+(True)
 
 # FoldNonNullIsNull replaces x IS NULL with False where x is a non-Null constant.
 [FoldNonNullIsNull, Normalize]
-(Is
-  $left:^(Null) & (IsConstValueOrTuple $left)
-  (Null)
-)
+(Is $left:^(Null) & (IsConstValueOrTuple $left) (Null))
 =>
 (False)
 
 # FoldIsNotNull replaces NULL IS NOT NULL with False.
 [FoldIsNotNull, Normalize]
-(IsNot (Null) (Null)) => (False)
+(IsNot (Null) (Null))
+=>
+(False)
 
 # FoldNonNullIsNotNull replaces x IS NOT NULL with True where x is a non-Null constant.
 [FoldNonNullIsNotNull, Normalize]
-(IsNot
-  $left:^(Null) & (IsConstValueOrTuple $left)
-  (Null)
-)
+(IsNot $left:^(Null) & (IsConstValueOrTuple $left) (Null))
 =>
 (True)
 
 # CommuteNullIs moves a NULL onto the right side of an IS/IS NOT comparison.
 [CommuteNullIs, Normalize]
-(Is | IsNot
-  $left:(Null)
-  $right:^(Null)
-)
+(Is | IsNot $left:(Null) $right:^(Null))
 =>
 ((OpName) $right $left)
