@@ -98,6 +98,12 @@ func MakeMetadataSchema(
 	return ms
 }
 
+// forSystemTenant returns whether this MetadataSchema is associated with the
+// system tenant or with a secondary tenant.
+func (ms *MetadataSchema) forSystemTenant() bool {
+	return ms.codec == keys.SystemSQLCodec
+}
+
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
@@ -140,7 +146,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	value := roachpb.Value{}
 	value.SetInt(int64(keys.MinUserDescID))
 	ret = append(ret, roachpb.KeyValue{
-		Key:   keys.DescIDGenerator,
+		Key:   ms.codec.DescIDSequenceKey(),
 		Value: value,
 	})
 

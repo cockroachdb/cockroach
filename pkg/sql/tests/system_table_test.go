@@ -112,6 +112,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable},
 		{keys.SettingsTableID, sqlbase.SettingsTableSchema, sqlbase.SettingsTable},
+		{keys.DescIDSequenceID, sqlbase.DescIDSequenceSchema, sqlbase.DescIDSequence},
 		{keys.WebSessionsTableID, sqlbase.WebSessionsTableSchema, sqlbase.WebSessionsTable},
 		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable},
 		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable},

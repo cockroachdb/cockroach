@@ -234,9 +234,10 @@ var (
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
 	//
-	// DescIDGenerator is the global descriptor ID generator sequence used for
-	// table and namespace IDs.
-	DescIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
+	// descIDGenerator is the global descriptor ID generator sequence used for
+	// table and namespace IDs for the system tenant. All other tenants use a
+	// SQL sequence for this purpose. See sqlEncoder.DescIDSequenceKey.
+	descIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))
 	// RangeIDGenerator is the global range ID generator sequence.
@@ -332,6 +333,7 @@ const (
 	UsersTableID               = 4
 	ZonesTableID               = 5
 	SettingsTableID            = 6
+	DescIDSequenceID           = 7
 
 	// IDs for the important columns and indexes in the zones table live here to
 	// avoid introducing a dependency on sql/sqlbase throughout the codebase.

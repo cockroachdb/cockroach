@@ -261,7 +261,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 	if err != nil {
 		return err
 	}

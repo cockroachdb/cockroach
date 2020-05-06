@@ -191,8 +191,8 @@ func allocateTableRewrites(
 
 	needsNewParentIDs := make(map[string][]sqlbase.ID)
 
-	// Increment the DescIDGenerator so that it is higher than the max desc ID in
-	// the backup. This generator keeps produced the next descriptor ID.
+	// Increment the DescIDSequenceKey so that it is higher than the max desc ID
+	// in the backup. This generator keeps produced the next descriptor ID.
 	var tempSysDBID sqlbase.ID
 	if descriptorCoverage == tree.AllDescriptors {
 		var err error
@@ -204,14 +204,14 @@ func allocateTableRewrites(
 		//   since for clusters with many descrirptors we'd want to avoid
 		//   incrementing it 10,000+ times.
 		for i := uint32(0); i <= numberOfIncrements; i++ {
-			_, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+			_, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
 				return nil, err
 			}
 		}
 
 		// Generate one more desc ID for the ID of the temporary system db.
-		tempSysDBID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		tempSysDBID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +338,7 @@ func allocateTableRewrites(
 		if descriptorCoverage == tree.AllDescriptors {
 			newID = db.ID
 		} else {
-			newID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+			newID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
 				return nil, err
 			}
@@ -372,7 +372,7 @@ func allocateTableRewrites(
 
 	// Generate new IDs for the tables that need to be remapped.
 	for _, table := range tablesToRemap {
-		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}

@@ -36,12 +36,13 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
+	codec := keys.SystemSQLCodec
 
 	// IDs to map (parentID, name) to. Actual ID value is irrelevant to the test.
 	idCounter := keys.MinNonPredefinedUserDescID
 
 	// Database name.
-	dKey := sqlbase.NewDeprecatedDatabaseKey("test").Key(keys.SystemSQLCodec)
+	dKey := sqlbase.NewDeprecatedDatabaseKey("test").Key(codec)
 	if gr, err := kvDB.Get(ctx, dKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -89,7 +90,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	} else if gr.Exists() {
 		t.Fatal("database key unexpectedly found in the deprecated system.namespace")
 	}
-	newDKey := sqlbase.NewDatabaseKey("test").Key(keys.SystemSQLCodec)
+	newDKey := sqlbase.NewDatabaseKey("test").Key(codec)
 	if gr, err := kvDB.Get(ctx, newDKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
@@ -97,7 +98,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	}
 
 	txn := kvDB.NewTxn(ctx, "lookup-test-db-id")
-	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, keys.SystemSQLCodec, "test")
+	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	}
 
 	// Simulate the same test for a table and sequence.
-	tKey := sqlbase.NewDeprecatedTableKey(dbID, "rel").Key(keys.SystemSQLCodec)
+	tKey := sqlbase.NewDeprecatedTableKey(dbID, "rel").Key(codec)
 	if err := kvDB.CPut(ctx, tKey, idCounter, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -122,10 +123,10 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	// counter to be in line with idCounter, and write a dummy table descriptor
 	// into system.descriptor so that conflicts against this fake entry are
 	// correctly detected.
-	if _, err := kvDB.Inc(ctx, keys.DescIDGenerator, 1); err != nil {
+	if _, err := kvDB.Inc(ctx, codec.DescIDSequenceKey(), 1); err != nil {
 		t.Fatal(err)
 	}
-	mKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(idCounter))
+	mKey := sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(idCounter))
 	// Fill the dummy descriptor with garbage.
 	desc := sql.InitTableDescriptor(
 		sqlbase.ID(idCounter),
@@ -195,7 +196,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	} else if gr.Exists() {
 		t.Fatal("table key unexpectedly found in the deprecated system.namespace")
 	}
-	newTKey := sqlbase.NewPublicTableKey(dbID, "rel").Key(keys.SystemSQLCodec)
+	newTKey := sqlbase.NewPublicTableKey(dbID, "rel").Key(codec)
 	if gr, err := kvDB.Get(ctx, newTKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {

@@ -51,7 +51,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	}
 
 	config.TestingSetupZoneConfigHook(tc.Stopper())
-	v, err := tc.Servers[0].DB().Get(context.TODO(), keys.DescIDGenerator)
+	v, err := tc.Servers[0].DB().Get(context.TODO(), keys.SystemSQLCodec.DescIDSequenceKey())
 	if err != nil {
 		t.Fatal(err)
 	}

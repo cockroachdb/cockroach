@@ -871,7 +871,7 @@ func prepareNewTableDescsForIngestion(
 	tableRewrites := make(backupccl.TableRewriteMap)
 	seqVals := make(map[sqlbase.ID]int64, len(tables))
 	for _, tableDesc := range tables {
-		id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}
