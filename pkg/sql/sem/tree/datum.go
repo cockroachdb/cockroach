@@ -797,33 +797,38 @@ func (d *DFloat) Compare(ctx *EvalContext, other Datum) int {
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < v {
+	return CompareFloats(float64(*d), float64(v))
+}
+
+// CompareFloats compares 2 float64 according to the SQL comparison rules.
+func CompareFloats(d float64, v float64) int {
+	if d < v {
 		return -1
 	}
-	if *d > v {
+	if d > v {
 		return 1
 	}
-	// NaN sorts before non-NaN (#10109).
-	if *d == v {
+
+	if d == v {
 		return 0
 	}
-	if math.IsNaN(float64(*d)) {
-		if math.IsNaN(float64(v)) {
+	if math.IsNaN(d) {
+		if math.IsNaN(v) {
 			return 0
 		}
-		return -1
+		return 1
 	}
-	return 1
+	return -1
 }
 
 // Prev implements the Datum interface.
 func (d *DFloat) Prev(_ *EvalContext) (Datum, bool) {
 	f := float64(*d)
 	if math.IsNaN(f) {
-		return nil, false
+		return dPosInfFloat, true
 	}
 	if f == math.Inf(-1) {
-		return dNaNFloat, true
+		return nil, false
 	}
 	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(-1)))), true
 }
@@ -832,10 +837,10 @@ func (d *DFloat) Prev(_ *EvalContext) (Datum, bool) {
 func (d *DFloat) Next(_ *EvalContext) (Datum, bool) {
 	f := float64(*d)
 	if math.IsNaN(f) {
-		return dNegInfFloat, true
+		return nil, false
 	}
 	if f == math.Inf(+1) {
-		return nil, false
+		return dNaNFloat, true
 	}
 	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(+1)))), true
 }
@@ -847,22 +852,22 @@ var dNaNFloat = NewDFloat(DFloat(math.NaN()))
 
 // IsMax implements the Datum interface.
 func (d *DFloat) IsMax(_ *EvalContext) bool {
-	return *d == *dPosInfFloat
+	return math.IsNaN(float64(*d))
 }
 
 // IsMin implements the Datum interface.
 func (d *DFloat) IsMin(_ *EvalContext) bool {
-	return math.IsNaN(float64(*d))
+	return *d == *dNegInfFloat
 }
 
 // Max implements the Datum interface.
 func (d *DFloat) Max(_ *EvalContext) (Datum, bool) {
-	return dPosInfFloat, true
+	return dNaNFloat, true
 }
 
 // Min implements the Datum interface.
 func (d *DFloat) Min(_ *EvalContext) (Datum, bool) {
-	return dNaNFloat, true
+	return dNegInfFloat, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -983,13 +988,13 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 }
 
 // CompareDecimals compares 2 apd.Decimals according to the SQL comparison
-// rules, making sure that NaNs sort first.
+// rules, making sure that NaNs sort last.
 func CompareDecimals(d *apd.Decimal, v *apd.Decimal) int {
 	// NaNs sort first in SQL.
 	if dn, vn := d.Form == apd.NaN, v.Form == apd.NaN; dn && !vn {
-		return -1
-	} else if !dn && vn {
 		return 1
+	} else if !dn && vn {
+		return -1
 	} else if dn && vn {
 		return 0
 	}
@@ -1007,27 +1012,27 @@ func (d *DDecimal) Next(_ *EvalContext) (Datum, bool) {
 }
 
 var dZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
-var dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
-var dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
+var dNegInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: true}}
+var dNanDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
 
 // IsMax implements the Datum interface.
 func (d *DDecimal) IsMax(_ *EvalContext) bool {
-	return d.Form == apd.Infinite && !d.Negative
+	return d.Form == apd.NaN
 }
 
 // IsMin implements the Datum interface.
 func (d *DDecimal) IsMin(_ *EvalContext) bool {
-	return d.Form == apd.NaN
+	return d.Form == apd.Infinite && d.Negative
 }
 
 // Max implements the Datum interface.
 func (d *DDecimal) Max(_ *EvalContext) (Datum, bool) {
-	return dPosInfDecimal, true
+	return dNanDecimal, true
 }
 
 // Min implements the Datum interface.
 func (d *DDecimal) Min(_ *EvalContext) (Datum, bool) {
-	return dNaNDecimal, true
+	return dNegInfDecimal, true
 }
 
 // AmbiguousFormat implements the Datum interface.

@@ -21,7 +21,6 @@ package colexec
 
 import (
 	"bytes"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -40,9 +39,6 @@ var _ tree.Datum
 
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _LEFT_CANONICAL_TYPE_FAMILY is the template variable.
 const _LEFT_CANONICAL_TYPE_FAMILY = types.UnknownFamily

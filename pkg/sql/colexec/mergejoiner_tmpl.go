@@ -23,7 +23,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/apd"
@@ -56,9 +55,6 @@ var _ time.Time
 
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _GOTYPE is the template variable.
 type _GOTYPE interface{}

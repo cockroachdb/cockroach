@@ -99,7 +99,7 @@ func init() {
 		},
 		{
 			tuples:   tuples{{3.2}, {2.0}, {2.4}, {math.NaN()}, {math.Inf(-1)}, {math.Inf(1)}},
-			expected: tuples{{math.NaN()}, {math.Inf(-1)}, {2.0}, {2.4}, {3.2}, {math.Inf(1)}},
+			expected: tuples{{math.Inf(-1)}, {2.0}, {2.4}, {3.2}, {math.Inf(1)}, {math.NaN()}},
 			typs:     []*types.T{types.Float},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},

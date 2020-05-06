@@ -131,7 +131,6 @@ func TestEncodeDecimal(t *testing.T) {
 		Value    *apd.Decimal
 		Encoding []byte
 	}{
-		{&apd.Decimal{Form: apd.NaN}, []byte{0x18}},
 		{&apd.Decimal{Form: apd.Infinite, Negative: true}, []byte{0x19}},
 		{apd.New(-99122, 99999), []byte{0x1a, 0x86, 0x3c, 0xad, 0x38, 0xe6, 0xd7, 0x00}},
 		// Three duplicates to make sure -13*10^1000 <= -130*10^999 <= -13*10^1000
@@ -177,6 +176,7 @@ func TestEncodeDecimal(t *testing.T) {
 		{apd.New(99122, 99999), []byte{0x34, 0xf7, 0xc3, 0x52, 0xc7, 0x19, 0x28, 0x00}},
 		{apd.New(99122839898321208, 99999), []byte{0x34, 0xf7, 0xc3, 0x58, 0xc7, 0x19, 0x39, 0x4f, 0xb3, 0xa7, 0x2b, 0x29, 0xa0, 0x00}},
 		{&apd.Decimal{Form: apd.Infinite}, []byte{0x35}},
+		{&apd.Decimal{Form: apd.NaN}, []byte{0x36}},
 	}
 
 	rng, _ := randutil.NewPseudoRand()
@@ -305,7 +305,7 @@ func TestNonsortingEncodeDecimal(t *testing.T) {
 		Value    *apd.Decimal
 		Encoding []byte
 	}{
-		{&apd.Decimal{Form: apd.NaN}, []byte{0x18}},
+		{&apd.Decimal{Form: apd.NaN}, []byte{0x36}},
 		{&apd.Decimal{Form: apd.Infinite, Negative: true}, []byte{0x19}},
 		{apd.New(-99122, 99999), []byte{0x1a, 0xf8, 0x01, 0x86, 0xa4, 0x01, 0x83, 0x32}},
 		// Three duplicates to make sure -13*10^1000 <= -130*10^999 <= -13*10^1000
