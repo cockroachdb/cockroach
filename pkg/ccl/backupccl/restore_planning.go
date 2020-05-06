@@ -204,14 +204,14 @@ func allocateTableRewrites(
 		//   since for clusters with many descrirptors we'd want to avoid
 		//   incrementing it 10,000+ times.
 		for i := uint32(0); i <= numberOfIncrements; i++ {
-			_, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+			_, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
 				return nil, err
 			}
 		}
 
 		// Generate one more desc ID for the ID of the temporary system db.
-		tempSysDBID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		tempSysDBID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +338,7 @@ func allocateTableRewrites(
 		if descriptorCoverage == tree.AllDescriptors {
 			newID = db.ID
 		} else {
-			newID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+			newID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
 				return nil, err
 			}
@@ -372,7 +372,7 @@ func allocateTableRewrites(
 
 	// Generate new IDs for the tables that need to be remapped.
 	for _, table := range tablesToRemap {
-		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}

@@ -1103,7 +1103,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		sqlDB.Exec(t, `BACKUP DATABASE DATA TO $1`, restoreDir)
 		sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 		restoreDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "restoredb")
-		restoreTableID, err := sql.GenerateUniqueDescID(ctx, tc.Servers[0].DB())
+		restoreTableID, err := sql.GenerateUniqueDescID(ctx, tc.Servers[0].DB(), keys.SystemSQLCodec)
 		if err != nil {
 			t.Fatal(err)
 		}

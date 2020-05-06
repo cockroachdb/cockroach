@@ -87,6 +87,13 @@ var SystemSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 // surrounding context.
 var TODOSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 
+// systemTenant returns whether the encoder is bound to the system tenant. This
+// information should not be exposed, but is used internally to the encoder when
+// key encoding for the system tenant differs from that of all other tenants.
+func (e sqlEncoder) systemTenant() bool {
+	return len(e.TenantPrefix()) == 0
+}
+
 // TenantPrefix returns the key prefix used for the tenants's data.
 func (e sqlEncoder) TenantPrefix() roachpb.Key {
 	return *e.buf
@@ -122,6 +129,16 @@ func (e sqlEncoder) SequenceKey(tableID uint32) roachpb.Key {
 	k = encoding.EncodeUvarintAscending(k, 0)    // Primary key value
 	k = MakeFamilyKey(k, SequenceColumnFamilyID) // Column family
 	return k
+}
+
+// DescIDSequenceKey returns the key used for the descriptor ID sequence.
+func (e sqlEncoder) DescIDSequenceKey() roachpb.Key {
+	if e.systemTenant() {
+		// To maintain backwards compatibility, the system tenant uses a
+		// separate, non-SQL, key to store its descriptor ID sequence.
+		return DescIDGenerator
+	}
+	return e.SequenceKey(DescIDSequenceID)
 }
 
 // ZoneKeyPrefix returns the key prefix for id's row in the system.zones table.

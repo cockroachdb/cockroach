@@ -12,6 +12,7 @@ package sqlbase
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -96,6 +97,9 @@ CREATE TABLE system.settings (
 	"valueType"       STRING,
 	FAMILY (name, value, "lastUpdated", "valueType")
 );`
+
+	DescIDSequenceSchema = `
+CREATE SEQUENCE system.descriptor_id_seq;`
 )
 
 // These system tables are not part of the system config.
@@ -290,7 +294,7 @@ create table system.statement_diagnostics(
 
 func pk(name string) IndexDescriptor {
 	return IndexDescriptor{
-		Name:             "primary",
+		Name:             PrimaryKeyIndexName,
 		ID:               1,
 		Unique:           true,
 		ColumnNames:      []string{name},
@@ -315,6 +319,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	// the use of a validating, logging accessor, so we'll go ahead and tolerate
 	// read-only privs to make that migration possible later.
 	keys.SettingsTableID:   privilege.ReadWriteData,
+	keys.DescIDSequenceID:  privilege.ReadData,
 	keys.LeaseTableID:      privilege.ReadWriteData,
 	keys.EventLogTableID:   privilege.ReadWriteData,
 	keys.RangeEventTableID: privilege.ReadWriteData,
@@ -566,6 +571,40 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
+	}
+
+	// DescIDSequence is the descriptor for the descriptor ID sequence.
+	DescIDSequence = TableDescriptor{
+		Name:                    "descriptor_id_seq",
+		ID:                      keys.DescIDSequenceID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: SequenceColumnName, ID: SequenceColumnID, Type: types.Int},
+		},
+		Families: []ColumnFamilyDescriptor{{
+			Name:            "primary",
+			ID:              keys.SequenceColumnFamilyID,
+			ColumnNames:     []string{SequenceColumnName},
+			ColumnIDs:       []ColumnID{SequenceColumnID},
+			DefaultColumnID: SequenceColumnID,
+		}},
+		PrimaryIndex: IndexDescriptor{
+			ID:               keys.SequenceIndexID,
+			Name:             PrimaryKeyIndexName,
+			ColumnIDs:        []ColumnID{SequenceColumnID},
+			ColumnNames:      []string{SequenceColumnName},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+		},
+		SequenceOpts: &TableDescriptor_SequenceOpts{
+			Increment: 1,
+			MinValue:  1,
+			MaxValue:  math.MaxInt64,
+			Start:     1,
+		},
+		Privileges:    NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescIDSequenceID]),
+		FormatVersion: InterleavedFormatVersion,
 	}
 )
 
@@ -1485,6 +1524,12 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
+
+	// Only add the descriptor ID sequence if this is a non-system tenant.
+	// System tenants use the global DescIDGenerator key. See #48513.
+	if !target.forSystemTenant() {
+		target.AddDescriptor(keys.SystemDatabaseID, &DescIDSequence)
+	}
 
 	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
