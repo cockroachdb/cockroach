@@ -523,8 +523,9 @@ define GroupBy {
 }
 
 # GroupingPrivate is shared between the grouping-related operators: GroupBy
-# ScalarGroupBy, DistinctOn, EnsureDistinctOn, and UpsertDistinctOn. This allows
-# the operators to be treated polymorphically.
+# ScalarGroupBy, DistinctOn, EnsureDistinctOn, UpsertDistinctOn, and
+# EnsureUpsertDistinctOn. This allows the operators to be treated
+# polymorphically.
 [Private]
 define GroupingPrivate {
     # GroupingCols partitions the GroupBy input rows into aggregation groups.
@@ -546,8 +547,8 @@ define GroupingPrivate {
     Ordering OrderingChoice
 
     # ErrorOnDup, if non-empty, triggers an error with the given text if any
-    # aggregation group contains more than one row. This can only be true for
-    # the EnsureDistinctOn and UpsertDistinctOn operators.
+    # aggregation group contains more than one row. This can only take on a
+    # value for the EnsureDistinctOn and EnsureUpsertDistinctOn operators.
     ErrorOnDup string
 }
 
@@ -616,6 +617,9 @@ define DistinctOn {
 # distinct grouping contains more than one row. Or in other words, it "ensures"
 # that the input is distinct on the grouping columns.
 #
+# EnsureDistinctOn is used when nulls are not considered distinct for grouping
+# purposes and an error should be raised when duplicates are detected.
+#
 # Rules should only "push through" or eliminate an EnsureDistinctOn if they
 # preserve the expected error behavior. For example, it would be invalid to
 # push a Select filter into an EnsureDistinctOn, as it might eliminate rows
@@ -628,22 +632,38 @@ define EnsureDistinctOn {
 }
 
 # UpsertDistinctOn is a variation on DistinctOn that is only used with UPSERT
-# and INSERT..ON CONFLICT statements. It differs from DistinctOn in two ways:
+# and INSERT..ON CONFLICT statements. Unlike DistinctOn, UpsertDistinctOn treats
+# NULL values as not equal to one another for purposes of grouping. Two rows
+# having a NULL-valued grouping column will be placed in different groups. This
+# differs from DistinctOn behavior, where the two rows would be grouped
+# together. This behavior difference reflects SQL semantics, in which a unique
+# index key still allows multiple NULL values.
 #
-#   1. Null behavior: UpsertDistinctOn treats NULL values as not equal to one
-#      another for purposes of grouping. Two rows having a NULL-valued grouping
-#      column will be placed in different groups. This differs from DistinctOn
-#      behavior, where the two rows would be grouped together. This behavior
-#      difference reflects SQL semantics, in which a unique index key still
-#      allows multiple NULL values.
-#
-#   2. Duplicate behavior: UpsertDistinctOn raises an error if any distinct
-#      grouping contains more than one row. It has "input must be distinct"
-#      semantics rather than "make the input distinct" semantics. This is used
-#      to ensure that no row will be updated more than once.
-#
+# UpsertDistinctOn is used when nulls are considered distinct for grouping
+# purposes and duplicates should be filtered out without raising an error.
 [Relational, Grouping, Telemetry]
 define UpsertDistinctOn {
+    Input RelExpr
+    Aggregations AggregationsExpr
+    _ GroupingPrivate
+}
+
+# EnsureUpsertDistinctOn is a variation on UpsertDistinctOn that is only used
+# with UPSERT and INSERT..ON CONFLICT statements. Like UpsertDistinctOn,
+# EnsureUpsertDistinctOn treats NULL values as not equal to one another for
+# purposes of grouping. Unlike UpsertDistinctOn, it raises an error if any
+# distinct grouping contains more than one row. Or in other words, it "ensures"
+# that the input is distinct on the grouping columns.
+#
+# EnsureUpsertDistinctOn is used when nulls are considered distinct for grouping
+# purposes and an error should be raised when duplicates are detected.
+#
+# Rules should only "push through" or eliminate an EnsureUpsertDistinctOn if
+# they preserve the expected error behavior. For example, it would be invalid to
+# push a Select filter into an EnsureUpsertDistinctOn, as it might eliminate
+# rows that would otherwise trigger the EnsureUpsertDistinctOn error.
+[Relational, Grouping, Telemetry]
+define EnsureUpsertDistinctOn {
     Input RelExpr
     Aggregations AggregationsExpr
     _ GroupingPrivate

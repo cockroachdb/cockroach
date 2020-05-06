@@ -96,7 +96,7 @@ upsert abc
       │    │    ├── columns: column14:14!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9
       │    │    │    │    ├── grouping columns: x:5!null
       │    │    │    │    ├── project
@@ -172,7 +172,7 @@ project
            │    │    ├── columns: column13:13!null column14:14!null column15:15!null x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12
-           │    │    │    ├── upsert-distinct-on
+           │    │    │    ├── ensure-upsert-distinct-on
            │    │    │    │    ├── columns: x:5!null y:6 z:7 column8:8
            │    │    │    │    ├── grouping columns: y:6 column8:8
            │    │    │    │    ├── project
@@ -236,7 +236,7 @@ upsert abc
       │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
-      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9
       │    │    │    │    │    ├── grouping columns: x:5!null
       │    │    │    │    │    ├── project
@@ -315,7 +315,7 @@ sort
       │              │    │    ├── columns: column13:13!null column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
       │              │    │    ├── left-join (hash)
       │              │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
-      │              │    │    │    ├── upsert-distinct-on
+      │              │    │    │    ├── ensure-upsert-distinct-on
       │              │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
       │              │    │    │    │    ├── grouping columns: column1:5!null
       │              │    │    │    │    ├── project
@@ -387,7 +387,7 @@ upsert tab
       │    │    ├── columns: column13:13 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
       │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
@@ -452,7 +452,7 @@ upsert abc
       │    │    ├── columns: column13:13!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
       │    │    │    │    ├── grouping columns: column2:6!null column8:8!null
       │    │    │    │    ├── project
@@ -669,7 +669,7 @@ project
  │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
  │         │    │    ├── left-join (hash)
  │         │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
- │         │    │    │    ├── upsert-distinct-on
+ │         │    │    │    ├── ensure-upsert-distinct-on
  │         │    │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
  │         │    │    │    │    ├── grouping columns: column2:5!null column3:6!null
  │         │    │    │    │    ├── values
@@ -749,7 +749,7 @@ upsert abc
       │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 x:13 "?column?":16
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
       │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
@@ -826,7 +826,7 @@ upsert abc
       │    │    ├── columns: column13:13 column14:14!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
       │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
@@ -899,7 +899,7 @@ upsert mutation
       │    │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
       │    │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    │    ├── project
@@ -960,7 +960,7 @@ upsert xyz
       ├── columns: upsert_x:9 column1:4!null column5:5 x:6 y:7 z:8
       ├── left-join (hash)
       │    ├── columns: column1:4!null column5:5 x:6 y:7 z:8
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:4!null column5:5
       │    │    ├── grouping columns: column1:4!null
       │    │    ├── project
@@ -1023,7 +1023,7 @@ with &1
  │              ├── columns: upsert_rowid:13 column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
  │              ├── left-join (hash)
  │              │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
- │              │    ├── upsert-distinct-on
+ │              │    ├── ensure-upsert-distinct-on
  │              │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
  │              │    │    ├── grouping columns: column7:7
  │              │    │    ├── project
@@ -1080,7 +1080,7 @@ upsert xyz
       ├── columns: upsert_x:10 column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
       ├── left-join (hash)
       │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:4!null column2:5!null column3:6!null
       │    │    ├── grouping columns: column2:5!null
       │    │    ├── values
@@ -1139,7 +1139,7 @@ upsert checks
       │    ├── columns: upsert_a:13 column1:5!null column2:6!null column3:7!null column8:8!null a:9 b:10 c:11 d:12
       │    ├── left-join (hash)
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null column8:8!null a:9 b:10 c:11 d:12
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column8:8!null
       │    │    │    ├── grouping columns: column1:5!null
       │    │    │    ├── project
@@ -1196,7 +1196,7 @@ upsert mutation
       │    ├── columns: upsert_m:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    ├── left-join (hash)
       │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
       │    │    │    ├── grouping columns: column1:6!null
       │    │    │    ├── project
@@ -1253,7 +1253,7 @@ upsert mutation
       │    ├── columns: upsert_m:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    ├── left-join (hash)
       │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
       │    │    │    ├── grouping columns: column1:6!null
       │    │    │    ├── project
@@ -1323,7 +1323,7 @@ upsert checks
       │    │    │    ├── columns: column13:13!null column14:14!null column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
-      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
       │    │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    │    ├── project
@@ -1448,7 +1448,7 @@ upsert checks
       │    │    ├── columns: column13:13 column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
       │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
@@ -1518,7 +1518,7 @@ upsert checks
       │    │    │    ├── columns: column18:18 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14
-      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    │    ├── columns: abc.a:5!null abc.b:6 column9:9 column10:10
       │    │    │    │    │    ├── grouping columns: abc.a:5!null
       │    │    │    │    │    ├── project
@@ -1596,7 +1596,7 @@ upsert xyz
       │    ├── columns: column11:11!null a:4!null b:5 c:6 x:8 y:9 z:10
       │    ├── left-join (hash)
       │    │    ├── columns: a:4!null b:5 c:6 x:8 y:9 z:10
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: a:4!null b:5 c:6
       │    │    │    ├── grouping columns: b:5 c:6
       │    │    │    ├── project
@@ -1650,7 +1650,7 @@ upsert decimals
       │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: a:8 b:9 c:10 d:12
       │    │    │    ├── grouping columns: a:8
       │    │    │    ├── project
@@ -1700,7 +1700,7 @@ upsert decimals
       │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: a:8 b:9 c:10 d:12
       │    │    │    ├── grouping columns: a:8
       │    │    │    ├── project
@@ -1753,7 +1753,7 @@ upsert decimals
       │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: a:8 b:9 c:10 d:12
       │    │    │    ├── grouping columns: a:8
       │    │    │    ├── project

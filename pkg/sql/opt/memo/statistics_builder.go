@@ -371,7 +371,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStatSetNode(colSet, e)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.EnsureDistinctOnOp,
-		opt.UpsertDistinctOnOp:
+		opt.UpsertDistinctOnOp, opt.EnsureUpsertDistinctOnOp:
 		return sb.colStatGroupBy(colSet, e)
 
 	case opt.LimitOp:
@@ -1551,9 +1551,9 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		}
 	}
 
-	if groupNode.Op() == opt.UpsertDistinctOnOp {
-		// UpsertDistinctOp inherits NullCount from child, since it does not group
-		// NULL values.
+	if groupNode.Op() == opt.UpsertDistinctOnOp || groupNode.Op() == opt.EnsureUpsertDistinctOnOp {
+		// UpsertDistinctOnOp and EnsureUpsertDistinctOnOp inherit NullCount from
+		// child, since they do not group NULL values.
 		colStat.NullCount = inputColStat.NullCount
 	} else {
 		// For null counts - we either only have 1 possible null value (if we're
