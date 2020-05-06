@@ -377,7 +377,7 @@
 
 [[projects]]
   branch = "v1.2.4-cockroach20.1"
-  digest = "1:f4441cc580b6f69ff82a4130589b43cf4b14883e9f090db66f9c4ad337b41ee4"
+  digest = "1:b71a73b66891223c46f81a6195774911b79320181b54963196e843e8c3566461"
   name = "github.com/cockroachdb/errors"
   packages = [
     ".",
@@ -400,7 +400,7 @@
     "withstack",
   ]
   pruneopts = "UT"
-  revision = "5f3a6d1e1cf5d5d6212d56dc3833d6d57c7545e4"
+  revision = "ad1964b7f01491050a580f32fa2566ea66518cbd"
 
 [[projects]]
   digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"
