@@ -422,7 +422,13 @@ func BenchmarkAppend(b *testing.B) {
 	for _, typ := range []*types.T{types.Bytes, types.Decimal, types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
 			src := coldata.NewMemColumn(typ, coldata.BatchSize())
-			coldatatestutils.RandomVec(rng, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
+			coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+				Rand:             rng,
+				Vec:              src,
+				N:                coldata.BatchSize(),
+				NullProbability:  nullProbability,
+				BytesFixedLength: 8,
+			})
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.SrcEndIdx = coldata.BatchSize()
@@ -465,7 +471,13 @@ func BenchmarkCopy(b *testing.B) {
 	for _, typ := range []*types.T{types.Bytes, types.Decimal, types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
 			src := coldata.NewMemColumn(typ, coldata.BatchSize())
-			coldatatestutils.RandomVec(rng, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
+			coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+				Rand:             rng,
+				Vec:              src,
+				N:                coldata.BatchSize(),
+				NullProbability:  nullProbability,
+				BytesFixedLength: 8,
+			})
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.SrcEndIdx = coldata.BatchSize()

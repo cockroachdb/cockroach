@@ -16,7 +16,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -525,7 +524,7 @@ func (p *pebbleMVCCScanner) advanceKeyAtEnd() bool {
 		// Iterating to the next key might have caused the iterator to reach the
 		// end of the key space. If that happens, back up to the very last key.
 		p.peeked = false
-		p.parent.SeekLT(MVCCKey{Key: keys.MaxKey})
+		p.parent.SeekLT(MVCCKey{Key: p.end})
 		if !p.updateCurrent() {
 			return false
 		}
@@ -665,7 +664,7 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 		if !p.iterValid() {
 			// We were peeked off the beginning of iteration. Seek to the first
 			// entry, and then advance one step.
-			p.parent.SeekGE(MVCCKey{})
+			p.parent.SeekGE(MVCCKey{Key: p.start})
 			if !p.iterValid() {
 				return false
 			}
