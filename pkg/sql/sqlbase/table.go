@@ -36,7 +36,7 @@ func SanitizeVarFreeExpr(
 	expectedType *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	allowImpure bool,
+	allowNonImmutable bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.Newf(pgcode.Syntax,
@@ -50,8 +50,8 @@ func SanitizeVarFreeExpr(
 
 	// Ensure that the expression doesn't contain special functions.
 	flags := tree.RejectSpecial
-	if !allowImpure {
-		flags |= tree.RejectImpureFunctions
+	if !allowNonImmutable {
+		flags |= tree.RejectNonImmutableFunctions
 	}
 	semaCtx.Properties.Require(context, flags)
 
@@ -172,7 +172,7 @@ func MakeColumnDefDescs(
 		// and does not contain invalid functions.
 		var err error
 		if typedExpr, err = SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, true, /* allowImpure */
+			d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, true, /* allowNonImmutable */
 		); err != nil {
 			return nil, nil, nil, err
 		}
@@ -233,7 +233,7 @@ func EvalShardBucketCount(
 ) (int32, error) {
 	const invalidBucketCountMsg = `BUCKET_COUNT must be an integer greater than 1`
 	typedExpr, err := SanitizeVarFreeExpr(
-		shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, true, /* allowImpure */
+		shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, true, /* allowNonImmutable */
 	)
 	if err != nil {
 		return 0, err
