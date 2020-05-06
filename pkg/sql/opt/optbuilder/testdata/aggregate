@@ -2925,14 +2925,14 @@ firstCol, secondCol, thirdCol;
 group-by
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
- ├── stats: [rows=991, distinct(1,2)=991, null(1,2)=10]
- ├── cost: 1109.96
+ ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
+ ├── cost: 1110.05
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1,+2)
  └── project
       ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
-      ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
+      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
       ├── cost: 1070.03
       ├── key: (1)
       ├── fd: (1)-->(2)
@@ -2940,7 +2940,7 @@ group-by
       ├── interesting orderings: (+1,+2)
       └── scan t.public.xyz
            ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float)
-           ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
+           ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
            ├── cost: 1060.02
            ├── key: (1)
            ├── fd: (1)-->(2,3)
