@@ -45,6 +45,9 @@ type Overload struct {
 	Types      TypeList
 	ReturnType ReturnTyper
 
+	// Volatility signifies whether the given function is volatile.
+	Volatility Volatility
+
 	// PreferredOverload determines overload resolution as follows.
 	// When multiple overloads are eligible based on types even after all of of
 	// the heuristics to pick one have been used, if one of the overloads is a
