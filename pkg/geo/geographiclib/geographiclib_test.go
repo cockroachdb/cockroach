@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/golang/geo/s2"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInverse(t *testing.T) {
@@ -37,10 +37,67 @@ func TestInverse(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			s12, az1, az2 := WGS84Spheroid.Inverse(tc.a, tc.b)
-			assert.Equal(t, tc.s12, s12)
-			assert.Equal(t, tc.az1, az1)
-			assert.Equal(t, tc.az2, az2)
+			s12, az1, az2 := tc.spheroid.Inverse(tc.a, tc.b)
+			require.Equal(t, tc.s12, s12)
+			require.Equal(t, tc.az1, az1)
+			require.Equal(t, tc.az2, az2)
+		})
+	}
+}
+
+func TestInverseBatch(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		spheroid Spheroid
+		points   []s2.Point
+		sum      float64
+	}{
+		{
+			desc:     "WKT from Wikipedia",
+			spheroid: WGS84Spheroid,
+			points: []s2.Point{
+				s2.PointFromLatLng(s2.LatLngFromDegrees(40, 40)),
+				s2.PointFromLatLng(s2.LatLngFromDegrees(45, 20)),
+				s2.PointFromLatLng(s2.LatLngFromDegrees(30, 45)),
+			},
+			sum: 4.477956179118822e+06,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			sum := tc.spheroid.InverseBatch(tc.points)
+			require.Equal(t, tc.sum, sum)
+		})
+	}
+}
+
+func TestAreaAndPerimeter(t *testing.T) {
+	testCases := []struct {
+		desc      string
+		spheroid  Spheroid
+		points    []s2.Point
+		area      float64
+		perimeter float64
+	}{
+		{
+			desc:     "WKT from Wikipedia",
+			spheroid: WGS84Spheroid,
+			points: []s2.Point{
+				s2.PointFromLatLng(s2.LatLngFromDegrees(40, 40)),
+				s2.PointFromLatLng(s2.LatLngFromDegrees(45, 20)),
+				s2.PointFromLatLng(s2.LatLngFromDegrees(30, 45)),
+			},
+			area:      6.91638769184179e+11,
+			perimeter: 5.6770339842410665e+06,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			area, perimeter := tc.spheroid.AreaAndPerimeter(tc.points)
+			require.Equal(t, tc.area, area)
+			require.Equal(t, tc.perimeter, perimeter)
 		})
 	}
 }
