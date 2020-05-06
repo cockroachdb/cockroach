@@ -8,16 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build !windows
-
 #include <cstdarg>
 #include <cstring>
+#if _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif // #if _WIN32
 #include <memory>
 #include <stdlib.h>
 #include <string>
 
-#include "geos_unix.h"
+#include "geos.h"
+
+#if _WIN32
+#define LOADLIBRARY(x) LoadLibrary(x)
+#define LOADFUNCTION GetProcAddress
+#define FREELIBRARY FreeLibrary
+#define LIBRARYTYPE HMODULE
+#else
+#define LOADLIBRARY(x) dlopen(x, RTLD_LAZY)
+#define LOADFUNCTION dlsym
+#define FREELIBRARY dlclose
+#define LIBRARYTYPE void*
+#endif // #if _WIN32
 
 #define CR_GEOS_NO_ERROR_DEFINED_MESSAGE "geos: returned invalid result but error not populated"
 
@@ -78,11 +92,12 @@ typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometr
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 const char* dlopenFailError = "failed to execute dlopen";
+const char* dlsymFailError = "failed to execute dlsym";
 
 }  // namespace
 
 struct CR_GEOS {
-  void* dlHandle;
+  LIBRARYTYPE dlHandle;
 
   CR_GEOS_init_r GEOS_init_r;
   CR_GEOS_finish_r GEOS_finish_r;
@@ -123,11 +138,11 @@ struct CR_GEOS {
 
   CR_GEOS_ClipByRect_r GEOSClipByRect_r;
 
-  CR_GEOS(void* h) : dlHandle(h) {}
+  CR_GEOS(LIBRARYTYPE h) : dlHandle(h) {}
 
   ~CR_GEOS() {
     if (dlHandle != NULL) {
-      dlclose(dlHandle);
+      FREELIBRARY(dlHandle);
     }
   }
 
@@ -176,9 +191,13 @@ struct CR_GEOS {
   }
 
   template <typename T> char* InitSym(T* ptr, const char* symbol) {
-    *ptr = reinterpret_cast<T>(dlsym(dlHandle, symbol));
+    *ptr = reinterpret_cast<T>(LOADFUNCTION(dlHandle, symbol));
     if (ptr == nullptr) {
+#if _WIN32
+      return (char*) dlsymFailError;
+#else
       return dlerror();
+#endif // #if _WIN32
     }
     return nullptr;
   }
@@ -203,7 +222,7 @@ CR_GEOS_String toGEOSString(const char* data, size_t len) {
 
 CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS** lib) {
   auto locStr = ToString(loc);
-  void* dlHandle = dlopen(locStr.c_str(), RTLD_LAZY);
+  LIBRARYTYPE dlHandle = LOADLIBRARY(locStr.c_str());
   if (!dlHandle) {
     return cStringToSlice((char*)dlopenFailError);
   }
