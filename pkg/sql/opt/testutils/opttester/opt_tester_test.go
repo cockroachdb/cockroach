@@ -11,6 +11,7 @@
 package opttester_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -24,6 +25,10 @@ func TestOptTester(t *testing.T) {
 		memo.ExprFmtHideQualifications
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		if strings.HasSuffix(path, ".json") {
+			// Skip any .json files; used for inject-stats
+			return
+		}
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			tester := opttester.New(catalog, d.Input)

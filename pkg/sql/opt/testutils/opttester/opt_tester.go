@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"path/filepath"
 	"runtime"
@@ -179,7 +180,7 @@ type Flags struct {
 	Database string
 
 	// Table specifies the current table to use for the command. This field
-	// is only used by the stats command.
+	// is only used by the stats and inject-stats commands.
 	Table string
 
 	// SaveTablesPrefix specifies the prefix of the table to create or print
@@ -284,7 +285,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    If rewriteActualFlag=true, also executes the given query against a
 //    running database and saves the intermediate results as tables.
 //
-//  - stats [flags]
+//  - stats table=... [flags]
 //
 //    Compares estimated statistics for a relational expression with the actual
 //    statistics calculated by calling CREATE STATISTICS on the output of the
@@ -292,7 +293,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    target expression as a table. The name of this table must be provided
 //    with the table flag.
 //
-//  - import [flags]
+//  - import file=...
 //
 //    Imports a file containing exec-ddl commands in order to add tables and/or
 //    stats to the catalog. This allows commonly-used schemas such as TPC-C or
@@ -300,6 +301,10 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    stats multiple times. The file name must be provided with the file flag.
 //    The path of the file should be relative to
 //    testutils/opttester/testfixtures.
+//
+//  - inject-stats file=... table=...
+//
+//    Injects table statistics from a json file.
 //
 // Supported flags:
 //
@@ -352,8 +357,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Otherwise, outputs the name of the table that would be created for each
 //    subexpression.
 //
-//  - file: used to set the name of the file to be imported. This is used by
-//    the import command.
+//  - file: specifies a file, used for the following commands:
+//     - import: the file path is relative to opttester/testfixtures;
+//     - inject-stats: the file path is relative to the test file.
 //
 //  - cascade-levels: used to limit the depth of recursive cascades for
 //    build-cascades.
@@ -386,7 +392,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		s, err := testCatalog.ExecuteDDL(d.Input)
 		if err != nil {
-			d.Fatalf(tb, "%+v", err)
+			d.Fatalf(tb, "%v", err)
 		}
 		return s
 
@@ -534,7 +540,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return ot.FormatExpr(e)
 
 	case "stats":
-		result, err := ot.Stats(d)
+		result, err := ot.Stats(tb, d)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -542,6 +548,10 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "import":
 		ot.Import(tb)
+		return ""
+
+	case "inject-stats":
+		ot.InjectStats(tb, d)
 		return ""
 
 	default:
@@ -1148,7 +1158,10 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 // actual statistics collected from running CREATE STATISTICS on the output
 // of the relational expression. If the -rewrite-actual-stats flag is
 // used, the actual stats are recalculated.
-func (ot *OptTester) Stats(d *datadriven.TestData) (string, error) {
+func (ot *OptTester) Stats(tb testing.TB, d *datadriven.TestData) (string, error) {
+	if ot.Flags.Table == "" {
+		tb.Fatal("table not specified")
+	}
 	catalog, ok := ot.catalog.(*testcat.Catalog)
 	if !ok {
 		return "", fmt.Errorf("stats can only be used with TestCatalog")
@@ -1163,6 +1176,9 @@ func (ot *OptTester) Stats(d *datadriven.TestData) (string, error) {
 // TPC-C or TPC-H to be used by multiple test files without copying the schemas
 // and stats multiple times.
 func (ot *OptTester) Import(tb testing.TB) {
+	if ot.Flags.File == "" {
+		tb.Fatal("file not specified")
+	}
 	// Find the file to be imported in opttester/testfixtures.
 	_, optTesterFile, _, ok := runtime.Caller(1)
 	if !ok {
@@ -1173,6 +1189,38 @@ func (ot *OptTester) Import(tb testing.TB) {
 		tester := New(ot.catalog, d.Input)
 		return tester.RunCommand(t, d)
 	})
+}
+
+// InjectStats constructs and executes an ALTER TABLE INJECT STATISTICS
+// statement using the statistics in a separate json file.
+func (ot *OptTester) InjectStats(tb testing.TB, d *datadriven.TestData) {
+	if ot.Flags.File == "" {
+		tb.Fatal("file not specified")
+	}
+	if ot.Flags.Table == "" {
+		tb.Fatal("table not specified")
+	}
+	// We get the file path from the Pos string which always of the form
+	// "file:linenum".
+	testfilePath := strings.SplitN(d.Pos, ":", 1)[0]
+	path := filepath.Join(filepath.Dir(testfilePath), ot.Flags.File)
+	stats, err := ioutil.ReadFile(path)
+	if err != nil {
+		tb.Fatalf("error reading %s: %v", path, err)
+	}
+	stmt := fmt.Sprintf(
+		"ALTER TABLE %s INJECT STATISTICS '%s'",
+		ot.Flags.Table,
+		strings.Replace(string(stats), "'", "''", -1),
+	)
+	testCatalog, ok := ot.catalog.(*testcat.Catalog)
+	if !ok {
+		d.Fatalf(tb, "inject-stats can only be used with TestCatalog")
+	}
+	_, err = testCatalog.ExecuteDDL(stmt)
+	if err != nil {
+		d.Fatalf(tb, "%v", err)
+	}
 }
 
 // SaveTables optimizes the given query and saves the subexpressions as tables
