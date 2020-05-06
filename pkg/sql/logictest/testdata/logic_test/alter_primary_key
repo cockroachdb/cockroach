@@ -1130,3 +1130,38 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 6  i1
 7  i2
 8  i3
+
+# Regression for #45889.
+# Primary key changes on a hash sharded index that just change the bucket
+# count shouldn't cause the old primary key to be copied.
+statement ok
+DROP TABLE IF EXISTS t CASCADE;
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 2);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH BUCKET_COUNT=3
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
+   FAMILY "primary" (crdb_internal_x_shard_2, x, crdb_internal_x_shard_3)
+)
+
+# Changes on a hash sharded index that change the columns will cause the old
+# primary key to be copied.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 2, y INT NOT NULL, FAMILY (x, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT=2
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
+   UNIQUE INDEX t_crdb_internal_x_shard_2_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
+   FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2)
+)
