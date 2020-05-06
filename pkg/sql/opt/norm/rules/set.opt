@@ -5,32 +5,16 @@
 # EliminateUnionAllLeft replaces a union all with a right side having a
 # cardinality of zero, with just the left side operand.
 [EliminateUnionAllLeft, Normalize]
-(UnionAll
-    $left:*
-    $right:* & (HasZeroRows $right)
-    $colmap:*
-)
+(UnionAll $left:* $right:* & (HasZeroRows $right) $colmap:*)
 =>
-(Project
-    $left
-    (ProjectColMapLeft $colmap)
-    (MakeEmptyColSet)
-)
+(Project $left (ProjectColMapLeft $colmap) (MakeEmptyColSet))
 
 # EliminateUnionAllRight replaces a union all with a left side having a
 # cardinality of zero, with just the right side operand.
 [EliminateUnionAllRight, Normalize]
-(UnionAll
-    $left:* & (HasZeroRows $left)
-    $right:*
-    $colmap:*
-)
+(UnionAll $left:* & (HasZeroRows $left) $right:* $colmap:*)
 =>
-(Project
-    $right
-    (ProjectColMapRight $colmap)
-    (MakeEmptyColSet)
-)
+(Project $right (ProjectColMapRight $colmap) (MakeEmptyColSet))
 
 # PushFilterIntoSetOp pushes filters down to both the left and right sides
 # of all set operators. For example, consider this query:
@@ -74,24 +58,20 @@
 [PushFilterIntoSetOp, Normalize]
 (Select
     $input:(Set $left:* $right:* $colmap:*)
-    $filter:[
-        ...
-        $item:* & (CanMapOnSetOp $item)
-        ...
-    ]
+    $filter:[ ... $item:* & (CanMapOnSetOp $item) ... ]
 )
 =>
 (Select
-  ((OpName $input)
-      (Select
-          $left
-          [ (FiltersItem (MapSetOpFilterLeft $item $colmap)) ]
-      )
-      (Select
-          $right
-          [ (FiltersItem (MapSetOpFilterRight $item $colmap)) ]
-      )
-      $colmap
-  )
-  (RemoveFiltersItem $filter $item)
+    ((OpName $input)
+        (Select
+            $left
+            [ (FiltersItem (MapSetOpFilterLeft $item $colmap)) ]
+        )
+        (Select
+            $right
+            [ (FiltersItem (MapSetOpFilterRight $item $colmap)) ]
+        )
+        $colmap
+    )
+    (RemoveFiltersItem $filter $item)
 )

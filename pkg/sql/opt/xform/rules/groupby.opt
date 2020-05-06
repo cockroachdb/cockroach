@@ -2,13 +2,17 @@
 # groupby.opt contains exploration rules for the groupby operators
 # =============================================================================
 
-
 # ReplaceMinWithLimit replaces a min with a limit 1. This rule may result in a
 # lower cost plan if the column min(x) is applied to is indexed.
 [ReplaceMinWithLimit, Explore]
 (ScalarGroupBy
     $input:*
-    [ (AggregationsItem (Min $variable:(Variable $col:*)) $aggPrivate:*) ]
+    [
+        (AggregationsItem
+            (Min $variable:(Variable $col:*))
+            $aggPrivate:*
+        )
+    ]
     $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
 )
 =>
@@ -32,7 +36,12 @@
 [ReplaceMaxWithLimit, Explore]
 (ScalarGroupBy
     $input:*
-    [ (AggregationsItem (Max $variable:(Variable $col:*)) $aggPrivate:*) ]
+    [
+        (AggregationsItem
+            (Max $variable:(Variable $col:*))
+            $aggPrivate:*
+        )
+    ]
     $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
 )
 =>
