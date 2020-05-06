@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/spf13/cobra"
@@ -63,7 +64,9 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.cluster_settings",
 	"crdb_internal.cluster_transactions",
 
+	// This table is special and is only retrieved from v20.2 and above.
 	"crdb_internal.jobs",
+
 	"system.jobs",       // get the raw, restorable jobs records too.
 	"system.descriptor", // descriptors also contain job-like mutation state.
 	"system.namespace",
@@ -331,6 +334,24 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	for _, table := range debugZipTablesPerCluster {
+		// crdb_internal.jobs is unsafe to collect for v20.1 and prior
+		// versions, because it materializes server-side in RAM and may
+		// contain too many rows.
+		//
+		// Version 20.2 and later is OK because it streams vtable rows.
+		if table == "crdb_internal.jobs" {
+			ver, err := version.Parse(nodeD.BuildInfo.Tag)
+			if err != nil {
+				fmt.Fprintf(stderr, "warning: unable to parse server version %q: %v\n", nodeD.BuildInfo.Tag, err)
+				fmt.Printf("skipping %q\n", table)
+				continue
+			}
+			if ver.Major() < 20 || (ver.Major() == 20 && ver.Minor() < 2) {
+				fmt.Printf("node running v%d.%d, skipping %q\n", ver.Major(), ver.Minor(), table)
+				continue
+			}
+		}
+
 		selectClause, ok := customSelectClause[table]
 		if !ok {
 			selectClause = "*"
