@@ -275,9 +275,16 @@ func runJobsMixedVersions(
 
 func registerJobsMixedVersions(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    "jobs/mixed-versions",
-		Owner:   OwnerBulkIO,
-		Cluster: makeClusterSpec(4),
+		Name:  "jobs/mixed-versions",
+		Owner: OwnerBulkIO,
+		// Jobs infrastructure was unstable prior to 20.1 in terms of the behavior
+		// of `PAUSE/CANCEL JOB` commands which were best effort and relied on the
+		// job itself to detect the request. These were fixed by introducing new job
+		// state machine states `Status{Pause,Cancel}Requested`. This test purpose
+		// is to to test the state transitions of jobs from paused to resumed and
+		// vice versa in order to detect regressions in the work done for 20.1.
+		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
