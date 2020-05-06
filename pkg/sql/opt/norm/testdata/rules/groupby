@@ -346,6 +346,64 @@ project
 norm expect=EliminateGroupByProject
 INSERT INTO nullablecols (rowid, c1, c2, c3)
 SELECT i, i, i, i FROM (SELECT * FROM a WHERE EXISTS(SELECT * FROM a) AND k>0)
+ON CONFLICT (c1) DO NOTHING
+----
+insert nullablecols
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── i:6 => c1:1
+ │    ├── i:6 => c2:2
+ │    ├── i:6 => c3:3
+ │    └── i:6 => rowid:4
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── upsert-distinct-on
+      ├── columns: i:6!null
+      ├── grouping columns: i:6!null
+      ├── key: (6)
+      └── select
+           ├── columns: k:5!null i:6!null c1:15 rowid:18
+           ├── key: (5)
+           ├── fd: ()-->(15,18), (5)-->(6)
+           ├── left-join (hash)
+           │    ├── columns: k:5!null i:6!null c1:15 rowid:18
+           │    ├── key: (5,18)
+           │    ├── fd: (5)-->(6), (18)-->(15), (15)~~>(18)
+           │    ├── select
+           │    │    ├── columns: k:5!null i:6!null
+           │    │    ├── key: (5)
+           │    │    ├── fd: (5)-->(6)
+           │    │    ├── scan a
+           │    │    │    ├── columns: k:5!null i:6!null
+           │    │    │    ├── key: (5)
+           │    │    │    └── fd: (5)-->(6)
+           │    │    └── filters
+           │    │         ├── exists [subquery]
+           │    │         │    └── limit
+           │    │         │         ├── columns: k:10!null i:11!null f:12 s:13!null j:14
+           │    │         │         ├── cardinality: [0 - 1]
+           │    │         │         ├── key: ()
+           │    │         │         ├── fd: ()-->(10-14)
+           │    │         │         ├── scan a
+           │    │         │         │    ├── columns: k:10!null i:11!null f:12 s:13!null j:14
+           │    │         │         │    ├── key: (10)
+           │    │         │         │    ├── fd: (10)-->(11-14), (11,13)-->(10,12,14), (11,12)~~>(10,13,14)
+           │    │         │         │    └── limit hint: 1.00
+           │    │         │         └── 1
+           │    │         └── k:5 > 0 [outer=(5), constraints=(/5: [/1 - ]; tight)]
+           │    ├── scan nullablecols
+           │    │    ├── columns: c1:15 rowid:18!null
+           │    │    ├── key: (18)
+           │    │    └── fd: (18)-->(15), (15)~~>(18)
+           │    └── filters
+           │         └── i:6 = c1:15 [outer=(6,15), constraints=(/6: (/NULL - ]; /15: (/NULL - ]), fd=(6)==(15), (15)==(6)]
+           └── filters
+                └── rowid:18 IS NULL [outer=(18), constraints=(/18: [/NULL - /NULL]; tight), fd=()-->(18)]
+
+# EnsureUpsertDistinctOn case.
+norm expect=EliminateGroupByProject
+INSERT INTO nullablecols (rowid, c1, c2, c3)
+SELECT i, i, i, i FROM (SELECT * FROM a WHERE EXISTS(SELECT * FROM a) AND k>0)
 ON CONFLICT (c1) DO UPDATE SET c3=1
 ----
 upsert nullablecols
@@ -369,7 +427,7 @@ upsert nullablecols
       │    ├── columns: i:6!null c1:15 c2:16 c3:17 rowid:18
       │    ├── key: (6,18)
       │    ├── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18)
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: i:6!null
       │    │    ├── grouping columns: i:6!null
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -559,6 +617,58 @@ distinct-on
 norm expect=ReduceNotNullGroupingCols
 INSERT INTO xy (x)
 SELECT y FROM xy WHERE y=0
+ON CONFLICT (x) DO NOTHING
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── y:4 => x:1
+ │    └── column5:5 => y:2
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: y:4!null column5:5
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(4,5)
+      └── limit
+           ├── columns: y:4!null column5:5 x:6
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(4-6)
+           ├── select
+           │    ├── columns: y:4!null column5:5 x:6
+           │    ├── fd: ()-->(4-6)
+           │    ├── limit hint: 1.00
+           │    ├── left-join (hash)
+           │    │    ├── columns: y:4!null column5:5 x:6
+           │    │    ├── fd: ()-->(4,5)
+           │    │    ├── limit hint: 1.00
+           │    │    ├── project
+           │    │    │    ├── columns: column5:5 y:4!null
+           │    │    │    ├── fd: ()-->(4,5)
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: y:4!null
+           │    │    │    │    ├── fd: ()-->(4)
+           │    │    │    │    ├── scan xy
+           │    │    │    │    │    └── columns: y:4
+           │    │    │    │    └── filters
+           │    │    │    │         └── y:4 = 0 [outer=(4), constraints=(/4: [/0 - /0]; tight), fd=()-->(4)]
+           │    │    │    └── projections
+           │    │    │         └── CAST(NULL AS INT8) [as=column5:5]
+           │    │    ├── scan xy
+           │    │    │    ├── columns: x:6!null
+           │    │    │    └── key: (6)
+           │    │    └── filters
+           │    │         └── y:4 = x:6 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+           │    └── filters
+           │         └── x:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+           └── 1
+
+# EnsureUpsertDistinctOn should reduce non-nullable constant grouping column.
+norm expect=ReduceNotNullGroupingCols
+INSERT INTO xy (x)
+SELECT y FROM xy WHERE y=0
 ON CONFLICT (x) DO UPDATE SET y=1
 ----
 upsert xy
@@ -611,6 +721,53 @@ upsert xy
 norm expect-not=ReduceNotNullGroupingCols
 INSERT INTO xy (x)
 SELECT y FROM xy WHERE y IS NULL
+ON CONFLICT (x) DO NOTHING
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── y:4 => x:1
+ │    └── column5:5 => y:2
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── upsert-distinct-on
+      ├── columns: y:4 column5:5
+      ├── grouping columns: y:4
+      ├── lax-key: (4)
+      ├── fd: ()-->(4,5)
+      ├── select
+      │    ├── columns: y:4 column5:5 x:6
+      │    ├── fd: ()-->(4-6)
+      │    ├── left-join (hash)
+      │    │    ├── columns: y:4 column5:5 x:6
+      │    │    ├── fd: ()-->(4,5)
+      │    │    ├── project
+      │    │    │    ├── columns: column5:5 y:4
+      │    │    │    ├── fd: ()-->(4,5)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: y:4
+      │    │    │    │    ├── fd: ()-->(4)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    └── columns: y:4
+      │    │    │    │    └── filters
+      │    │    │    │         └── y:4 IS NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
+      │    │    │    └── projections
+      │    │    │         └── CAST(NULL AS INT8) [as=column5:5]
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:6!null
+      │    │    │    └── key: (6)
+      │    │    └── filters
+      │    │         └── y:4 = x:6 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      │    └── filters
+      │         └── x:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+      └── aggregations
+           └── first-agg [as=column5:5, outer=(5)]
+                └── column5:5
+
+# EnsureUpsertDistinctOn should not reduce nullable constant grouping column.
+norm expect-not=ReduceNotNullGroupingCols
+INSERT INTO xy (x)
+SELECT y FROM xy WHERE y IS NULL
 ON CONFLICT (x) DO UPDATE SET y=1
 ----
 upsert xy
@@ -632,7 +789,7 @@ upsert xy
       │    ├── columns: y:4 column5:5 x:6 y:7
       │    ├── lax-key: (4,6)
       │    ├── fd: ()-->(4,5), (6)-->(7)
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: y:4 column5:5
       │    │    ├── grouping columns: y:4
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -684,7 +841,7 @@ upsert abc
       ├── columns: b:5!null "?column?":7!null "?column?":8!null a:9 b:10 c:11
       ├── key: (5,9-11)
       ├── fd: ()-->(7,8)
-      ├── upsert-distinct-on
+      ├── ensure-upsert-distinct-on
       │    ├── columns: b:5!null "?column?":7!null "?column?":8!null
       │    ├── grouping columns: b:5!null
       │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -737,7 +894,7 @@ upsert abc
       │    ├── columns: b:5!null c:6!null "?column?":7 a:8 b:9 c:10
       │    ├── lax-key: (6-10)
       │    ├── fd: ()-->(5,7)
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: b:5!null c:6!null "?column?":7
       │    │    ├── grouping columns: c:6!null "?column?":7
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -1284,7 +1441,7 @@ project
  └── projections
       └── xy.x:6 [as=x:8, outer=(6)]
 
-# UpsertDistinctOn case.
+# EnsureUpsertDistinctOn case.
 norm expect=EliminateEnsureDistinctNoColumns
 INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
 ON CONFLICT (s, i) DO UPDATE SET f=1.1
@@ -1620,6 +1777,52 @@ distinct-on
 # UpsertDistinctOn treats NULL values as distinct, so it can be eliminated.
 norm expect=EliminateDistinctOnValues
 INSERT INTO a (k, s, i) VALUES (1, NULL, NULL), (1, NULL, NULL)
+ON CONFLICT (s, i) DO NOTHING
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column3:8 => i:2
+ │    ├── column9:9 => f:3
+ │    ├── column2:7 => s:4
+ │    └── column10:10 => j:5
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10
+      ├── fd: ()-->(9,10)
+      └── select
+           ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 i:12 s:14
+           ├── fd: ()-->(9,10,14)
+           ├── left-join (hash)
+           │    ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 i:12 s:14
+           │    ├── cardinality: [2 - ]
+           │    ├── fd: ()-->(9,10)
+           │    ├── project
+           │    │    ├── columns: column9:9 column10:10 column1:6!null column2:7 column3:8
+           │    │    ├── cardinality: [2 - 2]
+           │    │    ├── fd: ()-->(9,10)
+           │    │    ├── values
+           │    │    │    ├── columns: column1:6!null column2:7 column3:8
+           │    │    │    ├── cardinality: [2 - 2]
+           │    │    │    ├── (1, NULL, NULL)
+           │    │    │    └── (1, NULL, NULL)
+           │    │    └── projections
+           │    │         ├── CAST(NULL AS FLOAT8) [as=column9:9]
+           │    │         └── CAST(NULL AS JSONB) [as=column10:10]
+           │    ├── scan a
+           │    │    ├── columns: i:12!null s:14!null
+           │    │    └── key: (12,14)
+           │    └── filters
+           │         ├── column2:7 = s:14 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
+           │         └── column3:8 = i:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+           └── filters
+                └── s:14 IS NULL [outer=(14), constraints=(/14: [/NULL - /NULL]; tight), fd=()-->(14)]
+
+# EnsureUpsertDistinctOn treats NULL values as distinct, so it can be eliminated.
+norm expect=EliminateDistinctOnValues
+INSERT INTO a (k, s, i) VALUES (1, NULL, NULL), (1, NULL, NULL)
 ON CONFLICT (s, i) DO UPDATE SET f=1.0
 ----
 upsert a
@@ -1666,7 +1869,7 @@ upsert a
       └── projections
            └── CASE WHEN k:11 IS NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]
 
-# UpsertDistinctOn is not removed when there are duplicates.
+# EnsureUpsertDistinctOn is not removed when there are duplicates.
 norm expect-not=EliminateDistinctOnValues
 INSERT INTO a (k, s, i) VALUES (1, 'foo', 1), (2, 'bar', 2), (3, 'foo', 1)
 ON CONFLICT (s, i) DO UPDATE SET f=1.0
@@ -1695,7 +1898,7 @@ upsert a
       │    ├── cardinality: [1 - ]
       │    ├── key: (7,8,11)
       │    ├── fd: ()-->(9,10), (7,8)-->(6), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       │    │    ├── grouping columns: column2:7!null column3:8!null
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"

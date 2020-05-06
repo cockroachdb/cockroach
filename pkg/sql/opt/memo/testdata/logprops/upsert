@@ -81,7 +81,7 @@ project
            │    │    │    ├── prune: (10,13)
            │    │    │    ├── reject-nulls: (10-13)
            │    │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
-           │    │    │    ├── upsert-distinct-on
+           │    │    │    ├── ensure-upsert-distinct-on
            │    │    │    │    ├── columns: x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null)
            │    │    │    │    ├── grouping columns: y:6(int!null) column9:9(int!null)
            │    │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -469,7 +469,7 @@ project
  │         │    │    ├── prune: (9-11)
  │         │    │    ├── reject-nulls: (9-12)
  │         │    │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
- │         │    │    ├── upsert-distinct-on
+ │         │    │    ├── ensure-upsert-distinct-on
  │         │    │    │    ├── columns: column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null)
  │         │    │    │    ├── grouping columns: column7:7(int)
  │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -560,8 +560,8 @@ project
            ├── variable: b:2 [type=int]
            └── variable: c:3 [type=int]
 
-# upsert-distinct-on should create strict key in case where all grouping columns
-# are not NULL.
+# ensure-upsert-distinct-on should create strict key in case where all grouping
+# columns are not NULL.
 build
 INSERT INTO abc (a)
 SELECT y FROM xyz WHERE y IS NOT NULL
@@ -614,7 +614,7 @@ upsert abc
       │    │    │    ├── prune: (12-14)
       │    │    │    ├── reject-nulls: (11-14)
       │    │    │    ├── interesting orderings: (+14) (+11) (+12,+13,+14)
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null)
       │    │    │    │    ├── grouping columns: y:6(int!null)
       │    │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
