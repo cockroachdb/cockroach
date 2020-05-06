@@ -124,7 +124,7 @@ with &1
  │         │    │    ├── stats: [rows=9.94974874, distinct(9)=9.94974874, null(9)=0]
  │         │    │    ├── lax-key: (5,9)
  │         │    │    ├── fd: ()-->(8), (5)~~>(4), (9)-->(10,11)
- │         │    │    ├── upsert-distinct-on
+ │         │    │    ├── ensure-upsert-distinct-on
  │         │    │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float)
  │         │    │    │    ├── grouping columns: b:5(string)
  │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -229,8 +229,8 @@ upsert xyz
       └── projections
            └── NULL::FLOAT8 [as=column8:8, type=float]
 
-# Nullable conflict column. Ensure that upsert-distinct-on passes through the
-# input's null count.
+# Nullable conflict column. Ensure that ensure-upsert-distinct-on passes through
+# the input's null count.
 build
 INSERT INTO uv (v)
 SELECT z::int FROM xyz
@@ -266,7 +266,7 @@ upsert uv
       │    │    ├── stats: [rows=1000, distinct(9)=991, null(9)=0]
       │    │    ├── lax-key: (6,8)
       │    │    ├── fd: (6)~~>(7), (8)-->(9), (9)~~>(8)
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: z:6(int) column7:7(int)
       │    │    │    ├── grouping columns: z:6(int)
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -345,7 +345,7 @@ upsert mno
       │    │    ├── stats: [rows=2000, distinct(8)=21.0526316, null(8)=1988.94737, distinct(9)=21.0526316, null(9)=2000]
       │    │    ├── key: (4,7)
       │    │    ├── fd: (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7)
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: m:4(int!null) n:5(int) o:6(int)
       │    │    │    ├── grouping columns: n:5(int) o:6(int)
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
