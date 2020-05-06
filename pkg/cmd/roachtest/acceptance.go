@@ -43,7 +43,10 @@ func registerAcceptance(r *testRegistry) {
 		{name: "gossip/restart-node-one", fn: runGossipRestartNodeOne},
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
-		{name: "many-splits", fn: runManySplits},
+		{
+			name: "many-splits", fn: runManySplits,
+			minVersion: "v19.2.0", // SQL syntax unsupported on 19.1.x
+		},
 		{name: "status-server", fn: runStatusServer},
 		{
 			name: "version-upgrade",
