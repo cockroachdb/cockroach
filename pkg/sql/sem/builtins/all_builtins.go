@@ -56,9 +56,12 @@ func init() {
 		}
 	}
 
-	// Generate missing categories.
+	// Generate missing categories and volatilities.
 	for _, name := range AllBuiltinNames {
 		def := builtins[name]
+		if def.props.Volatility == 0 {
+			def.props.Volatility = tree.VolatilityImmutable
+		}
 		if def.props.Category == "" {
 			def.props.Category = getCategory(def.overloads)
 			builtins[name] = def
