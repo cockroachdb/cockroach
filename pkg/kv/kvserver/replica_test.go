@@ -4513,7 +4513,7 @@ func TestReplicaLaziness(t *testing.T) {
 	})
 
 	testWithAction(func() roachpb.Request {
-		scan := scanArgs(roachpb.KeyMin, roachpb.KeyMax)
+		scan := scanArgs(roachpb.Key("a"), roachpb.Key("b"))
 		return scan
 	})
 }
