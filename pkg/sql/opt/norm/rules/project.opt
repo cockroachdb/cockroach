@@ -62,6 +62,47 @@ $input
 =>
 (MergeProjectWithValues $projections $passthrough $input)
 
+# PushColumnRemappingIntoValues folds ProjectionsItems into the passthrough set
+# if they simply remap Values output columns that are not already in
+# passthrough. The Values output columns are replaced with the corresponding
+# columns projected by the folded ProjectionsItems.
+#
+# Example:
+#
+# project
+#  ├── columns: x:2!null
+#  ├── values
+#  │    ├── columns: column1:1!null
+#  │    ├── cardinality: [2 - 2]
+#  │    ├── (1,)
+#  │    └── (2,)
+#  └── projections
+#       └── column1:1 [as=x:2, outer=(1)]
+# =>
+# project
+#  ├── columns: x:2!null
+#  └── values
+#       ├── columns: x:2!null
+#       ├── cardinality: [2 - 2]
+#       ├── (1,)
+#       └── (2,)
+#
+# This allows other rules to fire. In the example above, the project would now
+# be removed by EliminateProject.
+[PushColumnRemappingIntoValues, Normalize]
+(Project
+    $input:(Values)
+    $projections:*
+    $passthrough:* &
+        (CanPushColumnRemappingIntoValues
+            $projections
+            $passthrough
+            $input
+        )
+)
+=>
+(PushColumnRemappingIntoValues $input $projections $passthrough)
+
 # FoldTupleAccessIntoValues replaces a Values with a single column that
 # references a column of tuples with a new Values that has a column for each
 # tuple index. This works as long as the surrounding Project does not reference
