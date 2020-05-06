@@ -14,7 +14,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -165,7 +164,7 @@ func TestGetLargestID(t *testing.T) {
 			ms := sqlbase.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 			descIDs := ms.DescriptorIDs()
 			maxDescID := descIDs[len(descIDs)-1]
-			kvs, _ /* splits */ := ms.GetInitialValues(clusterversion.TestingClusterVersion)
+			kvs, _ /* splits */ := ms.GetInitialValues()
 			return testCase{kvs, uint32(maxDescID), 0, ""}
 		}(),
 
@@ -260,7 +259,7 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(
 		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(),
-	).GetInitialValues(clusterversion.TestingClusterVersion)
+	).GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,
 	}
@@ -294,9 +293,9 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	)
 	// Real system tables only.
-	baseSql, _ /* splits */ := schema.GetInitialValues(clusterversion.TestingClusterVersion)
+	baseSql, _ /* splits */ := schema.GetInitialValues()
 	// Real system tables plus some user stuff.
-	kvs, _ /* splits */ := schema.GetInitialValues(clusterversion.TestingClusterVersion)
+	kvs, _ /* splits */ := schema.GetInitialValues()
 	userSQL := append(kvs, descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real system tables and partitioned user tables.
 	var subzoneSQL = make([]roachpb.KeyValue, len(userSQL))
@@ -440,7 +439,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 
 	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(
 		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(),
-	).GetInitialValues(clusterversion.TestingClusterVersion)
+	).GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,
 	}

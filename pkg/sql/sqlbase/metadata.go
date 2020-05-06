@@ -128,9 +128,7 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 // a bootstrapping cluster in order to create the tables contained
 // in the schema. Also returns a list of split points (a split for each SQL
 // table descriptor part of the initial values). Both returned sets are sorted.
-func (ms MetadataSchema) GetInitialValues(
-	bootstrapVersion clusterversion.ClusterVersion,
-) ([]roachpb.KeyValue, []roachpb.RKey) {
+func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey) {
 	var ret []roachpb.KeyValue
 	var splits []roachpb.RKey
 
@@ -149,36 +147,26 @@ func (ms MetadataSchema) GetInitialValues(
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
-
-		// TODO(solon): This if/else can be removed in 20.2, as there will be no
-		// need to support the deprecated namespace table.
-		if bootstrapVersion.IsActive(clusterversion.VersionNamespaceTableWithSchemas) {
-			if parentID != keys.RootNamespaceID {
-				ret = append(ret, roachpb.KeyValue{
-					Key:   NewPublicTableKey(parentID, desc.GetName()).Key(ms.codec),
-					Value: value,
-				})
-			} else {
-				// Initializing a database. Databases must be initialized with
-				// the public schema, as all tables are scoped under the public schema.
-				publicSchemaValue := roachpb.Value{}
-				publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
-				ret = append(
-					ret,
-					roachpb.KeyValue{
-						Key:   NewDatabaseKey(desc.GetName()).Key(ms.codec),
-						Value: value,
-					},
-					roachpb.KeyValue{
-						Key:   NewPublicSchemaKey(desc.GetID()).Key(ms.codec),
-						Value: publicSchemaValue,
-					})
-			}
-		} else {
+		if parentID != keys.RootNamespaceID {
 			ret = append(ret, roachpb.KeyValue{
-				Key:   NewDeprecatedTableKey(parentID, desc.GetName()).Key(ms.codec),
+				Key:   NewPublicTableKey(parentID, desc.GetName()).Key(ms.codec),
 				Value: value,
 			})
+		} else {
+			// Initializing a database. Databases must be initialized with
+			// the public schema, as all tables are scoped under the public schema.
+			publicSchemaValue := roachpb.Value{}
+			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+			ret = append(
+				ret,
+				roachpb.KeyValue{
+					Key:   NewDatabaseKey(desc.GetName()).Key(ms.codec),
+					Value: value,
+				},
+				roachpb.KeyValue{
+					Key:   NewPublicSchemaKey(desc.GetID()).Key(ms.codec),
+					Value: publicSchemaValue,
+				})
 		}
 
 		// Create descriptor metadata key.

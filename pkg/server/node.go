@@ -217,18 +217,14 @@ func bootstrapCluster(
 		cv, err := kvserver.ReadClusterVersion(ctx, eng)
 		if err != nil {
 			return nil, errors.Wrapf(err, "reading cluster version of %s", eng)
-		}
-
-		// bootstrapCluster requires matching cluster versions on all engines.
-		if cv.Major == 0 {
+		} else if cv.Major == 0 {
 			return nil, errors.Errorf("missing bootstrap version")
 		}
 
+		// bootstrapCluster requires matching cluster versions on all engines.
 		if i == 0 {
 			bootstrapVersion = cv
-		}
-
-		if bootstrapVersion != cv {
+		} else if bootstrapVersion != cv {
 			return nil, errors.Wrapf(err, "found cluster versions %s and %s", bootstrapVersion, cv)
 		}
 
@@ -249,7 +245,7 @@ func bootstrapCluster(
 		// first store.
 		if i == 0 {
 			schema := GetBootstrapSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig)
-			initialValues, tableSplits := schema.GetInitialValues(bootstrapVersion)
+			initialValues, tableSplits := schema.GetInitialValues()
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {
 				return splits[i].Less(splits[j])

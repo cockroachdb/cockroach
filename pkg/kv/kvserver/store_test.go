@@ -239,10 +239,9 @@ func createTestStoreWithoutStart(
 		t.Fatal(err)
 	}
 	var splits []roachpb.RKey
-	bootstrapVersion := clusterversion.TestingClusterVersion
 	kvs, tableSplits := sqlbase.MakeMetadataSchema(
 		keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
-	).GetInitialValues(bootstrapVersion)
+	).GetInitialValues()
 	if opts.createSystemRanges {
 		splits = config.StaticSplits()
 		splits = append(splits, tableSplits...)
@@ -456,10 +455,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 		// Bootstrap the system ranges.
 		var splits []roachpb.RKey
-		bootstrapVersion := clusterversion.TestingClusterVersion
 		kvs, tableSplits := sqlbase.MakeMetadataSchema(
 			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
-		).GetInitialValues(bootstrapVersion)
+		).GetInitialValues()
 		splits = config.StaticSplits()
 		splits = append(splits, tableSplits...)
 		sort.Slice(splits, func(i, j int) bool {

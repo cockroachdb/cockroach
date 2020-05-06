@@ -192,8 +192,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
 		)
 		var tableSplits []roachpb.RKey
-		bootstrapVersion := clusterversion.TestingClusterVersion
-		initialValues, tableSplits = schema.GetInitialValues(bootstrapVersion)
+		initialValues, tableSplits = schema.GetInitialValues()
 		splits = append(config.StaticSplits(), tableSplits...)
 		sort.Slice(splits, func(i, j int) bool {
 			return splits[i].Less(splits[j])

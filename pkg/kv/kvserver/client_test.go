@@ -186,10 +186,9 @@ func createTestStoreWithOpts(
 	if !opts.dontBootstrap {
 		var kvs []roachpb.KeyValue
 		var splits []roachpb.RKey
-		bootstrapVersion := clusterversion.TestingClusterVersion
 		kvs, tableSplits := sqlbase.MakeMetadataSchema(
 			keys.SystemSQLCodec, storeCfg.DefaultZoneConfig, storeCfg.DefaultSystemZoneConfig,
-		).GetInitialValues(bootstrapVersion)
+		).GetInitialValues()
 		if !opts.dontCreateSystemRanges {
 			splits = config.StaticSplits()
 			splits = append(splits, tableSplits...)
@@ -892,10 +891,9 @@ func (m *multiTestContext) addStore(idx int) {
 	if needBootstrap && idx == 0 {
 		// Bootstrap the initial range on the first engine.
 		var splits []roachpb.RKey
-		bootstrapVersion := clusterversion.TestingClusterVersion
 		kvs, tableSplits := sqlbase.MakeMetadataSchema(
 			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
-		).GetInitialValues(bootstrapVersion)
+		).GetInitialValues()
 		if !m.startWithSingleRange {
 			splits = config.StaticSplits()
 			splits = append(splits, tableSplits...)
