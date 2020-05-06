@@ -233,13 +233,24 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				// accounts, so if the spilling is supported, we do *not* want to use
 				// streaming memory account.
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
-				result, err := colexec.NewColOperator(ctx, flowCtx, args)
-				require.NoError(t, err)
-				err = execerror.CatchVectorizedRuntimeError(func() {
-					result.Op.Init()
-					result.Op.Next(ctx)
-					result.Op.Next(ctx)
-				})
+				var (
+					result colexec.NewColOperatorResult
+					err    error
+				)
+				// The memory error can occur either during planning or during
+				// execution, and we want to actually execute the "query" only
+				// if there was no error during planning. That is why we have
+				// two separate panic-catchers.
+				if err = execerror.CatchVectorizedRuntimeError(func() {
+					result, err = colexec.NewColOperator(ctx, flowCtx, args)
+					require.NoError(t, err)
+				}); err == nil {
+					err = execerror.CatchVectorizedRuntimeError(func() {
+						result.Op.Init()
+						result.Op.Next(ctx)
+						result.Op.Next(ctx)
+					})
+				}
 				for _, memAccount := range result.OpAccounts {
 					memAccount.Close(ctx)
 				}

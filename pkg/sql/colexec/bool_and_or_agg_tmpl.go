@@ -20,6 +20,8 @@
 package colexec
 
 import (
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -43,7 +45,8 @@ func _ASSIGN_BOOL_OP(_, _, _ string) {
 
 // {{range .}}
 
-func newBool_OP_TYPEAgg() aggregateFunc {
+func newBool_OP_TYPEAgg(allocator *Allocator) aggregateFunc {
+	allocator.AdjustMemoryUsage(int64(sizeOfBool_OP_TYPEAgg))
 	return &bool_OP_TYPEAgg{}
 }
 
@@ -58,6 +61,10 @@ type bool_OP_TYPEAgg struct {
 	curIdx int
 	curAgg bool
 }
+
+var _ aggregateFunc = &bool_OP_TYPEAgg{}
+
+const sizeOfBool_OP_TYPEAgg = unsafe.Sizeof(bool_OP_TYPEAgg{})
 
 func (b *bool_OP_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	b.groups = groups
