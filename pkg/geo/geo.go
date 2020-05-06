@@ -149,6 +149,11 @@ func (g *Geometry) SRID() geopb.SRID {
 	return g.SpatialObject.SRID
 }
 
+// Shape returns the shape of the Geometry.
+func (g *Geometry) Shape() geopb.Shape {
+	return g.SpatialObject.Shape
+}
+
 //
 // Geography
 //
