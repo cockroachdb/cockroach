@@ -1,0 +1,260 @@
+[
+  {
+    "columns": [
+      "city"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 9,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "amsterdam"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "boston"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "los angeles"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "new york"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "paris"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "rome"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "san francisco"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "seattle"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "washington dc"
+      }
+    ],
+    "histo_col_type": "STRING",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "city",
+      "id"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 500,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "city",
+      "rider_id"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 50,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "vehicle_city"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 9,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "amsterdam"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "boston"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "los angeles"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "new york"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "paris"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "rome"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "san francisco"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 56,
+        "num_range": 0,
+        "upper_bound": "seattle"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 55,
+        "num_range": 0,
+        "upper_bound": "washington dc"
+      }
+    ],
+    "histo_col_type": "STRING",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "vehicle_city",
+      "vehicle_id"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 15,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "id"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 500,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "rider_id"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 50,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "vehicle_id"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 15,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "start_address"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 500,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "end_address"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 500,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "start_time"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 30,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "end_time"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 367,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  },
+  {
+    "columns": [
+      "revenue"
+    ],
+    "created_at": "2020-05-06 17:47:28.557622+00:00",
+    "distinct_count": 100,
+    "histo_col_type": "",
+    "name": "foo",
+    "null_count": 0,
+    "row_count": 500
+  }
+]
