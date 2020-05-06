@@ -19,17 +19,24 @@
 
 package colexec
 
-import "github.com/cockroachdb/cockroach/pkg/col/coldata"
+import (
+	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+)
 
 // newCountRowAgg creates a COUNT(*) aggregate, which counts every row in the
 // result unconditionally.
-func newCountRowAgg() *countAgg {
+func newCountRowAgg(allocator *colmem.Allocator) *countAgg {
+	allocator.AdjustMemoryUsage(int64(sizeOfCountAgg))
 	return &countAgg{countRow: true}
 }
 
 // newCountAgg creates a COUNT(col) aggregate, which counts every row in the
 // result where the value of col is not null.
-func newCountAgg() *countAgg {
+func newCountAgg(allocator *colmem.Allocator) *countAgg {
+	allocator.AdjustMemoryUsage(int64(sizeOfCountAgg))
 	return &countAgg{countRow: false}
 }
 
@@ -44,6 +51,10 @@ type countAgg struct {
 	done     bool
 	countRow bool
 }
+
+var _ aggregateFunc = &countAgg{}
+
+const sizeOfCountAgg = unsafe.Sizeof(&countAgg{})
 
 func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups

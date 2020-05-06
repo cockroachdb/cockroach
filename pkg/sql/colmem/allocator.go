@@ -215,8 +215,18 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	operation()
 	after := getVecsMemoryFootprint(destVecs)
 
-	delta := after - before
-	if delta >= 0 {
+	a.AdjustMemoryUsage(after - before)
+}
+
+// Used returns the number of bytes currently allocated through this allocator.
+func (a *Allocator) Used() int64 {
+	return a.acc.Used()
+}
+
+// AdjustMemoryUsage adjusts the number of bytes currently allocated through
+// this allocator by delta bytes (which can be both positive or negative).
+func (a *Allocator) AdjustMemoryUsage(delta int64) {
+	if delta > 0 {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -225,14 +235,12 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	}
 }
 
-// Used returns the number of bytes currently allocated through this allocator.
-func (a *Allocator) Used() int64 {
-	return a.acc.Used()
-}
-
 // ReleaseMemory reduces the number of bytes currently allocated through this
-// allocator by (at most) size bytes.
+// allocator by (at most) size bytes. size must be non-negative.
 func (a *Allocator) ReleaseMemory(size int64) {
+	if size < 0 {
+		colexecerror.InternalError(fmt.Sprintf("unexpectedly negative size in ReleaseMemory: %d", size))
+	}
 	if size > a.acc.Used() {
 		size = a.acc.Used()
 	}

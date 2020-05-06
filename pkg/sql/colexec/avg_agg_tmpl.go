@@ -20,10 +20,13 @@
 package colexec
 
 import (
+	"unsafe"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -59,13 +62,14 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newAvgAgg(t *types.T) (aggregateFunc, error) {
+func newAvgAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
+			allocator.AdjustMemoryUsage(int64(sizeOfAvg_TYPEAgg))
 			return &avg_TYPEAgg{}, nil
 			// {{end}}
 		}
@@ -101,6 +105,8 @@ type avg_TYPEAgg struct {
 }
 
 var _ aggregateFunc = &avg_TYPEAgg{}
+
+const sizeOfAvg_TYPEAgg = unsafe.Sizeof(&avg_TYPEAgg{})
 
 func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups

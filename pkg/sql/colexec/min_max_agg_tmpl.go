@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"math"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -93,6 +94,7 @@ func new_AGG_TITLEAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, e
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
+			allocator.AdjustMemoryUsage(int64(sizeOf_AGG_TYPEAgg))
 			return &_AGG_TYPEAgg{allocator: allocator}, nil
 			// {{end}}
 		}
@@ -125,6 +127,8 @@ type _AGG_TYPEAgg struct {
 }
 
 var _ aggregateFunc = &_AGG_TYPEAgg{}
+
+const sizeOf_AGG_TYPEAgg = unsafe.Sizeof(&_AGG_TYPEAgg{})
 
 func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups

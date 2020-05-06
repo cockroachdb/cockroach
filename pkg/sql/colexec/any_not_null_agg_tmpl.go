@@ -21,6 +21,7 @@ package colexec
 
 import (
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -66,6 +67,7 @@ func newAnyNotNullAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, e
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
+			allocator.AdjustMemoryUsage(int64(sizeOfAnyNotNull_TYPEAgg))
 			return &anyNotNull_TYPEAgg{allocator: allocator}, nil
 			// {{end}}
 		}
@@ -90,6 +92,10 @@ type anyNotNull_TYPEAgg struct {
 	curAgg                      _GOTYPE
 	foundNonNullForCurrentGroup bool
 }
+
+var _ aggregateFunc = &anyNotNull_TYPEAgg{}
+
+const sizeOfAnyNotNull_TYPEAgg = unsafe.Sizeof(&anyNotNull_TYPEAgg{})
 
 func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
