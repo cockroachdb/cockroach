@@ -42,6 +42,14 @@ func init() {
 	AllAggregateBuiltinNames = make([]string, 0, len(aggregates))
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	for name, def := range builtins {
+		// TODO: instead of the default being immutable (which could be a
+		// problem if a new function forgets to set its volatility if not immutable),
+		// explicitly define volatility of all functions and add a test that asserts
+		// it is never the zero value.
+		if def.props.Volatility == 0 {
+			def.props.Volatility = tree.VolatilityImmutable
+			builtins[name] = def
+		}
 		fDef := tree.NewFunctionDefinition(name, &def.props, def.overloads)
 		tree.FunDefs[name] = fDef
 		if fDef.Private {
@@ -56,7 +64,7 @@ func init() {
 		}
 	}
 
-	// Generate missing categories.
+	// Generate missing categories and volatilities.
 	for _, name := range AllBuiltinNames {
 		def := builtins[name]
 		if def.props.Category == "" {

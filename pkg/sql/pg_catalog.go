@@ -2179,6 +2179,7 @@ CREATE TABLE pg_catalog.pg_proc (
 							argmodes = tree.DNull
 							variadicType = oidZero
 						}
+
 						err := addRow(
 							h.BuiltinOid(name, &builtin),            // oid
 							dName,                                   // proname
@@ -2192,11 +2193,11 @@ CREATE TABLE pg_catalog.pg_proc (
 							tree.MakeDBool(tree.DBool(isAggregate)), // proisagg
 							tree.MakeDBool(tree.DBool(isWindow)),    // proiswindow
 							tree.DBoolFalse,                         // prosecdef
-							tree.MakeDBool(tree.DBool(!props.Impure)), // proleakproof
-							tree.DBoolFalse,                      // proisstrict
-							tree.MakeDBool(tree.DBool(isRetSet)), // proretset
-							tree.DNull,                           // provolatile
-							tree.DNull,                           // proparallel
+							tree.MakeDBool(tree.DBool(props.Volatility != tree.VolatilityVolatile)), // proleakproof
+							tree.DBoolFalse,                           // proisstrict
+							tree.MakeDBool(tree.DBool(isRetSet)),      // proretset
+							tree.NewDString(string(props.Volatility)), // provolatile
+							tree.DNull, // proparallel
 							tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 							retType,                                         // prorettype

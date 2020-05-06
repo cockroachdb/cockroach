@@ -1049,7 +1049,7 @@ SELECT description
 		tree.FunctionProperties{
 			// pg_sleep is marked as impure so it doesn't get executed during
 			// normalization.
-			Impure: true,
+			Volatility: tree.VolatilityVolatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"seconds", types.Float}},
@@ -1704,7 +1704,7 @@ SELECT description
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
 			DistsqlBlacklist: true,
-			Impure:           true,
+			Volatility:       tree.VolatilityVolatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}, {"new_value", types.String}, {"is_local", types.Bool}},

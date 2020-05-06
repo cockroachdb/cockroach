@@ -370,7 +370,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		return nil, false
 	}
 	fn := fns[s.rnd.Intn(len(fns))]
-	if s.disableImpureFns && fn.def.Impure {
+	if s.disableNonImmutableFns && fn.def.Volatility != tree.VolatilityImmutable {
 		return nil, false
 	}
 	for _, ignore := range s.ignoreFNs {
