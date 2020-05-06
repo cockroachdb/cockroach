@@ -239,21 +239,28 @@ func makeAggregateFuncs(
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
 			funcs[i], err = newAnyNotNullAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_AVG:
-			funcs[i], err = newAvgAgg(aggTyps[i][0])
+			funcs[i], err = newAvgAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
-			funcs[i], err = newSumAgg(aggTyps[i][0])
+			funcs[i], err = newSumAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
-			funcs[i] = newCountRowAgg()
+			funcs[i] = newCountRowAgg(allocator)
 		case execinfrapb.AggregatorSpec_COUNT:
-			funcs[i] = newCountAgg()
+			funcs[i] = newCountAgg(allocator)
 		case execinfrapb.AggregatorSpec_MIN:
 			funcs[i], err = newMinAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_MAX:
 			funcs[i], err = newMaxAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_BOOL_AND:
-			funcs[i] = newBoolAndAgg()
+			funcs[i] = newBoolAndAgg(allocator)
 		case execinfrapb.AggregatorSpec_BOOL_OR:
-			funcs[i] = newBoolOrAgg()
+			funcs[i] = newBoolOrAgg(allocator)
+		// NOTE: if you're adding an implementation of a new aggregate
+		// function, make sure to account for the memory under that struct in
+		// its constructor.
+		// TODO(yuzefovich): at the moment, we're updating the allocator on
+		// every created aggregate function. This hits the performance of the
+		// hash aggregator when group sizes are small. We should "batch" the
+		// accounting to address it.
 		default:
 			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}
@@ -471,7 +478,7 @@ func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
 // columns of types 'inputTypes' (which can be empty in case of COUNT_ROWS) is
 // supported.
 func isAggregateSupported(
-	aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
+	allocator *colmem.Allocator, aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
 ) (bool, error) {
 	if err := typeconv.AreTypesSupported(inputTypes); err != nil {
 		return false, err
@@ -492,7 +499,7 @@ func isAggregateSupported(
 		}
 	}
 	_, err := makeAggregateFuncs(
-		nil, /* allocator */
+		allocator,
 		[][]*types.T{inputTypes},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
 	)
