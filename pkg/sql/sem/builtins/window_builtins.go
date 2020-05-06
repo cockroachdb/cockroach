@@ -27,7 +27,7 @@ func initWindowBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 
-		if !v.props.Impure {
+		if v.props.Volatility != tree.VolatilityVolatile {
 			panic(fmt.Sprintf("%s: window functions should all be impure, found %v", k, v))
 		}
 		if v.props.Class != tree.WindowClass {
@@ -46,8 +46,8 @@ func initWindowBuiltins() {
 
 func winProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Impure: true,
-		Class:  tree.WindowClass,
+		Volatility: tree.VolatilityVolatile,
+		Class:      tree.WindowClass,
 	}
 }
 
