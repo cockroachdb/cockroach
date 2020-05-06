@@ -376,7 +376,8 @@
   revision = "edce558372380347c6fef147e62f5559a9f8413d"
 
 [[projects]]
-  digest = "1:35ff61e02c035785971ac6ec04d54428307a986412e5d0aea86b8b7f45677d09"
+  branch = "v1.2.3-cockroachdb19.2"
+  digest = "1:97dc514f2ae2e31577d7e5a541bb010b9811f9923a59c131a7d7da232d51851d"
   name = "github.com/cockroachdb/errors"
   packages = [
     ".",
@@ -399,8 +400,7 @@
     "withstack",
   ]
   pruneopts = "UT"
-  revision = "7ba395ace80575c71104187a222f77bf23c19326"
-  version = "v1.2.3"
+  revision = "6e28db11fa4b207dcffe7c5926929a5e6312bde1"
 
 [[projects]]
   digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"

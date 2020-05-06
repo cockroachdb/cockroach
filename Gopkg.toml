@@ -31,6 +31,11 @@ ignored = [
   "github.com/google/protobuf/examples/tutorial",
 ]
 
+[[constraint]]
+  name = "github.com/cockroachdb/errors"
+  branch = "v1.2.3-cockroachdb19.2"
+
+
 # The collation tables must never change.
 [[constraint]]
   name = "golang.org/x/text"
