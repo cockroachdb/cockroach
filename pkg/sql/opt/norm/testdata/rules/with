@@ -754,21 +754,13 @@ with &1 (foo)
 norm expect=InlineWith
 WITH foo AS NOT MATERIALIZED (SELECT 1/0) SELECT * FROM foo
 ----
-project
+values
  ├── columns: "?column?":2
  ├── cardinality: [1 - 1]
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(2)
- ├── values
- │    ├── columns: "?column?":1
- │    ├── cardinality: [1 - 1]
- │    ├── side-effects
- │    ├── key: ()
- │    ├── fd: ()-->(1)
- │    └── (1 / 0,)
- └── projections
-      └── "?column?":1 [as="?column?":2, outer=(1)]
+ └── (1 / 0,)
 
 # Original CTE is not inlined, adding "NOT MATERIALIZED" should force the inline.
 norm expect=InlineWith

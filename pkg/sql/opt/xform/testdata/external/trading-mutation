@@ -1080,17 +1080,11 @@ limit
  │         │    │    │    ├── columns: id:6!null quantity:7!null dealerid:8!null cardid:9!null accountname:10!null
  │         │    │    │    ├── key columns: [6] = [9]
  │         │    │    │    ├── fd: (6)==(9), (9)==(6)
- │         │    │    │    ├── project
+ │         │    │    │    ├── values
  │         │    │    │    │    ├── columns: id:6!null quantity:7!null
  │         │    │    │    │    ├── cardinality: [2 - 2]
- │         │    │    │    │    ├── values
- │         │    │    │    │    │    ├── columns: unnest_1:4!null unnest_2:5!null
- │         │    │    │    │    │    ├── cardinality: [2 - 2]
- │         │    │    │    │    │    ├── (42948, 3)
- │         │    │    │    │    │    └── (24924, 4)
- │         │    │    │    │    └── projections
- │         │    │    │    │         ├── unnest_1:4 [as=id:6, outer=(4)]
- │         │    │    │    │         └── unnest_2:5 [as=quantity:7, outer=(5)]
+ │         │    │    │    │    ├── (42948, 3)
+ │         │    │    │    │    └── (24924, 4)
  │         │    │    │    └── filters
  │         │    │    │         ├── ((((dealerid:8 = 1) OR (dealerid:8 = 2)) OR (dealerid:8 = 3)) OR (dealerid:8 = 4)) OR (dealerid:8 = 5) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
  │         │    │    │         └── accountname:10 IN ('account-1', 'account-2', 'account-3') [outer=(10), constraints=(/10: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
@@ -1477,14 +1471,12 @@ update ci
       │    │    │    │    │    │    ├── cardinality: [2 - 2]
       │    │    │    │    │    │    ├── fd: ()-->(48)
       │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: unnest_1:4!null unnest_2:5!null
+      │    │    │    │    │    │    │    ├── columns: c:32!null q:33!null
       │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
       │    │    │    │    │    │    │    ├── (42948, 3)
       │    │    │    │    │    │    │    └── (24924, 4)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         ├── 1 [as="project_const_col_@19":48]
-      │    │    │    │    │    │         ├── unnest_1:4 [as=c:32, outer=(4)]
-      │    │    │    │    │    │         └── unnest_2:5 [as=q:33, outer=(5)]
+      │    │    │    │    │    │         └── 1 [as="project_const_col_@19":48]
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=buyprice:21, outer=(21)]
