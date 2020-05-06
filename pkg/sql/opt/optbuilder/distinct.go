@@ -54,7 +54,8 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 // operator rather than the DistinctOn operator (see the UpsertDistinctOn
 // operator comment for details on the differences). The errorOnDup parameter
 // controls whether multiple rows in the same distinct group trigger an error.
-// This can only be set to true in the UpsertDistinctOn case.
+// This can only take on a value in the EnsureDistinctOn and
+// EnsureUpsertDistinctOn cases.
 func (b *Builder) buildDistinctOn(
 	distinctOnCols opt.ColSet, inScope *scope, nullsAreDistinct bool, errorOnDup string,
 ) (outScope *scope) {
@@ -155,11 +156,17 @@ func (b *Builder) buildDistinctOn(
 
 	input := inScope.expr.(memo.RelExpr)
 	if nullsAreDistinct {
-		outScope.expr = b.factory.ConstructUpsertDistinctOn(input, aggs, &private)
-	} else if errorOnDup == "" {
-		outScope.expr = b.factory.ConstructDistinctOn(input, aggs, &private)
+		if errorOnDup == "" {
+			outScope.expr = b.factory.ConstructUpsertDistinctOn(input, aggs, &private)
+		} else {
+			outScope.expr = b.factory.ConstructEnsureUpsertDistinctOn(input, aggs, &private)
+		}
 	} else {
-		outScope.expr = b.factory.ConstructEnsureDistinctOn(input, aggs, &private)
+		if errorOnDup == "" {
+			outScope.expr = b.factory.ConstructDistinctOn(input, aggs, &private)
+		} else {
+			outScope.expr = b.factory.ConstructEnsureDistinctOn(input, aggs, &private)
+		}
 	}
 	return outScope
 }

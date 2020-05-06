@@ -2403,9 +2403,8 @@ func (c *CustomFuncs) ErrorOnDup(private *memo.GroupingPrivate) string {
 	return private.ErrorOnDup
 }
 
-// RaisesErrorOnDup returns true if an EnsureDistinctOn or UpsertDistinctOn
-// operator with the given GroupingPrivate raises an error upon detection
-// of duplicate values.
+// RaisesErrorOnDup returns true if a distinct operator with the given
+// GroupingPrivate raises an error upon detection of duplicate values.
 func (c *CustomFuncs) RaisesErrorOnDup(private *memo.GroupingPrivate) bool {
 	return private.ErrorOnDup != ""
 }

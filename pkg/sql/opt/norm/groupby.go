@@ -22,10 +22,11 @@ import (
 )
 
 // NullsAreDistinct returns true if the given distinct operator treats NULL
-// values as not equal to one another (i.e. distinct). UpsertDistinctOp treats
-// NULL values as distinct, whereas DistinctOp does not.
+// values as not equal to one another (i.e. distinct). UpsertDistinctOp and
+// EnsureUpsertDistinctOp treat NULL values as distinct, whereas DistinctOp
+// does not.
 func (c *CustomFuncs) NullsAreDistinct(distinctOp opt.Operator) bool {
-	return distinctOp == opt.UpsertDistinctOnOp
+	return distinctOp == opt.UpsertDistinctOnOp || distinctOp == opt.EnsureUpsertDistinctOnOp
 }
 
 // RemoveGroupingCols returns a new grouping private struct with the given
@@ -234,6 +235,12 @@ func (c *CustomFuncs) AreValuesDistinct(
 		return c.AreValuesDistinct(t.Left, groupingCols, nullsAreDistinct)
 
 	case *memo.UpsertDistinctOnExpr:
+		// Pass through call to input if grouping on passthrough columns.
+		if groupingCols.SubsetOf(t.Input.Relational().OutputCols) {
+			return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)
+		}
+
+	case *memo.EnsureUpsertDistinctOnExpr:
 		// Pass through call to input if grouping on passthrough columns.
 		if groupingCols.SubsetOf(t.Input.Relational().OutputCols) {
 			return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)

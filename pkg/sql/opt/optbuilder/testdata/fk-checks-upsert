@@ -49,7 +49,7 @@ upsert c1
  │    ├── columns: upsert_c:10 column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9
  │    ├── left-join (hash)
  │    │    ├── columns: column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:4!null column2:5!null column6:6
  │    │    │    ├── grouping columns: column1:4!null
  │    │    │    ├── project
@@ -100,7 +100,7 @@ upsert c1
  │    ├── columns: upsert_c:10 upsert_p:11 upsert_i:12 column1:4!null column5:5!null column6:6 c:7 c1.p:8 i:9
  │    ├── left-join (hash)
  │    │    ├── columns: column1:4!null column5:5!null column6:6 c:7 c1.p:8 i:9
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:4!null column5:5!null column6:6
  │    │    │    ├── grouping columns: column1:4!null
  │    │    │    ├── project
@@ -158,7 +158,7 @@ upsert c1
  │    ├── columns: upsert_c:13 x:4 xyzw.y:5 column9:9 c:10 c1.p:11 i:12
  │    ├── left-join (hash)
  │    │    ├── columns: x:4 xyzw.y:5 column9:9 c:10 c1.p:11 i:12
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:4 xyzw.y:5 column9:9
  │    │    │    ├── grouping columns: x:4
  │    │    │    ├── project
@@ -213,7 +213,7 @@ upsert c1
  │    │    ├── columns: column10:10!null column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:4!null column2:5!null column6:6
  │    │    │    │    ├── grouping columns: column1:4!null
  │    │    │    │    ├── project
@@ -272,7 +272,7 @@ upsert c1
  │    │    ├── columns: column11:11 u:4!null v:5!null column7:7 c:8 c1.p:9 i:10
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: u:4!null v:5!null column7:7 c:8 c1.p:9 i:10
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: u:4!null v:5!null column7:7
  │    │    │    │    ├── grouping columns: u:4!null
  │    │    │    │    ├── project
@@ -333,7 +333,7 @@ upsert c2
  │    │    ├── columns: column4:4!null column1:2!null c:3
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:2!null c:3
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:2!null
  │    │    │    │    ├── grouping columns: column1:2!null
  │    │    │    │    └── values
@@ -384,7 +384,7 @@ upsert c3
  │    ├── columns: upsert_c:7 column1:3!null column2:4 c:5 c3.p:6
  │    ├── left-join (hash)
  │    │    ├── columns: column1:3!null column2:4 c:5 c3.p:6
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:3!null column2:4
  │    │    │    ├── grouping columns: column1:3!null
  │    │    │    ├── values
@@ -432,7 +432,7 @@ upsert c3
  │    ├── columns: upsert_c:7 upsert_p:8 column1:3!null column4:4 c:5 c3.p:6
  │    ├── left-join (hash)
  │    │    ├── columns: column1:3!null column4:4 c:5 c3.p:6
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:3!null column4:4
  │    │    │    ├── grouping columns: column1:3!null
  │    │    │    ├── project
@@ -494,7 +494,7 @@ upsert c4
  │    │    ├── columns: column12:12!null x:4 y:5 z:6 c:9 a:10 c4.other:11
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: x:4 y:5 z:6 c:9 a:10 c4.other:11
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: x:4 y:5 z:6
  │    │    │    │    ├── grouping columns: y:5
  │    │    │    │    ├── project
@@ -553,7 +553,7 @@ upsert c4
  │    │    ├── columns: column12:12!null x:4 y:5 z:6 c:9 a:10 c4.other:11
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: x:4 y:5 z:6 c:9 a:10 c4.other:11
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: x:4 y:5 z:6
  │    │    │    │    ├── grouping columns: y:5
  │    │    │    │    ├── project
@@ -640,7 +640,7 @@ upsert cpq
  │    ├── columns: upsert_c:13 column1:5!null column2:6!null column3:7!null column4:8!null c:9 cpq.p:10 cpq.q:11 cpq.other:12
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null c:9 cpq.p:10 cpq.q:11 cpq.other:12
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
  │    │    │    ├── grouping columns: column1:5!null
  │    │    │    ├── values
@@ -696,7 +696,7 @@ upsert cpq
  │    ├── columns: upsert_c:14 x:5 xyzw.y:6 xyzw.z:7 w:8 c:10 cpq.p:11 cpq.q:12 cpq.other:13
  │    ├── left-join (hash)
  │    │    ├── columns: x:5 xyzw.y:6 xyzw.z:7 w:8 c:10 cpq.p:11 cpq.q:12 cpq.other:13
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:5 xyzw.y:6 xyzw.z:7 w:8
  │    │    │    ├── grouping columns: x:5
  │    │    │    ├── project
@@ -755,7 +755,7 @@ upsert cpq
  │    ├── columns: upsert_c:16 upsert_q:17 upsert_other:18 x:5 xyzw.y:6 column10:10!null column11:11 c:12 cpq.p:13 cpq.q:14 cpq.other:15
  │    ├── left-join (hash)
  │    │    ├── columns: x:5 xyzw.y:6 column10:10!null column11:11 c:12 cpq.p:13 cpq.q:14 cpq.other:15
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:5 xyzw.y:6 column10:10!null column11:11
  │    │    │    ├── grouping columns: x:5
  │    │    │    ├── project
@@ -819,7 +819,7 @@ upsert cpq
  │    ├── columns: upsert_c:17 upsert_p:18 upsert_q:19 upsert_other:20 x:5 column10:10!null column11:11!null column12:12 c:13 cpq.p:14 cpq.q:15 cpq.other:16
  │    ├── left-join (hash)
  │    │    ├── columns: x:5 column10:10!null column11:11!null column12:12 c:13 cpq.p:14 cpq.q:15 cpq.other:16
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:5 column10:10!null column11:11!null column12:12
  │    │    │    ├── grouping columns: x:5
  │    │    │    ├── project
@@ -891,7 +891,7 @@ upsert cpq
  │    ├── columns: upsert_c:17 x:5 column10:10!null column11:11!null column12:12 c:13 cpq.p:14 cpq.q:15 cpq.other:16
  │    ├── left-join (hash)
  │    │    ├── columns: x:5 column10:10!null column11:11!null column12:12 c:13 cpq.p:14 cpq.q:15 cpq.other:16
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:5 column10:10!null column11:11!null column12:12
  │    │    │    ├── grouping columns: x:5
  │    │    │    ├── project
@@ -953,7 +953,7 @@ upsert cpq
  │    │    ├── columns: column13:13!null column1:5!null column6:6!null column7:7!null column8:8 c:9 cpq.p:10 cpq.q:11 cpq.other:12
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:5!null column6:6!null column7:7!null column8:8 c:9 cpq.p:10 cpq.q:11 cpq.other:12
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:5!null column6:6!null column7:7!null column8:8
  │    │    │    │    ├── grouping columns: column1:5!null
  │    │    │    │    ├── project
@@ -1039,7 +1039,7 @@ upsert cmulti
  │    ├── columns: upsert_a:14 upsert_b:15 x:5 y:6 xyzw.z:7 w:8 a:10 b:11 c:12 d:13
  │    ├── left-join (hash)
  │    │    ├── columns: x:5 y:6 xyzw.z:7 w:8 a:10 b:11 c:12 d:13
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:5 y:6 xyzw.z:7 w:8
  │    │    │    ├── grouping columns: x:5 y:6
  │    │    │    ├── project
@@ -1104,7 +1104,7 @@ upsert cmulti
  │    ├── columns: upsert_a:15 upsert_b:16 upsert_d:17 x:5 y:6 xyzw.z:7 column10:10!null a:11 b:12 c:13 d:14
  │    ├── left-join (hash)
  │    │    ├── columns: x:5 y:6 xyzw.z:7 column10:10!null a:11 b:12 c:13 d:14
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:5 y:6 xyzw.z:7 column10:10!null
  │    │    │    ├── grouping columns: x:5 y:6
  │    │    │    ├── project
@@ -1198,7 +1198,7 @@ upsert p1
       ├── columns: upsert_p:7 column1:3!null column2:4!null p:5 other:6
       ├── left-join (hash)
       │    ├── columns: column1:3!null column2:4!null p:5 other:6
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:3!null column2:4!null
       │    │    ├── grouping columns: column1:3!null
       │    │    ├── values
@@ -1236,7 +1236,7 @@ upsert p1
  │    │    ├── columns: column7:7!null column1:3!null column2:4!null p1.p:5 other:6
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:3!null column2:4!null p1.p:5 other:6
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:3!null column2:4!null
  │    │    │    │    ├── grouping columns: column1:3!null
  │    │    │    │    ├── values
@@ -1295,7 +1295,7 @@ upsert p1
       │    ├── columns: column7:7 column1:3!null column2:4!null p:5 other:6
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3!null column2:4!null p:5 other:6
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:3!null column2:4!null
       │    │    │    ├── grouping columns: column1:3!null
       │    │    │    ├── values
@@ -1341,7 +1341,7 @@ upsert p2
  │    ├── columns: upsert_p:7 column1:3!null column2:4!null p:5 p2.fk:6
  │    ├── left-join (hash)
  │    │    ├── columns: column1:3!null column2:4!null p:5 p2.fk:6
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:3!null column2:4!null
  │    │    │    ├── grouping columns: column1:3!null
  │    │    │    ├── values
@@ -1398,7 +1398,7 @@ upsert p2
       │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 fk:6
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3!null column2:4!null p:5 fk:6
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:3!null column2:4!null
       │    │    │    ├── grouping columns: column1:3!null
       │    │    │    ├── values
@@ -1439,7 +1439,7 @@ upsert p2
  │    │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 p2.fk:6
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:3!null column2:4!null p:5 p2.fk:6
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:3!null column2:4!null
  │    │    │    │    ├── grouping columns: column1:3!null
  │    │    │    │    ├── values
@@ -1499,7 +1499,7 @@ upsert p2
       │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 fk:6
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3!null column2:4!null p:5 fk:6
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:3!null column2:4!null
       │    │    │    ├── grouping columns: column2:4!null
       │    │    │    ├── values
@@ -1538,7 +1538,7 @@ upsert p2
  │    │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 p2.fk:6
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:3!null column2:4!null p:5 p2.fk:6
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:3!null column2:4!null
  │    │    │    │    ├── grouping columns: column2:4!null
  │    │    │    │    ├── values
@@ -1594,7 +1594,7 @@ upsert p2
       ├── columns: upsert_p:7 upsert_fk:8 column1:3!null column4:4 p:5 fk:6
       ├── left-join (hash)
       │    ├── columns: column1:3!null column4:4 p:5 fk:6
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:3!null column4:4
       │    │    ├── grouping columns: column1:3!null
       │    │    ├── project
@@ -1641,7 +1641,7 @@ upsert pq
  │    ├── columns: upsert_k:13 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
  │    │    │    ├── grouping columns: column1:5!null
  │    │    │    ├── values
@@ -1724,7 +1724,7 @@ upsert pq
       ├── columns: upsert_k:11 upsert_p:12 upsert_q:13 upsert_other:14 column1:5!null column6:6 k:7 p:8 q:9 other:10
       ├── left-join (hash)
       │    ├── columns: column1:5!null column6:6 k:7 p:8 q:9 other:10
-      │    ├── upsert-distinct-on
+      │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:5!null column6:6
       │    │    ├── grouping columns: column1:5!null
       │    │    ├── project
@@ -1767,7 +1767,7 @@ upsert pq
  │    ├── columns: upsert_k:12 upsert_p:13 upsert_other:14 column1:5!null column2:6!null column7:7 k:8 pq.p:9 pq.q:10 pq.other:11
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5!null column2:6!null column7:7 k:8 pq.p:9 pq.q:10 pq.other:11
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:5!null column2:6!null column7:7
  │    │    │    ├── grouping columns: column1:5!null
  │    │    │    ├── project
@@ -1858,7 +1858,7 @@ upsert pq
       │    ├── columns: column13:13 column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
       │    ├── left-join (hash)
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
       │    │    │    ├── grouping columns: column2:6!null column3:7!null
       │    │    │    ├── values
@@ -1904,7 +1904,7 @@ upsert pq
  │    │    ├── columns: column13:13 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
  │    │    │    │    ├── grouping columns: column2:6!null column3:7!null
  │    │    │    │    ├── values
@@ -1995,7 +1995,7 @@ upsert pq
       │    ├── columns: column13:13!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
       │    ├── left-join (hash)
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
-      │    │    ├── upsert-distinct-on
+      │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
       │    │    │    ├── grouping columns: column1:5!null
       │    │    │    ├── values
@@ -2042,7 +2042,7 @@ upsert pq
  │    │    ├── columns: column13:13!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
  │    │    │    │    ├── grouping columns: column1:5!null
  │    │    │    │    ├── values
@@ -2158,7 +2158,7 @@ upsert tab2
  │    ├── columns: upsert_c:10 column1:4!null column2:5 column3:6 c:7 d:8 tab2.e:9
  │    ├── left-join (hash)
  │    │    ├── columns: column1:4!null column2:5 column3:6 c:7 d:8 tab2.e:9
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: column1:4!null column2:5 column3:6
  │    │    │    ├── grouping columns: column1:4!null
  │    │    │    ├── values
@@ -2232,7 +2232,7 @@ upsert tab2
  │    │    ├── columns: column10:10 column1:4!null column2:5!null column3:6!null c:7 d:8 tab2.e:9
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null c:7 d:8 tab2.e:9
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
  │    │    │    │    ├── grouping columns: column1:4!null
  │    │    │    │    ├── values
@@ -2310,7 +2310,7 @@ upsert tab2
  │    │    ├── columns: column10:10 column1:4!null column2:5!null column3:6!null c:7 d:8 e:9
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null c:7 d:8 e:9
- │    │    │    ├── upsert-distinct-on
+ │    │    │    ├── ensure-upsert-distinct-on
  │    │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
  │    │    │    │    ├── grouping columns: column3:6!null
  │    │    │    │    ├── values
@@ -2382,7 +2382,7 @@ upsert self
  │    ├── columns: upsert_a:14 upsert_b:15 x:5 y:6 xyzw.z:7 xyzw.w:8 a:10 self.b:11 self.c:12 self.d:13
  │    ├── left-join (hash)
  │    │    ├── columns: x:5 y:6 xyzw.z:7 xyzw.w:8 a:10 self.b:11 self.c:12 self.d:13
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: x:5 y:6 xyzw.z:7 xyzw.w:8
  │    │    │    ├── grouping columns: x:5 y:6
  │    │    │    ├── project

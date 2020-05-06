@@ -441,6 +441,12 @@ func (b *logicalPropsBuilder) buildUpsertDistinctOnProps(
 	b.buildGroupingExprProps(distinctOn, rel)
 }
 
+func (b *logicalPropsBuilder) buildEnsureUpsertDistinctOnProps(
+	distinctOn *EnsureUpsertDistinctOnExpr, rel *props.Relational,
+) {
+	b.buildGroupingExprProps(distinctOn, rel)
+}
+
 func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *props.Relational) {
 	BuildSharedProps(groupExpr, &rel.Shared)
 
@@ -509,9 +515,12 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 
 		// The output of most of the grouping operators forms a strict key because
 		// they eliminate all duplicates in the grouping columns. However, the
-		// UpsertDistinctOn operator does not group NULL values together, so it
-		// only forms a lax key when NULL values are possible.
-		if groupExpr.Op() == opt.UpsertDistinctOnOp && !groupingCols.SubsetOf(rel.NotNullCols) {
+		// UpsertDistinctOn and EnsureUpsertDistinctOn operators do not group
+		// NULL values together, so they only form a lax key when NULL values
+		// are possible.
+		if (groupExpr.Op() == opt.UpsertDistinctOnOp ||
+			groupExpr.Op() == opt.EnsureUpsertDistinctOnOp) &&
+			!groupingCols.SubsetOf(rel.NotNullCols) {
 			rel.FuncDeps.AddLaxKey(groupingCols, rel.OutputCols)
 		} else {
 			rel.FuncDeps.AddStrictKey(groupingCols, rel.OutputCols)

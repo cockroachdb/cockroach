@@ -107,8 +107,13 @@
 # columns, using the interesting orderings property. When we have orderings on
 # grouping columns, we can execute aggregations in a streaming fashion which is
 # more efficient.
+#
+# Note: Doesn't match EnsureDistinctOn because test cases were too difficult to
+# find. If a test case for EnsureDistinctOn is found, it should be added to the
+# match pattern.
 [GenerateStreamingGroupBy, Explore]
-(GroupBy | DistinctOn | UpsertDistinctOn
+(GroupBy | DistinctOn | EnsureDistinctOn | UpsertDistinctOn
+        | EnsureUpsertDistinctOn
     $input:*
     $aggs:*
     $private:* & (IsCanonicalGroupBy $private)
