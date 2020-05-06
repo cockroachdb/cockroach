@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -208,6 +209,8 @@ func NewHashAggregator(
 		groupCols:                  groupCols,
 		groupTypes:                 groupTypes,
 		groupCanonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(groupTypes),
+
+		alloc: hashAggFuncsAlloc{allocator: allocator},
 	}, err
 }
 
@@ -442,6 +445,11 @@ type hashAggFuncs struct {
 	fns []aggregateFunc
 }
 
+const sizeOfHashAggFuncs = unsafe.Sizeof(&hashAggFuncs{})
+
+// TODO(yuzefovich): we need to account for memory used by this map. It is
+// likely that we will replace Golang's map with our vectorized hash table, so
+// we might hold off with fixing the accounting until then.
 type hashAggFuncMap map[uint64][]*hashAggFuncs
 
 func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
@@ -465,11 +473,13 @@ const hashAggFuncsAllocSize = 64
 // hashAggFuncsAlloc is a utility struct that batches allocations of
 // hashAggFuncs.
 type hashAggFuncsAlloc struct {
-	buf []hashAggFuncs
+	allocator *colmem.Allocator
+	buf       []hashAggFuncs
 }
 
 func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
 	if len(a.buf) == 0 {
+		a.allocator.AdjustMemoryUsage(int64(hashAggFuncsAllocSize * sizeOfHashAggFuncs))
 		a.buf = make([]hashAggFuncs, hashAggFuncsAllocSize)
 	}
 	ret := &a.buf[0]
