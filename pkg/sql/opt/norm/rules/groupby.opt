@@ -32,7 +32,7 @@
 # something the GroupBy operators can do on their own.
 [EliminateGroupByProject, Normalize]
 (GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
-        | UpsertDistinctOn
+        | UpsertDistinctOn | EnsureUpsertDistinctOn
     $input:(Project $innerInput:*) &
         (ColsAreSubset
             (OutputCols $input)
@@ -85,7 +85,7 @@
 #   SELECT c FROM t WHERE c IS NULL
 #
 [ReduceNotNullGroupingCols, Normalize]
-(UpsertDistinctOn
+(UpsertDistinctOn | EnsureUpsertDistinctOn
     $input:*
     $aggregations:*
     $groupingPrivate:* &
@@ -166,15 +166,14 @@
 # is equivalent to:
 #   SELECT a, b FROM ab WHERE a=1 LIMIT 1
 #
-# Note that this rule does not apply to UpsertDistinctOn with ErrorOnDup = true,
-# since that will raise an error if there are duplicate rows.
+# Note that this rule does not apply to EnsureDistinctOn or
+# EnsureUpsertDistinctOn, since they will raise an error if there are duplicate
+# rows.
 [EliminateDistinctNoColumns, Normalize]
 (DistinctOn | UpsertDistinctOn
     $input:*
     $aggregations:*
-    $groupingPrivate:* &
-        (HasNoGroupingCols $groupingPrivate) &
-        ^(RaisesErrorOnDup $groupingPrivate)
+    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate)
 )
 =>
 (ConstructProjectionFromDistinctOn
@@ -191,14 +190,13 @@
 # except that Max1Row will raise an error if there are no grouping columns and
 # the input has more than one row. No grouping columns means there is at most
 # one group. And the Max1Row operator is needed to raise an error if that group
-# has more than one row, which is a requirement of the Upsert operator.
+# has more than one row, which is a requirement of the EnsureDistinct and
+# EnsureUpsertDistinct operators.
 [EliminateEnsureDistinctNoColumns, Normalize]
-(EnsureDistinctOn | UpsertDistinctOn
+(EnsureDistinctOn | EnsureUpsertDistinctOn
     $input:*
     $aggregations:*
-    $groupingPrivate:* &
-        (HasNoGroupingCols $groupingPrivate) &
-        (RaisesErrorOnDup $groupingPrivate)
+    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate)
 )
 =>
 (ConstructProjectionFromDistinctOn
@@ -219,7 +217,7 @@
 # find. If a test case for EnsureDistinctOn is found, it should be added to the
 # match pattern.
 [EliminateDistinctOnValues, Normalize]
-(DistinctOn | UpsertDistinctOn
+(DistinctOn | UpsertDistinctOn | EnsureUpsertDistinctOn
     $input:*
     $aggregations:*
     $groupingPrivate:* &

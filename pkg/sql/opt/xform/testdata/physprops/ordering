@@ -1790,7 +1790,7 @@ sort
       │         │    ├── key columns: [4 5 6] = [7 8 9]
       │         │    ├── lookup columns are key
       │         │    ├── key: (4-9)
-      │         │    ├── upsert-distinct-on
+      │         │    ├── ensure-upsert-distinct-on
       │         │    │    ├── columns: x:4!null y:5!null z:6!null
       │         │    │    ├── grouping columns: x:4!null y:5!null z:6!null
       │         │    │    ├── internal-ordering: +5,+6
