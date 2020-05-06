@@ -102,7 +102,7 @@ func (i *Iterator) Valid() (bool, error) {
 	}
 	ok, err := i.i.Valid()
 	if err != nil {
-		return false, i.err
+		return false, err
 	}
 	return ok && !i.invalid, nil
 }
@@ -110,13 +110,15 @@ func (i *Iterator) Valid() (bool, error) {
 // Next is part of the engine.Iterator interface.
 func (i *Iterator) Next() {
 	i.i.Next()
-	if i.spansOnly {
-		if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
-			i.invalid = true
-		}
-	} else {
-		if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
-			i.invalid = true
+	if ok, _ := i.i.Valid(); ok {
+		if i.spansOnly {
+			if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
+				i.invalid = true
+			}
+		} else {
+			if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
+				i.invalid = true
+			}
 		}
 	}
 }
@@ -124,13 +126,15 @@ func (i *Iterator) Next() {
 // Prev is part of the engine.Iterator interface.
 func (i *Iterator) Prev() {
 	i.i.Prev()
-	if i.spansOnly {
-		if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
-			i.invalid = true
-		}
-	} else {
-		if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
-			i.invalid = true
+	if ok, _ := i.i.Valid(); ok {
+		if i.spansOnly {
+			if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
+				i.invalid = true
+			}
+		} else {
+			if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
+				i.invalid = true
+			}
 		}
 	}
 }
@@ -138,13 +142,15 @@ func (i *Iterator) Prev() {
 // NextKey is part of the engine.Iterator interface.
 func (i *Iterator) NextKey() {
 	i.i.NextKey()
-	if i.spansOnly {
-		if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
-			i.invalid = true
-		}
-	} else {
-		if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
-			i.invalid = true
+	if ok, _ := i.i.Valid(); ok {
+		if i.spansOnly {
+			if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
+				i.invalid = true
+			}
+		} else {
+			if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
+				i.invalid = true
+			}
 		}
 	}
 }
