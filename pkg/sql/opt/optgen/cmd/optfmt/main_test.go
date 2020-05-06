@@ -31,7 +31,8 @@ func prettyTest(t *testing.T, d *datadriven.TestData) string {
 		if d.HasArg("n") {
 			d.ScanArgs(t, "n", &n)
 		}
-		s, err := prettyify(strings.NewReader(d.Input), n)
+		exprgen := d.HasArg("expr")
+		s, err := prettyify(strings.NewReader(d.Input), n, exprgen)
 		if err != nil {
 			return fmt.Sprintf("ERROR: %s", err)
 		}
