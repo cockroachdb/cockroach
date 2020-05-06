@@ -510,7 +510,7 @@ project
  └── group-by
       ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
-      ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=399.903879]
+      ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── left-join (hash)
@@ -543,7 +543,7 @@ project
  └── group-by
       ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
-      ├── stats: [rows=400, distinct(2)=400, null(2)=400]
+      ├── stats: [rows=400, distinct(2)=400, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── full-join (hash)
@@ -676,12 +676,12 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
- ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.99851, null(2)=2500, distinct(3)=499.977311, null(3)=50, distinct(5)=499, null(5)=0, distinct(2,3)=3160.69477, null(2,3)=2525, distinct(3,5)=5000, null(3,5)=2525, distinct(1,2,7)=5000, null(1,2,7)=2500]
+ ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.99851, null(2)=2500, distinct(3)=499.977311, null(3)=50, distinct(5)=499, null(5)=0, distinct(2,3)=3160.69477, null(2,3)=25, distinct(3,5)=5000, null(3,5)=0, distinct(1,2,7)=5000, null(1,2,7)=0]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -697,12 +697,12 @@ SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
 left-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=0, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -718,12 +718,12 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 ----
 right-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
- ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=4323.45892, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
+ ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=4323.45892, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -739,12 +739,12 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 ----
 full-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -761,17 +761,17 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u WHERE s IS NOT NULL
 ----
 select
  ├── columns: x:1(int) y:2(int) s:3(string!null) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
- ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, distinct(3)=500, null(3)=0, distinct(5)=500, null(5)=4950, distinct(2,3)=4999.5, null(2,3)=4999.5, distinct(3,5)=9900, null(3,5)=4999.5, distinct(1,2,7)=9900, null(1,2,7)=4950]
+ ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, distinct(3)=500, null(3)=0, distinct(5)=500, null(5)=4950, distinct(2,3)=4999.5, null(2,3)=0, distinct(3,5)=9900, null(3,5)=0, distinct(1,2,7)=9900, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── full-join (hash)
  │    ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
- │    ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
+ │    ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
  │    ├── key: (1,7)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── scan uv
@@ -791,12 +791,12 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
 ----
 full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
- ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=25250000, distinct(3,5)=250000, null(3,5)=25250000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
+ ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=250000, distinct(3,5)=250000, null(3,5)=250000, distinct(1,2,7)=50000000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -812,16 +812,16 @@ SELECT * FROM xysd, uv
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
- ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
+ ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=50000000, null(1,2,7)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── inner-join (cross)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
-      ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
+      ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=50000000, null(1,2,7)=0]
       ├── key: (1,7)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(1,2)=2501, null(1,2)=2500]
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(1,2)=5000, null(1,2)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── scan uv
@@ -885,12 +885,12 @@ inner-join (merge)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
  ├── left ordering: +1
  ├── right ordering: +5
- ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(5)=499, null(5)=0, distinct(2,3)=5000, null(2,3)=2525, distinct(3,5)=5000, null(3,5)=2525, distinct(1,2,7)=5000, null(1,2,7)=2500]
+ ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(5)=499, null(5)=0, distinct(2,3)=5000, null(2,3)=25, distinct(3,5)=5000, null(3,5)=0, distinct(1,2,7)=5000, null(1,2,7)=0]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
@@ -926,12 +926,12 @@ left-join (merge)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
  ├── left ordering: +1
  ├── right ordering: +5
- ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(5)=500, null(5)=1666.66667, distinct(6)=100, null(6)=1666.66667, distinct(2,3)=5000, null(2,3)=2525, distinct(3,5)=5000, null(3,5)=2525, distinct(1,2,7)=5000, null(1,2,7)=2500]
+ ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(5)=500, null(5)=1666.66667, distinct(6)=100, null(6)=1666.66667, distinct(2,3)=5000, null(2,3)=25, distinct(3,5)=5000, null(3,5)=25, distinct(1,2,7)=5000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
@@ -1256,14 +1256,14 @@ expr format=show-all colstat=5 colstat=6 colstat=(5, 6) colstat=1 colstat=2 cols
 inner-join (lookup def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int) t.public.def.d:4(int!null) t.public.def.e:5(int!null) t.public.def.f:6(int)
  ├── key columns: [1 2] = [4 5]
- ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.00999500175, null(3)=0.0001, distinct(4)=0.01, null(4)=0, distinct(5)=0.01, null(5)=0, distinct(6)=0.00999995009, null(6)=0.0001, distinct(5,6)=0.00999999509, null(5,6)=0.0001, distinct(1-3)=0.0099995001, null(1-3)=0.0001]
+ ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.00999500175, null(3)=0.0001, distinct(4)=0.01, null(4)=0, distinct(5)=0.01, null(5)=0, distinct(6)=0.00999995009, null(6)=0.0001, distinct(5,6)=0.00999999509, null(5,6)=0, distinct(1-3)=0.0099995001, null(1-3)=0]
  ├── cost: 2106.0506
  ├── key: (4,5)
  ├── fd: (1,2)-->(3), (4,5)-->(6), (1)==(4), (4)==(1), (2)==(5), (5)==(2)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=1]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 106.02
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1284,14 +1284,14 @@ expr format=show-all colstat=5 colstat=6 colstat=(5, 6) colstat=1 colstat=2 cols
 semi-join (lookup def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [4 5]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(5,6)=1, null(5,6)=0, distinct(1-3)=100, null(1-3)=1]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(5,6)=1, null(5,6)=0, distinct(1-3)=100, null(1-3)=0]
  ├── cost: 2106.0506
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=1]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 106.02
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1309,14 +1309,14 @@ expr format=show-all colstat=5 colstat=6 colstat=(5, 6) colstat=1 colstat=2 cols
 anti-join (lookup def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [4 5]
- ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(3)=1e-10, null(3)=1e-10, distinct(5)=1e-10, null(5)=0, distinct(6)=1e-10, null(6)=0, distinct(5,6)=1e-10, null(5,6)=0, distinct(1-3)=1e-10, null(1-3)=1e-10]
+ ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(3)=1e-10, null(3)=1e-10, distinct(5)=1e-10, null(5)=0, distinct(6)=1e-10, null(6)=0, distinct(5,6)=1e-10, null(5,6)=0, distinct(1-3)=1e-10, null(1-3)=0]
  ├── cost: 2106.0506
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=1]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 106.02
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1341,7 +1341,7 @@ semi-join (lookup def)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=1]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 106.02
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1360,14 +1360,14 @@ expr format=show-all colstat=5 colstat=6 colstat=(5, 6) colstat=1 colstat=2 cols
 anti-join (lookup def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [4 5]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(5,6)=1, null(5,6)=0, distinct(1-3)=100, null(1-3)=1]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(5,6)=1, null(5,6)=0, distinct(1-3)=100, null(1-3)=0]
  ├── cost: 2106.0606
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=1]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 106.02
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
