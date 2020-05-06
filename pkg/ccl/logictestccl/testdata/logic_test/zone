@@ -1027,3 +1027,60 @@ WHERE table_name = 'parent_modify' AND index_name IS NULL
 ----
 parent_modify  NULL  ALTER TABLE test.public.parent_modify CONFIGURE ZONE USING
                      gc.ttlseconds = 700
+
+# Regression for #48254. Ensure that index rewrites in a primary key
+# change don't drop zone configs on rewritten indexes.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z INT,
+  w INT,
+  INDEX i1 (z),
+  INDEX i2 (w),
+  FAMILY (x, y, z, w)
+);
+ALTER INDEX t@i1 PARTITION BY LIST (z) (
+  PARTITION p1 VALUES IN (1, 2),
+  PARTITION p2 VALUES IN (3, 4)
+);
+ALTER INDEX t@i2 PARTITION BY LIST (w) (
+  PARTITION p3 VALUES IN (5, 6),
+  PARTITION p4 VALUES IN (7, 8)
+);
+ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210;
+ALTER PARTITION p2 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15213;
+ALTER PARTITION p3 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15411;
+ALTER PARTITION p4 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15418;
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+# Ensure that all the partitions of i1 and i2 still have their zone configs.
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   z INT8 NULL,
+   w INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   UNIQUE INDEX t_x_key (x ASC),
+   INDEX i1 (z ASC) PARTITION BY LIST (z) (
+     PARTITION p1 VALUES IN ((1), (2)),
+     PARTITION p2 VALUES IN ((3), (4))
+   ),
+   INDEX i2 (w ASC) PARTITION BY LIST (w) (
+     PARTITION p3 VALUES IN ((5), (6)),
+     PARTITION p4 VALUES IN ((7), (8))
+   ),
+   FAMILY fam_0_x_y_z_w (x, y, z, w)
+);
+ALTER PARTITION p1 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
+  gc.ttlseconds = 15210;
+ALTER PARTITION p2 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
+  gc.ttlseconds = 15213;
+ALTER PARTITION p3 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
+  gc.ttlseconds = 15411;
+ALTER PARTITION p4 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
+  gc.ttlseconds = 15418

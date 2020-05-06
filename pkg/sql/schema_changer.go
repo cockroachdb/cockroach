@@ -886,6 +886,13 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 					}
 				}
 
+				// We might have to update some zone configs for indexes that are
+				// being rewritten.
+				if err := sc.maybeUpdateZoneConfigsForPKChange(
+					ctx, txn, sc.execCfg, scDesc.TableDesc(), pkSwap); err != nil {
+					return err
+				}
+
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
 				mutationID := scDesc.ClusterVersion.NextMutationID
@@ -982,6 +989,46 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		log.VEventf(ctx, 2, "started job %d", *job.ID())
 	}
 	return descs[sc.tableID], nil
+}
+
+// maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
+// indexes from the old index over to the new index.
+func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	table *sqlbase.TableDescriptor,
+	swapInfo *sqlbase.PrimaryKeySwap,
+) error {
+	zone, err := getZoneConfigRaw(ctx, txn, table.ID)
+	if err != nil {
+		return err
+	}
+
+	// If this table doesn't have a zone attached to it, don't do anything.
+	if zone == nil {
+		return nil
+	}
+
+	// For each rewritten index, point its subzones for the old index at the
+	// new index.
+	for i, oldID := range swapInfo.OldIndexes {
+		for j := range zone.Subzones {
+			subzone := &zone.Subzones[j]
+			if subzone.IndexID == uint32(oldID) {
+				subzone.IndexID = uint32(swapInfo.NewIndexes[i])
+			}
+		}
+	}
+
+	// Write the zone back. This call regenerates the index spans that apply
+	// to each partition in the index.
+	_, err = writeZoneConfig(ctx, txn, table.ID, table, zone, execCfg, false)
+	if err != nil && !sqlbase.IsCCLRequiredError(err) {
+		return err
+	}
+
+	return nil
 }
 
 // notFirstInLine returns true whenever the schema change has been queued
