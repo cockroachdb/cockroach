@@ -15,6 +15,7 @@ package geographiclib
 // #cgo LDFLAGS: -lm
 //
 // #include "geodesic.h"
+// #include "geographiclib.h"
 import "C"
 
 import "github.com/golang/geo/s2"
@@ -61,4 +62,50 @@ func (s *Spheroid) Inverse(a, b s2.LatLng) (s12, az1, az2 float64) {
 		&retAZ2,
 	)
 	return float64(retS12), float64(retAZ1), float64(retAZ2)
+}
+
+// InverseBatch computes the sum of the length of the lines represented
+// by the line of points.
+// This is intended for use for LineStrings. LinearRings/Polygons should use "AreaAndPerimeter".
+// Returns the sum of the s12 (distance in meters) units.
+func (s *Spheroid) InverseBatch(points []s2.Point) float64 {
+	lats := make([]C.double, len(points))
+	lngs := make([]C.double, len(points))
+	for i, p := range points {
+		latlng := s2.LatLngFromPoint(p)
+		lats[i] = C.double(latlng.Lat.Degrees())
+		lngs[i] = C.double(latlng.Lng.Degrees())
+	}
+	var result C.double
+	C.CR_GEOGRAPHICLIB_InverseBatch(
+		&s.cRepr,
+		&lats[0],
+		&lngs[0],
+		C.int(len(points)),
+		&result,
+	)
+	return float64(result)
+}
+
+// AreaAndPerimeter computes the area and perimeter of a polygon on a given spheroid.
+// The points must never be duplicated (i.e. do not include the "final" point of a Polygon LinearRing).
+// Area is in meter^2, Perimeter is in meters.
+func (s *Spheroid) AreaAndPerimeter(points []s2.Point) (area float64, perimeter float64) {
+	lats := make([]C.double, len(points))
+	lngs := make([]C.double, len(points))
+	for i, p := range points {
+		latlng := s2.LatLngFromPoint(p)
+		lats[i] = C.double(latlng.Lat.Degrees())
+		lngs[i] = C.double(latlng.Lng.Degrees())
+	}
+	var areaDouble, perimeterDouble C.double
+	C.geod_polygonarea(
+		&s.cRepr,
+		&lats[0],
+		&lngs[0],
+		C.int(len(points)),
+		&areaDouble,
+		&perimeterDouble,
+	)
+	return float64(areaDouble), float64(perimeterDouble)
 }

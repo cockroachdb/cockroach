@@ -179,6 +179,19 @@ POINT (1 1)                                    SRID=3857;POINT (1 1)            
 POINT (1 1)                                    SRID=4326;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
 
+query TTTTTTTT
+SELECT
+  ST_PointFromText('POINT(1.0 1.0)'),
+  ST_PointFromText('POINT(1.0 1.0)', 4326),
+  ST_PointFromText('LINESTRING(1.0 1.0, 2.0 2.0)'),
+  ST_PointFromText('LINESTRING(1.0 1.0, 2.0 2.0)', 4326),
+  ST_PointFromWKB(ST_AsBinary('POINT(1.0 1.0)'::geometry)),
+  ST_PointFromWKB(ST_AsBinary('POINT(1.0 1.0)'::geometry), 4326),
+  ST_PointFromWKB(ST_AsBinary('LINESTRING(1.0 1.0, 2.0 2.0)'::geometry)),
+  ST_PointFromWKB(ST_AsBinary('LINESTRING(1.0 1.0, 2.0 2.0)'::geometry), 4326)
+----
+0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  NULL  NULL  0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  NULL  NULL
+
 subtest operators
 
 statement ok

@@ -74,6 +74,102 @@ var geometryFromText = makeBuiltin(
 	},
 )
 
+// geometryFromTextCheckShapeBuiltin is used for the ST_<Shape>FromText builtins.
+func geometryFromTextCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
+	return makeBuiltin(
+		defProps(),
+		stringOverload1(
+			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+				if err != nil {
+					return nil, err
+				}
+				if g.Shape() != shape {
+					return tree.DNull, nil
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not %s, NULL is returned.",
+					shape.String(),
+				),
+			}.String(),
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				srid := geopb.SRID(tree.MustBeDInt(args[1]))
+				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+				if err != nil {
+					return nil, err
+				}
+				if g.Shape() != shape {
+					return tree.DNull, nil
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info: infoBuilder{
+				info: fmt.Sprintf(
+					`Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not %s, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
+					shape.String(),
+				),
+			}.String(),
+		},
+	)
+}
+
+// geometryFromWKBCheckShapeBuiltin is used for the ST_<Shape>FromWKB builtins.
+func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
+	return makeBuiltin(
+		defProps(),
+		bytesOverload1(
+			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+				g, err := geo.ParseGeometryFromWKB(geopb.WKB(s), geopb.DefaultGeometrySRID)
+				if err != nil {
+					return nil, err
+				}
+				if g.Shape() != shape {
+					return tree.DNull, nil
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the Geometry from a WKB representation. If the shape underneath is not %s, NULL is returned.",
+					shape.String(),
+				),
+			}.String(),
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"wkb", types.Bytes}, {"srid", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDBytes(args[0]))
+				srid := geopb.SRID(tree.MustBeDInt(args[1]))
+				g, err := geo.ParseGeometryFromWKB(geopb.WKB(s), srid)
+				if err != nil {
+					return nil, err
+				}
+				if g.Shape() != shape {
+					return tree.DNull, nil
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info: infoBuilder{
+				info: fmt.Sprintf(
+					`Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not %s, NULL is returned.`,
+					shape.String(),
+				),
+			}.String(),
+		},
+	)
+}
+
 // geographyFromText is the builtin for ST_GeomFromText/ST_GeographyFromText.
 var geographyFromText = makeBuiltin(
 	defProps(),
@@ -205,6 +301,35 @@ var geoBuiltins = map[string]builtinDefinition{
 			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
 		),
 	),
+
+	"st_geomcollfromtext":        geometryFromTextCheckShapeBuiltin(geopb.Shape_GeometryCollection),
+	"st_geomcollfromwkb":         geometryFromWKBCheckShapeBuiltin(geopb.Shape_GeometryCollection),
+	"st_linefromtext":            geometryFromTextCheckShapeBuiltin(geopb.Shape_LineString),
+	"st_linefromwkb":             geometryFromWKBCheckShapeBuiltin(geopb.Shape_LineString),
+	"st_linestringfromtext":      geometryFromTextCheckShapeBuiltin(geopb.Shape_LineString), // missing from PostGIS
+	"st_linestringfromwkb":       geometryFromWKBCheckShapeBuiltin(geopb.Shape_LineString),
+	"st_mlinefromtext":           geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiLineString),
+	"st_mlinefromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiLineString),
+	"st_mpointfromtext":          geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPoint),
+	"st_mpointfromwkb":           geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPoint),
+	"st_mpolyfromtext":           geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPolygon),
+	"st_mpolyfromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPolygon),
+	"st_multilinefromtext":       geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiLineString), // missing from PostGIS
+	"st_multilinefromwkb":        geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiLineString),
+	"st_multilinestringfromtext": geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiLineString),
+	"st_multilinestringfromwkb":  geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiLineString), // missing from PostGIS
+	"st_multipointfromtext":      geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPoint),     // SRID version missing from PostGIS
+	"st_multipointfromwkb":       geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPoint),
+	"st_multipolyfromtext":       geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPolygon), // missing from PostGIS
+	"st_multipolyfromwkb":        geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPolygon),
+	"st_multipolygonfromtext":    geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPolygon),
+	"st_multipolygonfromwkb":     geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPolygon), // missing from PostGIS
+	"st_pointfromtext":           geometryFromTextCheckShapeBuiltin(geopb.Shape_Point),
+	"st_pointfromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.Shape_Point),
+	"st_polyfromtext":            geometryFromTextCheckShapeBuiltin(geopb.Shape_Polygon),
+	"st_polyfromwkb":             geometryFromWKBCheckShapeBuiltin(geopb.Shape_Polygon),
+	"st_polygonfromtext":         geometryFromTextCheckShapeBuiltin(geopb.Shape_Polygon),
+	"st_polygonfromwkb":          geometryFromWKBCheckShapeBuiltin(geopb.Shape_Polygon),
 
 	//
 	// Input (Geography)
