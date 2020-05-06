@@ -1308,13 +1308,13 @@ project
  │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
  │    │    ├── grouping columns: column2:2(string) column3:3(varbit)
  │    │    ├── cardinality: [1 - 2]
- │    │    ├── stats: [rows=2, distinct(4)=2, null(4)=0, distinct(2,3)=2, null(2,3)=2]
+ │    │    ├── stats: [rows=2, distinct(4)=2, null(4)=0, distinct(2,3)=2, null(2,3)=0]
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(4)
  │    │    ├── values
  │    │    │    ├── columns: column1:1(bool!null) column2:2(string) column3:3(varbit)
  │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── stats: [rows=2, distinct(2,3)=2, null(2,3)=2]
+ │    │    │    ├── stats: [rows=2, distinct(2,3)=2, null(2,3)=0]
  │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
  │    │    │    └── (true, e'19\x1e', NULL) [type=tuple{bool, string, varbit}]
  │    │    └── aggregations
@@ -1719,13 +1719,13 @@ SELECT * FROM v0 WHERE v0.c0 > 0
 ----
 select
  ├── columns: c0:3(int!null)
- ├── stats: [rows=2e-10, distinct(3)=2e-10, null(3)=0]
+ ├── stats: [rows=1, distinct(3)=1, null(3)=0]
  ├── project
  │    ├── columns: rowid:3(int)
- │    ├── stats: [rows=2, distinct(3)=1, null(3)=2]
+ │    ├── stats: [rows=2, distinct(3)=2, null(3)=0]
  │    ├── scan t0
  │    │    ├── columns: c0:1(int) t0.rowid:2(int!null)
- │    │    ├── stats: [rows=2, distinct(1,2)=1, null(1,2)=2]
+ │    │    ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0]
  │    │    ├── key: (2)
  │    │    └── fd: (2)-->(1)
  │    └── projections
