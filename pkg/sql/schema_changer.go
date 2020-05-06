@@ -846,9 +846,25 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				}
 				backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 			}
+
+			// Some primary key change specific operations need to happen before
+			// and after the index swap occurs.
+			if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+				// We might have to update some zone configs for indexes that are
+				// being rewritten. It is important that this is done _before_ the
+				// index swap occurs. The logic that generates spans for subzone
+				// configurations removes spans for indexes in the dropping state,
+				// which we don't want. So, set up the zone configs before we swap.
+				if err := sc.maybeUpdateZoneConfigsForPKChange(
+					ctx, txn, sc.execCfg, scDesc.TableDesc(), pkSwap); err != nil {
+					return err
+				}
+			}
+
 			if err := scDesc.MakeMutationComplete(mutation); err != nil {
 				return err
 			}
+
 			if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
 				if fn := sc.testingKnobs.RunBeforePrimaryKeySwap; fn != nil {
 					fn()
@@ -982,6 +998,50 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		log.VEventf(ctx, 2, "started job %d", *job.ID())
 	}
 	return descs[sc.tableID], nil
+}
+
+// maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
+// indexes from the old index over to the new index.
+func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	table *sqlbase.TableDescriptor,
+	swapInfo *sqlbase.PrimaryKeySwap,
+) error {
+	zone, err := getZoneConfigRaw(ctx, txn, table.ID)
+	if err != nil {
+		return err
+	}
+
+	// If this table doesn't have a zone attached to it, don't do anything.
+	if zone == nil {
+		return nil
+	}
+
+	// For each rewritten index, point its subzones for the old index at the
+	// new index.
+	for i, oldID := range swapInfo.OldIndexes {
+		for j := range zone.Subzones {
+			subzone := &zone.Subzones[j]
+			if subzone.IndexID == uint32(oldID) {
+				// If we find a subzone matching an old index, copy its subzone
+				// into a new subzone with the new index's ID.
+				subzoneCopy := *subzone
+				subzoneCopy.IndexID = uint32(swapInfo.NewIndexes[i])
+				zone.SetSubzone(subzoneCopy)
+			}
+		}
+	}
+
+	// Write the zone back. This call regenerates the index spans that apply
+	// to each partition in the index.
+	_, err = writeZoneConfig(ctx, txn, table.ID, table, zone, execCfg, false)
+	if err != nil && !sqlbase.IsCCLRequiredError(err) {
+		return err
+	}
+
+	return nil
 }
 
 // notFirstInLine returns true whenever the schema change has been queued
