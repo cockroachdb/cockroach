@@ -754,7 +754,13 @@ func BenchmarkAggregator(b *testing.B) {
 										if hasNulls {
 											nullProb = nullProbability
 										}
-										coldatatestutils.RandomVec(rng, bytesFixedLength, cols[1], nTuples, nullProb)
+										coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+											Rand:             rng,
+											Vec:              cols[1],
+											N:                nTuples,
+											NullProbability:  nullProb,
+											BytesFixedLength: bytesFixedLength,
+										})
 										if typ.Identical(types.Int) && aggFn == execinfrapb.AggregatorSpec_SUM {
 											// Summation of random Int64 values can lead to
 											// overflow, and we will panic. To go around it, we
