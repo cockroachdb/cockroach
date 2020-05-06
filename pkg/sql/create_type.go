@@ -91,7 +91,7 @@ func getCreateTypeParams(
 	if err != nil {
 		return nil, 0, err
 	}
-	id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
 	if err != nil {
 		return nil, 0, err
 	}

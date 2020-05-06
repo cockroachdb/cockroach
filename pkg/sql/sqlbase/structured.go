@@ -206,6 +206,10 @@ const InvalidMutationID MutationID = 0
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
+	// SequenceColumnID is the ID of the sole column in a sequence.
+	SequenceColumnID = 1
+	// SequenceColumnName is the name of the sole column in a sequence.
+	SequenceColumnName = "value"
 )
 
 // ErrMissingColumns indicates a table with no columns.

@@ -128,7 +128,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	} else {
 		// If we aren't replacing anything, make a new table descriptor.
-		id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
+		id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 		if err != nil {
 			return err
 		}

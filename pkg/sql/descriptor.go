@@ -55,9 +55,9 @@ var MaxDefaultDescriptorID = keys.MaxReservedDescID + sqlbase.ID(len(DefaultUser
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
 // the counter. The incrementing is non-transactional, and the counter could be
 // incremented multiple times because of retries.
-func GenerateUniqueDescID(ctx context.Context, db *kv.DB) (sqlbase.ID, error) {
+func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (sqlbase.ID, error) {
 	// Increment unique descriptor counter.
-	newVal, err := kv.IncrementValRetryable(ctx, db, keys.DescIDGenerator, 1)
+	newVal, err := kv.IncrementValRetryable(ctx, db, codec.DescIDSequenceKey(), 1)
 	if err != nil {
 		return sqlbase.InvalidID, err
 	}
@@ -92,7 +92,7 @@ func (p *planner) createDatabase(
 		return false, err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+	id, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return false, err
 	}
