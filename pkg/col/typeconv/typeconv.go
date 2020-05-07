@@ -20,23 +20,32 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TypeFamilyToCanonicalTypeFamily maps all type families that are supported by
-// the vectorized engine to their "canonical" counterparts. "Canonical" type
-// families are representatives from a set of "equivalent" type families where
-// "equivalence" means having the same physical representation.
-var TypeFamilyToCanonicalTypeFamily = map[types.Family]types.Family{
-	types.BoolFamily:        types.BoolFamily,
-	types.BytesFamily:       types.BytesFamily,
-	types.DateFamily:        types.IntFamily,
-	types.DecimalFamily:     types.DecimalFamily,
-	types.IntFamily:         types.IntFamily,
-	types.OidFamily:         types.IntFamily,
-	types.FloatFamily:       types.FloatFamily,
-	types.StringFamily:      types.BytesFamily,
-	types.UuidFamily:        types.BytesFamily,
-	types.TimestampFamily:   types.TimestampTZFamily,
-	types.TimestampTZFamily: types.TimestampTZFamily,
-	types.IntervalFamily:    types.IntervalFamily,
+// TypeFamilyToCanonicalTypeFamily converts all type families that are
+// supported by the vectorized engine to their "canonical" counterparts.
+// "Canonical" type families are representatives from a set of "equivalent"
+// type families where "equivalence" means having the same physical
+// representation.
+// It returns types.UnknownFamily if family is not supported by the vectorized
+// engine.
+func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
+	switch family {
+	case types.BoolFamily:
+		return types.BoolFamily
+	case types.BytesFamily, types.StringFamily, types.UuidFamily:
+		return types.BytesFamily
+	case types.DecimalFamily:
+		return types.DecimalFamily
+	case types.IntFamily, types.DateFamily, types.OidFamily:
+		return types.IntFamily
+	case types.FloatFamily:
+		return types.FloatFamily
+	case types.TimestampTZFamily, types.TimestampFamily:
+		return types.TimestampTZFamily
+	case types.IntervalFamily:
+		return types.IntervalFamily
+	default:
+		return types.UnknownFamily
+	}
 }
 
 // ToCanonicalTypeFamilies converts typs to the corresponding canonical type
@@ -44,7 +53,7 @@ var TypeFamilyToCanonicalTypeFamily = map[types.Family]types.Family{
 func ToCanonicalTypeFamilies(typs []*types.T) []types.Family {
 	families := make([]types.Family, len(typs))
 	for i := range typs {
-		families[i] = TypeFamilyToCanonicalTypeFamily[typs[i].Family()]
+		families[i] = TypeFamilyToCanonicalTypeFamily(typs[i].Family())
 	}
 	return families
 }
@@ -71,7 +80,7 @@ var AllSupportedSQLTypes = []*types.T{
 
 // IsTypeSupported returns whether t is supported by the vectorized engine.
 func IsTypeSupported(t *types.T) bool {
-	if _, found := TypeFamilyToCanonicalTypeFamily[t.Family()]; found {
+	if canonicalTypeFamily := TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily != types.UnknownFamily {
 		switch t.Family() {
 		case types.IntFamily:
 			switch t.Width() {

@@ -428,7 +428,7 @@ func (b *argWidthOverloadBase) Get(target, i string) string {
 
 // ReturnGet is a function that should only be used in templates.
 func (o *lastArgWidthOverload) ReturnGet(target, i string) string {
-	return get(typeconv.TypeFamilyToCanonicalTypeFamily[o.RetType.Family()], target, i)
+	return get(typeconv.TypeFamilyToCanonicalTypeFamily(o.RetType.Family()), target, i)
 }
 
 // CopyVal is a function that should only be used in templates.

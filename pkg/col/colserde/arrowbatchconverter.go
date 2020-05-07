@@ -91,7 +91,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 	n := batch.Length()
 	for i, typ := range c.typs {
 		vec := batch.ColVec(i)
-		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily[typ.Family()]
+		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family())
 
 		var arrowBitmap []byte
 		if vec.MaybeHasNulls() {
@@ -251,7 +251,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		d := data[i]
 
 		var arr array.Interface
-		switch typeconv.TypeFamilyToCanonicalTypeFamily[typ.Family()] {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BoolFamily:
 			boolArr := array.NewBooleanData(d)
 			vecArr := vec.Bool()
@@ -336,7 +336,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 			arr = bytesArr
 		default:
 			var col interface{}
-			switch typeconv.TypeFamilyToCanonicalTypeFamily[typ.Family()] {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 			case types.IntFamily:
 				switch typ.Width() {
 				case 16:

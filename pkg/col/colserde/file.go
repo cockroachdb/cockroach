@@ -328,7 +328,7 @@ func schema(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 	for idx, typ := range typs {
 		var fbTyp byte
 		var fbTypOffset flatbuffers.UOffsetT
-		switch typeconv.TypeFamilyToCanonicalTypeFamily[typ.Family()] {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BoolFamily:
 			arrowserde.BoolStart(fb)
 			fbTypOffset = arrowserde.BoolEnd(fb)
