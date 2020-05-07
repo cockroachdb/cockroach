@@ -1,0 +1,44 @@
+exec-ddl
+CREATE TABLE rides (
+    id UUID NOT NULL,
+    city VARCHAR NOT NULL,
+    vehicle_city VARCHAR NULL,
+    rider_id UUID NULL,
+    vehicle_id UUID NULL,
+    start_address VARCHAR NULL,
+    end_address VARCHAR NULL,
+    start_time TIMESTAMP NULL,
+    end_time TIMESTAMP NULL,
+    revenue DECIMAL(10,2) NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
+    INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+    FAMILY "primary" (id, city, vehicle_city, rider_id, vehicle_id, start_address, end_address, start_time, end_time, revenue),
+    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+)
+----
+
+opt format=show-stats
+SELECT * FROM rides WHERE city = 'rome'
+----
+scan rides
+ ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
+ ├── constraint: /2/1: [/'rome' - /'rome']
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+ ├── key: (1)
+ └── fd: ()-->(2), (1)-->(3-10)
+
+inject-stats file=inject-stats.json table=rides
+----
+
+opt format=show-stats
+SELECT * FROM rides WHERE city = 'rome'
+----
+scan rides
+ ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
+ ├── constraint: /2/1: [/'rome' - /'rome']
+ ├── stats: [rows=55, distinct(2)=1, null(2)=0]
+ │   histogram(2)=  0    55
+ │                <--- 'rome'
+ ├── key: (1)
+ └── fd: ()-->(2), (1)-->(3-10)
