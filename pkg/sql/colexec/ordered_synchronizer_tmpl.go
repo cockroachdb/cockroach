@@ -222,7 +222,7 @@ func (o *OrderedSynchronizer) Init() {
 	o.outColsMap = make([]int, len(o.typs))
 	for i, outVec := range o.output.ColVecs() {
 		o.outNulls[i] = outVec.Nulls()
-		switch typeconv.TypeFamilyToCanonicalTypeFamily[o.typs[i].Family()] {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(o.typs[i].Family()) {
 		// {{range .}}
 		case _CANONICAL_TYPE_FAMILY:
 			switch o.typs[i].Width() {

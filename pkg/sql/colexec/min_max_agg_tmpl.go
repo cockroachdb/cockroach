@@ -88,7 +88,7 @@ func _ASSIGN_CMP(_, _, _ string) bool {
 // {{$agg := .AggNameLower}}
 
 func new_AGG_TITLEAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .Overloads}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {

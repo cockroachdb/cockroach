@@ -36,7 +36,7 @@ func numBuffersForType(t *types.T) int {
 	// Nearly all types are represented by 2 memory.Buffers. One buffer for the
 	// null bitmap and one for the values.
 	numBuffers := 2
-	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BytesFamily, types.DecimalFamily, types.TimestampTZFamily, types.IntervalFamily:
 		// This type has an extra offsets buffer.
 		numBuffers = 3

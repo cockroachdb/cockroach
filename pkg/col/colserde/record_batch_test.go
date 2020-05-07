@@ -56,7 +56,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	}
 
 	var builder array.Builder
-	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		builder = array.NewBooleanBuilder(memory.DefaultAllocator)
 		data := make([]bool, n)

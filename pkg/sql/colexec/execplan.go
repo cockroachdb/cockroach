@@ -1687,7 +1687,7 @@ func planProjectionOperators(
 		buffer := NewBufferOp(schemaEnforcer)
 		caseOps := make([]colexecbase.Operator, len(t.Whens))
 		caseOutputType := t.ResolvedType()
-		if typeconv.TypeFamilyToCanonicalTypeFamily[caseOutputType.Family()] == types.BytesFamily {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family()) == types.BytesFamily {
 			// Currently, there is a contradiction between the way CASE operator
 			// works (which populates its output in arbitrary order) and the flat
 			// bytes implementation of Bytes type (which prohibits sets in arbitrary
