@@ -183,6 +183,12 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 			// We already have the vector of the desired type in place.
 			return
 		}
+		if presentType.Family() == types.UnknownFamily {
+			// We already have an unknown vector in place. If this is expected,
+			// then it will not be accessed and we're good; if this is not
+			// expected, then an error will occur later.
+			return
+		}
 		// We have a vector with an unexpected type, so we panic.
 		colexecerror.InternalError(errors.Errorf(
 			"trying to add a column of %s type at index %d but %s vector already present",
@@ -278,7 +284,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	// acc represents the number of bytes to represent a row in the batch.
 	acc := 0
 	for _, t := range vecTypes {
-		switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
 			acc += SizeOfBool
 		case types.BytesFamily:
