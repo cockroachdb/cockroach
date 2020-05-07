@@ -21,9 +21,22 @@ import (
 	"github.com/jackc/pgx/pgproto3"
 )
 
-// Walk walks path for datadriven files and calls RunTest on them.
-func Walk(t *testing.T, path, addr, user string) {
+// WalkWithRunningServer walks path for datadriven files and calls RunTest on them.
+// It is used when an existing server is desired for each test.
+func WalkWithRunningServer(t *testing.T, path, addr, user string) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
+		RunTest(t, path, addr, user)
+	})
+}
+
+// WalkWithNewServer walks path for datadriven files and calls RunTest on them,
+// but creates a new server for each test file.
+func WalkWithNewServer(
+	t *testing.T, path string, newServer func() (addr, user string, cleanup func()),
+) {
+	datadriven.Walk(t, path, func(t *testing.T, path string) {
+		addr, user, cleanup := newServer()
+		defer cleanup()
 		RunTest(t, path, addr, user)
 	})
 }
