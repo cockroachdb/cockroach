@@ -57,8 +57,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descA := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip),
-			true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 	)
@@ -131,7 +130,12 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tableID := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
-	cache := NewTableStatisticsCache(10 /* cacheSize */, gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */), kvDB, executor)
+	cache := NewTableStatisticsCache(
+		10, /* cacheSize */
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		kvDB,
+		executor,
+	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
@@ -358,7 +362,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 	)
@@ -394,7 +398,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 	)

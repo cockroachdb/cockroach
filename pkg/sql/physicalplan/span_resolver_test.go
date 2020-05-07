@@ -86,7 +86,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kvcoord.DistSender),
-		gossip.MakeDeprecatedGossip(s3.Gossip(), true /* exposed */),
+		gossip.MakeExposedGossip(s3.Gossip()),
 		s3.GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -194,7 +194,7 @@ func TestSpanResolver(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		s.(*server.TestServer).GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -289,7 +289,7 @@ func TestMixedDirections(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		s.(*server.TestServer).GetNode().Descriptor,
 		nil,
 		replicaoracle.BinPackingChoice)

@@ -227,7 +227,7 @@ func TestCacheBasic(t *testing.T) {
 	// exceeded, entries should be evicted according to the LRU policy.
 	sc := NewTableStatisticsCache(
 		2, /* cacheSize */
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
 	)
@@ -285,7 +285,7 @@ func TestCacheWait(t *testing.T) {
 	sort.Sort(tableIDs)
 	sc := NewTableStatisticsCache(
 		len(tableIDs), /* cacheSize */
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
 	)
