@@ -96,4 +96,9 @@ func TestDWithin(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := DWithin(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, 0, UseSpheroid)
+		requireMismatchingSRIDError(t, err)
+	})
 }

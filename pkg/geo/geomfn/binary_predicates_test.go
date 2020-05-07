@@ -45,6 +45,11 @@ func TestCovers(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Covers(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestCoveredBy(t *testing.T) {
@@ -65,6 +70,11 @@ func TestCoveredBy(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := CoveredBy(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestContains(t *testing.T) {
@@ -85,6 +95,11 @@ func TestContains(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Contains(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestCrosses(t *testing.T) {
@@ -107,6 +122,11 @@ func TestCrosses(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Crosses(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestEquals(t *testing.T) {
@@ -128,6 +148,11 @@ func TestEquals(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Equals(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestIntersects(t *testing.T) {
@@ -151,6 +176,11 @@ func TestIntersects(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Intersects(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestOverlaps(t *testing.T) {
@@ -172,6 +202,11 @@ func TestOverlaps(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Overlaps(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestTouches(t *testing.T) {
@@ -192,6 +227,11 @@ func TestTouches(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Touches(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestWithin(t *testing.T) {
@@ -212,4 +252,9 @@ func TestWithin(t *testing.T) {
 			require.Equal(t, tc.expected, g)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Within(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
