@@ -121,7 +121,7 @@ func NewBuiltinFunctionOperator(
 ) (colexecbase.Operator, error) {
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		input = newVectorTypeEnforcer(allocator, input, types.Bytes, outputIdx)
+		input = newVectorTypeEnforcer(allocator, input, types.String, outputIdx)
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
