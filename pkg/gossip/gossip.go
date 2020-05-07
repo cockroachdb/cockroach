@@ -1616,13 +1616,34 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 	return nil
 }
 
-// MakeDeprecatedGossip initializes a DeprecatedGossip instance.
+// MakeExposedGossip initializes a DeprecatedGossip instance which exposes a
+// wrapped Gossip instance via Optional(). This is used on SQL servers running
+// inside of a KV server (i.e. single-tenant deployments).
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-func MakeDeprecatedGossip(g *Gossip, exposed bool) DeprecatedGossip {
+func MakeExposedGossip(g *Gossip) DeprecatedGossip {
+	const exposed = true
+	return DeprecatedGossip{
+		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
+	}
+}
+
+// MakeUnexposedGossip initializes a DeprecatedGossip instance for which
+// Optional() does not return the wrapped Gossip instance. This is used on
+// SQL servers not running as part of a KV server, i.e. with multi-tenancy.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+//
+// See TenantSQLDeprecatedWrapper for details.
+//
+// TODO(tbg): once we can start a SQL tenant without gossip, remove this method
+// and rename DeprecatedGossip to OptionalGossip.
+func MakeUnexposedGossip(g *Gossip) DeprecatedGossip {
+	const exposed = false
 	return DeprecatedGossip{
 		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
 	}

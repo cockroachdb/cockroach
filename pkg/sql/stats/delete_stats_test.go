@@ -36,7 +36,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeDeprecatedGossip(s.GossipI().(*gossip.Gossip), true /* exposed */),
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
 	)

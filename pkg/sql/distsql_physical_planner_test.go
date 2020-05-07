@@ -816,7 +816,7 @@ func TestPartitionSpans(t *testing.T) {
 				ranges: tc.ranges,
 			}
 
-			gw := gossip.MakeDeprecatedGossip(mockGossip, true /* exposed */)
+			gw := gossip.MakeExposedGossip(mockGossip)
 			dsp := DistSQLPlanner{
 				planVersion:  execinfra.Version,
 				st:           cluster.MakeTestingClusterSettings(),
@@ -1001,7 +1001,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				ranges: ranges,
 			}
 
-			gw := gossip.MakeDeprecatedGossip(mockGossip, true /* exposed */)
+			gw := gossip.MakeExposedGossip(mockGossip)
 			dsp := DistSQLPlanner{
 				planVersion:  tc.planVersion,
 				st:           cluster.MakeTestingClusterSettings(),
@@ -1097,7 +1097,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		ranges: ranges,
 	}
 
-	gw := gossip.MakeDeprecatedGossip(mockGossip, true /* exposed */)
+	gw := gossip.MakeExposedGossip(mockGossip)
 	dsp := DistSQLPlanner{
 		planVersion:  execinfra.Version,
 		st:           cluster.MakeTestingClusterSettings(),
@@ -1200,7 +1200,7 @@ func TestCheckNodeHealth(t *testing.T) {
 		{notLive, "not using n5 due to liveness: node n5 is not live"},
 	}
 
-	gw := gossip.MakeDeprecatedGossip(mockGossip, true /* exposed */)
+	gw := gossip.MakeExposedGossip(mockGossip)
 	for _, test := range livenessTests {
 		t.Run("liveness", func(t *testing.T) {
 			h := distSQLNodeHealth{
