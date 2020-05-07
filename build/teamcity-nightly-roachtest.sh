@@ -20,7 +20,8 @@ artifacts=$PWD/artifacts
 mkdir -p "${artifacts}"
 chmod o+rwx "${artifacts}"
 
-export PATH=$PATH:$(go env GOPATH)/bin
+# Disable global -json flag.
+export PATH=$PATH:$(GOFLAGS=; go env GOPATH)/bin
 
 make bin/workload bin/roachtest bin/roachprod > "${artifacts}/build.txt" 2>&1 || cat "${artifacts}/build.txt"
 
