@@ -109,6 +109,7 @@ func TestSRV(t *testing.T) {
 		srvs := []*net.SRV{
 			{Target: "node1", Port: 26222},
 			{Target: "node2", Port: 35222},
+			{Target: "node3", Port: 0},
 		}
 
 		return "cluster", srvs, nil
