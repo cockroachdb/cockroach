@@ -250,7 +250,7 @@ func makeAggregateFuncs(
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
 			funcs[i], err = newSumAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
-			funcs[i] = newCountRowAgg(allocator)
+			funcs[i] = newCountRowsAgg(allocator)
 		case execinfrapb.AggregatorSpec_COUNT:
 			funcs[i] = newCountAgg(allocator)
 		case execinfrapb.AggregatorSpec_MIN:

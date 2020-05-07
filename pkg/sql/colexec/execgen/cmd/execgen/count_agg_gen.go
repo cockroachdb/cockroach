@@ -13,6 +13,7 @@ package main
 import (
 	"io"
 	"io/ioutil"
+	"strings"
 	"text/template"
 )
 
@@ -26,6 +27,8 @@ func genCountAgg(wr io.Writer) error {
 
 	s := string(t)
 
+	s = strings.ReplaceAll(s, "_KIND", "{{.Kind}}")
+
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_COUNT", 4)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateCount" buildDict "Global" . "ColWithNulls" $4}}`)
 
@@ -34,7 +37,16 @@ func genCountAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, struct{}{})
+	return tmpl.Execute(wr, []struct {
+		Kind string
+	}{
+		// "Rows" count aggregate performs COUNT(*) aggregation, which counts
+		// every row in the result unconditionally.
+		{Kind: "Rows"},
+		// "" ("pure") count aggregate performs COUNT(col) aggregation, which
+		// counts every row in the result where the value of col is not null.
+		{Kind: ""},
+	})
 }
 
 func init() {
