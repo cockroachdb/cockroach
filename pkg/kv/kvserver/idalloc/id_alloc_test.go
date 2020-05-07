@@ -13,6 +13,7 @@ package idalloc_test
 import (
 	"context"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestAllocator creates and returns a new idalloc.Allocator, backed by a
@@ -39,13 +40,13 @@ func newTestAllocator(t testing.TB) (*localtestcluster.LocalTestCluster, *idallo
 		DontCreateSystemRanges:   true,
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
-	idAlloc, err := idalloc.NewAllocator(
-		s.Cfg.AmbientCtx,
-		keys.RangeIDGenerator,
-		s.DB,
-		10, /* blockSize */
-		s.Stopper,
-	)
+	idAlloc, err := idalloc.NewAllocator(idalloc.Options{
+		AmbientCtx:  s.Cfg.AmbientCtx,
+		Key:         keys.RangeIDGenerator,
+		Incrementer: idalloc.DBIncrementer(s.DB),
+		BlockSize:   10, /* blockSize */
+		Stopper:     s.Stopper,
+	})
 	if err != nil {
 		s.Stop()
 		t.Errorf("failed to create idAllocator: %+v", err)
@@ -105,11 +106,9 @@ func TestIDAllocator(t *testing.T) {
 func TestNewAllocatorInvalidBlockSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	expErr := "blockSize must be a positive integer"
-	if _, err := idalloc.NewAllocator(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		nil /* idKey */, nil, /* db */
-		0 /* blockSize */, nil, /* stopper */
-	); !testutils.IsError(err, expErr) {
+	if _, err := idalloc.NewAllocator(idalloc.Options{
+		BlockSize: 0,
+	}); !testutils.IsError(err, expErr) {
 		t.Errorf("expected err: %s, got: %+v", expErr, err)
 	}
 }
@@ -122,34 +121,53 @@ func TestNewAllocatorInvalidBlockSize(t *testing.T) {
 // 5) Check if the following allocations return correctly.
 func TestAllocateErrorAndRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, idAlloc := newTestAllocator(t)
-	defer s.Stop()
+
 	ctx := context.Background()
+
+	var mu struct {
+		sync.Mutex
+		err     error
+		counter int64
+	}
+	inc := func(_ context.Context, _ roachpb.Key, inc int64) (new int64, _ error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if mu.err != nil {
+			return 0, mu.err
+		}
+		mu.counter += inc
+		return mu.counter, nil
+	}
+
+	s := stop.NewStopper()
+	defer s.Stop(ctx)
+
+	idAlloc, err := idalloc.NewAllocator(idalloc.Options{
+		Key:         roachpb.Key("foo"),
+		Incrementer: inc,
+		BlockSize:   10,
+		Stopper:     s,
+	})
 
 	const routines = 10
 	allocd := make(chan uint32, routines)
 
 	firstID, err := idAlloc.Allocate(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if firstID != 2 {
-		t.Fatalf("expected ID is 2, but got: %d", firstID)
-	}
+	require.NoError(t, err)
+
+	require.EqualValues(t, 1, firstID)
 
 	// Make Allocator invalid.
-	idAlloc.SetIDKey(roachpb.KeyMin)
+	mu.Lock()
+	mu.err = errors.New("boom")
+	mu.Unlock()
 
 	// Should be able to get the allocated IDs, and there will be one
 	// background Allocate to get ID continuously.
 	for i := 0; i < 9; i++ {
 		id, err := idAlloc.Allocate(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if int(id) != i+3 {
-			t.Fatalf("expected ID is %d, but got: %d", i+3, id)
-		}
+		require.NoError(t, err)
+		require.EqualValues(t, i+2, id)
 	}
 
 	errChan := make(chan error, routines)
@@ -173,9 +191,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 
 	// Wait until all the allocations are blocked.
 	for i := 0; i < routines; i++ {
-		if err := <-errChan; err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, <-errChan)
 	}
 
 	// Attempt a few allocations with a context timeout while allocations are
@@ -190,31 +206,26 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	}
 
 	// Make the IDAllocator valid again.
-	idAlloc.SetIDKey(keys.RangeIDGenerator)
+	mu.Lock()
+	mu.err = nil
+	mu.Unlock()
+
 	// Check if the blocked allocations return expected ID.
 	ids := make([]int, routines)
 	for i := range ids {
 		ids[i] = int(<-allocd)
-		if err := <-errChan; err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, <-errChan)
 	}
 	sort.Ints(ids)
 	for i := range ids {
-		if ids[i] != i+12 {
-			t.Errorf("expected \"%d\"th ID to be %d; got %d", i, i+12, ids[i])
-		}
+		require.EqualValues(t, i+11, ids[i], "i=%d", i)
 	}
 
 	// Check if the following allocations return expected ID.
 	for i := 0; i < routines; i++ {
 		id, err := idAlloc.Allocate(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if int(id) != i+22 {
-			t.Errorf("expected ID is %d, but got: %d", i+22, id)
-		}
+		require.NoError(t, err)
+		require.EqualValues(t, i+21, id, "i=%d", i)
 	}
 }
 
