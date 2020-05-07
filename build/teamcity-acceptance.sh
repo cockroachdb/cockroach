@@ -12,7 +12,8 @@ tc_start_block "Prepare environment for acceptance tests"
 # that it exists before running the test.
 export TMPDIR=$PWD/artifacts/acceptance
 mkdir -p "$TMPDIR"
-type=$(go env GOOS)
+# Disable global -json flag.
+type=$(GOFLAGS=; go env GOOS)
 tc_end_block "Prepare environment for acceptance tests"
 
 tc_start_block "Compile CockroachDB"
