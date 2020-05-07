@@ -1243,10 +1243,11 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 	}
 
-	if len(s.cfg.GossipBootstrapResolvers) == 0 {
-		// If the node is started without join flags, attempt self-bootstrap.
-		// Note that we're not checking whether the node is already bootstrapped;
-		// if this is the case, Bootstrap will simply fail.
+	if initServer.NeedsInit() && len(s.cfg.GossipBootstrapResolvers) == 0 {
+		// If a new node is started without join flags, self-bootstrap.
+		//
+		// Note: this is behavior slated for removal, see:
+		// https://github.com/cockroachdb/cockroach/pull/44112
 		_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
 		switch {
 		case err == nil:
