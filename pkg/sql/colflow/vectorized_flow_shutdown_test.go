@@ -303,7 +303,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					1, /* processorID */
 					materializerInput,
 					typs,
-					&execinfrapb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,
 					[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
