@@ -1217,33 +1217,14 @@ func (s *Server) Start(ctx context.Context) error {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
 
-	// The start cli command wants to print helpful information if it looks as
-	// though this node didn't immediately manage to connect to the cluster.
-	// This isn't the prettiest way to achieve this, but it gets the job done.
-	//
-	//
-	// TODO(tbg): we should avoid this when the node is bootstrapped.
-	// Unfortunately this knowledge is nicely encapsulated away in ServeAndWait.
-	// Perhaps that method should be split up.
-	haveStateCh := make(chan struct{})
-	if s.cfg.ReadyFn != nil {
-		_ = s.stopper.RunAsyncTask(ctx, "signal-readiness", func(ctx context.Context) {
-			waitForInit := true
-			tm := time.After(2 * time.Second)
-			select {
-			case <-haveStateCh:
-				waitForInit = false
-			case <-tm:
-			case <-ctx.Done():
-				return
-			case <-s.stopper.ShouldQuiesce():
-				return
-			}
-			s.cfg.ReadyFn(waitForInit)
-		})
-	}
-
-	if initServer.NeedsInit() && len(s.cfg.GossipBootstrapResolvers) == 0 {
+	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
+	// determines when `./cockroach [...] --background` returns. For any initialized
+	// nodes (i.e. already part of a cluster) this is when this method returns
+	// (assuming there's no error). For nodes that need to join a cluster, we
+	// return once the initServer is ready to accept requests.
+	var onSuccessfulReturnFn, onInitServerReady func()
+	selfBootstrap := initServer.NeedsInit() && len(s.cfg.GossipBootstrapResolvers) == 0
+	if selfBootstrap {
 		// If a new node is started without join flags, self-bootstrap.
 		//
 		// Note: this is behavior slated for removal, see:
@@ -1257,15 +1238,30 @@ func (s *Server) Start(ctx context.Context) error {
 			// Process is shutting down.
 		}
 	}
+	{
+		readyFn := func(bool) {}
+		if s.cfg.ReadyFn != nil {
+			readyFn = s.cfg.ReadyFn
+		}
+		if !initServer.NeedsInit() || selfBootstrap {
+			onSuccessfulReturnFn = func() { readyFn(false /* waitForInit */) }
+			onInitServerReady = func() {}
+		} else {
+			onSuccessfulReturnFn = func() {}
+			onInitServerReady = func() { readyFn(true /* waitForInit */) }
+		}
+	}
 
-	// This opens the main listener.
+	// This opens the main listener. When the listener is open, we can call
+	// initServerReadyFn since any request initated to the initServer at that
+	// point will reach it once ServeAndWait starts handling the queue of incoming
+	// connections.
 	startRPCServer(workersCtx)
-
+	onInitServerReady()
 	state, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV, s.gossip)
 	if err != nil {
 		return errors.Wrap(err, "during init")
 	}
-	close(haveStateCh)
 
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
 	// If there's no NodeID here, then we didn't just bootstrap. The Node will
@@ -1350,6 +1346,8 @@ func (s *Server) Start(ctx context.Context) error {
 	//
 	// TODO(tbg): clarify the contract here and move closer to usage if possible.
 	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
+
+	onSuccessfulReturnFn()
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
@@ -1556,7 +1554,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	log.Event(ctx, "server ready")
-
 	return nil
 }
 
