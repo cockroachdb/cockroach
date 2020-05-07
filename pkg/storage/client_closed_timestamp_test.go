@@ -102,7 +102,8 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 		if afterLease != nil {
 			afterLease()
 		}
-		nowClosed := repl.MaxClosed(ctx)
+		nowClosed, ok := repl.MaxClosed(ctx)
+		require.True(t, ok)
 		lease, _ := repl.GetLease()
 		if lease.Replica.NodeID != target.NodeID {
 			t.Fatalf("lease was unexpectedly transferred away which should" +
@@ -116,7 +117,8 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 				t.Fatalf("lease was unexpectedly transferred away which should" +
 					" not happen given the very long timeouts")
 			}
-			closed := repl.MaxClosed(ctx)
+			closed, ok := repl.MaxClosed(ctx)
+			require.True(t, ok)
 			if closed.Less(targetClosed) {
 				return errors.Errorf("closed timestamp %v not yet after target %v", closed, targetClosed)
 			}

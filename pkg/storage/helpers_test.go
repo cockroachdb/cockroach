@@ -275,7 +275,7 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 }
 
 // MaxClosed returns the maximum closed timestamp known to the Replica.
-func (r *Replica) MaxClosed(ctx context.Context) hlc.Timestamp {
+func (r *Replica) MaxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	return r.maxClosed(ctx)
 }
 
