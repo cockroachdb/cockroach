@@ -83,7 +83,6 @@ func newAnyNotNullAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, e
 // first non-null value in the input column.
 type anyNotNull_TYPEAgg struct {
 	allocator                   *colmem.Allocator
-	done                        bool
 	groups                      []bool
 	vec                         coldata.Vec
 	col                         _GOTYPESLICE
@@ -107,7 +106,6 @@ func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 
 func (a *anyNotNull_TYPEAgg) Reset() {
 	a.curIdx = -1
-	a.done = false
 	a.foundNonNullForCurrentGroup = false
 	a.nulls.UnsetNulls()
 }
@@ -124,22 +122,7 @@ func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 }
 
 func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	if a.done {
-		return
-	}
 	inputLen := b.Length()
-	if inputLen == 0 {
-		// If we haven't found any non-nulls for this group so far, the output for
-		// this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			execgen.SET(a.col, a.curIdx, a.curAgg)
-		}
-		a.curIdx++
-		a.done = true
-		return
-	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec.TemplateType(), vec.Nulls()
 
@@ -173,6 +156,17 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		},
 	)
+}
+
+func (a *anyNotNull_TYPEAgg) Flush() {
+	// If we haven't found any non-nulls for this group so far, the output for
+	// this group should be null.
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(a.curIdx)
+	} else {
+		execgen.SET(a.col, a.curIdx, a.curAgg)
+	}
+	a.curIdx++
 }
 
 func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {

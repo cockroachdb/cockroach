@@ -70,9 +70,16 @@ type aggregateFunc interface {
 	// index.
 	SetOutputIndex(idx int)
 
-	// Compute computes the aggregation on the input batch. A zero-length input
-	// batch tells the aggregate function that it should flush its results.
+	// Compute computes the aggregation on the input batch.
+	// Note: the implementations should be careful to account for their memory
+	// usage.
 	Compute(batch coldata.Batch, inputIdxs []uint32)
+
+	// Flush flushes the result of aggregation on the last group. It should be
+	// called once after input batches have been Compute()'d.
+	// Note: the implementations are free to not account for the memory used
+	// for the result of aggregation of the last group.
+	Flush()
 
 	// HandleEmptyInputScalar populates the output for a case of an empty input
 	// when the aggregate function is in scalar context. The output must always
@@ -403,8 +410,14 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				a.scratch.resumeIdx = 0
 			}
 		} else {
-			for i, fn := range a.aggregateFuncs {
-				fn.Compute(batch, a.aggCols[i])
+			if batch.Length() > 0 {
+				for i, fn := range a.aggregateFuncs {
+					fn.Compute(batch, a.aggCols[i])
+				}
+			} else {
+				for _, fn := range a.aggregateFuncs {
+					fn.Flush()
+				}
 			}
 			a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		}
