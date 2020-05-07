@@ -29,9 +29,9 @@ func (o lastArgWidthOverload) AssignAdd(target, l, r string) string {
 func (o lastArgWidthOverload) AssignDivInt64(target, l, r string) string {
 	switch o.lastArgTypeOverload.CanonicalTypeFamily {
 	case types.DecimalFamily:
-		return fmt.Sprintf(
-			`%s.SetInt64(%s)
-if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
+		return fmt.Sprintf(`
+			%s.SetInt64(%s)
+			if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
 			colexecerror.InternalError(err)
 		}`,
 			target, r, target, l, target,

@@ -252,11 +252,9 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 				remainingAggFuncs := op.aggFuncMap[op.output.resumeHashCode][op.output.resumeIdx:]
 				for groupIdx, aggFunc := range remainingAggFuncs {
 					if curOutputIdx < coldata.BatchSize() {
-						for fnIdx, fn := range aggFunc.fns {
+						for _, fn := range aggFunc.fns {
 							fn.SetOutputIndex(curOutputIdx)
-							// Passing a zero batch into an aggregation function causing it to
-							// flush the agg result to the output batch at curOutputIdx.
-							fn.Compute(coldata.ZeroBatch, op.aggCols[fnIdx])
+							fn.Flush()
 						}
 					} else {
 						op.output.resumeIdx = op.output.resumeIdx + groupIdx
@@ -274,9 +272,9 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			for aggHashCode, aggFuncs := range op.aggFuncMap {
 				for groupIdx, aggFunc := range aggFuncs {
 					if curOutputIdx < coldata.BatchSize() {
-						for fnIdx, fn := range aggFunc.fns {
+						for _, fn := range aggFunc.fns {
 							fn.SetOutputIndex(curOutputIdx)
-							fn.Compute(coldata.ZeroBatch, op.aggCols[fnIdx])
+							fn.Flush()
 						}
 					} else {
 						// If current batch is filled, we record where we left off

@@ -48,7 +48,6 @@ type countAgg struct {
 	nulls    *coldata.Nulls
 	curIdx   int
 	curAgg   int64
-	done     bool
 	countRow bool
 }
 
@@ -67,7 +66,6 @@ func (a *countAgg) Reset() {
 	a.curIdx = -1
 	a.curAgg = 0
 	a.nulls.UnsetNulls()
-	a.done = false
 }
 
 func (a *countAgg) CurrentOutputIndex() int {
@@ -82,17 +80,7 @@ func (a *countAgg) SetOutputIndex(idx int) {
 }
 
 func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	if a.done {
-		return
-	}
 	inputLen := b.Length()
-	if inputLen == 0 {
-		a.vec[a.curIdx] = a.curAgg
-		a.curIdx++
-		a.done = true
-		return
-	}
-
 	sel := b.Selection()
 
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
@@ -120,6 +108,11 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *countAgg) Flush() {
+	a.vec[a.curIdx] = a.curAgg
+	a.curIdx++
 }
 
 // {{/*
