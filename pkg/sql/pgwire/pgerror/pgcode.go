@@ -58,6 +58,8 @@ func HasCandidateCode(err error) bool {
 //   - if the inner code is not uncategorized, it is retained.
 //   - otherwise the outer code is retained.
 //
+// This function should not be used directly. It is only exported
+// for use in testing code. Use GetPGCode() instead.
 func GetPGCodeInternal(err error, computeDefaultCode func(err error) (code string)) (code string) {
 	code = pgcode.Uncategorized
 	if c, ok := err.(*withCandidateCode); ok {
@@ -81,6 +83,9 @@ func GetPGCodeInternal(err error, computeDefaultCode func(err error) (code strin
 // - StatementCompletionUnknown for ambiguous commit errors
 // - InternalError for assertion failures
 // - FeatureNotSupportedError for unimplemented errors.
+//
+// It is not meant to be used directly - it is only exported
+// for use by test code. Use GetPGCode() instead.
 func ComputeDefaultCode(err error) string {
 	switch e := err.(type) {
 	// If there was already a pgcode in the cause, use that.
