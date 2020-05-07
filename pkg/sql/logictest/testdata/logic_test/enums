@@ -34,3 +34,7 @@ SELECT * FROM db2.t
 
 statement error pq: type "db2.public.t" already exists
 CREATE TYPE db2.t AS ENUM ()
+
+# Regression for #48537. Dropping a table with a type name caused a panic.
+statement error pq: relation "t" does not exist
+DROP TABLE t
