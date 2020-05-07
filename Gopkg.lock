@@ -1605,7 +1605,7 @@
   version = "v1.4.0"
 
 [[projects]]
-  digest = "1:661aa35409435cec194eb640ec712cf1e9b483d988d587a8b91847293e715f59"
+  digest = "1:48c4d87d7cb5dac26d1654c6584019713c9e68da7b0f695dddf21a80a08e39eb"
   name = "github.com/twpayne/go-geom"
   packages = [
     ".",
@@ -1619,8 +1619,7 @@
     "encoding/wkt",
   ]
   pruneopts = "UT"
-  revision = "6e58c69044b13f84504654b4741390b92a70a402"
-  version = "v1.0.6"
+  revision = "3402552da1eb9d7a1c8a9ecb05395b076d8e7bf6"
 
 [[projects]]
   digest = "1:43e0db2b113d1aee4bb68745598c135511976a44fb380ebd701cd0c14a77c303"
