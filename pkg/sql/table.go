@@ -247,7 +247,11 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*sqlbase.MutableTableDescriptor), err
+	mutDesc, ok := obj.(*sqlbase.MutableTableDescriptor)
+	if !ok {
+		return nil, err
+	}
+	return mutDesc, nil
 }
 
 // resolveSchemaID attempts to lookup the schema from the schemaCache if it exists,
