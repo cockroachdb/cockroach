@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type retryError struct {
@@ -610,8 +610,8 @@ func (hv *historyVerifier) runHistoryWithRetry(
 		if log.V(1) {
 			log.Infof(context.Background(), "got an error running history %s: %s", historyString(cmds), err)
 		}
-		retry, ok := err.(*retryError)
-		if !ok {
+		var retry *retryError
+		if !errors.As(err, &retry) {
 			return err
 		}
 
@@ -675,7 +675,7 @@ func (hv *historyVerifier) runHistory(
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
 			if err := hv.runTxn(i, priorities[i], txnCmds, db, t); err != nil {
-				if re, ok := err.(*retryError); !ok {
+				if re := (*retryError)(nil); !errors.As(err, &re) {
 					reportErr := errors.Wrapf(err, "(%s): unexpected failure", cmds)
 					select {
 					case errs <- reportErr:

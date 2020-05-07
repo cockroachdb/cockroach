@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
 
 type testDescriptorDB struct {
@@ -493,7 +493,7 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 	}
 
 	expectContextCancellation := func(t *testing.T, c <-chan error) {
-		if err := <-c; errors.Cause(err) != context.Canceled {
+		if err := <-c; !errors.Is(err, context.Canceled) {
 			t.Errorf("expected context cancellation error, found %v", err)
 		}
 	}

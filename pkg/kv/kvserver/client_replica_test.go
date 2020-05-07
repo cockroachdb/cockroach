@@ -50,7 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -670,7 +670,7 @@ func (l *leaseTransferTest) forceLeaseExtension(storeIdx int, lease roachpb.Leas
 	// attempt fails because it's already been renewed. This used to work
 	// before we compared the proposer's lease with the actual lease because
 	// the renewed lease still encompassed the previous request.
-	if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
+	if errors.HasType(err, (*roachpb.NotLeaseHolderError)(nil)) {
 		err = nil
 	}
 	return err
@@ -811,7 +811,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 			// Transfer back from replica1 to replica0.
 			err := l.replica1.AdminTransferLease(context.Background(), l.replica0Desc.StoreID)
 			// Ignore not leaseholder errors which can arise due to re-proposals.
-			if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
+			if errors.HasType(err, (*roachpb.NotLeaseHolderError)(nil)) {
 				err = nil
 			}
 			transferErrCh <- err

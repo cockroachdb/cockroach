@@ -13,7 +13,7 @@ package util
 import (
 	"hash/crc32"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // CRC32 computes the Castagnoli CRC32 of the given data.

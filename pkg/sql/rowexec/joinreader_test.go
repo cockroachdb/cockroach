@@ -15,7 +15,6 @@ package rowexec
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -677,7 +677,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(sqlbase.OneIntCol))
 		}
-		if meta.Err != expectedMetaErr {
+		if !errors.Is(meta.Err, expectedMetaErr) {
 			t.Fatalf("unexpected error in metadata: %v", meta.Err)
 		}
 

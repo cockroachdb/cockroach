@@ -21,7 +21,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var (

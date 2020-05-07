@@ -12,7 +12,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"go/format"
@@ -20,6 +19,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
+	"github.com/cockroachdb/errors"
 )
 
 type genFunc func(compiled *lang.CompiledExpr, w io.Writer)

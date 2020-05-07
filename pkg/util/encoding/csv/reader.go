@@ -96,7 +96,7 @@ func (e *ParseError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, v
 
 // FormatError implements errors.Formatter.
 func (e *ParseError) FormatError(p errors.Printer) error {
-	if e.Err == ErrFieldCount {
+	if errors.Is(e.Err, ErrFieldCount) {
 		p.Printf("record on line %d", e.Line)
 	} else if e.StartLine != e.Line {
 		p.Printf("record on line %d; parse error on line %d, column %d", e.StartLine, e.Line, e.Column)
@@ -228,9 +228,9 @@ func (r *Reader) ReadAll() (records [][]string, err error) {
 // The result is only valid until the next call to readLine.
 func (r *Reader) readLine() ([]byte, error) {
 	line, err := r.r.ReadSlice('\n')
-	if err == bufio.ErrBufferFull {
+	if errors.Is(err, bufio.ErrBufferFull) {
 		r.rawBuffer = append(r.rawBuffer[:0], line...)
-		for err == bufio.ErrBufferFull {
+		for errors.Is(err, bufio.ErrBufferFull) {
 			line, err = r.r.ReadSlice('\n')
 			r.rawBuffer = append(r.rawBuffer, line...)
 		}

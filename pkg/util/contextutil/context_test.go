@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,14 +38,14 @@ func TestRunWithTimeout(t *testing.T) {
 	if err.Error() != expectedMsg {
 		t.Fatalf("expected %s, actual %s", expectedMsg, err.Error())
 	}
-	netError, ok := err.(net.Error)
-	if !ok {
+	var netError net.Error
+	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
 	}
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
-	if errors.Cause(err) != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("RunWithTimeout should return an error with a DeadlineExceeded cause")
 	}
 
@@ -55,16 +55,15 @@ func TestRunWithTimeout(t *testing.T) {
 	})
 	expExtended := expectedMsg + ": custom error: context deadline exceeded"
 	if err.Error() != expExtended {
-		t.Fatalf("expected %s, actual %s", expExtended, err.Error())
+		t.Fatalf("expected %q, actual %q", expExtended, err.Error())
 	}
-	netError, ok = err.(net.Error)
-	if !ok {
+	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
 	}
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
-	if errors.Cause(err) != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("RunWithTimeout should return an error with a DeadlineExceeded cause")
 	}
 }
@@ -81,14 +80,14 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 		<-ctx.Done()
 		return notContextDeadlineExceeded
 	})
-	netError, ok := err.(net.Error)
-	if !ok {
+	var netError net.Error
+	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
 	}
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
-	if errors.Cause(err) != notContextDeadlineExceeded {
+	if !errors.Is(err, notContextDeadlineExceeded) {
 		t.Fatalf("RunWithTimeout should return an error caused by the underlying " +
 			"returned error")
 	}

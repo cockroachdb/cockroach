@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Stores provides methods to access a collection of stores. There's
@@ -141,15 +141,15 @@ func (ls *Stores) GetReplicaForRangeID(
 	rangeID roachpb.RangeID,
 ) (replica *Replica, store *Store, err error) {
 	err = ls.VisitStores(func(s *Store) error {
-		switch r, err := s.GetReplica(rangeID); err.(type) {
-		case nil:
+		r, err := s.GetReplica(rangeID)
+		if err == nil {
 			replica, store = r, s
 			return nil
-		case *roachpb.RangeNotFoundError:
-			return nil
-		default:
-			return err
 		}
+		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+			return nil
+		}
+		return err
 	})
 	if err != nil {
 		return nil, nil, err

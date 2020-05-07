@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -715,7 +715,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; it.Next() {
 			ok, err := it.Valid()
 			if err != nil {
-				if _, ok = err.(*roachpb.WriteIntentError); ok {
+				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 					// This is the write intent error we were expecting.
 					return
 				}

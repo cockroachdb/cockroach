@@ -16,8 +16,9 @@ package csv
 
 import (
 	"bytes"
-	"errors"
 	"testing"
+
+	"github.com/cockroachdb/errors"
 )
 
 var writeTests = []struct {

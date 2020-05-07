@@ -32,12 +32,8 @@ func WithSeverity(err error, severity string) error {
 
 // GetSeverity attempts to unwrap and find a Severity.
 func GetSeverity(err error) string {
-	if c, ok := err.(*withSeverity); ok {
+	if c := (*withSeverity)(nil); errors.As(err, &c) {
 		return c.severity
-	}
-
-	if c := errors.UnwrapOnce(err); c != nil {
-		return GetSeverity(c)
 	}
 	return DefaultSeverity
 }

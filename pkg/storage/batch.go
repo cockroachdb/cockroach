@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/pkg/errors"
 )
 
 // BatchType represents the type of an entry in an encoded RocksDB batch.

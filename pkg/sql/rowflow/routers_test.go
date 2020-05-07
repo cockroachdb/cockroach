@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // setupRouter creates and starts a router. Returns the router and a WaitGroup
@@ -497,7 +497,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
 				_, meta := chans[0].Next()
-				if meta.Err != err1 {
+				if !errors.Is(meta.Err, err1) {
 					t.Fatalf("unexpected meta.Err %v, expected %s", meta.Err, err1)
 				}
 			}
@@ -510,7 +510,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
 				_, meta := chans[0].Next()
-				if meta.Err != err2 {
+				if !errors.Is(meta.Err, err2) {
 					t.Fatalf("unexpected meta.Err %v, expected %s", meta.Err, err2)
 				}
 			}
@@ -528,7 +528,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 				// try to go to 0 for a little while.
 				select {
 				case d := <-chans[1].C:
-					if d.Meta.Err != err3 {
+					if !errors.Is(d.Meta.Err, err3) {
 						t.Fatalf("unexpected meta.Err %v, expected %s", d.Meta.Err, err3)
 					}
 					return nil

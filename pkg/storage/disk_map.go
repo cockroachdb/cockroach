@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/pkg/errors"
 )
 
 // defaultBatchCapacityBytes is the default capacity for a

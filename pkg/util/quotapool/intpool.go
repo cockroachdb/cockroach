@@ -225,13 +225,7 @@ var ErrNotEnoughQuota = fmt.Errorf("not enough quota available")
 
 // HasErrClosed returns true if this error is or contains an ErrClosed error.
 func HasErrClosed(err error) bool {
-	_, hasErrClosed := errors.If(err, func(err error) (unwrapped interface{}, ok bool) {
-		if _, hasErrClosed := err.(*ErrClosed); hasErrClosed {
-			return err, hasErrClosed
-		}
-		return nil, false
-	})
-	return hasErrClosed
+	return errors.HasType(err, (*ErrClosed)(nil))
 }
 
 // PoolInfo represents the information that the IntRequestFunc gets about the current quota pool conditions.
@@ -499,7 +493,7 @@ func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled boo
 		if took != 0 {
 			panic(fmt.Sprintf("IntRequestFunc returned both took: %d and err: %s", took, err))
 		}
-		if err == ErrNotEnoughQuota {
+		if errors.Is(err, ErrNotEnoughQuota) {
 			return false, nil
 		}
 		r.err = err

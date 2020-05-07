@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +51,7 @@ func (th *testClusterWithHelpers) getVersionFromShow(i int) string {
 func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 	var version string
 	if err := th.ServerConn(i).QueryRow("SELECT value FROM system.settings WHERE name = 'version'").Scan(&version); err != nil {
-		if err == gosql.ErrNoRows {
+		if errors.Is(err, gosql.ErrNoRows) {
 			return ""
 		}
 		th.Fatalf("%d: %s (%T)", i, err, err)

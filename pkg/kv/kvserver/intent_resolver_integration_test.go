@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 func beginTransaction(
@@ -143,7 +144,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 
 	// The third transaction will always be aborted.
 	err := <-txnCh3
-	if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
+	if !errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
 		t.Fatalf("expected transaction aborted error; got %T", err)
 	}
 	if err := <-txnCh1; err != nil {

@@ -27,8 +27,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
-	"github.com/pkg/errors"
 	"golang.org/x/tools/go/buildutil"
 )
 
@@ -74,10 +74,14 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 			return scanner.Err()
 		})}, filters...)
 
+	var msgs strings.Builder
 	if err := stream.ForEach(stream.Sequence(filters...), func(s string) {
-		t.Errorf("\n%s", s)
+		fmt.Fprintln(&msgs, s)
 	}); err != nil {
 		t.Error(err)
+	}
+	if msgs.Len() > 0 {
+		t.Errorf("\n%s", strings.ReplaceAll(msgs.String(), "\\n++", "\n"))
 	}
 }
 
@@ -1184,6 +1188,8 @@ func TestLint(t *testing.T) {
 			"github.com/satori/go.uuid":                   "util/uuid",
 			"golang.org/x/sync/singleflight":              "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
 			"syscall":                                     "sysutil",
+			"errors":                                      "github.com/cockroachdb/errors",
+			"github.com/pkg/errors":                       "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/assert":        "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/barriers":      "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/contexttags":   "github.com/cockroachdb/errors",
@@ -1248,6 +1254,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
+			stream.GrepNot(`cockroach/pkg/util/log: github\.com/pkg/errors$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 
@@ -1685,6 +1692,37 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^#`), // comment line
 			// This exception is for the colexec generated files.
 			stream.GrepNot(`pkg/sql/colexec/.*\.eg.go:[0-9:]+: self-assignment of .* to .*`),
+			// Roachpb generated switch on `error`. It's OK for now because
+			// the inner error is always unwrapped (it's a protobuf
+			// enum). Eventually we want to use generalized error
+			// encode/decode instead and drop the linter exception.
+			stream.GrepNot(`pkg/roachpb/batch_generated\.go:.*invalid direct cast on error object`),
+			// Roachpb's own error package takes ownership of error unwraps
+			// (by enforcing that errors can never been wrapped under a
+			// roachpb.Error, which is an inconvenient limitation but it is
+			// what it is). Once this code is simplified to use generalized
+			// error encode/decode, it can be dropped from the linter
+			// exception as well.
+			stream.GrepNot(`pkg/roachpb/errors\.go:.*invalid direct cast on error object`),
+			// pgerror's pgcode logic uses its own custom cause recursion
+			// algorithm and thus cannot use errors.If() which mandates a
+			// different recursion order.
+			//
+			// It's a bit unfortunate that the entire file is added
+			// as an exception here, given that only one function
+			// really needs the linter. We could consider splitting
+			// that function to a different file to limit the scope
+			// of the exception.
+			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
+			// The crash reporting code uses its own custom cause recursion
+			// algorithm and thus cannot use errors.Is.  However, it's also
+			// due an overhaul - it's really redundant with the error
+			// redaction code already present in the errors library.
+			//
+			// TODO(knz): remove the code in log and replace by the errors'
+			// own redact code.
+			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct cast on error object`),
+			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct comparison of error object`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")

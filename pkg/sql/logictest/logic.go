@@ -61,8 +61,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 // This file is home to TestLogic, a general-purpose engine for
@@ -2050,8 +2050,7 @@ func (t *logicTest) verifyError(
 		return (err == nil) == (expectErr == ""), newErr
 	}
 	if err != nil {
-		pqErr, ok := err.(*pq.Error)
-		if ok &&
+		if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) &&
 			strings.HasPrefix(string(pqErr.Code), "XX" /* internal error, corruption, etc */) &&
 			string(pqErr.Code) != pgcode.Uncategorized /* this is also XX but innocuous */ {
 			if expectErrCode != string(pqErr.Code) {
@@ -2063,8 +2062,8 @@ func (t *logicTest) verifyError(
 	}
 	if expectErrCode != "" {
 		if err != nil {
-			pqErr, ok := err.(*pq.Error)
-			if !ok {
+			var pqErr *pq.Error
+			if !errors.As(err, &pqErr) {
 				newErr := errors.Errorf("%s %s\n: expected error code %q, but the error we found is not "+
 					"a libpq error: %s", pos, sql, expectErrCode, err)
 				return true, newErr
@@ -2085,7 +2084,7 @@ func (t *logicTest) verifyError(
 
 // formatErr attempts to provide more details if present.
 func formatErr(err error) string {
-	if pqErr, ok := err.(*pq.Error); ok {
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "(%s) %s", pqErr.Code, pqErr.Message)
 		if pqErr.File != "" || pqErr.Line != "" || pqErr.Routine != "" {

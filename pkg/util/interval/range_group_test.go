@@ -13,11 +13,11 @@ package interval
 import (
 	"bytes"
 	"crypto/rand"
-	"errors"
 	"reflect"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/errors"
 )
 
 func forEachRangeGroupImpl(t *testing.T, fn func(t *testing.T, rg RangeGroup)) {
@@ -533,7 +533,7 @@ func TestRangeGroupForEach(t *testing.T) {
 			expRngs := test.rngs
 			if throwingErr {
 				expRngs = test.rngs[:test.errAfter]
-				if errSaw != errToThrow {
+				if !errors.Is(errSaw, errToThrow) {
 					t.Errorf("expected error %v from RangeGroup.ForEach, found %v", errToThrow, errSaw)
 				}
 			} else {

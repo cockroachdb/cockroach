@@ -1297,7 +1297,7 @@ func (ex *connExecutor) run(
 
 		var err error
 		if err = ex.execCmd(ex.Ctx()); err != nil {
-			if err == io.EOF || err == errDrainingComplete {
+			if errors.IsAny(err, io.EOF, errDrainingComplete) {
 				return nil
 			}
 			return err
@@ -1848,9 +1848,7 @@ func isCommit(stmt tree.Statement) bool {
 }
 
 func errIsRetriable(err error) bool {
-	err = errors.UnwrapAll(err)
-	_, retriable := err.(*roachpb.TransactionRetryWithProtoRefreshError)
-	return retriable
+	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil))
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
@@ -2088,7 +2086,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmt), ev, payload)
 	if err != nil {
-		if _, ok := err.(fsm.TransitionNotFoundError); ok {
+		if errors.HasType(err, (*fsm.TransitionNotFoundError)(nil)) {
 			panic(err)
 		}
 		return advanceInfo{}, err

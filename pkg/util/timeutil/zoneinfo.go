@@ -11,9 +11,10 @@
 package timeutil
 
 import (
-	"errors"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 var errTZDataNotFound = errors.New("timezone data cannot be found")

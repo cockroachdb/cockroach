@@ -358,7 +358,8 @@ func delayedRetry(ctx context.Context, fn func() error) error {
 		if err == nil {
 			return nil
 		}
-		if s3err, ok := err.(s3.RequestFailure); ok {
+		var s3err s3.RequestFailure
+		if errors.As(err, &s3err) {
 			// A 503 error could mean we need to reduce our request rate. Impose an
 			// arbitrary slowdown in that case.
 			// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html

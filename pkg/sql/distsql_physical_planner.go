@@ -671,7 +671,7 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
 		err := h.connHealth(nodeID, rpc.DefaultClass)
-		if err != nil && err != rpc.ErrNotHeartbeated {
+		if err != nil && !errors.Is(err, rpc.ErrNotHeartbeated) {
 			// This host is known to be unhealthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our nodeID (which
 			// always has its address in the nodeMap).

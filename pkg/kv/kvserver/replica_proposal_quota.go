@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/tracker"
 )
@@ -60,7 +61,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 	}
 	alloc, err := quotaPool.Acquire(ctx, quota)
 	// Let quotapool errors due to being closed pass through.
-	if _, isClosed := err.(*quotapool.ErrClosed); isClosed {
+	if errors.HasType(err, (*quotapool.ErrClosed)(nil)) {
 		err = nil
 	}
 	return alloc, err

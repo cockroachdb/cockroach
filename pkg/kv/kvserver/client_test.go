@@ -61,8 +61,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc"
@@ -821,7 +821,7 @@ func (m *multiTestContext) addStore(idx int) {
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
 		_, err := kvserver.ReadStoreIdent(context.Background(), eng)
-		if _, notBootstrapped := err.(*kvserver.NotBootstrappedError); notBootstrapped {
+		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
 			needBootstrap = true
 		} else if err != nil {
 			m.t.Fatal(err)
@@ -1189,7 +1189,7 @@ func (m *multiTestContext) changeReplicas(
 			break
 		}
 
-		if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
+		if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 			// Try again after an AmbiguousResultError. If the operation
 			// succeeded, then the next attempt will return alreadyDoneErr;
 			// if it failed then the next attempt should succeed.
@@ -1282,14 +1282,12 @@ func (m *multiTestContext) waitForUnreplicated(rangeID roachpb.RangeID, dest int
 	// Wait for the unreplications to complete on destination node.
 	return retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 		_, err := m.stores[dest].GetReplica(rangeID)
-		switch err.(type) {
-		case nil:
+		if err == nil {
 			return fmt.Errorf("replica still exists on dest %d", dest)
-		case *roachpb.RangeNotFoundError:
+		} else if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
 			return nil
-		default:
-			return err
 		}
+		return err
 	})
 }
 
@@ -1399,7 +1397,7 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 	}
 
 	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
-		if err = nl.Heartbeat(ctx, l); err != kvserver.ErrEpochIncremented {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, kvserver.ErrEpochIncremented) {
 			break
 		}
 	}

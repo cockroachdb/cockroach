@@ -14,11 +14,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // Currently, we're running a version like 'v9.0.1'.

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 )
 
 func TestCommentOnDatabase(t *testing.T) {
@@ -95,7 +96,7 @@ func TestCommentOnDatabaseWhenDrop(t *testing.T) {
 	row := db.QueryRow(`SELECT comment FROM system.comments LIMIT 1`)
 	var comment string
 	err := row.Scan(&comment)
-	if err != gosql.ErrNoRows {
+	if !errors.Is(err, gosql.ErrNoRows) {
 		if err != nil {
 			t.Fatal(err)
 		}

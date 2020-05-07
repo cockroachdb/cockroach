@@ -41,9 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
@@ -5181,7 +5181,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
-	if _, ok := err.(purgatoryError); !ok {
+	if !errors.HasInterface(err, (*purgatoryError)(nil)) {
 		t.Fatalf("expected a purgatory error, got: %+v", err)
 	}
 
@@ -5215,7 +5215,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
-	if _, ok := err.(purgatoryError); ok {
+	if errors.HasInterface(err, (*purgatoryError)(nil)) {
 		t.Fatalf("expected a non purgatory error, got: %+v", err)
 	}
 }

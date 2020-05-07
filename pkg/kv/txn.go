@@ -806,7 +806,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
 				if err != nil {
-					if _, retryable := err.(*roachpb.TransactionRetryWithProtoRefreshError); !retryable {
+					if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
 						// We can't retry, so let the caller know we tried to
 						// autocommit.
 						err = &AutoCommitError{cause: err}
@@ -815,11 +815,8 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 			}
 		}
 
-		cause := errors.UnwrapAll(err)
-
 		var retryable bool
-		switch t := cause.(type) {
-		case *roachpb.UnhandledRetryableError:
+		if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
 			if txn.typ == RootTxn {
 				// We sent transactional requests, so the TxnCoordSender was supposed to
 				// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
@@ -827,7 +824,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 			}
 
-		case *roachpb.TransactionRetryWithProtoRefreshError:
+		} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
 			if !txn.IsRetryableErrMeantForTxn(*t) {
 				// Make sure the txn record that err carries is for this txn.
 				// If it's not, we terminate the "retryable" character of the error. We
@@ -932,8 +929,8 @@ func (txn *Txn) Send(
 }
 
 func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
-	retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError)
-	if !ok {
+	var retryErr *roachpb.TransactionRetryWithProtoRefreshError
+	if !errors.As(err, &retryErr) {
 		return
 	}
 	txn.resetDeadlineLocked()

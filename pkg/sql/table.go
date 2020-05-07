@@ -60,21 +60,25 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 var errTableAdding = errors.New("table is being added")
 
 type inactiveTableError struct {
-	error
+	cause error
 }
+
+func (i *inactiveTableError) Error() string { return i.cause.Error() }
+
+func (i *inactiveTableError) Unwrap() error { return i.cause }
 
 // FilterTableState inspects the state of a given table and returns an error if
 // the state is anything but PUBLIC. The error describes the state of the table.
 func FilterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	switch tableDesc.State {
 	case sqlbase.TableDescriptor_DROP:
-		return inactiveTableError{errors.New("table is being dropped")}
+		return &inactiveTableError{errors.New("table is being dropped")}
 	case sqlbase.TableDescriptor_OFFLINE:
 		err := errors.Errorf("table %q is offline", tableDesc.Name)
 		if tableDesc.OfflineReason != "" {
 			err = errors.Errorf("table %q is offline: %s", tableDesc.Name, tableDesc.OfflineReason)
 		}
-		return inactiveTableError{err}
+		return &inactiveTableError{err}
 	case sqlbase.TableDescriptor_ADD:
 		return errTableAdding
 	case sqlbase.TableDescriptor_PUBLIC:
@@ -406,7 +410,8 @@ func (tc *TableCollection) getTableVersion(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if _, ok := err.(inactiveTableError); ok || err == sqlbase.ErrDescriptorNotFound {
+		if errors.HasType(err, (*inactiveTableError)(nil)) ||
+			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return readTableFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
@@ -470,7 +475,7 @@ func (tc *TableCollection) getTableVersionByID(
 	readTimestamp := txn.ReadTimestamp()
 	table, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, tableID)
 	if err != nil {
-		if err == sqlbase.ErrDescriptorNotFound {
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			// Transform the descriptor error into an error that references the
 			// table's ID.
 			return nil, sqlbase.NewUndefinedRelationError(
@@ -721,7 +726,7 @@ func (tc *TableCollection) getUncommittedTable(
 			tn.Table(),
 		) {
 			// Right state?
-			if err = FilterTableState(mutTbl.TableDesc()); err != nil && err != errTableAdding {
+			if err = FilterTableState(mutTbl.TableDesc()); err != nil && !errors.Is(err, errTableAdding) {
 				if !required {
 					// If it's not required here, we simply say we don't have it.
 					err = nil

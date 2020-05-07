@@ -216,11 +216,11 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		r.mu.Unlock()
 
 		mean, err := offsets.Mean()
-		if err != nil && err != stats.EmptyInput {
+		if err != nil && !errors.Is(err, stats.EmptyInput) {
 			return err
 		}
 		stdDev, err := offsets.StandardDeviation()
-		if err != nil && err != stats.EmptyInput {
+		if err != nil && !errors.Is(err, stats.EmptyInput) {
 			return err
 		}
 		r.metrics.ClockOffsetMeanNanos.Update(int64(mean))

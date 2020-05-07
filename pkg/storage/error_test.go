@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // TestRocksDBErrorSafeMessage verifies that RocksDB errors have a chance of
@@ -50,9 +50,9 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 		defer r2.Close()
 		t.Fatal("expected error")
 	}
-	rErr, ok := errors.Cause(err).(*Error)
-	if !ok {
-		t.Fatalf("unexpected error of cause %T: %+v", errors.Cause(err), err)
+	var rErr *Error
+	if !errors.As(err, &rErr) {
+		t.Fatalf("unexpected error: %+v", err)
 	}
 
 	for _, test := range []struct {

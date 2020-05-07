@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -258,7 +258,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 							count++
 							if count == 1 {
 								var pErr *roachpb.Error
-								if _, ok := test.err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+								if errors.HasType(test.err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 									// This error requires an observed timestamp to have been
 									// recorded on the origin node.
 									ba.Txn.UpdateObservedTimestamp(1, hlc.Timestamp{WallTime: 1, Logical: 1})

@@ -12,7 +12,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"io"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 var (

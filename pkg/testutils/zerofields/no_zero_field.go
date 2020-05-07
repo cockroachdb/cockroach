@@ -13,6 +13,8 @@ package zerofields
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/cockroachdb/errors"
 )
 
 type zeroFieldErr struct {
@@ -35,7 +37,8 @@ func NoZeroField(v interface{}) error {
 		switch f.Kind() {
 		case reflect.Struct:
 			if err := NoZeroField(f.Interface()); err != nil {
-				zfe := err.(zeroFieldErr)
+				var zfe zeroFieldErr
+				_ = errors.As(err, &zfe)
 				zfe.field = fmt.Sprintf("%s.%s", n, zfe.field)
 				return zfe
 			}

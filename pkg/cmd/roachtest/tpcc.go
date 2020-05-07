@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 type tpccOptions struct {
@@ -603,8 +603,8 @@ func loadTPCCBench(
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
-	} else if pqErr, ok := err.(*pq.Error); !ok ||
-		string(pqErr.Code) != pgcode.InvalidCatalogName {
+	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
+		string(pqErr.Code) == pgcode.InvalidCatalogName) {
 		return err
 	}
 

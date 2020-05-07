@@ -20,7 +20,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // WritePEMToFile writes an arbitrary number of PEM blocks to a file.

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -152,7 +153,7 @@ func TestLeasesMultipleClients(t *testing.T) {
 	if !testutils.IsError(err, "is not available until") {
 		t.Fatalf("didn't get expected error trying to acquire already held lease: %v", err)
 	}
-	if _, ok := err.(*leasemanager.LeaseNotAvailableError); !ok {
+	if !errors.HasType(err, (*leasemanager.LeaseNotAvailableError)(nil)) {
 		t.Fatalf("expected LeaseNotAvailableError, got %v", err)
 	}
 

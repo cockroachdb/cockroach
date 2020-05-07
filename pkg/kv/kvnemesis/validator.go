@@ -556,8 +556,7 @@ func resultIsRetryable(r Result) bool {
 	}
 	ctx := context.Background()
 	err := errors.DecodeError(ctx, *r.Err)
-	_, isRetryable := err.(roachpb.ClientVisibleRetryError)
-	return isRetryable
+	return errors.HasInterface(err, (*roachpb.ClientVisibleRetryError)(nil))
 }
 
 func resultIsAmbiguous(r Result) bool {
@@ -566,8 +565,7 @@ func resultIsAmbiguous(r Result) bool {
 	}
 	ctx := context.Background()
 	err := errors.DecodeError(ctx, *r.Err)
-	_, isAmbiguous := err.(roachpb.ClientVisibleAmbiguousError)
-	return isAmbiguous
+	return errors.HasInterface(err, (*roachpb.ClientVisibleAmbiguousError)(nil))
 }
 
 func mustGetStringValue(value []byte) string {

@@ -14,7 +14,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Uint128 is a big-endian 128 bit unsigned integer which wraps two uint64s.

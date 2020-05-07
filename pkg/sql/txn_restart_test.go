@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,14 +82,13 @@ func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transacti
 	if !found {
 		return nil
 	}
-	switch failureRec.err.(type) {
-	case *roachpb.TransactionAbortedError:
+	if errors.HasType(failureRec.err, (*roachpb.TransactionAbortedError)(nil)) {
 		// The previous txn should have been aborted, so check that we're running
 		// in a new one.
 		if failureRec.txn.ID == txn.ID {
 			return errors.Errorf(`new transaction for value "%s" is the same as the old one`, value)
 		}
-	default:
+	} else {
 		// The previous txn should have been restarted, so we should be running in
 		// the same one.
 		if failureRec.txn.ID != txn.ID {
@@ -709,8 +708,8 @@ func retryExec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosq
 
 // isRetryableErr returns whether the given error is a PG retryable error.
 func isRetryableErr(err error) bool {
-	pqErr, ok := err.(*pq.Error)
-	return ok && pqErr.Code == "40001"
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "40001"
 }
 
 // Returns true on retriable errors.

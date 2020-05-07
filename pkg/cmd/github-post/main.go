@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (

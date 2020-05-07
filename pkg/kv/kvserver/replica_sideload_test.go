@@ -41,8 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 )
@@ -200,7 +200,7 @@ func testSideloadingSideloadedStorage(
 			},
 		},
 	} {
-		if err := test.fun(); err != test.err {
+		if err := test.fun(); !errors.Is(err, test.err) {
 			t.Fatalf("%d: expected %v, got %v", n, test.err, err)
 		}
 		if err := ss.Clear(ctx); err != nil {
@@ -266,7 +266,7 @@ func testSideloadingSideloadedStorage(
 			}
 			// Indexes below are gone.
 			for _, i := range payloads[:n] {
-				if _, err := ss.Get(ctx, i, term); err != errSideloadedFileNotFound {
+				if _, err := ss.Get(ctx, i, term); !errors.Is(err, errSideloadedFileNotFound) {
 					t.Fatalf("%d.%d: %+v", n, i, err)
 				}
 			}
@@ -951,7 +951,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			tc.repl.store.Engine().NewBatch,
 			func() {},
 		)
-		if _, ok := errors.Cause(err).(*errMustRetrySnapshotDueToTruncation); !ok {
+		if !errors.HasType(err, (*errMustRetrySnapshotDueToTruncation)(nil)) {
 			t.Fatal(err)
 		}
 	}()

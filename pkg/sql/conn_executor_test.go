@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -731,8 +732,8 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	require.Regexp(t,
 		`restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \(RETRY_REASON_UNKNOWN - boom\)`,
 		err)
-	pgErr, ok := err.(pgx.PgError)
-	require.True(t, ok)
+	var pgErr pgx.PgError
+	require.True(t, errors.As(err, &pgErr))
 	require.Equal(t, pgcode.SerializationFailure, pgErr.Code)
 
 	// Clear the error producing filter, restart the transaction, and run it to

@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // This test verifies that preserve_downgrade_option is respected and that in the

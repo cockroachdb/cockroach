@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Owner is a valid entry for the Owners field of a roachtest. They should be

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -40,7 +41,7 @@ func TestConcurrentRequestLimiter(t *testing.T) {
 			for {
 				//t.Logf("waiting to make request %d... (%d / %d)", req+1, l.sem.GetCount(), l.sem.GetLimit())
 				if err := l.Begin(ctx); err != nil {
-					if err == ctx.Err() {
+					if errors.Is(err, ctx.Err()) {
 						break
 					} else {
 						return err

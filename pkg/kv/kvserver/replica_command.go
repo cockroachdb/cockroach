@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,10 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	crdberrors "github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/raft/tracker"
@@ -65,7 +63,7 @@ func (r *Replica) AdminSplit(
 }
 
 func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (string, bool) {
-	if detail, ok := err.(*roachpb.ConditionFailedError); ok {
+	if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
 		// Provide a better message in the common case that the range being changed
 		// was already changed by a concurrent transaction.
 		var actualDesc roachpb.RangeDescriptor
@@ -532,16 +530,8 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		lastErr = updateDesc(r.Desc())
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
 		// command with the updated descriptor.
-		if retry := causer.Visit(lastErr, func(err error) bool {
-			switch err.(type) {
-			case *roachpb.ConditionFailedError:
-				return true
-			case *roachpb.AmbiguousResultError:
-				return true
-			default:
-				return false
-			}
-		}); !retry {
+		if !errors.HasType(lastErr, (*roachpb.ConditionFailedError)(nil)) &&
+			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
 			break
 		}
 	}
@@ -772,7 +762,7 @@ func (r *Replica) AdminMerge(
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
 		}
-		if _, canRetry := errors.Cause(err).(*roachpb.TransactionRetryWithProtoRefreshError); !canRetry {
+		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
 			if err != nil {
 				return reply, roachpb.NewErrorf("merge failed: %s", err)
 			}
@@ -850,10 +840,7 @@ func (s *snapshotError) Error() string {
 
 // IsSnapshotError returns true iff the error indicates a snapshot failed.
 func IsSnapshotError(err error) bool {
-	return causer.Visit(err, func(err error) bool {
-		_, ok := errors.Cause(err).(*snapshotError)
-		return ok
-	})
+	return errors.HasType(err, (*snapshotError)(nil))
 }
 
 // ChangeReplicas atomically changes the replicas that are members of a range.
@@ -1878,7 +1865,7 @@ func (r *Replica) sendSnapshot(
 		r.store.Engine().NewBatch,
 		sent,
 	); err != nil {
-		if errors.Cause(err) == errMalformedSnapshot {
+		if errors.Is(err, errMalformedSnapshot) {
 			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
 			if dir, err := r.store.checkpoint(ctx, tag); err != nil {
 				log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
@@ -2139,7 +2126,7 @@ func (s *Store) relocateOne(
 	if len(rangeReplicas) != len(desc.Replicas().Voters()) {
 		// The caller removed all the learners, so there shouldn't be anything but
 		// voters.
-		return nil, nil, crdberrors.AssertionFailedf(
+		return nil, nil, errors.AssertionFailedf(
 			`range %s had non-voter replicas: %v`, desc, desc.Replicas())
 	}
 

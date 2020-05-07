@@ -37,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,7 +108,7 @@ func TestNodeLiveness(t *testing.T) {
 			if err == nil {
 				break
 			}
-			if err == kvserver.ErrEpochIncremented {
+			if errors.Is(err, kvserver.ErrEpochIncremented) {
 				log.Warningf(context.Background(), "retrying after %s", err)
 				continue
 			}
@@ -316,7 +316,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	}
 
 	// Verify error on incrementing an already-incremented epoch.
-	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != kvserver.ErrEpochAlreadyIncremented {
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); !errors.Is(err, kvserver.ErrEpochAlreadyIncremented) {
 		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
 
@@ -475,7 +475,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
-			if err == kvserver.ErrEpochIncremented {
+			if errors.Is(err, kvserver.ErrEpochIncremented) {
 				return err
 			}
 			t.Fatal(err)
@@ -609,7 +609,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 		}()
 	}
 	for i := 0; i < concurrency; i++ {
-		if err := <-errCh; err != nil && err != kvserver.ErrEpochAlreadyIncremented {
+		if err := <-errCh; err != nil && !errors.Is(err, kvserver.ErrEpochAlreadyIncremented) {
 			t.Fatalf("concurrent increment epoch %d failed: %+v", i, err)
 		}
 	}
@@ -977,7 +977,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetDecommissioning(
 		ctx, goneNodeID, true,
-	); errors.Cause(err) != kvserver.ErrNoLivenessRecord {
+	); !errors.Is(err, kvserver.ErrNoLivenessRecord) {
 		t.Fatal(err)
 	}
 

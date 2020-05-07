@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // lookupFlow returns the registered flow with the given ID. If no such flow is
@@ -650,7 +650,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	// flow canceled error.
 
 	_, meta := right.Next()
-	if meta.Err != sqlbase.QueryCanceledError {
+	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 
@@ -659,7 +659,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	_, _ = left.Next()
 	_, meta = left.Next()
-	if meta.Err != sqlbase.QueryCanceledError {
+	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 }

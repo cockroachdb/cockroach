@@ -736,7 +736,7 @@ If problems persist, please see %s.`
 
 			// Attempt to start the server.
 			if err := s.Start(ctx); err != nil {
-				if le, ok := err.(server.ListenError); ok {
+				if le := (*server.ListenError)(nil); errors.As(err, &le) {
 					const errorPrefix = "consider changing the port via --"
 					if le.Addr == serverCfg.Addr {
 						err = errors.Wrap(err, errorPrefix+cliflags.ListenAddr.Name)

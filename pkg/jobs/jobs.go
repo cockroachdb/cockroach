@@ -166,11 +166,10 @@ func (e *InvalidStatusError) Error() string {
 // SimplifyInvalidStatusError unwraps an *InvalidStatusError into an error
 // message suitable for users. Other errors are returned as passed.
 func SimplifyInvalidStatusError(err error) error {
-	ierr, ok := err.(*InvalidStatusError)
-	if !ok {
-		return err
+	if ierr := (*InvalidStatusError)(nil); errors.As(err, &ierr) {
+		return errors.Errorf("job %s", ierr.status)
 	}
-	return errors.Errorf("job %s", ierr.status)
+	return err
 }
 
 // ID returns the ID of the job that this Job is currently tracking. This will
@@ -668,11 +667,7 @@ func (e *JobNotFoundError) Error() string {
 
 // HasJobNotFoundError returns true if the error contains a JobNotFoundError.
 func HasJobNotFoundError(err error) bool {
-	_, hasJobNotFoundError := errors.If(err, func(err error) (interface{}, bool) {
-		_, isJobNotFoundError := err.(*JobNotFoundError)
-		return err, isJobNotFoundError
-	})
-	return hasJobNotFoundError
+	return errors.HasType(err, (*JobNotFoundError)(nil))
 }
 
 func (j *Job) load(ctx context.Context) error {

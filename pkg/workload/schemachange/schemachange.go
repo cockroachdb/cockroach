@@ -390,7 +390,7 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 		}
 
 		// TODO(spaskob): use more fine-grained error reporting.
-		if stmt == "" || err == pgx.ErrNoRows {
+		if stmt == "" || errors.Is(err, pgx.ErrNoRows) {
 			if w.verbose >= 2 {
 				log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
 			}

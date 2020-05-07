@@ -546,12 +546,14 @@ func seekToFirstAfterFrom(f *os.File, from time.Time) (err error) {
 			panic(err)
 		}
 		var e log.Entry
-		switch err := log.NewEntryDecoder(f).Decode(&e); err {
-		case nil:
-			return e.Time >= from.UnixNano()
-		default:
-			return true
+		err := log.NewEntryDecoder(f).Decode(&e)
+		if err != nil {
+			if err == io.EOF {
+				return true
+			}
+			panic(err)
 		}
+		return e.Time >= from.UnixNano()
 	})
 	if _, err := f.Seek(int64(offset), io.SeekStart); err != nil {
 		return err

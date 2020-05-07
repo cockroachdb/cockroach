@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // KeyValue represents a single key/value pair. This is similar to
@@ -717,7 +717,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// Terminate TransactionRetryWithProtoRefreshError here, so it doesn't cause a higher-level
 	// txn to be retried. We don't do this in any of the other functions in DB; I
 	// guess we should.
-	if _, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
+	if errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
 		return errors.Wrapf(err, "terminated retryable error")
 	}
 	return err
@@ -801,8 +801,8 @@ func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int
 	var res KeyValue
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		res, err = db.Inc(ctx, key, inc)
-		switch err.(type) {
-		case *roachpb.UnhandledRetryableError, *roachpb.AmbiguousResultError:
+		if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) ||
+			errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 			continue
 		}
 		break

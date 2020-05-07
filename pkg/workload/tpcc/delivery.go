@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/rand"
 )
 
@@ -100,7 +100,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 				var oID int
 				if err := del.selectNewOrder.QueryRowTx(ctx, tx, wID, dID).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
-					if err != gosql.ErrNoRows {
+					if !errors.Is(err, gosql.ErrNoRows) {
 						atomic.AddUint64(&del.config.auditor.skippedDelivieries, 1)
 						return err
 					}

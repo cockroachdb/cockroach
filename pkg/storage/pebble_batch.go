@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
 
@@ -123,7 +124,7 @@ func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
 		ret = retCopy
 		closer.Close()
 	}
-	if err == pebble.ErrNotFound || len(ret) == 0 {
+	if errors.Is(err, pebble.ErrNotFound) || len(ret) == 0 {
 		return nil, nil
 	}
 	return ret, err
@@ -158,7 +159,7 @@ func (p *pebbleBatch) GetProto(
 		closer.Close()
 		return true, keyBytes, valBytes, err
 	}
-	if err == pebble.ErrNotFound {
+	if errors.Is(err, pebble.ErrNotFound) {
 		return false, 0, 0, nil
 	}
 	return false, 0, 0, err

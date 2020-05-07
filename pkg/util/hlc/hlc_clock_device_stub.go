@@ -15,7 +15,7 @@ package hlc
 import (
 	"context"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ClockSource contains the handle of the clock device as well as the

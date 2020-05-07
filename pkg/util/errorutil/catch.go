@@ -23,7 +23,7 @@ import (
 func ShouldCatch(obj interface{}) (ok bool, err error) {
 	err, ok = obj.(error)
 	if ok {
-		if _, isRuntime := err.(runtime.Error); isRuntime {
+		if errors.HasInterface(err, (*runtime.Error)(nil)) {
 			// Convert runtime errors to internal errors, which display the stack and
 			// get reported to Sentry.
 			err = errors.HandleAsAssertionFailure(err)

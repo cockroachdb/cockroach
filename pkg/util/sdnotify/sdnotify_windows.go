@@ -11,8 +11,9 @@
 package sdnotify
 
 import (
-	"errors"
 	"os/exec"
+
+	"github.com/cockroachdb/errors"
 )
 
 func ready() error {

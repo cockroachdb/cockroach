@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -232,7 +232,7 @@ func maybePurgeSideloaded(
 	var totalSize int64
 	for i := firstIndex; i <= lastIndex; i++ {
 		size, err := ss.Purge(ctx, i, term)
-		if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
+		if err != nil && !errors.Is(err, errSideloadedFileNotFound) {
 			return totalSize, err
 		}
 		totalSize += size
