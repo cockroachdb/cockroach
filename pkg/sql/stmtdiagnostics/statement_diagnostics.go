@@ -60,7 +60,7 @@ type Registry struct {
 	st     *cluster.Settings
 	ie     sqlutil.InternalExecutor
 	db     *kv.DB
-	gossip *gossip.Gossip
+	gossip gossip.DeprecatedGossip
 
 	// gossipUpdateChan is used to notify the polling loop that a diagnostics
 	// request has been added. The gossip callback will not block sending on this
@@ -70,17 +70,19 @@ type Registry struct {
 
 // NewRegistry constructs a new Registry.
 func NewRegistry(
-	ie sqlutil.InternalExecutor, db *kv.DB, g *gossip.Gossip, st *cluster.Settings,
+	ie sqlutil.InternalExecutor, db *kv.DB, gw gossip.DeprecatedGossip, st *cluster.Settings,
 ) *Registry {
 	r := &Registry{
 		ie:               ie,
 		db:               db,
-		gossip:           g,
+		gossip:           gw,
 		gossipUpdateChan: make(chan requestID, 1),
 		st:               st,
 	}
-	// Some tests pass a nil gossip.
-	if g != nil {
+	// Some tests pass a nil gossip, and gossip is not available on SQL tenant
+	// servers.
+	g, ok := gw.Optional(47893)
+	if ok && g != nil {
 		g.RegisterCallback(gossip.KeyGossipStatementDiagnosticsRequest, r.gossipNotification)
 	}
 	return r
@@ -193,8 +195,13 @@ func (r *Registry) InsertRequest(ctx context.Context, fprint string) error {
 }
 
 func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (requestID, error) {
+	g, err := r.gossip.OptionalErr(48274)
+	if err != nil {
+		return 0, err
+	}
+
 	var reqID requestID
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err = r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
 			sqlbase.InternalExecutorSessionDataOverride{
@@ -239,7 +246,7 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (re
 	// Notify all the other nodes that they have to poll.
 	buf := make([]byte, 8)
 	binary.LittleEndian.PutUint64(buf, uint64(reqID))
-	if err := r.gossip.AddInfo(gossip.KeyGossipStatementDiagnosticsRequest, buf, 0 /* ttl */); err != nil {
+	if err := g.AddInfo(gossip.KeyGossipStatementDiagnosticsRequest, buf, 0 /* ttl */); err != nil {
 		log.Warningf(ctx, "error notifying of diagnostics request: %s", err)
 	}
 

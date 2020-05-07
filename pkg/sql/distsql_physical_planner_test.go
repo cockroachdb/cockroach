@@ -816,15 +816,16 @@ func TestPartitionSpans(t *testing.T) {
 				ranges: tc.ranges,
 			}
 
+			gw := gossip.MakeExposedGossip(mockGossip)
 			dsp := DistSQLPlanner{
 				planVersion:  execinfra.Version,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
 				stopper:      stopper,
 				spanResolver: tsp,
-				gossip:       mockGossip,
+				gossip:       gw,
 				nodeHealth: distSQLNodeHealth{
-					gossip: mockGossip,
+					gossip: gw,
 					connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
 						for _, n := range tc.deadNodes {
 							if int(node) == n {
@@ -1000,15 +1001,16 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				ranges: ranges,
 			}
 
+			gw := gossip.MakeExposedGossip(mockGossip)
 			dsp := DistSQLPlanner{
 				planVersion:  tc.planVersion,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[gatewayNode-1],
 				stopper:      stopper,
 				spanResolver: tsp,
-				gossip:       mockGossip,
+				gossip:       gw,
 				nodeHealth: distSQLNodeHealth{
-					gossip: mockGossip,
+					gossip: gw,
 					connHealth: func(roachpb.NodeID, rpc.ConnectionClass) error {
 						// All the nodes are healthy.
 						return nil
@@ -1095,15 +1097,16 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		ranges: ranges,
 	}
 
+	gw := gossip.MakeExposedGossip(mockGossip)
 	dsp := DistSQLPlanner{
 		planVersion:  execinfra.Version,
 		st:           cluster.MakeTestingClusterSettings(),
 		nodeDesc:     *tsp.nodes[gatewayNode-1],
 		stopper:      stopper,
 		spanResolver: tsp,
-		gossip:       mockGossip,
+		gossip:       gw,
 		nodeHealth: distSQLNodeHealth{
-			gossip: mockGossip,
+			gossip: gw,
 			connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
 				_, err := mockGossip.GetNodeIDAddress(node)
 				return err
@@ -1197,10 +1200,11 @@ func TestCheckNodeHealth(t *testing.T) {
 		{notLive, "not using n5 due to liveness: node n5 is not live"},
 	}
 
+	gw := gossip.MakeExposedGossip(mockGossip)
 	for _, test := range livenessTests {
 		t.Run("liveness", func(t *testing.T) {
 			h := distSQLNodeHealth{
-				gossip:     mockGossip,
+				gossip:     gw,
 				connHealth: connHealthy,
 				isLive:     test.isLive,
 			}
@@ -1221,7 +1225,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	for _, test := range connHealthTests {
 		t.Run("connHealth", func(t *testing.T) {
 			h := distSQLNodeHealth{
-				gossip:     mockGossip,
+				gossip:     gw,
 				connHealth: test.connHealth,
 				isLive:     live,
 			}

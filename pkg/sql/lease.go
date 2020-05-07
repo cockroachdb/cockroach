@@ -1773,16 +1773,16 @@ func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableSta
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
-func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *kv.DB, g *gossip.Gossip) {
+func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *kv.DB, gw gossip.DeprecatedGossip) {
 	ctx := context.TODO()
 	s.RunWorker(ctx, func(ctx context.Context) {
 		descKeyPrefix := m.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
-		gossipUpdateC := g.RegisterSystemConfigChannel()
+		gossipUpdateC := gw.DeprecatedRegisterSystemConfigChannel(47150)
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg := g.GetSystemConfig()
+				cfg := gw.DeprecatedSystemConfig(47150)
 				if m.testingKnobs.GossipUpdateEvent != nil {
 					if err := m.testingKnobs.GossipUpdateEvent(cfg); err != nil {
 						break
