@@ -337,7 +337,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					s.sr.Get(),
 					colIdx,
 					typ,
-					si.numRows,
+					si.numRows-si.numNulls,
 					distinctCount,
 					int(si.spec.HistogramMaxBuckets),
 				)
@@ -397,7 +397,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 
 // generateHistogram returns a histogram (on a given column) from a set of
 // samples.
-// numRows is the total number of rows from which values were sampled.
+// numRows is the total number of non-null rows from which values were sampled.
 func (s *sampleAggregator) generateHistogram(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
