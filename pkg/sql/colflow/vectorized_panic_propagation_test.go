@@ -58,7 +58,6 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		1, /* processorID */
 		vee,
 		types,
-		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* toClose */
@@ -106,7 +105,6 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		1, /* processorID */
 		nvee,
 		types,
-		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* toClose */

@@ -890,7 +890,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 			pspec.ProcessorID,
 			op,
 			columnTypes,
-			&execinfrapb.PostProcessSpec{},
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
 			toClose,

@@ -66,7 +66,6 @@ func wrapRowSources(
 				processorID,
 				input,
 				inputTypes[i],
-				&execinfrapb.PostProcessSpec{},
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
 				nil, /* toClose */

@@ -76,7 +76,6 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		2, /* processorID */
 		noop,
 		types,
-		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		[]execinfrapb.MetadataSource{col},
 		nil, /* toClose */

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -90,7 +89,6 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 				1, /* processorID */
 				arrowOp,
 				typs,
-				&execinfrapb.PostProcessSpec{},
 				output,
 				nil, /* metadataSourcesQueue */
 				nil, /* toClose */
