@@ -17,9 +17,13 @@ import (
 
 func registerSchemaChangeMixedVersions(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    "schemachange/mixed-versions",
-		Owner:   OwnerSQLSchema,
-		Cluster: makeClusterSpec(4),
+		Name:  "schemachange/mixed-versions",
+		Owner: OwnerSQLSchema,
+		// This tests the work done for 20.1 that made schema changes jobs and in
+		// addition prevented making any new schema changes on a mixed cluster in
+		// order to prevent bugs during upgrades.
+		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
