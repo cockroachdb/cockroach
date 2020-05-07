@@ -144,7 +144,6 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		int32(len(args.inputs))+2,
 		result.Op,
 		args.outputTypes,
-		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		result.MetadataSources,
 		nil, /* toClose */
