@@ -30,18 +30,21 @@ var (
 func TestPGTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	addr := *flagAddr
-	user := *flagUser
-	if addr == "" {
-		ctx := context.Background()
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-			Insecure: true,
-		})
-		defer s.Stopper().Stop(ctx)
-
-		addr = s.ServingSQLAddr()
-		user = security.RootUser
+	if *flagAddr == "" {
+		newServer := func() (addr, user string, cleanup func()) {
+			ctx := context.Background()
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Insecure: true,
+			})
+			cleanup = func() {
+				s.Stopper().Stop(ctx)
+			}
+			addr = s.ServingSQLAddr()
+			user = security.RootUser
+			return addr, user, cleanup
+		}
+		pgtest.WalkWithNewServer(t, "testdata/pgtest", newServer)
+	} else {
+		pgtest.WalkWithRunningServer(t, "testdata/pgtest", *flagAddr, *flagUser)
 	}
-
-	pgtest.Walk(t, "testdata/pgtest", addr, user)
 }
