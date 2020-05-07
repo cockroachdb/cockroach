@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
@@ -154,7 +155,7 @@ func parseEWKT(
 	str geopb.EWKT, defaultSRID geopb.SRID, overwrite defaultSRIDOverwriteSetting,
 ) (geopb.SpatialObject, error) {
 	srid := defaultSRID
-	if strings.HasPrefix(string(str), sridPrefix) {
+	if hasPrefixIgnoreCase(string(str), sridPrefix) {
 		end := strings.Index(string(str[sridPrefixLen:]), ";")
 		if end != -1 {
 			if overwrite != DefaultSRIDShouldOverwrite {
@@ -182,4 +183,17 @@ func parseEWKT(
 		return geopb.SpatialObject{}, err
 	}
 	return parseEWKBRaw(ewkb)
+}
+
+// hasPrefixIgnoreCase returns whether a given str begins with a prefix, ignoring case.
+func hasPrefixIgnoreCase(str string, prefix string) bool {
+	if len(str) < len(prefix) {
+		return false
+	}
+	for i := 0; i < len(prefix); i++ {
+		if unicode.ToLower(rune(str[i])) != unicode.ToLower(rune(prefix[i])) {
+			return false
+		}
+	}
+	return true
 }
