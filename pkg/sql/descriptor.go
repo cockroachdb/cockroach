@@ -241,53 +241,40 @@ func lookupDescriptorByID(
 	return nil, false, nil
 }
 
-// getDescriptorByID looks up the descriptor for `id`, validates it,
-// and unmarshals it into `descriptor`.
+// getDescriptorByID looks up the descriptor for `id`, validates it.
 //
 // In most cases you'll want to use wrappers: `getDatabaseDescByID` or
 // `getTableDescByID`.
 func getDescriptorByID(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	id sqlbase.ID,
-	descriptor sqlbase.DescriptorProto,
-) error {
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+) (sqlbase.DescriptorProto, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(codec, id)
 	desc := &sqlbase.Descriptor{}
 	ts, err := txn.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	switch t := descriptor.(type) {
-	case *sqlbase.TableDescriptor:
-		table := desc.Table(ts)
-		if table == nil {
-			return pgerror.Newf(pgcode.WrongObjectType,
-				"%q is not a table", desc.String())
-		}
+	table, database, typ := desc.Table(ts), desc.GetDatabase(), desc.GetType()
+	switch {
+	case table != nil:
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
-			return err
+			return nil, err
 		}
-
 		if err := table.Validate(ctx, txn, codec); err != nil {
-			return err
+			return nil, err
 		}
-		*t = *table
-	case *sqlbase.DatabaseDescriptor:
-		database := desc.GetDatabase()
-		if database == nil {
-			return pgerror.Newf(pgcode.WrongObjectType,
-				"%q is not a database", desc.String())
-		}
-
+		return table, nil
+	case database != nil:
 		if err := database.Validate(); err != nil {
-			return err
+			return nil, err
 		}
-		*t = *database
+		return database, nil
+	case typ != nil:
+		return typ, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown proto: %s", desc.String())
 	}
-	return nil
 }
 
 // IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is

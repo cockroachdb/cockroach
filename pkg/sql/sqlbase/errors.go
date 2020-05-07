@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -89,6 +90,24 @@ func NewInvalidWildcardError(name string) error {
 		"%q does not match any valid database or schema", name)
 }
 
+// NewUndefinedObjectError returns the correct undefined object error based on
+// the kind of object that was requested.
+func NewUndefinedObjectError(name tree.NodeFormatter, kind tree.DesiredObjectKind) error {
+	switch kind {
+	case tree.TableObject:
+		return NewUndefinedRelationError(name)
+	case tree.TypeObject:
+		return NewUndefinedTypeError(name)
+	default:
+		return errors.AssertionFailedf("unknown object kind %d", kind)
+	}
+}
+
+// NewUndefinedTypeError creates an error that represents a missing type.
+func NewUndefinedTypeError(name tree.NodeFormatter) error {
+	return pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", tree.ErrString(name))
+}
+
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
 func NewUndefinedRelationError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedTable,
@@ -108,6 +127,11 @@ func NewDatabaseAlreadyExistsError(name string) error {
 // NewRelationAlreadyExistsError creates an error for a preexisting relation.
 func NewRelationAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateRelation, "relation %q already exists", name)
+}
+
+// NewTypeAlreadyExistsError creates an error for a preexisting type.
+func NewTypeAlreadyExistsError(name string) error {
+	return pgerror.Newf(pgcode.DuplicateObject, "type %q already exists", name)
 }
 
 // IsRelationAlreadyExistsError checks whether this is an error for a preexisting relation.

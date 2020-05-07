@@ -237,9 +237,9 @@ func (c *ColumnItem) Resolve(
 	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
 }
 
-// TableNameTargetResolver is the helper interface to resolve table
+// ObjectNameTargetResolver is the helper interface to resolve object
 // names when the object is not expected to exist.
-type TableNameTargetResolver interface {
+type ObjectNameTargetResolver interface {
 	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
 }
 
@@ -249,11 +249,11 @@ type SchemaMeta interface {
 	SchemaMeta()
 }
 
-// TableNameExistingResolver is the helper interface to resolve table
+// ObjectNameExistingResolver is the helper interface to resolve table
 // names when the object is expected to exist already. The boolean passed
 // is used to specify if a MutableTableDescriptor is to be returned in the
 // result.
-type TableNameExistingResolver interface {
+type ObjectNameExistingResolver interface {
 	LookupObject(ctx context.Context, flags ObjectLookupFlags, dbName, scName, obName string) (
 		found bool, objMeta NameResolutionResult, err error,
 	)
@@ -274,7 +274,7 @@ type NameResolutionResult interface {
 func ResolveExisting(
 	ctx context.Context,
 	u *UnresolvedObjectName,
-	r TableNameExistingResolver,
+	r ObjectNameExistingResolver,
 	lookupFlags ObjectLookupFlags,
 	curDb string,
 	searchPath sessiondata.SearchPath,
@@ -351,7 +351,7 @@ func ResolveExisting(
 func ResolveTarget(
 	ctx context.Context,
 	u *UnresolvedObjectName,
-	r TableNameTargetResolver,
+	r ObjectNameTargetResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 ) (found bool, namePrefix ObjectNamePrefix, scMeta SchemaMeta, err error) {
@@ -413,7 +413,7 @@ func ResolveTarget(
 // Resolve is used for table prefixes. This is adequate for table
 // patterns with stars, e.g. AllTablesSelector.
 func (tp *ObjectNamePrefix) Resolve(
-	ctx context.Context, r TableNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
+	ctx context.Context, r ObjectNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
 ) (found bool, scMeta SchemaMeta, err error) {
 	if tp.ExplicitSchema {
 		// pg_temp can be used as an alias for the current sessions temporary schema.
@@ -570,6 +570,17 @@ type DatabaseListFlags struct {
 	ExplicitPrefix bool
 }
 
+// DesiredObjectKind represents what kind of object is desired in a name
+// resolution attempt.
+type DesiredObjectKind int
+
+const (
+	// TableObject is used when a table-like object is desired from resolution.
+	TableObject DesiredObjectKind = iota
+	// TypeObject is used when a type-like object is desired from resolution.
+	TypeObject
+)
+
 // ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
@@ -577,6 +588,8 @@ type ObjectLookupFlags struct {
 	RequireMutable         bool
 	IncludeOffline         bool
 	AllowWithoutPrimaryKey bool
+	// Control what type of object is being requested.
+	DesiredObjectKind DesiredObjectKind
 }
 
 // ObjectLookupFlagsWithRequired returns a default ObjectLookupFlags object

@@ -41,13 +41,13 @@ var virtualSequenceOpts = tree.SequenceOptions{
 
 // processSerialInColumnDef analyzes a column definition and determines
 // whether to use a sequence if the requested type is SERIAL-like.
-// If a sequence must be created, it returns an ObjectName to use
+// If a sequence must be created, it returns an TableName to use
 // to create the new sequence and the DatabaseDescriptor of the
 // parent database where it should be created.
 // The ColumnTableDef is not mutated in-place; instead a new one is returned.
 func (p *planner) processSerialInColumnDef(
-	ctx context.Context, d *tree.ColumnTableDef, tableName *ObjectName,
-) (*tree.ColumnTableDef, *DatabaseDescriptor, *ObjectName, tree.SequenceOptions, error) {
+	ctx context.Context, d *tree.ColumnTableDef, tableName *TableName,
+) (*tree.ColumnTableDef, *DatabaseDescriptor, *TableName, tree.SequenceOptions, error) {
 	if !d.IsSerial {
 		// Column is not SERIAL: nothing to do.
 		return d, nil, nil, nil, nil
@@ -163,7 +163,7 @@ func (p *planner) processSerialInColumnDef(
 // This is currently used by bulk I/O import statements which do not
 // (yet?) support customization of the SERIAL behavior.
 func SimplifySerialInColumnDefWithRowID(
-	ctx context.Context, d *tree.ColumnTableDef, tableName *ObjectName,
+	ctx context.Context, d *tree.ColumnTableDef, tableName *TableName,
 ) error {
 	if !d.IsSerial {
 		// Column is not SERIAL: nothing to do.
@@ -189,7 +189,7 @@ func SimplifySerialInColumnDefWithRowID(
 	return nil
 }
 
-func assertValidSerialColumnDef(d *tree.ColumnTableDef, tableName *ObjectName) error {
+func assertValidSerialColumnDef(d *tree.ColumnTableDef, tableName *TableName) error {
 	if d.HasDefaultExpr() {
 		// SERIAL implies a new default expression, we can't have one to
 		// start with. This is the error produced by pg in such case.

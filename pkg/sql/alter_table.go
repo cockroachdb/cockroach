@@ -129,7 +129,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 	descriptorChanged := false
 	origNumMutations := len(n.tableDesc.Mutations)
 	var droppedViews []string
-	tn := params.p.ResolvedName(n.n.Table)
+	resolved := params.p.ResolvedName(n.n.Table)
+	tn, ok := resolved.(*tree.TableName)
+	if !ok {
+		return errors.AssertionFailedf(
+			"%q was not resolved as a table but is %T", resolved, resolved)
+	}
 
 	for i, cmd := range n.n.Cmds {
 		telemetry.Inc(cmd.TelemetryCounter())

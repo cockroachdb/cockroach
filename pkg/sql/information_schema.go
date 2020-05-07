@@ -1367,7 +1367,7 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				addRow func(...tree.Datum) error) (bool, error) {
 				// This index is on the TABLE_NAME column.
 				name := tree.MustBeDString(constraint)
-				desc, err := ResolveExistingObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)),
+				desc, err := ResolveExistingTableObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)),
 					tree.ObjectLookupFlags{}, ResolveAnyDescType)
 				if err != nil || desc == nil {
 					return false, err
