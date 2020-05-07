@@ -55,7 +55,6 @@ func SRV(ctx context.Context, name string) ([]string, error) {
 	}
 
 	if name == "" {
-		// nolint:returnerrcheck
 		return nil, nil
 	}
 
@@ -73,9 +72,11 @@ func SRV(ctx context.Context, name string) ([]string, error) {
 		return nil, nil
 	}
 
-	var addrs = make([]string, len(recs))
-	for i, r := range recs {
-		addrs[i] = net.JoinHostPort(r.Target, fmt.Sprintf("%d", r.Port))
+	addrs := []string{}
+	for _, r := range recs {
+		if r.Port != 0 {
+			addrs = append(addrs, net.JoinHostPort(r.Target, fmt.Sprintf("%d", r.Port)))
+		}
 	}
 
 	return addrs, nil
