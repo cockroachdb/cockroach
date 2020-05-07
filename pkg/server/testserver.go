@@ -492,7 +492,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 			distSender:   ds,
 			statusServer: noStatusServer,
 			nodeLiveness: nl,
-			gossip:       gossip.MakeDeprecatedGossip(g, false /* exposed */),
+			gossip:       gossip.MakeUnexposedGossip(g),
 			nodeDialer:   nd,
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,

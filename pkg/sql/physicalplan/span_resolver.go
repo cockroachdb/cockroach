@@ -117,7 +117,7 @@ type SpanResolverIterator interface {
 // spanResolver implements SpanResolver.
 type spanResolver struct {
 	st            *cluster.Settings
-	gossip        *gossip.Gossip
+	gossip        gossip.DeprecatedGossip
 	distSender    *kvcoord.DistSender
 	nodeDesc      roachpb.NodeDescriptor
 	oracleFactory replicaoracle.OracleFactory
@@ -129,7 +129,7 @@ var _ SpanResolver = &spanResolver{}
 func NewSpanResolver(
 	st *cluster.Settings,
 	distSender *kvcoord.DistSender,
-	gossip *gossip.Gossip,
+	gw gossip.DeprecatedGossip,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
 	policy replicaoracle.Policy,
@@ -139,13 +139,13 @@ func NewSpanResolver(
 		nodeDesc: nodeDesc,
 		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
 			Settings:         st,
-			Gossip:           gossip,
+			Gossip:           gw.DeprecatedOracleGossip(48432),
 			NodeDesc:         nodeDesc,
 			RPCContext:       rpcCtx,
 			LeaseHolderCache: distSender.LeaseHolderCache(),
 		}),
 		distSender: distSender,
-		gossip:     gossip,
+		gossip:     gw,
 	}
 }
 
@@ -153,9 +153,6 @@ func NewSpanResolver(
 type spanResolverIterator struct {
 	// it is a wrapper RangeIterator.
 	it *kvcoord.RangeIterator
-	// gossip is used to resolve NodeIds to addresses and node attributes, used to
-	// giving preference to close-by replicas.
-	gossip *gossip.Gossip
 	// oracle is used to choose a lease holders for ranges when one isn't present
 	// in the cache.
 	oracle replicaoracle.Oracle
@@ -174,7 +171,6 @@ var _ SpanResolverIterator = &spanResolverIterator{}
 // NewSpanResolverIterator creates a new SpanResolverIterator.
 func (sr *spanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
 	return &spanResolverIterator{
-		gossip:     sr.gossip,
 		it:         kvcoord.NewRangeIterator(sr.distSender),
 		oracle:     sr.oracleFactory.Oracle(txn),
 		queryState: replicaoracle.MakeQueryState(),

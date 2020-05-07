@@ -527,7 +527,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			distSender:             distSender,
 			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
 			nodeLiveness:           nodeLiveness,
-			gossip:                 gossip.MakeDeprecatedGossip(g, true /* exposed */),
+			gossip:                 gossip.MakeExposedGossip(g),
 			nodeDialer:             nodeDialer,
 			grpcServer:             grpcServer.Server,
 			recorder:               recorder,

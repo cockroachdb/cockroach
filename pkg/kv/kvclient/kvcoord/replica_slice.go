@@ -15,7 +15,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
@@ -42,7 +41,12 @@ type ReplicaSlice []ReplicaInfo
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
-func NewReplicaSlice(gossip *gossip.Gossip, replicas []roachpb.ReplicaDescriptor) ReplicaSlice {
+func NewReplicaSlice(
+	gossip interface {
+		GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
+	},
+	replicas []roachpb.ReplicaDescriptor,
+) ReplicaSlice {
 	if gossip == nil {
 		return nil
 	}

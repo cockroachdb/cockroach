@@ -34,7 +34,12 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
-	cache := NewTableStatisticsCache(10 /* cacheSize */, s.GossipI().(*gossip.Gossip), db, ex)
+	cache := NewTableStatisticsCache(
+		10, /* cacheSize */
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		db,
+		ex,
+	)
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
 	// expected deleted stats is correct.

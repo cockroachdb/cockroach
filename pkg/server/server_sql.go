@@ -401,7 +401,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
-			cfg.gossip.Deprecated(distsql.MultiTenancyIssueNo),
+			cfg.gossip,
 			cfg.stopper,
 			cfg.nodeLiveness,
 			cfg.nodeDialer,
@@ -409,7 +409,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		TableStatsCache: stats.NewTableStatisticsCache(
 			cfg.SQLTableStatCacheSize,
-			cfg.gossip.Deprecated(47925),
+			cfg.gossip,
 			cfg.db,
 			cfg.circularInternalExecutor,
 		),
@@ -530,12 +530,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,
-		cfg.gossip.Deprecated(47893),
+		cfg.gossip,
 		cfg.Settings,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
-	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip.Deprecated(47150))
+	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
 	leaseMgr.PeriodicallyRefreshSomeLeases()
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(

@@ -1616,13 +1616,34 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 	return nil
 }
 
-// MakeDeprecatedGossip initializes a DeprecatedGossip instance.
+// MakeExposedGossip initializes a DeprecatedGossip instance which exposes a
+// wrapped Gossip instance via Optional(). This is used on SQL servers running
+// inside of a KV server (i.e. single-tenant deployments).
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-func MakeDeprecatedGossip(g *Gossip, exposed bool) DeprecatedGossip {
+func MakeExposedGossip(g *Gossip) DeprecatedGossip {
+	const exposed = true
+	return DeprecatedGossip{
+		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
+	}
+}
+
+// MakeUnexposedGossip initializes a DeprecatedGossip instance for which
+// Optional() does not return the wrapped Gossip instance. This is used on
+// SQL servers not running as part of a KV server, i.e. with multi-tenancy.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+//
+// See TenantSQLDeprecatedWrapper for details.
+//
+// TODO(tbg): once we can start a SQL tenant without gossip, remove this method
+// and rename DeprecatedGossip to OptionalGossip.
+func MakeUnexposedGossip(g *Gossip) DeprecatedGossip {
+	const exposed = false
 	return DeprecatedGossip{
 		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
 	}
@@ -1638,15 +1659,52 @@ type DeprecatedGossip struct {
 	w errorutil.TenantSQLDeprecatedWrapper
 }
 
-// Deprecated trades a Github issue tracking the removal of the call for the
+// deprecated trades a Github issue tracking the removal of the call for the
 // wrapped Gossip instance.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) Deprecated(issueNo int) *Gossip {
+func (dg DeprecatedGossip) deprecated(issueNo int) *Gossip {
 	// NB: some tests use a nil Gossip.
 	g, _ := dg.w.Deprecated(issueNo).(*Gossip)
 	return g
+}
+
+// DeprecatedSystemConfig calls GetSystemConfig on the wrapped Gossip instance.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemConfig {
+	g := dg.deprecated(issueNo)
+	if g == nil {
+		return nil // a few unit tests
+	}
+	return g.GetSystemConfig()
+}
+
+// DeprecatedOracleGossip trims down *gossip.Gossip for use in the Oracle.
+//
+// NB: we're trying to get rid of this dep altogether, see:
+// https://github.com/cockroachdb/cockroach/issues/48432
+type DeprecatedOracleGossip interface {
+	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
+	GetNodeIDForStoreID(roachpb.StoreID) (roachpb.NodeID, error)
+}
+
+// DeprecatedOracleGossip returns an DeprecatedOracleGossip (a Gossip for use with the
+// replicaoracle package).
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) DeprecatedOracleGossip(issueNo int) DeprecatedOracleGossip {
+	return dg.deprecated(issueNo)
+}
+
+// DeprecatedRegisterSystemConfigChannel calls RegisterSystemConfigChannel on
+// the wrapped Gossip instance.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) DeprecatedRegisterSystemConfigChannel(issueNo int) <-chan struct{} {
+	g := dg.deprecated(issueNo)
+	return g.RegisterSystemConfigChannel()
 }
 
 // OptionalErr returns the Gossip instance if the wrapper was set up to allow
@@ -1663,4 +1721,18 @@ func (dg DeprecatedGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
 	// NB: some tests use a nil Gossip.
 	g, _ := v.(*Gossip)
 	return g, nil
+}
+
+// Optional is like OptionalErr, but returns false if Gossip is not exposed.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) Optional(issueNos ...int) (*Gossip, bool) {
+	v, ok := dg.w.Optional()
+	if !ok {
+		return nil, false
+	}
+	// NB: some tests use a nil Gossip.
+	g, _ := v.(*Gossip)
+	return g, true
 }

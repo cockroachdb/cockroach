@@ -55,7 +55,12 @@ func TestMaybeRefreshStats(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	descA := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
-	cache := NewTableStatisticsCache(10 /* cacheSize */, s.GossipI().(*gossip.Gossip), kvDB, executor)
+	cache := NewTableStatisticsCache(
+		10, /* cacheSize */
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		kvDB,
+		executor,
+	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// There should not be any stats yet.
@@ -125,7 +130,12 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tableID := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
-	cache := NewTableStatisticsCache(10 /* cacheSize */, s.GossipI().(*gossip.Gossip), kvDB, executor)
+	cache := NewTableStatisticsCache(
+		10, /* cacheSize */
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		kvDB,
+		executor,
+	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
@@ -350,7 +360,12 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		CREATE TABLE t.a (k INT PRIMARY KEY);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	cache := NewTableStatisticsCache(10 /* cacheSize */, s.GossipI().(*gossip.Gossip), kvDB, executor)
+	cache := NewTableStatisticsCache(
+		10, /* cacheSize */
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		kvDB,
+		executor,
+	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	AutomaticStatisticsClusterMode.Override(&st.SV, true)
@@ -381,7 +396,12 @@ func TestNoRetryOnFailure(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	cache := NewTableStatisticsCache(10 /* cacheSize */, s.GossipI().(*gossip.Gossip), kvDB, executor)
+	cache := NewTableStatisticsCache(
+		10, /* cacheSize */
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		kvDB,
+		executor,
+	)
 	r := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// Try to refresh stats on a table that doesn't exist.

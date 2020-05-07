@@ -72,7 +72,7 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
-		flowRegistry:  flowinfra.NewFlowRegistry(cfg.NodeID.DeprecatedNodeID(MultiTenancyIssueNo)),
+		flowRegistry:  flowinfra.NewFlowRegistry(cfg.NodeID.SQLInstanceID()),
 		flowScheduler: flowinfra.NewFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
 		memMonitor: mon.MakeMonitor(
 			"distsql",
@@ -92,15 +92,19 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 func (ds *ServerImpl) Start() {
 	// Gossip the version info so that other nodes don't plan incompatible flows
 	// for us.
-	if err := ds.ServerConfig.Gossip.Deprecated(MultiTenancyIssueNo).AddInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(ds.ServerConfig.NodeID.DeprecatedNodeID(MultiTenancyIssueNo)),
-		&execinfrapb.DistSQLVersionGossipInfo{
-			Version:            execinfra.Version,
-			MinAcceptedVersion: execinfra.MinAcceptedVersion,
-		},
-		0, // ttl - no expiration
-	); err != nil {
-		panic(err)
+	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
+		if nodeID, ok := ds.ServerConfig.NodeID.OptionalNodeID(); ok {
+			if err := g.AddInfoProto(
+				gossip.MakeDistSQLNodeVersionKey(nodeID),
+				&execinfrapb.DistSQLVersionGossipInfo{
+					Version:            execinfra.Version,
+					MinAcceptedVersion: execinfra.MinAcceptedVersion,
+				},
+				0, // ttl - no expiration
+			); err != nil {
+				panic(err)
+			}
+		}
 	}
 
 	if err := ds.setDraining(false); err != nil {
@@ -124,7 +128,7 @@ func (ds *ServerImpl) Drain(
 	if ds.ServerConfig.TestingKnobs.DrainFast {
 		flowWait = 0
 		minWait = 0
-	} else if len(ds.Gossip.Deprecated(MultiTenancyIssueNo).Outgoing()) == 0 {
+	} else if g, ok := ds.Gossip.Optional(MultiTenancyIssueNo); !ok || len(g.Outgoing()) == 0 {
 		// If there is only one node in the cluster (us), there's no need to
 		// wait a minimum time for the draining state to be gossiped.
 		minWait = 0
@@ -142,13 +146,16 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 		_ = MultiTenancyIssueNo // related issue
 		return nil
 	}
-	return ds.ServerConfig.Gossip.Deprecated(MultiTenancyIssueNo).AddInfoProto(
-		gossip.MakeDistSQLDrainingKey(nodeID),
-		&execinfrapb.DistSQLDrainingInfo{
-			Draining: drain,
-		},
-		0, // ttl - no expiration
-	)
+	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
+		return g.AddInfoProto(
+			gossip.MakeDistSQLDrainingKey(nodeID),
+			&execinfrapb.DistSQLDrainingInfo{
+				Draining: drain,
+			},
+			0, // ttl - no expiration
+		)
+	}
+	return nil
 }
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's
