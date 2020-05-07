@@ -104,9 +104,6 @@ type flowEntry struct {
 type FlowRegistry struct {
 	syncutil.Mutex
 
-	// instID is the instance ID of the current server. Used for debugging.
-	instID base.SQLInstanceID
-
 	// All fields in the flowEntry's are protected by the FlowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[execinfrapb.FlowID]*flowEntry
@@ -129,10 +126,7 @@ type FlowRegistry struct {
 // instID is the ID of the current node. Used for debugging; pass 0 if you don't
 // care.
 func NewFlowRegistry(instID base.SQLInstanceID) *FlowRegistry {
-	fr := &FlowRegistry{
-		instID: instID,
-		flows:  make(map[execinfrapb.FlowID]*flowEntry),
-	}
+	fr := &FlowRegistry{flows: make(map[execinfrapb.FlowID]*flowEntry)}
 	fr.flowDone = sync.NewCond(fr)
 	return fr
 }
@@ -196,17 +190,16 @@ func (fr *FlowRegistry) RegisterFlow(
 	}()
 	if fr.draining {
 		return errors.Errorf(
-			"could not register flowID %d on node %s because the registry is draining",
+			"could not register flowID %d because the registry is draining",
 			id,
-			fr.instID,
 		)
 	}
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
 		return errors.Errorf(
-			"flow already registered: current node ID: %s flowID: %s.\n"+
+			"flow already registered: flowID: %s.\n"+
 				"Current flow: %+v\nExisting flow: %+v",
-			fr.instID, f.spec.FlowID, f.spec, entry.flow.spec)
+			f.spec.FlowID, f.spec, entry.flow.spec)
 	}
 	// Take a reference that will be removed by UnregisterFlow.
 	entry.refCount++
