@@ -404,7 +404,13 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 	default:
 		return geopb.SpatialObject{}, errors.Newf("unknown shape: %T", t)
 	}
-	if t.Layout() != geom.XY {
+	switch t.Layout() {
+	case geom.XY:
+	case geom.NoLayout:
+		if gc, ok := t.(*geom.GeometryCollection); !ok || !gc.Empty() {
+			return geopb.SpatialObject{}, errors.Newf("no layout found on object")
+		}
+	default:
 		return geopb.SpatialObject{}, errors.Newf("only 2D objects are currently supported")
 	}
 	return geopb.SpatialObject{
