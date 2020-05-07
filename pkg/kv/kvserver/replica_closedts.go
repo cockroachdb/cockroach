@@ -26,9 +26,14 @@ func (r *Replica) EmitMLAI() {
 		lai = r.mu.state.LeaseAppliedIndex
 	}
 	epoch := r.mu.state.Lease.Epoch
+	isLeaseholder := r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID
 	r.mu.RUnlock()
 
-	ctx := r.AnnotateCtx(context.Background())
-	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
+	// If we're the leaseholder of an epoch-based lease, notify the minPropTracker
+	// of the current LAI to trigger a re-broadcast of this range's LAI.
+	if isLeaseholder && epoch > 0 {
+		ctx := r.AnnotateCtx(context.Background())
+		_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+		untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
+	}
 }
