@@ -133,7 +133,7 @@ func (ef *execFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) 
 	if err != nil {
 		return nil, err
 	}
-	columns, constructor := virtual.getPlanInfo()
+	columns, constructor := virtual.getPlanInfo(table.(*optVirtualTable).desc.TableDesc())
 
 	return &delayedNode{
 		columns: columns,
@@ -218,9 +218,9 @@ func (ef *execFactory) ConstructSimpleProject(
 	for i, col := range cols {
 		v := rb.r.ivarHelper.IndexedVar(int(col))
 		if colNames == nil {
-			rb.addExpr(v, inputCols[col].Name)
+			rb.addExpr(v, inputCols[col].Name, inputCols[col].TableID, inputCols[col].PGAttributeNum)
 		} else {
-			rb.addExpr(v, colNames[i])
+			rb.addExpr(v, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */)
 		}
 	}
 	return rb.res, nil
@@ -245,7 +245,7 @@ func (ef *execFactory) ConstructRender(
 	rb.init(n, reqOrdering, len(exprs))
 	for i, expr := range exprs {
 		expr = rb.r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		rb.addExpr(expr, colNames[i])
+		rb.addExpr(expr, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */)
 	}
 	return rb.res, nil
 }
@@ -574,7 +574,7 @@ func (ef *execFactory) ConstructIndexJoin(
 		scan = t
 	case *zeroNode:
 		// zeroNode is possible when the scanNode had a contradiction constraint.
-		return newZeroNode(sqlbase.ResultColumnsFromColDescs(colDescs)), nil
+		return newZeroNode(sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), colDescs)), nil
 	default:
 		return nil, fmt.Errorf("%T not supported as input to lookup join", t)
 	}
@@ -598,7 +598,7 @@ func (ef *execFactory) ConstructIndexJoin(
 		table:             tableScan,
 		primaryKeyColumns: primaryKeyColumns,
 		cols:              colDescs,
-		resultColumns:     sqlbase.ResultColumnsFromColDescs(colDescs),
+		resultColumns:     sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), colDescs),
 		run: indexJoinRun{
 			primaryKeyPrefix: primaryKeyPrefix,
 			colIDtoRowIndex:  colIDtoRowIndex,
@@ -1311,7 +1311,7 @@ func (ef *execFactory) ConstructInsert(
 			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
 		}
 
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
 
 		// Update the tabColIdxToRetIdx for the mutation. Insert always
 		// returns non-mutation columns in the same order they are defined in
@@ -1439,7 +1439,7 @@ func (ef *execFactory) ConstructUpdate(
 			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
 		}
 
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
 
 		// Add the passthrough columns to the returning columns.
 		returnCols = append(returnCols, passthrough...)
@@ -1592,7 +1592,7 @@ func (ef *execFactory) ConstructUpsert(
 			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
 		}
 
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
 
 		// Update the tabColIdxToRetIdx for the mutation. Upsert returns
 		// non-mutation columns specified, in the same order they are defined
@@ -1772,7 +1772,7 @@ func (ef *execFactory) ConstructDelete(
 
 		// Delete returns the non-mutation columns specified, in the same
 		// order they are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
 
 		// Find all the columns that the deleteNode receives. The returning
 		// columns of the mutation are a subset of this column set.
@@ -2046,9 +2046,19 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap 
 }
 
 // addExpr adds a new render expression with the given name.
-func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
+func (rb *renderBuilder) addExpr(
+	expr tree.TypedExpr, colName string, tableID sqlbase.ID, pgAttributeNum sqlbase.ColumnID,
+) {
 	rb.r.render = append(rb.r.render, expr)
-	rb.r.columns = append(rb.r.columns, sqlbase.ResultColumn{Name: colName, Typ: expr.ResolvedType()})
+	rb.r.columns = append(
+		rb.r.columns,
+		sqlbase.ResultColumn{
+			Name:           colName,
+			Typ:            expr.ResolvedType(),
+			TableID:        tableID,
+			PGAttributeNum: pgAttributeNum,
+		},
+	)
 }
 
 // makeColDescList returns a list of table column descriptors. Columns are

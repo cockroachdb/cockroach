@@ -164,7 +164,7 @@ func MakeComputedExprs(
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
 	sources := []*DataSourceInfo{NewSourceInfoForSingleTable(
-		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
+		*tn, ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns),
 	)}
 
 	semaCtx := tree.MakeSemaContext()
@@ -174,7 +174,7 @@ func MakeComputedExprs(
 		ivarHelper.AppendSlot()
 		iv.cols = append(iv.cols, *col)
 		sources = append(sources, NewSourceInfoForSingleTable(
-			*tn, ResultColumnsFromColDescs([]ColumnDescriptor{*col}),
+			*tn, ResultColumnsFromColDescs(tableDesc.GetID(), []ColumnDescriptor{*col}),
 		))
 	}
 

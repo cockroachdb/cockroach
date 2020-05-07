@@ -75,7 +75,7 @@ func (p *planner) getVirtualDataSource(
 		return planDataSource{}, err
 	}
 
-	columns, constructor := virtual.getPlanInfo()
+	columns, constructor := virtual.getPlanInfo(virtual.desc)
 
 	// Define the name of the source visible in EXPLAIN(NOEXPAND).
 	sourceName := tree.MakeTableNameWithSchema(
@@ -392,7 +392,7 @@ func (p *planner) getViewPlan(
 		return planDataSource{}, err
 	}
 	return planDataSource{
-		info: sqlbase.NewSourceInfoForSingleTable(*tn, sqlbase.ResultColumnsFromColDescs(desc.Columns)),
+		info: sqlbase.NewSourceInfoForSingleTable(*tn, sqlbase.ResultColumnsFromColDescs(desc.ID, desc.Columns)),
 		plan: plan,
 	}, nil
 }

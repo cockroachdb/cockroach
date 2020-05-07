@@ -121,7 +121,12 @@ func newCopyMachine(
 	}
 	c.resultColumns = make(sqlbase.ResultColumns, len(cols))
 	for i := range cols {
-		c.resultColumns[i] = sqlbase.ResultColumn{Typ: &cols[i].Type}
+		c.resultColumns[i] = sqlbase.ResultColumn{
+			Name:           cols[i].Name,
+			Typ:            &cols[i].Type,
+			TableID:        tableDesc.GetID(),
+			PGAttributeNum: cols[i].ID,
+		}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()

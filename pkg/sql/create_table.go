@@ -1130,7 +1130,7 @@ func MakeTableDesc(
 	// Now that we've constructed our columns, we pop into any of our computed
 	// columns so that we can dequalify any column references.
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		n.Table, sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		n.Table, sqlbase.ResultColumnsFromColDescs(desc.GetID(), desc.Columns),
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
@@ -1635,7 +1635,10 @@ func MakeCheckConstraint(
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		tableName, sqlbase.ResultColumnsFromColDescs(desc.TableDesc().AllNonDropColumns()),
+		tableName, sqlbase.ResultColumnsFromColDescs(
+			desc.GetID(),
+			desc.TableDesc().AllNonDropColumns(),
+		),
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 

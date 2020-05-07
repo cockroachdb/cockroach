@@ -79,7 +79,7 @@ func NewEvalCheckHelper(
 	c.cols = tableDesc.Columns
 	c.sourceInfo = NewSourceInfoForSingleTable(
 		tree.MakeUnqualifiedTableName(tree.Name(tableDesc.Name)),
-		ResultColumnsFromColDescs(tableDesc.Columns),
+		ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns),
 	)
 
 	c.Exprs = make([]tree.TypedExpr, len(tableDesc.ActiveChecks()))
