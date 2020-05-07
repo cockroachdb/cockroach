@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,19 +23,41 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
+// libraryUsage is a masked bit indicating which libraries are used by
+// a given geospatial builtin.
+type libraryUsage uint64
+
+const (
+	usesGEOS libraryUsage = (1 << (iota + 1))
+	usesS2
+	usesGeographicLib
+)
+
+const usesSpheroidMessage = " Uses a spheroid to perform the operation."
+
 // infoBuilder is used to build a detailed info string that is consistent between
 // geospatial data types.
 type infoBuilder struct {
-	info        string
-	usesGEOS    bool
-	canUseIndex bool
+	info         string
+	libraryUsage libraryUsage
+	precision    string
+	canUseIndex  bool
 }
 
 func (ib infoBuilder) String() string {
 	var sb strings.Builder
 	sb.WriteString(ib.info)
-	if ib.usesGEOS {
-		sb.WriteString("\n\nThis function uses the GEOS module.")
+	if ib.precision != "" {
+		sb.WriteString(fmt.Sprintf("\n\nThe calculations performed are have a precision of %s.", ib.precision))
+	}
+	if ib.libraryUsage&usesGEOS != 0 {
+		sb.WriteString("\n\nThis function utilizes the GEOS module.")
+	}
+	if ib.libraryUsage&usesS2 != 0 {
+		sb.WriteString("\n\nThis function utilizes the S2 library for spherical calculations.")
+	}
+	if ib.libraryUsage&usesGeographicLib != 0 {
+		sb.WriteString("\n\nThis function utilizes the GeographicLib library for spheroid calculations.")
 	}
 	if ib.canUseIndex {
 		sb.WriteString("\n\nThis function will automatically use any available index.")
@@ -587,58 +610,103 @@ var geoBuiltins = map[string]builtinDefinition{
 	//
 	"st_area": makeBuiltin(
 		defProps(),
-		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				ret, err := geomfn.Area(g.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDFloat(tree.DFloat(ret)), nil
-			},
-			types.Float,
-			infoBuilder{
-				info:     "Returns the area of the given geometry.",
-				usesGEOS: true,
-			},
-		),
+		append(
+			geographyOverload1WithUseSpheroid(
+				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+					ret, err := geogfn.Area(g.Geography, useSphereOrSpheroid)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDFloat(tree.DFloat(ret)), nil
+				},
+				types.Float,
+				infoBuilder{
+					info: "Returns the area of the given geography in meters^2.",
+				},
+			),
+			geometryOverload1(
+				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+					ret, err := geomfn.Area(g.Geometry)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDFloat(tree.DFloat(ret)), nil
+				},
+				types.Float,
+				infoBuilder{
+					info:         "Returns the area of the given geometry.",
+					libraryUsage: usesGEOS,
+				},
+			),
+		)...,
 	),
 	"st_length": makeBuiltin(
 		defProps(),
-		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				ret, err := geomfn.Length(g.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDFloat(tree.DFloat(ret)), nil
-			},
-			types.Float,
-			infoBuilder{
-				info: `Returns the length of the given geometry.
+		append(
+			geographyOverload1WithUseSpheroid(
+				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+					ret, err := geogfn.Length(g.Geography, useSphereOrSpheroid)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDFloat(tree.DFloat(ret)), nil
+				},
+				types.Float,
+				infoBuilder{
+					info: "Returns the length of the given geography in meters.",
+				},
+			),
+			geometryOverload1(
+				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+					ret, err := geomfn.Length(g.Geometry)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDFloat(tree.DFloat(ret)), nil
+				},
+				types.Float,
+				infoBuilder{
+					info: `Returns the length of the given geometry.
 
 Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
-				usesGEOS: true,
-			},
-		),
+					libraryUsage: usesGEOS,
+				},
+			),
+		)...,
 	),
 	"st_perimeter": makeBuiltin(
 		defProps(),
-		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				ret, err := geomfn.Perimeter(g.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDFloat(tree.DFloat(ret)), nil
-			},
-			types.Float,
-			infoBuilder{
-				info: `Returns the perimeter of the given geometry.
+		append(
+			geographyOverload1WithUseSpheroid(
+				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+					ret, err := geogfn.Perimeter(g.Geography, useSphereOrSpheroid)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDFloat(tree.DFloat(ret)), nil
+				},
+				types.Float,
+				infoBuilder{
+					info: "Returns the perimeter of the given geography in meters.",
+				},
+			),
+			geometryOverload1(
+				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+					ret, err := geomfn.Perimeter(g.Geometry)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDFloat(tree.DFloat(ret)), nil
+				},
+				types.Float,
+				infoBuilder{
+					info: `Returns the perimeter of the given geometry in meters.
 
 Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
-				usesGEOS: true,
-			},
-		),
+					libraryUsage: usesGEOS,
+				},
+			),
+		)...,
 	),
 
 	//
@@ -656,10 +724,55 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			},
 			types.Float,
 			infoBuilder{
-				info:     `Returns the distance between the given geometries.`,
-				usesGEOS: true,
+				info:         `Returns the distance between the given geometries.`,
+				libraryUsage: usesGEOS,
 			},
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography_a", types.Geography},
+				{"geography_b", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				b := args[1].(*tree.DGeography)
+				ret, err := geogfn.Distance(a.Geography, b.Geography, geogfn.UseSpheroid)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			Info: infoBuilder{
+				info:         "Returns the distance in meters between geography_a and geography_b." + usesSpheroidMessage,
+				libraryUsage: usesGeographicLib,
+				canUseIndex:  true,
+			}.String(),
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography_a", types.Geography},
+				{"geography_b", types.Geography},
+				{"use_spheroid", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				b := args[1].(*tree.DGeography)
+				useSpheroid := args[2].(*tree.DBool)
+
+				ret, err := geogfn.Distance(a.Geography, b.Geography, toUseSphereOrSpheroid(useSpheroid))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			Info: infoBuilder{
+				info:         "Returns the distance in meters between geography_a and geography_b.",
+				libraryUsage: usesGeographicLib | usesS2,
+				canUseIndex:  true,
+			}.String(),
+		},
 	),
 
 	//
@@ -671,9 +784,17 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		geometryOverload2BinaryPredicate(
 			geomfn.Covers,
 			infoBuilder{
-				info:        "Returns true if no point in geometry_b is outside geometry_a.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				info:         "Returns true if no point in geometry_b is outside geometry_a.",
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
+			},
+		),
+		geographyOverload2BinaryPredicate(
+			geogfn.Covers,
+			infoBuilder{
+				info:         `Returns true if no point in geography_b is outside geography_a.`,
+				libraryUsage: usesS2,
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -682,9 +803,18 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		geometryOverload2BinaryPredicate(
 			geomfn.CoveredBy,
 			infoBuilder{
-				info:        "Returns true if no point in geometry_a is outside geometry_b.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				info:         `Returns true if no point in geometry_a is outside geometry_b`,
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
+			},
+		),
+		geographyOverload2BinaryPredicate(
+			geogfn.CoveredBy,
+			infoBuilder{
+				info:         `Returns true if no point in geography_a is outside geography_b.`,
+				libraryUsage: usesS2,
+				precision:    "1cm",
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -695,8 +825,8 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			infoBuilder{
 				info: "Returns true if no points of geometry_b lie in the exterior of geometry_a, " +
 					"and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -705,11 +835,65 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		geometryOverload2BinaryPredicate(
 			geomfn.Crosses,
 			infoBuilder{
-				info:        "Returns true if geometry_a has some - but not all - interior points in common with geometry_b.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				info:         "Returns true if geometry_a has some - but not all - interior points in common with geometry_b.",
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
 			},
 		),
+	),
+	"st_dwithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography_a", types.Geography},
+				{"geography_b", types.Geography},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				b := args[1].(*tree.DGeography)
+				dist := args[2].(*tree.DFloat)
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), geogfn.UseSpheroid)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info:         "Returns true if any of geography_a is within distance meters of geography_b." + usesSpheroidMessage,
+				libraryUsage: usesGeographicLib,
+				precision:    "1cm",
+				canUseIndex:  true,
+			}.String(),
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography_a", types.Geography},
+				{"geography_b", types.Geography},
+				{"distance", types.Float},
+				{"use_spheroid", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				b := args[1].(*tree.DGeography)
+				dist := args[2].(*tree.DFloat)
+				useSpheroid := args[3].(*tree.DBool)
+
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), toUseSphereOrSpheroid(useSpheroid))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info:         "Returns true if any of geography_a is within distance meters of geography_b.",
+				libraryUsage: usesGeographicLib | usesS2,
+				precision:    "1cm",
+				canUseIndex:  true,
+			}.String(),
+		},
 	),
 	"st_equals": makeBuiltin(
 		defProps(),
@@ -718,8 +902,8 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			infoBuilder{
 				info: "Returns true if geometry_a is spatially equal to geometry_b, " +
 					"i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -728,9 +912,19 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		geometryOverload2BinaryPredicate(
 			geomfn.Intersects,
 			infoBuilder{
-				info:        "Returns true if geometry_a shares any portion of space with geometry_b.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				info:         "Returns true if geometry_a shares any portion of space with geometry_b.",
+				libraryUsage: usesGEOS,
+				precision:    "1cm",
+				canUseIndex:  true,
+			},
+		),
+		geographyOverload2BinaryPredicate(
+			geogfn.Intersects,
+			infoBuilder{
+				info:         `Returns true if geography_a shares any portion of space with geography_b.`,
+				libraryUsage: usesS2,
+				precision:    "1cm",
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -741,8 +935,8 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			infoBuilder{
 				info: "Returns true if geometry_a intersects but does not completely contain geometry_b, or vice versa. " +
 					`"Does not completely" implies ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = false.`,
-				usesGEOS:    true,
-				canUseIndex: true,
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -753,8 +947,8 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			infoBuilder{
 				info: "Returns true if the only points in common between geometry_a and geometry_b are on the boundary. " +
 					"Note points do not touch other points.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -763,9 +957,9 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		geometryOverload2BinaryPredicate(
 			geomfn.Within,
 			infoBuilder{
-				info:        "Returns true if geometry_a is completely inside geometry_b.",
-				usesGEOS:    true,
-				canUseIndex: true,
+				info:         "Returns true if geometry_a is completely inside geometry_b.",
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
 			},
 		),
 	),
@@ -784,25 +978,6 @@ func geometryOverload1(
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			a := args[0].(*tree.DGeometry)
-			return f(ctx, a)
-		},
-		Info: ib.String(),
-	}
-}
-
-// geographyOverload1 hides the boilerplate for builtins operating on one geography.
-func geographyOverload1(
-	f func(*tree.EvalContext, *tree.DGeography) (tree.Datum, error),
-	returnType *types.T,
-	ib infoBuilder,
-) tree.Overload {
-	return tree.Overload{
-		Types: tree.ArgTypes{
-			{"geography", types.Geography},
-		},
-		ReturnType: tree.FixedReturnType(returnType),
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			a := args[0].(*tree.DGeography)
 			return f(ctx, a)
 		},
 		Info: ib.String(),
@@ -846,6 +1021,113 @@ func geometryOverload2BinaryPredicate(
 		types.Bool,
 		ib,
 	)
+}
+
+// geographyOverload1 hides the boilerplate for builtins operating on one geography.
+func geographyOverload1(
+	f func(*tree.EvalContext, *tree.DGeography) (tree.Datum, error),
+	returnType *types.T,
+	ib infoBuilder,
+) tree.Overload {
+	return tree.Overload{
+		Types: tree.ArgTypes{
+			{"geography", types.Geography},
+		},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			a := args[0].(*tree.DGeography)
+			return f(ctx, a)
+		},
+		Info: ib.String(),
+	}
+}
+
+// geographyOverload1WithUseSpheroid hides the boilerplate for builtins operating on one geography
+// with an optional spheroid argument.
+func geographyOverload1WithUseSpheroid(
+	f func(*tree.EvalContext, *tree.DGeography, geogfn.UseSphereOrSpheroid) (tree.Datum, error),
+	returnType *types.T,
+	ib infoBuilder,
+) []tree.Overload {
+	infoWithSphereAndSpheroid := ib
+	infoWithSphereAndSpheroid.libraryUsage = usesS2 | usesGeographicLib
+	infoWithSpheroid := ib
+	infoWithSpheroid.info += usesSpheroidMessage
+	infoWithSpheroid.libraryUsage = usesS2
+
+	return []tree.Overload{
+		{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(returnType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				return f(ctx, a, geogfn.UseSpheroid)
+			},
+			Info: infoWithSpheroid.String(),
+		},
+		{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"use_spheroid", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(returnType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				b := args[1].(*tree.DBool)
+				return f(ctx, a, toUseSphereOrSpheroid(b))
+			},
+			Info: infoWithSphereAndSpheroid.String(),
+		},
+	}
+}
+
+// geographyOverload2 hides the boilerplate for builtins operating on two geographys.
+func geographyOverload2(
+	f func(*tree.EvalContext, *tree.DGeography, *tree.DGeography) (tree.Datum, error),
+	returnType *types.T,
+	ib infoBuilder,
+) tree.Overload {
+	return tree.Overload{
+		Types: tree.ArgTypes{
+			{"geography_a", types.Geography},
+			{"geography_b", types.Geography},
+		},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			a := args[0].(*tree.DGeography)
+			b := args[1].(*tree.DGeography)
+			return f(ctx, a, b)
+		},
+		Info: ib.String(),
+	}
+}
+
+// geographyOverload2 hides the boilerplate for builtins operating on two geographys
+// and the overlap wraps a binary predicate.
+func geographyOverload2BinaryPredicate(
+	f func(*geo.Geography, *geo.Geography) (bool, error), ib infoBuilder,
+) tree.Overload {
+	return geographyOverload2(
+		func(_ *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
+			ret, err := f(a.Geography, b.Geography)
+			if err != nil {
+				return nil, err
+			}
+			return tree.MakeDBool(tree.DBool(ret)), nil
+		},
+		types.Bool,
+		ib,
+	)
+}
+
+// toUseSphereOrSpheroid returns whether to use a sphere or spheroid.
+func toUseSphereOrSpheroid(useSpheroid *tree.DBool) geogfn.UseSphereOrSpheroid {
+	if *useSpheroid {
+		return geogfn.UseSpheroid
+	}
+	return geogfn.UseSphere
 }
 
 func initGeoBuiltins() {

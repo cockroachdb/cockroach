@@ -109,7 +109,7 @@ func TestArea(t *testing.T) {
 
 			for _, subTC := range []struct {
 				desc                string
-				useSphereOrSpheroid useSphereOrSpheroid
+				useSphereOrSpheroid UseSphereOrSpheroid
 				expected            float64
 			}{
 				{"sphere", UseSphere, tc.sphere.expectedArea},
@@ -140,7 +140,7 @@ func TestPerimeter(t *testing.T) {
 
 			for _, subTC := range []struct {
 				desc                string
-				useSphereOrSpheroid useSphereOrSpheroid
+				useSphereOrSpheroid UseSphereOrSpheroid
 				expected            float64
 			}{
 				{"sphere", UseSphere, tc.sphere.expectedPerimeter},
@@ -171,7 +171,7 @@ func TestLength(t *testing.T) {
 
 			for _, subTC := range []struct {
 				desc                string
-				useSphereOrSpheroid useSphereOrSpheroid
+				useSphereOrSpheroid UseSphereOrSpheroid
 				expected            float64
 			}{
 				{"sphere", UseSphere, tc.sphere.expectedLength},
