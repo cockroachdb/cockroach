@@ -43,7 +43,7 @@ message TableStatisticProto {
   uint64 row_count = 6;
   // The estimated number of distinct values of the columns in ColumnIDs.
   uint64 distinct_count = 7;
-  // The number of rows that have a NULL in any of the columns in ColumnIDs.
+  // The number of rows that have a NULL in all of the columns in ColumnIDs.
   uint64 null_count = 8;
   // Histogram (if available)
   HistogramData histogram_data = 9;

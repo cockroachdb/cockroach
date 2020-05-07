@@ -147,8 +147,8 @@ func newSamplerProcessor(
 	s.numRowsCol = len(outTypes)
 	outTypes = append(outTypes, types.Int)
 
-	// An INT column indicating the number of rows that have a NULL in any sketch
-	// column.
+	// An INT column indicating the number of rows that have a NULL in all sketch
+	// columns.
 	s.numNullsCol = len(outTypes)
 	outTypes = append(outTypes, types.Int)
 
@@ -306,16 +306,16 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
 				s.sketches[i].sketch.Insert(intbuf[:])
 			} else {
-				var hasNull bool
+				isNull := true
 				buf = buf[:0]
 				for _, col := range s.sketches[i].spec.Columns {
 					buf, err = row[col].Fingerprint(s.outTypes[col], &da, buf)
-					hasNull = hasNull || row[col].IsNull()
+					isNull = isNull && row[col].IsNull()
 					if err != nil {
 						return false, err
 					}
 				}
-				if hasNull {
+				if isNull {
 					s.sketches[i].numNulls++
 				}
 				s.sketches[i].sketch.Insert(buf)

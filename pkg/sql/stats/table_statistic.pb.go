@@ -46,7 +46,7 @@ type TableStatisticProto struct {
 	RowCount uint64 `protobuf:"varint,6,opt,name=row_count,json=rowCount,proto3" json:"row_count,omitempty"`
 	// The estimated number of distinct values of the columns in ColumnIDs.
 	DistinctCount uint64 `protobuf:"varint,7,opt,name=distinct_count,json=distinctCount,proto3" json:"distinct_count,omitempty"`
-	// The number of rows that have a NULL in any of the columns in ColumnIDs.
+	// The number of rows that have a NULL in all of the columns in ColumnIDs.
 	NullCount uint64 `protobuf:"varint,8,opt,name=null_count,json=nullCount,proto3" json:"null_count,omitempty"`
 	// Histogram (if available)
 	HistogramData *HistogramData `protobuf:"bytes,9,opt,name=histogram_data,json=histogramData,proto3" json:"histogram_data,omitempty"`
@@ -56,7 +56,7 @@ func (m *TableStatisticProto) Reset()         { *m = TableStatisticProto{} }
 func (m *TableStatisticProto) String() string { return proto.CompactTextString(m) }
 func (*TableStatisticProto) ProtoMessage()    {}
 func (*TableStatisticProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_table_statistic_a8d57cc4b836a89f, []int{0}
+	return fileDescriptor_table_statistic_9d94c01803960c4f, []int{0}
 }
 func (m *TableStatisticProto) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -647,10 +647,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/stats/table_statistic.proto", fileDescriptor_table_statistic_a8d57cc4b836a89f)
+	proto.RegisterFile("sql/stats/table_statistic.proto", fileDescriptor_table_statistic_9d94c01803960c4f)
 }
 
-var fileDescriptor_table_statistic_a8d57cc4b836a89f = []byte{
+var fileDescriptor_table_statistic_9d94c01803960c4f = []byte{
 	// 459 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x92, 0x3f, 0x6f, 0x9b, 0x40,
 	0x18, 0xc6, 0xb9, 0xc6, 0x89, 0xcd, 0xb9, 0x4e, 0x25, 0xd2, 0x81, 0xba, 0x2a, 0x87, 0x22, 0x55,
