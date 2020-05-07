@@ -12,6 +12,7 @@ package idalloc_test
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -237,5 +238,69 @@ func TestAllocateWithStopper(t *testing.T) {
 
 	if _, err := idAlloc.Allocate(context.Background()); !testutils.IsError(err, "system is draining") {
 		t.Errorf("unexpected error: %+v", err)
+	}
+}
+
+// TestLostWriteAssertion makes sure that the Allocator performs a best-effort
+// detection of counter regressions.
+func TestLostWriteAssertion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s := stop.NewStopper()
+	defer s.Stop(ctx)
+
+	var mu struct {
+		sync.Mutex
+		counter int64
+		fatal   string
+	}
+
+	inc := func(_ context.Context, _ roachpb.Key, inc int64) (new int64, _ error) {
+		mu.Lock()
+		defer mu.Unlock()
+		mu.counter += inc
+		return mu.counter, nil
+	}
+
+	opts := idalloc.Options{
+		Key:         roachpb.Key("foo"),
+		Incrementer: inc,
+		BlockSize:   10,
+		Stopper:     s,
+		Fatalf: func(_ context.Context, format string, args ...interface{}) {
+			mu.Lock()
+			defer mu.Unlock()
+			mu.fatal = fmt.Sprintf(format, args...)
+		},
+	}
+	a, err := idalloc.NewAllocator(opts)
+	require.NoError(t, err)
+
+	// Trigger first allocation.
+	{
+		n, err := a.Allocate(ctx)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+	}
+
+	// Mess with the counter.
+	mu.Lock()
+	mu.counter--
+	mu.Unlock()
+
+	for i := 0; ; i++ {
+		n, err := a.Allocate(ctx)
+		if err != nil {
+			mu.Lock()
+			msg := mu.fatal
+			mu.Unlock()
+			require.Contains(t, msg, "counter corrupt")
+			break
+		}
+		require.EqualValues(t, 2+i, n)
+		if i > 10*int(opts.BlockSize) {
+			t.Fatal("unexpected infinite loop")
+		}
 	}
 }

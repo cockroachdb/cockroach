@@ -12,7 +12,6 @@ package idalloc
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -49,6 +48,7 @@ type Options struct {
 	Incrementer Incrementer
 	BlockSize   uint32
 	Stopper     *stop.Stopper
+	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.Fatalf
 }
 
 // An Allocator is used to increment a key in allocation blocks of arbitrary
@@ -69,6 +69,9 @@ type Allocator struct {
 func NewAllocator(opts Options) (*Allocator, error) {
 	if opts.BlockSize == 0 {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", opts.BlockSize)
+	}
+	if opts.Fatalf == nil {
+		opts.Fatalf = log.Fatalf
 	}
 	opts.AmbientCtx.AddLogTag("idalloc", nil)
 	return &Allocator{
@@ -99,6 +102,7 @@ func (ia *Allocator) start() {
 	ia.opts.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(ia.ids)
 
+		var prevValue int64 // for assertions
 		for {
 			var newValue int64
 			var err error
@@ -122,14 +126,25 @@ func (ia *Allocator) start() {
 				)
 			}
 			if err != nil {
-				panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
+				ia.opts.Fatalf(ctx, "unexpectedly exited id allocation retry loop: %s", err)
+				return
+			}
+			if prevValue != 0 && newValue < prevValue+int64(ia.opts.BlockSize) {
+				ia.opts.Fatalf(
+					ctx,
+					"counter corrupt: incremented to %d, expected at least %d + %d",
+					newValue, prevValue, ia.opts.BlockSize,
+				)
+				return
 			}
 
 			end := newValue + 1
 			start := end - int64(ia.opts.BlockSize)
 			if start <= 0 {
-				log.Fatalf(ctx, "allocator initialized with negative key")
+				ia.opts.Fatalf(ctx, "allocator initialized with negative key")
+				return
 			}
+			prevValue = newValue
 
 			// Add all new ids to the channel for consumption.
 			for i := start; i < end; i++ {
