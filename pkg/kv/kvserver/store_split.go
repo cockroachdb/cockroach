@@ -149,10 +149,11 @@ func splitPreApply(
 	// the hazard and ensures that no replica on the RHS is created with an
 	// initialMaxClosed that could be violated by a proposal on the RHS's
 	// initial leaseholder. See #44878.
-	initialMaxClosed := r.maxClosed(ctx)
-	rightRepl.mu.Lock()
-	rightRepl.mu.initialMaxClosed = initialMaxClosed
-	rightRepl.mu.Unlock()
+	if initialMaxClosed, ok := r.maxClosed(ctx); ok {
+		rightRepl.mu.Lock()
+		rightRepl.mu.initialMaxClosed = initialMaxClosed
+		rightRepl.mu.Unlock()
+	}
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
