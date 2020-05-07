@@ -82,8 +82,6 @@ func newAvgAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
 // {{range .WidthOverloads}}
 
 type avg_TYPEAgg struct {
-	done bool
-
 	groups  []bool
 	scratch struct {
 		curIdx int
@@ -121,7 +119,6 @@ func (a *avg_TYPEAgg) Reset() {
 	a.scratch.curCount = 0
 	a.scratch.foundNonNullForCurrentGroup = false
 	a.scratch.nulls.UnsetNulls()
-	a.done = false
 }
 
 func (a *avg_TYPEAgg) CurrentOutputIndex() int {
@@ -136,23 +133,7 @@ func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 }
 
 func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	if a.done {
-		return
-	}
 	inputLen := b.Length()
-	if inputLen == 0 {
-		// The aggregation is finished. Flush the last value. If we haven't found
-		// any non-nulls for this group so far, the output for this group should be
-		// NULL.
-		if !a.scratch.foundNonNullForCurrentGroup {
-			a.scratch.nulls.SetNull(a.scratch.curIdx)
-		} else {
-			_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
-		}
-		a.scratch.curIdx++
-		a.done = true
-		return
-	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	if nulls.MaybeHasNulls() {
@@ -180,6 +161,18 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *avg_TYPEAgg) Flush() {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should be
+	// NULL.
+	if !a.scratch.foundNonNullForCurrentGroup {
+		a.scratch.nulls.SetNull(a.scratch.curIdx)
+	} else {
+		_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
+	}
+	a.scratch.curIdx++
 }
 
 func (a *avg_TYPEAgg) HandleEmptyInputScalar() {

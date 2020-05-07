@@ -108,7 +108,6 @@ func new_AGG_TITLEAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, e
 
 type _AGG_TYPEAgg struct {
 	allocator *colmem.Allocator
-	done      bool
 	groups    []bool
 	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
@@ -142,7 +141,6 @@ func (a *_AGG_TYPEAgg) Reset() {
 	a.curIdx = -1
 	a.foundNonNullForCurrentGroup = false
 	a.nulls.UnsetNulls()
-	a.done = false
 }
 
 func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
@@ -157,28 +155,7 @@ func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 }
 
 func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	if a.done {
-		return
-	}
 	inputLen := b.Length()
-	if inputLen == 0 {
-		// The aggregation is finished. Flush the last value. If we haven't found
-		// any non-nulls for this group so far, the output for this group should
-		// be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			a.allocator.PerformOperation(
-				[]coldata.Vec{a.vec},
-				func() {
-					execgen.SET(a.col, a.curIdx, a.curAgg)
-				},
-			)
-		}
-		a.curIdx++
-		a.done = true
-		return
-	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TYPE(), vec.Nulls()
 	a.allocator.PerformOperation(
@@ -211,6 +188,18 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		},
 	)
+}
+
+func (a *_AGG_TYPEAgg) Flush() {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(a.curIdx)
+	} else {
+		execgen.SET(a.col, a.curIdx, a.curAgg)
+	}
+	a.curIdx++
 }
 
 func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {

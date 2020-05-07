@@ -49,7 +49,6 @@ func newBool_OP_TYPEAgg(allocator *colmem.Allocator) aggregateFunc {
 }
 
 type bool_OP_TYPEAgg struct {
-	done       bool
 	sawNonNull bool
 
 	groups []bool
@@ -74,7 +73,6 @@ func (b *bool_OP_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 func (b *bool_OP_TYPEAgg) Reset() {
 	b.curIdx = -1
 	b.nulls.UnsetNulls()
-	b.done = false
 	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR aggregate.
 	// For bool_and the _DEFAULT_VAL is true and for bool_or the _DEFAULT_VAL is false.
 	b.curAgg = _DEFAULT_VAL
@@ -92,20 +90,7 @@ func (b *bool_OP_TYPEAgg) SetOutputIndex(idx int) {
 }
 
 func (b *bool_OP_TYPEAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
-	if b.done {
-		return
-	}
 	inputLen := batch.Length()
-	if inputLen == 0 {
-		if !b.sawNonNull {
-			b.nulls.SetNull(b.curIdx)
-		} else {
-			b.vec[b.curIdx] = b.curAgg
-		}
-		b.curIdx++
-		b.done = true
-		return
-	}
 	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
 	col, nulls := vec.Bool(), vec.Nulls()
 	if sel != nil {
@@ -119,6 +104,15 @@ func (b *bool_OP_TYPEAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 			_ACCUMULATE_BOOLEAN(b, nulls, i)
 		}
 	}
+}
+
+func (b *bool_OP_TYPEAgg) Flush() {
+	if !b.sawNonNull {
+		b.nulls.SetNull(b.curIdx)
+	} else {
+		b.vec[b.curIdx] = b.curAgg
+	}
+	b.curIdx++
 }
 
 func (b *bool_OP_TYPEAgg) HandleEmptyInputScalar() {
