@@ -223,8 +223,15 @@ func (p *planner) MemberOfWithAdminOption(
 
 	// Lookup table version.
 	objDesc, err := p.PhysicalSchemaAccessor().GetObjectDesc(
-		ctx, p.txn, p.ExecCfg().Settings, p.ExecCfg().Codec, &roleMembersTableName,
-		p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
+		ctx,
+		p.txn,
+		p.ExecCfg().Settings,
+		p.ExecCfg().Codec,
+		roleMembersTableName.Catalog(),
+		roleMembersTableName.Schema(),
+		roleMembersTableName.Table(),
+		p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -278,7 +278,7 @@ func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.O
 	}
 }
 
-// Implements the tree.TableNameExistingResolver interface.
+// Implements the tree.ObjectNameExistingResolver interface.
 func (r fkResolver) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
@@ -297,7 +297,7 @@ func (r fkResolver) LookupObject(
 	return false, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)", obName, suggestions)
 }
 
-// Implements the tree.TableNameTargetResolver interface.
+// Implements the tree.ObjectNameTargetResolver interface.
 func (r fkResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
