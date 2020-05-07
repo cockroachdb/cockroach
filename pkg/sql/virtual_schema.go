@@ -313,8 +313,10 @@ func (e virtualDefEntry) getPlanInfo(
 	for i := range e.desc.Columns {
 		col := &e.desc.Columns[i]
 		columns = append(columns, sqlbase.ResultColumn{
-			Name: col.Name,
-			Typ:  col.Type,
+			Name:           col.Name,
+			Typ:            col.Type,
+			TableID:        table.GetID(),
+			PGAttributeNum: col.GetLogicalColumnID(),
 		})
 	}
 
