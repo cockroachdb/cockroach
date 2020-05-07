@@ -60,7 +60,7 @@ select
       ├── (i:2 + k:1) > 4 [outer=(1,2)]
       └── (i:2 * 2) >= 3 [outer=(2)]
 
-# Impure function should not be considered constant.
+# Volatile function should not be considered constant.
 norm expect-not=CommuteConstInequality
 SELECT * FROM a WHERE random()::int>a.i+a.i
 ----

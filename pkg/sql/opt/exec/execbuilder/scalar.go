@@ -623,7 +623,7 @@ func (v *fastIsConstVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 
 	switch t := expr.(type) {
 	case *tree.FuncExpr:
-		if t.IsImpure() {
+		if t.Volatility() != tree.VolatilityImmutable {
 			v.isConst = false
 			return false, expr
 		}

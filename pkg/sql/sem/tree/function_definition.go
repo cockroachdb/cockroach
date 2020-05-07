@@ -28,6 +28,29 @@ type FunctionDefinition struct {
 	FunctionProperties
 }
 
+// Volatility indicates whether the result of a function is dependent *only*
+// on the values of its explicit arguments, or can change due to outside factors
+// (such as parameter variables or table contents).
+//
+// This matches the postgres definition of volatility.
+//
+// NOTE: functions having side-effects, such as setval(),
+// must be labeled volatile to ensure they will not get optimized away,
+// even if the actual return value is not changeable.
+type Volatility byte
+
+const (
+	// VolatilityImmutable indicates the builtin result never changes for a
+	// given input.
+	VolatilityImmutable Volatility = 'i'
+	// VolatilityStable indicates the builtin result never changes during
+	// a given scan.
+	VolatilityStable Volatility = 's'
+	// VolatilityVolatile indicates the builtin result can change even
+	// within a scan. These functions are also "impure".
+	VolatilityVolatile Volatility = 'v'
+)
+
 // FunctionProperties defines the properties of the built-in
 // functions that are common across all overloads.
 type FunctionProperties struct {
@@ -57,13 +80,10 @@ type FunctionProperties struct {
 	// aggregate functions.
 	NeedsRepeatedEvaluation bool
 
-	// Impure is set to true when a function potentially returns a
-	// different value when called in the same statement with the same
-	// parameters. e.g.: random(), clock_timestamp(). Some functions
-	// like now() return the same value in the same statement, but
-	// different values in separate statements, and should not be marked
-	// as impure.
-	Impure bool
+	// Volatility signifies whether the given function is volatile.
+	// NOTE(otan): This should technically be per overload, but will
+	// get the job done for the majority of the cases we care about.
+	Volatility Volatility
 
 	// DistsqlBlacklist is set to true when a function depends on
 	// members of the EvalContext that are not marshaled by DistSQL
