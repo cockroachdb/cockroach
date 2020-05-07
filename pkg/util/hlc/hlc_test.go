@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -539,7 +539,7 @@ func TestResetAndRefreshHLCUpperBound(t *testing.T) {
 			// Test Reset Upper Bound
 			err = c.ResetHLCUpperBound(persistFn)
 			a.True(
-				test.persistErr == err,
+				errors.Is(test.persistErr, err),
 				fmt.Sprintf(
 					"expected err %v not equal to actual err %v",
 					test.persistErr,

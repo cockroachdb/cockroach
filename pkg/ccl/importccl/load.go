@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // TestingGetDescriptorFromDB is a wrapper for getDescriptorFromDB.
@@ -74,7 +74,7 @@ func getDescriptorFromDB(
 			keys.RootNamespaceID,
 			dbName,
 		).Scan(&dbDescBytes); err != nil {
-			if err == gosql.ErrNoRows {
+			if errors.Is(err, gosql.ErrNoRows) {
 				continue
 			}
 			return nil, errors.Wrap(err, "fetch database descriptor")

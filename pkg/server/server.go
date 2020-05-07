@@ -76,11 +76,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -637,9 +637,15 @@ type grpcGatewayServer interface {
 // the main Cockroach port or the HTTP port, so that the CLI can instruct the
 // user on what might have gone wrong.
 type ListenError struct {
-	error
-	Addr string
+	cause error
+	Addr  string
 }
+
+// Error implements error.
+func (l *ListenError) Error() string { return l.cause.Error() }
+
+// Unwrap is because ListenError is a wrapper.
+func (l *ListenError) Unwrap() error { return l.cause }
 
 // inspectEngines goes through engines and populates in initDiskState. It also
 // calls SynthesizeClusterVersionFromEngines, which selects and backfills the
@@ -656,7 +662,7 @@ func inspectEngines(
 
 	for _, eng := range engines {
 		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
-		if _, notBootstrapped := err.(*kvserver.NotBootstrappedError); notBootstrapped {
+		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
 			state.newEngines = append(state.newEngines, eng)
 			continue
 		} else if err != nil {
@@ -1242,10 +1248,10 @@ func (s *Server) Start(ctx context.Context) error {
 		// Note that we're not checking whether the node is already bootstrapped;
 		// if this is the case, Bootstrap will simply fail.
 		_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
-		switch err {
-		case nil:
+		switch {
+		case err == nil:
 			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
-		case ErrClusterInitialized:
+		case errors.Is(err, ErrClusterInitialized):
 		default:
 			// Process is shutting down.
 		}
@@ -1934,7 +1940,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			//      -v http://localhost:8080/favicon.ico > /dev/null
 			//
 			// which results in a 304 Not Modified.
-			if err := gzw.Close(); err != nil && err != http.ErrBodyNotAllowed {
+			if err := gzw.Close(); err != nil && !errors.Is(err, http.ErrBodyNotAllowed) {
 				ctx := s.AnnotateCtx(r.Context())
 				log.Warningf(ctx, "error closing gzip response writer: %v", err)
 			}
@@ -2064,8 +2070,8 @@ func listen(
 ) (net.Listener, error) {
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
-		return nil, ListenError{
-			error: err,
+		return nil, &ListenError{
+			cause: err,
 			Addr:  *addr,
 		}
 	}

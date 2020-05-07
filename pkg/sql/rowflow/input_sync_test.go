@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func TestOrderedSync(t *testing.T) {

@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 type interceptingTransport struct {
@@ -174,7 +174,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		if _, err := sqlDB.Exec(`INSERT INTO test.t (v) VALUES (1)`); ambiguousSuccess {
-			if pqErr, ok := err.(*pq.Error); ok {
+			if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 				if pqErr.Code != pgcode.StatementCompletionUnknown {
 					t.Errorf("expected code %q, got %q (err: %s)",
 						pgcode.StatementCompletionUnknown, pqErr.Code, err)

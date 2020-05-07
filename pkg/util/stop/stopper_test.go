@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -199,7 +199,7 @@ func TestStopperQuiesce(t *testing.T) {
 			// Wait until Quiesce() is called.
 			<-qc
 			err := thisStopper.RunTask(ctx, "test", func(context.Context) {})
-			if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
+			if !errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)) {
 				t.Error(err)
 			}
 			// Make the stoppers call Stop().
@@ -407,15 +407,15 @@ func TestStopperWithCancel(t *testing.T) {
 	if err := ctx2.Err(); err != nil {
 		t.Fatalf("should not be canceled: %v", err)
 	}
-	if err := ctx3.Err(); err != context.Canceled {
+	if err := ctx3.Err(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("should be canceled: %v", err)
 	}
-	if err := ctx4.Err(); err != context.Canceled {
+	if err := ctx4.Err(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("should be canceled: %v", err)
 	}
 
 	s.Quiesce(ctx)
-	if err := ctx1.Err(); err != context.Canceled {
+	if err := ctx1.Err(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("should be canceled: %v", err)
 	}
 	if err := ctx2.Err(); err != nil {
@@ -423,7 +423,7 @@ func TestStopperWithCancel(t *testing.T) {
 	}
 
 	s.Stop(ctx)
-	if err := ctx2.Err(); err != context.Canceled {
+	if err := ctx2.Err(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("should be canceled: %v", err)
 	}
 }
@@ -457,10 +457,10 @@ func TestStopperWithCancelConcurrent(t *testing.T) {
 		}()
 		wg.Wait()
 
-		if err := ctx1.Err(); err != context.Canceled {
+		if err := ctx1.Err(); !errors.Is(err, context.Canceled) {
 			t.Errorf("should be canceled: %v", err)
 		}
-		if err := ctx2.Err(); err != context.Canceled {
+		if err := ctx2.Err(); !errors.Is(err, context.Canceled) {
 			t.Errorf("should be canceled: %v", err)
 		}
 	}
@@ -598,7 +598,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 		context.Background(), "test", sem, false /* wait */, func(_ context.Context) {
 		},
 	)
-	if err != stop.ErrThrottled {
+	if !errors.Is(err, stop.ErrThrottled) {
 		t.Fatalf("expected %v; got %v", stop.ErrThrottled, err)
 	}
 }
@@ -652,7 +652,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	if err := s.RunAsyncTask(ctx, "test", func(ctx context.Context) {
 		for i := 0; i < maxConcurrency*2; i++ {
 			if err := s.RunLimitedAsyncTask(ctx, "test", sem, true, f); err != nil {
-				if err != context.Canceled {
+				if !errors.Is(err, context.Canceled) {
 					t.Fatal(err)
 				}
 				atomic.AddInt32(&workersCanceled, 1)

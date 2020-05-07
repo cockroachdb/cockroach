@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -288,7 +288,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Wait for the connection.
 	testutils.SucceedsSoon(t, func() error {
 		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
-		if err != nil && err != ErrNotHeartbeated {
+		if err != nil && !errors.Is(err, ErrNotHeartbeated) {
 			t.Fatal(err)
 		}
 		return err
@@ -343,7 +343,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := clientCtx.TestingConnHealth(lisNonExistentConnection.Addr().String(), 3); err != ErrNotHeartbeated {
+	if err := clientCtx.TestingConnHealth(lisNonExistentConnection.Addr().String(), 3); !errors.Is(err, ErrNotHeartbeated) {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 	// The connection to Node 3 on the lisNonExistentConnection should be
@@ -353,7 +353,7 @@ func TestHeartbeatHealth(t *testing.T) {
 			1 /* initializing */, 1 /* nominal */, 0 /* failed */)
 	})
 
-	if err := clientCtx.TestingConnHealth(clientCtx.Addr, clientNodeID); err != ErrNotHeartbeated {
+	if err := clientCtx.TestingConnHealth(clientCtx.Addr, clientNodeID); !errors.Is(err, ErrNotHeartbeated) {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 
@@ -362,7 +362,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// an internal server has been registered.
 	clientCtx.SetLocalInternalServer(&internalServer{})
 
-	if err := clientCtx.TestingConnHealth(clientCtx.Addr, clientNodeID); err != ErrNotHeartbeated {
+	if err := clientCtx.TestingConnHealth(clientCtx.Addr, clientNodeID); !errors.Is(err, ErrNotHeartbeated) {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 	if err := clientCtx.TestingConnHealth(clientCtx.AdvertiseAddr, clientNodeID); err != nil {
@@ -559,7 +559,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		// ErrNotHeartbeated, but there are brief periods during which we
 		// could get one of the grpc errors below (while the old
 		// connection is in the middle of closing).
-		if err == ErrNotHeartbeated {
+		if errors.Is(err, ErrNotHeartbeated) {
 			return true
 		}
 		// The expected code here is Unavailable, but at least on OSX you can also get

@@ -13,6 +13,8 @@ package sysutil
 import (
 	"os/exec"
 	"testing"
+
+	"github.com/cockroachdb/errors"
 )
 
 func TestExitStatus(t *testing.T) {
@@ -21,8 +23,8 @@ func TestExitStatus(t *testing.T) {
 	if err == nil {
 		t.Fatalf("%s did not return error", cmd.Args)
 	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("%s returned error of type %T, but expected *exec.ExitError", cmd.Args, err)
 	}
 	if status := ExitStatus(exitErr); status != 42 {

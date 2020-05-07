@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // bufferSize is the size of the buffer used by PartitionableConn. Writes to a
@@ -382,7 +382,7 @@ func (c *PartitionableConn) copyFromBuffer(
 			}
 		} else if err == nil {
 			err = io.EOF
-		} else if err == errEAgain {
+		} else if errors.Is(err, errEAgain) {
 			continue
 		}
 		if err != nil {

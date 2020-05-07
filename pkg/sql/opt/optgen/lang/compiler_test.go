@@ -11,13 +11,13 @@
 package lang
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 func TestCompiler(t *testing.T) {

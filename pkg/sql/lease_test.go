@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1017,8 +1017,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	checkDeadlineErr := func(err error, t *testing.T) {
-		pqe, ok := err.(*pq.Error)
-		if !ok || pqe.Code != pgcode.SerializationFailure ||
+		var pqe (*pq.Error)
+		if !errors.As(err, &pqe) || pqe.Code != pgcode.SerializationFailure ||
 			!testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
 			t.Fatalf("expected deadline exceeded, got: %v", err)
 		}

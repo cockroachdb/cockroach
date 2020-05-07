@@ -40,9 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
-	"github.com/pkg/errors"
 )
 
 const (

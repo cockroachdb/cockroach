@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
 
@@ -386,7 +387,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				roachpb.MakeValueFromBytes([]byte("it")),
 				&txn,
 			); err != nil {
-				if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
+				if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -759,7 +760,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					roachpb.MakeValueFromBytes([]byte("tt")),
 					&txn,
 				); err != nil {
-					if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
+					if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 						t.Fatalf("%+v", err)
 					}
 				}

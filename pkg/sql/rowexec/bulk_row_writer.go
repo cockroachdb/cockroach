@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // CTASPlanResultTypes is the result types for EXPORT plans.
@@ -139,7 +139,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
 				if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					if _, ok := err.(storagebase.DuplicateKeyError); ok {
+					if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
 						return errors.WithStack(err)
 					}
 					return err
@@ -148,7 +148,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 		}
 
 		if err := adder.Flush(ctx); err != nil {
-			if err, ok := err.(storagebase.DuplicateKeyError); ok {
+			if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
 				return errors.WithStack(err)
 			}
 			return err

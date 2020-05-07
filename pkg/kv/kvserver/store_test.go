@@ -52,9 +52,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -522,9 +522,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	switch err := errors.Cause(store.Start(ctx, stopper)); err.(type) {
-	case *NotBootstrappedError:
-	default:
+	if err := store.Start(ctx, stopper); !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		t.Errorf("unexpected error initializing un-bootstrapped store: %+v", err)
 	}
 
@@ -714,7 +712,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	st := &storagepb.LeaseStatus{Timestamp: repl1.Clock().Now()}
-	if err = repl1.checkExecutionCanProceed(&roachpb.BatchRequest{}, nil /* g */, st); err != expErr {
+	if err = repl1.checkExecutionCanProceed(&roachpb.BatchRequest{}, nil /* g */, st); !errors.Is(err, expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
 }
@@ -2941,7 +2939,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}
-		if err != expectedErr {
+		if !errors.Is(err, expectedErr) {
 			t.Fatalf("expected error %s, but found %s", err, expectedErr)
 		}
 	}

@@ -22,6 +22,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 func TestUUID(t *testing.T) {
@@ -121,7 +123,7 @@ func TestMust(t *testing.T) {
 		if !ok {
 			t.Fatalf("panicked with %T, want error (%v)", r, sentinel)
 		}
-		if err != sentinel {
+		if !errors.Is(err, sentinel) {
 			t.Fatalf("panicked with %v, want %v", err, sentinel)
 		}
 	}()

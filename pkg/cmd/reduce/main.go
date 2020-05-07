@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -122,12 +123,12 @@ func reduceSQL(path, contains string, workers int, verbose bool) (string, error)
 		}
 		cmd.Stdin = strings.NewReader(sql)
 		out, err := cmd.CombinedOutput()
-		switch err := err.(type) {
-		case *exec.Error:
-			if err.Err == exec.ErrNotFound {
+		switch {
+		case errors.Is(err, (*exec.Error)(nil)):
+			if errors.Is(err, exec.ErrNotFound) {
 				log.Fatal(err)
 			}
-		case *os.PathError:
+		case errors.Is(err, (*os.PathError)(nil)):
 			log.Fatal(err)
 		}
 		return containsRE.Match(out)

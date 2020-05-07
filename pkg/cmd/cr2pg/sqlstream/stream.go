@@ -19,7 +19,7 @@ import (
 	// Include this because the parser assumes builtin functions exist.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Modified from importccl/read_import_pgdump.go.
@@ -74,8 +74,8 @@ func (s *Stream) Next() (tree.Statement, error) {
 		}
 	}
 	if err := s.scan.Err(); err != nil {
-		if err == bufio.ErrTooLong {
-			err = errors.New("line too long")
+		if errors.Is(err, bufio.ErrTooLong) {
+			err = errors.HandledWithMessage(err, "line too long")
 		}
 		return nil, err
 	}

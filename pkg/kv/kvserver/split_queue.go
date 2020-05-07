@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -159,19 +159,16 @@ var _ purgatoryError = unsplittableRangeError{}
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg *config.SystemConfig) error {
 	err := sq.processAttempt(ctx, r, sysCfg)
-	switch errors.Cause(err).(type) {
-	case nil:
-	case *roachpb.ConditionFailedError:
+	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
 		// attempts because splits can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be split.
 		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying")
 		sq.MaybeAddAsync(ctx, r, sq.store.Clock().Now())
-	default:
-		return err
+		return nil
 	}
-	return nil
+	return err
 }
 
 func (sq *splitQueue) processAttempt(

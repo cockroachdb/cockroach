@@ -125,7 +125,7 @@ func (s *Server) ServeWith(
 	for {
 		rw, e := l.Accept()
 		if e != nil {
-			if ne, ok := e.(net.Error); ok && ne.Temporary() {
+			if ne := (net.Error)(nil); errors.As(e, &ne) && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
 				} else {

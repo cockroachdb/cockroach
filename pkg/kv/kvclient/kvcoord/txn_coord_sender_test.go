@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -534,8 +534,8 @@ func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	{
-		err, ok := txn.CPut(ctx, key, []byte("x"), strToValue("born to fail")).(*roachpb.ConditionFailedError)
-		if !ok {
+		err := txn.CPut(ctx, key, []byte("x"), strToValue("born to fail"))
+		if !errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 			t.Fatal(err)
 		}
 	}
@@ -553,7 +553,7 @@ func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 
 func assertTransactionRetryError(t *testing.T, e error) {
 	t.Helper()
-	if retErr, ok := e.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
+	if retErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(e, &retErr) {
 		if !testutils.IsError(retErr, "TransactionRetryError") {
 			t.Fatalf("expected the cause to be TransactionRetryError, but got %s",
 				retErr)
@@ -564,7 +564,7 @@ func assertTransactionRetryError(t *testing.T, e error) {
 }
 
 func assertTransactionAbortedError(t *testing.T, e error) {
-	if retErr, ok := e.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
+	if retErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(e, &retErr) {
 		if !testutils.IsError(retErr, "TransactionAbortedError") {
 			t.Fatalf("expected the cause to be TransactionAbortedError, but got %s",
 				retErr)
@@ -2276,7 +2276,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	// test is interested in demonstrating is that it's not a
 	// TransactionRetryWithProtoRefreshError.
 	_, err := leafTxn.Get(ctx, roachpb.Key("a"))
-	if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
+	if !errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
 		t.Fatalf("expected UnhandledRetryableError(TransactionAbortedError), got: (%T) %v", err, err)
 	}
 }

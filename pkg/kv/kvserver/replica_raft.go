@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/raft/tracker"
@@ -387,7 +387,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		err := raftGroup.Step(req.Message)
-		if err == raft.ErrProposalDropped {
+		if errors.Is(err, raft.ErrProposalDropped) {
 			// A proposal was forwarded to this replica but we couldn't propose it.
 			// Swallow the error since we don't have an effective way of signaling
 			// this to the sender.
@@ -467,7 +467,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return unquiesceAndWakeLeader, nil
 	})
 	r.mu.Unlock()
-	if err == errRemoved {
+	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
 		return stats, "", nil
 	} else if err != nil {
@@ -582,10 +582,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 	defer appTask.Close()
 	if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
-		return stats, err.(*nonDeterministicFailure).safeExpl, err
+		return stats, getNonDeterministicFailureExplanation(err), err
 	}
 	if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
-		return stats, err.(*nonDeterministicFailure).safeExpl, err
+		return stats, getNonDeterministicFailureExplanation(err), err
 	}
 
 	// Separate the MsgApp messages from all other Raft message types so that we
@@ -764,15 +764,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if len(rd.CommittedEntries) > 0 {
 		err := appTask.ApplyCommittedEntries(ctx)
 		stats.applyCommittedEntriesStats = sm.moveStats()
-		switch err {
-		case nil:
-		case apply.ErrRemoved:
+		if errors.Is(err, apply.ErrRemoved) {
 			// We know that our replica has been removed. All future calls to
 			// r.withRaftGroup() will return errRemoved so no future Ready objects
 			// will be processed by this Replica.
 			return stats, "", err
-		default:
-			return stats, err.(*nonDeterministicFailure).safeExpl, err
+		} else if err != nil {
+			return stats, getNonDeterministicFailureExplanation(err), err
 		}
 
 		// etcd raft occasionally adds a nil entry (our own commands are never
@@ -865,10 +863,10 @@ func splitMsgApps(msgs []raftpb.Message) (msgApps, otherMsgs []raftpb.Message) {
 // maybeFatalOnRaftReadyErr will fatal if err is neither nil nor
 // apply.ErrRemoved.
 func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (removed bool) {
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		return false
-	case apply.ErrRemoved:
+	case errors.Is(err, apply.ErrRemoved):
 		return true
 	default:
 		log.FatalfDepth(ctx, 1, "%s: %+v", log.Safe(expl), err)
@@ -1193,7 +1191,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
-		}); err != nil && err != errRemoved {
+		}); err != nil && !errors.Is(err, errRemoved) {
 			log.Fatalf(ctx, "%v", err)
 		}
 	}
@@ -1236,7 +1234,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
-	}); err != nil && err != errRemoved {
+	}); err != nil && !errors.Is(err, errRemoved) {
 		log.Fatalf(ctx, "%v", err)
 	}
 }
@@ -1614,7 +1612,7 @@ func (r *Replica) acquireSplitLock(
 		rightReplDesc.GetType() == roachpb.LEARNER)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
 	// has already been removed. This case is handled properly in splitPostApply.
-	if _, isRaftGroupDeletedError := err.(*roachpb.RaftGroupDeletedError); isRaftGroupDeletedError {
+	if errors.HasType(err, (*roachpb.RaftGroupDeletedError)(nil)) {
 		return func() {}, nil
 	}
 	if err != nil {
@@ -1815,4 +1813,11 @@ func maybeCampaignAfterConfChange(
 		log.VEventf(ctx, 3, "leader got removed by conf change; campaigning")
 		_ = raftGroup.Campaign()
 	}
+}
+
+func getNonDeterministicFailureExplanation(err error) string {
+	if nd := (*nonDeterministicFailure)(nil); errors.As(err, &nd) {
+		return nd.safeExpl
+	}
+	return "???"
 }

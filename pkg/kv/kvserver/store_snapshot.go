@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	crdberrors "github.com/cockroachdb/errors"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 )
@@ -429,7 +429,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				}
 				return nil
 			}); err != nil {
-				if errors.Cause(err) == errSideloadedFileNotFound {
+				if errors.Is(err, errSideloadedFileNotFound) {
 					// We're creating the Raft snapshot based on a snapshot of
 					// the engine, but the Raft log may since have been
 					// truncated and corresponding on-disk sideloaded payloads

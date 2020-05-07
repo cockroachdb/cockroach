@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -82,7 +82,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		var found bool
 		for _, repl := range repls {
 			resp, pErr := repl.Send(ctx, baWrite)
-			if _, ok := pErr.GoError().(*roachpb.NotLeaseHolderError); ok {
+			if errors.HasType(pErr.GoError(), (*roachpb.NotLeaseHolderError)(nil)) {
 				continue
 			} else if pErr != nil {
 				t.Fatal(pErr)

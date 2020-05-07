@@ -33,13 +33,14 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 const modeUsage = `strip:

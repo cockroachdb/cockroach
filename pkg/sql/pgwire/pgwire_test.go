@@ -193,13 +193,13 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// because we must wait (since we told the pgServer not to) until the
 		// connection registers the cancellation and closes itself.
 		testutils.SucceedsSoon(t, func() error {
-			if _, err := txn.Exec("SELECT 1"); err != driver.ErrBadConn {
+			if _, err := txn.Exec("SELECT 1"); !errors.Is(err, driver.ErrBadConn) {
 				return errors.Errorf("unexpected error: %v", err)
 			}
 			return nil
 		})
 
-		if err := txn.Commit(); err != driver.ErrBadConn {
+		if err := txn.Commit(); !errors.Is(err, driver.ErrBadConn) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -224,7 +224,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		}
 
 		if err := txn.Commit(); err == nil ||
-			(err != driver.ErrBadConn && !strings.Contains(err.Error(), "connection reset by peer")) {
+			(!errors.Is(err, driver.ErrBadConn) &&
+				!strings.Contains(err.Error(), "connection reset by peer")) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -255,7 +256,7 @@ func TestPGUnwrapError(t *testing.T) {
 	if _, err := db.Exec(stmt); err == nil {
 		t.Fatalf("expected %s to error", stmt)
 	} else {
-		if _, ok := err.(*pq.Error); !ok {
+		if !errors.HasType(err, (*pq.Error)(nil)) {
 			t.Fatalf("pgwire should be surfacing a pq.Error")
 		}
 	}

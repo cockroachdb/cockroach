@@ -51,7 +51,7 @@ func (pg *Error) SafeDetails() []string {
 // FullError can be used when the hint and/or detail are to be tested.
 func FullError(err error) string {
 	var errString string
-	if pqErr, ok := err.(*pq.Error); ok {
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		errString = formatMsgHintDetail("pq", pqErr.Message, pqErr.Hint, pqErr.Detail)
 	} else {
 		pg := Flatten(err)

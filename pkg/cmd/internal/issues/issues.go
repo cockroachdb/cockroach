@@ -22,8 +22,8 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
-	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )
 
@@ -470,8 +470,8 @@ func (p *poster) parameters() []string {
 }
 
 func isInvalidAssignee(err error) bool {
-	e, ok := errors.Cause(err).(*github.ErrorResponse)
-	if !ok {
+	var e *github.ErrorResponse
+	if !errors.As(err, &e) {
 		return false
 	}
 	if e.Response.StatusCode != 422 {

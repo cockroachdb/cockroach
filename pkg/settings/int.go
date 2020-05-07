@@ -10,7 +10,7 @@
 
 package settings
 
-import "github.com/pkg/errors"
+import "github.com/cockroachdb/errors"
 
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting

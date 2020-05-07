@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -235,7 +235,7 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter fu
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		liveness, err := nl.Self()
-		if err != nil && err != ErrNoLivenessRecord {
+		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
 		err = nl.setDrainingInternal(ctx, liveness, drain, reporter)
@@ -318,7 +318,7 @@ func (nl *NodeLiveness) SetDecommissioning(
 
 	for {
 		changeCommitted, err := attempt()
-		if errors.Cause(err) == errChangeDecommissioningFailed {
+		if errors.Is(err, errChangeDecommissioningFailed) {
 			continue // expected when epoch incremented
 		}
 		return changeCommitted, err
@@ -366,7 +366,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 		if log.V(1) {
 			log.Infof(ctx, "updating liveness record: %v", err)
 		}
-		if err == errNodeDrainingSet {
+		if errors.Is(err, errNodeDrainingSet) {
 			return nil
 		}
 		return err
@@ -478,11 +478,11 @@ func (nl *NodeLiveness) StartHeartbeat(
 					// Retry heartbeat in the event the conditional put fails.
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 						liveness, err := nl.Self()
-						if err != nil && err != ErrNoLivenessRecord {
+						if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 							log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 						}
 						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
-							if err == ErrEpochIncremented {
+							if errors.Is(err, ErrEpochIncremented) {
 								log.Infof(ctx, "%s; retrying", err)
 								continue
 							}
@@ -632,7 +632,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// Otherwise, return error.
 		return ErrEpochIncremented
 	}); err != nil {
-		if err == errNodeAlreadyLive {
+		if errors.Is(err, errNodeAlreadyLive) {
 			nl.metrics.HeartbeatSuccesses.Inc(1)
 			return nil
 		}
@@ -828,7 +828,7 @@ func (nl *NodeLiveness) updateLiveness(
 		}
 		if err := nl.updateLivenessAttempt(ctx, update, oldLiveness, handleCondFailed); err != nil {
 			// Intentionally don't errors.Cause() the error, or we'd hop past errRetryLiveness.
-			if _, ok := err.(*errRetryLiveness); ok {
+			if errors.HasType(err, (*errRetryLiveness)(nil)) {
 				log.Infof(ctx, "retrying liveness update after %s", err)
 				continue
 			}
@@ -848,7 +848,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	// put failures.
 	if !update.ignoreCache {
 		l, err := nl.GetLiveness(update.NodeID)
-		if err != nil && err != ErrNoLivenessRecord {
+		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			return err
 		}
 		if err == nil && l != oldLiveness {
@@ -883,8 +883,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		})
 		return txn.Run(ctx, b)
 	}); err != nil {
-		switch tErr := errors.Cause(err).(type) {
-		case *roachpb.ConditionFailedError:
+		if tErr := (*roachpb.ConditionFailedError)(nil); errors.As(err, &tErr) {
 			if handleCondFailed != nil {
 				if tErr.ActualValue == nil {
 					return handleCondFailed(storagepb.Liveness{})
@@ -895,9 +894,8 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 				}
 				return handleCondFailed(actualLiveness)
 			}
-		case *roachpb.TransactionStatusError:
-			return &errRetryLiveness{err}
-		case *roachpb.AmbiguousResultError:
+		} else if errors.HasType(err, (*roachpb.TransactionStatusError)(nil)) ||
+			errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 			return &errRetryLiveness{err}
 		}
 		return err
@@ -994,7 +992,7 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	defer nl.mu.RUnlock()
 
 	self, err := nl.getLivenessLocked(selfID)
-	if err == ErrNoLivenessRecord {
+	if errors.Is(err, ErrNoLivenessRecord) {
 		return 0
 	}
 	if err != nil {

@@ -12,7 +12,6 @@ package stop
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -345,7 +345,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	} else {
 		alloc, err = sem.TryAcquire(ctx, 1)
 	}
-	if err == quotapool.ErrNotEnoughQuota {
+	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
 		err = ErrThrottled
 	} else if quotapool.HasErrClosed(err) {
 		err = ErrUnavailable

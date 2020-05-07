@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // newTestAllocator creates and returns a new idalloc.Allocator, backed by a
@@ -184,7 +184,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	defer cancel()
 	for i := 0; i < routines; i++ {
 		id, err := idAlloc.Allocate(ctx)
-		if id != 0 || err != context.DeadlineExceeded {
+		if id != 0 || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expected context cancellation, found id=%d, err=%v", id, err)
 		}
 	}

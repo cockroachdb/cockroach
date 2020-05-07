@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 

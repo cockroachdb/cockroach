@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	crdberrors "github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -356,7 +357,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			case *roachpb.ReplicaTooOldError:
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
-					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+					if !errors.HasType(replErr, (*roachpb.RangeNotFoundError)(nil)) {
 						log.Errorf(ctx, "%v", replErr)
 					}
 					return nil
@@ -397,7 +398,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			case *roachpb.RaftGroupDeletedError:
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
-					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+					if !errors.HasType(replErr, (*roachpb.RangeNotFoundError)(nil)) {
 						log.Errorf(ctx, "%v", replErr)
 					}
 					return nil

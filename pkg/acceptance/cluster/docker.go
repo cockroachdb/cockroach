@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -36,7 +37,6 @@ import (
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/go-connections/nat"
 	isatty "github.com/mattn/go-isatty"
-	"github.com/pkg/errors"
 )
 
 // Retrieve the IP address of docker itself.
@@ -388,7 +388,7 @@ func (cli resilientDockerClient) ContainerStart(
 
 		// Keep going if ContainerStart timed out, but client's context is not
 		// expired.
-		if errors.Cause(err) == context.DeadlineExceeded && clientCtx.Err() == nil {
+		if errors.Is(err, context.DeadlineExceeded) && clientCtx.Err() == nil {
 			log.Warningf(clientCtx, "ContainerStart timed out, retrying")
 			continue
 		}

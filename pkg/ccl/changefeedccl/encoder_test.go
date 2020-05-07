@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

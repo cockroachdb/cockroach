@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -139,7 +139,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 			return nil
 		}
 
-		var err storagebase.DuplicateKeyError
+		err := &storagebase.DuplicateKeyError{}
 		err.Key = append(err.Key, key.Key...)
 		err.Value = append(err.Value, value...)
 		return err
@@ -429,7 +429,7 @@ func AddSSTable(
 					return nil
 				}
 				// This range has split -- we need to split the SST to try again.
-				if m, ok := errors.Cause(err).(*roachpb.RangeKeyMismatchError); ok {
+				if m := (*roachpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
 					split := m.MismatchedRange.EndKey.AsRawKey()
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
 					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings)
@@ -451,7 +451,7 @@ func AddSSTable(
 					return nil
 				}
 				// Retry on AmbiguousResult.
-				if _, ok := err.(*roachpb.AmbiguousResultError); ok {
+				if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, i, err)
 					continue
 				}

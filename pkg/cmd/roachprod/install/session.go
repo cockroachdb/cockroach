@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type session interface {

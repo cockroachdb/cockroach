@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type stringMatcher interface {
@@ -399,7 +399,7 @@ func (is *infoStore) combine(
 		// the data in *is is newer than in *delta.
 		if addErr := is.addInfo(key, &infoCopy); addErr == nil {
 			freshCount++
-		} else if addErr != errNotFresh {
+		} else if !errors.Is(addErr, errNotFresh) {
 			err = addErr
 		}
 	}

@@ -128,7 +128,7 @@ func doDrain(
 		hardError, remainingWork, err = doDrainNoTimeout(ctx, c)
 		return err
 	})
-	if _, ok := err.(*contextutil.TimeoutError); ok {
+	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
 		log.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout")
 	}
@@ -255,7 +255,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient) (hardError bool, er
 			}
 		}
 	})
-	if _, ok := err.(*contextutil.TimeoutError); !ok {
+	if !errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
 		hardError = true
 	}
 	return hardError, err

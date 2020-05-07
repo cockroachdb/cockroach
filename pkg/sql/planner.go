@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/pkg/errors"
 )
 
 // extendedEvalContext extends tree.EvalContext with fields that are needed for
@@ -458,7 +458,7 @@ func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
-		if err == errTableAdding {
+		if errors.Is(err, errTableAdding) {
 			return row.TableEntry{IsAdding: true}, nil
 		}
 		return row.TableEntry{}, err

@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // Processor is a common interface implemented by all processors, used by the
@@ -644,8 +644,7 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 				// We only look for UnhandledRetryableErrors. Local reads (which would
 				// be transformed by the Root TxnCoordSender into
 				// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
-				err = errors.Cause(err)
-				if ure, ok := err.(*roachpb.UnhandledRetryableError); ok {
+				if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
 					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
 					if uncertain != nil {
 						continue

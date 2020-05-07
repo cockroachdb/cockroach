@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	flatbuffers "github.com/google/flatbuffers/go"
-	"github.com/pkg/errors"
 )
 
 const (

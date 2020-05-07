@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func TestWriteResumeSpan(t *testing.T) {

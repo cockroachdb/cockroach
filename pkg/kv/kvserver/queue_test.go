@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1061,7 +1061,7 @@ func TestBaseQueueDisable(t *testing.T) {
 	}
 
 	// Add the range directly, bypassing shouldQueue.
-	if _, err := bq.testingAdd(ctx, r, 1.0); err != errQueueDisabled {
+	if _, err := bq.testingAdd(ctx, r, 1.0); !errors.Is(err, errQueueDisabled) {
 		t.Fatal(err)
 	}
 

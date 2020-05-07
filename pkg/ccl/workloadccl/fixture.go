@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"google.golang.org/api/iterator"
 )
@@ -142,7 +142,7 @@ func GetFixture(
 
 			fixtureFolder := generatorToGCSFolder(config, gen)
 			_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
-			if err == iterator.Done {
+			if errors.Is(err, iterator.Done) {
 				notFound = true
 				return errors.Errorf(`fixture not found: %s`, fixtureFolder)
 			} else if err != nil {
@@ -153,7 +153,7 @@ func GetFixture(
 			for _, table := range gen.Tables() {
 				tableFolder := filepath.Join(fixtureFolder, table.Name)
 				_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
-				if err == iterator.Done {
+				if errors.Is(err, iterator.Done) {
 					return errors.Errorf(`fixture table not found: %s`, tableFolder)
 				} else if err != nil {
 					return err
@@ -619,14 +619,14 @@ func ListFixtures(
 	gensPrefix := config.GCSPrefix + `/`
 	for genIter := b.Objects(ctx, &storage.Query{Prefix: gensPrefix, Delimiter: `/`}); ; {
 		gen, err := genIter.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		} else if err != nil {
 			return nil, err
 		}
 		for genConfigIter := b.Objects(ctx, &storage.Query{Prefix: gen.Prefix, Delimiter: `/`}); ; {
 			genConfig, err := genConfigIter.Next()
-			if err == iterator.Done {
+			if errors.Is(err, iterator.Done) {
 				break
 			} else if err != nil {
 				return nil, err

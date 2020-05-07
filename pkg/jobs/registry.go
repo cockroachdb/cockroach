@@ -833,12 +833,12 @@ func (r *Registry) stepThroughStateMachine(
 		if errors.Is(err, retryJobErrorSentinel) {
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
 		}
-		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
-			if err.status != StatusCancelRequested && err.status != StatusPauseRequested {
-				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a running job", *job.ID(), err.status)
+		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
+			if sErr.status != StatusCancelRequested && sErr.status != StatusPauseRequested {
+				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a running job", *job.ID(), sErr.status)
 				return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 			}
-			return err
+			return sErr
 		}
 		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, err)
 	case StatusPauseRequested:
@@ -894,12 +894,12 @@ func (r *Registry) stepThroughStateMachine(
 		if errors.Is(err, retryJobErrorSentinel) {
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
 		}
-		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
-			if err.status != StatusPauseRequested {
-				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a reverting job", *job.ID(), err.status)
+		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
+			if sErr.status != StatusPauseRequested {
+				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a reverting job", *job.ID(), sErr.status)
 				return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 			}
-			return err
+			return sErr
 		}
 		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
 	case StatusFailed:

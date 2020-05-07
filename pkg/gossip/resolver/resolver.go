@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -61,7 +61,7 @@ func SRV(ctx context.Context, name string) ([]string, error) {
 	// "" as the addr and proto forces the direct look up of the name
 	_, recs, err := lookupSRV("", "", name)
 	if err != nil {
-		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.Err == "no such host" {
+		if dnsErr := (*net.DNSError)(nil); errors.As(err, &dnsErr) && dnsErr.Err == "no such host" {
 			return nil, nil
 		}
 

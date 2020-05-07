@@ -16,7 +16,6 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"flag"
 	"fmt"
 	"go/build"
@@ -33,6 +32,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
 

@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // Send executes a command on this range, dispatching it to the
@@ -378,7 +378,7 @@ func (r *Replica) handleIndeterminateCommitError(
 	// stuck transaction. Retry immediately if successful.
 	if _, err := r.store.recoveryMgr.ResolveIndeterminateCommit(ctx, t); err != nil {
 		// Do not propagate ambiguous results; assume success and retry original op.
-		if _, ok := err.(*roachpb.AmbiguousResultError); ok {
+		if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 			return nil
 		}
 		// Propagate new error. Preserve the error index.

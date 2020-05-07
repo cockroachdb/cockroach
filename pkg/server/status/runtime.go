@@ -12,6 +12,7 @@ package status
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -414,7 +415,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 
 	fds := gosigar.ProcFDUsage{}
 	if err := fds.Get(pid); err != nil {
-		if _, ok := err.(gosigar.ErrNotImplemented); ok {
+		if gosigar.IsNotImplemented(err) {
 			if !rsr.fdUsageNotImplemented {
 				rsr.fdUsageNotImplemented = true
 				log.Warningf(ctx, "unable to get file descriptor usage (will not try again): %s", err)
@@ -495,7 +496,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 		staleMsg = "(stale)"
 	}
 	goTotal := ms.Sys - ms.HeapReleased
-	log.Infof(ctx, "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total%s, "+
+	log.Infof(ctx, "%s", log.Safe(fmt.Sprintf("runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total%s, "+
 		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
 		"%s/%s (r/w)net",
 		humanize.IBytes(mem.Resident), numGoroutine,
@@ -504,7 +505,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
 		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
 		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
-	)
+	)))
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC
 

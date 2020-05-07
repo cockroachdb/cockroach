@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 )
 
 func TestErrorAfterCancel(t *testing.T) {
@@ -36,7 +37,7 @@ func TestErrorAfterCancel(t *testing.T) {
 			cancel()
 		}
 
-		if err := g.Wait(); err != expErr {
+		if err := g.Wait(); !errors.Is(err, expErr) {
 			t.Errorf("expected %v, got %v", expErr, err)
 		}
 	})

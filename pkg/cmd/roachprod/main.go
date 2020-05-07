@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/unix"
@@ -290,12 +290,12 @@ type clusterAlreadyExistsError struct {
 	name string
 }
 
-func (e clusterAlreadyExistsError) Error() string {
+func (e *clusterAlreadyExistsError) Error() string {
 	return fmt.Sprintf("cluster %s already exists", e.name)
 }
 
 func newClusterAlreadyExistsError(name string) error {
-	return clusterAlreadyExistsError{name: name}
+	return &clusterAlreadyExistsError{name: name}
 }
 
 var createCmd = &cobra.Command{
@@ -355,7 +355,7 @@ Local Clusters
 			if retErr == nil || clusterName == config.Local {
 				return
 			}
-			if _, ok := retErr.(clusterAlreadyExistsError); ok {
+			if errors.HasType(retErr, (*clusterAlreadyExistsError)(nil)) {
 				return
 			}
 			fmt.Fprintf(os.Stderr, "Cleaning up partially-created cluster (prev err: %s)\n", retErr)

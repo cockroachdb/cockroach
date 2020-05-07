@@ -412,7 +412,7 @@ func (p *Provider) List() (vm.List, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := p.fillNetworkDetails(ctx, &m, nicID); err == vm.ErrBadNetwork {
+		if err := p.fillNetworkDetails(ctx, &m, nicID); errors.Is(err, vm.ErrBadNetwork) {
 			m.Errors = append(m.Errors, err)
 		} else if err != nil {
 			return nil, err
@@ -668,7 +668,8 @@ func (p *Provider) createVNets(
 		if err == nil {
 			return group, true, nil
 		}
-		if detail, ok := err.(autorest.DetailedError); ok {
+		var detail autorest.DetailedError
+		if errors.As(err, &detail) {
 			if code, ok := detail.StatusCode.(int); ok {
 				if code == 404 {
 					return resources.Group{}, false, nil

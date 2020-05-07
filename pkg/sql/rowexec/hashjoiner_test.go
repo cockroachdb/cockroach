@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func TestHashJoiner(t *testing.T) {

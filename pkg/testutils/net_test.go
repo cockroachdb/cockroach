@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // RunEchoServer runs a network server that accepts one connection from ln and

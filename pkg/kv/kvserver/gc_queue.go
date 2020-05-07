@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -472,7 +472,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 							gcq.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
 						}
 					})
-			if errors.Cause(err) == stop.ErrThrottled {
+			if errors.Is(err, stop.ErrThrottled) {
 				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
 				return nil
 			}

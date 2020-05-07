@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -300,6 +300,7 @@ func (cm *CertificateManager) ClientCerts() map[string]*CertInfo {
 }
 
 // Error is the error type for this package.
+// TODO(knz): make this an error wrapper.
 type Error struct {
 	Message string
 	Err     error

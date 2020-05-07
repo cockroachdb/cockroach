@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Move moves a file from a directory to another, while handling
@@ -37,10 +38,9 @@ func isCrossDeviceLinkError(err error) bool {
 	if err == nil {
 		return false
 	}
-	le, ok := err.(*os.LinkError)
-	if !ok {
-		return false
+	var le *os.LinkError
+	if errors.As(err, &le) {
+		return sysutil.IsCrossDeviceLinkErrno(le.Err)
 	}
-
-	return sysutil.IsCrossDeviceLinkErrno(le.Err)
+	return false
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 func TestPrettyPrint(t *testing.T) {
@@ -291,7 +292,7 @@ exp:    %s
 			scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
 			parsed, err := scanner.Scan(keyInfo)
 			if err != nil {
-				if _, ok := err.(*keys.ErrUglifyUnsupported); !ok {
+				if !errors.HasType(err, (*keys.ErrUglifyUnsupported)(nil)) {
 					t.Errorf("%d: %s: %s", i, keyInfo, err)
 				} else if !test.assertRevertSupported {
 					t.Logf("%d: skipping parsing of %s; key is unsupported: %v", i, keyInfo, err)

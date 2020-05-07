@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
@@ -180,7 +180,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 				pd, data := newPropData(false)
 				mlai, err := b.Insert(pd, data)
 				if err != nil {
-					if err == dsErr {
+					if errors.Is(err, dsErr) {
 						return nil
 					}
 					return errors.Wrap(err, "Insert")

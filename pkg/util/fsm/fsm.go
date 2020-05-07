@@ -65,7 +65,7 @@ type TransitionNotFoundError struct {
 	Event Event
 }
 
-func (e TransitionNotFoundError) Error() string {
+func (e *TransitionNotFoundError) Error() string {
 	return "event " + eventName(e.Event) + " inappropriate in current state " + stateName(e.State)
 }
 
@@ -96,11 +96,11 @@ func Compile(p Pattern) Transitions {
 func (t Transitions) apply(a Args) (State, error) {
 	sm, ok := t.expanded[a.Prev]
 	if !ok {
-		return a.Prev, TransitionNotFoundError{State: a.Prev, Event: a.Event}
+		return a.Prev, &TransitionNotFoundError{State: a.Prev, Event: a.Event}
 	}
 	tr, ok := sm[a.Event]
 	if !ok {
-		return a.Prev, TransitionNotFoundError{State: a.Prev, Event: a.Event}
+		return a.Prev, &TransitionNotFoundError{State: a.Prev, Event: a.Event}
 	}
 	if tr.Action != nil {
 		if err := tr.Action(a); err != nil {

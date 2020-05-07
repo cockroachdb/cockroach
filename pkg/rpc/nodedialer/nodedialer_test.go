@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
@@ -129,8 +129,7 @@ func TestConcurrentCancellationAndTimeout(t *testing.T) {
 			time.Sleep(randDuration(time.Millisecond))
 			_, err := nd.Dial(iCtx, 1, rpc.DefaultClass)
 			if err != nil &&
-				err != context.Canceled &&
-				err != context.DeadlineExceeded {
+				!errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
 				t.Errorf("got an unexpected error from Dial: %v", err)
 			}
 			wg.Done()
@@ -178,9 +177,7 @@ func TestDisconnectsTrip(t *testing.T) {
 	errChan := make(chan error, N)
 	shouldTrip := func(err error) bool {
 		return err != nil &&
-			err != context.DeadlineExceeded &&
-			err != context.Canceled &&
-			errors.Cause(err) != circuit.ErrBreakerOpen
+			!errors.IsAny(err, context.DeadlineExceeded, context.Canceled, circuit.ErrBreakerOpen)
 	}
 	var wg sync.WaitGroup
 	for i := 0; i < N; i++ {
