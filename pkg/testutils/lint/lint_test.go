@@ -74,10 +74,14 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 			return scanner.Err()
 		})}, filters...)
 
+	var msgs strings.Builder
 	if err := stream.ForEach(stream.Sequence(filters...), func(s string) {
-		t.Errorf("\n%s", s)
+		fmt.Fprintln(&msgs, s)
 	}); err != nil {
 		t.Error(err)
+	}
+	if msgs.Len() > 0 {
+		t.Errorf("\n%s", strings.ReplaceAll(msgs.String(), "\\n++", "\n"))
 	}
 }
 
