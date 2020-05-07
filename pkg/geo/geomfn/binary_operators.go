@@ -17,5 +17,8 @@ import (
 
 // MinDistance returns the minimum distance between geometries A and B.
 func MinDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
+	if a.SRID() != b.SRID() {
+		return 0, geo.NewMismatchingSRIDsError(a, b)
+	}
 	return geos.MinDistance(a.EWKB(), b.EWKB())
 }

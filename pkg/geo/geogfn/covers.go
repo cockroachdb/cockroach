@@ -40,6 +40,14 @@ import (
 //       'linestring(0.0 0.0, 2.0 0.0)'::geography
 //     );
 func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	return covers(a, b)
+}
+
+// covers is the internal calculation for Covers.
+func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 	aRegions, err := a.AsS2()
 	if err != nil {
 		return false, err
@@ -75,7 +83,10 @@ func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 // CoveredBy returns whether geography A is covered by geography B.
 // See Covers for limitations.
 func CoveredBy(a *geo.Geography, b *geo.Geography) (bool, error) {
-	return Covers(b, a)
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	return covers(b, a)
 }
 
 // regionCovers returns whether aRegion completely covers bRegion.
