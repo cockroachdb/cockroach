@@ -26,68 +26,60 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
-// newCountRowAgg creates a COUNT(*) aggregate, which counts every row in the
-// result unconditionally.
-func newCountRowAgg(allocator *colmem.Allocator) *countAgg {
-	allocator.AdjustMemoryUsage(int64(sizeOfCountAgg))
-	return &countAgg{countRow: true}
+// {{range .}}
+
+func newCount_KINDAgg(allocator *colmem.Allocator) *count_KINDAgg {
+	allocator.AdjustMemoryUsage(int64(sizeOfCount_KINDAgg))
+	return &count_KINDAgg{}
 }
 
-// newCountAgg creates a COUNT(col) aggregate, which counts every row in the
-// result where the value of col is not null.
-func newCountAgg(allocator *colmem.Allocator) *countAgg {
-	allocator.AdjustMemoryUsage(int64(sizeOfCountAgg))
-	return &countAgg{countRow: false}
+// count_KINDAgg supports either COUNT(*) or COUNT(col) aggregate.
+type count_KINDAgg struct {
+	groups []bool
+	vec    []int64
+	nulls  *coldata.Nulls
+	curIdx int
+	curAgg int64
 }
 
-// countAgg supports both the COUNT(*) and COUNT(col) aggregates, which are
-// distinguished by the countRow flag.
-type countAgg struct {
-	groups   []bool
-	vec      []int64
-	nulls    *coldata.Nulls
-	curIdx   int
-	curAgg   int64
-	countRow bool
-}
+var _ aggregateFunc = &count_KINDAgg{}
 
-var _ aggregateFunc = &countAgg{}
+const sizeOfCount_KINDAgg = unsafe.Sizeof(&count_KINDAgg{})
 
-const sizeOfCountAgg = unsafe.Sizeof(&countAgg{})
-
-func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *count_KINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec.Int64()
 	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
-func (a *countAgg) Reset() {
+func (a *count_KINDAgg) Reset() {
 	a.curIdx = -1
 	a.curAgg = 0
 	a.nulls.UnsetNulls()
 }
 
-func (a *countAgg) CurrentOutputIndex() int {
+func (a *count_KINDAgg) CurrentOutputIndex() int {
 	return a.curIdx
 }
 
-func (a *countAgg) SetOutputIndex(idx int) {
+func (a *count_KINDAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
 		a.nulls.UnsetNullsAfter(idx + 1)
 	}
 }
 
-func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *count_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	inputLen := b.Length()
 	sel := b.Selection()
 
+	// {{if not (eq .Kind "Rows")}}
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
-	if !a.countRow && b.ColVec(int(inputIdxs[0])).MaybeHasNulls() {
-		nulls := b.ColVec(int(inputIdxs[0])).Nulls()
+	nulls := b.ColVec(int(inputIdxs[0])).Nulls()
+	if nulls.MaybeHasNulls() {
 		if sel != nil {
 			for _, i := range sel[:inputLen] {
 				_ACCUMULATE_COUNT(a, nulls, i, true)
@@ -97,7 +89,9 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 				_ACCUMULATE_COUNT(a, nulls, i, true)
 			}
 		}
-	} else {
+	} else
+	// {{end}}
+	{
 		if sel != nil {
 			for _, i := range sel[:inputLen] {
 				_ACCUMULATE_COUNT(a, nulls, i, false)
@@ -110,15 +104,20 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
-func (a *countAgg) Flush() {
+func (a *count_KINDAgg) Flush() {
 	a.vec[a.curIdx] = a.curAgg
 	a.curIdx++
 }
 
+func (a *count_KINDAgg) HandleEmptyInputScalar() {
+	a.vec[0] = 0
+}
+
+// {{end}}
+
 // {{/*
 // _ACCUMULATE_COUNT aggregates the value at index i into the count aggregate.
-// _COL_WITH_NULLS indicates whether we have COUNT aggregate (i.e. not
-// COUNT_ROWS) and there maybe NULLs.
+// _COL_WITH_NULLS indicates whether we should be paying attention to NULLs.
 func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS bool) { // */}}
 	// {{define "accumulateCount" -}}
 
@@ -143,7 +142,3 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 
 	// {{/*
 } // */}}
-
-func (a *countAgg) HandleEmptyInputScalar() {
-	a.vec[0] = 0
-}
