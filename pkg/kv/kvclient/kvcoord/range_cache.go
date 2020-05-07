@@ -84,6 +84,11 @@ type RangeDescriptorCache struct {
 	// multiplexed onto the same database lookup. See makeLookupRequestKey
 	// for details on this inference.
 	lookupRequests singleflight.Group
+
+	// coalesced, if not nil, is sent on every time a request is coalesced onto
+	// another in-flight one. Used by tests to block until a lookup request is
+	// blocked on the single-flight querying the db.
+	coalesced chan struct{}
 }
 
 // RangeDescriptorCache implements the kvbase interface.
@@ -268,7 +273,7 @@ func (et *EvictionToken) EvictAndReplace(
 func (rdc *RangeDescriptorCache) LookupRangeDescriptorWithEvictionToken(
 	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
-	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, useReverseScan, nil)
+	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, useReverseScan)
 }
 
 // LookupRangeDescriptor presents a simpler interface for looking up a
@@ -278,7 +283,7 @@ func (rdc *RangeDescriptorCache) LookupRangeDescriptorWithEvictionToken(
 func (rdc *RangeDescriptorCache) LookupRangeDescriptor(
 	ctx context.Context, key roachpb.RKey,
 ) (*roachpb.RangeDescriptor, error) {
-	rd, _, err := rdc.lookupRangeDescriptorInternal(ctx, key, nil, false, nil)
+	rd, _, err := rdc.lookupRangeDescriptorInternal(ctx, key, nil, false)
 	return rd, err
 }
 
@@ -288,20 +293,49 @@ func (rdc *RangeDescriptorCache) LookupRangeDescriptor(
 // added to the inflight request map (with or without merging) or the
 // function finishes. Used for testing.
 func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
-	ctx context.Context,
-	key roachpb.RKey,
-	evictToken *EvictionToken,
-	useReverseScan bool,
-	wg *sync.WaitGroup,
+	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
-	doneWg := func() {
-		if wg != nil {
-			wg.Done()
+	// Retry while we're hitting lookupCoalescingErrors.
+	for {
+		desc, newToken, err := rdc.tryLookupRangeDescriptorInner(ctx, key, evictToken, useReverseScan)
+		if errors.HasType(err, (lookupCoalescingError{})) {
+			log.VEventf(ctx, 2, "bad lookup coalescing; retrying: %s", err)
+			continue
 		}
-		wg = nil
+		if err != nil {
+			return nil, nil, err
+		}
+		return desc, newToken, nil
 	}
-	defer doneWg()
+}
 
+// lookupCoalescingError is returned by tryLookupRangeDescriptorInner() when the
+// descriptor database lookup failed because this request was grouped with
+// another request for another key, and the grouping proved bad since that other
+// request returned a descriptor that doesn't cover our request. The lookup
+// should be retried.
+type lookupCoalescingError struct {
+	// key is the key whose range was being looked-up.
+	key       roachpb.RKey
+	wrongDesc *roachpb.RangeDescriptor
+}
+
+func (e lookupCoalescingError) Error() string {
+	return fmt.Sprintf("key %q not contained in range lookup's "+
+		"resulting descriptor %v", e.key, e.wrongDesc)
+}
+
+func newLookupCoalescingError(key roachpb.RKey, wrongDesc *roachpb.RangeDescriptor) error {
+	return lookupCoalescingError{
+		key:       key,
+		wrongDesc: wrongDesc,
+	}
+}
+
+// tryLookupRangeDescriptorInner can return lookupCoalescingError.
+func (rdc *RangeDescriptorCache) tryLookupRangeDescriptorInner(
+	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
+) (*roachpb.RangeDescriptor, *EvictionToken, error) {
 	rdc.rangeCache.RLock()
 	if desc, _, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
 		rdc.rangeCache.RUnlock()
@@ -315,7 +349,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, "lookup range descriptor: key=%s", key)
+		log.Infof(ctx, "lookup range descriptor: key=%s (reverse: %t)", key, useReverseScan)
 	}
 
 	var prevDesc *roachpb.RangeDescriptor
@@ -384,7 +418,6 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	// be done *after* the request has been added to the lookupRequests group, or
 	// we risk it racing with an inflight request.
 	rdc.rangeCache.RUnlock()
-	doneWg()
 
 	// We only want to wait on context cancellation here if we are not the
 	// leader of the lookupRequest. If we are the leader then we'll wait for
@@ -394,6 +427,11 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	ctxDone := ctx.Done()
 	if leader {
 		ctxDone = nil
+	} else {
+		log.VEvent(ctx, 2, "coalesced range lookup request onto in-flight one")
+		if rdc.coalesced != nil {
+			rdc.coalesced <- struct{}{}
+		}
 	}
 
 	// Wait for the inflight request.
@@ -419,9 +457,15 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		return nil, nil, res.Err
 	}
 
-	// It rarely may be possible that we got grouped in with the wrong
-	// RangeLookup (eg. from a double split), so if we did, return an error with
-	// an unmodified eviction token.
+	// We might get a descriptor that doesn't contain the key we're looking for
+	// because of bad grouping of requests. For example, say we had a stale
+	// [a-z) in the cache who's info is passed into this function as evictToken.
+	// In the meantime the range has been split to [a-m),[m-z). A request for "a"
+	// will be coalesced with a request for "m" in the singleflight, above, but
+	// one of them will get a wrong results. We return an error that will trigger
+	// a retry at a higher level inside the cache. Note that the retry might find
+	// the descriptor it's looking for in the cache if it was pre-fetched by the
+	// original lookup.
 	lookupRes := res.Val.(lookupResult)
 	if desc := lookupRes.desc; desc != nil {
 		containsFn := (*roachpb.RangeDescriptor).ContainsKey
@@ -429,8 +473,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 		}
 		if !containsFn(desc, key) {
-			return nil, evictToken, errors.Errorf("key %q not contained in range lookup's "+
-				"resulting descriptor %v", key, desc)
+			return nil, nil, newLookupCoalescingError(key, desc)
 		}
 	}
 	return lookupRes.desc, lookupRes.evictToken, nil

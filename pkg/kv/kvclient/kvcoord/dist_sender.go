@@ -1864,7 +1864,7 @@ func (ds *DistSender) sendToReplicas(
 
 		ds.metrics.NextReplicaErrCount.Inc(1)
 		curReplica = transport.NextReplica()
-		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica)
+		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica.String())
 		br, err = transport.SendNext(ctx, ba)
 	}
 }
