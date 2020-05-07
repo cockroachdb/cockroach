@@ -177,6 +177,15 @@ func ParseGeography(str string) (*Geography, error) {
 	return NewGeography(spatialObject), nil
 }
 
+// MustParseGeography behaves as ParseGeography, but panics if there is an error.
+func MustParseGeography(str string) *Geography {
+	g, err := ParseGeography(str)
+	if err != nil {
+		panic(err)
+	}
+	return g
+}
+
 // ParseGeographyFromEWKT parses the EWKT into a Geography.
 func ParseGeographyFromEWKT(
 	ewkt geopb.EWKT, srid geopb.SRID, defaultSRIDOverwriteSetting defaultSRIDOverwriteSetting,

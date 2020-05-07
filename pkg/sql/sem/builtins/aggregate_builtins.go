@@ -38,8 +38,8 @@ func initAggregateBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 
-		if !v.props.Impure {
-			panic(fmt.Sprintf("%s: aggregate functions should all be impure, found %v", k, v))
+		if v.props.Volatility != tree.VolatilityVolatile {
+			panic(fmt.Sprintf("%s: aggregate functions should all be volatile, found %v", k, v))
 		}
 		if v.props.Class != tree.AggregateClass {
 			panic(fmt.Sprintf("%s: aggregate functions should be marked with the tree.AggregateClass "+
@@ -68,7 +68,7 @@ func initAggregateBuiltins() {
 }
 
 func aggProps() tree.FunctionProperties {
-	return tree.FunctionProperties{Class: tree.AggregateClass, Impure: true}
+	return tree.FunctionProperties{Class: tree.AggregateClass, Volatility: tree.VolatilityVolatile}
 }
 
 func aggPropsNullableArgs() tree.FunctionProperties {
@@ -318,8 +318,16 @@ var aggregates = map[string]builtinDefinition{
 			"Aggregates values as a JSON or JSONB array."),
 	),
 
-	"json_object_agg":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
-	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
+	"json_object_agg": makeBuiltin(tree.FunctionProperties{
+		UnsupportedWithIssue: 33285,
+		Class:                tree.AggregateClass,
+		Volatility:           tree.VolatilityVolatile,
+	}),
+	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{
+		UnsupportedWithIssue: 33285,
+		Class:                tree.AggregateClass,
+		Volatility:           tree.VolatilityVolatile,
+	}),
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
