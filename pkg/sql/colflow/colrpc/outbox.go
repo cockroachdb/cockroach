@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
 )
@@ -243,6 +244,16 @@ func (o *Outbox) sendBatches(
 		}
 		o.batch = o.Input().Next(o.runnerCtx)
 	}
+	serializeBatch := func() {
+		o.scratch.buf.Reset()
+		d, err := o.converter.BatchToArrow(o.batch)
+		if err != nil {
+			colexecerror.InternalError(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
+		}
+		if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
+			colexecerror.InternalError(errors.Wrap(err, "Outbox Serialize data error"))
+		}
+	}
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
 			return true, nil
@@ -258,14 +269,8 @@ func (o *Outbox) sendBatches(
 			return true, nil
 		}
 
-		o.scratch.buf.Reset()
-		d, err := o.converter.BatchToArrow(o.batch)
-		if err != nil {
-			log.Errorf(ctx, "Outbox BatchToArrow data serialization error: %+v", err)
-			return false, err
-		}
-		if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
-			log.Errorf(ctx, "Outbox Serialize data error: %+v", err)
+		if err := colexecerror.CatchVectorizedRuntimeError(serializeBatch); err != nil {
+			log.Errorf(ctx, "%+v", err)
 			return false, err
 		}
 		o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
