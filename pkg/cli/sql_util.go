@@ -12,7 +12,6 @@ package cli
 
 import (
 	"context"
-	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -353,21 +352,21 @@ type sqlTxnShim struct {
 	conn *sqlConn
 }
 
-func (t sqlTxnShim) Commit() error {
+var _ crdb.Tx = sqlTxnShim{}
+
+func (t sqlTxnShim) Commit(context.Context) error {
 	return t.conn.Exec(`COMMIT`, nil)
 }
 
-func (t sqlTxnShim) Rollback() error {
+func (t sqlTxnShim) Rollback(context.Context) error {
 	return t.conn.Exec(`ROLLBACK`, nil)
 }
 
-func (t sqlTxnShim) ExecContext(
-	_ context.Context, query string, values ...interface{},
-) (gosql.Result, error) {
+func (t sqlTxnShim) Exec(_ context.Context, query string, values ...interface{}) error {
 	if len(values) != 0 {
 		panic(fmt.Sprintf("sqlTxnShim.ExecContext must not be called with values"))
 	}
-	return nil, t.conn.Exec(query, nil)
+	return t.conn.Exec(query, nil)
 }
 
 // ExecTxn runs fn inside a transaction and retries it as needed.
