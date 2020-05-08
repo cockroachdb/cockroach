@@ -3754,7 +3754,7 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 // sizes.
 //
 // It holds for every Datum d that d.Size() >= DatumSize(d.ResolvedType())
-func DatumTypeSize(t *types.T) (uintptr, bool) {
+func DatumTypeSize(t *types.T) (size uintptr, isVarlen bool) {
 	// The following are composite types or types that support multiple widths.
 	switch t.Family() {
 	case types.TupleFamily:
@@ -3771,6 +3771,13 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 		return sz, variable
 	case types.IntFamily, types.FloatFamily:
 		return uintptr(t.Width() / 8), false
+
+	case types.StringFamily:
+		// T_char is a special string type that has a fixed size of 1. We have to
+		// report its size accurately, and that it's not a variable-length datatype.
+		if t.Oid() == oid.T_char {
+			return 1, false
+		}
 	}
 
 	// All the primary types have fixed size information.

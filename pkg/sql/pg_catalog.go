@@ -2372,7 +2372,7 @@ CREATE TABLE pg_catalog.pg_type (
 						nspOid,                     // typnamespace
 						tree.DNull,                 // typowner
 						typLen(typ),                // typlen
-						typByVal(typ),              // typbyval
+						typByVal(typ),              // typbyval (is it fixedlen or not)
 						typType,                    // typtype
 						cat,                        // typcategory
 						tree.DBoolFalse,            // typispreferred
