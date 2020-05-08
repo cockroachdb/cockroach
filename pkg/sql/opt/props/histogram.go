@@ -537,6 +537,7 @@ func getFilteredBucket(
 	)
 
 	var numEq float64
+	isEqualityCondition := spanLowerBound.Compare(keyCtx.EvalCtx, spanUpperBound) == 0
 	isSpanEndBoundaryInclusive := filteredSpan.EndBoundary() == constraint.IncludeBoundary
 	includesOriginalUpperBound := isSpanEndBoundaryInclusive && cmpSpanEndBucketEnd == 0
 	if iter.desc {
@@ -548,7 +549,19 @@ func getFilteredBucket(
 	}
 
 	var numRange float64
-	if ok && rangeBefore > 0 {
+	if isEqualityCondition {
+		if !includesOriginalUpperBound {
+			// This span represents an equality condition with a value in the range
+			// of this bucket. Use the distinct count of the bucket to estimate the
+			// selectivity of the equality condition.
+			selectivity := 1.0
+			if b.DistinctRange > 1 {
+				selectivity = 1 / b.DistinctRange
+			}
+			numEq = selectivity * b.NumRange
+		}
+		numRange = 0
+	} else if ok && rangeBefore > 0 {
 		if isDiscrete(bucketLowerBound.ResolvedType()) && !includesOriginalUpperBound {
 			// The data type is discrete (e.g., integer or date) and the new upper
 			// bound falls within the original range, so we can assign some of the
@@ -556,9 +569,6 @@ func getFilteredBucket(
 			numEq = b.NumRange / rangeBefore
 		}
 		numRange = b.NumRange * rangeAfter / rangeBefore
-	} else if bucketUpperBound.Compare(keyCtx.EvalCtx, spanLowerBound) == 0 {
-		// This span represents an equality condition with the upper bound.
-		numRange = 0
 	} else {
 		// In the absence of any information, assume we reduced the size of the
 		// bucket by half.

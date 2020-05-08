@@ -221,12 +221,12 @@ func TestHistogram(t *testing.T) {
 		},
 		{
 			constraint: "/1: [/40 - /40]",
-			//   0 3.6364
+			//   0 5.7143
 			// <---- 40 -
 			buckets: []cat.HistogramBucket{
-				{NumRange: 0, NumEq: 3.64, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
 			},
-			count:       3.64,
+			count:       5.71,
 			maxDistinct: 1,
 			distinct:    1,
 		},
@@ -279,12 +279,12 @@ func TestHistogram(t *testing.T) {
 		},
 		{
 			constraint: "/2/1/3: [/1/40/2 - /1/40/3]",
-			//   0 3.6364
+			//   0 5.7143
 			// <---- 40 -
 			buckets: []cat.HistogramBucket{
-				{NumRange: 0, NumEq: 3.64, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
 			},
-			count:       3.64,
+			count:       5.71,
 			maxDistinct: 1,
 			distinct:    1,
 		},
@@ -447,7 +447,7 @@ func TestFilterBucket(t *testing.T) {
 		testData := []testCase{
 			{
 				span:     "[/0 - /0]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(0)},
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(0)},
 			},
 			{
 				span:     "(/0 - /5]",
