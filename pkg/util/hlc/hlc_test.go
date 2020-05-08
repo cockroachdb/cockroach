@@ -251,7 +251,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			// This should not fatal as tickerCh has ticked
 			a.Equal(false, fatal)
 			// After ticker ticks, last physical time should be equal to physical now
-			lastPhysicalTime := c.lastPhysicalTime
+			lastPhysicalTime := atomic.LoadInt64(&c.lastPhysicalTime)
 			physicalNow := c.PhysicalNow()
 			a.Equal(lastPhysicalTime, physicalNow)
 
