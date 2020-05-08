@@ -344,7 +344,7 @@ func TestOutboxInbox(t *testing.T) {
 			// If the stream context gets canceled, GRPC should take care of closing
 			// and cleaning up the stream. The Inbox stream handler should have
 			// received the context cancellation and returned.
-			require.Error(t, streamHandlerErr, "context canceled")
+			require.Regexp(t, "context canceled", streamHandlerErr)
 			// The Inbox propagates this cancellation on its host.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
@@ -355,7 +355,7 @@ func TestOutboxInbox(t *testing.T) {
 		case readerCtxCancel:
 			// If the reader context gets canceled, the Inbox should have returned
 			// from the stream handler.
-			require.Error(t, streamHandlerErr, "context canceled")
+			require.Regexp(t, "context canceled", streamHandlerErr)
 			// The Inbox should propagate this error upwards.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 

@@ -612,7 +612,7 @@ BEGIN;
 
 	// Continue the txn in a new request, which is not retriable.
 	_, err = sqlDB.Exec("INSERT INTO t.public.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
-	require.Error(t, err, "RETRY_REASON_UNKNOWN - injected err")
+	require.Regexp(t, "RETRY_REASON_UNKNOWN - injected err", err)
 }
 
 // Test that aborted txn are only retried once.
