@@ -24,6 +24,17 @@ import (
 // EWKBEncodingFormat is the encoding format for EWKB.
 var EWKBEncodingFormat = binary.LittleEndian
 
+// GeospatialType are functions that are common between all Geospatial types.
+type GeospatialType interface {
+	// SRID returns the SRID of the given type.
+	SRID() geopb.SRID
+	// Shape returns the Shape of the given type.
+	Shape() geopb.Shape
+}
+
+var _ GeospatialType = (*Geometry)(nil)
+var _ GeospatialType = (*Geography)(nil)
+
 //
 // Geometry
 //
@@ -262,6 +273,11 @@ func (g *Geography) EWKB() geopb.EWKB {
 // SRID returns the SRID representation of the Geography.
 func (g *Geography) SRID() geopb.SRID {
 	return g.SpatialObject.SRID
+}
+
+// Shape returns the shape of the Geography.
+func (g *Geography) Shape() geopb.Shape {
+	return g.SpatialObject.Shape
 }
 
 // AsS2 converts a given Geography into it's S2 form.

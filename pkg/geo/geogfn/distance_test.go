@@ -265,4 +265,9 @@ func TestDistance(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Distance(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, UseSpheroid)
+		requireMismatchingSRIDError(t, err)
+	})
 }

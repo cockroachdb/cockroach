@@ -277,4 +277,9 @@ func TestIntersects(t *testing.T) {
 			require.Equal(t, tc.expected, intersects)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Intersects(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB)
+		requireMismatchingSRIDError(t, err)
+	})
 }

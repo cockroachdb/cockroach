@@ -136,4 +136,9 @@ func TestMinDistance(t *testing.T) {
 			require.Equal(t, tc.expected, ret)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := MinDistance(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
