@@ -45,7 +45,7 @@ users_dupe  bar         false       2             name         ASC        false 
 statement error index name "bar" already exists
 ALTER INDEX users@foo RENAME TO bar
 
-statement error empty index name
+statement error pgcode 42601 empty index name
 ALTER INDEX users@foo RENAME TO ""
 
 statement error index "ffo" does not exist
