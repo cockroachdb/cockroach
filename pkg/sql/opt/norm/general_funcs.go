@@ -126,6 +126,17 @@ func (c *CustomFuncs) IsAdditiveType(typ *types.T) bool {
 	return types.IsAdditiveType(typ)
 }
 
+// IsConstJSON returns true if the given ScalarExpr is a ConstExpr that wraps a
+// DJSON datum.
+func (c *CustomFuncs) IsConstJSON(expr opt.ScalarExpr) bool {
+	if constExpr, ok := expr.(*memo.ConstExpr); ok {
+		if _, ok := constExpr.Value.(*tree.DJSON); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // ----------------------------------------------------------------------
 //
 // Column functions
@@ -162,14 +173,14 @@ func (c *CustomFuncs) IsColNotNull2(col opt.ColumnID, left, right memo.RelExpr) 
 		right.Relational().NotNullCols.Contains(col)
 }
 
-// HasNoCols returns true if the input expression has zero output columns.
-func (c *CustomFuncs) HasNoCols(input memo.RelExpr) bool {
-	return input.Relational().OutputCols.Empty()
+// HasNoCols returns true if the input ColSet has zero output columns.
+func (c *CustomFuncs) HasNoCols(cols opt.ColSet) bool {
+	return cols.Empty()
 }
 
-// HasOneCol returns true if the input expression has exactly one output column.
-func (c *CustomFuncs) HasOneCol(input memo.RelExpr) bool {
-	return input.Relational().OutputCols.Len() == 1
+// HasOneCol returns true if the input ColSet has exactly one output column.
+func (c *CustomFuncs) HasOneCol(cols opt.ColSet) bool {
+	return cols.Len() == 1
 }
 
 // ColsAreConst returns true if the given columns have the same values for all
