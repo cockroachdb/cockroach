@@ -891,7 +891,7 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind boo
 	}
 
 	description := `sinkless feed`
-	if cf.isSinkless() {
+	if !cf.isSinkless() {
 		description = fmt.Sprintf("job %d", cf.spec.JobID)
 	}
 	if frontierChanged {
