@@ -452,6 +452,78 @@ message HashJoinerSpec {
   optional bool merged_columns = 7 [(gogoproto.nullable) = false];
 }
 
+// InvertedJoinerSpec is the specification for an inverted join. The processor
+// has two inputs and one output.
+//
+// The processor uses the inverted index on a column of the right input to
+// join with a column of the left input. In addition to the InvertedExpr which
+// is specified on these two columns, it also evaluates an OnExpr on the
+// joined rows that satisfy the InvertedExpr. The "internal columns" of an
+// InvertedJoiner for INNER and LEFT_OUTER joins are a concatenation of the
+// columns of left and right input. The only columns of the right input that
+// are populated are the columns present in the inverted index, except for the
+// inverted column (since it does not represent a complete value for the datum
+// that was indexed). For LEFT_SEMI and LEFT_ANTI, the "internal columns" are
+// the columns of the left input.
+//
+// Example:
+// Input stream columns: | a | b |
+// Table columns: | c | d | e |
+// The InvertedExpr involves columns b, e and the primary key for the right
+// input is c.
+// The inverted index has columns: | e' | c |
+// where e' is derived from e. For instance, if e is an array, e' will
+// correspond to elements of the array.
+// The OnExpr can use columns a, b, c, since they are the other columns that
+// are present in the input stream and the inverted index.
+//
+// Internal columns for INNER and LEFT_OUTER: | a | b | c | d | e |
+// where d, e are not populated.
+// Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b |
+message InvertedJoinerSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+
+  // The ID of the inverted index. The first column in the index is the
+  // inverted column, and the the remaining columns are the primary key.
+  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+
+  // Index of the column in the input stream that is to be joined with
+  // the inverted index.
+  optional uint32 lookup_column = 3 [(gogoproto.nullable) = false];
+
+  // The join expression is a conjunction of inverted_expr and on_expr.
+
+  // Expression involving only the indexed column and the lookup column, where
+  // @1 refers to the lookup column and @2 to the indexed column. The
+  // expression is used to construct an implementation of
+  // RowToInvertedIndexExpr which will be fed each input row and output
+  // an expression to evaluate over the inverted index.
+  //
+  // TODO(sumeer): RowToInvertedIndexExpr will be added with the
+  // invertedJoiner implementation. And update this comment when all the
+  // expression generation machinery is in place to refer to actual code
+  // abstractions.
+  optional Expression inverted_expr = 4 [(gogoproto.nullable) = false];
+
+  // Optional expression involving the columns in the index (other than the
+  // inverted column) and the columns in the input stream. Assuming that the
+  // input stream has N columns and the table that has been indexed has M
+  // columns, in this expression variables @1 to @N refer to columns of the
+  // input stream and variables @(N+1) to @(N+M) refer to columns in the
+  // table. The numbering does not omit the column in the table corresponding
+  // to the inverted column, or other table columns absent from the index, but
+  // they cannot be present in this expression.
+  optional Expression on_expr = 5 [(gogoproto.nullable) = false];
+
+  // Only INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI are supported. For indexes
+  // that produce false positives for user expressions, like geospatial
+  // indexes, only INNER and LEFT_OUTER are actually useful -- LEFT_SEMI will
+  // be mapped to INNER by the optimizer, and LEFT_ANTI to LEFT_OUTER, to
+  // allow the false positives to be eliminated by evaluating the exact
+  // expression on the rows output by this join.
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+}
+
 // AggregatorSpec is the specification for an "aggregator" (processor core
 // type, not the logical plan computation stage). An aggregator performs
 // 'aggregation' in the SQL sense in that it groups rows and computes an aggregate
