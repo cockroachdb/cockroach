@@ -347,6 +347,16 @@ type DiskBackedRowContainer struct {
 	mrc *MemRowContainer
 	drc *DiskRowContainer
 
+	// See comment in DoDeDuplicate().
+	deDuplicate bool
+	keyToIndex  map[string]uint64
+	// Encoding helpers for de-duplication:
+	// encodings keeps around the DatumEncoding equivalents of the encoding
+	// directions in ordering to avoid conversions in hot paths.
+	encodings  []sqlbase.DatumEncoding
+	datumAlloc sqlbase.DatumAlloc
+	scratchKey []byte
+
 	spilled bool
 
 	// The following fields are used to create a DiskRowContainer when spilling
@@ -386,6 +396,27 @@ func (f *DiskBackedRowContainer) Init(
 	f.src = &mrc
 	f.engine = engine
 	f.diskMonitor = diskMonitor
+	f.encodings = make([]sqlbase.DatumEncoding, len(ordering))
+	for i, orderInfo := range ordering {
+		f.encodings[i] = sqlbase.EncodingDirToDatumEncoding(orderInfo.Direction)
+	}
+}
+
+// De-duplication is a special feature of the DiskBackedRowContainer that must
+// be used in conjunction with AddRowWithDeDup(). It should not be mixed with
+// calls to AddRow(). It de-duplicates the keys such that the only the first
+// row with the given key will be stored. The index returned in
+// AddRowWithDedup() is a dense index starting from 0, representing when that
+// key was first added. This feature does not combine with Sort(), Reorder()
+// etc., and only to be used for assignment of these dense indexes. The main
+// reason to add this to DiskBackedRowContainer is to avoid significant code
+// duplication in constructing another row container. Currently, this feature
+// only supports a row where all the columns are encoded into the key --
+// relaxing this is not hard, but is not worth adding the code without a use
+// for it.
+func (f *DiskBackedRowContainer) DoDeDuplicate() {
+	f.deDuplicate = true
+	f.keyToIndex = make(map[string]uint64)
 }
 
 // Len is part of the SortableRowContainer interface.
@@ -405,6 +436,44 @@ func (f *DiskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatu
 		}
 		// Add the row that caused the memory error.
 		return f.src.AddRow(ctx, row)
+	}
+	return nil
+}
+
+func (f *DiskBackedRowContainer) AddRowWithDeDup(
+	ctx context.Context, row sqlbase.EncDatumRow,
+) (uint64, error) {
+	if !f.spilled {
+		if err := f.encodeKey(ctx, row); err != nil {
+			return 0, err
+		}
+		encodedStr := string(f.scratchKey)
+		idx, ok := f.keyToIndex[encodedStr]
+		if ok {
+			return idx, nil
+		}
+		idx = uint64(f.Len())
+		if err := f.AddRow(ctx, row); err != nil {
+			return 0, err
+		}
+		return idx, nil
+	} else {
+		// Already spilled.
+		return f.drc.AddRowWithDeDup(ctx, row)
+	}
+}
+
+func (f *DiskBackedRowContainer) encodeKey(ctx context.Context, row sqlbase.EncDatumRow) error {
+	if len(row) != len(f.mrc.types) {
+		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(f.mrc.types))
+	}
+	for i, orderInfo := range f.mrc.ordering {
+		col := orderInfo.ColIdx
+		var err error
+		f.scratchKey, err = row[col].Encode(f.mrc.types[col], &f.datumAlloc, f.encodings[i], f.scratchKey)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -496,6 +565,13 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 		return errors.New("already using disk")
 	}
 	drc := MakeDiskRowContainer(f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	if f.deDuplicate {
+		drc.DoDeDuplicate()
+		// After spilling to disk we don't need this map to de-duplicate. The
+		// DiskRowContainer will do the de-duplication. Calling AddRow() below
+		// is correct since these rows are already de-duplicated.
+		f.keyToIndex = nil
+	}
 	i := f.mrc.NewFinalIterator(ctx)
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {

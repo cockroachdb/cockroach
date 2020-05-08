@@ -34,9 +34,10 @@ type rocksDBMapBatchWriter struct {
 
 	// makeKey is a function that transforms a key into an MVCCKey with a prefix
 	// to be written to the underlying store.
-	makeKey func(k []byte) MVCCKey
-	batch   Batch
-	store   Engine
+	makeKey           func(k []byte) MVCCKey
+	batch             Batch
+	numPutsSinceFlush int
+	store             Engine
 }
 
 // rocksDBMapIterator iterates over the keys of a RocksDBMap in sorted order.
@@ -214,6 +215,7 @@ func (b *rocksDBMapBatchWriter) Put(k []byte, v []byte) error {
 	if err := b.batch.Put(b.makeKey(k), v); err != nil {
 		return err
 	}
+	b.numPutsSinceFlush++
 	if b.batch.Len() >= b.capacity {
 		return b.Flush()
 	}
@@ -228,8 +230,14 @@ func (b *rocksDBMapBatchWriter) Flush() error {
 	if err := b.batch.Commit(false /* syncCommit */); err != nil {
 		return err
 	}
+	b.numPutsSinceFlush = 0
 	b.batch = b.store.NewWriteOnlyBatch()
 	return nil
+}
+
+// NumPutsSinceFlush implements the SortedDiskMapBatchWriter interface.
+func (b *rocksDBMapBatchWriter) NumPutsSinceFlush() int {
+	return b.numPutsSinceFlush
 }
 
 // Close implements the SortedDiskMapBatchWriter interface.
@@ -246,9 +254,10 @@ type pebbleMapBatchWriter struct {
 
 	// makeKey is a function that transforms a key into a byte slice with a prefix
 	// to be written to the underlying store.
-	makeKey func(k []byte) []byte
-	batch   *pebble.Batch
-	store   *pebble.DB
+	makeKey           func(k []byte) []byte
+	batch             *pebble.Batch
+	numPutsSinceFlush int
+	store             *pebble.DB
 }
 
 // pebbleMapIterator iterates over the keys of a pebbleMap in sorted order.
@@ -413,6 +422,7 @@ func (b *pebbleMapBatchWriter) Put(k []byte, v []byte) error {
 	if err := b.batch.Set(key, v, nil); err != nil {
 		return err
 	}
+	b.numPutsSinceFlush++
 	if len(b.batch.Repr()) >= b.capacity {
 		return b.Flush()
 	}
@@ -424,8 +434,14 @@ func (b *pebbleMapBatchWriter) Flush() error {
 	if err := b.batch.Commit(pebble.NoSync); err != nil {
 		return err
 	}
+	b.numPutsSinceFlush = 0
 	b.batch = b.store.NewBatch()
 	return nil
+}
+
+// NumPutsSinceFlush implements the SortedDiskMapBatchWriter interface.
+func (b *pebbleMapBatchWriter) NumPutsSinceFlush() int {
+	return b.numPutsSinceFlush
 }
 
 // Close implements the SortedDiskMapBatchWriter interface.
