@@ -513,6 +513,7 @@ For 2D geometry and geography, these are:
 * ST_Covers
 * ST_CoveredBy
 * ST_Contains (geometry only)
+* ST_ContainsProperly (geometry only)
 * ST_Crosses (geometry only)
 * ST_DFullyWithin (geometry only)
 * ST_DWithin
@@ -1039,6 +1040,7 @@ Functions map to the index functions:
   contains(g, x)
 * ST_Contains(g, x), ST_Contains(x, g): use contains(g, x) or
   contained-by(g, x)
+* ST_ContainsProperly(g, x), ST_ContainsProperly(x, g): see above.
 * ST_Crosses: use intersects
 * ST_DFullyWithin(g, x, d), ST_DFullyWithin(x, g, d): extend g by
   distance d to produce a shape g’, and then use contains(g', x). The
@@ -1667,3 +1669,7 @@ good stretch option as well.
 ## Unresolved questions
 
 None beyond what is already mentioned in earlier text.
+
+# Updates
+* 2020-05-07:
+  * added ST_ContainsProperly as an indexable function.
