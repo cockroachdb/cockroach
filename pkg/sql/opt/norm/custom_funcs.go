@@ -32,6 +32,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// unnestFuncs maps function names that are supported by
+// ConvertZipArraysToValues
+var unnestFuncs = map[string]bool{
+	"unnest":               true,
+	"json_array_elements":  true,
+	"jsonb_array_elements": true,
+}
+
 // CustomFuncs contains all the custom match and replace functions used by
 // the normalization rules. These are also imported and used by the explorer.
 type CustomFuncs struct {
@@ -1706,18 +1714,18 @@ func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
 // ProjectSet to which the zip belongs can be converted to an InnerJoinApply
 // with a Values operator on the right input.
 func (c *CustomFuncs) CanConstructValuesFromZips(zip memo.ZipExpr) bool {
-	for _, zipItem := range zip {
-		fn, ok := zipItem.Fn.(*memo.FunctionExpr)
-		if !ok || fn.Name != "unnest" {
-			// Not an unnest function.
+	for i := range zip {
+		fn, ok := zip[i].Fn.(*memo.FunctionExpr)
+		if !ok || !unnestFuncs[fn.Name] {
+			// Not an supported function.
 			return false
 		}
 		if len(fn.Args) != 1 {
-			// Unnest has more than one argument.
+			// Function has more than one argument.
 			return false
 		}
-		if !c.IsStaticArray(fn.Args[0]) {
-			// Unnest argument is not an ArrayExpr or ConstExpr wrapping a DArray.
+		if !c.IsStaticArray(fn.Args[0]) && !c.WrapsJSONArray(fn.Args[0]) {
+			// Argument is not an ArrayExpr or ConstExpr wrapping a DArray or DJSON.
 			return false
 		}
 	}
@@ -1725,12 +1733,14 @@ func (c *CustomFuncs) CanConstructValuesFromZips(zip memo.ZipExpr) bool {
 }
 
 // ConstructValuesFromZips constructs a Values operator with the elements from
-// the given ArrayExpr(s) (or ConstExpr(s) that wrap a DArray) in the given
-// ZipExpr.
+// the given ArrayExpr(s) or the ConstExpr(s) that wrap a DArray or DJSON in the
+// given ZipExpr.
 //
-// The functions contained in the ZipExpr must be unnest functions with a single
-// parameter each. The parameters of the unnest functions must be either
-// ArrayExpr's or ConstExpr's wrapping DArrays.
+// The functions contained in the ZipExpr must be unnest, json_array_elements or
+// jsonb_array_elements functions with a single parameter each. The parameters
+// of the unnest functions must be either ArrayExpr's or ConstExpr's wrapping
+// DArrays. The parameters of the json_array_elements functions must be
+// ConstExpr's wrapping DJSON datums.
 func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 	numCols := len(zip)
 	outColTypes := make([]*types.T, numCols)
@@ -1738,10 +1748,20 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 	var outRows []memo.ScalarListExpr
 
 	// Get type and ColumnID of each column.
-	for i, zipItem := range zip {
-		arrExpr := zipItem.Fn.(*memo.FunctionExpr).Args[0]
-		outColTypes[i] = arrExpr.DataType().ArrayContents()
-		outColIDs[i] = zipItem.Cols[0]
+	for i := range zip {
+		function := zip[i].Fn.(*memo.FunctionExpr)
+		expr := function.Args[0]
+		switch function.Name {
+		case "unnest":
+			outColTypes[i] = expr.DataType().ArrayContents()
+
+		case "json_array_elements", "jsonb_array_elements":
+			outColTypes[i] = types.Jsonb
+
+		default:
+			panic(errors.AssertionFailedf("invalid function name"))
+		}
+		outColIDs[i] = zip[i].Cols[0]
 	}
 
 	// addValToOutRows inserts a value into outRows at the given index.
@@ -1758,20 +1778,49 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 	}
 
 	// Fill outRows with values from the arrays in the ZipExpr.
-	for i, zipItem := range zip {
-		arrExpr := zipItem.Fn.(*memo.FunctionExpr).Args[0]
-		switch t := arrExpr.(type) {
+	for i := range zip {
+		function := zip[i].Fn.(*memo.FunctionExpr)
+		param := function.Args[0]
+		switch t := param.(type) {
 		case *memo.ArrayExpr:
 			for j, val := range t.Elems {
 				addValToOutRows(val, j, i)
 			}
 
 		case *memo.ConstExpr:
-			dArray := t.Value.(*tree.DArray)
-			for j, elem := range dArray.Array {
-				val := c.f.ConstructConstVal(elem, dArray.ParamTyp)
-				addValToOutRows(val, j, i)
+			// Use a ValueGenerator to retrieve values from the datums wrapped
+			// in the ConstExpr. These generators are used at runtime to unnest
+			// values from regular and JSON arrays.
+			generator, err := function.Overload.Generator(c.f.evalCtx, tree.Datums{t.Value})
+			if err != nil {
+				panic(errors.AssertionFailedf("generator retrieval failed: %v", err))
 			}
+			if err = generator.Start(c.f.evalCtx.Context, c.f.evalCtx.Txn); err != nil {
+				panic(errors.AssertionFailedf("generator.Start failed: %v", err))
+			}
+
+			j := 0
+			for {
+				hasNext, err := generator.Next(c.f.evalCtx.Context)
+				if err != nil {
+					panic(errors.AssertionFailedf("generator.Next failed: %v", err))
+				}
+				if !hasNext {
+					break
+				}
+
+				vals, err := generator.Values()
+				if err != nil {
+					panic(errors.AssertionFailedf("failed to retrieve value: %v", err))
+				}
+				val := c.f.ConstructConstVal(vals[0], vals[0].ResolvedType())
+				addValToOutRows(val, j, i)
+				j++
+			}
+			generator.Close()
+
+		default:
+			panic(errors.AssertionFailedf("invalid parameter type"))
 		}
 	}
 
@@ -2197,6 +2246,17 @@ func (c *CustomFuncs) AllowNullArgs(op opt.Operator, left, right opt.ScalarExpr)
 func (c *CustomFuncs) IsJSONScalar(value opt.ScalarExpr) bool {
 	v := value.(*memo.ConstExpr).Value.(*tree.DJSON)
 	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
+}
+
+// WrapsJSONArray returns true if the given ScalarExpr is a ConstExpr that wraps
+// a DJSON datum that contains a JSON array.
+func (c *CustomFuncs) WrapsJSONArray(expr opt.ScalarExpr) bool {
+	if constExpr, ok := expr.(*memo.ConstExpr); ok {
+		if dJSON, ok := constExpr.Value.(*tree.DJSON); ok {
+			return dJSON.JSON.Type() == json.ArrayJSONType
+		}
+	}
+	return false
 }
 
 // MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
