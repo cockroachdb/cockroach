@@ -163,7 +163,7 @@ CREATE TABLE multi_ref_child (
 )
 
 query TTT
-EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL), (2, 3, 4, 5)
 ----
 ·                                               distributed            false
 ·                                               vectorized             false
@@ -175,7 +175,7 @@ root                                            ·                      ·
  │         └── buffer node                      ·                      ·
  │              │                               label                  buffer 1
  │              └── values                      ·                      ·
- │                                              size                   4 columns, 1 row
+ │                                              size                   4 columns, 2 rows
  ├── fk-check                                   ·                      ·
  │    └── error if rows                         ·                      ·
  │         └── lookup-join                      ·                      ·
@@ -202,6 +202,20 @@ root                                            ·                      ·
                      └── render                 ·                      ·
                           └── scan buffer node  ·                      ·
 ·                                               label                  buffer 1
+
+# FK check can be omitted when we are inserting only NULLs.
+query TTT
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+----
+·                 distributed  false
+·                 vectorized   false
+count             ·            ·
+ └── insert       ·            ·
+      │           into         multi_ref_child(k, a, b, c)
+      │           strategy     inserter
+      │           auto commit  ·
+      └── values  ·            ·
+·                 size         4 columns, 1 row
 
 # -- Tests with DELETE --
 
