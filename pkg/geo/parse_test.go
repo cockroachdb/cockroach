@@ -192,6 +192,17 @@ func TestParseGeometry(t *testing.T) {
 			"",
 		},
 		{
+			"SRid=3857;POINT(1.0 1.0)",
+			&Geometry{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  3857,
+					Shape: geopb.Shape_Point,
+				},
+			},
+			"",
+		},
+		{
 			"\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f",
 			&Geometry{
 				SpatialObject: geopb.SpatialObject{

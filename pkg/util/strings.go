@@ -30,3 +30,12 @@ func GetSingleRune(s string) (rune, error) {
 	}
 	return r, nil
 }
+
+// ToLowerSingleByte returns the the lowercase of a given single ASCII byte.
+// A non ASCII byte is returned unchanged.
+func ToLowerSingleByte(b byte) byte {
+	if b >= 'A' && b <= 'Z' {
+		return 'a' + (b - 'A')
+	}
+	return b
+}
