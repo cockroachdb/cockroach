@@ -336,7 +336,7 @@ NULL
 query T
 SELECT pg_typeof('{"a": 1}'::JSONB->>'a')
 ----
-string
+text
 
 query T
 SELECT '{"a": 1, "b": 2}'::JSONB->>'b'

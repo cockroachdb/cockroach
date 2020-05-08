@@ -25,7 +25,7 @@ X'636174'
 eval
 pg_typeof(x'636174')
 ----
-'bytes'
+'bytea'
 
 eval
 '\x636174'::bytes
