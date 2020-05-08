@@ -1344,6 +1344,7 @@ func (r *importResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *
 			if err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tableDesc.ParentID, tableDesc.Name); err != nil {
 				return err
 			}
+			tablesToGC = append(tablesToGC, tableDesc.ID)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
