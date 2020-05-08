@@ -1,0 +1,29 @@
+# This test verifies some of the pgwire encoding process for ENUMs.
+
+send
+Query {"String": "CREATE TYPE t AS ENUM ('hi', 'hello')"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Use the enum now.
+send
+Query {"String": "SELECT 'hi'::t"}
+----
+
+# TODO (rohany): Once ENUM's have real type OID's, this needs to be updated.
+# Note that this is slightly different than Postgres -- in Postgres the
+# DataTypeSize for an enum is 4, as floats are used to represent enums
+# internally (4 bytes). Since our encodings are variable size, we report
+# the DataTypeSize to be -1, which is the variable length size.
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"t","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"hi"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

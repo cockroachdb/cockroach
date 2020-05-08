@@ -1882,6 +1882,7 @@ func makeIsFn(a, b *types.T) *CmpOp {
 var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	EQ: {
 		// Single-type comparisons.
+		makeEqFn(types.AnyEnum, types.AnyEnum),
 		makeEqFn(types.Bool, types.Bool),
 		makeEqFn(types.Bytes, types.Bytes),
 		makeEqFn(types.Date, types.Date),
@@ -1931,6 +1932,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	LT: {
 		// Single-type comparisons.
+		makeLtFn(types.AnyEnum, types.AnyEnum),
 		makeLtFn(types.Bool, types.Bool),
 		makeLtFn(types.Bytes, types.Bytes),
 		makeLtFn(types.Date, types.Date),
@@ -1979,6 +1981,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	LE: {
 		// Single-type comparisons.
+		makeLeFn(types.AnyEnum, types.AnyEnum),
 		makeLeFn(types.Bool, types.Bool),
 		makeLeFn(types.Bytes, types.Bytes),
 		makeLeFn(types.Date, types.Date),
@@ -2035,6 +2038,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			isPreferred: true,
 		},
 		// Single-type comparisons.
+		makeIsFn(types.AnyEnum, types.AnyEnum),
 		makeIsFn(types.Bool, types.Bool),
 		makeIsFn(types.Bytes, types.Bytes),
 		makeIsFn(types.Date, types.Date),
@@ -2087,6 +2091,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	},
 
 	In: {
+		makeEvalTupleIn(types.AnyEnum),
 		makeEvalTupleIn(types.Bool),
 		makeEvalTupleIn(types.Bytes),
 		makeEvalTupleIn(types.Date),
@@ -3458,6 +3463,14 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return res, nil
 		}
 
+	case types.EnumFamily:
+		switch v := d.(type) {
+		case *DString:
+			return MakeDEnumFromLogicalRepresentation(t, string(*v))
+		case *DEnum:
+			return d, nil
+		}
+
 	case types.FloatFamily:
 		switch v := d.(type) {
 		case *DBool:
@@ -3604,6 +3617,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			s = t.String()
 		case *DJSON:
 			s = t.JSON.String()
+		case *DEnum:
+			s = t.LogicalRep
 		}
 		switch t.Family() {
 		case types.StringFamily:
@@ -4525,6 +4540,11 @@ func (t *DGeography) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DGeometry) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DEnum) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

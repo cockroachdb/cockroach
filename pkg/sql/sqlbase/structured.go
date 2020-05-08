@@ -4088,6 +4088,33 @@ func (desc *TypeDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
+// HydrateTypeInfo fills in user defined type metadata for a type.
+// TODO (rohany): This method should eventually be defined on an
+//  ImmutableTypeDescriptor so that pointers to the cached info
+//  can be shared among callers.
+func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
+	switch desc.Kind {
+	case TypeDescriptor_ENUM:
+		if typ.Family() != types.EnumFamily {
+			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
+		}
+		logical := make([]string, len(desc.EnumMembers))
+		physical := make([][]byte, len(desc.EnumMembers))
+		for i := range desc.EnumMembers {
+			member := &desc.EnumMembers[i]
+			logical[i] = member.LogicalRepresentation
+			physical[i] = member.PhysicalRepresentation
+		}
+		typ.TypeMeta.EnumData = &types.EnumMetadata{
+			LogicalRepresentations:  logical,
+			PhysicalRepresentations: physical,
+		}
+		return nil
+	default:
+		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
+	}
+}
+
 // NameResolutionResult implements the NameResolutionResult interface.
 func (desc *TypeDescriptor) NameResolutionResult() {}
 

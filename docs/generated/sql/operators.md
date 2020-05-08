@@ -146,6 +146,7 @@
 <table><thead>
 <tr><td><code><</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyenum <code><</code> anyenum</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code><</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code><</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code><</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -205,6 +206,7 @@
 <table><thead>
 <tr><td><code><=</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyenum <code><=</code> anyenum</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code><=</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code><=</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code><=</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -263,6 +265,7 @@
 <table><thead>
 <tr><td><code>=</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyenum <code>=</code> anyenum</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>=</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>=</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code>=</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -348,6 +351,7 @@
 <table><thead>
 <tr><td><code>IN</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyenum <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collatedstring.html">collatedstring</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
@@ -373,6 +377,7 @@
 <table><thead>
 <tr><td><code>IS NOT DISTINCT FROM</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyenum <code>IS NOT DISTINCT FROM</code> anyenum</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code>IS NOT DISTINCT FROM</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
