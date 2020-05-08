@@ -703,6 +703,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
 </span></td></tr>
+<tr><td><a name="st_containsproperly"></a><code>st_containsproperly(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_b intersects the interior of geometry_a but not the boundary or exterior of geometry_a.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
 <tr><td><a name="st_coveredby"></a><code>st_coveredby(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geometry_a is outside geometry_b.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
@@ -889,6 +893,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_polygonfromwkb"></a><code>st_polygonfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_polygonfromwkb"></a><code>st_polygonfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not Polygon, NULL is returned.</p>
+</span></td></tr>
+<tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the DE-9IM spatial relation between geometry_a and geometry_b.</p>
+<p>This function uses the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry, pattern: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the DE-9IM spatial relation between geometry_a and geometry_b matches the DE-9IM pattern.</p>
+<p>This function uses the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_touches"></a><code>st_touches(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the only points in common between geometry_a and geometry_b are on the boundary. Note points do not touch other points.</p>
 <p>This function uses the GEOS module.</p>
