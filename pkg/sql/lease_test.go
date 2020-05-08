@@ -2081,7 +2081,7 @@ func TestLeaseAcquisitionByNameDoesntBlock(t *testing.T) {
 
 	require.NoError(t, <-schemaCh)
 	_, err = db.Exec("SELECT * from t.test")
-	require.Error(t, err, `pq: relation "t.test" does not exist`)
+	require.Regexp(t, `pq: relation "t\.test" does not exist`, err)
 	close(schemaUnblock)
 
 	// Wait for the schema change to finish.
