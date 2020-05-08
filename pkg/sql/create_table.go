@@ -2275,7 +2275,7 @@ func validateComputedColumn(
 		return err
 	}
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, defType, "computed column", semaCtx, false, /* allowNonImmutable */
+		replacedExpr, defType, "computed column", semaCtx, false, /* allowImpure */
 	); err != nil {
 		return err
 	}
@@ -2345,7 +2345,7 @@ func MakeCheckConstraint(
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		expr, types.Bool, "CHECK", semaCtx, true, /* allowNonImmutable */
+		expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
 	); err != nil {
 		return nil, err
 	}
