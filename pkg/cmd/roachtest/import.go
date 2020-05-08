@@ -62,12 +62,12 @@ func registerImportTPCC(r *testRegistry) {
 	const geoWarehouses = 4000
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
 	r.Add(testSpec{
+		Skip:    "#37349 - OOMing",
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 		Owner:   OwnerBulkIO,
 		Cluster: makeClusterSpec(8, cpu(16), geo(), zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Skip("#37349 - OOMing", "" /* details */)
 			runImportTPCC(ctx, t, c, geoWarehouses)
 		},
 	})
