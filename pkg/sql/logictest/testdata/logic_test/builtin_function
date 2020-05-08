@@ -1878,7 +1878,7 @@ SELECT from_uuid(b'f00d')
 query T
 SELECT pg_catalog.pg_typeof(sign(1:::decimal))
 ----
-decimal
+numeric
 
 query T
 VALUES (pg_typeof(1:::int)),
@@ -1891,15 +1891,15 @@ VALUES (pg_typeof(1:::int)),
        (pg_typeof(b'a':::bytes)),
        (pg_typeof(array[1,2,3]))
 ----
-int
-string
-bool
+bigint
+text
+boolean
 unknown
 interval
 date
-timestamptz
-bytes
-int[]
+timestamp with time zone
+bytea
+bigint[]
 
 query T
 VALUES (format_type('anyelement'::regtype, -1)),

@@ -737,7 +737,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(args[0].ResolvedType().String()), nil
+				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
 			},
 			Info: notUsableInfo,
 		},

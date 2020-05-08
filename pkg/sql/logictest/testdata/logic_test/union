@@ -79,12 +79,12 @@ query IT rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 ----
 1  unknown
-2  int
+2  bigint
 
 query IT rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 ----
-1  int
+1  bigint
 2  unknown
 
 # INTERSECT with NULL columns in operands works.
