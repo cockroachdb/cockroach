@@ -232,17 +232,6 @@ SELECT * FROM parent
 statement error pq: insert on table "parent" violates foreign key constraint "fk_b_ref_parent" on table "child"\nDETAIL: Key \(b\)=\(2\) is still referenced from table "child"\.
 INSERT INTO parent VALUES (2, 2) ON CONFLICT (a) DO UPDATE SET b = parent.b - 1
 
-# This mutation *also* removes that row, but also via an update, introduces a
-# new one, making it acceptable.
-statement ok
-INSERT INTO parent VALUES (2, 2), (1, 3) ON CONFLICT (a) DO UPDATE SET b = parent.b - 1
-
-query II rowsort
-SELECT * FROM parent
-----
-1  2
-2  1
-
 statement ok
 DROP TABLE child
 
