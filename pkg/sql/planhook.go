@@ -89,7 +89,7 @@ type PlanHookState interface {
 	ResolveUncachedDatabaseByName(
 		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
 	ResolveMutableTableDescriptor(
-		ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
+		ctx context.Context, tn *ObjectName, required, includeOffline bool, requiredType ResolveRequiredType,
 	) (table *MutableTableDescriptor, err error)
 }
 

@@ -457,7 +457,8 @@ func ResolveFK(
 		originColumnIDs[i] = col.ID
 	}
 
-	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
+	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table,
+		true /* required */, false /* includeOffline */, ResolveRequireTableDesc)
 	if err != nil {
 		return err
 	}
