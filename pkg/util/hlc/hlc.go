@@ -220,18 +220,23 @@ func (c *Clock) MaxOffset() time.Duration {
 	return c.maxOffset
 }
 
-// getPhysicalClockAndCheck locks mu in order to access the physical clock, check for
-// time jumps and update the internal jump checking state.
+// getPhysicalClockAndCheck reads the physical time as nanos since epoch. It
+// also checks for backwards and forwards jumps, as configured.
 func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
 	oldTime := atomic.LoadInt64(&c.lastPhysicalTime)
 	newTime := c.physicalClock()
 	lastPhysTime := oldTime
+	// Try to update c.lastPhysicalTime. When multiple updaters race, we want the
+	// highest clock reading to win, so keep retrying while we interleave with
+	// updaters with lower clock readings; bail if we interleave with a higher
+	// clock reading.
 	for {
-		atomic.CompareAndSwapInt64(&c.lastPhysicalTime, lastPhysTime, newTime)
+		if atomic.CompareAndSwapInt64(&c.lastPhysicalTime, lastPhysTime, newTime) {
+			break
+		}
 		lastPhysTime = atomic.LoadInt64(&c.lastPhysicalTime)
 		if lastPhysTime >= newTime {
-			// Either we did a successful update or someone else updated to a
-			// later time than ours. Either way - we are done.
+			// Someone else updated to a later time than ours.
 			break
 		}
 		// Someone else did an update to an earlier time than what we got in newTime.
