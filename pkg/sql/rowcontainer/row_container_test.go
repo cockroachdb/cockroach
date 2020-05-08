@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // verifyRows verifies that the rows read with the given RowIterator match up
@@ -335,6 +336,96 @@ func TestDiskBackedRowContainer(t *testing.T) {
 			t.Fatal("memory monitor reports unexpected usage")
 		}
 	})
+}
+
+func TestDiskBackedRowContainerDeDuping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	memoryMonitor := mon.MakeMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memoryMonitor.Stop(ctx)
+	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+
+	const numRows = 10
+	const numCols = 2
+	ordering := sqlbase.ColumnOrdering{
+		sqlbase.ColumnOrderInfo{
+			ColIdx:    0,
+			Direction: encoding.Ascending,
+		},
+		sqlbase.ColumnOrderInfo{
+			ColIdx:    1,
+			Direction: encoding.Descending,
+		},
+	}
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	// Use random types and random rows.
+	types := sqlbase.RandSortingTypes(rng, numCols)
+	rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
+	rc := DiskBackedRowContainer{}
+	rc.Init(
+		ordering,
+		types,
+		&evalCtx,
+		tempEngine,
+		&memoryMonitor,
+		&diskMonitor,
+		0, /* rowCapacity */
+	)
+	defer rc.Close(ctx)
+	rc.DoDeDuplicate()
+
+	for run := 0; run < 2; run++ {
+		// Add rows to a DiskBackedRowContainer, and make it spill to disk halfway
+		// through, and keep adding rows.
+		mid := len(rows) / 2
+		for i := 0; i < mid; i++ {
+			idx, err := rc.AddRowWithDeDup(ctx, rows[i])
+			require.NoError(t, err)
+			require.Equal(t, i, idx)
+			require.Equal(t, false, rc.UsingDisk())
+		}
+		require.NoError(t, rc.SpillToDisk(ctx))
+		require.Equal(t, true, rc.UsingDisk())
+
+		for i := mid; i < len(rows); i++ {
+			idx, err := rc.AddRowWithDeDup(ctx, rows[i])
+			require.NoError(t, err)
+			require.Equal(t, i, idx)
+		}
+		// Reset and reorder the rows for the next run.
+		rand.Shuffle(len(rows), func(i, j int) {
+			rows[i], rows[j] = rows[j], rows[i]
+		})
+		require.NoError(t, rc.UnsafeReset(ctx))
+	}
 }
 
 // verifyOrdering checks whether the rows in src are ordered according to
