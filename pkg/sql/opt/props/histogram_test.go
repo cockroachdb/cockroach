@@ -139,28 +139,15 @@ func TestHistogram(t *testing.T) {
 		},
 		{
 			constraint: "/1: [/40 - /40]",
-			//   0 3.6364
+			//   0 5.7143
 			// <---- 40 -
 			buckets: []cat.HistogramBucket{
-				{NumRange: 0, NumEq: 3.64, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
 			},
-			count:       3.64,
+			count:       5.71,
 			maxDistinct: 1,
 			distinct:    1,
 		},
-	}
-
-	// Round all values to two decimal places.
-	roundVal := func(val float64) float64 {
-		return math.Round(val*100.0) / 100.0
-	}
-
-	round := func(h *Histogram) {
-		for i := range h.buckets {
-			h.buckets[i].NumRange = roundVal(h.buckets[i].NumRange)
-			h.buckets[i].NumEq = roundVal(h.buckets[i].NumEq)
-			h.buckets[i].DistinctRange = roundVal(h.buckets[i].DistinctRange)
-		}
 	}
 
 	for i := range testData {
@@ -181,7 +168,7 @@ func TestHistogram(t *testing.T) {
 		if testData[i].distinct != distinct {
 			t.Fatalf("expected %f but found %f", testData[i].distinct, distinct)
 		}
-		round(filtered)
+		roundHistogram(filtered)
 		if !reflect.DeepEqual(testData[i].buckets, filtered.buckets) {
 			t.Fatalf("expected %v but found %v", testData[i].buckets, filtered.buckets)
 		}
@@ -198,6 +185,7 @@ func TestFilterBucket(t *testing.T) {
 		expected *cat.HistogramBucket
 		isError  bool
 	}
+
 	runTestCase := func(
 		bucket *cat.HistogramBucket, lowerBound tree.Datum, span *constraint.Span,
 	) (actual *cat.HistogramBucket, err error) {
@@ -212,7 +200,9 @@ func TestFilterBucket(t *testing.T) {
 			}
 		}()
 
-		return getFilteredBucket(bucket, &keyCtx, span, lowerBound), nil
+		b := getFilteredBucket(bucket, &keyCtx, span, lowerBound)
+		roundBucket(b)
+		return b, nil
 	}
 
 	runTest := func(
@@ -274,7 +264,7 @@ func TestFilterBucket(t *testing.T) {
 		testData := []testCase{
 			{
 				span:     "[/0 - /0]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(0)},
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(0)},
 			},
 			{
 				span:     "(/0 - /5]",
@@ -412,4 +402,21 @@ func TestFilterBucket(t *testing.T) {
 		runTest(bucket, lowerBound, testData, types.StringFamily)
 	})
 
+}
+
+// Round all values to two decimal places.
+func roundVal(val float64) float64 {
+	return math.Round(val*100.0) / 100.0
+}
+
+func roundBucket(b *cat.HistogramBucket) {
+	b.NumRange = roundVal(b.NumRange)
+	b.NumEq = roundVal(b.NumEq)
+	b.DistinctRange = roundVal(b.DistinctRange)
+}
+
+func roundHistogram(h *Histogram) {
+	for i := range h.buckets {
+		roundBucket(&h.buckets[i])
+	}
 }

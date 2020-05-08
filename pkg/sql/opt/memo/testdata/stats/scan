@@ -776,13 +776,13 @@ SELECT * FROM hist WHERE e < '2018-07-31 23:00:00'::TIMESTAMP
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp!null) f:6(timestamptz) g:7(string)
  ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0]
- │   histogram(5)=  0               0               90              10               5.5645                  0
+ │   histogram(5)=  0               0               90              10               5.5645              6.7204e-14
  │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
  └── scan hist@idx_e
       ├── columns: e:5(timestamp!null) rowid:8(int!null)
       ├── constraint: /5/8: (/NULL - /'2018-07-31 22:59:59.999999+00:00']
       ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0]
-      │   histogram(5)=  0               0               90              10               5.5645                  0
+      │   histogram(5)=  0               0               90              10               5.5645              6.7204e-14
       │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
       ├── key: (8)
       └── fd: (8)-->(5)
@@ -808,16 +808,16 @@ SELECT * FROM hist WHERE g = 'mango' OR g = 'foo'
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string!null)
- ├── stats: [rows=165, distinct(7)=2, null(7)=0]
- │   histogram(7)=  0   135   0    30
+ ├── stats: [rows=60, distinct(7)=2, null(7)=0]
+ │   histogram(7)=  0   30    0    30
  │                <--- 'foo' --- 'mango'
  └── scan hist@idx_g
       ├── columns: g:7(string!null) rowid:8(int!null)
       ├── constraint: /7/8
       │    ├── [/'foo' - /'foo']
       │    └── [/'mango' - /'mango']
-      ├── stats: [rows=165, distinct(7)=2, null(7)=0]
-      │   histogram(7)=  0   135   0    30
+      ├── stats: [rows=60, distinct(7)=2, null(7)=0]
+      │   histogram(7)=  0   30    0    30
       │                <--- 'foo' --- 'mango'
       ├── key: (8)
       └── fd: (8)-->(7)
