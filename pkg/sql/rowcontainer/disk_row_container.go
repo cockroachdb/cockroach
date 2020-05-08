@@ -11,6 +11,7 @@
 package rowcontainer
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
@@ -38,6 +39,9 @@ type DiskRowContainer struct {
 	scratchVal    []byte
 	scratchEncRow sqlbase.EncDatumRow
 
+	// For computing mean encoded row bytes.
+	totalEncodedRowBytes uint64
+
 	// lastReadKey is used to implement NewFinalIterator. Refer to the method's
 	// comment for more information.
 	lastReadKey []byte
@@ -62,6 +66,16 @@ type DiskRowContainer struct {
 	// MakeDiskRowContainer() for more encoding specifics.
 	valueIdxs []int
 
+	// See comment in DoDeDuplicate().
+	deDuplicate bool
+	// A mapping from a key to the dense row index assigned to the key. It
+	// contains all the key strings that are potentially buffered in bufferedRows.
+	// Since we need to de-duplicate for every insert attempt, we don't want to
+	// keep flushing bufferedRows after every insert.
+	// There is currently no memory-accounting for the deDupCache, just like there
+	// is none for the bufferedRows. Both will be approximately the same size.
+	deDupCache map[string]int
+
 	diskMonitor *mon.BytesMonitor
 	engine      diskmap.Factory
 
@@ -69,6 +83,7 @@ type DiskRowContainer struct {
 }
 
 var _ SortableRowContainer = &DiskRowContainer{}
+var _ DeDupingRowContainer = &DiskRowContainer{}
 
 // MakeDiskRowContainer creates a DiskRowContainer with the given engine as the
 // underlying store that rows are stored on.
@@ -128,6 +143,20 @@ func MakeDiskRowContainer(
 	return d
 }
 
+// DoDeDuplicate causes DiskRowContainer to behave as an implementation of
+// DeDupingRowContainer. It should not be mixed with calls to AddRow() (except
+// when the AddRow() already represent deduplicated rows). It de-duplicates
+// the keys such that only the first row with the given key will be stored.
+// The index returned in AddRowWithDedup() is a dense index starting from 0,
+// representing when that key was first added. This feature does not combine
+// with Sort(), Reorder() etc., and only to be used for assignment of these
+// dense indexes. The main reason to add this to DiskBackedRowContainer is to
+// avoid significant code duplication in constructing another row container.
+func (d *DiskRowContainer) DoDeDuplicate() {
+	d.deDuplicate = true
+	d.deDupCache = make(map[string]int)
+}
+
 // Len is part of the SortableRowContainer interface.
 func (d *DiskRowContainer) Len() int {
 	return int(d.rowID)
@@ -135,9 +164,115 @@ func (d *DiskRowContainer) Len() int {
 
 // AddRow is part of the SortableRowContainer interface.
 //
+// It is additionally used in de-duping mode by DiskBackedRowContainer when
+// switching from a memory container to this disk container, since it is
+// adding rows that are already de-duped. Once it has added all the already
+// de-duped rows, it should switch to using AddRowWithDeDup() and never call
+// AddRow() again.
+//
 // Note: if key calculation changes, computeKey() of hashMemRowIterator should
 // be changed accordingly.
 func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	if err := d.encodeRow(ctx, row); err != nil {
+		return err
+	}
+	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
+		return pgerror.Wrapf(err, pgcode.OutOfMemory,
+			"this query requires additional disk space")
+	}
+	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
+		return err
+	}
+	// See comment above on when this is used for already de-duplicated
+	// rows -- we need to track these in the de-dup cache so that later
+	// calls to AddRowWithDeDup() de-duplicate wrt this cache.
+	if d.deDuplicate {
+		if d.bufferedRows.NumPutsSinceFlush() == 0 {
+			d.clearDeDupCache()
+		} else {
+			d.deDupCache[string(d.scratchKey)] = int(d.rowID)
+		}
+	}
+	d.totalEncodedRowBytes += uint64(len(d.scratchKey) + len(d.scratchVal))
+	d.scratchKey = d.scratchKey[:0]
+	d.scratchVal = d.scratchVal[:0]
+	d.rowID++
+	return nil
+}
+
+// AddRowWithDeDup is part of the DeDupingRowContainer interface.
+func (d *DiskRowContainer) AddRowWithDeDup(
+	ctx context.Context, row sqlbase.EncDatumRow,
+) (int, error) {
+	if err := d.encodeRow(ctx, row); err != nil {
+		return 0, err
+	}
+	defer func() {
+		d.scratchKey = d.scratchKey[:0]
+		d.scratchVal = d.scratchVal[:0]
+	}()
+	// First use the cache to de-dup.
+	entry, ok := d.deDupCache[string(d.scratchKey)]
+	if ok {
+		return entry, nil
+	}
+	// Since not in cache, we need to use an iterator to de-dup.
+	// TODO(sumeer): this read is expensive:
+	// - if there is a significant  fraction of duplicates, we can do better
+	//   with a larger cache
+	// - if duplicates are rare, use a bloom filter for all the keys in the
+	//   diskMap, since a miss in the bloom filter allows us to write to the
+	//   diskMap without reading.
+	iter := d.diskMap.NewIterator()
+	defer iter.Close()
+	iter.SeekGE(d.scratchKey)
+	valid, err := iter.Valid()
+	if err != nil {
+		return 0, err
+	}
+	if valid && bytes.Equal(iter.UnsafeKey(), d.scratchKey) {
+		// Found the key. Note that as documented in DeDupingRowContainer,
+		// this feature is limited to the case where the whole row is
+		// encoded into the key. The value only contains the dense RowID
+		// assigned to the key.
+		_, idx, err := encoding.DecodeUvarintAscending(iter.UnsafeValue())
+		if err != nil {
+			return 0, err
+		}
+		return int(idx), nil
+	}
+	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
+		return 0, pgerror.Wrapf(err, pgcode.OutOfMemory,
+			"this query requires additional disk space")
+	}
+	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
+		return 0, err
+	}
+	if d.bufferedRows.NumPutsSinceFlush() == 0 {
+		d.clearDeDupCache()
+	} else {
+		d.deDupCache[string(d.scratchKey)] = int(d.rowID)
+	}
+	d.totalEncodedRowBytes += uint64(len(d.scratchKey) + len(d.scratchVal))
+	idx := int(d.rowID)
+	d.rowID++
+	return idx, nil
+}
+
+func (d *DiskRowContainer) clearDeDupCache() {
+	for k := range d.deDupCache {
+		delete(d.deDupCache, k)
+	}
+}
+
+func (d *DiskRowContainer) testingFlushBuffer(ctx context.Context) {
+	if err := d.bufferedRows.Flush(); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
+	d.clearDeDupCache()
+}
+
+func (d *DiskRowContainer) encodeRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if len(row) != len(d.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
 	}
@@ -150,27 +285,32 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 			return err
 		}
 	}
-	for _, i := range d.valueIdxs {
-		var err error
-		d.scratchVal, err = row[i].Encode(d.types[i], d.datumAlloc, sqlbase.DatumEncoding_VALUE, d.scratchVal)
-		if err != nil {
-			return err
+	if !d.deDuplicate {
+		for _, i := range d.valueIdxs {
+			var err error
+			d.scratchVal, err = row[i].Encode(d.types[i], d.datumAlloc, sqlbase.DatumEncoding_VALUE, d.scratchVal)
+			if err != nil {
+				return err
+			}
 		}
+		// Put a unique row to keep track of duplicates. Note that this will not
+		// mess with key decoding.
+		d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.rowID)
+	} else {
+		// Add the row id to the value. Note that in this de-duping case the
+		// row id is the only thing in the value since the whole row is encoded
+		// into the key. Note that the key could have types for which
+		// HasCompositeKeyEncoding() returns true and we do not encode them
+		// into the value (only in the key) for this DeDupingRowContainer. This
+		// is ok since:
+		// - The DeDupingRowContainer never needs to return the original row
+		//   (there is no get method).
+		// - The columns encoded into the key are the primary key columns
+		//   of the original table, so the key encoding represents a unique
+		//   row in the original table (the key encoding here is not only
+		//   a determinant of sort ordering).
+		d.scratchVal = encoding.EncodeUvarintAscending(d.scratchVal, d.rowID)
 	}
-
-	// Put a unique row to keep track of duplicates. Note that this will not
-	// mess with key decoding.
-	d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.rowID)
-	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
-		return pgerror.Wrapf(err, pgcode.OutOfMemory,
-			"this query requires additional disk space")
-	}
-	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
-		return err
-	}
-	d.scratchKey = d.scratchKey[:0]
-	d.scratchVal = d.scratchVal[:0]
-	d.rowID++
 	return nil
 }
 
@@ -217,6 +357,15 @@ func (d *DiskRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncD
 	return d.AddRow(ctx, row)
 }
 
+// MeanEncodedRowBytes returns the mean bytes consumed by an encoded row stored in
+// this container.
+func (d *DiskRowContainer) MeanEncodedRowBytes() int {
+	if d.rowID == 0 {
+		return 0
+	}
+	return int(d.totalEncodedRowBytes / d.rowID)
+}
+
 // UnsafeReset is part of the SortableRowContainer interface.
 func (d *DiskRowContainer) UnsafeReset(ctx context.Context) error {
 	_ = d.bufferedRows.Close(ctx)
@@ -225,8 +374,10 @@ func (d *DiskRowContainer) UnsafeReset(ctx context.Context) error {
 	}
 	d.diskAcc.Clear(ctx)
 	d.bufferedRows = d.diskMap.NewBatchWriter()
+	d.clearDeDupCache()
 	d.lastReadKey = nil
 	d.rowID = 0
+	d.totalEncodedRowBytes = 0
 	return nil
 }
 
@@ -330,6 +481,23 @@ func (r *diskRowIterator) Close() {
 	if r.SortedDiskMapIterator != nil {
 		r.SortedDiskMapIterator.Close()
 	}
+}
+
+// numberedRowIterator is a specialization of diskRowIterator that is
+// only for the case where the key is the rowID assigned in AddRow().
+type numberedRowIterator struct {
+	*diskRowIterator
+	scratchKey []byte
+}
+
+func (d *DiskRowContainer) newNumberedIterator(ctx context.Context) *numberedRowIterator {
+	i := d.newIterator(ctx)
+	return &numberedRowIterator{diskRowIterator: &i}
+}
+
+func (n numberedRowIterator) seekToIndex(idx int) {
+	n.scratchKey = encoding.EncodeUvarintAscending(n.scratchKey, uint64(idx))
+	n.SeekGE(n.scratchKey)
 }
 
 type diskRowFinalIterator struct {
