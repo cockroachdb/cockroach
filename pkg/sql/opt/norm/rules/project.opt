@@ -143,12 +143,12 @@ $input
 =>
 (PushColumnRemappingIntoValues $input $projections $passthrough)
 
-# FoldTupleAccessIntoValues replaces a Values with a single column that
-# references a column of tuples with a new Values that has a column for each
-# tuple index. This works as long as the surrounding Project does not reference
-# the original tuple column itself, since then it would be invalid to eliminate
-# that reference. However, references to fields within the tuple are allowed,
-# and are translated to the new unnested Values columns.
+# FoldTupleAccessIntoValues replaces a Values that has a single tuple column and
+# at least one row with a new Values that has a column for each tuple index.
+# This works as long as the surrounding Project does not reference the original
+# tuple column itself, since then it would be invalid to eliminate that
+# reference. However, references to fields within the tuple are allowed, and are
+# translated to the new unnested Values columns.
 #
 # This rule simplifies access to the Values operator in hopes of allowing other
 # rules to fire.
@@ -161,9 +161,11 @@ $input
 #
 [FoldTupleAccessIntoValues, Normalize]
 (Project
-    $input:(Values) & (CanUnnestTuplesFromValues $input)
+    $input:(Values [ * ... ]) &
+        (ColsAreLenOne (OutputCols $input)) &
+        (CanUnnestTuplesFromValues $input)
     $projections:* &
-        (OnlyTupleColumnsAccessed
+        (HasNoDirectTupleReferences
             $projections
             $col:(SingleColFromSet (OutputCols $input))
         )
@@ -173,8 +175,61 @@ $input
 (Project
     (UnnestTuplesFromValues
         $input
-        $tuplecols:(MakeColsForUnnestTuples $col)
+        $tupleCols:(MakeColsForUnnestTuples $col)
     )
-    (FoldTupleColumnAccess $projections $tuplecols $col)
+    (FoldTupleColumnAccess $projections $tupleCols $col)
+    $passthrough
+)
+
+# FoldJSONAccessIntoValues replaces a Values operator that has a single JSON
+# column and at least one row with a new Values operator that has a column for
+# each JSON key. This works as long as the surrounding Project does not
+# reference the original JSON column itself, since then it would be invalid to
+# eliminate that reference. However, references to fields within the JSON are
+# allowed, and are translated to the new unnested Values columns. The rule only
+# fires if all referenced JSON keys exist the first row, and if all JSON keys
+# from the first row also exist in all other rows.
+#
+# FoldJSONAccessIntoValues has the side affect of pruning any keys that are not
+# present in the first Values row (since they are unreferenced).
+#
+# This rule simplifies access to the Values operator in hopes of allowing other
+# rules to fire.
+#
+# Example:
+#
+#   SELECT cust->'id' AS id, cust->'name' AS name
+#   FROM (VALUES
+#      ('{"id": 1, "name": 'Drew'}'::JSON),
+#      ('{"id": 2, "name": 'Radu'}'::JSON),
+#      ('{"id": 3, "name": 'Rebecca'}'::JSON)
+#   ) v(cust)
+#   =>
+#   SELECT id, name
+#   FROM (VALUES
+#      (1::JSON, 'Drew'::JSON),
+#      (2::JSON, 'Radu'::JSON),
+#      (3::JSON, 'Rebecca'::JSON)
+#   ) v(id, name)
+#
+[FoldJSONAccessIntoValues, Normalize]
+(Project
+    $input:(Values [ * ... ]) &
+        (ColsAreLenOne (OutputCols $input))
+    $projections:* &
+        (CanUnnestJSONFromValues
+            $input
+            $projections
+            $col:(SingleColFromSet (OutputCols $input))
+        )
+    $passthrough:* & (ColsAreEmpty $passthrough)
+)
+=>
+(Project
+    (UnnestJSONFromValues
+        $input
+        $jsonCols:(MakeColsForUnnestJSON $input $col)
+    )
+    (FoldJSONFieldAccess $projections $jsonCols $col $input)
     $passthrough
 )
