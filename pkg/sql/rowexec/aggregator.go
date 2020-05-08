@@ -150,9 +150,6 @@ func (ag *aggregatorBase) init(
 				return errors.Wrapf(err, "%s", argument)
 			}
 			argTypes[len(aggInfo.ColIdx)+j] = d.ResolvedType()
-			if err != nil {
-				return errors.Wrapf(err, "%s", argument)
-			}
 			arguments[j] = d
 		}
 
