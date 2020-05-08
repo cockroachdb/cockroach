@@ -3632,6 +3632,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if t.Width() > 0 && int(t.Width()) < len(s) {
 				s = s[:t.Width()]
 			}
+
+			if t.Oid() == oid.T_char {
+				return NewDChar(s), nil
+			}
 			return NewDString(s), nil
 		case types.CollatedStringFamily:
 			// Ditto truncation like for TString.

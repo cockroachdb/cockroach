@@ -4225,6 +4225,12 @@ func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
 }
 
+// NewDName is a helper routine to create a *DName (implemented as a *DOidWrapper)
+// initialized from a string.
+func NewDChar(d string) Datum {
+	return wrapWithOid(NewDString(d), oid.T_char)
+}
+
 // NewDIntVectorFromDArray is a helper routine to create a *DIntVector
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDIntVectorFromDArray(d *DArray) Datum {
