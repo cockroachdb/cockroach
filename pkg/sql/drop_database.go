@@ -115,6 +115,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{Required: true},
 				RequireMutable:    true,
+				IncludeOffline:    true,
 			},
 			tbName.Catalog(),
 			tbName.Schema(),
@@ -132,6 +133,12 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 				"descriptor for %q is not MutableTableDescriptor",
 				tbName.String(),
 			)
+		}
+		if tbDesc.State == sqlbase.TableDescriptor_OFFLINE {
+			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"cannot drop a database with OFFLINE tables, ensure %s is"+
+					" dropped or made public before dropping database %s",
+				tbName.String(), tree.AsString((*tree.Name)(&dbDesc.Name)))
 		}
 		if err := p.prepareDropWithTableDesc(ctx, tbDesc); err != nil {
 			return nil, err
