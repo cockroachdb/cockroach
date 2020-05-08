@@ -92,7 +92,7 @@ type joinReader struct {
 
 	// State variables for each batch of input rows.
 	inputRows            sqlbase.EncDatumRows
-	lookedUpRows         rowcontainer.IndexedRowContainer
+	lookedUpRows         *rowcontainer.DiskBackedNumberedRowContainer
 	keyToInputRowIndices map[string][]int
 	// inputRowIdxToLookedUpRowIdx is a multimap from input row indices to
 	// corresponding looked up row indices. It's populated in the
@@ -232,8 +232,8 @@ func newJoinReader(
 	// Initialize memory monitors and row container for looked up rows.
 	jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joiner-limited")
 	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
-	drc := rowcontainer.NewDiskBackedIndexedRowContainer(
-		nil, /* ordering */
+	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
+		false, /* de-dup */
 		jr.desc.ColumnTypesWithMutations(returnMutations),
 		jr.EvalCtx,
 		jr.FlowCtx.Cfg.TempStorage,
@@ -276,7 +276,7 @@ func (jr *joinReader) SetBatchSize(batchSize int) {
 
 // Spilled returns whether the joinReader spilled to disk.
 func (jr *joinReader) Spilled() bool {
-	return jr.lookedUpRows.(*rowcontainer.DiskBackedIndexedRowContainer).Spilled()
+	return jr.lookedUpRows.Spilled()
 }
 
 // neededRightCols returns the set of column indices which need to be fetched
@@ -477,7 +477,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 					lookedUpRow[i].Datum = tree.DNull
 				}
 			}
-			if err := jr.lookedUpRows.AddRow(jr.Ctx, lookedUpRow); err != nil {
+			if _, err := jr.lookedUpRows.AddRow(jr.Ctx, lookedUpRow); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
 			}
@@ -509,7 +509,9 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 	}
 	log.VEventf(jr.Ctx, 1, "done joining rows (%d loop iterations)", lookedUpRowIdx)
-
+	if !isJoinTypePartialJoin {
+		jr.lookedUpRows.SetupForRead(jr.Ctx, jr.inputRowIdxToLookedUpRowIdx)
+	}
 	return jrEmittingRows, nil
 }
 
@@ -573,12 +575,12 @@ func (jr *joinReader) emitRow() (
 		return jrEmittingRows, nil, nil
 	}
 
-	lookedUpRow, err := jr.lookedUpRows.GetRow(jr.Ctx, lookedUpRowIdx)
+	lookedUpRow, err := jr.lookedUpRows.GetRow(jr.Ctx, uint64(lookedUpRowIdx), false /*skip*/)
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
-	outputRow, err := jr.render(inputRow, lookedUpRow.(rowcontainer.IndexedRow).Row)
+	outputRow, err := jr.render(inputRow, lookedUpRow)
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
