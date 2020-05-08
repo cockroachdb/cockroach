@@ -170,7 +170,7 @@ spec:
         command:
         - "/bin/ash"
         - "-ecx"
-        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname),$(hostname -f),$(hostname -i),cockroachdb-public,cockroachdb-public.${POD_NAMESPACE}.svc.cluster.local -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname),$(hostname -f),$(hostname -i),cockroachdb-public,cockroachdb-public.${POD_NAMESPACE}.svc.cluster.local,cockroachdb-public.${POD_NAMESPACE}.svc,cockroachdb-public.${POD_NAMESPACE} -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
         env:
         - name: POD_NAMESPACE
           valueFrom:
