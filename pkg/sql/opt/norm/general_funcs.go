@@ -126,6 +126,17 @@ func (c *CustomFuncs) IsAdditiveType(typ *types.T) bool {
 	return types.IsAdditiveType(typ)
 }
 
+// IsConstJSON returns true if the given ScalarExpr is a ConstExpr that wraps a
+// DJSON datum.
+func (c *CustomFuncs) IsConstJSON(expr opt.ScalarExpr) bool {
+	if constExpr, ok := expr.(*memo.ConstExpr); ok {
+		if _, ok := constExpr.Value.(*tree.DJSON); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // ----------------------------------------------------------------------
 //
 // Column functions
@@ -162,23 +173,13 @@ func (c *CustomFuncs) IsColNotNull2(col opt.ColumnID, left, right memo.RelExpr) 
 		right.Relational().NotNullCols.Contains(col)
 }
 
-// HasNoCols returns true if the input expression has zero output columns.
-func (c *CustomFuncs) HasNoCols(input memo.RelExpr) bool {
-	return input.Relational().OutputCols.Empty()
-}
-
-// HasOneCol returns true if the input expression has exactly one output column.
-func (c *CustomFuncs) HasOneCol(input memo.RelExpr) bool {
-	return input.Relational().OutputCols.Len() == 1
-}
-
 // ColsAreConst returns true if the given columns have the same values for all
 // rows in the given input expression.
 func (c *CustomFuncs) ColsAreConst(cols opt.ColSet, input memo.RelExpr) bool {
 	return cols.SubsetOf(input.Relational().FuncDeps.ConstantCols())
 }
 
-// ColsAreEmpty returns true if the column set is empty.
+// ColsAreEmpty returns true if the given column set is empty.
 func (c *CustomFuncs) ColsAreEmpty(cols opt.ColSet) bool {
 	return cols.Empty()
 }
@@ -186,6 +187,11 @@ func (c *CustomFuncs) ColsAreEmpty(cols opt.ColSet) bool {
 // MakeEmptyColSet returns a column set with no columns in it.
 func (c *CustomFuncs) MakeEmptyColSet() opt.ColSet {
 	return opt.ColSet{}
+}
+
+// ColsAreLenOne returns true if the input ColSet has exactly one column.
+func (c *CustomFuncs) ColsAreLenOne(cols opt.ColSet) bool {
+	return cols.Len() == 1
 }
 
 // ColsAreSubset returns true if the left columns are a subset of the right
