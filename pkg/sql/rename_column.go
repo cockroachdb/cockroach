@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 var errEmptyColumnName = pgerror.New(pgcode.Syntax, "empty column name")
@@ -117,9 +117,29 @@ func (p *planner) renameColumn(
 	if isShardColumn && !allowRenameOfShardColumn {
 		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
 	}
-
-	if _, _, err := tableDesc.FindColumnByName(*newName); err == nil {
-		return false, fmt.Errorf("column name %q already exists", tree.ErrString(newName))
+	// Understand if the active column already exists before checking for column
+	// mutations to detect assertion failure of empty mutation and no column.
+	// Otherwise we would have to make the above call twice.
+	_, columnNotFoundErr := tableDesc.FindActiveColumnByName(string(*newName))
+	if m := tableDesc.FindColumnMutationByName(*newName); m != nil {
+		switch m.Direction {
+		case sqlbase.DescriptorMutation_ADD:
+			return false, pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q in the middle of being added, not yet public",
+				col.Name)
+		case sqlbase.DescriptorMutation_DROP:
+			return false, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q being dropped, try again later", col.Name)
+		default:
+			if columnNotFoundErr != nil {
+				return false, errors.AssertionFailedf(
+					"mutation in state %s, direction %s, and no column descriptor",
+					errors.Safe(m.State), errors.Safe(m.Direction))
+			}
+		}
+	}
+	if columnNotFoundErr == nil {
+		return false, sqlbase.NewColumnAlreadyExistsError(tree.ErrString(newName), tableDesc.Name)
 	}
 
 	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
