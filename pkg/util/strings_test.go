@@ -10,7 +10,11 @@
 
 package util
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestGetSingleRune(t *testing.T) {
 	tests := []struct {
@@ -32,6 +36,28 @@ func TestGetSingleRune(t *testing.T) {
 			if tc.expected != got {
 				t.Fatalf("expected %v, got %v", tc.expected, got)
 			}
+		})
+	}
+}
+
+func TestToLowerSingleByte(t *testing.T) {
+	testCases := []struct {
+		from     byte
+		expected byte
+	}{
+		{'a', 'a'},
+		{'A', 'a'},
+		{'c', 'c'},
+		{'C', 'c'},
+		{'Z', 'z'},
+		{'1', '1'},
+		{'\n', '\n'},
+	}
+
+	for _, tc := range testCases {
+		t.Run(string(tc.from), func(t *testing.T) {
+			ret := ToLowerSingleByte(tc.from)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 }
