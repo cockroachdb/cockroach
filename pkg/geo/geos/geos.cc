@@ -316,6 +316,7 @@ CR_GEOS_Status CR_GEOS_UnaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, R *ret
         error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
       }
     }
+    lib->GEOSGeom_destroy_r(handle, geom);
   }
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
@@ -337,6 +338,12 @@ CR_GEOS_Status CR_GEOS_BinaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GE
         error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
       }
     }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
   }
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
@@ -378,6 +385,12 @@ CR_GEOS_Status CR_GEOS_BinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_G
     } else {
       *ret = r;
     }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
   }
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
