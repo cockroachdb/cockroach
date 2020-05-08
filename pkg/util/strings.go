@@ -13,7 +13,7 @@ package util
 import (
 	"unicode/utf8"
 
-	"github.com/cockroachdb/errors"
+	"github.com/pkg/errors"
 )
 
 // GetSingleRune decodes the string s as a single rune if possible.
@@ -29,4 +29,13 @@ func GetSingleRune(s string) (rune, error) {
 		return r, errors.New("must be only one character")
 	}
 	return r, nil
+}
+
+// ToLowerSingleByte returns the the lowercase of a given single ASCII byte.
+// A non ASCII byte is returned unchanged.
+func ToLowerSingleByte(b byte) byte {
+	if b >= 'A' && b <= 'Z' {
+		return 'a' + (b - 'A')
+	}
+	return b
 }
