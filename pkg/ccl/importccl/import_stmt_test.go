@@ -30,16 +30,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1103,15 +1106,38 @@ func TestImportCSVStmt(t *testing.T) {
 	rowsPerFile := 1000
 	rowsPerRaceFile := 16
 
+	var forceFailure bool
+	blockGC := make(chan struct{})
+
 	ctx := context.Background()
 	baseDir := filepath.Join("testdata", "csv")
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
+		Knobs: base.TestingKnobs{
+			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
+		},
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
+
+	for i := range tc.Servers {
+		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	kvDB := tc.Server(0).DB()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
@@ -1471,6 +1497,67 @@ func TestImportCSVStmt(t *testing.T) {
 			t, `relation "t" already exists`,
 			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]),
 		)
+	})
+
+	// Verify that a failed import will clean up after itself. This means:
+	//  - Delete the garbage data that it partially imported.
+	//  - Delete the table descriptor for the table that was created during the
+	//  import.
+	t.Run("failed-import-gc", func(t *testing.T) {
+		forceFailure = true
+		defer func() { forceFailure = false }()
+		defer gcjob.SetSmallMaxGCIntervalForTest()()
+		beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sqlDB.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
+		// Hit a failure during import.
+		sqlDB.ExpectErr(
+			t, `testing injected failure`,
+			fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[1]),
+		)
+		// Nudge the registry to quickly adopt the job.
+		tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+
+		// In the case of the test, the ID of the table that will be cleaned up due
+		// to the failed import will be one higher than the ID of the empty database
+		// it was created in.
+		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
+		tableID := sqlbase.ID(dbID + 1)
+		var td *sqlbase.TableDescriptor
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			td, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, tableID)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		// Ensure that we have garbage written to the descriptor that we want to
+		// clean up.
+		tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), rowsPerFile)
+
+		// Allow GC to progress.
+		close(blockGC)
+		// Ensure that a GC job was created, and wait for it to finish.
+		doneGCQuery := fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND created > %s",
+			"SCHEMA CHANGE GC", jobs.StatusSucceeded, beforeImport.String(),
+		)
+		sqlDB.CheckQueryResultsRetry(t, doneGCQuery, [][]string{{"1"}})
+		// Expect there are no more KVs for this span.
+		tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), 0)
+		// Expect that the table descriptor is deleted.
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, tableID)
+			if !testutils.IsError(err, "descriptor not found") {
+				return err
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	// Test basic role based access control. Users who have the admin role should
