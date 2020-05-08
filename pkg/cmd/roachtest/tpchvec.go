@@ -164,6 +164,22 @@ func (p tpchVecPerfTest) numRunsPerQuery() int {
 	return tpchPerfTestNumRunsPerQuery
 }
 
+func (p tpchVecPerfTest) preTestRunHook(
+	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
+) {
+	p.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version)
+	// TODO(yuzefovich): remove this once we figure out the issue with random
+	// performance hits on query 7.
+	for node := 1; node <= c.spec.NodeCount; node++ {
+		nodeConn := c.Conn(ctx, node)
+		if _, err := nodeConn.Exec(
+			"SELECT crdb_internal.set_vmodule('vectorized_flow=1,spilling_queue=1,row_container=2,hash_row_container=2');",
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bool) {
 	configIdx := tpchPerfTestVecOffConfigIdx
 	if vectorized {

@@ -372,4 +372,11 @@ func TestCovers(t *testing.T) {
 			require.Equal(t, tc.expected, coveredBy)
 		})
 	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Covers(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB)
+		requireMismatchingSRIDError(t, err)
+		_, err = CoveredBy(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB)
+		requireMismatchingSRIDError(t, err)
+	})
 }

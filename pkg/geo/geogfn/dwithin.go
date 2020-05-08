@@ -21,6 +21,10 @@ import (
 func DWithin(
 	a *geo.Geography, b *geo.Geography, distance float64, useSphereOrSpheroid useSphereOrSpheroid,
 ) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+
 	aRegions, err := a.AsS2()
 	if err != nil {
 		return false, err
