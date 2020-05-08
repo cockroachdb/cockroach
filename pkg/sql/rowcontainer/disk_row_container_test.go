@@ -15,6 +15,7 @@ import (
 	"fmt"
 	math "math"
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // compareRows compares l and r according to a column ordering. Returns -1 if
@@ -238,6 +240,130 @@ func TestDiskRowContainer(t *testing.T) {
 			}()
 		}
 	})
+
+	t.Run("DeDupingRowContainer", func(t *testing.T) {
+		numCols := 2
+		numRows := 10
+		ordering := sqlbase.ColumnOrdering{
+			sqlbase.ColumnOrderInfo{
+				ColIdx:    0,
+				Direction: encoding.Ascending,
+			},
+			sqlbase.ColumnOrderInfo{
+				ColIdx:    1,
+				Direction: encoding.Descending,
+			},
+		}
+		// Use random types and random rows.
+		types := sqlbase.RandSortingTypes(rng, numCols)
+		rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
+		numRows = len(rows) // makeUniqueRows can give < numRows
+		// Shuffle so that not adding in sorted order.
+		rand.Shuffle(len(rows), func(i, j int) {
+			rows[i], rows[j] = rows[j], rows[i]
+		})
+		d := MakeDiskRowContainer(&diskMonitor, types, ordering, tempEngine)
+		defer d.Close(ctx)
+		d.DoDeDuplicate()
+		addRowsRepeatedly := func() {
+			// Add some number of de-duplicated rows using AddRow() to exercise
+			// the code path that spills from memory to disk.
+			addRowCalls := rng.Intn(numRows)
+			for i := 0; i < addRowCalls; i++ {
+				require.NoError(t, d.AddRow(ctx, rows[i]))
+				require.Equal(t, d.bufferedRows.NumPutsSinceFlush(), len(d.deDupCache))
+			}
+			// Repeatedly add the same set of rows.
+			for i := 0; i < 3; i++ {
+				if i == 2 && rng.Intn(2) == 0 {
+					// Clear the de-dup cache so that a SortedDiskMapIterator is needed
+					// to de-dup.
+					d.testingFlushBuffer(ctx)
+				}
+				for j := 0; j < numRows; j++ {
+					idx, err := d.AddRowWithDeDup(ctx, rows[j])
+					require.NoError(t, err)
+					require.Equal(t, j, int(idx))
+				}
+			}
+		}
+		addRowsRepeatedly()
+		// Reset and add the rows in a different order.
+		require.NoError(t, d.UnsafeReset(ctx))
+		rand.Shuffle(len(rows), func(i, j int) {
+			rows[i], rows[j] = rows[j], rows[i]
+		})
+		addRowsRepeatedly()
+	})
+
+	t.Run("NumberedRowIterator", func(t *testing.T) {
+		numCols := 2
+		numRows := 10
+		// Use random types and random rows.
+		types := sqlbase.RandSortingTypes(rng, numCols)
+		rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
+		// There are no ordering columns when using the numberedRowIterator.
+		d := MakeDiskRowContainer(&diskMonitor, types, nil, tempEngine)
+		defer d.Close(ctx)
+		for i := 0; i < numRows; i++ {
+			require.NoError(t, d.AddRow(ctx, rows[i]))
+		}
+		require.NotEqual(t, 0, d.MeanEncodedRowBytes())
+		iter := d.newNumberedIterator(ctx)
+		defer iter.Close()
+		// Checks equality of rows[index] and the current position of iter.
+		checkEq := func(index int) {
+			valid, err := iter.Valid()
+			require.True(t, valid)
+			require.NoError(t, err)
+			row, err := iter.Row()
+			require.NoError(t, err)
+			require.Equal(t, rows[index].String(types), row.String(types))
+		}
+		for i := 0; i < numRows; i++ {
+			// Seek to a random position and iterate until the end.
+			index := rng.Intn(numRows)
+			iter.seekToIndex(uint64(index))
+			checkEq(index)
+			for index++; index < numRows; index++ {
+				iter.Next()
+				checkEq(index)
+			}
+		}
+	})
+}
+
+func makeUniqueRows(
+	t *testing.T,
+	evalCtx *tree.EvalContext,
+	rng *rand.Rand,
+	numRows int,
+	types []*types.T,
+	ordering sqlbase.ColumnOrdering,
+) sqlbase.EncDatumRows {
+	rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
+	// It is possible there was some duplication, so remove duplicates.
+	var alloc sqlbase.DatumAlloc
+	sort.Slice(rows, func(i, j int) bool {
+		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, rows[j])
+		require.NoError(t, err)
+		return cmp < 0
+	})
+	deDupedRows := rows[:1]
+	for i := 1; i < len(rows); i++ {
+		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, deDupedRows[len(deDupedRows)-1])
+		require.NoError(t, err)
+		if cmp != 0 {
+			deDupedRows = append(deDupedRows, rows[i])
+		}
+	}
+	rows = deDupedRows
+	numRows = len(rows)
+	// Shuffle so that not adding in sorted order.
+	rand.Shuffle(len(rows), func(i, j int) {
+		rows[i], rows[j] = rows[j], rows[i]
+	})
+	return rows
 }
 
 func TestDiskRowContainerDiskFull(t *testing.T) {
