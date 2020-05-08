@@ -178,6 +178,10 @@ func (b *writeBuffer) writeTextDatum(
 	case *tree.DOid:
 		b.writeLengthPrefixedDatum(v)
 
+	case *tree.DEnum:
+		// Enums are serialized with their logical representation.
+		b.writeLengthPrefixedString(v.LogicalRep)
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
@@ -389,6 +393,9 @@ func (b *writeBuffer) writeBinaryDatum(
 		} else {
 			b.setError(errors.Errorf("error encoding inet to pgBinary: %v", v.IPAddr))
 		}
+
+	case *tree.DEnum:
+		b.writeLengthPrefixedString(v.LogicalRep)
 
 	case *tree.DString:
 		b.writeLengthPrefixedString(string(*v))

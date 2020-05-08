@@ -1015,7 +1015,16 @@ message TypeDescriptor {
   optional Kind kind = 6 [(gogoproto.nullable) = false];
 
   // The fields below are used only when this type is an ENUM type.
-  // TODO (rohany): Leaving this empty until we actually store enum values.
+
+  // EnumMember represents a value in an enum.
+  message EnumMember {
+    option (gogoproto.equal) = true;
+    optional bytes physical_representation = 1;
+    optional string logical_representation = 2 [(gogoproto.nullable) = false];
+    // TODO (rohany): Add the state here.
+  }
+  // enum_members is the set of values in an enum.
+  repeated EnumMember enum_members = 7 [(gogoproto.nullable) = false];
 
   // TODO (rohany): Do we need a draining names like the table descriptor?
 }
