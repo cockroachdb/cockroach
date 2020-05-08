@@ -1914,6 +1914,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		Visibility:        n.table.colCfg.visibility.toDistSQLScanVisibility(),
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		MaintainOrdering:  len(n.reqOrdering) > 0,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table)
 	if err != nil {
