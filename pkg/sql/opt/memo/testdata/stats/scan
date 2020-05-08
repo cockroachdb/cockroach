@@ -776,13 +776,13 @@ SELECT * FROM hist WHERE e < '2018-07-31 23:00:00'::TIMESTAMP
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp!null) f:6(timestamptz) g:7(string)
  ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0]
- │   histogram(5)=  0               0               90              10               5.5645                  0
+ │   histogram(5)=  0               0               90              10               5.5645              6.7204e-14
  │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
  └── scan hist@idx_e
       ├── columns: e:5(timestamp!null) rowid:8(int!null)
       ├── constraint: /5/8: (/NULL - /'2018-07-31 22:59:59.999999+00:00']
       ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0]
-      │   histogram(5)=  0               0               90              10               5.5645                  0
+      │   histogram(5)=  0               0               90              10               5.5645              6.7204e-14
       │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
       ├── key: (8)
       └── fd: (8)-->(5)
@@ -808,16 +808,16 @@ SELECT * FROM hist WHERE g = 'mango' OR g = 'foo'
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string!null)
- ├── stats: [rows=165, distinct(7)=2, null(7)=0]
- │   histogram(7)=  0   135   0    30
+ ├── stats: [rows=60, distinct(7)=2, null(7)=0]
+ │   histogram(7)=  0   30    0    30
  │                <--- 'foo' --- 'mango'
  └── scan hist@idx_g
       ├── columns: g:7(string!null) rowid:8(int!null)
       ├── constraint: /7/8
       │    ├── [/'foo' - /'foo']
       │    └── [/'mango' - /'mango']
-      ├── stats: [rows=165, distinct(7)=2, null(7)=0]
-      │   histogram(7)=  0   135   0    30
+      ├── stats: [rows=60, distinct(7)=2, null(7)=0]
+      │   histogram(7)=  0   30    0    30
       │                <--- 'foo' --- 'mango'
       ├── key: (8)
       └── fd: (8)-->(7)
@@ -951,16 +951,16 @@ SELECT * FROM xyz WHERE x=1 AND z<990 AND (other=11 OR other=13)
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) other:4(int!null)
- ├── stats: [rows=0.879991102, distinct(1)=0.879991102, null(1)=0, distinct(3)=0.879991102, null(3)=0, distinct(4)=0.879991102, null(4)=0]
- │   histogram(3)=  0  0  0.8791 0.00088978
- │                <--- 0 ---------- 989 ---
- │   histogram(4)=  0 0.44 0 0.44
- │                <--- 11 --- 13
+ ├── stats: [rows=0.395995996, distinct(1)=0.395995996, null(1)=0, distinct(3)=0.395995996, null(3)=0, distinct(4)=0.395995996, null(4)=0]
+ │   histogram(3)=  0  0  0.3956 0.0004004
+ │                <--- 0 ---------- 989 --
+ │   histogram(4)=  0 0.198 0 0.198
+ │                <--- 11 ---- 13 -
  ├── key: (2)
  ├── fd: ()-->(1), (2)-->(3,4), (3)-->(2,4)
  ├── index-join xyz
  │    ├── columns: x:1(int!null) y:2(int!null) z:3(int) other:4(int)
- │    ├── stats: [rows=0.888888889]
+ │    ├── stats: [rows=0.4]
  │    ├── key: (2)
  │    ├── fd: ()-->(1), (2)-->(4), (2)-->(3,4), (1,3)~~>(2,4)
  │    └── scan xyz@xyz_x_other_z
@@ -968,9 +968,9 @@ select
  │         ├── constraint: /1/-4/2
  │         │    ├── [/1/13 - /1/13]
  │         │    └── [/1/11 - /1/11]
- │         ├── stats: [rows=0.888888889, distinct(1)=0.888888889, null(1)=0, distinct(4)=0.888888889, null(4)=0]
- │         │   histogram(4)=  0 0.44444 0 0.44444
- │         │                <---- 11 ------ 13 --
+ │         ├── stats: [rows=0.4, distinct(1)=0.4, null(1)=0, distinct(4)=0.4, null(4)=0]
+ │         │   histogram(4)=  0 0.2  0 0.2
+ │         │                <--- 11 --- 13
  │         ├── key: (2)
  │         └── fd: ()-->(1), (2)-->(4)
  └── filters
