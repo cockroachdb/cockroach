@@ -75,17 +75,17 @@ type Smither struct {
 	scalarExprWeights, boolExprWeights []scalarExprWeight
 	scalarExprSampler, boolExprSampler *scalarExprSampler
 
-	disableWith            bool
-	disableNonImmutableFns bool
-	disableLimits          bool
-	disableWindowFuncs     bool
-	simpleDatums           bool
-	avoidConsts            bool
-	vectorizable           bool
-	outputSort             bool
-	postgres               bool
-	ignoreFNs              []*regexp.Regexp
-	complexity             float64
+	disableWith        bool
+	disableImpureFns   bool
+	disableLimits      bool
+	disableWindowFuncs bool
+	simpleDatums       bool
+	avoidConsts        bool
+	vectorizable       bool
+	outputSort         bool
+	postgres           bool
+	ignoreFNs          []*regexp.Regexp
+	complexity         float64
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -268,9 +268,9 @@ var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
 })
 
-// DisableNonImmutableFns causes the Smither to disable non-immutable functions.
-var DisableNonImmutableFns = simpleOption("disable non-immutable funcs", func(s *Smither) {
-	s.disableNonImmutableFns = true
+// DisableImpureFns causes the Smither to disable impure functions.
+var DisableImpureFns = simpleOption("disable impure funcs", func(s *Smither) {
+	s.disableImpureFns = true
 })
 
 // DisableCRDBFns causes the Smither to disable crdb_internal functions.
@@ -337,7 +337,7 @@ var OutputSort = simpleOption("output sort", func(s *Smither) {
 var CompareMode = multiOption(
 	"compare mode",
 	DisableMutations(),
-	DisableNonImmutableFns(),
+	DisableImpureFns(),
 	DisableCRDBFns(),
 	IgnoreFNs("^version"),
 	DisableLimits(),

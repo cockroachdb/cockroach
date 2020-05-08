@@ -137,8 +137,8 @@ const (
 	// This is used e.g. when processing the calls inside ROWS FROM.
 	RejectNestedGenerators
 
-	// RejectNonImmutableFunctions rejects any non-const functions like now().
-	RejectNonImmutableFunctions
+	// RejectImpureFunctions rejects any non-const functions like now().
+	RejectImpureFunctions
 
 	// RejectSubqueries rejects subqueries in scalar contexts.
 	RejectSubqueries
@@ -164,9 +164,9 @@ type ScalarProperties struct {
 	// contained a SRF.
 	SeenGenerator bool
 
-	// SeenNonImmutableFunctions is set to true if the expression originally
-	// contained a function which was not immutable.
-	SeenNonImmutable bool
+	// SeenImpureFunctions is set to true if the expression originally
+	// contained an impure function.
+	SeenImpure bool
 
 	// inFuncExpr is temporarily set to true while type checking the
 	// parameters of a function. Used to process RejectNestedGenerators
@@ -810,15 +810,15 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		}
 		sc.Properties.Derived.SeenGenerator = true
 	}
-	if def.Volatility != VolatilityImmutable {
-		if sc.Properties.required.rejectFlags&RejectNonImmutableFunctions != 0 {
+	if def.Impure {
+		if sc.Properties.required.rejectFlags&RejectImpureFunctions != 0 {
 			// The code FeatureNotSupported is a bit misleading here,
 			// because we probably can't support the feature at all. However
 			// this error code matches PostgreSQL's in the same conditions.
 			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"impure functions are not allowed in %s", sc.Properties.required.context)
 		}
-		sc.Properties.Derived.SeenNonImmutable = true
+		sc.Properties.Derived.SeenImpure = true
 	}
 	return nil
 }

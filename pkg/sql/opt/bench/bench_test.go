@@ -511,7 +511,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			typ,
 			"", /* context */
 			&h.semaCtx,
-			true, /* allowNonImmutable */
+			true, /* allowImpure */
 		)
 		if err != nil {
 			tb.Fatalf("%v", err)

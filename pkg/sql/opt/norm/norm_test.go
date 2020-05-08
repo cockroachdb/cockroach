@@ -86,8 +86,8 @@ func TestRuleFunctionAssumption(t *testing.T) {
 			t.Errorf("could not find properties for function %s", name)
 			continue
 		}
-		if props.Volatility != tree.VolatilityImmutable {
-			t.Errorf("%s should not be folded because it is not immutable", name)
+		if props.Impure {
+			t.Errorf("%s should not be folded because it is impure", name)
 		}
 		if props.Category == categorySystemInfo || props.Category == categoryDateAndTime {
 			switch name {

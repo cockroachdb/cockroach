@@ -1292,13 +1292,11 @@ func (node *FuncExpr) IsWindowFunctionApplication() bool {
 	return node.WindowDef != nil
 }
 
-// Volatility returns the volatility of the given function.
-// See Volatility definition.
-func (node *FuncExpr) Volatility() Volatility {
-	if node.fnProps == nil {
-		return VolatilityImmutable
-	}
-	return node.fnProps.Volatility
+// IsImpure returns whether the function application is impure, meaning that it
+// potentially returns a different value when called in the same statement with
+// the same parameters.
+func (node *FuncExpr) IsImpure() bool {
+	return node.fnProps != nil && node.fnProps.Impure
 }
 
 // IsDistSQLBlacklist returns whether the function is not supported by DistSQL.
