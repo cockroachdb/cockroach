@@ -126,6 +126,17 @@ func (c *CustomFuncs) IsAdditiveType(typ *types.T) bool {
 	return types.IsAdditiveType(typ)
 }
 
+// IsConstJson returns true if the given ScalarExpr is a ConstExpr that wraps a
+// DJSON datum.
+func (c *CustomFuncs) IsConstJson(expr opt.ScalarExpr) bool {
+	if constExpr, ok := expr.(*memo.ConstExpr); ok {
+		if _, ok := constExpr.Value.(*tree.DJSON); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // ----------------------------------------------------------------------
 //
 // Column functions

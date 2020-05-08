@@ -3,7 +3,7 @@ CREATE TABLE a (x INT PRIMARY KEY, y INT, f FLOAT, s STRING)
 ----
 
 exec-ddl
-CREATE TABLE b (x INT PRIMARY KEY, z INT)
+CREATE TABLE b (x INT PRIMARY KEY, z INT, j JSON)
 ----
 
 exec-ddl
@@ -85,65 +85,65 @@ norm expect=EliminateJoinUnderProjectLeft
 SELECT 1+b.x FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
- ├── columns: "?column?":7!null
+ ├── columns: "?column?":8!null
  ├── immutable
  ├── scan b
  │    ├── columns: b.x:1!null
  │    └── key: (1)
  └── projections
-      └── b.x:1 + 1 [as="?column?":7, outer=(1), immutable]
+      └── b.x:1 + 1 [as="?column?":8, outer=(1), immutable]
 
 # Case with no references to the left side.
 norm expect=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
- ├── columns: "?column?":7!null
- ├── fd: ()-->(7)
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
  ├── scan b
  └── projections
-      └── 1 [as="?column?":7]
+      └── 1 [as="?column?":8]
 
 # No-op case because the cross join may duplicate left rows.
 norm expect-not=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON True
 ----
 project
- ├── columns: "?column?":7!null
- ├── fd: ()-->(7)
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
  ├── left-join (cross)
  │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── scan b
  │    ├── scan a
  │    └── filters (true)
  └── projections
-      └── 1 [as="?column?":7]
+      └── 1 [as="?column?":8]
 
 # No-op case with a projection that references the right input.
 norm expect-not=EliminateJoinUnderProjectLeft
 SELECT b.x, b.z, 1+a.x FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
- ├── columns: x:1!null z:2 "?column?":7
+ ├── columns: x:1!null z:2 "?column?":8
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2,7)
+ ├── fd: (1)-->(2,8)
  ├── left-join (hash)
- │    ├── columns: b.x:1!null z:2 a.x:3
+ │    ├── columns: b.x:1!null z:2 a.x:4
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3)
+ │    ├── fd: (1)-->(2,4)
  │    ├── scan b
  │    │    ├── columns: b.x:1!null z:2
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── scan a
- │    │    ├── columns: a.x:3!null
- │    │    └── key: (3)
+ │    │    ├── columns: a.x:4!null
+ │    │    └── key: (4)
  │    └── filters
- │         └── b.x:1 = a.x:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │         └── b.x:1 = a.x:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  └── projections
-      └── a.x:3 + 1 [as="?column?":7, outer=(3), immutable]
+      └── a.x:4 + 1 [as="?column?":8, outer=(4), immutable]
 
 # No-op case because r2 is nullable, and therefore rows may not match despite
 # the fact that it is a foreign key.
@@ -220,9 +220,9 @@ norm expect=EliminateJoinUnderProjectRight
 SELECT b1.x, b1.z FROM b INNER JOIN b AS b1 ON b.x = b1.x
 ----
 scan b1
- ├── columns: x:3!null z:4
- ├── key: (3)
- └── fd: (3)-->(4)
+ ├── columns: x:4!null z:5
+ ├── key: (4)
+ └── fd: (4)-->(5)
 
 # InnerJoin case with not-null foreign key.
 norm expect=EliminateJoinUnderProjectRight
@@ -239,18 +239,18 @@ norm expect-not=EliminateJoinUnderProjectRight
 SELECT b.x, b1.x FROM b LEFT JOIN b AS b1 ON b.x = b1.x
 ----
 inner-join (hash)
- ├── columns: x:1!null x:3!null
+ ├── columns: x:1!null x:4!null
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- ├── key: (3)
- ├── fd: (1)==(3), (3)==(1)
+ ├── key: (4)
+ ├── fd: (1)==(4), (4)==(1)
  ├── scan b
  │    ├── columns: b.x:1!null
  │    └── key: (1)
  ├── scan b1
- │    ├── columns: b1.x:3!null
- │    └── key: (3)
+ │    ├── columns: b1.x:4!null
+ │    └── key: (4)
  └── filters
-      └── b.x:1 = b1.x:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      └── b.x:1 = b1.x:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 # --------------------------------------------------
 # EliminateProject
@@ -307,7 +307,7 @@ norm expect=MergeProjects
 SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
- ├── columns: r:7
+ ├── columns: r:8
  ├── immutable
  ├── inner-join (hash)
  │    ├── columns: a.x:1!null y:2 b.x:5!null
@@ -324,7 +324,7 @@ project
  │    └── filters
  │         └── a.x:1 = b.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
-      └── y:2 + 1 [as=r:7, outer=(2), immutable]
+      └── y:2 + 1 [as=r:8, outer=(2), immutable]
 
 # Outer and inner projections have synthesized columns.
 norm expect=MergeProjects
@@ -531,47 +531,47 @@ norm expect=FoldTupleAccessIntoValues
 SELECT (SELECT (tup).@1 * x FROM b) FROM (VALUES ((1,2)), ((3,4))) AS v(tup)
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── cardinality: [1 - ]
  ├── immutable
  ├── ensure-distinct-on
- │    ├── columns: "?column?":4 rownum:8!null
- │    ├── grouping columns: rownum:8!null
+ │    ├── columns: "?column?":5 rownum:9!null
+ │    ├── grouping columns: rownum:9!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── cardinality: [1 - ]
  │    ├── immutable
- │    ├── key: (8)
- │    ├── fd: (8)-->(4)
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(5)
  │    ├── left-join-apply
- │    │    ├── columns: "?column?":4 column1_1:6!null rownum:8!null
+ │    │    ├── columns: "?column?":5 column1_1:7!null rownum:9!null
  │    │    ├── cardinality: [2 - ]
  │    │    ├── immutable
- │    │    ├── fd: (8)-->(6)
+ │    │    ├── fd: (9)-->(7)
  │    │    ├── ordinality
- │    │    │    ├── columns: column1_1:6!null rownum:8!null
+ │    │    │    ├── columns: column1_1:7!null rownum:9!null
  │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── key: (8)
- │    │    │    ├── fd: (8)-->(6)
+ │    │    │    ├── key: (9)
+ │    │    │    ├── fd: (9)-->(7)
  │    │    │    └── values
- │    │    │         ├── columns: column1_1:6!null
+ │    │    │         ├── columns: column1_1:7!null
  │    │    │         ├── cardinality: [2 - 2]
  │    │    │         ├── (1,)
  │    │    │         └── (3,)
  │    │    ├── project
- │    │    │    ├── columns: "?column?":4
- │    │    │    ├── outer: (6)
+ │    │    │    ├── columns: "?column?":5
+ │    │    │    ├── outer: (7)
  │    │    │    ├── immutable
  │    │    │    ├── scan b
  │    │    │    │    ├── columns: x:2!null
  │    │    │    │    └── key: (2)
  │    │    │    └── projections
- │    │    │         └── x:2 * column1_1:6 [as="?column?":4, outer=(2,6), immutable]
+ │    │    │         └── x:2 * column1_1:7 [as="?column?":5, outer=(2,7), immutable]
  │    │    └── filters (true)
  │    └── aggregations
- │         └── const-agg [as="?column?":4, outer=(4)]
- │              └── "?column?":4
+ │         └── const-agg [as="?column?":5, outer=(5)]
+ │              └── "?column?":5
  └── projections
-      └── "?column?":4 [as="?column?":5, outer=(4)]
+      └── "?column?":5 [as="?column?":6, outer=(5)]
 
 # Case where columns are unnested and then pruned away because the surrounding
 # project only references an outer column.
@@ -701,31 +701,31 @@ norm expect-not=FoldTupleAccessIntoValues
 SELECT (tup).@1, (tup).@2 FROM (VALUES ((3,4)), ((SELECT (x, z) FROM b))) AS v(tup)
 ----
 project
- ├── columns: "?column?":5 "?column?":6
+ ├── columns: "?column?":6 "?column?":7
  ├── cardinality: [2 - 2]
  ├── values
- │    ├── columns: column1:4
+ │    ├── columns: column1:5
  │    ├── cardinality: [2 - 2]
  │    ├── ((3, 4),)
  │    └── tuple
  │         └── subquery
  │              └── max1-row
- │                   ├── columns: "?column?":3
+ │                   ├── columns: "?column?":4
  │                   ├── error: "more than one row returned by a subquery used as an expression"
  │                   ├── cardinality: [0 - 1]
  │                   ├── key: ()
- │                   ├── fd: ()-->(3)
+ │                   ├── fd: ()-->(4)
  │                   └── project
- │                        ├── columns: "?column?":3
+ │                        ├── columns: "?column?":4
  │                        ├── scan b
  │                        │    ├── columns: x:1!null z:2
  │                        │    ├── key: (1)
  │                        │    └── fd: (1)-->(2)
  │                        └── projections
- │                             └── (x:1, z:2) [as="?column?":3, outer=(1,2)]
+ │                             └── (x:1, z:2) [as="?column?":4, outer=(1,2)]
  └── projections
-      ├── (column1:4).@1 [as="?column?":5, outer=(4)]
-      └── (column1:4).@2 [as="?column?":6, outer=(4)]
+      ├── (column1:5).@1 [as="?column?":6, outer=(5)]
+      └── (column1:5).@2 [as="?column?":7, outer=(5)]
 
 # No-op case because the tuple itself is referenced rather than just its fields.
 norm expect-not=FoldTupleAccessIntoValues
@@ -824,7 +824,7 @@ norm expect=PushColumnRemappingIntoValues
 WITH a AS (SELECT v FROM (VALUES (1), ((SELECT z FROM b WHERE z=1))) f(v)) SELECT v FROM a
 ----
 values
- ├── columns: v:4
+ ├── columns: v:5
  ├── cardinality: [2 - 2]
  ├── (1,)
  └── tuple
@@ -1033,3 +1033,450 @@ project
  │         └── (3,)
  └── projections
       └── x:5 [as=x:7, outer=(5)]
+
+# --------------------------------------------------
+# FoldJSONAccessIntoValues
+# --------------------------------------------------
+
+# Basic case: all rows have the same single key.
+norm expect=FoldJSONAccessIntoValues
+SELECT j->'x' AS x
+FROM
+(VALUES
+    ('{"x": "one"}'::JSON),
+    ('{"x": "two"}'::JSON),
+    ('{"x": "three"}'::JSON)
+) v(j)
+----
+values
+ ├── columns: x:2!null
+ ├── cardinality: [3 - 3]
+ ├── ('"one"',)
+ ├── ('"two"',)
+ └── ('"three"',)
+
+# Case with three fields and all rows have the same schema; order of key-value
+# pairs does not matter.
+norm expect=FoldJSONAccessIntoValues
+SELECT j->'x' AS x, j->'y' AS y, j->'z' AS z
+FROM
+(VALUES
+    ('{"y": "red", "z": 1, "x": "one"}'::JSON),
+    ('{"z": 2, "y": "yellow", "x": "two"}'::JSON),
+    ('{"x": "three", "y": "blue", "z": 3}'::JSON)
+) v(j)
+----
+values
+ ├── columns: x:2!null y:3!null z:4!null
+ ├── cardinality: [3 - 3]
+ ├── ('"one"', '"red"', '1')
+ ├── ('"two"', '"yellow"', '2')
+ └── ('"three"', '"blue"', '3')
+
+# Case where not all first row fields are referenced. The unreferenced columns
+# are later pruned away by a different rule.
+norm expect=FoldJSONAccessIntoValues
+SELECT j->'x' AS x
+FROM
+(VALUES
+    ('{"y": "red", "z": 1, "x": "one"}'::JSON),
+    ('{"z": 2, "y": "yellow", "x": "two"}'::JSON),
+    ('{"x": "three", "y": "blue", "z": 3}'::JSON)
+) v(j)
+----
+values
+ ├── columns: x:2!null
+ ├── cardinality: [3 - 3]
+ ├── ('"one"',)
+ ├── ('"two"',)
+ └── ('"three"',)
+
+# Case with various value types.
+norm expect=FoldJSONAccessIntoValues
+SELECT j->'x' AS x
+FROM
+(VALUES
+    ('{"x": 1}'::JSON),
+    ('{"x": [1,2,3]}'::JSON),
+    ('{"x": {"a": "three"}}'::JSON),
+    ('{"x": [{"b": 1}, {"b": 2}]}'::JSON),
+    ('{"x": null}'::JSON)
+) v(j)
+----
+values
+ ├── columns: x:2!null
+ ├── cardinality: [5 - 5]
+ ├── ('1',)
+ ├── ('[1, 2, 3]',)
+ ├── ('{"a": "three"}',)
+ ├── ('[{"b": 1}, {"b": 2}]',)
+ └── ('null',)
+
+# Case where fields that are not present in the first row are filtered out.
+norm expect=FoldJSONAccessIntoValues
+SELECT j->'x' AS x
+FROM
+(VALUES
+    ('{"x": "one"}'::JSON),
+    ('{"z": "2", "y": "yellow", "x": "two"}'::JSON),
+    ('{"x": "three", "y": "blue", "z": "3"}'::JSON)
+) v(j)
+----
+values
+ ├── columns: x:2!null
+ ├── cardinality: [3 - 3]
+ ├── ('"one"',)
+ ├── ('"two"',)
+ └── ('"three"',)
+
+# Case with one projection referencing an outer JSON column (j) that should not
+# be folded and the other referencing an inner column (c) that should be folded.
+norm expect=FoldJSONAccessIntoValues
+SELECT *
+FROM b
+INNER JOIN LATERAL
+(
+    SELECT j->'x' AS x, c->'x'
+    FROM
+    (VALUES
+        ('{"x": "zero"}'::JSON),
+        ('{"x": "one"}'::JSON)
+    ) v(c)
+)
+ON True
+----
+project
+ ├── columns: x:1!null z:2 j:3 x:5 "?column?":6!null
+ ├── immutable
+ ├── fd: (1)-->(2,3), (3)-->(5)
+ ├── inner-join (cross)
+ │    ├── columns: b.x:1!null z:2 j:3 "?column?":6!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── scan b
+ │    │    ├── columns: b.x:1!null z:2 j:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    ├── values
+ │    │    ├── columns: "?column?":6!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── ('"zero"',)
+ │    │    └── ('"one"',)
+ │    └── filters (true)
+ └── projections
+      └── j:3->'x' [as=x:5, outer=(3), immutable]
+
+# Rule fires harmlessly when none of the JSON fields are accessed; the columns
+# are later pruned away by PruneValuesCols.
+norm expect=FoldJSONAccessIntoValues
+SELECT
+    (
+        SELECT j->'x'
+        FROM
+        (VALUES
+            ('{"x": "zero"}'::JSON),
+            ('{"x": "one"}'::JSON)
+        ) v(c)
+    )
+FROM b
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── ensure-distinct-on
+ │    ├── columns: x:1!null "?column?":5
+ │    ├── grouping columns: x:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(5)
+ │    ├── project
+ │    │    ├── columns: "?column?":5 x:1!null
+ │    │    ├── immutable
+ │    │    ├── fd: (1)-->(5)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: x:1!null j:3
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    │    ├── fd: (1)-->(3)
+ │    │    │    ├── scan b
+ │    │    │    │    ├── columns: x:1!null j:3
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(3)
+ │    │    │    ├── values
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── ()
+ │    │    │    │    └── ()
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── j:3->'x' [as="?column?":5, outer=(3), immutable]
+ │    └── aggregations
+ │         └── const-agg [as="?column?":5, outer=(5)]
+ │              └── "?column?":5
+ └── projections
+      └── "?column?":5 [as="?column?":7, outer=(5)]
+
+# No-op case because the Values column contains strings, not JSON expressions.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j::JSON->'x' AS x
+FROM
+(VALUES
+    ('{"x": "one"}'),
+    ('{"x": "two"}'),
+    ('{"x": "three"}')
+) v(j)
+----
+project
+ ├── columns: x:2
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── ('{"x": "one"}',)
+ │    ├── ('{"x": "two"}',)
+ │    └── ('{"x": "three"}',)
+ └── projections
+      └── column1:1::JSONB->'x' [as=x:2, outer=(1), immutable]
+
+# No-op case with SQL null row.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j->'x' AS x
+FROM
+(VALUES
+    ('{"x": "two"}'::JSON),
+    (NULL::JSON),
+    ('{"x": "three"}'::JSON)
+) v(j)
+----
+project
+ ├── columns: x:2
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1
+ │    ├── cardinality: [3 - 3]
+ │    ├── ('{"x": "two"}',)
+ │    ├── (NULL,)
+ │    └── ('{"x": "three"}',)
+ └── projections
+      └── column1:1->'x' [as=x:2, outer=(1), immutable]
+
+# No-op case with JSON null row.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j->'x' As x
+FROM
+(VALUES
+    ('null'::JSON),
+    ('{"x": "two"}'::JSON),
+    ('{"x": "three"}'::JSON)
+) v(j)
+----
+project
+ ├── columns: x:2
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── ('null',)
+ │    ├── ('{"x": "two"}',)
+ │    └── ('{"x": "three"}',)
+ └── projections
+      └── column1:1->'x' [as=x:2, outer=(1), immutable]
+
+# No-op case because the Values operator has more than one column.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j1->'x' AS x1, j2->'x' AS x2
+FROM
+(VALUES
+    ('{"x": "one"}'::JSON, '{"x": "two"}'::JSON),
+    ('{"x": "three"}'::JSON, '{"x": "four"}'::JSON)
+) v(j1, j2)
+----
+project
+ ├── columns: x1:3 x2:4
+ ├── cardinality: [2 - 2]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ('{"x": "one"}', '{"x": "two"}')
+ │    └── ('{"x": "three"}', '{"x": "four"}')
+ └── projections
+      ├── column1:1->'x' [as=x1:3, outer=(1), immutable]
+      └── column2:2->'x' [as=x2:4, outer=(2), immutable]
+
+# No-op case because the JSON column is directly referenced.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j->'x' AS x, j
+FROM
+(VALUES
+    ('{"x": "one"}'::JSON),
+    ('{"x": "two"}'::JSON)
+) v(j)
+----
+project
+ ├── columns: x:2 j:1!null
+ ├── cardinality: [2 - 2]
+ ├── immutable
+ ├── fd: (1)-->(2)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ('{"x": "one"}',)
+ │    └── ('{"x": "two"}',)
+ └── projections
+      └── column1:1->'x' [as=x:2, outer=(1), immutable]
+
+# No-op case because one of the Values rows is a reference to an outer column.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j->'x' AS x
+FROM
+(VALUES
+    ('{"x": "one"}'::JSON),
+    ((SELECT j FROM b))
+) v(j)
+----
+project
+ ├── columns: x:5
+ ├── cardinality: [2 - 2]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:4
+ │    ├── cardinality: [2 - 2]
+ │    ├── ('{"x": "one"}',)
+ │    └── tuple
+ │         └── subquery
+ │              └── max1-row
+ │                   ├── columns: j:3
+ │                   ├── error: "more than one row returned by a subquery used as an expression"
+ │                   ├── cardinality: [0 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(3)
+ │                   └── scan b
+ │                        └── columns: j:3
+ └── projections
+      └── column1:4->'x' [as=x:5, outer=(4), immutable]
+
+# No-op case because the key being used to access JSON fields is not a constant
+# string.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT
+    (
+        SELECT v.j->a.s
+        FROM
+        (VALUES
+           ('{"x": "one"}'::JSON),
+           ('{"x": "two"}'::JSON)
+        ) v(j)
+    )
+FROM a
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── ensure-distinct-on
+ │    ├── columns: x:1!null "?column?":6
+ │    ├── grouping columns: x:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── project
+ │    │    ├── columns: "?column?":6 x:1!null
+ │    │    ├── immutable
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: x:1!null s:4 column1:5!null
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    │    ├── fd: (1)-->(4)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: x:1!null s:4
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(4)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5!null
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── ('{"x": "one"}',)
+ │    │    │    │    └── ('{"x": "two"}',)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── column1:5->s:4 [as="?column?":6, outer=(4,5), immutable]
+ │    └── aggregations
+ │         └── const-agg [as="?column?":6, outer=(6)]
+ │              └── "?column?":6
+ └── projections
+      └── "?column?":6 [as="?column?":7, outer=(6)]
+
+# No-op case because one of the projections attempts to access a key that is not
+# in any of the rows.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j::JSON->'x' AS x, j::JSON->'y' AS y
+FROM
+(VALUES
+    ('{"x": "one"}'),
+    ('{"x": "two"}'),
+    ('{"x": "three"}')
+) v(j)
+----
+project
+ ├── columns: x:2 y:3
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── ('{"x": "one"}',)
+ │    ├── ('{"x": "two"}',)
+ │    └── ('{"x": "three"}',)
+ └── projections
+      ├── column1:1::JSONB->'x' [as=x:2, outer=(1), immutable]
+      └── column1:1::JSONB->'y' [as=y:3, outer=(1), immutable]
+
+# No-op case because one of the projections attempts to access a key that is not
+# in the first row.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j::JSON->'x' AS x, j::JSON->'y' AS y
+FROM
+(VALUES
+    ('{"x": "one"}'),
+    ('{"x": "two", "y": "blue"}'),
+    ('{"x": "three", "y": "red"}')
+) v(j)
+----
+project
+ ├── columns: x:2 y:3
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── ('{"x": "one"}',)
+ │    ├── ('{"x": "two", "y": "blue"}',)
+ │    └── ('{"x": "three", "y": "red"}',)
+ └── projections
+      ├── column1:1::JSONB->'x' [as=x:2, outer=(1), immutable]
+      └── column1:1::JSONB->'y' [as=y:3, outer=(1), immutable]
+
+# No-op case because one of the rows does not have all the keys that are present
+# in the first row.
+norm expect-not=FoldJSONAccessIntoValues
+SELECT j::JSON->'x' AS x
+FROM
+(VALUES
+    ('{"x": "one"}'),
+    ('{"x": "two"}'),
+    ('{"y": "three"}')
+) v(j)
+----
+project
+ ├── columns: x:2
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── ('{"x": "one"}',)
+ │    ├── ('{"x": "two"}',)
+ │    └── ('{"y": "three"}',)
+ └── projections
+      └── column1:1::JSONB->'x' [as=x:2, outer=(1), immutable]
