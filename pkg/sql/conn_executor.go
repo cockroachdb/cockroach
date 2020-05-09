@@ -413,10 +413,20 @@ func (s *Server) SetupConn(
 	memMetrics MemoryMetrics,
 ) (ConnectionHandler, error) {
 	sd := s.newSessionData(args)
+
+	// Set the SessionData from args.SessionDefaults. This also validates the
+	// respective values.
 	sdMut := s.makeSessionDataMutator(sd, args.SessionDefaults)
-	ex, err := s.newConnExecutor(
-		ctx, sd, &sdMut, stmtBuf, clientComm, memMetrics, &s.Metrics, resetSessionDataToDefaults)
-	return ConnectionHandler{ex}, err
+	if err := resetSessionVars(ctx, &sdMut); err != nil {
+		log.Errorf(ctx, "error setting up client session: %s", err)
+		return ConnectionHandler{}, err
+	}
+
+	ex := s.newConnExecutor(
+		ctx, sd, args.SessionDefaults, stmtBuf, clientComm, memMetrics, &s.Metrics,
+		s.sqlStats.getStatsForApplication(sd.ApplicationName),
+	)
+	return ConnectionHandler{ex}, nil
 }
 
 // ConnectionHandler is the interface between the result of SetupConn
@@ -514,30 +524,22 @@ func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
 	}
 }
 
-type sdResetOption bool
-
-const (
-	resetSessionDataToDefaults     sdResetOption = true
-	dontResetSessionDataToDefaults               = false
-)
-
 // newConnExecutor creates a new connExecutor.
 //
-// resetOpt controls whether sd is to be reset to the default values.
-// TODO(andrei): resetOpt is a hack needed by the InternalExecutor, which
-// doesn't want this resetting. Figure out a better API where the responsibility
-// of assigning default values is either entirely inside or outside of this
-// ctor.
+// sd is expected to be fully initialized with the values of all the session
+// vars.
+// sdDefaults controls what the session vars will be reset to through
+// RESET statements.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
-	sdMutator *sessionDataMutator,
+	sdDefaults SessionDefaults,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
-	resetOpt sdResetOption,
-) (*connExecutor, error) {
+	appStats *appStats,
+) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
 	sessionRootMon := mon.MakeMonitor(
@@ -564,6 +566,9 @@ func (s *Server) newConnExecutor(
 	)
 
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
+	sdMutator := new(sessionDataMutator)
+	*sdMutator = s.makeSessionDataMutator(sd, sdDefaults)
+
 	ex := &connExecutor{
 		server:      s,
 		metrics:     srvMetrics,
@@ -599,46 +604,22 @@ func (s *Server) newConnExecutor(
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
+	// The transaction_read_only variable is special; its updates need to be
+	// hooked-up to the executor.
 	sdMutator.setCurTxnReadOnly = func(val bool) {
 		ex.state.readOnly = val
 	}
+
 	sdMutator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
 	}
+
+	ex.applicationName.Store(ex.sessionData.ApplicationName)
+	ex.appStats = appStats
 	sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
-		ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 		ex.applicationName.Store(newName)
+		ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 	})
-	// Initialize the session data from provided defaults. We need to do this early
-	// because other initializations below use the configured values.
-	if resetOpt == resetSessionDataToDefaults {
-		if err := resetSessionVars(ctx, sdMutator); err != nil {
-			log.Errorf(ctx, "error setting up client session: %v", err)
-			return nil, err
-		}
-	} else {
-		// We have set the ex.sessionData without using the dataMutator.
-		// So we need to update the application name manually.
-		ex.applicationName.Store(ex.sessionData.ApplicationName)
-		// When the connEx is serving an internal executor, it can inherit
-		// the application name from an outer session. This happens
-		// e.g. during ::regproc casts and built-in functions that use SQL internally.
-		// In that case, we do not want to record statistics against
-		// the outer application name directly; instead we want
-		// to use a separate bucket. However we will still
-		// want to have separate buckets for different applications so that
-		// we can measure their respective "pressure" on internal queries.
-		// Hence the choice here to add the delegate prefix
-		// to the current app name.
-		var appStatsBucketName string
-		if !strings.HasPrefix(ex.sessionData.ApplicationName, sqlbase.InternalAppNamePrefix) {
-			appStatsBucketName = sqlbase.DelegatedAppNamePrefix + ex.sessionData.ApplicationName
-		} else {
-			// If this is already an "internal app", don't put more prefix.
-			appStatsBucketName = ex.sessionData.ApplicationName
-		}
-		ex.appStats = s.sqlStats.getStatsForApplication(appStatsBucketName)
-	}
 
 	ex.phaseTimes[sessionInit] = timeutil.Now()
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
@@ -664,7 +645,7 @@ func (s *Server) newConnExecutor(
 	ex.statsCollector = ex.newStatsCollector()
 	ex.initPlanner(ctx, &ex.planner)
 
-	return ex, nil
+	return ex
 }
 
 // newConnExecutorWithTxn creates a connExecutor that will execute statements
@@ -680,7 +661,7 @@ func (s *Server) newConnExecutor(
 func (s *Server) newConnExecutorWithTxn(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
-	sdMutator *sessionDataMutator,
+	sdDefaults SessionDefaults,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	parentMon *mon.BytesMonitor,
@@ -688,13 +669,9 @@ func (s *Server) newConnExecutorWithTxn(
 	srvMetrics *Metrics,
 	txn *kv.Txn,
 	tcModifier tableCollectionModifier,
-	resetOpt sdResetOption,
-) (*connExecutor, error) {
-	ex, err := s.newConnExecutor(
-		ctx, sd, sdMutator, stmtBuf, clientComm, memMetrics, srvMetrics, resetOpt)
-	if err != nil {
-		return nil, err
-	}
+	appStats *appStats,
+) *connExecutor {
+	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, appStats)
 
 	// The new transaction stuff below requires active monitors and traces, so
 	// we need to activate the executor now.
@@ -723,7 +700,7 @@ func (s *Server) newConnExecutorWithTxn(
 	if tcModifier != nil {
 		tcModifier.copyModifiedSchema(&ex.extraTxnState.tables)
 	}
-	return ex, nil
+	return ex
 }
 
 var sqlStatReset = settings.RegisterPublicNonNegativeDurationSettingWithMaximum(
