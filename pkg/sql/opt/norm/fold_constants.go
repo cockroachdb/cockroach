@@ -517,6 +517,7 @@ var FoldFunctionWhitelist = map[string]struct{}{
 	"st_covers":                    {},
 	"st_coveredby":                 {},
 	"st_contains":                  {},
+	"st_containsproperly":          {},
 	"st_crosses":                   {},
 	"st_equals":                    {},
 	"st_intersects":                {},

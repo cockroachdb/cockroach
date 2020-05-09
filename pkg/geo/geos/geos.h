@@ -84,6 +84,11 @@ CR_GEOS_Status CR_GEOS_Overlaps(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, 
 CR_GEOS_Status CR_GEOS_Touches(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret);
 CR_GEOS_Status CR_GEOS_Within(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret);
 
+//
+// DE-9IM related
+//
+
+CR_GEOS_Status CR_GEOS_Relate(CR_GEOS *lib, CR_GEOS_Slice a, CR_GEOS_Slice b, CR_GEOS_String *ret);
 #ifdef __cplusplus
 }  // extern "C"
 #endif
