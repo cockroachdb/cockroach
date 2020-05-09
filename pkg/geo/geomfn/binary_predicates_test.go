@@ -85,6 +85,8 @@ func TestContains(t *testing.T) {
 	}{
 		{rightRect, rightRectPoint, true},
 		{rightRectPoint, rightRect, false},
+		{rightRectPoint, rightRectPoint, true},
+		{rightRect, rightRect, true},
 		{leftRect, rightRect, false},
 	}
 
@@ -98,6 +100,31 @@ func TestContains(t *testing.T) {
 
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := Contains(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestContainsProperly(t *testing.T) {
+	testCases := []struct {
+		a        *geo.Geometry
+		b        *geo.Geometry
+		expected bool
+	}{
+		{rightRect, rightRect, false},
+		{rightRect, rightRectPoint, true},
+		{rightRectPoint, rightRectPoint, true},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+			g, err := ContainsProperly(tc.a, tc.b)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, g)
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := ContainsProperly(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
 		requireMismatchingSRIDError(t, err)
 	})
 }
