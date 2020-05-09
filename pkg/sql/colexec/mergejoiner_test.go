@@ -2093,7 +2093,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					colmem.NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
+					colmem.NewAllocator(ctx, &benchMemAccount, coldata.StandardColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
 					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2124,7 +2124,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					colmem.NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
+					colmem.NewAllocator(ctx, &benchMemAccount, coldata.StandardColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
 					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2157,7 +2157,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					colmem.NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
+					colmem.NewAllocator(ctx, &benchMemAccount, coldata.StandardColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
 					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

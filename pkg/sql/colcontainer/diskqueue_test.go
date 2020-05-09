@@ -68,7 +68,7 @@ func TestDiskQueue(t *testing.T) {
 						BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 						Nulls:      true,
 						BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
-							batches = append(batches, coldatatestutils.CopyBatch(b, typs))
+							batches = append(batches, coldatatestutils.CopyBatch(b, typs, testColumnFactory))
 						},
 					})
 					typs := op.Typs()
@@ -124,7 +124,7 @@ func TestDiskQueue(t *testing.T) {
 					}
 					for i := 0; i < numReadIterations; i++ {
 						batchIdx := 0
-						b := coldata.NewMemBatch(typs)
+						b := coldata.NewMemBatch(typs, testColumnFactory)
 						for batchIdx < len(batches) {
 							if ok, err := q.Dequeue(ctx, b); !ok {
 								t.Fatal("queue incorrectly considered empty")
@@ -217,7 +217,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 				break
 			}
 		}
-		dequeuedBatch := coldata.NewMemBatch(typs)
+		dequeuedBatch := coldata.NewMemBatch(typs, testColumnFactory)
 		for dequeuedBatch.Length() != 0 {
 			if _, err := q.Dequeue(ctx, dequeuedBatch); err != nil {
 				b.Fatal(err)

@@ -39,7 +39,7 @@ const (
 func WriteCSVRows(
 	ctx context.Context, w io.Writer, table Table, rowStart, rowEnd int, sizeBytesLimit int64,
 ) (rowBatchIdx int, err error) {
-	cb := coldata.NewMemBatchWithSize(nil, 0)
+	cb := coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, coldata.StandardColumnFactory)
 	var a bufalloc.ByteAllocator
 
 	bytesWrittenW := &bytesWrittenWriter{w: w}
@@ -91,7 +91,7 @@ type csvRowsReader struct {
 
 func (r *csvRowsReader) Read(p []byte) (n int, err error) {
 	if r.cb == nil {
-		r.cb = coldata.NewMemBatchWithSize(nil, 0)
+		r.cb = coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, coldata.StandardColumnFactory)
 	}
 
 	for {

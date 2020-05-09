@@ -32,7 +32,7 @@ func TestFileRoundtrip(t *testing.T) {
 	t.Run(`mem`, func(t *testing.T) {
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := coldatatestutils.CopyBatch(b, typs)
+		original := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
 		var buf bytes.Buffer
 		s, err := colserde.NewFileSerializer(&buf, typs)
@@ -45,7 +45,7 @@ func TestFileRoundtrip(t *testing.T) {
 		// buffer.
 		for i := 0; i < 2; i++ {
 			func() {
-				roundtrip := coldata.NewMemBatchWithSize(typs, b.Length())
+				roundtrip := testAllocator.NewMemBatchWithSize(typs, b.Length())
 				d, err := colserde.NewFileDeserializerFromBytes(typs, buf.Bytes())
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
@@ -65,7 +65,7 @@ func TestFileRoundtrip(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := coldatatestutils.CopyBatch(b, typs)
+		original := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
 		f, err := os.Create(path)
 		require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestFileRoundtrip(t *testing.T) {
 		// file.
 		for i := 0; i < 2; i++ {
 			func() {
-				roundtrip := coldata.NewMemBatchWithSize(typs, b.Length())
+				roundtrip := testAllocator.NewMemBatchWithSize(typs, b.Length())
 				d, err := colserde.NewFileDeserializerFromPath(typs, path)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
@@ -107,7 +107,7 @@ func TestFileIndexing(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 0; i < numInts; i++ {
-		b := coldata.NewMemBatchWithSize(typs, batchSize)
+		b := testAllocator.NewMemBatchWithSize(typs, batchSize)
 		b.SetLength(batchSize)
 		b.ColVec(0).Int64()[0] = int64(i)
 		require.NoError(t, s.AppendBatch(b))
@@ -120,7 +120,7 @@ func TestFileIndexing(t *testing.T) {
 	require.Equal(t, typs, d.Typs())
 	require.Equal(t, numInts, d.NumBatches())
 	for batchIdx := numInts - 1; batchIdx >= 0; batchIdx-- {
-		b := coldata.NewMemBatchWithSize(typs, batchSize)
+		b := testAllocator.NewMemBatchWithSize(typs, batchSize)
 		require.NoError(t, d.GetBatch(batchIdx, b))
 		require.Equal(t, batchSize, b.Length())
 		require.Equal(t, 1, b.Width())

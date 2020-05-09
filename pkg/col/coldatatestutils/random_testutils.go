@@ -373,7 +373,7 @@ func NewRandomDataOp(
 func (o *RandomDataOp) Init() {}
 
 // Next is part of the colexec.Operator interface.
-func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
+func (o *RandomDataOp) Next(context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch

@@ -221,7 +221,7 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 				}
 			})
 
-			cb.Reset(typs, 1)
+			cb.Reset(typs, 1, coldata.StandardColumnFactory)
 			for colIdx, col := range cb.ColVecs() {
 				switch d := row[colIdx].(type) {
 				case nil:
@@ -252,7 +252,7 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 // heavy. In performance-critical code, FillBatch should be used directly,
 // instead.
 func (b BatchedTuples) BatchRows(batchIdx int) [][]interface{} {
-	cb := coldata.NewMemBatchWithSize(nil, 0)
+	cb := coldata.NewMemBatchWithSize(nil, 0, coldata.StandardColumnFactory)
 	var a bufalloc.ByteAllocator
 	b.FillBatch(batchIdx, cb, &a)
 	return ColBatchToRows(cb)

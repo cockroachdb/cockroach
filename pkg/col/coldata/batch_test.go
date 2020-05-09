@@ -30,7 +30,7 @@ func TestBatchReset(t *testing.T) {
 		// reallocated.
 		vecsBefore := b.ColVecs()
 		ptrBefore := (*reflect.SliceHeader)(unsafe.Pointer(&vecsBefore))
-		b.Reset(typs, n)
+		b.Reset(typs, n, coldata.StandardColumnFactory)
 		vecsAfter := b.ColVecs()
 		ptrAfter := (*reflect.SliceHeader)(unsafe.Pointer(&vecsAfter))
 		assert.Equal(t, shouldReuse, ptrBefore.Data == ptrAfter.Data)
@@ -74,37 +74,37 @@ func TestBatchReset(t *testing.T) {
 	var b coldata.Batch
 
 	// Simple case, reuse
-	b = coldata.NewMemBatch(typsInt)
+	b = coldata.NewMemBatch(typsInt, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Types don't match, don't reuse
-	b = coldata.NewMemBatch(typsInt)
+	b = coldata.NewMemBatch(typsInt, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsBytes, 1, false)
 
 	// Columns are a prefix, reuse
-	b = coldata.NewMemBatch(typsIntBytes)
+	b = coldata.NewMemBatch(typsIntBytes, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Exact length, reuse
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Insufficient capacity, don't reuse
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 2, false)
 
 	// Selection vector gets reset
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
 	b.SetSelection(true)
 	b.Selection()[0] = 7
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Nulls gets reset
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
 	b.ColVec(0).Nulls().SetNull(0)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Bytes columns use a different impl than everything else
-	b = coldata.NewMemBatch(typsBytes)
+	b = coldata.NewMemBatch(typsBytes, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsBytes, 1, true)
 }

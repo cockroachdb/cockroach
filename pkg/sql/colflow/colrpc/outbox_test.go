@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -54,7 +55,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
 	inbox, err := NewInbox(
-		colmem.NewAllocator(ctx, &inboxMemAccount), typs, execinfrapb.StreamID(0),
+		colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0),
 	)
 	require.NoError(t, err)
 
@@ -108,7 +109,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		outboxMemAccount := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAccount.Close(ctx)
 		outbox, sourceDrained, err := newOutboxWithMetaSources(
-			colmem.NewAllocator(ctx, &outboxMemAccount),
+			colmem.NewAllocator(ctx, &outboxMemAccount, coldata.StandardColumnFactory),
 		)
 		require.NoError(t, err)
 
