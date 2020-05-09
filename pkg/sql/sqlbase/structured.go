@@ -2848,6 +2848,21 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
+// FindActiveIndexByID returns the index with the specified ID, or nil if it
+// does not exist. It only searches active indexes.
+func (desc *TableDescriptor) FindActiveIndexByID(id IndexID) *IndexDescriptor {
+	if desc.PrimaryIndex.ID == id {
+		return &desc.PrimaryIndex
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.ID == id {
+			return idx
+		}
+	}
+	return nil
+}
+
 // FindIndexByIndexIdx returns an active index with the specified
 // index's index which has a domain of [0, # of secondary indexes] and whether
 // the index is a secondary index.
