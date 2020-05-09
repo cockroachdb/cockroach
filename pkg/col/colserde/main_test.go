@@ -15,6 +15,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -25,7 +26,8 @@ import (
 var (
 	// testAllocator is a colexec.Allocator with an unlimited budget for use in
 	// tests.
-	testAllocator *colmem.Allocator
+	testAllocator     *colmem.Allocator
+	testColumnFactory coldata.ColumnFactory
 
 	// testMemMonitor and testMemAcc are a test monitor with an unlimited budget
 	// and a memory account bound to it for use in tests.
@@ -37,11 +39,13 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	os.Exit(func() int {
 		ctx := context.Background()
-		testMemMonitor = execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+		st := cluster.MakeTestingClusterSettings()
+		testMemMonitor = execinfra.NewTestMemMonitor(ctx, st)
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
-		testAllocator = colmem.NewAllocator(ctx, testMemAcc)
+		testColumnFactory = coldata.StandardColumnFactory
+		testAllocator = colmem.NewAllocator(ctx, testMemAcc, testColumnFactory)
 		defer testMemAcc.Close(ctx)
 		return m.Run()
 	}())

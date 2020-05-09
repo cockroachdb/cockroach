@@ -189,7 +189,7 @@ func hashTableInitialData(
 	h hash.Hash, data workload.BatchedTuples, a *bufalloc.ByteAllocator,
 ) error {
 	var scratch [8]byte
-	b := coldata.NewMemBatchWithSize(nil, 0)
+	b := coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, coldata.StandardColumnFactory)
 	for batchIdx := 0; batchIdx < data.NumBatches; batchIdx++ {
 		*a = (*a)[:0]
 		data.FillBatch(batchIdx, b, a)

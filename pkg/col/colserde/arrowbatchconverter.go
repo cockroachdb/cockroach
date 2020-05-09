@@ -65,8 +65,8 @@ func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
 	c.scratch.arrowData = make([]*array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
 	for i := range c.scratch.buffers {
-		// Most types need only two buffers: one for the nulls, and one for the
-		// values, but some types (i.e. Bytes) need an extra buffer for the
+		// Some types need only two buffers: one for the nulls, and one for the
+		// values, but others (i.e. Bytes) need an extra buffer for the
 		// offsets.
 		c.scratch.buffers[i] = make([]*memory.Buffer, 0, 3)
 	}

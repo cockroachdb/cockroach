@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
-// column is an interface that represents a raw array of a Go native type.
-type column interface{}
+// Column is an interface that represents a raw array of a Go native type.
+type Column interface{}
 
 // SliceArgs represents the arguments passed in to Vec.Append and Nulls.set.
 type SliceArgs struct {
@@ -146,40 +146,59 @@ var _ Vec = &memColumn{}
 type memColumn struct {
 	t                   *types.T
 	canonicalTypeFamily types.Family
-	col                 column
+	col                 Column
 	nulls               Nulls
 }
 
-// NewMemColumn returns a new memColumn, initialized with a length.
-func NewMemColumn(t *types.T, n int) Vec {
-	nulls := NewNulls(n)
+// ColumnFactory is an interface that can construct columns for Batches.
+type ColumnFactory interface {
+	MakeColumn(t *types.T, n int) Column
+}
 
+type defaultColumnFactory struct{}
+
+// StandardColumnFactory is a factory that produces columns of types that are
+// explicitly supported by the vectorized engine (i.e. not datum-backed).
+var StandardColumnFactory ColumnFactory = &defaultColumnFactory{}
+
+func (cf *defaultColumnFactory) MakeColumn(t *types.T, n int) Column {
 	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
 	case types.BoolFamily:
-		return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]bool, n), nulls: nulls}
+		return make([]bool, n)
 	case types.BytesFamily:
-		return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: NewBytes(n), nulls: nulls}
+		return NewBytes(n)
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
-			return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]int16, n), nulls: nulls}
+			return make([]int16, n)
 		case 32:
-			return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]int32, n), nulls: nulls}
+			return make([]int32, n)
 		case 0, 64:
-			return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]int64, n), nulls: nulls}
+			return make([]int64, n)
 		default:
 			panic(fmt.Sprintf("unexpected integer width: %d", t.Width()))
 		}
 	case types.FloatFamily:
-		return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]float64, n), nulls: nulls}
+		return make([]float64, n)
 	case types.DecimalFamily:
-		return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]apd.Decimal, n), nulls: nulls}
+		return make([]apd.Decimal, n)
 	case types.TimestampTZFamily:
-		return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]time.Time, n), nulls: nulls}
+		return make([]time.Time, n)
 	case types.IntervalFamily:
-		return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]duration.Duration, n), nulls: nulls}
+		return make([]duration.Duration, n)
 	default:
 		return unknown{}
+	}
+}
+
+// NewMemColumn returns a new memColumn, initialized with a length using the
+// given column factory.
+func NewMemColumn(t *types.T, n int, factory ColumnFactory) Vec {
+	return &memColumn{
+		t:                   t,
+		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()),
+		col:                 factory.MakeColumn(t, n),
+		nulls:               NewNulls(n),
 	}
 }
 

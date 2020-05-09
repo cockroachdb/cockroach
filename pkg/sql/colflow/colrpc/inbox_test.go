@@ -224,7 +224,7 @@ func TestInboxShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(inboxCtx)
 					inbox, err := NewInbox(
-						colmem.NewAllocator(inboxCtx, &inboxMemAccount),
+						colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory),
 						typs, execinfrapb.StreamID(0),
 					)
 					require.NoError(t, err)
