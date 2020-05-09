@@ -17,7 +17,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -104,7 +104,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 
 	acc := evalCtx.Mon.MakeBoundAccount()
 	defer acc.Close(ctx)
-	testAllocator := colmem.NewAllocator(ctx, &acc, coldata.StandardColumnFactory)
+	testAllocator := colmem.NewAllocator(ctx, &acc, coldataext.NewExtendedColumnFactory(&evalCtx))
 	columnarizers := make([]colexecbase.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
 		c, err := colexec.NewColumnarizer(ctx, testAllocator, flowCtx, int32(i)+1, input)

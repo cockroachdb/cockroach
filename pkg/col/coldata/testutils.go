@@ -12,7 +12,9 @@ package coldata
 
 import (
 	"bytes"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
@@ -91,6 +93,18 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 			for i := range expectedInterval {
 				if expectedInterval[i].Compare(resultInterval[i]) != 0 {
 					t.Fatalf("Interval mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedInterval[i], resultInterval[i])
+				}
+			}
+		} else if expectedVec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+			// Cannot use require.Equal for this type.
+			expectedDatum := expectedVec.Datum().Slice(0 /* start */, expected.Length())
+			resultDatum := actualVec.Datum().Slice(0 /* start */, actual.Length())
+			require.Equal(t, expectedDatum.Len(), resultDatum.Len())
+			for i := 0; i < expectedDatum.Len(); i++ {
+				expected := expectedDatum.Get(i).(fmt.Stringer).String()
+				actual := resultDatum.Get(i).(fmt.Stringer).String()
+				if expected != actual {
+					t.Fatalf("Datum mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedDatum.Get(i), resultDatum.Get(i))
 				}
 			}
 		} else {

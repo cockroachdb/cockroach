@@ -94,11 +94,9 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							aggregations[i].ColIdx = []uint32{}
 							aggInputTypes = aggInputTypes[:0]
 						}
-						if typeconv.IsTypeSupported(aggTyp) {
-							if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
-								outputTypes[i] = outputType
-								break
-							}
+						if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
+							outputTypes[i] = outputType
+							break
 						}
 					}
 					inputTypes[i+numGroupingCols] = aggTyp
@@ -912,9 +910,12 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []*types.T {
 	typs := make([]*types.T, 0, nCols)
 	for len(typs) < nCols {
 		typ := sqlbase.RandType(rng)
-		if typeconv.IsTypeSupported(typ) {
-			typs = append(typs, typ)
+		if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+			// At the moment, we disallow datum-backed types.
+			// TODO(yuzefovich): remove this.
+			continue
 		}
+		typs = append(typs, typ)
 	}
 	return typs
 }
@@ -927,26 +928,29 @@ func generateRandomComparableTypes(rng *rand.Rand, inputTypes []*types.T) []*typ
 	for i, inputType := range inputTypes {
 		for {
 			typ := sqlbase.RandType(rng)
-			if typeconv.IsTypeSupported(typ) {
-				comparable := false
-				for _, cmpOverloads := range tree.CmpOps[tree.LT] {
-					o := cmpOverloads.(*tree.CmpOp)
-					if inputType.Equivalent(o.LeftType) && typ.Equivalent(o.RightType) {
-						if (typ.Family() == types.DateFamily && inputType.Family() != types.DateFamily) ||
-							(typ.Family() != types.DateFamily && inputType.Family() == types.DateFamily) {
-							// We map Dates to int64 and don't have casts from int64 to
-							// timestamps (and there is a comparison between dates and
-							// timestamps).
-							continue
-						}
-						comparable = true
-						break
+			if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+				// At the moment, we disallow datum-backed types.
+				// TODO(yuzefovich): remove this.
+				continue
+			}
+			comparable := false
+			for _, cmpOverloads := range tree.CmpOps[tree.LT] {
+				o := cmpOverloads.(*tree.CmpOp)
+				if inputType.Equivalent(o.LeftType) && typ.Equivalent(o.RightType) {
+					if (typ.Family() == types.DateFamily && inputType.Family() != types.DateFamily) ||
+						(typ.Family() != types.DateFamily && inputType.Family() == types.DateFamily) {
+						// We map Dates to int64 and don't have casts from int64 to
+						// timestamps (and there is a comparison between dates and
+						// timestamps).
+						continue
 					}
-				}
-				if comparable {
-					typs[i] = typ
+					comparable = true
 					break
 				}
+			}
+			if comparable {
+				typs[i] = typ
+				break
 			}
 		}
 	}

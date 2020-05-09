@@ -82,6 +82,8 @@ type Vec interface {
 	Timestamp() []time.Time
 	// Interval returns a duration.Duration slice.
 	Interval() []duration.Duration
+	// Datum returns a vector of Datums.
+	Datum() DatumVec
 
 	// Col returns the raw, typeless backing storage for this Vec.
 	Col() interface{}
@@ -187,7 +189,7 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, n int) Column {
 	case types.IntervalFamily:
 		return make([]duration.Duration, n)
 	default:
-		return unknown{}
+		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))
 	}
 }
 
@@ -250,6 +252,10 @@ func (m *memColumn) Interval() []duration.Duration {
 	return m.col.([]duration.Duration)
 }
 
+func (m *memColumn) Datum() DatumVec {
+	return m.col.(DatumVec)
+}
+
 func (m *memColumn) Col() interface{} {
 	return m.col
 }
@@ -295,6 +301,8 @@ func (m *memColumn) Length() int {
 		return len(m.col.([]time.Time))
 	case types.IntervalFamily:
 		return len(m.col.([]duration.Duration))
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return m.col.(DatumVec).Len()
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}
@@ -325,6 +333,8 @@ func (m *memColumn) SetLength(l int) {
 		m.col = m.col.([]time.Time)[:l]
 	case types.IntervalFamily:
 		m.col = m.col.([]duration.Duration)[:l]
+	case typeconv.DatumVecCanonicalTypeFamily:
+		m.col.(DatumVec).SetLength(l)
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}
@@ -355,6 +365,8 @@ func (m *memColumn) Capacity() int {
 		return cap(m.col.([]time.Time))
 	case types.IntervalFamily:
 		return cap(m.col.([]duration.Duration))
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return m.col.(DatumVec).Cap()
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}

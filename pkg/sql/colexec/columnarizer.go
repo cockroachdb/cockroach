@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -80,7 +79,7 @@ func NewColumnarizer(
 		return nil, err
 	}
 	c.typs = c.OutputTypes()
-	return c, typeconv.AreTypesSupported(c.typs)
+	return c, nil
 }
 
 // Init is part of the Operator interface.

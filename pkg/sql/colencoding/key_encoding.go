@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -33,6 +34,7 @@ import (
 // for. The input key will also be mutated if matches is false. See the analog
 // in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
+	da *sqlbase.DatumAlloc,
 	vecs []coldata.Vec,
 	idx int,
 	desc *sqlbase.ImmutableTableDescriptor,
@@ -70,8 +72,10 @@ func DecodeIndexKeyToCols(
 			// We don't care about whether this call to DecodeKeyVals found a null or not, because
 			// it is a interleaving ancestor.
 			var isNull bool
-			key, isNull, err = DecodeKeyValsToCols(vecs, idx, indexColIdx[:length], types[:length], colDirs[:length],
-				nil /* unseen */, key)
+			key, isNull, err = DecodeKeyValsToCols(
+				da, vecs, idx, indexColIdx[:length], types[:length],
+				colDirs[:length], nil /* unseen */, key,
+			)
 			if err != nil {
 				return nil, false, false, err
 			}
@@ -104,7 +108,9 @@ func DecodeIndexKeyToCols(
 	}
 
 	var isNull bool
-	key, isNull, err = DecodeKeyValsToCols(vecs, idx, indexColIdx, types, colDirs, nil /* unseen */, key)
+	key, isNull, err = DecodeKeyValsToCols(
+		da, vecs, idx, indexColIdx, types, colDirs, nil /* unseen */, key,
+	)
 	if err != nil {
 		return nil, false, false, err
 	}
@@ -132,6 +138,7 @@ func DecodeIndexKeyToCols(
 // See the analog in sqlbase/index_encoding.go.
 // DecodeKeyValsToCols additionally returns whether a NULL was encountered when decoding.
 func DecodeKeyValsToCols(
+	da *sqlbase.DatumAlloc,
 	vecs []coldata.Vec,
 	idx int,
 	indexColIdx []int,
@@ -156,7 +163,7 @@ func DecodeKeyValsToCols(
 				unseen.Remove(i)
 			}
 			var isNull bool
-			key, isNull, err = decodeTableKeyToCol(vecs[i], idx, types[j], key, enc)
+			key, isNull, err = decodeTableKeyToCol(da, vecs[i], idx, types[j], key, enc)
 			foundNull = isNull || foundNull
 		}
 		if err != nil {
@@ -171,7 +178,12 @@ func DecodeKeyValsToCols(
 // See the analog, DecodeTableKey, in sqlbase/column_type_encoding.go.
 // decodeTableKeyToCol also returns whether or not the decoded value was NULL.
 func decodeTableKeyToCol(
-	vec coldata.Vec, idx int, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
+	da *sqlbase.DatumAlloc,
+	vec coldata.Vec,
+	idx int,
+	valType *types.T,
+	key []byte,
+	dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, bool, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
 		return nil, false, errors.AssertionFailedf("invalid direction: %d", log.Safe(dir))
@@ -236,6 +248,8 @@ func decodeTableKeyToCol(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		vec.Bytes().Set(idx, r)
+	// TODO(yuzefovich): this case can probably be merged with types.IntFamily
+	// case.
 	case types.DateFamily, types.OidFamily:
 		var t int64
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -261,17 +275,25 @@ func decodeTableKeyToCol(
 		}
 		vec.Interval()[idx] = d
 	default:
-		return rkey, false, errors.AssertionFailedf("unsupported type %+v", log.Safe(valType))
+		var d tree.Datum
+		encDir := encoding.Ascending
+		if dir == sqlbase.IndexDescriptor_DESC {
+			encDir = encoding.Descending
+		}
+		d, rkey, err = sqlbase.DecodeTableKey(da, valType, key, encDir)
+		vec.Datum().Set(idx, d)
 	}
 	return rkey, false, err
 }
 
 // UnmarshalColumnValueToCol decodes the value from a roachpb.Value using the
 // type expected by the column, writing into the input Vec at the given row
-// idx. An error is returned if the value's type does
-// not match the column's type.
+// idx. An error is returned if the value's type does not match the column's
+// type.
 // See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
-func UnmarshalColumnValueToCol(vec coldata.Vec, idx int, typ *types.T, value roachpb.Value) error {
+func UnmarshalColumnValueToCol(
+	da *sqlbase.DatumAlloc, vec coldata.Vec, idx int, typ *types.T, value roachpb.Value,
+) error {
 	if value.RawBytes == nil {
 		vec.Nulls().SetNull(idx)
 	}
@@ -317,8 +339,14 @@ func UnmarshalColumnValueToCol(vec coldata.Vec, idx int, typ *types.T, value roa
 		var v duration.Duration
 		v, err = value.GetDuration()
 		vec.Interval()[idx] = v
+	// Types backed by tree.Datums.
 	default:
-		return errors.AssertionFailedf("unsupported column type: %s", log.Safe(typ.Family()))
+		var d tree.Datum
+		d, err = sqlbase.UnmarshalColumnValue(da, typ, value)
+		if err != nil {
+			return err
+		}
+		vec.Datum().Set(idx, d)
 	}
 	return err
 }

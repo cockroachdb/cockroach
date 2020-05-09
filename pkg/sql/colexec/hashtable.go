@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -144,6 +145,7 @@ type hashTable struct {
 	allowNullEquality bool
 
 	decimalScratch decimalOverloadScratch
+	datumAlloc     sqlbase.DatumAlloc
 	cancelChecker  CancelChecker
 
 	// mode determines how hashTable is built.
@@ -340,7 +342,7 @@ func (ht *hashTable) computeBuckets(
 	}
 
 	for i := range ht.keyCols {
-		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch)
+		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch, &ht.datumAlloc)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)

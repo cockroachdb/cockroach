@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -46,6 +47,7 @@ var (
 
 // {{/*
 
+type _GOTYPESLICE interface{}
 type _GOTYPE interface{}
 type _TYPE interface{}
 
@@ -63,6 +65,9 @@ var _ bytes.Buffer
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "coldataext" package.
+var _ coldataext.Datum
 
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
@@ -192,10 +197,12 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, er
 	return result, hasNulls, nil
 }
 
-func cmpIn_TYPE(target _GOTYPE, filterRow []_GOTYPE, hasNulls bool) comparisonResult {
+func cmpIn_TYPE(
+	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE, hasNulls bool,
+) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
-		_ASSIGN_EQ(cmp, target, filterRow[i], _, _, _)
+		_ASSIGN_EQ(cmp, targetElem, filterRow[i], _, targetCol, _)
 		if cmp {
 			return siTrue
 		}
@@ -238,7 +245,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					v := execgen.UNSAFEGET(col, i)
-					if !nulls.NullAt(i) && cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
+					if !nulls.NullAt(i) && cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
 					}
@@ -249,7 +256,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				col = execgen.SLICE(col, 0, n)
 				for execgen.RANGE(i, col, 0, n) {
 					v := execgen.UNSAFEGET(col, i)
-					if !nulls.NullAt(i) && cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
+					if !nulls.NullAt(i) && cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
 					}
@@ -260,7 +267,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					v := execgen.UNSAFEGET(col, i)
-					if cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
+					if cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
 					}
@@ -271,7 +278,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				col = execgen.SLICE(col, 0, n)
 				for execgen.RANGE(i, col, 0, n) {
 					v := execgen.UNSAFEGET(col, i)
-					if cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
+					if cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
 					}
@@ -320,7 +327,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 					projNulls.SetNull(i)
 				} else {
 					v := execgen.UNSAFEGET(col, i)
-					cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
+					cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
 					} else {
@@ -335,7 +342,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 					projNulls.SetNull(i)
 				} else {
 					v := execgen.UNSAFEGET(col, i)
-					cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
+					cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
 					} else {
@@ -349,7 +356,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			sel = sel[:n]
 			for _, i := range sel {
 				v := execgen.UNSAFEGET(col, i)
-				cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
+				cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
 				} else {
@@ -360,7 +367,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			col = execgen.SLICE(col, 0, n)
 			for execgen.RANGE(i, col, 0, n) {
 				v := execgen.UNSAFEGET(col, i)
-				cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
+				cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
 				} else {

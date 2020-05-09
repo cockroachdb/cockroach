@@ -71,9 +71,10 @@ func TestExternalSort(t *testing.T) {
 			for _, tc := range tcs {
 				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
 					var semsToCheck []semaphore.Semaphore
-					runTests(
+					runTestsWithTyps(
 						t,
 						[]tuples{tc.tuples},
+						[][]*types.T{tc.typs},
 						tc.expected,
 						orderedVerifier,
 						func(input []colexecbase.Operator) (colexecbase.Operator, error) {

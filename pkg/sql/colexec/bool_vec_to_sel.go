@@ -12,9 +12,13 @@ package colexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // boolVecToSelOp transforms a boolean column into a selection vector by adding
@@ -129,33 +133,46 @@ func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	inputCol := batch.ColVec(d.colIdx)
-	d.boolVecToSelOp.outputCol = inputCol.Bool()
-	if inputCol.MaybeHasNulls() {
-		// If the input column has null values, we need to explicitly set the
-		// values of the output column that correspond to those null values to
-		// false. For example, doing the comparison 'NULL < 0' will put true into
-		// the boolean Vec (because NULLs are smaller than any integer) but will
-		// also set the null. In the code above, we only copied the values' vector,
-		// so we need to adjust it.
-		// TODO(yuzefovich): think through this case more, possibly clean this up.
-		outputCol := d.boolVecToSelOp.outputCol
-		sel := batch.Selection()
-		nulls := inputCol.Nulls()
-		if sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if nulls.NullAt(i) {
-					outputCol[i] = false
+	// TODO(yuzefovich): refactor this / template it out.
+	switch inputCol.CanonicalTypeFamily() {
+	case types.BoolFamily:
+		d.boolVecToSelOp.outputCol = inputCol.Bool()
+		if inputCol.MaybeHasNulls() {
+			// If the input column has null values, we need to explicitly set the
+			// values of the output column that correspond to those null values to
+			// false. For example, doing the comparison 'NULL < 0' will put true into
+			// the boolean Vec (because NULLs are smaller than any integer) but will
+			// also set the null. In the code above, we only copied the values' vector,
+			// so we need to adjust it.
+			// TODO(yuzefovich): think through this case more, possibly clean this up.
+			outputCol := d.boolVecToSelOp.outputCol
+			sel := batch.Selection()
+			nulls := inputCol.Nulls()
+			if sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						outputCol[i] = false
+					}
 				}
-			}
-		} else {
-			outputCol = outputCol[0:n]
-			for i := range outputCol {
-				if nulls.NullAt(i) {
-					outputCol[i] = false
+			} else {
+				outputCol = outputCol[0:n]
+				for i := range outputCol {
+					if nulls.NullAt(i) {
+						outputCol[i] = false
+					}
 				}
 			}
 		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		if cap(d.boolVecToSelOp.outputCol) < coldata.BatchSize() {
+			d.boolVecToSelOp.outputCol = make([]bool, coldata.BatchSize())
+		} else {
+			d.boolVecToSelOp.outputCol = d.boolVecToSelOp.outputCol[:coldata.BatchSize()]
+			copy(d.boolVecToSelOp.outputCol, zeroBoolColumn)
+		}
+	default:
+		colexecerror.InternalError(fmt.Sprintf("unexpected canonical type family in selBoolOp: %s", inputCol.CanonicalTypeFamily()))
 	}
 	return batch
 }
