@@ -1601,9 +1601,24 @@ func (r schemaChangeResumer) Resume(
 				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
 			},
 		}
-		if err := sc.exec(ctx); err != nil {
+		opts := retry.Options{
+			InitialBackoff: 100 * time.Millisecond,
+			MaxBackoff:     20 * time.Second,
+			Multiplier:     1.5,
+		}
+
+		// The schema change may have to be retried if it is not first in line or
+		// for other retriable reasons so we run it in an exponential backoff retry
+		// loop. The loop terminates only if the context is canceled.
+		var scErr error
+		for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+			// Note that r.Next always returns true on first run so exec will be
+			// called at least once before there is a chance for this loop to exit.
+			scErr = sc.exec(ctx)
 			switch {
-			case errors.Is(err, sqlbase.ErrDescriptorNotFound):
+			case scErr == nil:
+				return nil
+			case errors.Is(scErr, sqlbase.ErrDescriptorNotFound):
 				// If the table descriptor for the ID can't be found, we assume that
 				// another job to drop the table got to it first, and consider this job
 				// finished.
@@ -1614,22 +1629,17 @@ func (r schemaChangeResumer) Resume(
 					tableID, mutationID,
 				)
 				return nil
-			case ctx.Err() != nil:
-				// If the context was canceled, the job registry will retry the job.
-				// We check for this case so that we can just return the error without
-				// wrapping it in a retry error.
-				return err
-			case !isPermanentSchemaChangeError(err):
+			case !isPermanentSchemaChangeError(scErr):
 				// Check if the error is on a whitelist of errors we should retry on,
-				// including the schema change not having the first mutation in line,
-				// and have the job registry retry.
-				return jobs.NewRetryJobError(err.Error())
+				// including the schema change not having the first mutation in line.
 			default:
 				// All other errors lead to a failed job.
-				return err
+				return scErr
 			}
 		}
-		return nil
+		// If the context was canceled, the job registry will retry the job. We can
+		// just return the error without wrapping it in a retry error.
+		return scErr
 	}
 
 	// For an empty database, the zone config for it was already GC'ed and there's

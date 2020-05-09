@@ -290,32 +290,6 @@ func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([
 		// We must use value encodings without a column ID even if the EncDatum already
 		// is encoded with the value encoding so that the hashes are indeed unique.
 		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
-	case types.ArrayFamily:
-		if err := ed.EnsureDecoded(typ, a); err != nil {
-			return nil, err
-		}
-		// Arrays may contain composite data, so we cannot just value
-		// encode an array (that would give same-valued composite
-		// datums a different encoding).
-		if ed.Datum == tree.DNull {
-			return ed.Encode(typ, a, DatumEncoding_ASCENDING_KEY, appendTo)
-		}
-		// Allocate one EncDatum upfront rather than using the DatumToEncDatum
-		// to avoid allocating an EncDatum on each iteration of the loop.
-		e := EncDatum{}
-		array := ed.Datum.(*tree.DArray)
-		// Append a type header to the encoding to differentiate between
-		// NULL and ARRAY[NULL].
-		appendTo = append(appendTo, byte(encoding.Array))
-		var err error
-		for _, d := range array.Array {
-			e.Datum = d
-			appendTo, err = e.Fingerprint(array.ParamTyp, a, appendTo)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return appendTo, nil
 	default:
 		// For values that are key encodable, using the ascending key.
 		// TODO (rohany): However, there should be a knob for the hasher that sees

@@ -267,22 +267,28 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
-		contents := typ.ArrayContents()
-		if contents.Family() == types.AnyFamily {
-			contents = RandArrayContentsType(rng)
-		}
-		arr := tree.NewDArray(contents)
-		for i := 0; i < rng.Intn(10); i++ {
-			if err := arr.Append(RandDatumWithNullChance(rng, contents, 0)); err != nil {
-				panic(err)
-			}
-		}
-		return arr
+		return RandArray(rng, typ, 0)
 	case types.AnyFamily:
 		return RandDatumWithNullChance(rng, RandType(rng), nullChance)
 	default:
 		panic(fmt.Sprintf("invalid type %v", typ.DebugString()))
 	}
+}
+
+// RandArray generates a random DArray where the contents have nullChance
+// of being null.
+func RandArray(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
+	contents := typ.ArrayContents()
+	if contents.Family() == types.AnyFamily {
+		contents = RandArrayContentsType(rng)
+	}
+	arr := tree.NewDArray(contents)
+	for i := 0; i < rng.Intn(10); i++ {
+		if err := arr.Append(RandDatumWithNullChance(rng, contents, nullChance)); err != nil {
+			panic(err)
+		}
+	}
+	return arr
 }
 
 const simpleRange = 10
@@ -829,6 +835,17 @@ func RandColumnType(rng *rand.Rand) *types.T {
 	}
 }
 
+// RandArrayType generates a random array type.
+func RandArrayType(rng *rand.Rand) *types.T {
+	for {
+		typ := RandColumnType(rng)
+		resTyp := types.MakeArray(typ)
+		if err := ValidateColumnDefType(resTyp); err == nil {
+			return resTyp
+		}
+	}
+}
+
 // RandColumnTypes returns a slice of numCols random types. These types must be
 // legal table column types.
 func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
@@ -842,7 +859,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for MustBeValueEncoded(typ.Family()) {
+	for MustBeValueEncoded(typ) {
 		typ = RandType(rng)
 	}
 	return typ
@@ -1387,7 +1404,7 @@ func randIndexTableDefFromCols(
 
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
-		semType := tree.MustBeStaticallyKnownType(cols[i].Type).Family()
+		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
 		if MustBeValueEncoded(semType) {
 			continue
 		}
