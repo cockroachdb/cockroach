@@ -1761,3 +1761,160 @@ select
  │    └── fd: (1)-->(2)
  └── filters
       └── ((x:1 <= 5) OR (x:1 = 10)) OR (x:1 = 15) [type=bool, outer=(1), constraints=(/1: (/NULL - /5] [/10 - /10] [/15 - /15]; tight)]
+
+exec-ddl
+CREATE TABLE data (
+  user_id UUID NOT NULL,
+  name VARCHAR(255) NULL,
+  created TIMESTAMPTZ,
+  INDEX user_id_idx (user_id ASC),
+  INDEX name_idx (name ASC),
+  INDEX created_idx (created ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE data INJECT STATISTICS '[
+  {
+    "columns": ["user_id"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "3b57b3e4-a68a-9b47-2752-e365d7d8954e"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4998,
+        "upper_bound": "6b49a786-387b-d5a2-6582-4e963eb4d537"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4999,
+        "upper_bound": "d9739a48-d5be-9a62-e752-34d877e56ba5"
+      }
+    ],
+    "histo_col_type": "UUID"
+  },
+  {
+    "columns": ["name"],
+    "created_at": "2020-01-28 03:03:03.012072+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "a"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4998,
+        "upper_bound": "b"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4999,
+        "upper_bound": "c"
+      }
+    ],
+    "histo_col_type": "STRING"
+  },
+  {
+    "columns": ["created"],
+    "created_at": "2020-01-28 03:03:03.012072+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2020-02-11 07:25:00+00:00"
+      },
+      {
+        "distinct_range": 4998,
+        "num_eq": 1,
+        "num_range": 4998,
+        "upper_bound": "2020-03-21 06:45:41+00:00"
+      },
+      {
+        "distinct_range": 4999,
+        "num_eq": 1,
+        "num_range": 4999,
+        "upper_bound": "2020-04-21 06:25:41+00:00"
+      }
+    ],
+    "histo_col_type": "TIMESTAMPTZ"
+  }
+]'
+----
+
+# Make sure that using a histogram produces correct stats with equality
+# predicates on data types such as UUID, string, and timepstamptz.
+norm
+SELECT * FROM data WHERE user_id = '679d3e56-b985-63d2-5442-e4ba7a8479e3'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ ├── stats: [rows=10.0160321, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0                  10.016
+ │                <--- '679d3e56-b985-63d2-5442-e4ba7a8479e3'
+ ├── fd: ()-->(1)
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ └── filters
+      └── user_id:1 = '679d3e56-b985-63d2-5442-e4ba7a8479e3' [type=bool, outer=(1), constraints=(/1: [/'679d3e56-b985-63d2-5442-e4ba7a8479e3' - /'679d3e56-b985-63d2-5442-e4ba7a8479e3']; tight), fd=()-->(1)]
+
+norm
+SELECT * FROM data WHERE name = 'abc'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar!null) created:3(timestamptz)
+ ├── stats: [rows=10.0160321, distinct(2)=1, null(2)=0]
+ │   histogram(2)=  0 10.016
+ │                <--- 'abc'
+ ├── fd: ()-->(2)
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ │        histogram(2)=  0   1   4998   1   4999   1
+ │                     <--- 'a' ------ 'b' ------ 'c'
+ └── filters
+      └── name:2 = 'abc' [type=bool, outer=(2), constraints=(/2: [/'abc' - /'abc']; tight), fd=()-->(2)]
+
+norm
+SELECT * FROM data WHERE created = '2020-04-11 06:25:41+00:00'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz!null)
+ ├── stats: [rows=1, distinct(3)=1, null(3)=0]
+ │   histogram(3)=  0               1
+ │                <--- '2020-04-11 06:25:41+00:00'
+ ├── fd: ()-->(3)
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(3)=10000, null(3)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ │        histogram(3)=  0               1               4998               1               4999               1
+ │                     <--- '2020-02-11 07:25:00+00:00' ------ '2020-03-21 06:45:41+00:00' ------ '2020-04-21 06:25:41+00:00'
+ └── filters
+      └── created:3 = '2020-04-11 06:25:41+00:00' [type=bool, outer=(3), constraints=(/3: [/'2020-04-11 06:25:41+00:00' - /'2020-04-11 06:25:41+00:00']; tight), fd=()-->(3)]

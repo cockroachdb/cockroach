@@ -531,40 +531,63 @@ func getFilteredBucket(
 		panic(errors.AssertionFailedf("span must be fully contained in the bucket"))
 	}
 
-	// Extract the range sizes before and after filtering.
+	// Extract the range sizes before and after filtering. Only numeric and
+	// date-time types will have ok=true, since these are the only types for
+	// which we can accurately calculate the range size of a non-equality span.
 	rangeBefore, rangeAfter, ok := getRangesBeforeAndAfter(
 		bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound, iter.desc,
 	)
 
-	var numEq float64
+	// Determine whether this span represents an equality condition.
+	isEqualityCondition := spanLowerBound.Compare(keyCtx.EvalCtx, spanUpperBound) == 0
+
+	// Determine whether this span includes the original upper bound of the
+	// bucket.
 	isSpanEndBoundaryInclusive := filteredSpan.EndBoundary() == constraint.IncludeBoundary
 	includesOriginalUpperBound := isSpanEndBoundaryInclusive && cmpSpanEndBucketEnd == 0
 	if iter.desc {
 		isSpanStartBoundaryInclusive := filteredSpan.StartBoundary() == constraint.IncludeBoundary
 		includesOriginalUpperBound = isSpanStartBoundaryInclusive && cmpSpanStartBucketStart == 0
 	}
+
+	// Calculate the new value for numEq.
+	var numEq float64
 	if includesOriginalUpperBound {
 		numEq = b.NumEq
-	}
-
-	var numRange float64
-	if ok && rangeBefore > 0 {
-		if isDiscrete(bucketLowerBound.ResolvedType()) && !includesOriginalUpperBound {
-			// The data type is discrete (e.g., integer or date) and the new upper
-			// bound falls within the original range, so we can assign some of the
-			// old NumRange to the new NumEq.
+	} else {
+		if isEqualityCondition {
+			// This span represents an equality condition with a value in the range
+			// of this bucket. Use the distinct count of the bucket to estimate the
+			// selectivity of the equality condition.
+			selectivity := 1.0
+			if b.DistinctRange > 1 {
+				selectivity = 1 / b.DistinctRange
+			}
+			numEq = selectivity * b.NumRange
+		} else if ok && rangeBefore > 0 && isDiscrete(bucketLowerBound.ResolvedType()) {
+			// If we were successful in finding the ranges before and after filtering
+			// and the data type is discrete (e.g., integer, date, or timestamp), we
+			// can assign some of the old NumRange to the new NumEq.
 			numEq = b.NumRange / rangeBefore
 		}
-		numRange = b.NumRange * rangeAfter / rangeBefore
-	} else if bucketUpperBound.Compare(keyCtx.EvalCtx, spanLowerBound) == 0 {
-		// This span represents an equality condition with the upper bound.
+	}
+
+	// Calculate the new value for numRange.
+	var numRange float64
+	if isEqualityCondition {
 		numRange = 0
+	} else if ok && rangeBefore > 0 {
+		// If we were successful in finding the ranges before and after filtering,
+		// calculate the fraction of values that should be assigned to the new
+		// bucket.
+		numRange = b.NumRange * rangeAfter / rangeBefore
 	} else {
 		// In the absence of any information, assume we reduced the size of the
 		// bucket by half.
 		numRange = 0.5 * b.NumRange
 	}
 
+	// Calculate the new value for distinctCountRange.
 	var distinctCountRange float64
 	if b.NumRange > 0 {
 		distinctCountRange = b.DistinctRange * numRange / b.NumRange
@@ -667,7 +690,7 @@ func getRangesBeforeAndAfter(
 // isDiscrete returns true if the given data type is discrete.
 func isDiscrete(typ *types.T) bool {
 	switch typ.Family() {
-	case types.IntFamily, types.DateFamily:
+	case types.IntFamily, types.DateFamily, types.TimestampFamily, types.TimestampTZFamily:
 		return true
 	}
 	return false
