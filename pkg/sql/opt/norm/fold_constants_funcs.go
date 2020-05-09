@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -9,3 +9,415 @@
 // licenses/APL.txt.
 
 package norm
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+)
+
+// FoldNullUnary replaces the unary operator with a typed null value having the
+// same type as the unary operator would have.
+func (c *CustomFuncs) FoldNullUnary(op opt.Operator, input opt.ScalarExpr) opt.ScalarExpr {
+	return c.f.ConstructNull(memo.InferUnaryType(op, input.DataType()))
+}
+
+// FoldNullBinary replaces the binary operator with a typed null value having
+// the same type as the binary operator would have.
+func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
+	return c.f.ConstructNull(memo.InferBinaryType(op, left.DataType(), right.DataType()))
+}
+
+// AllowNullArgs returns true if the binary operator with the given inputs
+// allows one of those inputs to be null. If not, then the binary operator will
+// simply be replaced by null.
+func (c *CustomFuncs) AllowNullArgs(op opt.Operator, left, right opt.ScalarExpr) bool {
+	return memo.BinaryAllowsNullArgs(op, left.DataType(), right.DataType())
+}
+
+// IsListOfConstants returns true if elems is a list of constant values or
+// tuples.
+func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
+	for _, elem := range elems {
+		if !c.IsConstValueOrTuple(elem) {
+			return false
+		}
+	}
+	return true
+}
+
+// FoldArray evaluates an Array expression with constant inputs. It returns the
+// array as a Const datum with type TArray.
+func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ types.T) opt.ScalarExpr {
+	elemType := typ.(types.TArray).Typ
+	a := tree.NewDArray(elemType)
+	a.Array = make(tree.Datums, len(elems))
+	for i := range a.Array {
+		a.Array[i] = memo.ExtractConstDatum(elems[i])
+		if a.Array[i] == tree.DNull {
+			a.HasNulls = true
+		}
+	}
+	return c.f.ConstructConst(a)
+}
+
+// IsConstValueOrTuple returns true if the input is a constant or a tuple of
+// constants.
+func (c *CustomFuncs) IsConstValueOrTuple(input opt.ScalarExpr) bool {
+	return memo.CanExtractConstDatum(input)
+}
+
+// FoldBinary evaluates a binary expression with constant inputs. It returns
+// a constant expression as long as it finds an appropriate overload function
+// for the given operator and input types, and the evaluation causes no error.
+func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
+	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
+
+	o, ok := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
+	if !ok {
+		return nil
+	}
+
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	if err != nil {
+		return nil
+	}
+	return c.f.ConstructConstVal(result, o.ReturnType)
+}
+
+// FoldUnary evaluates a unary expression with a constant input. It returns
+// a constant expression as long as it finds an appropriate overload function
+// for the given operator and input type, and the evaluation causes no error.
+func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.ScalarExpr {
+	datum := memo.ExtractConstDatum(input)
+
+	o, ok := memo.FindUnaryOverload(op, input.DataType())
+	if !ok {
+		return nil
+	}
+
+	result, err := o.Fn(c.f.evalCtx, datum)
+	if err != nil {
+		return nil
+	}
+	return c.f.ConstructConstVal(result, o.ReturnType)
+}
+
+// FoldCast evaluates a cast expression with a constant input. It returns
+// a constant expression as long as the evaluation causes no error.
+func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, colType coltypes.T) opt.ScalarExpr {
+	switch colType.(type) {
+	case *coltypes.TOid:
+		// Save this cast for the execbuilder.
+		return nil
+	}
+
+	datum := memo.ExtractConstDatum(input)
+	texpr, err := tree.NewTypedCastExpr(datum, colType)
+	if err != nil {
+		return nil
+	}
+
+	result, err := texpr.Eval(c.f.evalCtx)
+	if err != nil {
+		return nil
+	}
+
+	return c.f.ConstructConstVal(result, c.ColTypeToDatumType(colType))
+}
+
+// isMonotonicConversion returns true if conversion of a value from FROM to
+// TO is monotonic.
+// That is, if a and b are values of type FROM, then
+//
+//   1. a = b implies a::TO = b::TO and
+//   2. a < b implies a::TO <= b::TO
+//
+// Property (1) can be violated by cases like:
+//
+//   '-0'::FLOAT = '0'::FLOAT, but '-0'::FLOAT::STRING != '0'::FLOAT::STRING
+//
+// Property (2) can be violated by cases like:
+//
+//   2 < 10, but  2::STRING > 10::STRING.
+//
+// Note that the stronger version of (2),
+//
+//   a < b implies a::TO < b::TO
+//
+// is not required, for instance this is not generally true of conversion from
+// a TIMESTAMP to a DATE, but certain such conversions can still generate spans
+// in some cases where values under FROM and TO are "the same" (such as where a
+// TIMESTAMP precisely falls on a date boundary).  We don't need this property
+// because we will subsequently check that the values can round-trip to ensure
+// that we don't lose any information by doing the conversion.
+// TODO(justin): fill this out with the complete set of such conversions.
+func isMonotonicConversion(from, to coltypes.T) bool {
+	if from == coltypes.Timestamp ||
+		from == coltypes.TimestampWithTZ ||
+		from == coltypes.Date {
+		return to == coltypes.Timestamp ||
+			to == coltypes.TimestampWithTZ ||
+			to == coltypes.Date
+	}
+
+	if from == coltypes.Int8 ||
+		from == coltypes.Float8 ||
+		from == coltypes.Decimal {
+		return to == coltypes.Int8 ||
+			to == coltypes.Float8 ||
+			to == coltypes.Decimal
+	}
+
+	return false
+}
+
+// UnifyComparison attempts to convert a constant expression to the type of the
+// variable expression, if that conversion can round-trip and is monotonic.
+func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr {
+	v := left.(*memo.VariableExpr)
+	cnst := right.(*memo.ConstExpr)
+
+	desiredType := v.DataType()
+	originalType := cnst.DataType()
+
+	// Don't bother if they're already the same.
+	if desiredType.Equivalent(originalType) {
+		return nil
+	}
+
+	desiredColType, err := coltypes.DatumTypeToColumnType(desiredType)
+	if err != nil {
+		return nil
+	}
+
+	originalColType, err := coltypes.DatumTypeToColumnType(originalType)
+	if err != nil {
+		return nil
+	}
+
+	if !isMonotonicConversion(originalColType, desiredColType) {
+		return nil
+	}
+
+	// Check that the datum can round-trip between the types. If this is true, it
+	// means we don't lose any information needed to generate spans, and combined
+	// with monotonicity means that it's safe to convert the RHS to the type of
+	// the LHS.
+	convertedDatum, err := tree.PerformCast(c.f.evalCtx, cnst.Value, desiredColType)
+	if err != nil {
+		return nil
+	}
+
+	convertedBack, err := tree.PerformCast(c.f.evalCtx, convertedDatum, originalColType)
+	if err != nil {
+		return nil
+	}
+
+	if convertedBack.Compare(c.f.evalCtx, cnst.Value) != 0 {
+		return nil
+	}
+
+	return c.f.ConstructConst(convertedDatum)
+}
+
+// FoldComparison evaluates a comparison expression with constant inputs. It
+// returns a constant expression as long as it finds an appropriate overload
+// function for the given operator and input types, and the evaluation causes
+// no error.
+func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
+	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
+
+	var flipped, not bool
+	o, flipped, not, ok := memo.FindComparisonOverload(op, left.DataType(), right.DataType())
+	if !ok {
+		return nil
+	}
+
+	if flipped {
+		lDatum, rDatum = rDatum, lDatum
+	}
+
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	if err != nil {
+		return nil
+	}
+	if b, ok := result.(*tree.DBool); ok && not {
+		result = tree.MakeDBool(!*b)
+	}
+	return c.f.ConstructConstVal(result, types.Bool)
+}
+
+// FoldFunction evaluates a function expression with constant inputs. It
+// returns a constant expression as long as the function is contained in the
+// FoldFunctionWhitelist, and the evaluation causes no error.
+func (c *CustomFuncs) FoldFunction(
+	args memo.ScalarListExpr, private *memo.FunctionPrivate,
+) opt.ScalarExpr {
+	if _, ok := FoldFunctionWhitelist[private.Name]; !ok {
+		return nil
+	}
+
+	exprs := make(tree.TypedExprs, len(args))
+	for i := range exprs {
+		exprs[i] = memo.ExtractConstDatum(args[i])
+	}
+	funcRef := tree.WrapFunction(private.Name)
+	fn := tree.NewTypedFuncExpr(
+		funcRef,
+		0, /* aggQualifier */
+		exprs,
+		nil, /* filter */
+		nil, /* windowDef */
+		private.Typ,
+		private.Properties,
+		private.Overload,
+	)
+
+	result, err := fn.Eval(c.f.evalCtx)
+	if err != nil {
+		return nil
+	}
+	return c.f.ConstructConstVal(result, private.Typ)
+}
+
+// FoldFunctionWhitelist contains functions that are known to always produce
+// the same result given the same set of arguments. This excludes impure
+// functions and functions that rely on context such as locale or current user.
+// See sql/sem/builtins/builtins.go for the function definitions.
+// TODO(rytaft): This is a stopgap until #26582 is completed to identify
+// functions as immutable, stable or volatile.
+var FoldFunctionWhitelist = map[string]struct{}{
+	"length":                        {},
+	"char_length":                   {},
+	"character_length":              {},
+	"bit_length":                    {},
+	"octet_length":                  {},
+	"lower":                         {},
+	"upper":                         {},
+	"substr":                        {},
+	"substring":                     {},
+	"concat":                        {},
+	"concat_ws":                     {},
+	"convert_from":                  {},
+	"convert_to":                    {},
+	"to_uuid":                       {},
+	"from_uuid":                     {},
+	"abbrev":                        {},
+	"broadcast":                     {},
+	"family":                        {},
+	"host":                          {},
+	"hostmask":                      {},
+	"masklen":                       {},
+	"netmask":                       {},
+	"set_masklen":                   {},
+	"text":                          {},
+	"inet_same_family":              {},
+	"inet_contained_by_or_equals":   {},
+	"inet_contains_or_contained_by": {},
+	"inet_contains_or_equals":       {},
+	"from_ip":                       {},
+	"to_ip":                         {},
+	"split_part":                    {},
+	"repeat":                        {},
+	"encode":                        {},
+	"decode":                        {},
+	"ascii":                         {},
+	"chr":                           {},
+	"md5":                           {},
+	"sha1":                          {},
+	"sha256":                        {},
+	"sha512":                        {},
+	"fnv32":                         {},
+	"fnv32a":                        {},
+	"fnv64":                         {},
+	"fnv64a":                        {},
+	"crc32ieee":                     {},
+	"crc32c":                        {},
+	"to_hex":                        {},
+	"to_english":                    {},
+	"strpos":                        {},
+	"overlay":                       {},
+	"lpad":                          {},
+	"rpad":                          {},
+	"btrim":                         {},
+	"ltrim":                         {},
+	"rtrim":                         {},
+	"reverse":                       {},
+	"replace":                       {},
+	"translate":                     {},
+	"regexp_extract":                {},
+	"regexp_replace":                {},
+	"like_escape":                   {},
+	"not_like_escape":               {},
+	"ilike_escape":                  {},
+	"not_ilike_escape":              {},
+	"similar_to_escape":             {},
+	"not_similar_to_escape":         {},
+	"initcap":                       {},
+	"quote_ident":                   {},
+	"left":                          {},
+	"right":                         {},
+	"greatest":                      {},
+	"least":                         {},
+	"abs":                           {},
+	"acos":                          {},
+	"asin":                          {},
+	"atan":                          {},
+	"atan2":                         {},
+	"cbrt":                          {},
+	"ceil":                          {},
+	"ceiling":                       {},
+	"cos":                           {},
+	"cot":                           {},
+	"degrees":                       {},
+	"div":                           {},
+	"exp":                           {},
+	"floor":                         {},
+	"isnan":                         {},
+	"ln":                            {},
+	"log":                           {},
+	"mod":                           {},
+	"pi":                            {},
+	"pow":                           {},
+	"power":                         {},
+	"radians":                       {},
+	"round":                         {},
+	"sin":                           {},
+	"sign":                          {},
+	"sqrt":                          {},
+	"tan":                           {},
+	"trunc":                         {},
+	"string_to_array":               {},
+	"array_to_string":               {},
+	"array_length":                  {},
+	"array_lower":                   {},
+	"array_upper":                   {},
+	"array_append":                  {},
+	"array_prepend":                 {},
+	"array_cat":                     {},
+	"json_remove_path":              {},
+	"json_extract_path":             {},
+	"jsonb_extract_path":            {},
+	"json_set":                      {},
+	"jsonb_set":                     {},
+	"jsonb_insert":                  {},
+	"jsonb_pretty":                  {},
+	"json_typeof":                   {},
+	"jsonb_typeof":                  {},
+	"array_to_json":                 {},
+	"to_json":                       {},
+	"to_jsonb":                      {},
+	"json_build_array":              {},
+	"jsonb_build_array":             {},
+	"json_build_object":             {},
+	"jsonb_build_object":            {},
+	"json_object":                   {},
+	"jsonb_object":                  {},
+	"json_strip_nulls":              {},
+	"jsonb_strip_nulls":             {},
+	"json_array_length":             {},
+	"jsonb_array_length":            {},
+}

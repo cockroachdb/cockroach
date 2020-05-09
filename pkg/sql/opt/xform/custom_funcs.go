@@ -425,12 +425,6 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 //
 // ----------------------------------------------------------------------
 
-// IsPositiveLimit is true if the given limit value is greater than zero.
-func (c *CustomFuncs) IsPositiveLimit(limit tree.Datum) bool {
-	limitVal := int64(*limit.(*tree.DInt))
-	return limitVal > 0
-}
-
 // LimitScanPrivate constructs a new ScanPrivate value that is based on the
 // given ScanPrivate. The new private's HardLimit is set to the given limit,
 // which must be a constant int datum value. The other fields are inherited from
