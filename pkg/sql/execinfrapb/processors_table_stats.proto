@@ -74,8 +74,8 @@ message SketchSpec {
 //       - an INT column indicating the sketch index
 //         (0 to len(sketches) - 1).
 //       - an INT column indicating the number of rows processed
-//       - an INT column indicating the number of NULL values
-//         on the first column of the sketch.
+//       - an INT column indicating the number of rows with NULL values
+//         on all columns of the sketch.
 //       - a BYTES column with the binary sketch data (format
 //         dependent on the sketch type).
 // Rows have NULLs on either all the sampled row columns or on all the
@@ -107,7 +107,7 @@ message SamplerSpec {
 //  2. sketch columns:
 //    - sketch index
 //    - number of rows processed
-//    - number of NULL values encountered on the first column of the sketch
+//    - number of rows encountered with NULL values on all columns of the sketch
 //    - binary sketch data
 message SampleAggregatorSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];

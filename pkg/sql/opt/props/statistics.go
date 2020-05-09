@@ -146,8 +146,7 @@ type ColumnStatistic struct {
 
 	// NullCount is the estimated number of null values of this set of
 	// columns for this expression. For multi-column stats, this null
-	// count tracks all instances of at least one null value in the
-	// column set.
+	// count tracks only the rows in which all columns in the set are null.
 	NullCount float64
 
 	// Histogram is only used when the size of Cols is one. It contains

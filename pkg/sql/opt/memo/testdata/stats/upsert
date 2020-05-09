@@ -263,7 +263,7 @@ upsert uv
       │    ├── left-join (hash)
       │    │    ├── columns: z:6(int) column7:7(int) u:8(int) v:9(int)
       │    │    ├── side-effects
-      │    │    ├── stats: [rows=1000, distinct(9)=991, null(9)=10]
+      │    │    ├── stats: [rows=1000, distinct(9)=991, null(9)=0]
       │    │    ├── lax-key: (6,8)
       │    │    ├── fd: (6)~~>(7), (8)-->(9), (9)~~>(8)
       │    │    ├── upsert-distinct-on
@@ -271,16 +271,16 @@ upsert uv
       │    │    │    ├── grouping columns: z:6(int)
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    ├── side-effects
-      │    │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=10]
+      │    │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
       │    │    │    ├── lax-key: (6)
       │    │    │    ├── fd: (6)~~>(7)
       │    │    │    ├── project
       │    │    │    │    ├── columns: column7:7(int) z:6(int)
       │    │    │    │    ├── side-effects
-      │    │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
+      │    │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=0]
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: z:6(int)
-      │    │    │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
+      │    │    │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=0]
       │    │    │    │    │    ├── scan xyz
       │    │    │    │    │    │    ├── columns: x:3(string!null) y:4(int!null) xyz.z:5(float)
       │    │    │    │    │    │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]

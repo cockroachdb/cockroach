@@ -66,12 +66,12 @@ SELECT * FROM abc ORDER BY a, b, c
 ----
 sort (segmented)
  ├── columns: a:1 b:2 c:3
- ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
+ ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
  ├── cost: 1090.43
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
-      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
+      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
       ├── cost: 1070.02
       └── ordering: +1,+2
 
@@ -81,12 +81,12 @@ SELECT * FROM abc ORDER BY c, b, a
 ----
 sort (segmented)
  ├── columns: a:1 b:2 c:3
- ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
  ├── cost: 1090.43
  ├── ordering: +3,+2,+1
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
-      ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
+      ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
       ├── cost: 1070.02
       └── ordering: +3,+2
 
