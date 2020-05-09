@@ -79,19 +79,19 @@ with &1 (t0)
  │    ├── left columns: column1:1(int) column2:2(oid) column3:9(date) column4:4(string)
  │    ├── right columns: column1:5(int) column2:6(oid) column3:7(date) column4:8(string)
  │    ├── cardinality: [1 - 2]
- │    ├── stats: [rows=2, distinct(10-13)=2, null(10-13)=2]
+ │    ├── stats: [rows=2, distinct(10-13)=2, null(10-13)=0]
  │    ├── key: (10-13)
  │    ├── values
  │    │    ├── columns: column1:1(int!null) column2:2(oid!null) column4:4(string!null) column3:9(date)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(1,2,4,9)=1, null(1,2,4,9)=1]
+ │    │    ├── stats: [rows=1, distinct(1,2,4,9)=1, null(1,2,4,9)=0]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1,2,4,9)
  │    │    └── (0, 0, '', NULL) [type=tuple{int, oid, string, date}]
  │    └── values
  │         ├── columns: column1:5(int) column2:6(oid!null) column3:7(date!null) column4:8(string)
  │         ├── cardinality: [1 - 1]
- │         ├── stats: [rows=1, distinct(5-8)=1, null(5-8)=1]
+ │         ├── stats: [rows=1, distinct(5-8)=1, null(5-8)=0]
  │         ├── key: ()
  │         ├── fd: ()-->(5-8)
  │         └── (NULL, 0, '1970-09-08', NULL) [type=tuple{int, oid, date, string}]

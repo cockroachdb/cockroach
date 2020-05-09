@@ -302,7 +302,19 @@ statistics_name  column_names  row_count  distinct_count  null_count
 default_stat3    {rowid}       5          5               0
 default_stat3    {y}           5          3               3
 default_stat3    {x}           5          2               3
-default_stat3    {x,y}         5          4               4
+default_stat3    {x,y}         5          4               2
+
+let $hist_id_3
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE simple]
+WHERE statistics_name = 'default_stat3' AND column_names = '{y}'
+
+# The counts in each bucket should not include null values.
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_3
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+0            0           0                    1
+1            0           0                    1
 
 #
 # Test numeric references

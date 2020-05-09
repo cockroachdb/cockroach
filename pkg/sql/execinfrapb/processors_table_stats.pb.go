@@ -63,7 +63,7 @@ func (x *SketchType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SketchType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{0}
+	return fileDescriptor_processors_table_stats_df5a4164ee0249fa, []int{0}
 }
 
 // SketchSpec contains the specification for a generated statistic.
@@ -85,7 +85,7 @@ func (m *SketchSpec) Reset()         { *m = SketchSpec{} }
 func (m *SketchSpec) String() string { return proto.CompactTextString(m) }
 func (*SketchSpec) ProtoMessage()    {}
 func (*SketchSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{0}
+	return fileDescriptor_processors_table_stats_df5a4164ee0249fa, []int{0}
 }
 func (m *SketchSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -136,8 +136,8 @@ var xxx_messageInfo_SketchSpec proto.InternalMessageInfo
 //       - an INT column indicating the sketch index
 //         (0 to len(sketches) - 1).
 //       - an INT column indicating the number of rows processed
-//       - an INT column indicating the number of NULL values
-//         on the first column of the sketch.
+//       - an INT column indicating the number of rows with NULL values
+//         on all columns of the sketch.
 //       - a BYTES column with the binary sketch data (format
 //         dependent on the sketch type).
 // Rows have NULLs on either all the sampled row columns or on all the
@@ -160,7 +160,7 @@ func (m *SamplerSpec) Reset()         { *m = SamplerSpec{} }
 func (m *SamplerSpec) String() string { return proto.CompactTextString(m) }
 func (*SamplerSpec) ProtoMessage()    {}
 func (*SamplerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{1}
+	return fileDescriptor_processors_table_stats_df5a4164ee0249fa, []int{1}
 }
 func (m *SamplerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -197,7 +197,7 @@ var xxx_messageInfo_SamplerSpec proto.InternalMessageInfo
 //  2. sketch columns:
 //    - sketch index
 //    - number of rows processed
-//    - number of NULL values encountered on the first column of the sketch
+//    - number of rows encountered with NULL values on all columns of the sketch
 //    - binary sketch data
 type SampleAggregatorSpec struct {
 	Sketches []SketchSpec `protobuf:"bytes,1,rep,name=sketches" json:"sketches"`
@@ -221,7 +221,7 @@ func (m *SampleAggregatorSpec) Reset()         { *m = SampleAggregatorSpec{} }
 func (m *SampleAggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*SampleAggregatorSpec) ProtoMessage()    {}
 func (*SampleAggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{2}
+	return fileDescriptor_processors_table_stats_df5a4164ee0249fa, []int{2}
 }
 func (m *SampleAggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1120,10 +1120,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors_table_stats.proto", fileDescriptor_processors_table_stats_99f3061131dbffaf)
+	proto.RegisterFile("sql/execinfrapb/processors_table_stats.proto", fileDescriptor_processors_table_stats_df5a4164ee0249fa)
 }
 
-var fileDescriptor_processors_table_stats_99f3061131dbffaf = []byte{
+var fileDescriptor_processors_table_stats_df5a4164ee0249fa = []byte{
 	// 619 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x54, 0x4f, 0x6f, 0xd3, 0x4e,
 	0x10, 0xcd, 0x36, 0x49, 0x93, 0x6e, 0x7e, 0xf9, 0x91, 0x9a, 0x22, 0x59, 0x15, 0x72, 0x4c, 0x54,
