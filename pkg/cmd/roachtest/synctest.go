@@ -28,6 +28,7 @@ fi
 `
 
 	r.Add(testSpec{
+		Skip:       "#48603: broken on Pebble",
 		Name:       "synctest",
 		Owner:      OwnerStorage,
 		MinVersion: "v19.1.0",
