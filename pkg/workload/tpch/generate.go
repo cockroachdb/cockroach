@@ -67,7 +67,7 @@ func (w *tpch) tpchRegionInitialRowBatch(
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	regionKey := batchIdx
-	cb.Reset(regionTypes, 1)
+	cb.Reset(regionTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int16()[0] = int16(regionKey)                       // r_regionkey
 	cb.ColVec(1).Bytes().Set(0, []byte(regionNames[regionKey]))      // r_name
 	cb.ColVec(2).Bytes().Set(0, w.textPool.randString(rng, 31, 115)) // r_comment
@@ -90,7 +90,7 @@ func (w *tpch) tpchNationInitialRowBatch(
 
 	nationKey := batchIdx
 	nation := nations[nationKey]
-	cb.Reset(nationTypes, 1)
+	cb.Reset(nationTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int16()[0] = int16(nationKey)                       // n_nationkey
 	cb.ColVec(1).Bytes().Set(0, []byte(nation.name))                 // n_name
 	cb.ColVec(2).Int16()[0] = int16(nation.regionKey)                // n_regionkey
@@ -117,7 +117,7 @@ func (w *tpch) tpchSupplierInitialRowBatch(
 
 	suppKey := int64(batchIdx) + 1
 	nationKey := int16(randInt(rng, 0, 24))
-	cb.Reset(supplierTypes, 1)
+	cb.Reset(supplierTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = suppKey                                        // s_suppkey
 	cb.ColVec(1).Bytes().Set(0, supplierName(a, suppKey))                    // s_name
 	cb.ColVec(2).Bytes().Set(0, randVString(rng, a, 10, 40))                 // s_address
@@ -151,7 +151,7 @@ func (w *tpch) tpchPartInitialRowBatch(batchIdx int, cb coldata.Batch, a *bufall
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	partKey := batchIdx + 1
-	cb.Reset(partTypes, 1)
+	cb.Reset(partTypes, 1, coldata.StandardColumnFactory)
 
 	// P_PARTKEY unique within [SF * 200,000].
 	cb.ColVec(0).Int64()[0] = int64(partKey)
@@ -192,7 +192,7 @@ func (w *tpch) tpchPartSuppInitialRowBatch(
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	partKey := batchIdx + 1
-	cb.Reset(partSuppTypes, numPartSuppPerPart)
+	cb.Reset(partSuppTypes, numPartSuppPerPart, coldata.StandardColumnFactory)
 
 	// P_PARTKEY unique within [SF * 200,000].
 	partKeyCol := cb.ColVec(0).Int64()
@@ -239,7 +239,7 @@ func (w *tpch) tpchCustomerInitialRowBatch(
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	custKey := int64(batchIdx) + 1
-	cb.Reset(customerTypes, 1)
+	cb.Reset(customerTypes, 1, coldata.StandardColumnFactory)
 
 	// C_CUSTKEY unique within [SF * 150,000].
 	cb.ColVec(0).Int64()[0] = custKey
@@ -371,7 +371,7 @@ func (w *tpch) tpchOrdersInitialRowBatch(
 	defer w.localsPool.Put(l)
 	rng := l.rng
 
-	cb.Reset(ordersTypes, numOrderPerCustomer)
+	cb.Reset(ordersTypes, numOrderPerCustomer, coldata.StandardColumnFactory)
 
 	orderKeyCol := cb.ColVec(0).Int64()
 	custKeyCol := cb.ColVec(1).Int64()
@@ -450,7 +450,7 @@ func (w *tpch) tpchLineItemInitialRowBatch(
 	defer w.localsPool.Put(l)
 	rng := l.rng
 
-	cb.Reset(lineItemTypes, numOrderPerCustomer*7)
+	cb.Reset(lineItemTypes, numOrderPerCustomer*7, coldata.StandardColumnFactory)
 
 	orderKeyCol := cb.ColVec(0).Int64()
 	partKeyCol := cb.ColVec(1).Int64()
