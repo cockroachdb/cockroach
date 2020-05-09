@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -166,6 +167,7 @@ type hashAggregator struct {
 	hashAlloc      hashAggFuncsAlloc
 	cancelChecker  CancelChecker
 	decimalScratch decimalOverloadScratch
+	datumAlloc     sqlbase.DatumAlloc
 }
 
 var _ colexecbase.Operator = &hashAggregator{}
@@ -328,6 +330,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b c
 			b.Selection(),
 			op.cancelChecker,
 			op.decimalScratch,
+			&op.datumAlloc,
 		)
 	}
 

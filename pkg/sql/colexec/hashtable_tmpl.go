@@ -24,6 +24,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,6 +56,9 @@ const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
 
 // _RIGHT_TYPE_WIDTH is the template variable.
 const _RIGHT_TYPE_WIDTH = 0
+
+// Dummy import to pull in "coldataext" package.
+var _ coldataext.Datum
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.

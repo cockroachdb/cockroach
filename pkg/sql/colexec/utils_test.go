@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -92,6 +94,20 @@ func (t tuple) less(other tuple) bool {
 				return true
 			} else {
 				return false
+			}
+		}
+
+		// Since the expected values are provided as strings, we convert the json
+		// values here to strings so we can use the string lexical ordering. This is
+		// because json orders certain values differently (e.g. null) compared to
+		// string.
+		if strings.Contains(lhsVal.Type().String(), "json") {
+			lhsStr := lhsVal.Interface().(fmt.Stringer).String()
+			rhsStr := rhsVal.Interface().(fmt.Stringer).String()
+			if lhsStr == rhsStr {
+				continue
+			} else {
+				return lhsStr < rhsStr
 			}
 		}
 
@@ -537,13 +553,17 @@ func runTestsWithFn(
 // function that takes a list of input Operators, which will give back the
 // tuples provided in batches.
 func runTestsWithFixedSel(
-	t *testing.T, tups []tuples, sel []int, test func(t *testing.T, inputs []colexecbase.Operator),
+	t *testing.T,
+	tups []tuples,
+	typs []*types.T,
+	sel []int,
+	test func(t *testing.T, inputs []colexecbase.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
 		t.Run(fmt.Sprintf("batchSize=%d/fixedSel", batchSize), func(t *testing.T) {
 			inputSources := make([]colexecbase.Operator, len(tups))
 			for i, tup := range tups {
-				inputSources[i] = newOpFixedSelTestInput(sel, batchSize, tup)
+				inputSources[i] = newOpFixedSelTestInput(sel, batchSize, tup, typs)
 			}
 			test(t, inputSources)
 		})
@@ -581,9 +601,43 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 			// cause the code that does not properly use execgen package to fail.
 			vec.Decimal()[idx].Set(decimalVal)
 		}
+	} else if vec.CanonicalTypeFamily() == types.AnyFamily {
+		switch vec.Type().Family() {
+		case types.JsonFamily:
+			if jsonStr, ok := val.(string); ok {
+				jobj, err := json.ParseJSON(jsonStr)
+				if err != nil {
+					colexecerror.InternalError(
+						fmt.Sprintf("unable to parse json object: %v: %v", jobj, err))
+				}
+				vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
+			} else if jobj, ok := val.(json.JSON); ok {
+				vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
+			}
+		default:
+			colexecerror.InternalError(fmt.Sprintf("unexpected datum-backed type: %s", vec.Type()))
+		}
 	} else {
 		reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
 	}
+}
+
+// extrapolateTypesFromTuples determines the type schema based on the input
+// tuples.
+func extrapolateTypesFromTuples(tups tuples) []*types.T {
+	typs := make([]*types.T, len(tups[0]))
+	for i := range typs {
+		// Default type for test cases is Int64 in case the entire column is
+		// null and the type is indeterminate.
+		typs[i] = types.Int
+		for _, tup := range tups {
+			if tup[i] != nil {
+				typs[i] = typeconv.UnsafeFromGoType(tup[i])
+				break
+			}
+		}
+	}
+	return typs
 }
 
 // opTestInput is an Operator that columnarizes test input in the form of
@@ -651,21 +705,7 @@ func (s *opTestInput) Init() {
 		if len(s.tuples) == 0 {
 			colexecerror.InternalError("empty tuple source with no specified types")
 		}
-
-		// The type schema was not provided, so we need to determine it based on
-		// the input tuple.
-		s.typs = make([]*types.T, len(s.tuples[0]))
-		for i := range s.typs {
-			// Default type for test cases is Int64 in case the entire column is null
-			// and the type is indeterminate.
-			s.typs[i] = types.Int
-			for _, tup := range s.tuples {
-				if tup[i] != nil {
-					s.typs[i] = typeconv.UnsafeFromGoType(tup[i])
-					break
-				}
-			}
-		}
+		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
 	s.batch = testAllocator.NewMemBatch(s.typs)
 
@@ -768,6 +808,16 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						newBytes := make([]byte, rng.Intn(16)+1)
 						rng.Read(newBytes)
 						setColVal(vec, outputIdx, newBytes)
+					} else if canonicalTypeFamily == types.AnyFamily {
+						switch vec.Type().Family() {
+						case types.JsonFamily:
+							newBytes := make([]byte, rng.Intn(16)+1)
+							rng.Read(newBytes)
+							j := json.FromString(string(newBytes))
+							setColVal(vec, outputIdx, j)
+						default:
+							colexecerror.InternalError(fmt.Sprintf("unexpected datum-backed type: %s", vec.Type()))
+						}
 					} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
 						setColVal(vec, outputIdx, val.Interface())
 					} else {
@@ -804,31 +854,24 @@ var _ colexecbase.Operator = &opFixedSelTestInput{}
 // newOpFixedSelTestInput returns a new opFixedSelTestInput with the given
 // input tuples and selection vector. The input tuples are translated into
 // types automatically, using simple rules (e.g. integers always become Int64).
-func newOpFixedSelTestInput(sel []int, batchSize int, tuples tuples) *opFixedSelTestInput {
+func newOpFixedSelTestInput(
+	sel []int, batchSize int, tuples tuples, typs []*types.T,
+) *opFixedSelTestInput {
 	ret := &opFixedSelTestInput{
 		batchSize: batchSize,
 		sel:       sel,
 		tuples:    tuples,
+		typs:      typs,
 	}
 	return ret
 }
 
 func (s *opFixedSelTestInput) Init() {
-	if len(s.tuples) == 0 {
-		colexecerror.InternalError("empty tuple source")
-	}
-
-	s.typs = make([]*types.T, len(s.tuples[0]))
-	for i := range s.typs {
-		// Default type for test cases is Int64 in case the entire column is null
-		// and the type is indeterminate.
-		s.typs[i] = types.Int
-		for _, tup := range s.tuples {
-			if tup[i] != nil {
-				s.typs[i] = typeconv.UnsafeFromGoType(tup[i])
-				break
-			}
+	if s.typs == nil {
+		if len(s.tuples) == 0 {
+			colexecerror.InternalError("empty tuple source with no specified types")
 		}
+		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
 
 	s.batch = testAllocator.NewMemBatch(s.typs)
@@ -947,6 +990,18 @@ func getTupleFromBatch(batch coldata.Batch, tupleIdx int) tuple {
 				var newDec apd.Decimal
 				newDec.Set(&colDec[tupleIdx])
 				val = reflect.ValueOf(newDec)
+			} else if vec.CanonicalTypeFamily() == types.AnyFamily {
+				switch vec.Type().Family() {
+				case types.JsonFamily:
+					d := vec.Datum().Get(tupleIdx).(*coldataext.Datum).Datum
+					if d == tree.DNull {
+						val = reflect.ValueOf(tree.DNull)
+					} else {
+						val = reflect.ValueOf(d.(*tree.DJSON).JSON)
+					}
+				default:
+					colexecerror.InternalError(fmt.Sprintf("unexpected datum-backed type: %s", vec.Type()))
+				}
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(tupleIdx)
 			}
@@ -1037,6 +1092,22 @@ func tupleEquals(expected tuple, actual tuple) bool {
 						return false
 					}
 				}
+			}
+			if j1, ok := actual[i].(json.JSON); ok {
+				if j2, ok := expected[i].(json.JSON); ok {
+					if cmp, err := j1.Compare(j2); err == nil && cmp == 0 {
+						continue
+					}
+				} else if str2, ok := expected[i].(string); ok {
+					j2, err := json.ParseJSON(str2)
+					if err != nil {
+						return false
+					}
+					if cmp, err := j1.Compare(j2); err == nil && cmp == 0 {
+						continue
+					}
+				}
+				return false
 			}
 			if !reflect.DeepEqual(
 				reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(),

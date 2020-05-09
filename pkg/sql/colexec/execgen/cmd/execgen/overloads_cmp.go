@@ -38,6 +38,7 @@ var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
 	types.FloatFamily:       numericCanonicalTypeFamilies,
 	types.TimestampTZFamily: {types.TimestampTZFamily},
 	types.IntervalFamily:    {types.IntervalFamily},
+	types.AnyFamily:         {types.AnyFamily},
 }
 
 // sameTypeComparisonOpToOverloads maps a comparison operator to all of the
@@ -326,5 +327,20 @@ func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {
 func (c intervalCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
 		return fmt.Sprintf("%s = %s.Compare(%s)", targetElem, leftElem, rightElem)
+	}
+}
+
+func (c datumCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
+		// In most cases, we have a datum coming from coldataext.datumVec on
+		// the left side, but it is also possible that we have a constant datum
+		// on the left, then the datum vec will be on the right side.
+		datumVecVariableName := leftCol
+		if datumVecVariableName == "_" {
+			datumVecVariableName = rightCol
+		}
+		return fmt.Sprintf(`
+			%s = %s.(*coldataext.Datum).CompareDatum(%s, %s)
+		`, targetElem, leftElem, datumVecVariableName, rightElem)
 	}
 }
