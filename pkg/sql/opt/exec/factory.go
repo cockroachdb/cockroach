@@ -96,9 +96,7 @@ type Factory interface {
 
 	// ConstructRender returns a node that applies a projection on the results of
 	// the given input node. The projection can contain new expressions.
-	ConstructRender(
-		n Node, exprs tree.TypedExprs, colNames []string, reqOrdering OutputOrdering,
-	) (Node, error)
+	ConstructRender(n Node, typs []*types.T, exprs tree.TypedExprs, colNames []string, reqOrdering OutputOrdering) (Node, error)
 
 	// ConstructApplyJoin returns a node that runs an apply join between an input
 	// node (the left side of the join) and a RelExpr that has outer columns (the

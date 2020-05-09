@@ -284,10 +284,11 @@ func (ef *execFactory) ConstructSimpleProject(
 	rb.init(n, reqOrdering, len(cols))
 	for i, col := range cols {
 		v := rb.r.ivarHelper.IndexedVar(int(col))
+
 		if colNames == nil {
-			rb.addExpr(v, inputCols[col].Name, inputCols[col].TableID, inputCols[col].PGAttributeNum, inputCols[col].GetTypeModifier())
+			rb.addExpr(v, inputCols[col].Typ, inputCols[col].Name, inputCols[col].TableID, inputCols[col].PGAttributeNum)
 		} else {
-			rb.addExpr(v, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */, v.ResolvedType().TypeModifier())
+			rb.addExpr(v, v.ResolvedType(), colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */)
 		}
 	}
 	return rb.res, nil
@@ -306,13 +307,17 @@ func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
 
 // ConstructRender is part of the exec.Factory interface.
 func (ef *execFactory) ConstructRender(
-	n exec.Node, exprs tree.TypedExprs, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node,
+	typs []*types.T,
+	exprs tree.TypedExprs,
+	colNames []string,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	var rb renderBuilder
 	rb.init(n, reqOrdering, len(exprs))
 	for i, expr := range exprs {
 		expr = rb.r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		rb.addExpr(expr, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */, -1 /* typeModifier */)
+		rb.addExpr(expr, typs[i], colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */)
 	}
 	return rb.res, nil
 }
@@ -2047,20 +2052,19 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap 
 // addExpr adds a new render expression with the given name.
 func (rb *renderBuilder) addExpr(
 	expr tree.TypedExpr,
+	typ *types.T,
 	colName string,
 	tableID sqlbase.ID,
 	pgAttributeNum sqlbase.ColumnID,
-	typeModifier int32,
 ) {
 	rb.r.render = append(rb.r.render, expr)
 	rb.r.columns = append(
 		rb.r.columns,
 		sqlbase.ResultColumn{
 			Name:           colName,
-			Typ:            expr.ResolvedType(),
+			Typ:            typ,
 			TableID:        tableID,
 			PGAttributeNum: pgAttributeNum,
-			TypeModifier:   typeModifier,
 		},
 	)
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -565,6 +566,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 
 	var res execPlan
 	exprs := make(tree.TypedExprs, 0, len(projections)+prj.Passthrough.Len())
+	typs := make([]*types.T, 0, len(exprs))
 	colNames := make([]string, 0, len(exprs))
 	ctx := input.makeBuildScalarCtx()
 	for i := range projections {
@@ -575,15 +577,18 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		}
 		res.outputCols.Set(int(item.Col), i)
 		exprs = append(exprs, expr)
+		typs = append(typs, item.Typ)
 		colNames = append(colNames, md.ColumnMeta(item.Col).Alias)
 	}
 	prj.Passthrough.ForEach(func(colID opt.ColumnID) {
 		res.outputCols.Set(int(colID), len(exprs))
-		exprs = append(exprs, b.indexedVar(&ctx, md, colID))
+		indexedVar := b.indexedVar(&ctx, md, colID)
+		exprs = append(exprs, indexedVar)
+		typs = append(typs, indexedVar.ResolvedType())
 		colNames = append(colNames, md.ColumnMeta(colID).Alias)
 	})
 	reqOrdering := res.reqOrdering(prj)
-	res.root, err = b.factory.ConstructRender(input.root, exprs, colNames, reqOrdering)
+	res.root, err = b.factory.ConstructRender(input.root, typs, exprs, colNames, reqOrdering)
 	if err != nil {
 		return execPlan{}, err
 	}
