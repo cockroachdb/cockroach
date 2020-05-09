@@ -2193,10 +2193,10 @@ CREATE TABLE pg_catalog.pg_proc (
 							tree.MakeDBool(tree.DBool(isWindow)),    // proiswindow
 							tree.DBoolFalse,                         // prosecdef
 							tree.MakeDBool(tree.DBool(!props.Impure)), // proleakproof
-							tree.DBoolFalse,                      // proisstrict
-							tree.MakeDBool(tree.DBool(isRetSet)), // proretset
-							tree.DNull,                           // provolatile
-							tree.DNull,                           // proparallel
+							tree.DBoolFalse,                             // proisstrict
+							tree.MakeDBool(tree.DBool(isRetSet)),        // proretset
+							tree.NewDString(string(builtin.Volatility)), // provolatile
+							tree.DNull, // proparallel
 							tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 							retType,                                         // prorettype

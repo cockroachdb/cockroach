@@ -1353,14 +1353,14 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    proisstrict  proretset  provolatile  proparallel
-substring  false        false      NULL         NULL
-substring  false        false      NULL         NULL
-substring  false        false      NULL         NULL
-substring  false        false      NULL         NULL
-substring  false        false      NULL         NULL
-substring  false        false      NULL         NULL
-substring  false        false      NULL         NULL
-substring  false        false      NULL         NULL
+substring  false        false      i            NULL
+substring  false        false      i            NULL
+substring  false        false      i            NULL
+substring  false        false      i            NULL
+substring  false        false      i            NULL
+substring  false        false      i            NULL
+substring  false        false      i            NULL
+substring  false        false      i            NULL
 
 query TIIOTTTT colnames
 SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults

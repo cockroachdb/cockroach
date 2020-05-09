@@ -91,6 +91,11 @@ type FunctionProperties struct {
 	// determined without extra context. This is used for formatting builtins
 	// with the FmtParsable directive.
 	AmbiguousReturnType bool
+
+	// IgnoreVolatilityCheck ignores checking the functions overloads against
+	// the Postgres ones at test time.
+	// This should be used with caution.
+	IgnoreVolatilityCheck bool
 }
 
 // FunctionClass specifies the class of the builtin function.
