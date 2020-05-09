@@ -437,13 +437,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	var cache storage.RocksDBCache
 	var pebbleCache *pebble.Cache
-	if cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if cfg.StorageEngine == enginepb.EngineTypeDefault ||
+		cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		details = append(details, fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 		pebbleCache = pebble.NewCache(cfg.CacheSize)
 		defer pebbleCache.Unref()
 	}
-	if cfg.StorageEngine == enginepb.EngineTypeDefault ||
-		cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		details = append(details, fmt.Sprintf("RocksDB cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 		cache = storage.NewRocksDBCache(cfg.CacheSize)
 		defer cache.Release()
@@ -518,7 +518,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				UseFileRegistry: spec.UseFileRegistry,
 				ExtraOptions:    spec.ExtraOptions,
 			}
-			if cfg.StorageEngine == enginepb.EngineTypePebble {
+			if cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeDefault {
 				// TODO(itsbilal): Tune these options, and allow them to be overridden
 				// in the spec (similar to the existing spec.RocksDBOptions and others).
 				pebbleConfig := storage.PebbleConfig{
@@ -528,7 +528,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 				eng, err = storage.NewPebble(ctx, pebbleConfig)
-			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeDefault {
+			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB {
 				rocksDBConfig := storage.RocksDBConfig{
 					StorageConfig:           storageConfig,
 					MaxOpenFiles:            openFileLimitPerStore,

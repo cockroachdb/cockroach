@@ -120,7 +120,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 }
 
 func init() {
-	if storage.DefaultStorageEngine != enginepb.EngineTypeRocksDB && storage.DefaultStorageEngine != enginepb.EngineTypeDefault {
+	if storage.DefaultStorageEngine != enginepb.EngineTypeRocksDB {
 		// These are marshaled below Raft by the Pebble merge operator. The Pebble
 		// merge operator can be called below Raft whenever a Pebble Iterator is
 		// used. Note that we only see these protos marshaled below Raft when the
