@@ -1076,7 +1076,7 @@ inner-join (hash)
  ├── key: (6)
  ├── fd: ()-->(3,4,7), (1)-->(2,5), (1)==(6), (6)==(1)
  ├── select
- │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5
+ │    ├── columns: k:1!null i:2!null f:3!null s:4!null j:5
  │    ├── key: (1)
  │    ├── fd: ()-->(3,4), (1)-->(2,5)
  │    ├── scan a
@@ -1085,7 +1085,8 @@ inner-join (hash)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters
  │         ├── f:3 = 1.1 [outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
- │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         └── i:2 < 10 [outer=(2), constraints=(/2: (/NULL - /9]; tight)]
  ├── select
  │    ├── columns: x:6!null y:7!null
  │    ├── key: (6)
@@ -1097,8 +1098,7 @@ inner-join (hash)
  │    └── filters
  │         └── y:7 = 10 [outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
  └── filters
-      ├── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── i:2 < y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 norm
 SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
@@ -1409,117 +1409,6 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
-
-# --------------------------------------------------
-# InlineConstVar
-# --------------------------------------------------
-
-norm expect=InlineConstVar
-SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4, 5)
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── select
-      ├── columns: k:1!null i:2!null
-      ├── key: (1)
-      ├── fd: ()-->(2)
-      ├── scan b
-      │    ├── columns: k:1!null i:2
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
-      └── filters
-           └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-
-norm expect=InlineConstVar
-SELECT k FROM b WHERE i=8 AND 3 = mod(i, 5)
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── select
-      ├── columns: k:1!null i:2!null
-      ├── key: (1)
-      ├── fd: ()-->(2)
-      ├── scan b
-      │    ├── columns: k:1!null i:2
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
-      └── filters
-           └── i:2 = 8 [outer=(2), constraints=(/2: [/8 - /8]; tight), fd=()-->(2)]
-
-norm expect=InlineConstVar
-SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4)
-----
-values
- ├── columns: k:1!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1)
-
-# Case that requires multiple iterations to fully inline.
-norm expect=InlineConstVar
-SELECT * FROM xy WHERE x=y AND y=4 AND x IN (1, 2, 3, 4)
-----
-select
- ├── columns: x:1!null y:2!null
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(1,2)
- ├── scan xy
- │    ├── columns: x:1!null y:2
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
- └── filters
-      ├── x:1 = 4 [outer=(1), constraints=(/1: [/4 - /4]; tight), fd=()-->(1)]
-      └── y:2 = 4 [outer=(2), constraints=(/2: [/4 - /4]; tight), fd=()-->(2)]
-
-norm expect=InlineConstVar
-SELECT * FROM xy WHERE x=y AND y=4 AND x=3
-----
-values
- ├── columns: x:1!null y:2!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1,2)
-
-# Can't inline composite types.
-norm expect-not=InlineConstVar
-SELECT * FROM (VALUES (0.0), (0.00), (0.000)) AS v (x) WHERE x = 0 AND x::STRING = '0.00';
-----
-select
- ├── columns: x:1!null
- ├── cardinality: [0 - 3]
- ├── fd: ()-->(1)
- ├── values
- │    ├── columns: column1:1!null
- │    ├── cardinality: [3 - 3]
- │    ├── (0.0,)
- │    ├── (0.00,)
- │    └── (0.000,)
- └── filters
-      ├── column1:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
-      └── column1:1::STRING = '0.00' [outer=(1)]
-
-# The rule should trigger, but not inline the composite type.
-norm expect=InlineConstVar
-SELECT * FROM (VALUES (0.0, 'a'), (0.00, 'b'), (0.000, 'b')) AS v (x, y) WHERE x = 0 AND x::STRING = '0.00' AND y = 'b' AND y IN ('a', 'b');
-----
-select
- ├── columns: x:1!null y:2!null
- ├── cardinality: [0 - 3]
- ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: column1:1!null column2:2!null
- │    ├── cardinality: [3 - 3]
- │    ├── (0.0, 'a')
- │    ├── (0.00, 'b')
- │    └── (0.000, 'b')
- └── filters
-      ├── column1:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
-      ├── column1:1::STRING = '0.00' [outer=(1)]
-      └── column2:2 = 'b' [outer=(2), constraints=(/2: [/'b' - /'b']; tight), fd=()-->(2)]
-
 
 # --------------------------------------------------
 # PushSelectIntoProjectSet
