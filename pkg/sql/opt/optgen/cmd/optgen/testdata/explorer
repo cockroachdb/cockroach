@@ -49,7 +49,7 @@ define Const {
       (Scan $scanDef:*)
       $indexJoinDef:*
     )
-    (Const $limit:* & (IsPositiveLimit $limit))
+    (Const $limit:* & (IsPositiveInt $limit))
     $ordering:* & (CanLimitConstrainedScan $scanDef $ordering)
 )
 =>
@@ -126,7 +126,7 @@ func (_e *explorer) exploreLimit(
 							_const, _ := _root.Limit.(*memo.ConstExpr)
 							if _const != nil {
 								limit := _const.Value
-								if _e.funcs.IsPositiveLimit(limit) {
+								if _e.funcs.IsPositiveInt(limit) {
 									ordering := _root.Ordering
 									if _e.funcs.CanLimitConstrainedScan(scanDef, ordering) {
 										if _e.o.matchedRule == nil || _e.o.matchedRule(opt.PushLimitIntoIndexJoin) {

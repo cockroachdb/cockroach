@@ -26,7 +26,7 @@
 # that $left is numeric because JSON - INT is valid and is not a no-op with a
 # zero value.
 [FoldMinusZero, Normalize]
-(Minus $left:(IsAdditive $left) $right:(Const 0))
+(Minus $left:(IsAdditiveType (TypeOf $left)) $right:(Const 0))
 =>
 (Cast $left (BinaryType Minus $left $right))
 
