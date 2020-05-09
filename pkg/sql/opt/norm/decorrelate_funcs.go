@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -631,32 +630,6 @@ func (c *CustomFuncs) EnsureAggsCanIgnoreNulls(
 		return aggs
 	}
 	return newAggs
-}
-
-// MakeGrouping constructs a new unordered GroupingPrivate using the given
-// grouping columns.
-func (c *CustomFuncs) MakeGrouping(groupingCols opt.ColSet) *memo.GroupingPrivate {
-	return &memo.GroupingPrivate{GroupingCols: groupingCols}
-}
-
-// ExtractGroupingOrdering returns the ordering associated with the input
-// GroupingPrivate.
-func (c *CustomFuncs) ExtractGroupingOrdering(
-	private *memo.GroupingPrivate,
-) physical.OrderingChoice {
-	return private.Ordering
-}
-
-// AddColsToGrouping returns a new GroupByDef that is a copy of the given
-// GroupingPrivate, except with the given set of grouping columns union'ed with
-// the existing grouping columns.
-func (c *CustomFuncs) AddColsToGrouping(
-	private *memo.GroupingPrivate, groupingCols opt.ColSet,
-) *memo.GroupingPrivate {
-	return &memo.GroupingPrivate{
-		GroupingCols: private.GroupingCols.Union(groupingCols),
-		Ordering:     private.Ordering,
-	}
 }
 
 // AddColsToPartition unions the given set of columns with a window private's

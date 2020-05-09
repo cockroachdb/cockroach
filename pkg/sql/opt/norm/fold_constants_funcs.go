@@ -29,6 +29,13 @@ func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right opt.ScalarExpr
 	return c.f.ConstructNull(memo.InferBinaryType(op, left.DataType(), right.DataType()))
 }
 
+// AllowNullArgs returns true if the binary operator with the given inputs
+// allows one of those inputs to be null. If not, then the binary operator will
+// simply be replaced by null.
+func (c *CustomFuncs) AllowNullArgs(op opt.Operator, left, right opt.ScalarExpr) bool {
+	return memo.BinaryAllowsNullArgs(op, left.DataType(), right.DataType())
+}
+
 // IsListOfConstants returns true if elems is a list of constant values or
 // tuples.
 func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
