@@ -95,9 +95,10 @@ type Factory interface {
 	) (Node, error)
 
 	// ConstructRender returns a node that applies a projection on the results of
-	// the given input node. The projection can contain new expressions.
+	// the given input node. The projection can contain new expressions. The input
+	// expression slice will be modified.
 	ConstructRender(
-		n Node, exprs tree.TypedExprs, colNames []string, reqOrdering OutputOrdering,
+		n Node, columns sqlbase.ResultColumns, exprs tree.TypedExprs, reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructApplyJoin returns a node that runs an apply join between an input
