@@ -11,8 +11,6 @@
 package sqlsmith
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -109,10 +107,7 @@ func makeScalarSample(
 }
 
 func makeCaseExpr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ, ok := s.pickAnyType(typ)
-	if !ok {
-		return nil, false
-	}
+	typ = s.pickAnyType(typ)
 	condition := makeScalar(s, types.Bool, refs)
 	trueExpr := makeScalar(s, typ, refs)
 	falseExpr := makeScalar(s, typ, refs)
@@ -132,10 +127,7 @@ func makeCoalesceExpr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, b
 	if s.vectorizable {
 		return nil, false
 	}
-	typ, ok := s.pickAnyType(typ)
-	if !ok {
-		return nil, false
-	}
+	typ = s.pickAnyType(typ)
 	firstExpr := makeScalar(s, typ, refs)
 	secondExpr := makeScalar(s, typ, refs)
 	return tree.NewTypedCoalesceExpr(
@@ -148,19 +140,7 @@ func makeCoalesceExpr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, b
 }
 
 func makeConstExpr(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
-	typ, ok := s.pickAnyType(typ)
-	if !ok {
-		// We want to panic here instead of return "nil, false" because
-		// this function should never have a requested type that
-		// is disallowed. If we do, it indicates that some function
-		// upstream (like a binary operator, func arguments, etc.) has
-		// not properly checked its types with allowedType(). We panic
-		// here so we can fix that other function. We want to keep the
-		// return signature to this function as is (i.e., it doesn't
-		// have an "ok bool" return like the others do) so that it is
-		// guaranteed to always succeed.
-		panic(fmt.Errorf("bad type %v", typ))
-	}
+	typ = s.pickAnyType(typ)
 
 	if s.avoidConsts {
 		if expr, ok := makeColRef(s, typ, refs); ok {
@@ -298,19 +278,13 @@ var vecBinOps = map[tree.BinaryOperator]bool{
 }
 
 func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ, ok := s.pickAnyType(typ)
-	if !ok {
-		return nil, false
-	}
+	typ = s.pickAnyType(typ)
 	ops := operators[typ.Oid()]
 	if len(ops) == 0 {
 		return nil, false
 	}
 	n := s.rnd.Intn(len(ops))
 	op := ops[n]
-	if !s.allowedType(op.LeftType, op.RightType) {
-		return nil, false
-	}
 	if s.vectorizable && !vecBinOps[op.Operator] {
 		return nil, false
 	}
@@ -353,10 +327,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	if s.vectorizable {
 		return nil, false
 	}
-	typ, ok := s.pickAnyType(typ)
-	if !ok {
-		return nil, false
-	}
+	typ = s.pickAnyType(typ)
 
 	class := ctx.fnClass
 	// Turn off window functions most of the time because they are
@@ -381,9 +352,6 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
-		if !s.allowedType(argTyp) {
-			return nil, false
-		}
 		var arg tree.TypedExpr
 		// If we're a GROUP BY or window function, try to choose a col ref for the arguments.
 		if class == tree.AggregateClass || class == tree.WindowClass {
