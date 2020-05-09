@@ -11,10 +11,10 @@
 package colexec
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,7 +25,7 @@ import (
 )
 
 // PhysicalTypeColElemToDatum converts an element in a colvec to a datum of
-// semtype ct. The returned Datum is a deep copy of the colvec element. Note
+// type ct. The returned Datum is a deep copy of the colvec element. Note
 // that this function handles nulls as well, so there is no need for a separate
 // null check.
 func PhysicalTypeColElemToDatum(
@@ -91,8 +91,6 @@ func PhysicalTypeColElemToDatum(
 	case types.IntervalFamily:
 		return da.NewDInterval(tree.DInterval{Duration: col.Interval()[rowIdx]})
 	default:
-		colexecerror.InternalError(fmt.Sprintf("Unsupported column type %s", ct.String()))
-		// This code is unreachable, but the compiler cannot infer that.
-		return nil
+		return col.Datum().Get(rowIdx).(*coldataext.DatumWithEvalCtx).Datum
 	}
 }

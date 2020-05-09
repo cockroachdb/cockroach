@@ -38,6 +38,7 @@ var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
 	types.FloatFamily:       numericCanonicalTypeFamilies,
 	types.TimestampTZFamily: {types.TimestampTZFamily},
 	types.IntervalFamily:    {types.IntervalFamily},
+	types.AnyFamily:         {types.AnyFamily},
 }
 
 // sameTypeComparisonOpToOverloads maps a comparison operator to all of the
@@ -326,5 +327,13 @@ func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {
 func (c intervalCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		return fmt.Sprintf("%s = %s.Compare(%s)", target, l, r)
+	}
+}
+
+func (c datumCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		return fmt.Sprintf(`
+			%s = %s.(*coldataext.DatumWithEvalCtx).CompareDatum(%s)
+		`, target, l, r)
 	}
 }

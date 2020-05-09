@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -215,9 +214,9 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	}
 }
 
-// TestRandomComparisons runs binary comparisons against all scalar types
-// (supported by the vectorized engine) with random non-null data verifying
-// that the result of Datum.Compare matches the result of the exec projection.
+// TestRandomComparisons runs comparisons against all scalar types with random
+// non-null data verifying that the result of Datum.Compare matches the result
+// of the exec projection.
 func TestRandomComparisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -240,9 +239,6 @@ func TestRandomComparisons(t *testing.T) {
 	for _, typ := range types.Scalar {
 		if typ.Family() == types.DateFamily {
 			// TODO(jordan): #40354 tracks failure to compare infinite dates.
-			continue
-		}
-		if !typeconv.IsTypeSupported(typ) {
 			continue
 		}
 		typs := []*types.T{typ, typ, types.Bool}
@@ -269,7 +265,11 @@ func TestRandomComparisons(t *testing.T) {
 			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, &da, typ)
 			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, &da, typ)
 		}
-		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+		supportedCmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
+		if typ.Family() == types.JsonFamily {
+			supportedCmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE}
+		}
+		for _, cmpOp := range supportedCmpOps {
 			for i := range lDatums {
 				cmp := lDatums[i].Compare(&evalCtx, rDatums[i])
 				var b bool
@@ -295,9 +295,6 @@ func TestRandomComparisons(t *testing.T) {
 				fmt.Sprintf("@1 %s @2", cmpOp), false, /* canFallbackToRowexec */
 			)
 			require.NoError(t, err)
-			if err != nil {
-				t.Fatal(err)
-			}
 			op.Init()
 			var idx int
 			for batch := op.Next(ctx); batch.Length() > 0; batch = op.Next(ctx) {

@@ -17,6 +17,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -568,7 +569,7 @@ func NewColOperator(
 	}()
 	spec := args.Spec
 	inputs := args.Inputs
-	factory := coldata.StandardColumnFactory
+	factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
 	streamingMemAccount := args.StreamingMemAccount
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
@@ -719,9 +720,6 @@ func NewColOperator(
 			}
 			typs := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(typs, spec.Input[0].ColumnTypes)
-			if err = typeconv.AreTypesSupported(typs); err != nil {
-				return result, err
-			}
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
@@ -751,9 +749,6 @@ func NewColOperator(
 			}
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
-			if err = typeconv.AreTypesSupported(result.ColumnTypes); err != nil {
-				return result, err
-			}
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
 				result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
 				result.IsStreaming = true
@@ -796,14 +791,8 @@ func NewColOperator(
 			}
 			leftTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(leftTypes, spec.Input[0].ColumnTypes)
-			if err := typeconv.AreTypesSupported(leftTypes); err != nil {
-				return result, err
-			}
 			rightTypes := make([]*types.T, len(spec.Input[1].ColumnTypes))
 			copy(rightTypes, spec.Input[1].ColumnTypes)
-			if err := typeconv.AreTypesSupported(rightTypes); err != nil {
-				return result, err
-			}
 
 			hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
 			var hashJoinerMemAccount *mon.BoundAccount
@@ -907,14 +896,8 @@ func NewColOperator(
 
 			leftTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(leftTypes, spec.Input[0].ColumnTypes)
-			if err := typeconv.AreTypesSupported(leftTypes); err != nil {
-				return result, err
-			}
 			rightTypes := make([]*types.T, len(spec.Input[1].ColumnTypes))
 			copy(rightTypes, spec.Input[1].ColumnTypes)
-			if err := typeconv.AreTypesSupported(rightTypes); err != nil {
-				return result, err
-			}
 
 			joinType := core.MergeJoiner.Type
 			var onExpr *execinfrapb.Expression
@@ -968,9 +951,6 @@ func NewColOperator(
 			input := inputs[0]
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
-			if err = typeconv.AreTypesSupported(result.ColumnTypes); err != nil {
-				return result, err
-			}
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
 			result.Op, err = result.createDiskBackedSort(
@@ -991,9 +971,6 @@ func NewColOperator(
 				// temporary columns that can be appended below.
 				typs := make([]*types.T, len(result.ColumnTypes), len(result.ColumnTypes)+2)
 				copy(typs, result.ColumnTypes)
-				if err = typeconv.AreTypesSupported(typs); err != nil {
-					return result, err
-				}
 				tempColOffset, partitionColIdx := uint32(0), columnOmitted
 				peersColIdx := columnOmitted
 				windowFn := *wf.Func.WindowFunc
@@ -1716,10 +1693,6 @@ func planProjectionOperators(
 			return nil, resultIdx, typs, internalMemUsed, errors.Newf(
 				"unsupported type %s in CASE operator", caseOutputType)
 		}
-		if !typeconv.IsTypeSupported(caseOutputType) {
-			return nil, resultIdx, typs, internalMemUsed, errors.Newf(
-				"unsupported type %s", caseOutputType)
-		}
 		caseOutputIdx := len(columnTypes)
 		typs = make([]*types.T, len(columnTypes)+1)
 		copy(typs, columnTypes)
@@ -1741,10 +1714,6 @@ func planProjectionOperators(
 			// result of the case projection.
 			whenTyped := when.Cond.(tree.TypedExpr)
 			whenResolvedType := whenTyped.ResolvedType()
-			if !typeconv.IsTypeSupported(whenResolvedType) {
-				return nil, resultIdx, typs, internalMemUsed, errors.Newf(
-					"unsupported type %s in CASE WHEN expression", whenResolvedType)
-			}
 			var whenInternalMemUsed, thenInternalMemUsed int
 			caseOps[i], resultIdx, typs, whenInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
 				ctx, evalCtx, whenTyped, whenResolvedType, typs, buffer, acc, factory,
