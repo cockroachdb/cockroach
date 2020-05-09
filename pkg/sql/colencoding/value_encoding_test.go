@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -25,17 +25,15 @@ import (
 
 func TestDecodeTableValueToCol(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
-	var buf []byte
-	var scratch []byte
+	var (
+		da           sqlbase.DatumAlloc
+		buf, scratch []byte
+	)
 	nCols := 1000
 	datums := make([]tree.Datum, nCols)
 	typs := make([]*types.T, nCols)
 	for i := 0; i < nCols; i++ {
 		ct := sqlbase.RandType(rng)
-		if !typeconv.IsTypeSupported(ct) {
-			i--
-			continue
-		}
 		datum := sqlbase.RandDatum(rng, ct, false /* nullOk */)
 		typs[i] = ct
 		datums[i] = datum
@@ -46,14 +44,14 @@ func TestDecodeTableValueToCol(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	batch := coldata.NewMemBatchWithSize(typs, 1 /* size */, coldata.StandardColumnFactory)
+	batch := coldata.NewMemBatchWithSize(typs, 1 /* size */, coldataext.NewExtendedColumnFactory(nil /*evalCtx */))
 	for i := 0; i < nCols; i++ {
 		typeOffset, dataOffset, _, typ, err := encoding.DecodeValueTag(buf)
 		fmt.Println(typ)
 		if err != nil {
 			t.Fatal(err)
 		}
-		buf, err = DecodeTableValueToCol(batch.ColVec(i), 0 /* rowIdx */, typ,
+		buf, err = DecodeTableValueToCol(&da, batch.ColVec(i), 0 /* rowIdx */, typ,
 			dataOffset, typs[i], buf[typeOffset:])
 		if err != nil {
 			t.Fatal(err)

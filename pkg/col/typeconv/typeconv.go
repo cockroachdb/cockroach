@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/errors"
 )
 
 // TypeFamilyToCanonicalTypeFamily converts all type families that are
@@ -25,8 +24,9 @@ import (
 // "Canonical" type families are representatives from a set of "equivalent"
 // type families where "equivalence" means having the same physical
 // representation.
-// It returns types.UnknownFamily if family is not supported by the vectorized
-// engine.
+//
+// All type families that do not have an optimized physical representation are
+// handled by using tree.Datums, and such types are mapped to types.AnyFamily.
 func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 	switch family {
 	case types.BoolFamily:
@@ -44,7 +44,9 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 	case types.IntervalFamily:
 		return types.IntervalFamily
 	default:
-		return types.UnknownFamily
+		// TODO(yuzefovich): consider adding native support for
+		// types.UnknownFamily.
+		return types.AnyFamily
 	}
 }
 
@@ -58,59 +60,10 @@ func ToCanonicalTypeFamilies(typs []*types.T) []types.Family {
 	return families
 }
 
-// AllSupportedSQLTypes is a slice of all SQL types that the vectorized engine
-// currently supports.
-var AllSupportedSQLTypes = []*types.T{
-	types.Bool,
-	types.Bytes,
-	types.Date,
-	types.Decimal,
-	types.Int2,
-	types.Int4,
-	types.Int,
-	types.Oid,
-	types.Float,
-	types.Float4,
-	types.String,
-	types.Uuid,
-	types.Timestamp,
-	types.TimestampTZ,
-	types.Interval,
-}
-
-// IsTypeSupported returns whether t is supported by the vectorized engine.
-func IsTypeSupported(t *types.T) bool {
-	if canonicalTypeFamily := TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily != types.UnknownFamily {
-		switch t.Family() {
-		case types.IntFamily:
-			switch t.Width() {
-			// Note that here we do not expect to see an integer type with
-			// width 0.
-			case 16, 32, 64:
-				return true
-			}
-			panic(fmt.Sprintf("integer with unknown width %d", t.Width()))
-		default:
-			return true
-		}
-	}
-	return false
-}
-
-// AreTypesSupported checks whether all types in typs are supported by the
-// vectorized engine and returns an error if they are not.
-func AreTypesSupported(typs []*types.T) error {
-	for _, t := range typs {
-		if !IsTypeSupported(t) {
-			return errors.Errorf("unsupported type %s", t)
-		}
-	}
-	return nil
-}
-
 // UnsafeFromGoType returns the type for a Go value, if applicable. Shouldn't
 // be used at runtime. This method is unsafe because multiple logical types can
-// be represented by the same physical type.
+// be represented by the same physical type. Types that are backed by DatumVec
+// are *not* supported by this function.
 func UnsafeFromGoType(v interface{}) *types.T {
 	switch t := v.(type) {
 	case int16:

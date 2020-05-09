@@ -11,7 +11,6 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -64,12 +63,8 @@ func (s *Smither) randType() *types.T {
 // allowedType returns whether t is ok to be used. This is useful to filter
 // out undesirable types to enable certain execution paths to be taken (like
 // vectorization).
+// TODO(yuzefovich): remove this method.
 func (s *Smither) allowedType(types ...*types.T) bool {
-	for _, t := range types {
-		if s.vectorizable && !typeconv.IsTypeSupported(t) {
-			return false
-		}
-	}
 	return true
 }
 

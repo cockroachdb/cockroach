@@ -364,7 +364,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' AS r FROM t
 ----
 ·          distributed  false            ·    ·
-·          vectorized   false            ·    ·
+·          vectorized   true             ·    ·
 render     ·            ·                (r)  ·
  │         render 0     j @> '{"a": 1}'  ·    ·
  └── scan  ·            ·                (j)  ·
@@ -375,7 +375,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j AS r FROM t
 ----
 ·          distributed  false            ·    ·
-·          vectorized   false            ·    ·
+·          vectorized   true             ·    ·
 render     ·            ·                (r)  ·
  │         render 0     j @> '{"a": 1}'  ·    ·
  └── scan  ·            ·                (j)  ·
@@ -386,7 +386,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j->>'a' AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     j->>'a'    ·    ·
  └── scan  ·            ·          (j)  ·
@@ -397,7 +397,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j->'a' AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     j->'a'     ·    ·
  └── scan  ·            ·          (j)  ·
@@ -408,7 +408,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j ? 'a' AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     j ? 'a'    ·    ·
  └── scan  ·            ·          (j)  ·
@@ -419,7 +419,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] AS r FROM t
 ----
 ·          distributed  false                    ·    ·
-·          vectorized   false                    ·    ·
+·          vectorized   true                     ·    ·
 render     ·            ·                        (r)  ·
  │         render 0     j ?| ARRAY['a','b','c']  ·    ·
  └── scan  ·            ·                        (j)  ·
@@ -430,7 +430,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] AS r FROM t
 ----
 ·          distributed  false                    ·    ·
-·          vectorized   false                    ·    ·
+·          vectorized   true                     ·    ·
 render     ·            ·                        (r)  ·
  │         render 0     j ?& ARRAY['a','b','c']  ·    ·
  └── scan  ·            ·                        (j)  ·
@@ -441,7 +441,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] AS r FROM t
 ----
 ·          distributed  false          ·    ·
-·          vectorized   false          ·    ·
+·          vectorized   true           ·    ·
 render     ·            ·              (r)  ·
  │         render 0     j#>ARRAY['a']  ·    ·
  └── scan  ·            ·              (j)  ·
@@ -452,7 +452,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] AS r FROM t
 ----
 ·          distributed  false           ·    ·
-·          vectorized   false           ·    ·
+·          vectorized   true            ·    ·
 render     ·            ·               (r)  ·
  │         render 0     j#>>ARRAY['a']  ·    ·
  └── scan  ·            ·               (j)  ·
@@ -584,7 +584,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[]:::int[] FROM t
 ----
 ·          distributed  false      ·          ·
-·          vectorized   false      ·          ·
+·          vectorized   true       ·          ·
 render     ·            ·          ("array")  ·
  │         render 0     ARRAY[]    ·          ·
  └── scan  ·            ·          ()         ·
@@ -595,7 +595,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[1, 2, 3] FROM t
 ----
 ·          distributed  false         ·          ·
-·          vectorized   false         ·          ·
+·          vectorized   true          ·          ·
 render     ·            ·             ("array")  ·
  │         render 0     ARRAY[1,2,3]  ·          ·
  └── scan  ·            ·             ()         ·
@@ -606,7 +606,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
 ----
 ·          distributed  false               ·          ·
-·          vectorized   false               ·          ·
+·          vectorized   true                ·          ·
 render     ·            ·                   ("array")  ·
  │         render 0     ARRAY[a + 1, 2, 3]  ·          ·
  └── scan  ·            ·                   (a)        ·
