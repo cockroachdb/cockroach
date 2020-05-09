@@ -209,7 +209,7 @@ func decodeTableKeyToCol(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		vec.Bool()[idx] = i != 0
-	case types.IntFamily:
+	case types.IntFamily, types.DateFamily, types.OidFamily:
 		var i int64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -248,16 +248,6 @@ func decodeTableKeyToCol(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		vec.Bytes().Set(idx, r)
-	// TODO(yuzefovich): this case can probably be merged with types.IntFamily
-	// case.
-	case types.DateFamily, types.OidFamily:
-		var t int64
-		if dir == sqlbase.IndexDescriptor_ASC {
-			rkey, t, err = encoding.DecodeVarintAscending(key)
-		} else {
-			rkey, t, err = encoding.DecodeVarintDescending(key)
-		}
-		vec.Int64()[idx] = t
 	case types.TimestampFamily, types.TimestampTZFamily:
 		var t time.Time
 		if dir == sqlbase.IndexDescriptor_ASC {
