@@ -32,7 +32,7 @@ func TestBoolVecToSelOp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewBoolVecToSelOp(input[0], 0), nil
+			return newBoolVecToSelOp(input[0], 0), nil
 		})
 	}
 }
