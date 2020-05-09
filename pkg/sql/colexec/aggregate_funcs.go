@@ -14,7 +14,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -237,9 +236,6 @@ func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
 func isAggregateSupported(
 	allocator *colmem.Allocator, aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
 ) (bool, error) {
-	if err := typeconv.AreTypesSupported(inputTypes); err != nil {
-		return false, err
-	}
 	switch aggFn {
 	case execinfrapb.AggregatorSpec_SUM:
 		switch inputTypes[0].Family() {

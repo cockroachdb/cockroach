@@ -32,6 +32,13 @@ import (
 {{define "opName"}}perform{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}{{end}}
 
 {{range .}}
+// {{/*
+//     TODO(yuzefovich): overloads on datum-backed types require passing in
+//     non-empty valid variable names of columns, and we currently don't have
+//     those - we only have "elements". For now, it's ok to skip generation of
+//     these utility test methods for datum-backed types.
+// */}}
+{{if and (not (eq .Left.VecMethod "Datum")) (not (eq .Right.VecMethod "Datum"))}}
 
 func {{template "opName" .}}(a {{.Left.GoType}}, b {{.Right.GoType}}) {{.Right.RetGoType}} {
 	var r {{.Right.RetGoType}}
@@ -45,6 +52,7 @@ func {{template "opName" .}}(a {{.Left.GoType}}, b {{.Right.GoType}}) {{.Right.R
 	return r
 }
 
+{{end}}
 {{end}}
 `
 

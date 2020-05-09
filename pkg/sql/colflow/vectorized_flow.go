@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -729,9 +729,6 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
 				return nil, nil, err
 			}
-			if err := typeconv.AreTypesSupported(input.ColumnTypes); err != nil {
-				return nil, nil, err
-			}
 			inbox, err := s.remoteComponentCreator.newInbox(
 				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
 				input.ColumnTypes, inputStream.StreamID,
@@ -760,9 +757,6 @@ func (s *vectorizedFlowCreator) setupInput(
 	if len(inputStreamOps) > 1 {
 		var err error
 		statsInputs := inputStreamOps
-		if err = typeconv.AreTypesSupported(input.ColumnTypes); err != nil {
-			return nil, nil, err
-		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op, err = colexec.NewOrderedSynchronizer(
 				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
@@ -923,7 +917,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
-	factory := coldata.StandardColumnFactory
+	factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
 	// queue is a queue of indices into processorSpecs, for topologically
 	// ordered processing.
 	queue := make([]int, 0, len(processorSpecs))
@@ -1023,9 +1017,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// buffer an unlimited number of tuples, even though it falls back to
 			// disk. vectorize=on does support this.
 			return nil, errors.Errorf("hash router encountered when vectorize=201auto")
-		}
-		if err := typeconv.AreTypesSupported(result.ColumnTypes); err != nil {
-			return nil, err
 		}
 		if err = s.setupOutput(
 			ctx, flowCtx, pspec, op, result.ColumnTypes, metadataSourcesQueue, toClose, factory,

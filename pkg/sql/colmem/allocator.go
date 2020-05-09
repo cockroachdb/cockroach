@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -334,10 +335,11 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			acc += SizeOfTime
 		case types.IntervalFamily:
 			acc += SizeOfDuration
-		case types.UnknownFamily:
-			// Placeholder coldata.Vecs of unknown types are allowed.
+		case typeconv.DatumVecCanonicalTypeFamily:
+			size, _ := tree.DatumTypeSize(t)
+			acc += int(size)
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
 	return acc * batchLength
