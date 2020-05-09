@@ -54,7 +54,7 @@ type Batch interface {
 	// NOTE: Reset can allocate a new Batch, so when calling from the vectorized
 	// engine consider either allocating a new Batch explicitly via
 	// colexec.Allocator or calling ResetInternalBatch.
-	Reset(typs []*types.T, length int)
+	Reset(typs []*types.T, length int, factory ColumnFactory)
 	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
@@ -98,16 +98,16 @@ func ResetBatchSizeForTests() {
 // NewMemBatch allocates a new in-memory Batch. An unsupported type will create
 // a placeholder Vec that may not be accessed.
 // TODO(jordan): pool these allocations.
-func NewMemBatch(typs []*types.T) Batch {
-	return NewMemBatchWithSize(typs, BatchSize())
+func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
+	return NewMemBatchWithSize(typs, BatchSize(), factory)
 }
 
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
 // size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithSize(typs []*types.T, size int) Batch {
+func NewMemBatchWithSize(typs []*types.T, size int, factory ColumnFactory) Batch {
 	b := NewMemBatchNoCols(typs, size).(*MemBatch)
 	for i, t := range typs {
-		b.b[i] = NewMemColumn(t, size)
+		b.b[i] = NewMemColumn(t, size, factory)
 	}
 	return b
 }
@@ -126,7 +126,11 @@ func NewMemBatchNoCols(typs []*types.T, size int) Batch {
 }
 
 // ZeroBatch is a schema-less Batch of length 0.
-var ZeroBatch = &zeroBatch{MemBatch: NewMemBatchWithSize(nil /* types */, 0 /* size */).(*MemBatch)}
+var ZeroBatch = &zeroBatch{
+	MemBatch: NewMemBatchWithSize(
+		nil /* types */, 0 /* size */, StandardColumnFactory,
+	).(*MemBatch),
+}
 
 // zeroBatch is a wrapper around MemBatch that prohibits modifications of the
 // batch.
@@ -156,7 +160,7 @@ func (b *zeroBatch) ReplaceCol(Vec, int) {
 	panic("no columns should be replaced in zero batch")
 }
 
-func (b *zeroBatch) Reset([]*types.T, int) {
+func (b *zeroBatch) Reset([]*types.T, int, ColumnFactory) {
 	panic("zero batch should not be reset")
 }
 
@@ -226,7 +230,7 @@ func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
 }
 
 // Reset implements the Batch interface.
-func (m *MemBatch) Reset(typs []*types.T, length int) {
+func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 	// The columns are always sized the same as the selection vector, so use it as
 	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
 	// shorter than the capacity). We could be more defensive and type switch
@@ -242,7 +246,7 @@ func (m *MemBatch) Reset(typs []*types.T, length int) {
 		}
 	}
 	if cannotReuse {
-		*m = *NewMemBatchWithSize(typs, length).(*MemBatch)
+		*m = *NewMemBatchWithSize(typs, length, factory).(*MemBatch)
 		m.SetLength(length)
 		return
 	}
