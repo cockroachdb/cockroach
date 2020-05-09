@@ -27,8 +27,10 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -182,6 +184,21 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			binary.LittleEndian.PutUint64(data[i][sizeOfInt64*2:sizeOfInt64*3], rng.Uint64())
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
+	case types.AnyFamily:
+		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+		data := make([][]byte, n)
+		var (
+			scratch []byte
+			err     error
+		)
+		for i := range data {
+			d := sqlbase.RandDatum(rng, t, false /* nullOk */)
+			data[i], err = sqlbase.EncodeTableValue(data[i], sqlbase.ColumnID(encoding.NoColumnID), d, scratch)
+			if err != nil {
+				panic(err)
+			}
+		}
+		builder.(*array.BinaryBuilder).AppendValues(data, valid)
 	default:
 		panic(fmt.Sprintf("unsupported type %s", t))
 	}
@@ -230,7 +247,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	for i := range typs {
-		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
+		typs[i] = sqlbase.RandType(rng)
 		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 

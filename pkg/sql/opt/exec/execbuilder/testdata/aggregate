@@ -12,7 +12,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
 ·               distributed   false               ·                                                                                                                                                   ·
-·               vectorized    false               ·                                                                                                                                                   ·
+·               vectorized    true                ·                                                                                                                                                   ·
 group           ·             ·                   (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
  │              aggregate 0   min(column5)        ·                                                                                                                                                   ·
  │              aggregate 1   max(column5)        ·                                                                                                                                                   ·
@@ -214,7 +214,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
 ·                          distributed  false                         ·             ·
-·                          vectorized   false                         ·             ·
+·                          vectorized   true                          ·             ·
 group                      ·            ·                             (count)       ·
  │                         aggregate 0  count(column9)                ·             ·
  │                         scalar       ·                             ·             ·
@@ -616,7 +616,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT v, count(NULL) FROM kv GROUP BY v ORDER BY count(1)
 ----
 ·                         distributed  false            ·                                   ·
-·                         vectorized   false            ·                                   ·
+·                         vectorized   true             ·                                   ·
 render                    ·            ·                (v int, count int)                  ·
  │                        render 0     (v)[int]         ·                                   ·
  │                        render 1     (count)[int]     ·                                   ·
@@ -639,7 +639,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE v > 10
 ----
 ·               distributed  false           ·             ·
-·               vectorized   false           ·             ·
+·               vectorized   true            ·             ·
 group           ·            ·               (v, count)    ·
  │              aggregate 0  v               ·             ·
  │              aggregate 1  count(column5)  ·             ·
@@ -813,7 +813,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT (b, a) r FROM ab GROUP BY (b, a)
 ----
 ·          distributed  false                                    ·                    ·
-·          vectorized   false                                    ·                    ·
+·          vectorized   true                                     ·                    ·
 render     ·            ·                                        (r tuple{int, int})  ·
  │         render 0     (((b)[int], (a)[int]))[tuple{int, int}]  ·                    ·
  └── scan  ·            ·                                        (a int, b int)       ·
@@ -824,7 +824,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
 ·                     distributed  false                                               ·                                                ·
-·                     vectorized   false                                               ·                                                ·
+·                     vectorized   true                                                ·                                                ·
 render                ·            ·                                                   (min string, r tuple{int, int})                  ·
  │                    render 0     (min)[string]                                       ·                                                ·
  │                    render 1     (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
@@ -1020,7 +1020,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(v) FROM (SELECT * FROM kv ORDER BY v)
 ----
 ·               distributed  false         ·            ·
-·               vectorized   false         ·            ·
+·               vectorized   true          ·            ·
 group           ·            ·             (array_agg)  ·
  │              aggregate 0  array_agg(v)  ·            ·
  │              scalar       ·             ·            ·
@@ -1059,7 +1059,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
 ·               distributed  false         ·            ·
-·               vectorized   false         ·            ·
+·               vectorized   true          ·            ·
 group           ·            ·             (array_agg)  ·
  │              aggregate 0  array_agg(k)  ·            ·
  │              scalar       ·             ·            ·
@@ -1115,7 +1115,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 ----
 ·          distributed  false         ·          ·
-·          vectorized   false         ·          ·
+·          vectorized   true          ·          ·
 group      ·            ·             (u, v, s)  ·
  │         aggregate 0  u             ·          ·
  │         aggregate 1  v             ·          ·
@@ -1214,7 +1214,7 @@ EXPLAIN (VERBOSE)
         company_id
 ----
 ·                    distributed  false                          ·                                ·
-·                    vectorized   false                          ·                                ·
+·                    vectorized   true                           ·                                ·
 sort                 ·            ·                              (company_id, string_agg)         +company_id
  │                   order        +company_id                    ·                                ·
  └── group           ·            ·                              (company_id, string_agg)         ·
@@ -1241,7 +1241,7 @@ EXPLAIN (VERBOSE)
         company_id
 ----
 ·                    distributed  false                         ·                               ·
-·                    vectorized   false                         ·                               ·
+·                    vectorized   true                          ·                               ·
 sort                 ·            ·                             (company_id, string_agg)        +company_id
  │                   order        +company_id                   ·                               ·
  └── group           ·            ·                             (company_id, string_agg)        ·

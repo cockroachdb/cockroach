@@ -56,9 +56,6 @@ type ArrowBatchConverter struct {
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
 func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
-	if err := typeconv.AreTypesSupported(typs); err != nil {
-		return nil, err
-	}
 	c := &ArrowBatchConverter{typs: typs}
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
 	c.builders.binaryBuilder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
@@ -140,6 +137,16 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 				binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64:sizeOfInt64*2], uint64(months))
 				binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64*2:sizeOfInt64*3], uint64(days))
 				c.builders.binaryBuilder.Append(scratchIntervalBytes)
+			}
+			data = c.builders.binaryBuilder.NewBinaryArray().Data()
+		case types.AnyFamily:
+			datums := vec.Datum().Slice(0 /* start */, n)
+			for idx := 0; idx < n; idx++ {
+				b, err := datums.MarshalAt(idx)
+				if err != nil {
+					return nil, err
+				}
+				c.builders.binaryBuilder.Append(b)
 			}
 			data = c.builders.binaryBuilder.NewBinaryArray().Data()
 		}
@@ -329,6 +336,24 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64:sizeOfInt64*2])),
 					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64*2:sizeOfInt64*3])),
 				)
+				if err != nil {
+					return err
+				}
+			}
+			arr = bytesArr
+		case types.AnyFamily:
+			bytesArr := array.NewBinaryData(d)
+			bytes := bytesArr.ValueBytes()
+			if bytes == nil {
+				// All bytes values are empty, so the representation is solely with the
+				// offsets slice, so create an empty slice so that the conversion
+				// corresponds.
+				bytes = make([]byte, 0)
+			}
+			offsets := bytesArr.ValueOffsets()
+			vecArr := vec.Datum()
+			for i := 0; i < len(offsets)-1; i++ {
+				err := vecArr.UnmarshalTo(i, bytes[offsets[i]:offsets[i+1]])
 				if err != nil {
 					return err
 				}

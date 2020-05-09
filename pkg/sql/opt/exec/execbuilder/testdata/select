@@ -624,7 +624,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT a, b FROM coll ORDER BY a, b
 ----
 ·     distributed  false         ·                              ·
-·     vectorized   false         ·                              ·
+·     vectorized   true          ·                              ·
 scan  ·            ·             (a collatedstring{da}, b int)  +a,+b
 ·     table        coll@primary  ·                              ·
 ·     spans        FULL SCAN     ·                              ·
@@ -633,7 +633,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT b, a FROM coll ORDER BY b, a
 ----
 ·          distributed  false                    ·                              ·
-·          vectorized   false                    ·                              ·
+·          vectorized   true                     ·                              ·
 render     ·            ·                        (b int, a collatedstring{da})  ·
  │         render 0     (b)[int]                 ·                              ·
  │         render 1     (a)[collatedstring{da}]  ·                              ·

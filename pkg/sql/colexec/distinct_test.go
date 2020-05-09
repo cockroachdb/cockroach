@@ -157,12 +157,35 @@ func TestDistinct(t *testing.T) {
 				{0, "11"},
 			},
 		},
+		{
+			distinctCols: []uint32{0},
+			typs:         []*types.T{types.Jsonb, types.String},
+			tuples: tuples{
+				{`{"id": 1}`, "a"},
+				{`{"id": 2}`, "b"},
+				{`{"id": 3}`, "c"},
+				{`{"id": 1}`, "1"},
+				{`{"id": null}`, "d"},
+				{`{"id": 2}`, "2"},
+				{`{"id": 5}`, "e"},
+				{`{"id": 6}`, "f"},
+				{`{"id": 3}`, "3"},
+			},
+			expected: tuples{
+				{`{"id": 1}`, "a"},
+				{`{"id": 2}`, "b"},
+				{`{"id": 3}`, "c"},
+				{`{"id": null}`, "d"},
+				{`{"id": 5}`, "e"},
+				{`{"id": 6}`, "f"},
+			},
+		},
 	}
 
 	for _, tc := range tcs {
 		for _, numOfBuckets := range []uint64{1, 3, 5, hashTableNumBuckets} {
 			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
-				runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
+				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return NewUnorderedDistinct(
 							testAllocator, input[0], tc.distinctCols, tc.typs,

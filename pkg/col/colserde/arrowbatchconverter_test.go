@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -33,23 +33,13 @@ func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 
 	typs := make([]*types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
+		typs[i] = sqlbase.RandType(rng)
 	}
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1
 	length := rng.Intn(capacity)
 	b := coldatatestutils.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
-}
-
-func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	unsupportedTypes := []*types.T{types.INet}
-	for _, typ := range unsupportedTypes {
-		_, err := colserde.NewArrowBatchConverter([]*types.T{typ})
-		require.Error(t, err)
-	}
 }
 
 func TestArrowBatchConverterRandom(t *testing.T) {

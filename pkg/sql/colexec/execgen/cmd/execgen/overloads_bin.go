@@ -50,6 +50,7 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 	types.FloatFamily:       append(numericCanonicalTypeFamilies, types.IntervalFamily),
 	types.TimestampTZFamily: timeCanonicalTypeFamilies,
 	types.IntervalFamily:    append(numericCanonicalTypeFamilies, timeCanonicalTypeFamilies...),
+	// TODO(yuzefovich): add support for binary overloads on datum-backed types.
 }
 
 // sameTypeBinaryOpToOverloads maps a binary operator to all of the overloads

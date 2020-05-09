@@ -321,12 +321,105 @@ func getDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 			}
 			return d.Duration, nil
 		}
+
+	// Types backed by tree.Datums.
+	case types.CollatedStringFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DCollatedString)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DCollatedString, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.UnknownFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			if datum != tree.DNull {
+				return nil, errors.Errorf("unexpectedly datum is not tree.DNull for types.UnknownFamily: %+v", datum)
+			}
+			return tree.DNull, nil
+		}
+	case types.ArrayFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DArray)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DArray, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.INetFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DIPAddr)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DIPAddr, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.TimeFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DTime)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DTime, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.JsonFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DJSON)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DJSON, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.TimeTZFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DTimeTZ)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DTimeTZ, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.TupleFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DTuple)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DTuple, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.BitFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DBitArray)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DBitArray, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.GeometryFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DGeometry)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DGeometry, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.GeographyFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DGeography)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DGeography, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
+	case types.EnumFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DEnum)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DEnum, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
+		}
 	}
-	// It would probably be more correct to return an error here, rather than a
-	// function which always returns an error. But since the function tends to be
-	// invoked immediately after getDatumToPhysicalFn is called, this works just
-	// as well and makes the error handling less messy for the caller.
-	return func(datum tree.Datum) (interface{}, error) {
-		return nil, errors.Errorf("unhandled type %s", ct.DebugString())
-	}
+	colexecerror.InternalError(fmt.Sprintf("unexpectedly unhandled type %s", ct.DebugString()))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }

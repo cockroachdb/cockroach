@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -61,6 +62,9 @@ var _ time.Time
 
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
+
+// Dummy import to pull in "coldataext" package.
+var _ coldataext.DatumWithEvalCtx
 
 // _LEFT_CANONICAL_TYPE_FAMILY is the template variable.
 const _LEFT_CANONICAL_TYPE_FAMILY = types.UnknownFamily

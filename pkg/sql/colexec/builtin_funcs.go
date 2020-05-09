@@ -14,14 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 type defaultBuiltinFuncOperator struct {
@@ -72,7 +70,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 				for j := range b.argumentCols {
 					col := batch.ColVec(b.argumentCols[j])
-					b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, b.da, b.columnTypes[b.argumentCols[j]])
+					b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, &b.da, b.columnTypes[b.argumentCols[j]])
 					hasNulls = hasNulls || b.row[j] == tree.DNull
 				}
 
@@ -127,12 +125,6 @@ func NewBuiltinFunctionOperator(
 		), nil
 	default:
 		outputType := funcExpr.ResolvedType()
-		if !typeconv.IsTypeSupported(outputType) {
-			return nil, errors.Errorf(
-				"unsupported output type %q of %s",
-				outputType.String(), funcExpr.String(),
-			)
-		}
 		input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
 			OneInputNode: NewOneInputNode(input),

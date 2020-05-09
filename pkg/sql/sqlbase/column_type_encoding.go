@@ -444,10 +444,10 @@ func DecodeTableValue(a *DatumAlloc, valType *types.T, b []byte) (tree.Datum, []
 	if valType.Family() != types.BoolFamily {
 		b = b[dataOffset:]
 	}
-	return decodeUntaggedDatum(a, valType, b)
+	return DecodeUntaggedDatum(a, valType, b)
 }
 
-// decodeUntaggedDatum is used to decode a Datum whose type is known,
+// DecodeUntaggedDatum is used to decode a Datum whose type is known,
 // and which doesn't have a value tag (either due to it having been
 // consumed already or not having one in the first place).
 //
@@ -455,7 +455,7 @@ func DecodeTableValue(a *DatumAlloc, valType *types.T, b []byte) (tree.Datum, []
 //
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
-func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []byte, error) {
+func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []byte, error) {
 	switch t.Family() {
 	case types.IntFamily:
 		b, i, err := encoding.DecodeUntaggedIntValue(buf)
@@ -875,7 +875,8 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		datum, _, err := decodeArrayNoMarshalColumnValue(a, typ.ArrayContents(), v)
+		datum, _, err := DecodeArrayNoMarshalColumnValue(a, typ.ArrayContents(), v)
+		// TODO(yuzefovich): do we want to create a new object via DatumAlloc?
 		return datum, err
 	case types.JsonFamily:
 		v, err := value.GetBytes()
@@ -887,6 +888,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return tree.NewDJSON(jsonDatum), nil
+	// TODO(yuzefovich): is it intentional that types.TupleFamily is missing?
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.Family())
 	}
@@ -1042,12 +1044,12 @@ func decodeArray(a *DatumAlloc, elementType *types.T, b []byte) (tree.Datum, []b
 	if err != nil {
 		return nil, b, err
 	}
-	return decodeArrayNoMarshalColumnValue(a, elementType, b)
+	return DecodeArrayNoMarshalColumnValue(a, elementType, b)
 }
 
-// decodeArrayNoMarshalColumnValue skips the step where the MarshalColumnValue
+// DecodeArrayNoMarshalColumnValue skips the step where the MarshalColumnValue
 // is stripped from the bytes. This is required for single-column family arrays.
-func decodeArrayNoMarshalColumnValue(
+func DecodeArrayNoMarshalColumnValue(
 	a *DatumAlloc, elementType *types.T, b []byte,
 ) (tree.Datum, []byte, error) {
 	header, b, err := decodeArrayHeader(b)
@@ -1065,7 +1067,7 @@ func decodeArrayNoMarshalColumnValue(
 			result.HasNulls = true
 		} else {
 			result.HasNonNulls = true
-			val, b, err = decodeUntaggedDatum(a, elementType, b)
+			val, b, err = DecodeUntaggedDatum(a, elementType, b)
 			if err != nil {
 				return nil, b, err
 			}

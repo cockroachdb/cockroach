@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -297,11 +296,6 @@ func (rf *cFetcher) Init(
 	typs := make([]*types.T, len(colDescriptors))
 	for i := range typs {
 		typs[i] = colDescriptors[i].Type
-		if !typeconv.IsTypeSupported(typs[i]) && tableArgs.ValNeededForCol.Contains(i) {
-			// Only return an error if the type is unhandled and needed. If not needed,
-			// a placeholder Vec will be created.
-			return errors.Errorf("unhandled type %+v", colDescriptors[i].Type)
-		}
 	}
 
 	rf.machine.batch = allocator.NewMemBatch(typs)
@@ -669,6 +663,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 					indexOrds = rf.table.allIndexColOrdinals
 				}
 				key, matches, foundNull, err = colencoding.DecodeIndexKeyToCols(
+					&rf.table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
 					rf.table.desc,
@@ -897,7 +892,7 @@ func (rf *cFetcher) pushState(state fetcherState) {
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
 func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int, typ *types.T) tree.Datum {
-	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
+	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, &rf.table.da, typ)
 }
 
 // processValue processes the state machine's current value component, setting
@@ -997,6 +992,7 @@ func (rf *cFetcher) processValue(
 					extraColOrds = table.allExtraValColOrdinals
 				}
 				valueBytes, _, err = colencoding.DecodeKeyValsToCols(
+					&table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
 					extraColOrds,
@@ -1085,7 +1081,9 @@ func (rf *cFetcher) processValueSingle(
 				return prettyKey, "", nil
 			}
 			typ := table.cols[idx].Type
-			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
+			err := colencoding.UnmarshalColumnValueToCol(
+				&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
+			)
 			if err != nil {
 				return "", "", err
 			}
@@ -1183,8 +1181,9 @@ func (rf *cFetcher) processValueBytes(
 		vec := rf.machine.colvecs[idx]
 
 		valTyp := table.cols[idx].Type
-		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,
-			valueBytes)
+		valueBytes, err = colencoding.DecodeTableValueToCol(
+			&table.da, vec, rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes,
+		)
 		if err != nil {
 			return "", "", err
 		}

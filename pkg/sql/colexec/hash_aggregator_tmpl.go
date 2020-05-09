@@ -25,6 +25,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,7 +46,10 @@ var _ bytes.Buffer
 var _ tree.Operator
 
 // Dummy import to pull in "math" package.
-var _ int = math.MaxInt16
+var _ = math.MaxInt16
+
+// Dummy import to pull in "coldataext" package.
+var _ coldataext.DatumWithEvalCtx
 
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily

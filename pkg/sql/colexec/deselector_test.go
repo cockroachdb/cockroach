@@ -64,7 +64,7 @@ func TestDeselector(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.sel, func(t *testing.T, input []colexecbase.Operator) {
+		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.typs, tc.sel, func(t *testing.T, input []colexecbase.Operator) {
 			op := NewDeselectorOp(testAllocator, input[0], tc.typs)
 			out := newOpTestOutput(op, tc.expected)
 

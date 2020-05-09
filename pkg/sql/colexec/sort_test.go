@@ -138,9 +138,10 @@ func init() {
 func TestSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, tc := range sortAllTestCases {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
-		})
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
+			})
 	}
 }
 
