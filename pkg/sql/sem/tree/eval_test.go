@@ -217,7 +217,7 @@ func TestEval(t *testing.T) {
 								return coldata.ZeroBatch
 							}
 							// It doesn't matter what types we create the input batch with.
-							batch := coldata.NewMemBatch(inputTyps)
+							batch := coldata.NewMemBatch(inputTyps, coldata.StandardColumnFactory)
 							batch.SetLength(1)
 							batchesReturned++
 							return batch

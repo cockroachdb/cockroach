@@ -227,7 +227,7 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 	}
 	var alloc sqlbase.DatumAlloc
 	var a bufalloc.ByteAllocator
-	cb := coldata.NewMemBatchWithSize(nil, 0)
+	cb := coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, coldata.StandardColumnFactory)
 
 	for {
 		batchIdx := int(atomic.AddInt64(&w.batchIdxAtomic, 1))
