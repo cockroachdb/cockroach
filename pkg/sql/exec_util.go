@@ -1997,7 +1997,15 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
-	m.setCurTxnReadOnly(val)
+	// The read-only state is special; it's set as a session variable (SET
+	// transaction_read_only=<>), but it represents per-txn state, not
+	// per-session. There's no field for it in the SessionData struct. Instead, we
+	// call into the connEx, which modifies its TxnState.
+	// NOTE(andrei): I couldn't find good documentation on transaction_read_only,
+	// but I've tested its behavior in Postgres 11.
+	if m.setCurTxnReadOnly != nil {
+		m.setCurTxnReadOnly(val)
+	}
 }
 
 func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
