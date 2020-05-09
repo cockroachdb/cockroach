@@ -281,15 +281,23 @@ func (ef *execFactory) ConstructSimpleProject(
 	}
 
 	var rb renderBuilder
-	rb.init(n, reqOrdering, len(cols))
+	rb.init(n, reqOrdering)
+
+	exprs := make(tree.TypedExprs, len(cols))
+	resultCols := make(sqlbase.ResultColumns, len(cols))
 	for i, col := range cols {
 		v := rb.r.ivarHelper.IndexedVar(int(col))
 		if colNames == nil {
-			rb.addExpr(v, inputCols[col].Name, inputCols[col].TableID, inputCols[col].PGAttributeNum, inputCols[col].GetTypeModifier())
+			resultCols[i] = inputCols[col]
 		} else {
-			rb.addExpr(v, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */, v.ResolvedType().TypeModifier())
+			resultCols[i] = sqlbase.ResultColumn{
+				Name: colNames[i],
+				Typ:  v.ResolvedType(),
+			}
 		}
+		exprs[i] = v
 	}
+	rb.setOutput(exprs, resultCols)
 	return rb.res, nil
 }
 
@@ -305,15 +313,20 @@ func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
 }
 
 // ConstructRender is part of the exec.Factory interface.
+// N.B.: The input exprs will be modified.
 func (ef *execFactory) ConstructRender(
-	n exec.Node, exprs tree.TypedExprs, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node,
+	columns sqlbase.ResultColumns,
+	exprs tree.TypedExprs,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	var rb renderBuilder
-	rb.init(n, reqOrdering, len(exprs))
+	rb.init(n, reqOrdering)
 	for i, expr := range exprs {
 		expr = rb.r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		rb.addExpr(expr, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */, -1 /* typeModifier */)
+		exprs[i] = expr
 	}
+	rb.setOutput(exprs, columns)
 	return rb.res, nil
 }
 
@@ -2024,12 +2037,10 @@ type renderBuilder struct {
 }
 
 // init initializes the renderNode with render expressions.
-func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap int) {
+func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering) {
 	src := asDataSource(n)
 	rb.r = &renderNode{
-		source:  src,
-		render:  make([]tree.TypedExpr, 0, cap),
-		columns: make([]sqlbase.ResultColumn, 0, cap),
+		source: src,
 	}
 	rb.r.ivarHelper = tree.MakeIndexedVarHelper(rb.r, len(src.columns))
 	rb.r.reqOrdering = ReqOrdering(reqOrdering)
@@ -2044,25 +2055,12 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap 
 	}
 }
 
-// addExpr adds a new render expression with the given name.
-func (rb *renderBuilder) addExpr(
-	expr tree.TypedExpr,
-	colName string,
-	tableID sqlbase.ID,
-	pgAttributeNum sqlbase.ColumnID,
-	typeModifier int32,
-) {
-	rb.r.render = append(rb.r.render, expr)
-	rb.r.columns = append(
-		rb.r.columns,
-		sqlbase.ResultColumn{
-			Name:           colName,
-			Typ:            expr.ResolvedType(),
-			TableID:        tableID,
-			PGAttributeNum: pgAttributeNum,
-			TypeModifier:   typeModifier,
-		},
-	)
+// setOutput sets the output of the renderNode. exprs is the list of render
+// expressions, and columns is the list of information about the expressions,
+// including their names, types, and so on. They must be the same length.
+func (rb *renderBuilder) setOutput(exprs tree.TypedExprs, columns sqlbase.ResultColumns) {
+	rb.r.render = exprs
+	rb.r.columns = columns
 }
 
 // makeColDescList returns a list of table column descriptors. Columns are
