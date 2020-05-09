@@ -55,6 +55,7 @@ var geometryFromText = makeBuiltin(
 		},
 		types.Geometry,
 		infoBuilder{info: "Returns the Geometry from a WKT or EWKT representation."}.String(),
+		tree.VolatilityImmutable,
 	),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
@@ -71,6 +72,7 @@ var geometryFromText = makeBuiltin(
 		Info: infoBuilder{
 			info: `Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
 		}.String(),
+		Volatility: tree.VolatilityImmutable,
 	},
 )
 
@@ -96,6 +98,7 @@ func geometryFromTextCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 					shape.String(),
 				),
 			}.String(),
+			tree.VolatilityImmutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
@@ -118,6 +121,7 @@ func geometryFromTextCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 					shape.String(),
 				),
 			}.String(),
+			Volatility: tree.VolatilityImmutable,
 		},
 	)
 }
@@ -144,6 +148,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 					shape.String(),
 				),
 			}.String(),
+			tree.VolatilityImmutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"wkb", types.Bytes}, {"srid", types.Int}},
@@ -166,6 +171,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 					shape.String(),
 				),
 			}.String(),
+			Volatility: tree.VolatilityImmutable,
 		},
 	)
 }
@@ -183,6 +189,7 @@ var geographyFromText = makeBuiltin(
 		},
 		types.Geography,
 		infoBuilder{info: "Returns the Geography from a WKT or EWKT representation."}.String(),
+		tree.VolatilityImmutable,
 	),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
@@ -199,6 +206,7 @@ var geographyFromText = makeBuiltin(
 		Info: infoBuilder{
 			info: `Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
 		}.String(),
+		Volatility: tree.VolatilityImmutable,
 	},
 )
 
@@ -222,6 +230,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an EWKT representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_geomfromwkb": makeBuiltin(
@@ -236,6 +245,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from a WKB representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
@@ -252,6 +262,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Info: infoBuilder{
 				info: `Returns the Geometry from a WKB representation with the given SRID set.`,
 			}.String(),
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 	"st_geomfromewkb": makeBuiltin(
@@ -266,6 +277,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an EWKB representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_geomfromgeojson": makeBuiltin(
@@ -280,6 +292,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 		jsonOverload1(
 			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
@@ -299,6 +312,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 	),
 
@@ -349,6 +363,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an EWKT representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_geogfromwkb": makeBuiltin(
@@ -363,6 +378,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from a WKB representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
@@ -379,6 +395,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Info: infoBuilder{
 				info: `Returns the Geography from a WKB representation with the given SRID set.`,
 			}.String(),
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 	"st_geogfromewkb": makeBuiltin(
@@ -393,6 +410,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an EWKB representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_geogfromgeojson": makeBuiltin(
@@ -407,6 +425,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an GeoJSON representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 		jsonOverload1(
 			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
@@ -426,6 +445,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an GeoJSON representation."}.String(),
+			tree.VolatilityImmutable,
 		),
 	),
 
@@ -442,6 +462,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the WKT representation of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -450,6 +471,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the WKT representation of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_asewkt": makeBuiltin(
@@ -461,6 +483,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKT representation of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -469,6 +492,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKT representation of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_asbinary": makeBuiltin(
@@ -480,6 +504,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the WKB representation of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -488,6 +513,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the WKB representation of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_asewkb": makeBuiltin(
@@ -498,6 +524,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the EWKB representation of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -505,6 +532,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the EWKB representation of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_ashexwkb": makeBuiltin(
@@ -516,6 +544,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the WKB representation in hex of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -524,6 +553,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the WKB representation in hex of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_ashexewkb": makeBuiltin(
@@ -534,6 +564,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKB representation in hex of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -541,6 +572,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKB representation in hex of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_askml": makeBuiltin(
@@ -552,6 +584,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the KML representation of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -560,6 +593,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the KML representation of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_asgeojson": makeBuiltin(
@@ -571,6 +605,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the GeoJSON representation of a given Geometry."},
+			tree.VolatilityImmutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -579,6 +614,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			types.String,
 			infoBuilder{info: "Returns the GeoJSON representation of a given Geography."},
+			tree.VolatilityImmutable,
 		),
 	),
 
@@ -600,6 +636,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				info:     "Returns the area of the given geometry.",
 				usesGEOS: true,
 			},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_length": makeBuiltin(
@@ -619,6 +656,7 @@ var geoBuiltins = map[string]builtinDefinition{
 Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
 				usesGEOS: true,
 			},
+			tree.VolatilityImmutable,
 		),
 	),
 	"st_perimeter": makeBuiltin(
@@ -638,6 +676,7 @@ Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
 Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 				usesGEOS: true,
 			},
+			tree.VolatilityImmutable,
 		),
 	),
 
@@ -659,6 +698,7 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 				info:     `Returns the distance between the given geometries.`,
 				usesGEOS: true,
 			},
+			tree.VolatilityImmutable,
 		),
 	),
 
@@ -776,6 +816,7 @@ func geometryOverload1(
 	f func(*tree.EvalContext, *tree.DGeometry) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
+	volatility tree.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ArgTypes{
@@ -786,7 +827,8 @@ func geometryOverload1(
 			a := args[0].(*tree.DGeometry)
 			return f(ctx, a)
 		},
-		Info: ib.String(),
+		Info:       ib.String(),
+		Volatility: volatility,
 	}
 }
 
@@ -795,6 +837,7 @@ func geographyOverload1(
 	f func(*tree.EvalContext, *tree.DGeography) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
+	volatility tree.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ArgTypes{
@@ -805,7 +848,8 @@ func geographyOverload1(
 			a := args[0].(*tree.DGeography)
 			return f(ctx, a)
 		},
-		Info: ib.String(),
+		Info:       ib.String(),
+		Volatility: volatility,
 	}
 }
 
@@ -814,6 +858,7 @@ func geometryOverload2(
 	f func(*tree.EvalContext, *tree.DGeometry, *tree.DGeometry) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
+	volatility tree.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ArgTypes{
@@ -826,7 +871,8 @@ func geometryOverload2(
 			b := args[1].(*tree.DGeometry)
 			return f(ctx, a, b)
 		},
-		Info: ib.String(),
+		Info:       ib.String(),
+		Volatility: volatility,
 	}
 }
 
@@ -845,6 +891,7 @@ func geometryOverload2BinaryPredicate(
 		},
 		types.Bool,
 		ib,
+		tree.VolatilityImmutable,
 	)
 }
 

@@ -1408,30 +1408,6 @@ WHERE proname='json_extract_path'
 proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
 json_extract_path  25           2         3802        3802 25      {i,v}
 
-# Check provolatile is set.
-query TT colnames
-SELECT proname, provolatile
-FROM pg_catalog.pg_proc
-WHERE proname IN ('random', 'current_timestamp', 'substring')
-----
-proname            provolatile
-current_timestamp  s
-current_timestamp  s
-current_timestamp  s
-current_timestamp  s
-current_timestamp  s
-current_timestamp  s
-random             v
-substring          i
-substring          i
-substring          i
-substring          i
-substring          i
-substring          i
-substring          i
-substring          i
-
-
 user testuser
 
 # Should be globally visible

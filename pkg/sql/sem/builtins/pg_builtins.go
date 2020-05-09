@@ -47,7 +47,8 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 				Fn: func(*tree.EvalContext, tree.Datums) (tree.Datum, error) {
 					return tree.DBoolFalse, nil
 				},
-				Info: notUsableInfo,
+				Info:       notUsableInfo,
+				Volatility: tree.VolatilityVolatile,
 			},
 		},
 	}
@@ -134,6 +135,9 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefin
 	return builtinDefinition{
 		props: tree.FunctionProperties{
 			Category: categoryCompatibility,
+			// Ignore validity checks for typeio builtins.
+			// We don't implement these anyway, and they are very hard to special case.
+			IgnoreVolatilityCheck: true,
 		},
 		overloads: []tree.Overload{
 			{
@@ -142,7 +146,8 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefin
 				Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 					return nil, errUnimplemented
 				},
-				Info: notUsableInfo,
+				Info:       notUsableInfo,
+				Volatility: tree.VolatilityVolatile,
 			},
 		},
 	}
@@ -227,7 +232,8 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 			}
 			return r[0], nil
 		},
-		Info: notUsableInfo,
+		Info:       notUsableInfo,
+		Volatility: tree.VolatilityStable,
 	}
 }
 
@@ -250,7 +256,8 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 			}
 			return r[0], nil
 		},
-		Info: notUsableInfo,
+		Info:       notUsableInfo,
+		Volatility: tree.VolatilityStable,
 	}
 }
 
@@ -272,7 +279,8 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Overload {
 			}
 			return r[0], nil
 		},
-		Info: notUsableInfo,
+		Info:       notUsableInfo,
+		Volatility: tree.VolatilityStable,
 	}
 }
 
@@ -370,7 +378,8 @@ func makePGPrivilegeInquiryDef(
 				}
 				return fn(ctx, args, user)
 			},
-			Info: fmt.Sprintf(infoFmt, infoDetail),
+			Info:       fmt.Sprintf(infoFmt, infoDetail),
+			Volatility: tree.VolatilityStable,
 		})
 	}
 	return builtinDefinition{
@@ -540,7 +549,8 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 			Fn: func(_ *tree.EvalContext, d tree.Datums) (tree.Datum, error) {
 				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), typ, string(tree.MustBeDString(d[1]))), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityVolatile,
 		},
 	)
 }
@@ -554,7 +564,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.NewDInt(-1), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -571,7 +582,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				return tree.DNull, nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -588,7 +600,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				// entry for pg_catalog.pg_database.
 				return datEncodingUTF8ShortName, nil
 			},
-			Info: "Returns the current encoding name used by the database.",
+			Info:       "Returns the current encoding name used by the database.",
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -608,7 +621,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -620,7 +634,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -654,7 +669,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				return t[0], nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -699,7 +715,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(sb.String()), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -727,7 +744,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.NewDOid(0), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -739,7 +757,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().String()), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -763,7 +782,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				return t[0], nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -796,7 +816,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(fmt.Sprintf("(%s,%s,%s,%s,%s,%s,%s)", seqstart, seqmin, seqmax, seqincrement, seqcycleStr, seqcache, seqtypid)), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -826,6 +847,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -863,7 +885,8 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 				}
 				return r[0], nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -874,7 +897,8 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return getPgObjDesc(ctx, "", int(args[0].(*tree.DOid).DInt))
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
@@ -885,7 +909,8 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 					int(args[0].(*tree.DOid).DInt),
 				)
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -896,7 +921,8 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDOid(*args[0].(*tree.DInt)), nil
 			},
-			Info: "Converts an integer to an OID.",
+			Info:       "Converts an integer to an OID.",
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
@@ -933,7 +959,8 @@ SELECT description
 				}
 				return r[0], nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -944,7 +971,8 @@ SELECT description
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.DBoolTrue, nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
@@ -955,7 +983,8 @@ SELECT description
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.DBoolTrue, nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
@@ -968,7 +997,8 @@ SELECT description
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.NewDString("UTF8"), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -995,7 +1025,8 @@ SELECT description
 				}
 				return tree.DNull, nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 	// pg_table_is_visible returns true if the input oid corresponds to a table
@@ -1017,7 +1048,8 @@ SELECT description
 				}
 				return tree.MakeDBool(tree.DBool(t != nil)), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -1041,7 +1073,8 @@ SELECT description
 				}
 				return tree.DNull, nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -1049,7 +1082,7 @@ SELECT description
 		tree.FunctionProperties{
 			// pg_sleep is marked as impure so it doesn't get executed during
 			// normalization.
-			Volatility: tree.VolatilityVolatile,
+			Impure: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"seconds", types.Float}},
@@ -1067,6 +1100,7 @@ SELECT description
 			Info: "pg_sleep makes the current session's process sleep until " +
 				"seconds seconds have elapsed. seconds is a value of type " +
 				"double precision, so fractional-second delays can be specified.",
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
@@ -1687,7 +1721,8 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), false /* missingOk */)
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}, {"missing_ok", types.Bool}},
@@ -1695,7 +1730,8 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -1704,7 +1740,7 @@ SELECT description
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
 			DistsqlBlacklist: true,
-			Volatility:       tree.VolatilityVolatile,
+			Impure:           true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}, {"new_value", types.String}, {"is_local", types.Bool}},
@@ -1717,7 +1753,8 @@ SELECT description
 				}
 				return getSessionVar(ctx, varName, false /* missingOk */)
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
@@ -1739,7 +1776,8 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -1750,7 +1788,8 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.DZero, nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -1761,7 +1800,8 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -1772,7 +1812,8 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.DZero, nil
 			},
-			Info: notUsableInfo,
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 }

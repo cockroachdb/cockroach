@@ -38,8 +38,8 @@ func initAggregateBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 
-		if v.props.Volatility != tree.VolatilityVolatile {
-			panic(fmt.Sprintf("%s: aggregate functions should all be volatile, found %v", k, v))
+		if !v.props.Impure {
+			panic(fmt.Sprintf("%s: aggregate functions should all be impure, found %v", k, v))
 		}
 		if v.props.Class != tree.AggregateClass {
 			panic(fmt.Sprintf("%s: aggregate functions should be marked with the tree.AggregateClass "+
@@ -68,7 +68,7 @@ func initAggregateBuiltins() {
 }
 
 func aggProps() tree.FunctionProperties {
-	return tree.FunctionProperties{Class: tree.AggregateClass, Volatility: tree.VolatilityVolatile}
+	return tree.FunctionProperties{Class: tree.AggregateClass, Impure: true}
 }
 
 func aggPropsNullableArgs() tree.FunctionProperties {
@@ -117,67 +117,68 @@ var aggregates = map[string]builtinDefinition{
 				},
 				newArrayAggregate,
 				"Aggregates the selected values into an array.",
+				tree.VolatilityImmutable,
 			)
 		})),
 
 	"avg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntAvgAggregate,
-			"Calculates the average of the selected values."),
+			"Calculates the average of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatAvgAggregate,
-			"Calculates the average of the selected values."),
+			"Calculates the average of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalAvgAggregate,
-			"Calculates the average of the selected values."),
+			"Calculates the average of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalAvgAggregate,
-			"Calculates the average of the selected values."),
+			"Calculates the average of the selected values.", tree.VolatilityImmutable),
 	),
 
 	"bit_and": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Int, newIntBitAndAggregate,
-			"Calculates the bitwise AND of all non-null input values, or null if none."),
+			"Calculates the bitwise AND of all non-null input values, or null if none.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.VarBit}, types.VarBit, newBitBitAndAggregate,
-			"Calculates the bitwise AND of all non-null input values, or null if none."),
+			"Calculates the bitwise AND of all non-null input values, or null if none.", tree.VolatilityImmutable),
 	),
 
 	"bit_or": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Int, newIntBitOrAggregate,
-			"Calculates the bitwise OR of all non-null input values, or null if none."),
+			"Calculates the bitwise OR of all non-null input values, or null if none.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.VarBit}, types.VarBit, newBitBitOrAggregate,
-			"Calculates the bitwise OR of all non-null input values, or null if none."),
+			"Calculates the bitwise OR of all non-null input values, or null if none.", tree.VolatilityImmutable),
 	),
 
 	"bool_and": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
-			"Calculates the boolean value of `AND`ing all selected values."),
+			"Calculates the boolean value of `AND`ing all selected values.", tree.VolatilityImmutable),
 	),
 
 	"bool_or": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolOrAggregate,
-			"Calculates the boolean value of `OR`ing all selected values."),
+			"Calculates the boolean value of `OR`ing all selected values.", tree.VolatilityImmutable),
 	),
 
 	"concat_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String}, types.String, newStringConcatAggregate,
-			"Concatenates all selected values."),
+			"Concatenates all selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesConcatAggregate,
-			"Concatenates all selected values."),
+			"Concatenates all selected values.", tree.VolatilityImmutable),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
 	),
 
 	"corr": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Float, types.Float}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values."),
+			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Int, types.Int}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values."),
+			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float, types.Int}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values."),
+			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Int, types.Float}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values."),
+			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
 	),
 
 	"count": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
-			"Calculates the number of selected elements."),
+			"Calculates the number of selected elements.", tree.VolatilityImmutable),
 	),
 
 	"count_rows": makeBuiltin(aggProps(),
@@ -193,57 +194,58 @@ var aggregates = map[string]builtinDefinition{
 					},
 				)
 			},
-			Info: "Calculates the number of rows.",
+			Info:       "Calculates the number of rows.",
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
 	"every": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
-			"Calculates the boolean value of `AND`ing all selected values."),
+			"Calculates the boolean value of `AND`ing all selected values.", tree.VolatilityImmutable),
 	),
 
 	"max": collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeAggOverload([]*types.T{t}, t, newMaxAggregate,
-				"Identifies the maximum selected value.")
+				"Identifies the maximum selected value.", tree.VolatilityImmutable)
 		}),
 
 	"min": collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeAggOverload([]*types.T{t}, t, newMinAggregate,
-				"Identifies the minimum selected value.")
+				"Identifies the minimum selected value.", tree.VolatilityImmutable)
 		}),
 
 	"string_agg": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.String, types.String}, types.String, newStringConcatAggregate,
-			"Concatenates all selected values using the provided delimiter."),
+			"Concatenates all selected values using the provided delimiter.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Bytes, types.Bytes}, types.Bytes, newBytesConcatAggregate,
-			"Concatenates all selected values using the provided delimiter."),
+			"Concatenates all selected values using the provided delimiter.", tree.VolatilityImmutable),
 	),
 
 	"sum_int": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Int, newSmallIntSumAggregate,
-			"Calculates the sum of the selected values."),
+			"Calculates the sum of the selected values.", tree.VolatilityImmutable),
 	),
 
 	"sum": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntSumAggregate,
-			"Calculates the sum of the selected values."),
+			"Calculates the sum of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatSumAggregate,
-			"Calculates the sum of the selected values."),
+			"Calculates the sum of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSumAggregate,
-			"Calculates the sum of the selected values."),
+			"Calculates the sum of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalSumAggregate,
-			"Calculates the sum of the selected values."),
+			"Calculates the sum of the selected values.", tree.VolatilityImmutable),
 	),
 
 	"sqrdiff": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntSqrDiffAggregate,
-			"Calculates the sum of squared differences from the mean of the selected values."),
+			"Calculates the sum of squared differences from the mean of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSqrDiffAggregate,
-			"Calculates the sum of squared differences from the mean of the selected values."),
+			"Calculates the sum of squared differences from the mean of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatSqrDiffAggregate,
-			"Calculates the sum of squared differences from the mean of the selected values."),
+			"Calculates the sum of squared differences from the mean of the selected values.", tree.VolatilityImmutable),
 	),
 
 	// final_(variance|stddev) computes the global (variance|standard deviation)
@@ -263,12 +265,14 @@ var aggregates = map[string]builtinDefinition{
 			types.Decimal,
 			newDecimalFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
 		),
 		makeAggOverload(
 			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
 		),
 	)),
 
@@ -279,22 +283,24 @@ var aggregates = map[string]builtinDefinition{
 			types.Decimal,
 			newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
 		),
 		makeAggOverload(
 			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
 		),
 	)),
 
 	"variance": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
-			"Calculates the variance of the selected values."),
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
-			"Calculates the variance of the selected values."),
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
-			"Calculates the variance of the selected values."),
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
 	),
 
 	// stddev is a historical alias for stddev_samp.
@@ -303,31 +309,23 @@ var aggregates = map[string]builtinDefinition{
 
 	"xor_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
-			"Calculates the bitwise XOR of the selected values."),
+			"Calculates the bitwise XOR of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Int}, types.Int, newIntXorAggregate,
-			"Calculates the bitwise XOR of the selected values."),
+			"Calculates the bitwise XOR of the selected values.", tree.VolatilityImmutable),
 	),
 
 	"json_agg": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array."),
+			"Aggregates values as a JSON or JSONB array.", tree.VolatilityStable),
 	),
 
 	"jsonb_agg": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array."),
+			"Aggregates values as a JSON or JSONB array.", tree.VolatilityStable),
 	),
 
-	"json_object_agg": makeBuiltin(tree.FunctionProperties{
-		UnsupportedWithIssue: 33285,
-		Class:                tree.AggregateClass,
-		Volatility:           tree.VolatilityVolatile,
-	}),
-	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{
-		UnsupportedWithIssue: 33285,
-		Class:                tree.AggregateClass,
-		Volatility:           tree.VolatilityVolatile,
-	}),
+	"json_object_agg":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
+	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
@@ -335,6 +333,7 @@ var aggregates = map[string]builtinDefinition{
 			tree.IdentityReturnType(0),
 			newAnyNotNullAggregate,
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",
+			tree.VolatilityImmutable,
 		))),
 }
 
@@ -351,12 +350,14 @@ func makeAggOverload(
 	ret *types.T,
 	f func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	info string,
+	volatility tree.Volatility,
 ) tree.Overload {
 	return makeAggOverloadWithReturnType(
 		in,
 		tree.FixedReturnType(ret),
 		f,
 		info,
+		volatility,
 	)
 }
 
@@ -365,6 +366,7 @@ func makeAggOverloadWithReturnType(
 	retType tree.ReturnTyper,
 	f func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	info string,
+	volatility tree.Volatility,
 ) tree.Overload {
 	argTypes := make(tree.ArgTypes, len(in))
 	for i, typ := range in {
@@ -413,18 +415,19 @@ func makeAggOverloadWithReturnType(
 				},
 			)
 		},
-		Info: info,
+		Info:       info,
+		Volatility: volatility,
 	}
 }
 
 func makeStdDevBuiltin() builtinDefinition {
 	return makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
-			"Calculates the standard deviation of the selected values."),
+			"Calculates the standard deviation of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
-			"Calculates the standard deviation of the selected values."),
+			"Calculates the standard deviation of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
-			"Calculates the standard deviation of the selected values."),
+			"Calculates the standard deviation of the selected values.", tree.VolatilityImmutable),
 	)
 }
 
