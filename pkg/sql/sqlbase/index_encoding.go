@@ -1081,11 +1081,11 @@ func EncodeSecondaryIndex(
 			key = append(key, extraKey...)
 		}
 
-		// We do all computation that affects indexes with families in a separate code path to avoid performance
-		// regression for tables without column families.
 		if len(tableDesc.Families) == 1 ||
 			secondaryIndex.Type == IndexDescriptor_INVERTED ||
 			secondaryIndex.Version == BaseIndexFormatVersion {
+			// We do all computation that affects indexes with families in a separate code path to avoid performance
+			// regression for tables without column families.
 			entry, err := encodeSecondaryIndexNoFamilies(secondaryIndex, colMap, key, values, extraKey)
 			if err != nil {
 				return []IndexEntry{}, err
@@ -1246,6 +1246,11 @@ func encodeSecondaryIndexNoFamilies(
 		cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
 	}
 	for _, id := range index.CompositeColumnIDs {
+		// Inverted indexes on a composite type (i.e. an array of composite types)
+		// should not add the indexed column to the value.
+		if index.Type == IndexDescriptor_INVERTED && id == index.ColumnIDs[0] {
+			continue
+		}
 		cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
 	}
 	sort.Sort(byID(cols))
