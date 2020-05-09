@@ -206,7 +206,7 @@ func TestAndOrOps(t *testing.T) {
 							return nil, err
 						}
 						// We will project out the first two columns in order
-						// to have test cases less verbose.
+						// to have test cases be less verbose.
 						return NewSimpleProjectOp(projOp, 3 /* numInputCols */, []uint32{2}), nil
 					})
 			}

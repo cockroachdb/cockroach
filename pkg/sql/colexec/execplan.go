@@ -1430,7 +1430,8 @@ func planSelectionOperators(
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		return NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, internalMemUsed, nil
+		op, err = boolOrUnknownToSelOp(input, columnTypes, t.Idx)
+		return op, -1, columnTypes, internalMemUsed, err
 	case *tree.AndExpr:
 		// AND expressions are handled by an implicit AND'ing of selection vectors.
 		// First we select out the tuples that are true on the left side, and then,
@@ -1471,13 +1472,19 @@ func planSelectionOperators(
 		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, caseExpr, columnTypes, input, acc, factory,
 		)
-		op = NewBoolVecToSelOp(op, resultIdx)
+		if err != nil {
+			return nil, resultIdx, typs, internalMemUsed, err
+		}
+		op, err = boolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, internalMemUsed, err
 	case *tree.CaseExpr:
 		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, expr, columnTypes, input, acc, factory,
 		)
-		op = NewBoolVecToSelOp(op, resultIdx)
+		if err != nil {
+			return op, resultIdx, typs, internalMemUsed, err
+		}
+		op, err = boolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, internalMemUsed, err
 	case *tree.IsNullExpr:
 		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
@@ -1544,28 +1551,6 @@ func planSelectionOperators(
 	default:
 		return nil, resultIdx, nil, internalMemUsed, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
 	}
-}
-
-// planTypedMaybeNullProjectionOperators is used to plan projection operators, but is able to
-// plan constNullOperators in the case that we know the "type" of the null. It is currently
-// unsafe to plan a constNullOperator when we don't know the type of the null.
-func planTypedMaybeNullProjectionOperators(
-	ctx context.Context,
-	evalCtx *tree.EvalContext,
-	expr tree.TypedExpr,
-	exprTyp *types.T,
-	columnTypes []*types.T,
-	input colexecbase.Operator,
-	acc *mon.BoundAccount,
-	factory coldata.ColumnFactory,
-) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
-	if expr == tree.DNull {
-		resultIdx = len(columnTypes)
-		op = NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx, exprTyp)
-		typs = appendOneType(columnTypes, exprTyp)
-		return op, resultIdx, typs, internalMemUsed, nil
-	}
-	return planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc, factory)
 }
 
 func checkCastSupported(fromType, toType *types.T) error {
@@ -1635,16 +1620,9 @@ func planProjectionOperators(
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory)
 	case *tree.CastExpr:
 		expr := t.Expr.(tree.TypedExpr)
-		// If the expression is NULL, we use planTypedMaybeNullProjectionOperators instead of planProjectionOperators
-		// because we can say that the type of the NULL is the type that we are casting to, rather than unknown.
-		// We can't use planProjectionOperators because it will reject planning a constNullOp without knowing
-		// the post typechecking "type" of the NULL.
-		if expr.ResolvedType() == types.Unknown {
-			op, resultIdx, typs, internalMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, evalCtx, expr, t.ResolvedType(), columnTypes, input, acc, factory)
-		} else {
-			op, resultIdx, typs, internalMemUsed, err =
-				planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc, factory)
-		}
+		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
+			ctx, evalCtx, expr, columnTypes, input, acc, factory,
+		)
 		if err != nil {
 			return nil, 0, nil, internalMemUsed, err
 		}
@@ -1683,7 +1661,10 @@ func planProjectionOperators(
 		resultIdx = len(columnTypes)
 		typs = appendOneType(columnTypes, datumType)
 		if datumType.Family() == types.UnknownFamily {
-			return nil, resultIdx, typs, internalMemUsed, errors.New("cannot plan null type unknown")
+			// We handle Unknown type by planning a special constant null
+			// operator.
+			op = NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx)
+			return op, resultIdx, typs, internalMemUsed, nil
 		}
 		constVal, err := getDatumToPhysicalFn(datumType)(t)
 		if err != nil {
@@ -1734,20 +1715,21 @@ func planProjectionOperators(
 			// results of the WHEN into a single output vector, assembling the final
 			// result of the case projection.
 			whenTyped := when.Cond.(tree.TypedExpr)
-			whenResolvedType := whenTyped.ResolvedType()
 			var whenInternalMemUsed, thenInternalMemUsed int
-			caseOps[i], resultIdx, typs, whenInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
-				ctx, evalCtx, whenTyped, whenResolvedType, typs, buffer, acc, factory,
+			caseOps[i], resultIdx, typs, whenInternalMemUsed, err = planProjectionOperators(
+				ctx, evalCtx, whenTyped, typs, buffer, acc, factory,
 			)
 			if err != nil {
 				return nil, resultIdx, typs, internalMemUsed, err
 			}
-			// Transform the booleans to a selection vector.
-			caseOps[i] = NewBoolVecToSelOp(caseOps[i], resultIdx)
+			caseOps[i], err = boolOrUnknownToSelOp(caseOps[i], typs, resultIdx)
+			if err != nil {
+				return nil, resultIdx, typs, internalMemUsed, err
+			}
 
 			// Run the "then" clause on those tuples that were selected.
-			caseOps[i], thenIdxs[i], typs, thenInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
-				ctx, evalCtx, when.Val.(tree.TypedExpr), t.ResolvedType(), typs, caseOps[i], acc, factory,
+			caseOps[i], thenIdxs[i], typs, thenInternalMemUsed, err = planProjectionOperators(
+				ctx, evalCtx, when.Val.(tree.TypedExpr), typs, caseOps[i], acc, factory,
 			)
 			if err != nil {
 				return nil, resultIdx, typs, internalMemUsed, err
@@ -1773,8 +1755,8 @@ func planProjectionOperators(
 			// If there's no ELSE arm, we write NULLs.
 			elseExpr = tree.DNull
 		}
-		elseOp, thenIdxs[len(t.Whens)], typs, elseInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
-			ctx, evalCtx, elseExpr.(tree.TypedExpr), t.ResolvedType(), typs, buffer, acc, factory,
+		elseOp, thenIdxs[len(t.Whens)], typs, elseInternalMemUsed, err = planProjectionOperators(
+			ctx, evalCtx, elseExpr.(tree.TypedExpr), typs, buffer, acc, factory,
 		)
 		if err != nil {
 			return nil, resultIdx, typs, internalMemUsed, err
@@ -2022,14 +2004,14 @@ func planLogicalProjectionOp(
 	default:
 		colexecerror.InternalError(fmt.Sprintf("unexpected logical expression type %s", t.String()))
 	}
-	leftProjOpChain, leftIdx, typs, internalMemUsedLeft, err = planTypedMaybeNullProjectionOperators(
-		ctx, evalCtx, typedLeft, types.Bool, typs, &leftFeedOp, acc, factory,
+	leftProjOpChain, leftIdx, typs, internalMemUsedLeft, err = planProjectionOperators(
+		ctx, evalCtx, typedLeft, typs, &leftFeedOp, acc, factory,
 	)
 	if err != nil {
 		return nil, resultIdx, typs, internalMemUsed, err
 	}
-	rightProjOpChain, rightIdx, typs, internalMemUsedRight, err = planTypedMaybeNullProjectionOperators(
-		ctx, evalCtx, typedRight, types.Bool, typs, &rightFeedOp, acc, factory,
+	rightProjOpChain, rightIdx, typs, internalMemUsedRight, err = planProjectionOperators(
+		ctx, evalCtx, typedRight, typs, &rightFeedOp, acc, factory,
 	)
 	if err != nil {
 		return nil, resultIdx, typs, internalMemUsed, err
