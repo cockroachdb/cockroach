@@ -823,7 +823,7 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 		switch t := expr.(type) {
 		case *FuncExpr:
-			if t.Volatility() != VolatilityImmutable {
+			if t.IsImpure() {
 				v.isConst = false
 				return false, expr
 			}
@@ -895,7 +895,7 @@ func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 	switch t := expr.(type) {
 	case *FuncExpr:
-		if t.Volatility() != VolatilityImmutable {
+		if t.IsImpure() {
 			v.isConst = false
 			return false, expr
 		}

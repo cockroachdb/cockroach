@@ -44,8 +44,6 @@ const (
 type Overload struct {
 	Types      TypeList
 	ReturnType ReturnTyper
-
-	// Volatility signifies whether the given function is volatile.
 	Volatility Volatility
 
 	// PreferredOverload determines overload resolution as follows.

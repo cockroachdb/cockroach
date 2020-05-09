@@ -984,7 +984,7 @@ func applyColumnMutation(
 		} else {
 			colDatumType := col.Type
 			expr, err := sqlbase.SanitizeVarFreeExpr(
-				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, true, /* allowNonImmutable */
+				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, true, /* allowImpure */
 			)
 			if err != nil {
 				return err
