@@ -65,7 +65,10 @@ func (f *stubFactory) ConstructSimpleProject(
 }
 
 func (f *stubFactory) ConstructRender(
-	n exec.Node, exprs tree.TypedExprs, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node,
+	columns sqlbase.ResultColumns,
+	exprs tree.TypedExprs,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

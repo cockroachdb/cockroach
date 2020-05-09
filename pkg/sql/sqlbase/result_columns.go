@@ -30,7 +30,6 @@ type ResultColumn struct {
 	// reference, these fields are zeroes.
 	TableID        ID       // OID of column's source table (pg_attribute.attrelid).
 	PGAttributeNum ColumnID // Column's number in source table (pg_attribute.attnum).
-	TypeModifier   int32    // Type-specific data size (pg_attribute.atttypmod).
 }
 
 // ResultColumns is the type used throughout the sql module to
@@ -57,7 +56,6 @@ func ResultColumnsFromColDescs(tableID ID, colDescs []ColumnDescriptor) ResultCo
 				Hidden:         hidden,
 				TableID:        tableID,
 				PGAttributeNum: colDesc.ID,
-				TypeModifier:   typ.TypeModifier(),
 			},
 		)
 	}
@@ -67,11 +65,7 @@ func ResultColumnsFromColDescs(tableID ID, colDescs []ColumnDescriptor) ResultCo
 // GetTypeModifier returns the type modifier for this column. If it is not set,
 // it defaults to returning -1.
 func (r ResultColumn) GetTypeModifier() int32 {
-	if r.TypeModifier != 0 {
-		return r.TypeModifier
-	}
-
-	return -1
+	return r.Typ.TypeModifier()
 }
 
 // TypesEqual returns whether the length and types of r matches other. If
