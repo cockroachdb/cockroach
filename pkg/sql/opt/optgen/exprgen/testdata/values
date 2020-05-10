@@ -1,8 +1,8 @@
 expr
 (Values
   [
-    (Tuple [ (Const 1) (Const 1) ] "tuple{int, int}" )
-    (Tuple [ (Const 2) (Const 2) ] "tuple{int, int}" )
+    (Tuple [ (Const 1 "int") (Const 1 "int") ] "tuple{int, int}" )
+    (Tuple [ (Const 2 "int") (Const 2 "int") ] "tuple{int, int}" )
   ]
   [ (Cols [ (NewColumn "a" "int") (NewColumn "b" "int") ]) ]
 )
@@ -23,10 +23,10 @@ values
 expr
 (Project
   (Values
-    [ (Tuple [ (Const 1) ] "tuple{int}" ) ]
+    [ (Tuple [ (Const 1 "int") ] "tuple{int}" ) ]
     [ (Cols [ (NewColumn "x" "int") ]) ]
   )
-  [ (ProjectionsItem (Plus (Var "x") (Const 10)) (NewColumn "y" "int")) ]
+  [ (ProjectionsItem (Plus (Var "x") (Const 10 "int")) (NewColumn "y" "int")) ]
   "x"
 )
 ----

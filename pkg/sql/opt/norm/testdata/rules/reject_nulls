@@ -412,7 +412,7 @@ exprnorm expect=RejectNullsGroupBy
             ]
             [ ]
         )
-        [ (Eq (Var "sum") (Const 10)) ]
+        [ (Eq (Var "sum") (Const 10 "int")) ]
     )
     (Presentation "u,v")
     (NoOrdering)
@@ -696,7 +696,7 @@ exprnorm
                       [ (Tuple [ (Plus (Var "x") (Var "u")) ] "tuple{int}" ) ]
                       [ (Cols [ (NewColumn "z" "int") ]) ]
                     )
-                    [ (Eq (Var "x") (Const 3)) ]
+                    [ (Eq (Var "x") (Const 3 "int")) ]
                 )
                 [ ]
                 [ ]
@@ -707,7 +707,7 @@ exprnorm
         [ (AggregationsItem (Sum (Var "z")) (NewColumn "sum" "int")) ]
         [ ]
     )
-    [ (Eq (Var "sum") (Const 10)) ]
+    [ (Eq (Var "sum") (Const 10 "int")) ]
 )
 ----
 select

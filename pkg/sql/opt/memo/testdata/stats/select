@@ -1264,7 +1264,7 @@ expr colstat=1 colstat=2
       ]`)
     ]
   )
-  [ (Eq (Var "b") (Const 1)) ]
+  [ (Eq (Var "b") (Const 1 "int")) ]
 )
 ----
 select

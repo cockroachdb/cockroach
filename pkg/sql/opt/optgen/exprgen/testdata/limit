@@ -5,7 +5,7 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
 expr
 (Limit
   (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
-  (Const 10)
+  (Const 10 "int")
   (OrderingChoice "+a")
 )
 ----
@@ -30,7 +30,7 @@ limit
 expr
 (Limit
   (Sort (Scan [ (Table "abc") (Cols "a,b") ]))
-  (Const 10)
+  (Const 10 "int")
   (OrderingChoice "+a")
 )
 ----

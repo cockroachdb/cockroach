@@ -130,7 +130,7 @@ $input
 )
 =>
 (Exists
-    (Limit $input (Const 1) (EmptyOrdering))
+    (Limit $input (IntConst 1) (EmptyOrdering))
     (MakeLimited $subqueryPrivate)
 )
 

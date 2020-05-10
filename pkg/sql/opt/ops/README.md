@@ -11,6 +11,8 @@ operator can contain, in this order:
    the `Private` tag). The private fields are interned with the expression and
    can be used by rules; they must be initialized before construction of the
    expression. Private fields can be accessed by rules.
+ - at most one `Typ` field (only for Scalar operators). If this field is not
+   present, the scalar type of the operator is inferred from its inputs.
  - any number of unexported fields. Unexported fields are typically used to
    cache information that can be deduced from the children and the private. If
    there are unexported fields, an `initUnexportedFields(*Memo)` method must be
