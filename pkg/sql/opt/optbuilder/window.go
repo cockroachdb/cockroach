@@ -525,7 +525,7 @@ func (b *Builder) replaceDefaultReturn(
 func (b *Builder) overrideDefaultNullValue(agg aggregateInfo) (opt.ScalarExpr, bool) {
 	switch agg.def.Name {
 	case "count", "count_rows":
-		return b.factory.ConstructConst(tree.NewDInt(0)), true
+		return b.factory.ConstructConst(tree.NewDInt(0), types.Int), true
 	default:
 		return nil, false
 	}

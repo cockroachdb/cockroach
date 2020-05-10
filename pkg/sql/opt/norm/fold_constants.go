@@ -57,7 +57,7 @@ func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.Sca
 			a.HasNonNulls = true
 		}
 	}
-	return c.f.ConstructConst(a)
+	return c.f.ConstructConst(a, typ)
 }
 
 // IsConstValueOrTuple returns true if the input is a constant or a tuple of
@@ -237,7 +237,7 @@ func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr
 		return nil
 	}
 
-	return c.f.ConstructConst(convertedDatum)
+	return c.f.ConstructConst(convertedDatum, desiredType)
 }
 
 // FoldComparison evaluates a comparison expression with constant inputs. It

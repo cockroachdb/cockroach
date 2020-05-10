@@ -23,7 +23,7 @@
             $input
             [ (FiltersItem (IsNot $variable (Null (AnyType)))) ]
         )
-        (Const 1)
+        (IntConst 1)
         (MakeOrderingChoiceFromColumn (OpName $agg) $col)
     )
     [ (AggregationsItem (ConstAgg $variable) $aggPrivate) ]
@@ -68,7 +68,7 @@
 (MakeProjectFromPassthroughAggs
     (Limit
         $input
-        (Const 1)
+        (IntConst 1)
         (MakeOrderingChoiceFromColumn Min $col)
     )
     $aggregations
@@ -96,7 +96,7 @@
 (MakeProjectFromPassthroughAggs
     (Limit
         $input
-        (Const 1)
+        (IntConst 1)
         (MakeOrderingChoiceFromColumn Max $col)
     )
     $aggregations

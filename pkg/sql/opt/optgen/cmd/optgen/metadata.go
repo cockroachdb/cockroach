@@ -409,11 +409,7 @@ func (m *metadata) childAndPrivateFields(define *lang.DefineExpr) lang.DefineFie
 	n := 0
 	for _, field := range define.Fields {
 		typ := m.typeOf(field)
-		if !typ.isExpr {
-			// If this is the private field, include it.
-			if isEmbeddedField(field) || isExportedField(field) {
-				n++
-			}
+		if !typ.isExpr && !isEmbeddedField(field) && !isExportedField(field) {
 			break
 		}
 		n++

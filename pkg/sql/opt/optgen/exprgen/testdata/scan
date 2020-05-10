@@ -40,7 +40,7 @@ scan t.public.abc@ab
 expr
 (Select
   (Scan [ (Table "abc") (Cols "a,b,c") ])
-  [ (Eq (Var "a") (Const 1)) ]
+  [ (Eq (Var "a") (Const 1 "int")) ]
 )
 ----
 select

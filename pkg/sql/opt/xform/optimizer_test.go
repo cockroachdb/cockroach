@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -109,7 +110,7 @@ func TestDetachMemoRace(t *testing.T) {
 						memo.FiltersExpr{f.ConstructFiltersItem(
 							f.ConstructEq(
 								f.ConstructVariable(col),
-								f.ConstructConst(tree.NewDInt(10)),
+								f.ConstructConst(tree.NewDInt(10), types.Int),
 							),
 						)},
 					)

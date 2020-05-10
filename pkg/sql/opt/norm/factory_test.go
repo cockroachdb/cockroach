@@ -43,7 +43,7 @@ func TestSimplifyFilters(t *testing.T) {
 	ax := a.ColumnID(0)
 
 	variable := f.ConstructVariable(ax)
-	constant := f.ConstructConst(tree.NewDInt(1))
+	constant := f.ConstructConst(tree.NewDInt(1), types.Int)
 	eq := f.ConstructEq(variable, constant)
 
 	// Filters expression evaluates to False if any operand is False.
