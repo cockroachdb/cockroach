@@ -3007,7 +3007,7 @@ CREATE TABLE pg_catalog.pg_aggregate (
 								}
 							}
 						}
-						regprocForZeroOid := oidZero.AsRegProc("-")
+						regprocForZeroOid := tree.NewDOidWithName(tree.DInt(0), types.RegProc, "-")
 						err := addRow(
 							h.BuiltinOid(name, &overload).AsRegProc(name), // aggfnoid
 							aggregateKind,     // aggkind
