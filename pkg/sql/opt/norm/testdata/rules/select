@@ -1651,60 +1651,6 @@ union
            └── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
 
 norm expect=PushFilterIntoSetOp
-SELECT
-(SELECT k FROM
-((SELECT k FROM b)
-  UNION ALL
-  (SELECT k FROM b))
-WHERE k < i)
-FROM a
-----
-project
- ├── columns: k:17
- ├── ensure-distinct-on
- │    ├── columns: a.k:1!null k:16
- │    ├── grouping columns: a.k:1!null
- │    ├── error: "more than one row returned by a subquery used as an expression"
- │    ├── key: (1)
- │    ├── fd: (1)-->(16)
- │    ├── left-join-apply
- │    │    ├── columns: a.k:1!null a.i:2 k:16
- │    │    ├── fd: (1)-->(2)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1!null a.i:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    ├── union-all
- │    │    │    ├── columns: k:16!null
- │    │    │    ├── left columns: b.k:6
- │    │    │    ├── right columns: b.k:11
- │    │    │    ├── outer: (2)
- │    │    │    ├── select
- │    │    │    │    ├── columns: b.k:6!null
- │    │    │    │    ├── outer: (2)
- │    │    │    │    ├── key: (6)
- │    │    │    │    ├── scan b
- │    │    │    │    │    ├── columns: b.k:6!null
- │    │    │    │    │    └── key: (6)
- │    │    │    │    └── filters
- │    │    │    │         └── b.k:6 < a.i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
- │    │    │    └── select
- │    │    │         ├── columns: b.k:11!null
- │    │    │         ├── outer: (2)
- │    │    │         ├── key: (11)
- │    │    │         ├── scan b
- │    │    │         │    ├── columns: b.k:11!null
- │    │    │         │    └── key: (11)
- │    │    │         └── filters
- │    │    │              └── b.k:11 < a.i:2 [outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ])]
- │    │    └── filters (true)
- │    └── aggregations
- │         └── const-agg [as=k:16, outer=(16)]
- │              └── k:16
- └── projections
-      └── k:16 [as=k:17, outer=(16)]
-
-norm expect=PushFilterIntoSetOp
 SELECT k FROM
 ((SELECT k FROM b)
   EXCEPT
@@ -2009,6 +1955,49 @@ union-all
                 │         └── filters
                 │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
                 └── random() < 0.5 [side-effects]
+
+# No-op case because the filter references outer columns.
+norm expect-not=PushFilterIntoSetOp
+SELECT
+  (
+    SELECT k
+    FROM ((SELECT k FROM b) UNION ALL (SELECT k FROM b))
+    WHERE k < i
+  )
+FROM a
+----
+project
+ ├── columns: k:17
+ ├── ensure-distinct-on
+ │    ├── columns: a.k:1!null k:16
+ │    ├── grouping columns: a.k:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(16)
+ │    ├── left-join (cross)
+ │    │    ├── columns: a.k:1!null a.i:2 k:16
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1!null a.i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── union-all
+ │    │    │    ├── columns: k:16!null
+ │    │    │    ├── left columns: b.k:6
+ │    │    │    ├── right columns: b.k:11
+ │    │    │    ├── scan b
+ │    │    │    │    ├── columns: b.k:6!null
+ │    │    │    │    └── key: (6)
+ │    │    │    └── scan b
+ │    │    │         ├── columns: b.k:11!null
+ │    │    │         └── key: (11)
+ │    │    └── filters
+ │    │         └── k:16 < a.i:2 [outer=(2,16), constraints=(/2: (/NULL - ]; /16: (/NULL - ])]
+ │    └── aggregations
+ │         └── const-agg [as=k:16, outer=(16)]
+ │              └── k:16
+ └── projections
+      └── k:16 [as=k:17, outer=(16)]
 
 norm
 SELECT * FROM ((values (1,2))
