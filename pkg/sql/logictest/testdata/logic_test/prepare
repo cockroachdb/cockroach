@@ -1095,8 +1095,8 @@ PREPARE b AS OPT PLAN '
       (Scan [ (Table "t2") (Cols "k,str") ])
       [
         (Eq
-          (Mod (Var "k") (Const 2))
-          (Const 1)
+          (Mod (Var "k") (Const 2 "int"))
+          (Const 1 "int")
         )
       ]
     )
@@ -1120,8 +1120,8 @@ PREPARE e AS OPT PLAN '
       (Scan [ (Table "t2") (Cols "k,str") ])
       [
         (Eq
-          (Mod (Var "k") (Const 2))
-          (Const 1)
+          (Mod (Var "k") (Const 2 "int"))
+          (Const 1 "int")
         )
       ]
     )

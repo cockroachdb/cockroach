@@ -60,6 +60,11 @@ func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physi
 	return *result
 }
 
+// IntConst constructs a Const holding a DInt.
+func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
+	return c.f.ConstructConst(d, types.Int)
+}
+
 // ----------------------------------------------------------------------
 //
 // ScalarList functions
@@ -2208,7 +2213,7 @@ func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value opt.ScalarExpr) opt.Sca
 	builder.Add(string(*k), v.JSON)
 	j := builder.Build()
 
-	return c.f.ConstructConst(&tree.DJSON{JSON: j})
+	return c.f.ConstructConst(&tree.DJSON{JSON: j}, types.Jsonb)
 }
 
 // IsConstValueEqual returns whether const1 and const2 are equal.
@@ -2348,7 +2353,7 @@ func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) op
 	if err != nil {
 		panic(err)
 	}
-	return c.f.ConstructConst(d)
+	return c.f.ConstructConst(d, types.MakeCollatedString(str.DataType(), locale))
 }
 
 // MakeUnorderedSubquery returns a SubqueryPrivate that specifies no ordering.
@@ -2568,16 +2573,17 @@ func (c *CustomFuncs) EqualsNumber(datum tree.Datum, value int64) bool {
 	return false
 }
 
-// AddConstInts adds the numeric constants together. AddConstInts assumes the sum
-// will not overflow. Call CanAddConstInts on the constants to guarantee this.
-func (c *CustomFuncs) AddConstInts(first tree.Datum, second tree.Datum) tree.Datum {
+// AddConstInts adds the numeric constants together and constructs a Const.
+// AddConstInts assumes the sum will not overflow. Call CanAddConstInts on the
+// constants to guarantee this.
+func (c *CustomFuncs) AddConstInts(first tree.Datum, second tree.Datum) opt.ScalarExpr {
 	firstVal := int64(*first.(*tree.DInt))
 	secondVal := int64(*second.(*tree.DInt))
 	sum, ok := arith.AddWithOverflow(firstVal, secondVal)
 	if !ok {
 		panic(errors.AssertionFailedf("addition of %d and %d overflowed", firstVal, secondVal))
 	}
-	return tree.NewDInt(tree.DInt(sum))
+	return c.f.ConstructConst(tree.NewDInt(tree.DInt(sum)), types.Int)
 }
 
 // CanAddConstInts returns true if the addition of the two integers overflows.

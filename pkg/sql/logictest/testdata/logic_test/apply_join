@@ -45,7 +45,7 @@ PREPARE b AS OPT PLAN '
     (Scan [(Table "t") (Cols "k,str") ])
     (Select
       (Scan [(Table "u") (Cols "l,str2") ])
-      [ (Eq (Plus (Var "k") (Const 1)) (Var "l") )]
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
      )
     []
     []
@@ -72,7 +72,7 @@ PREPARE c AS OPT PLAN '
     (Scan [(Table "t") (Cols "k,str") ])
     (Select
       (Scan [(Table "u") (Cols "l,str2") ])
-      [ (Eq (Plus (Var "k") (Const 1)) (Var "l") )]
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
      )
     []
     []
@@ -98,7 +98,7 @@ PREPARE d AS OPT PLAN '
     (Scan [(Table "t") (Cols "k,str") ])
     (Select
       (Scan [(Table "u") (Cols "l,str2") ])
-      [ (Eq (Plus (Var "k") (Const 1)) (Var "l") )]
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
      )
     []
     []
@@ -158,7 +158,7 @@ PREPARE f AS OPT PLAN '
     (Select
       (Scan [(Table "u") (Cols "l,str2") ])
       [ (Eq (Plus (Var "k")
-                  (Subquery (Values [(Tuple [(Const 1)] "tuple{int}") ]
+                  (Subquery (Values [(Tuple [(Const 1 "int")] "tuple{int}") ]
                                     [(Cols [(NewColumn "z" "int")] )])
                             []))
             (Var "l") )]
