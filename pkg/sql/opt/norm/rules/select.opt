@@ -376,7 +376,13 @@ $input
 [PushFilterIntoSetOp, Normalize]
 (Select
     $input:(Set $left:* $right:* $colmap:*)
-    $filter:[ ... $item:* & (CanMapOnSetOp $item) ... ]
+    $filter:[
+        ...
+        $item:* &
+            (CanMapOnSetOp $item) &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
 )
 =>
 (Select
