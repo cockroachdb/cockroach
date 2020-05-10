@@ -2374,3 +2374,18 @@ select adnum from pg_attrdef WHERE adrelid = 85
 1
 3
 4
+
+# Check virtual table lookup joins.
+statement ok
+CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VALUES('jt'::regclass::int)
+
+query ITT
+SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
+----
+86  86  jt
+
+query ITT
+SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
+----
+1   NULL  NULL
+86  86    jt

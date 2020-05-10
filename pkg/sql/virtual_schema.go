@@ -300,6 +300,26 @@ func newInvalidVirtualDefEntryError() error {
 	return errors.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
 }
 
+func (e virtualDefEntry) validateRow(datums tree.Datums, columns sqlbase.ResultColumns) error {
+	if r, c := len(datums), len(columns); r != c {
+		return errors.AssertionFailedf("datum row count and column count differ: %d vs %d", r, c)
+	}
+	for i := range columns {
+		col := &columns[i]
+		datum := datums[i]
+		if datum == tree.DNull {
+			if !e.desc.Columns[i].Nullable {
+				return errors.AssertionFailedf("column %s.%s not nullable, but found NULL value",
+					e.desc.Name, col.Name)
+			}
+		} else if !datum.ResolvedType().Equivalent(col.Typ) {
+			return errors.AssertionFailedf("datum column %q expected to be type %s; found type %s",
+				col.Name, col.Typ, datum.ResolvedType())
+		}
+	}
+	return nil
+}
+
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
@@ -350,29 +370,10 @@ func (e virtualDefEntry) getPlanInfo(
 			}
 
 			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
-
-			validateRow := func(datums ...tree.Datum) error {
-				if r, c := len(datums), len(columns); r != c {
-					return errors.AssertionFailedf("datum row count and column count differ: %d vs %d", r, c)
-				}
-				for i, col := range columns {
-					datum := datums[i]
-					if datum == tree.DNull {
-						if !e.desc.Columns[i].Nullable {
-							return errors.AssertionFailedf("column %s.%s not nullable, but found NULL value",
-								e.desc.Name, col.Name)
-						}
-					} else if !datum.ResolvedType().Equivalent(col.Typ) {
-						return errors.AssertionFailedf("datum column %q expected to be type %s; found type %s",
-							col.Name, col.Typ, datum.ResolvedType())
-					}
-				}
-				return nil
-			}
 			if !constrainedScan {
 				generator, cleanup := setupGenerator(ctx, func(pusher rowPusher) error {
 					return def.populate(ctx, p, dbDesc, func(row ...tree.Datum) error {
-						if err := validateRow(row...); err != nil {
+						if err := e.validateRow(row, columns); err != nil {
 							return err
 						}
 						return pusher.pushRow(row...)
@@ -392,74 +393,8 @@ func (e virtualDefEntry) getPlanInfo(
 			columnIdxMap := table.ColumnIdxMap()
 			indexKeyDatums := make([]tree.Datum, len(index.ColumnIDs))
 
-			generator, cleanup := setupGenerator(ctx, func(pusher rowPusher) error {
-				var span constraint.Span
-				addRowIfPassesFilter := func(datums ...tree.Datum) error {
-					for i, id := range index.ColumnIDs {
-						indexKeyDatums[i] = datums[columnIdxMap[id]]
-					}
-					// Construct a single key span out of the current row, so that
-					// we can test it for containment within the constraint span of the
-					// filter that we're applying. The results of this containment check
-					// will tell us whether or not to let the current row pass the filter.
-					key := constraint.MakeCompositeKey(indexKeyDatums...)
-					span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
-					var err error
-					if idxConstraint.ContainsSpan(p.EvalContext(), &span) {
-						if err := validateRow(datums...); err != nil {
-							return err
-						}
-						return pusher.pushRow(datums...)
-					}
-					return err
-				}
-
-				// We have a virtual index with a constraint. Run the constrained
-				// populate routine for every span. If for some reason we can't use the
-				// index for a given span, we exit the loop early and run a "full scan"
-				// over the virtual table, filtering the output using the remaining
-				// spans.
-				// N.B. we count down in this loop so that, if we have to give up half
-				// way through, we can easily truncate the spans we already processed
-				// from the end and use them as a filter for the remaining rows of the
-				// table.
-				currentConstraint := idxConstraint.Spans.Count() - 1
-				for ; currentConstraint >= 0; currentConstraint-- {
-					span := idxConstraint.Spans.Get(currentConstraint)
-					if span.StartKey().Length() > 1 {
-						return errors.AssertionFailedf(
-							"programming error: can't push down composite constraints into vtables")
-					}
-					if !span.HasSingleKey(p.EvalContext()) {
-						// No hope - we can't deal with range scans on virtual indexes.
-						break
-					}
-					constraintDatum := span.StartKey().Value(0)
-					virtualIndex := def.getIndex(index.ID)
-
-					// For each span, run the index's populate method, constrained to the
-					// constraint span's value.
-					found, err := virtualIndex.populate(ctx, constraintDatum, p, dbDesc,
-						addRowIfPassesFilter)
-					if err != nil {
-						return err
-					}
-					if !found && virtualIndex.partial {
-						// If we found nothing, and the index was partial, we have no choice
-						// but to populate the entire table and search through it.
-						break
-					}
-				}
-				if currentConstraint < 0 {
-					// We successfully processed all constraints, so we can leave now.
-					return nil
-				}
-
-				// Fall back to a full scan of the table, using the remaining filters
-				// that weren't able to be used as constraints.
-				idxConstraint.Spans.Truncate(currentConstraint + 1)
-				return def.populate(ctx, p, dbDesc, addRowIfPassesFilter)
-			})
+			generator, cleanup := setupGenerator(ctx, e.makeConstrainedRowsGenerator(
+				ctx, p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns))
 			return p.newVirtualTableNode(columns, generator, cleanup), nil
 
 		default:
@@ -468,6 +403,90 @@ func (e virtualDefEntry) getPlanInfo(
 	}
 
 	return columns, constructor
+}
+
+// makeConstrainedRowsGenerator returns a generator function that can be invoked
+// to push all rows from this virtual table that satisfy the input index
+// constraint to a row pusher that's supplied to the generator function.
+func (e virtualDefEntry) makeConstrainedRowsGenerator(
+	ctx context.Context,
+	p *planner,
+	dbDesc *DatabaseDescriptor,
+	index *sqlbase.IndexDescriptor,
+	indexKeyDatums []tree.Datum,
+	columnIdxMap map[sqlbase.ColumnID]int,
+	idxConstraint *constraint.Constraint,
+	columns sqlbase.ResultColumns,
+) func(pusher rowPusher) error {
+	def := e.virtualDef.(virtualSchemaTable)
+	return func(pusher rowPusher) error {
+		var span constraint.Span
+		addRowIfPassesFilter := func(datums ...tree.Datum) error {
+			for i, id := range index.ColumnIDs {
+				indexKeyDatums[i] = datums[columnIdxMap[id]]
+			}
+			// Construct a single key span out of the current row, so that
+			// we can test it for containment within the constraint span of the
+			// filter that we're applying. The results of this containment check
+			// will tell us whether or not to let the current row pass the filter.
+			key := constraint.MakeCompositeKey(indexKeyDatums...)
+			span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+			var err error
+			if idxConstraint.ContainsSpan(p.EvalContext(), &span) {
+				if err := e.validateRow(datums, columns); err != nil {
+					return err
+				}
+				return pusher.pushRow(datums...)
+			}
+			return err
+		}
+
+		// We have a virtual index with a constraint. Run the constrained
+		// populate routine for every span. If for some reason we can't use the
+		// index for a given span, we exit the loop early and run a "full scan"
+		// over the virtual table, filtering the output using the remaining
+		// spans.
+		// N.B. we count down in this loop so that, if we have to give up half
+		// way through, we can easily truncate the spans we already processed
+		// from the end and use them as a filter for the remaining rows of the
+		// table.
+		currentConstraint := idxConstraint.Spans.Count() - 1
+		for ; currentConstraint >= 0; currentConstraint-- {
+			span := idxConstraint.Spans.Get(currentConstraint)
+			if span.StartKey().Length() > 1 {
+				return errors.AssertionFailedf(
+					"programming error: can't push down composite constraints into vtables")
+			}
+			if !span.HasSingleKey(p.EvalContext()) {
+				// No hope - we can't deal with range scans on virtual indexes.
+				break
+			}
+			constraintDatum := span.StartKey().Value(0)
+			virtualIndex := def.getIndex(index.ID)
+
+			// For each span, run the index's populate method, constrained to the
+			// constraint span's value.
+			found, err := virtualIndex.populate(ctx, constraintDatum, p, dbDesc,
+				addRowIfPassesFilter)
+			if err != nil {
+				return err
+			}
+			if !found && virtualIndex.partial {
+				// If we found nothing, and the index was partial, we have no choice
+				// but to populate the entire table and search through it.
+				break
+			}
+		}
+		if currentConstraint < 0 {
+			// We successfully processed all constraints, so we can leave now.
+			return nil
+		}
+
+		// Fall back to a full scan of the table, using the remaining filters
+		// that weren't able to be used as constraints.
+		idxConstraint.Spans.Truncate(currentConstraint + 1)
+		return def.populate(ctx, p, dbDesc, addRowIfPassesFilter)
+	}
 }
 
 // NewVirtualSchemaHolder creates a new VirtualSchemaHolder.

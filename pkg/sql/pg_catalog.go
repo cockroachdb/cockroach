@@ -1024,14 +1024,18 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 				populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *DatabaseDescriptor,
 					addRow func(...tree.Datum) error) (bool, error) {
 					var id sqlbase.ID
-					switch t := constraint.(type) {
+					d := tree.UnwrapDatum(p.EvalContext(), constraint)
+					if d == tree.DNull {
+						return false, nil
+					}
+					switch t := d.(type) {
 					case *tree.DOid:
 						id = sqlbase.ID(t.DInt)
 					case *tree.DInt:
 						id = sqlbase.ID(*t)
 					default:
 						return false, errors.AssertionFailedf("unexpected type %T for table id column in virtual table %s",
-							constraint, schemaDef)
+							d, schemaDef)
 					}
 					table, err := p.LookupTableByID(ctx, id)
 					if err != nil {
@@ -3006,7 +3010,7 @@ CREATE TABLE pg_catalog.pg_aggregate (
 								}
 							}
 						}
-						regprocForZeroOid := oidZero.AsRegProc("-")
+						regprocForZeroOid := tree.NewDOidWithName(tree.DInt(0), types.RegProc, "-")
 						err := addRow(
 							h.BuiltinOid(name, &overload).AsRegProc(name), // aggfnoid
 							aggregateKind,     // aggkind

@@ -89,6 +89,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *zigzagJoinNode:
 		return n.columns
+	case *vTableLookupJoinNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
