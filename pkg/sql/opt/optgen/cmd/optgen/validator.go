@@ -61,15 +61,19 @@ func (v *validator) validate(compiled *lang.CompiledExpr) []error {
 				exprsDone = true
 
 				if isExportedField(field) || isEmbeddedField(field) {
-					// Private definition.
-					if privateDone {
-						format := "private field '%s' cannot follow private or unexported field in '%s'"
-						v.addErrorf(field.Source(), format, field.Name, define.Name)
-						break
+					// Tolerate a Typ field for Scalars (even if there was a Private
+					// field).
+					if !(define.Tags.Contains("Scalar") && field.Name == "Typ" && field.Type == "Type") {
+						// Private definition.
+						if privateDone {
+							format := "private field '%s' cannot follow private or unexported field in '%s'"
+							v.addErrorf(field.Source(), format, field.Name, define.Name)
+							break
+						}
 					}
 				}
-				// This is either a private definition, or an unexported field. In either
-				// case, we can no longer accept a private definition.
+				// This is either a private definition, a Typ field, or an unexported
+				// field. In either case, we can no longer accept a private definition.
 				privateDone = true
 			}
 		}

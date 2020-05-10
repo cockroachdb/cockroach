@@ -99,6 +99,10 @@ define Variable {
 [Scalar, ConstValue]
 define Const {
     Value Datum
+
+    # Typ is the type of the constant. It is necessary because
+    # Value.ResolvedType() loses information in some cases.
+    Typ Type
 }
 
 # Null is the constant SQL null value that has "unknown value" semantics. If
