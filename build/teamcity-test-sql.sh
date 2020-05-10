@@ -15,14 +15,7 @@ run build/builder.sh make -Otarget c-deps &> artifacts/c-build.log || (cat artif
 rm artifacts/c-build.log
 tc_end_block "Compile C dependencies"
 
-maybe_stress stress
-
-tc_start_block "Run Go tests (excluding ./pkg/sql/logictest)"
-export PKG=$(go list ./pkg/... | grep -v "pkg/sql/logictest" | sed 's/github.com\/cockroachdb\/cockroach/./g' | paste -sd " " -)
+tc_start_block "Run Go tests (./pkg/sql/logictest only)"
+export PKG=$(go list ./pkg/... | grep "pkg/sql/logictest" | sed 's/github.com\/cockroachdb\/cockroach/./g' | paste -sd " " -)
 run_json_test build/builder.sh stdbuf -oL -eL make test GOTESTFLAGS=-json TESTFLAGS='-v' PKG="$PKG"
-tc_end_block "Run Go tests (excluding ./pkg/sql/logictest)"
-
-tc_start_block "Run C++ tests"
-# Buffer noisy output and only print it on failure.
-run build/builder.sh make check-libroach &> artifacts/c-tests.log || (cat artifacts/c-tests.log && false)
-tc_end_block "Run C++ tests"
+tc_end_block "Run Go tests (./pkg/sql/logictest only)"
