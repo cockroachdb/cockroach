@@ -299,6 +299,7 @@ alter_ddl_stmt ::=
 	| alter_database_stmt
 	| alter_range_stmt
 	| alter_partition_stmt
+	| alter_type_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user string_or_placeholder opt_role_options
@@ -618,13 +619,16 @@ unreserved_keyword ::=
 	| 'ACTION'
 	| 'ADD'
 	| 'ADMIN'
+	| 'AFTER'
 	| 'AGGREGATE'
 	| 'ALTER'
 	| 'ALWAYS'
 	| 'AT'
+	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
 	| 'AUTHORIZATION'
 	| 'BACKUP'
+	| 'BEFORE'
 	| 'BEGIN'
 	| 'BUCKET_COUNT'
 	| 'BUNDLE'
@@ -762,6 +766,7 @@ unreserved_keyword ::=
 	| 'OTHERS'
 	| 'OVER'
 	| 'OWNED'
+	| 'OWNER'
 	| 'PARENT'
 	| 'PARTIAL'
 	| 'PARTITION'
@@ -993,6 +998,13 @@ alter_range_stmt ::=
 
 alter_partition_stmt ::=
 	alter_zone_partition_stmt
+
+alter_type_stmt ::=
+	'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'SCONST' opt_add_val_placement
+	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'IF' 'NOT' 'EXISTS' 'SCONST' opt_add_val_placement
+	| 'ALTER' 'TYPE' type_name 'RENAME' 'VALUE' 'SCONST' 'TO' 'SCONST'
+	| 'ALTER' 'TYPE' type_name 'RENAME' 'TO' type_name
+	| 'ALTER' 'TYPE' type_name 'SET' 'SCHEMA' schema_name
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -1366,6 +1378,17 @@ alter_zone_partition_stmt ::=
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
+type_name ::=
+	db_object_name
+
+opt_add_val_placement ::=
+	'BEFORE' 'SCONST'
+	| 'AFTER' 'SCONST'
+	| 
+
+schema_name ::=
+	name
+
 opt_with ::=
 	'WITH'
 	| 
@@ -1430,9 +1453,6 @@ opt_partition_by ::=
 	partition_by
 	| 
 
-schema_name ::=
-	name
-
 opt_temp_create_table ::=
 	opt_temp
 	| 'LOCAL' 'TEMPORARY'
@@ -1447,9 +1467,6 @@ opt_table_elem_list ::=
 create_as_opt_col_list ::=
 	'(' create_as_table_defs ')'
 	| 
-
-type_name ::=
-	db_object_name
 
 opt_enum_val_list ::=
 	enum_val_list
