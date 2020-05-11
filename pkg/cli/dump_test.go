@@ -458,6 +458,7 @@ CREATE TABLE d.orders (
 	PRIMARY KEY (customer, id),
 	CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES d.customers
 ) INTERLEAVE IN PARENT d.customers (customer);
+CREATE INDEX i ON d.orders (customer, total) INTERLEAVE IN PARENT d.customers (customer);
 `
 
 	_, err := c.RunWithCaptureArgs([]string{"sql", "-e", create})
@@ -480,7 +481,7 @@ CREATE TABLE orders (
 ) INTERLEAVE IN PARENT customers (customer);
 
 ALTER TABLE orders ADD CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers(id);
-CREATE UNIQUE INDEX "primary" ON orders (customer ASC, id ASC) INTERLEAVE IN PARENT customers (customer);
+CREATE INDEX i ON orders (customer ASC, total ASC) INTERLEAVE IN PARENT customers (customer);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
 ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
