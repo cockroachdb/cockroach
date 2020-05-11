@@ -65,7 +65,8 @@ func (r *Replica) canServeFollowerRead(
 			ts.Forward(ba.Txn.MaxTimestamp)
 		}
 
-		canServeFollowerRead = ts.LessEq(r.maxClosed(ctx))
+		maxClosed, _ := r.maxClosed(ctx)
+		canServeFollowerRead = ts.LessEq(maxClosed)
 		if !canServeFollowerRead {
 			// We can't actually serve the read based on the closed timestamp.
 			// Signal the clients that we want an update so that future requests can succeed.
@@ -104,15 +105,22 @@ func (r *Replica) canServeFollowerRead(
 // start time of the current lease because leasePostApply bumps the timestamp
 // cache forward to at least the new lease start time. Using this combination
 // allows the closed timestamp mechanism to be robust to lease transfers.
-func (r *Replica) maxClosed(ctx context.Context) hlc.Timestamp {
+// If the ok return value is false, the Replica is a member of a range which
+// uses an expiration-based lease. Expiration-based leases do not support the
+// closed timestamp subsystem. A zero-value timestamp will be returned if ok
+// is false.
+func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	r.mu.RLock()
 	lai := r.mu.state.LeaseAppliedIndex
 	lease := *r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
 	r.mu.RUnlock()
+	if lease.Expiration != nil {
+		return hlc.Timestamp{}, false
+	}
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
 	maxClosed.Forward(lease.Start)
 	maxClosed.Forward(initialMaxClosed)
-	return maxClosed
+	return maxClosed, true
 }
