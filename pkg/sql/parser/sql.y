@@ -523,6 +523,9 @@ func (u *sqlSymUnion) typeReference() tree.ResolvableTypeReference {
 func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
     return u.val.([]tree.ResolvableTypeReference)
 }
+func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacement {
+    return u.val.(*tree.AlterTypeAddValuePlacement)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -542,11 +545,11 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACTION ADD ADMIN AGGREGATE
+%token <str> ABORT ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT AUTHORIZATION AUTOMATIC
 
-%token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BUNDLE BY
 
@@ -667,6 +670,7 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
 %type <tree.Statement> alter_role_stmt
+%type <tree.Statement> alter_type_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1006,6 +1010,7 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 
 %type <tree.ResolvableTypeReference> typename simple_typename cast_target
 %type <*types.T> const_typename
+%type <*tree.AlterTypeAddValuePlacement> opt_add_val_placement
 %type <bool> opt_timezone
 %type <*types.T> numeric opt_numeric_modifiers
 %type <*types.T> opt_float
@@ -1199,6 +1204,7 @@ alter_ddl_stmt:
 | alter_database_stmt  // EXTEND WITH HELP: ALTER DATABASE
 | alter_range_stmt     // EXTEND WITH HELP: ALTER RANGE
 | alter_partition_stmt // EXTEND WITH HELP: ALTER PARTITION
+| alter_type_stmt      // EXTEND WITH HELP: ALTER TYPE
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1865,6 +1871,65 @@ opt_validate_behavior:
 | /* EMPTY */
   {
     $$.val = tree.ValidationDefault
+  }
+
+// %Help: ALTER TYPE - change the definition of a type.
+// %Category: DDL
+// %Text: ALTER TYPE <typename> <command>
+//
+// Commands:
+//   ALTER TYPE ... ADD VALUE <value> [ { BEFORE | AFTER } <value> ]
+//   ALTER TYPE ... RENAME TO <newname>
+//   ALTER TYPE ... SET SCHEMA <newschemaname>
+alter_type_stmt:
+  ALTER TYPE type_name ADD VALUE SCONST opt_add_val_placement
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeAddValue{
+        NewVal: $6,
+        Placement: $7.alterTypeAddValuePlacement(),
+      },
+    }
+  }
+| ALTER TYPE type_name RENAME TO type_name
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeRename{
+        NewName: $6.unresolvedObjectName(),
+      },
+    }
+  }
+| ALTER TYPE type_name SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeSetSchema{
+        Schema: $6,
+      },
+    }
+  }
+| ALTER TYPE error // SHOW HELP: ALTER TYPE
+
+opt_add_val_placement:
+  BEFORE SCONST
+  {
+    $$.val = &tree.AlterTypeAddValuePlacement{
+       Before: true,
+       ExistingVal: $2,
+    }
+  }
+| AFTER SCONST
+  {
+    $$.val = &tree.AlterTypeAddValuePlacement{
+       Before: false,
+       ExistingVal: $2,
+    }
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.AlterTypeAddValuePlacement)(nil)
   }
 
 // %Help: BACKUP - back up data to external storage
@@ -10040,6 +10105,7 @@ unreserved_keyword:
 | ACTION
 | ADD
 | ADMIN
+| AFTER
 | AGGREGATE
 | ALTER
 | ALWAYS
@@ -10047,6 +10113,7 @@ unreserved_keyword:
 | AUTOMATIC
 | AUTHORIZATION
 | BACKUP
+| BEFORE
 | BEGIN
 | BUCKET_COUNT
 | BUNDLE

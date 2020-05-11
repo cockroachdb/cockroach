@@ -1359,6 +1359,12 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN ALTER TABLE t EXPERIMENTAL_AUDIT SET READ WRITE`},
 		{`ALTER TABLE t EXPERIMENTAL_AUDIT SET OFF`},
 
+		{`ALTER TYPE db.s.t ADD VALUE 'hi'`},
+		{`ALTER TYPE s.t ADD VALUE 'hi' BEFORE 'hello'`},
+		{`ALTER TYPE t ADD VALUE 'hi' AFTER 'howdy'`},
+		{`ALTER TYPE t RENAME TO t2`},
+		{`ALTER TYPE t SET SCHEMA newschema`},
+
 		{`COMMENT ON COLUMN a.b IS 'a'`},
 		{`COMMENT ON COLUMN a.b IS NULL`},
 		{`COMMENT ON COLUMN a.b.c IS 'a'`},
