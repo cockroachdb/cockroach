@@ -6731,7 +6731,9 @@ func TestProposalOverhead(t *testing.T) {
 	key := roachpb.Key("k")
 	var overhead uint32
 
-	cfg := TestStoreConfig(nil)
+	manual := hlc.NewManualClock(123)
+	tc := testContext{manualClock: manual}
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.TestingProposalFilter =
 		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
 			if len(args.Req.Requests) != 1 {
@@ -6754,12 +6756,14 @@ func TestProposalOverhead(t *testing.T) {
 			t.Logf(pretty.Sprint(args.Cmd))
 			return nil
 		}
-	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	ba := roachpb.BatchRequest{}
+	// Use a realistic timestamp with no logical portion to guarantee that the
+	// timestamp in the proposal has a deterministic size.
+	ba.Timestamp = hlc.Timestamp{WallTime: 1588747910671904812}
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},
 		Value:         roachpb.MakeValueFromString("v"),

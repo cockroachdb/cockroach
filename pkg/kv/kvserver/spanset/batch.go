@@ -66,35 +66,6 @@ func (i *Iterator) Iterator() storage.Iterator {
 	return i.i
 }
 
-// SeekGE is part of the engine.Iterator interface.
-func (i *Iterator) SeekGE(key storage.MVCCKey) {
-	if i.spansOnly {
-		i.err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
-	} else {
-		i.err = i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: key.Key}, i.ts)
-	}
-	if i.err == nil {
-		i.invalid = false
-	}
-	i.i.SeekGE(key)
-}
-
-// SeekLT is part of the engine.Iterator interface.
-func (i *Iterator) SeekLT(key storage.MVCCKey) {
-	// CheckAllowed{At} supports the span representation of [,key), which
-	// corresponds to the span [key.Prev(),).
-	revSpan := roachpb.Span{EndKey: key.Key}
-	if i.spansOnly {
-		i.err = i.spans.CheckAllowed(SpanReadOnly, revSpan)
-	} else {
-		i.err = i.spans.CheckAllowedAt(SpanReadOnly, revSpan, i.ts)
-	}
-	if i.err == nil {
-		i.invalid = false
-	}
-	i.i.SeekLT(key)
-}
-
 // Valid is part of the engine.Iterator interface.
 func (i *Iterator) Valid() (bool, error) {
 	if i.err != nil {
@@ -107,51 +78,57 @@ func (i *Iterator) Valid() (bool, error) {
 	return ok && !i.invalid, nil
 }
 
+// SeekGE is part of the engine.Iterator interface.
+func (i *Iterator) SeekGE(key storage.MVCCKey) {
+	i.i.SeekGE(key)
+	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
+}
+
+// SeekLT is part of the engine.Iterator interface.
+func (i *Iterator) SeekLT(key storage.MVCCKey) {
+	i.i.SeekLT(key)
+	// CheckAllowed{At} supports the span representation of [,key), which
+	// corresponds to the span [key.Prev(),).
+	i.checkAllowed(roachpb.Span{EndKey: key.Key}, true)
+}
+
 // Next is part of the engine.Iterator interface.
 func (i *Iterator) Next() {
 	i.i.Next()
-	if ok, _ := i.i.Valid(); ok {
-		if i.spansOnly {
-			if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
-				i.invalid = true
-			}
-		} else {
-			if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
-				i.invalid = true
-			}
-		}
-	}
+	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
 }
 
 // Prev is part of the engine.Iterator interface.
 func (i *Iterator) Prev() {
 	i.i.Prev()
-	if ok, _ := i.i.Valid(); ok {
-		if i.spansOnly {
-			if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
-				i.invalid = true
-			}
-		} else {
-			if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
-				i.invalid = true
-			}
-		}
-	}
+	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
 }
 
 // NextKey is part of the engine.Iterator interface.
 func (i *Iterator) NextKey() {
 	i.i.NextKey()
-	if ok, _ := i.i.Valid(); ok {
-		if i.spansOnly {
-			if i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}) != nil {
-				i.invalid = true
-			}
-		} else {
-			if i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: i.UnsafeKey().Key}, i.ts) != nil {
-				i.invalid = true
-			}
-		}
+	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
+}
+
+func (i *Iterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
+	i.invalid = false
+	i.err = nil
+	if ok, _ := i.i.Valid(); !ok {
+		// If the iterator is invalid after the operation, there's nothing to
+		// check. We allow uses of iterators to exceed the declared span bounds
+		// as long as the iterator itself is configured with proper boundaries.
+		return
+	}
+	var err error
+	if i.spansOnly {
+		err = i.spans.CheckAllowed(SpanReadOnly, span)
+	} else {
+		err = i.spans.CheckAllowedAt(SpanReadOnly, span, i.ts)
+	}
+	if errIfDisallowed {
+		i.err = err
+	} else {
+		i.invalid = err != nil
 	}
 }
 
