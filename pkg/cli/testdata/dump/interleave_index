@@ -109,9 +109,5 @@ CREATE TABLE d (
 	CONSTRAINT "primary" PRIMARY KEY (x ASC, y DESC, z DESC),
 	FAMILY "primary" (x, y, z)
 ) INTERLEAVE IN PARENT a (x, y);
-
-CREATE UNIQUE INDEX "primary" ON d (x ASC, y DESC, z DESC) INTERLEAVE IN PARENT a (x, y);
-
--- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
 ----
 ----
