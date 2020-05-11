@@ -130,7 +130,7 @@ const (
 	// If set, user defined types will be printed as '@id', where id is the
 	// stable type ID for the user defined type. This is used in DistSQL flows
 	// where we don't want to perform name resolution of types again.
-	fmtFormatUserDefinedTypesAsIDs
+	FmtFormatUserDefinedTypesAsIDs
 )
 
 // Composite/derived flag definitions follow.
@@ -157,9 +157,9 @@ const (
 
 	// FmtDistSQLSerialization is just like FmtCheckEquivalence, but it can be
 	// used to serialize expressions for query distribution. In particular, it
-	// includes the flag fmtFormatUserDefinedTypesAsIDs which serializes user
+	// includes the flag FmtFormatUserDefinedTypesAsIDs which serializes user
 	// defined types in a way that avoids name resolution for DistSQL evaluation.
-	FmtDistSQLSerialization FmtFlags = FmtCheckEquivalence | fmtFormatUserDefinedTypesAsIDs
+	FmtDistSQLSerialization FmtFlags = FmtCheckEquivalence | FmtFormatUserDefinedTypesAsIDs
 
 	// FmtArrayToString is a special composite flag suitable
 	// for the output of array_to_string(). This de-quotes

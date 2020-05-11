@@ -153,21 +153,13 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 		return nil, err
 	}
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
-	tdesc := desc.(*sqlbase.TypeDescriptor)
-	// Hydrate the types.T from the resolved descriptor. Once we cache
-	// descriptors, this hydration should install pointers to cached data.
-	switch t := tdesc.Kind; t {
-	case sqlbase.TypeDescriptor_ENUM:
-		typ := types.MakeEnum(uint32(tdesc.ID))
-		if err := tdesc.HydrateTypeInfo(typ); err != nil {
-			return nil, err
-		}
-		// Override the hydrated name with the fully resolved type name.
-		typ.TypeMeta.Name = &tn
-		return typ, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
+	typ, err := sqlbase.MakeTypeFromTypeDesc(desc.(*TypeDescriptor))
+	if err != nil {
+		return nil, err
 	}
+	// Override the hydrated name with the fully resolved type name.
+	typ.TypeMeta.Name = &tn
+	return typ, nil
 }
 
 // TODO (rohany): Once we start to cache type descriptors, this needs to
@@ -183,15 +175,43 @@ func (p *planner) getTypeDescByID(ctx context.Context, id sqlbase.ID) (*TypeDesc
 	if !ok {
 		return nil, errors.AssertionFailedf("%s was not a type descriptor", rawDesc)
 	}
+	// TODO (rohany): Should we perform lookups on the parent database andschema
+	//  in order to provide this type with a fully resolved name?
 	return typDesc, nil
 }
 
-// ResolveTypeByID implements the tree.TypeResolver interface. We disallow
-// accessing types directly by their ID in standard SQL contexts, so error
-// out nicely here.
-// TODO (rohany): Is there a need to disable this in the general case?
+// ResolveTypeByID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByID(id uint32) (*types.T, error) {
-	return nil, errors.Newf("type id reference @%d not allowed in this context", id)
+	// TODO (rohany): This should take in a context. See #49262.
+	desc, err := p.getTypeDescByID(p.EvalContext().Context, sqlbase.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return sqlbase.MakeTypeFromTypeDesc(desc)
+}
+
+// Helper method to hydrate the types within a TableDescriptor.
+func (p *planner) hydrateTableDescriptor(ctx context.Context, desc *TableDescriptor) error {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
+		if col.Type.UserDefined() {
+			// Look up its type descriptor.
+			typDesc, err := p.getTypeDescByID(ctx, sqlbase.ID(col.Type.StableTypeID()))
+			if err != nil {
+				return err
+			}
+			// TODO (rohany): This should be a noop if the hydrated type
+			//  information present in the descriptor has the same version as
+			//  the resolved type descriptor we found here.
+			// TODO (rohany): Once types are leased we need to create a new
+			//  ImmutableTableDescriptor when a type lease expires rather than
+			//  overwriting the types information in the shared descriptor.
+			if err := typDesc.HydrateTypeInfo(col.Type); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // maybeHydrateTypesInDescriptor hydrates any types.T's in the input descriptor.
@@ -200,39 +220,15 @@ func (p *planner) ResolveTypeByID(id uint32) (*types.T, error) {
 func (p *planner) maybeHydrateTypesInDescriptor(
 	ctx context.Context, objDesc tree.NameResolutionResult,
 ) error {
-	// Helper method to hydrate the types within a TableDescriptor.
-	hydrateDesc := func(desc *TableDescriptor) error {
-		for i := range desc.Columns {
-			col := &desc.Columns[i]
-			if col.Type.UserDefined() {
-				// Look up its type descriptor.
-				typDesc, err := p.getTypeDescByID(ctx, sqlbase.ID(col.Type.StableTypeID()))
-				if err != nil {
-					return err
-				}
-				// TODO (rohany): This should be a noop if the hydrated type
-				//  information present in the descriptor has the same version as
-				//  the resolved type descriptor we found here.
-				// TODO (rohany): Once types are leased we need to create a new
-				//  ImmutableTableDescriptor when a type lease expires rather than
-				//  overwriting the types information in the shared descriptor.
-				if err := typDesc.HydrateTypeInfo(col.Type); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-
 	// As of now, only {Mutable,Immutable}TableDescriptor have types.T that
 	// need to be hydrated.
 	switch desc := objDesc.(type) {
 	case *sqlbase.MutableTableDescriptor:
-		if err := hydrateDesc(desc.TableDesc()); err != nil {
+		if err := p.hydrateTableDescriptor(ctx, desc.TableDesc()); err != nil {
 			return err
 		}
 	case *sqlbase.ImmutableTableDescriptor:
-		if err := hydrateDesc(desc.TableDesc()); err != nil {
+		if err := p.hydrateTableDescriptor(ctx, desc.TableDesc()); err != nil {
 			return err
 		}
 	}
