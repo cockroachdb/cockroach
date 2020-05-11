@@ -538,6 +538,11 @@ type optTable struct {
 	outboundFKs []optForeignKeyConstraint
 	inboundFKs  []optForeignKeyConstraint
 
+	// checkConstraints is the set of check constraints for this table. It
+	// can be different from desc's constraints because of synthesized
+	// constraints for user defined types.
+	checkConstraints []cat.CheckConstraint
+
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap map[sqlbase.ColumnID]int
@@ -625,6 +630,55 @@ func newOptTable(
 	for i := range ot.families {
 		ot.families[i].init(ot, &desc.Families[i+1])
 	}
+
+	// Synthesize any check constraints for user defined types.
+	var synthesizedChecks []cat.CheckConstraint
+	// TODO (rohany): We don't allow referencing columns in mutations in these
+	//  expressions. However, it seems like we will need to have these checks
+	//  operate on columns in mutations. Consider the following case:
+	//  * a user adds a column with an enum type.
+	//  * the column has a default expression of an enum that is not in the
+	//    writeable state.
+	//  * We will need a check constraint here to ensure that writes to the
+	//    column are not successful, but we wouldn't be able to add that now.
+	for i := 0; i < ot.ColumnCount(); i++ {
+		col := ot.Column(i)
+		colType := col.DatumType()
+		if colType.UserDefined() {
+			switch colType.Family() {
+			case types.EnumFamily:
+				// TODO (rohany): When we can alter types, this logic will change.
+				//  In particular, we will want to generate two check constraints if the
+				//  enum contains values that are read only. The first constraint will
+				//  be validated, and contain all of the members of the enum. The second
+				//  will be unvalidated, and will contain only the writeable members of
+				//  the enum. The unvalidated constraint ensures that only writeable
+				//  members of the enum are written. The validated constraint ensures
+				//  that all potentially written values of the enum are considered when
+				//  planning read operations.
+				// We synthesize an (x IN (v1, v2, v3...)) check for enum types.
+				expr := &tree.ComparisonExpr{
+					Operator: tree.In,
+					Left:     &tree.ColumnItem{ColumnName: col.ColName()},
+					Right:    tree.NewDTuple(colType, tree.MakeAllDEnumsInType(colType)...),
+				}
+				synthesizedChecks = append(synthesizedChecks, cat.CheckConstraint{
+					Constraint: tree.Serialize(expr),
+					Validated:  true,
+				})
+			}
+		}
+	}
+	// Move all existing and synthesized checks into the opt table.
+	activeChecks := desc.ActiveChecks()
+	ot.checkConstraints = make([]cat.CheckConstraint, 0, len(activeChecks)+len(synthesizedChecks))
+	for i := range activeChecks {
+		ot.checkConstraints = append(ot.checkConstraints, cat.CheckConstraint{
+			Constraint: activeChecks[i].Expr,
+			Validated:  activeChecks[i].Validity == sqlbase.ConstraintValidity_Validated,
+		})
+	}
+	ot.checkConstraints = append(ot.checkConstraints, synthesizedChecks...)
 
 	// Add stats last, now that other metadata is initialized.
 	if stats != nil {
@@ -781,16 +835,12 @@ func (ot *optTable) Statistic(i int) cat.TableStatistic {
 
 // CheckCount is part of the cat.Table interface.
 func (ot *optTable) CheckCount() int {
-	return len(ot.desc.ActiveChecks())
+	return len(ot.checkConstraints)
 }
 
 // Check is part of the cat.Table interface.
 func (ot *optTable) Check(i int) cat.CheckConstraint {
-	check := ot.desc.ActiveChecks()[i]
-	return cat.CheckConstraint{
-		Constraint: check.Expr,
-		Validated:  check.Validity == sqlbase.ConstraintValidity_Validated,
-	}
+	return ot.checkConstraints[i]
 }
 
 // FamilyCount is part of the cat.Table interface.
