@@ -235,7 +235,7 @@ func TestDistance(t *testing.T) {
 			for _, subTC := range []struct {
 				desc                string
 				expected            float64
-				useSphereOrSpheroid useSphereOrSpheroid
+				useSphereOrSpheroid UseSphereOrSpheroid
 			}{
 				{"sphere", tc.expectedSphereDistance, UseSphere},
 				{"spheroid", tc.expectedSpheroidDistance, UseSpheroid},
