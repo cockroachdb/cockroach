@@ -24,7 +24,7 @@ import (
 func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 	desc := sqlbase.GetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
-	p := planner{}
+	p := planner{alloc: &sqlbase.DatumAlloc{}}
 	scan := p.Scan()
 	scan.desc = desc
 	err := scan.initDescDefaults(p.curPlan.deps, publicColumnsCfg)

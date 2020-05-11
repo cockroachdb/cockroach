@@ -65,7 +65,7 @@ type DiskRowContainer struct {
 	diskMonitor *mon.BytesMonitor
 	engine      diskmap.Factory
 
-	datumAlloc sqlbase.DatumAlloc
+	datumAlloc *sqlbase.DatumAlloc
 }
 
 var _ SortableRowContainer = &DiskRowContainer{}
@@ -92,6 +92,7 @@ func MakeDiskRowContainer(
 		scratchEncRow: make(sqlbase.EncDatumRow, len(types)),
 		diskMonitor:   diskMonitor,
 		engine:        e,
+		datumAlloc:    &sqlbase.DatumAlloc{},
 	}
 	d.bufferedRows = d.diskMap.NewBatchWriter()
 
@@ -144,14 +145,14 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	for i, orderInfo := range d.ordering {
 		col := orderInfo.ColIdx
 		var err error
-		d.scratchKey, err = row[col].Encode(d.types[col], &d.datumAlloc, d.encodings[i], d.scratchKey)
+		d.scratchKey, err = row[col].Encode(d.types[col], d.datumAlloc, d.encodings[i], d.scratchKey)
 		if err != nil {
 			return err
 		}
 	}
 	for _, i := range d.valueIdxs {
 		var err error
-		d.scratchVal, err = row[i].Encode(d.types[i], &d.datumAlloc, sqlbase.DatumEncoding_VALUE, d.scratchVal)
+		d.scratchVal, err = row[i].Encode(d.types[i], d.datumAlloc, sqlbase.DatumEncoding_VALUE, d.scratchVal)
 		if err != nil {
 			return err
 		}
