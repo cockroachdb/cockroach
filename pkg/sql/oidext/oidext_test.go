@@ -41,3 +41,18 @@ func TestTypeName(t *testing.T) {
 		})
 	}
 }
+
+// TestOIDsMaxValue ensures that any predefined OID values are less than
+// the set maximum for OIDs.
+func TestOIDsMaxValue(t *testing.T) {
+	for oid, name := range oid.TypeName {
+		if oid >= CockroachPredefinedOIDMax {
+			t.Fatalf("oid %d for type %s greater than max %d", oid, name, CockroachPredefinedOIDMax)
+		}
+	}
+	for oid, name := range ExtensionTypeName {
+		if oid >= CockroachPredefinedOIDMax {
+			t.Fatalf("oid %d for type %s greater than max %d", oid, name, CockroachPredefinedOIDMax)
+		}
+	}
+}
