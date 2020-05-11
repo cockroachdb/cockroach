@@ -820,7 +820,7 @@ func (rf *cFetcher) pushState(state fetcherState) {
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
 func (rf *cFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
-	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, &typ)
+	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, &rf.table.da, &typ)
 }
 
 // processValue processes the state machine's current value component, setting
