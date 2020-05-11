@@ -313,13 +313,15 @@ func maybeAddSequenceDependencies(
 		var seqDesc *MutableTableDescriptor
 		p, ok := sc.(*planner)
 		if ok {
-			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, ResolveRequireSequenceDesc)
+			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true, /* required */
+				false /* includeOffline */, ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			// This is only executed via IMPORT which uses its own resolver.
-			seqDesc, err = ResolveMutableExistingObject(ctx, sc, &tn, true /*required*/, ResolveRequireSequenceDesc)
+			seqDesc, err = ResolveMutableExistingObject(ctx, sc, &tn, true, /* required */
+				false /* includeOffline */, ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}

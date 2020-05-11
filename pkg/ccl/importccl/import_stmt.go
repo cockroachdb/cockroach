@@ -441,7 +441,8 @@ func importPlanHook(
 			// - Look at if/how cleanup/rollback works. Reconsider the cpu from the
 			//   desc version (perhaps we should be re-reading instead?).
 			// - Write _a lot_ of tests.
-			found, err := p.ResolveMutableTableDescriptor(ctx, table, true, sql.ResolveRequireTableDesc)
+			found, err := p.ResolveMutableTableDescriptor(ctx, table, true /* required */, false, /* includeOffline */
+				sql.ResolveRequireTableDesc)
 			if err != nil {
 				return err
 			}

@@ -61,8 +61,7 @@ func (t *truncateNode) startExec(params runParams) error {
 
 	for i := range n.Tables {
 		tn := &n.Tables[i]
-		tableDesc, err := p.ResolveMutableTableDescriptor(
-			ctx, tn, true /*required*/, ResolveRequireTableDesc)
+		tableDesc, err := p.ResolveMutableTableDescriptor(ctx, tn, true /* required */, false /* includeOffline */, ResolveRequireTableDesc)
 		if err != nil {
 			return err
 		}
