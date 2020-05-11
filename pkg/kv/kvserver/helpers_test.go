@@ -195,6 +195,12 @@ func (s *Store) ClearClosedTimestampStorage() {
 	s.cfg.ClosedTimestamp.Storage.Clear()
 }
 
+// RequestClosedTimestamp instructs the closed timestamp client to request the
+// relevant node to publish its MLAI for the provided range.
+func (s *Store) RequestClosedTimestamp(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
+	s.cfg.ClosedTimestamp.Clients.Request(nodeID, rangeID)
+}
+
 // AssertInvariants verifies that the store's bookkeping is self-consistent. It
 // is only valid to call this method when there is no in-flight traffic to the
 // store (e.g., after the store is shut down).
@@ -267,6 +273,11 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
+}
+
+// MaxClosed returns the maximum closed timestamp known to the Replica.
+func (r *Replica) MaxClosed(ctx context.Context) hlc.Timestamp {
+	return r.maxClosed(ctx)
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
