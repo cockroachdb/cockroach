@@ -118,13 +118,11 @@ func ResolveMutableExistingObject(
 	sc SchemaResolver,
 	tn *ObjectName,
 	required bool,
-	includeOffline bool,
 	requiredType ResolveRequiredType,
 ) (res *MutableTableDescriptor, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
 		RequireMutable:    true,
-		IncludeOffline:    includeOffline,
 	}
 	desc, err := resolveExistingObjectImpl(ctx, sc, tn, lookupFlags, requiredType)
 	if err != nil || desc == nil {
@@ -199,13 +197,9 @@ type resolveFlags struct {
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
-	ctx context.Context,
-	tn *ObjectName,
-	required bool,
-	includeOffline bool,
-	requiredType ResolveRequiredType,
+	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
 ) (table *MutableTableDescriptor, err error) {
-	return ResolveMutableExistingObject(ctx, p, tn, required, includeOffline, requiredType)
+	return ResolveMutableExistingObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
@@ -350,8 +344,7 @@ func getDescriptorsFromTargetList(
 			return nil, err
 		}
 		for i := range tableNames {
-			descriptor, err := ResolveMutableExistingObject(ctx, p, &tableNames[i],
-				true /* required */, false /* includeOffline */, ResolveAnyDescType)
+			descriptor, err := ResolveMutableExistingObject(ctx, p, &tableNames[i], true, ResolveAnyDescType)
 			if err != nil {
 				return nil, err
 			}
@@ -409,8 +402,7 @@ func findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := ResolveMutableExistingObject(ctx, sc, tn,
-			false /* required */, false /* includeOffline */, ResolveAnyDescType)
+		tableDesc, err := ResolveMutableExistingObject(ctx, sc, tn, false /*required*/, ResolveAnyDescType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -467,8 +459,7 @@ func expandIndexName(
 	tn = &index.Table
 	if tn.Table() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
-		const includeOffline = false
-		desc, err = ResolveMutableExistingObject(ctx, sc, tn, requireTable, includeOffline, ResolveRequireTableDesc)
+		desc, err = ResolveMutableExistingObject(ctx, sc, tn, requireTable, ResolveRequireTableDesc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -712,7 +703,7 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	requiredType ResolveRequiredType,
 ) (*MutableTableDescriptor, error) {
 	tn := name.ToTableName()
-	table, err := ResolveMutableExistingObject(ctx, p, &tn, required, false /* includeOffline */, requiredType)
+	table, err := ResolveMutableExistingObject(ctx, p, &tn, required, requiredType)
 	if err != nil {
 		return nil, err
 	}

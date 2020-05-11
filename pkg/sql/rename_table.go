@@ -43,7 +43,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		toRequire = ResolveRequireSequenceDesc
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, false /* includeOffline */, toRequire)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)
 	if err != nil {
 		return nil, err
 	}

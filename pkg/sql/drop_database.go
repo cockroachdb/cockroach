@@ -86,21 +86,13 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 
 	td := make([]toDelete, 0, len(tbNames))
 	for i := range tbNames {
-		tbDesc, err := p.prepareDrop(ctx, &tbNames[i],
-			false /*required*/, true /* includeOffline */, ResolveAnyDescType)
+		tbDesc, err := p.prepareDrop(ctx, &tbNames[i], false /*required*/, ResolveAnyDescType)
 		if err != nil {
 			return nil, err
 		}
 		if tbDesc == nil {
 			continue
 		}
-		if tbDesc.State == sqlbase.TableDescriptor_OFFLINE {
-			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"cannot drop a database with OFFLINE tables, ensure %s is"+
-					" dropped or made public before dropping database %s",
-				tbNames[i].String(), tree.AsString((*tree.Name)(&dbDesc.Name)))
-		}
-
 		// Recursively check permissions on all dependent views, since some may
 		// be in different databases.
 		for _, ref := range tbDesc.DependedOnBy {

@@ -35,7 +35,7 @@ type renameColumnNode struct {
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	// Check if table exists.
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, false /* includeOffline */, ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
