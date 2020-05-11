@@ -14,6 +14,7 @@ package backfill
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -295,7 +296,9 @@ func ConvertBackfillError(
 type IndexBackfiller struct {
 	backfiller
 
-	added []sqlbase.IndexDescriptor
+	added       []sqlbase.IndexDescriptor
+	addedCols   []sqlbase.ColumnDescriptor
+	updateExprs []tree.TypedExpr
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[sqlbase.ColumnID]int
 
@@ -319,11 +322,9 @@ func (ib *IndexBackfiller) Init(
 	evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
 ) error {
 	ib.evalCtx = evalCtx
-	numCols := len(desc.Columns)
 	cols := desc.Columns
 	if len(desc.Mutations) > 0 {
-		cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
-		cols = append(cols, desc.Columns...)
+		//cols = append(cols, desc.AddingColumns...)
 		for _, m := range desc.Mutations {
 			if column := m.GetColumn(); column != nil &&
 				m.Direction == sqlbase.DescriptorMutation_ADD &&
@@ -342,6 +343,14 @@ func (ib *IndexBackfiller) Init(
 		if IndexMutationFilter(m) {
 			idx := m.GetIndex()
 			ib.added = append(ib.added, *idx)
+
+			// Update columns to add.
+
+			// This has to exclude columns currently being added.
+			//cols = append(cols, idx.ColumnsToAdd...)
+
+			ib.addedCols = append(ib.addedCols, idx.ColumnsToAdd...)
+
 			for i := range cols {
 				id := cols[i].ID
 				if idx.ContainsColumnID(id) ||
@@ -352,14 +361,40 @@ func (ib *IndexBackfiller) Init(
 		}
 	}
 
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		desc.AddingColumns, &transform.ExprTransformContext{}, ib.evalCtx,
+	)
+	if err != nil {
+		return err
+	}
+
+	var txCtx transform.ExprTransformContext
+	computedExprs, err := sqlbase.MakeComputedExprs(desc.AddingColumns, desc,
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, ib.evalCtx, true /* addingCols */)
+	if err != nil {
+		return err
+	}
+
+	ib.updateExprs = make([]tree.TypedExpr, len(desc.AddingColumns))
+	for j := range desc.AddingColumns {
+		col := &desc.AddingColumns[j]
+		if col.IsComputed() {
+			ib.updateExprs[j] = computedExprs[j]
+		} else if defaultExprs == nil || defaultExprs[j] == nil {
+			ib.updateExprs[j] = tree.DNull
+		} else {
+			ib.updateExprs[j] = defaultExprs[j]
+		}
+	}
+
 	ib.types = make([]*types.T, len(cols))
-	for i := range cols {
-		ib.types[i] = cols[i].Type
+	for i, c := range cols {
+		ib.types[i] = c.Type
 	}
 
 	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
-	for i := range cols {
-		ib.colIdxMap[cols[i].ID] = i
+	for i, c := range cols {
+		ib.colIdxMap[c.ID] = i
 	}
 
 	tableArgs := row.FetcherTableArgs{
@@ -410,6 +445,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil, nil, err
 	}
 
+	iv := &sqlbase.RowIndexedVarContainer{
+		//Cols: append(tableDesc.Columns, tableDesc.AddingColumns...),
+		Cols:    tableDesc.Columns,
+		Mapping: ib.colIdxMap,
+	}
+	ib.evalCtx.IVarContainer = iv
+
 	buffer := make([]sqlbase.IndexEntry, len(ib.added))
 	for i := int64(0); i < chunkSize; i++ {
 		encRow, _, _, err := ib.fetcher.NextRow(ctx)
@@ -420,11 +462,47 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			break
 		}
 		if len(ib.rowVals) == 0 {
-			ib.rowVals = make(tree.Datums, len(encRow))
+			ib.rowVals = make(tree.Datums, len(encRow)+len(tableDesc.AddingColumns))
 		}
 		if err := sqlbase.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.alloc); err != nil {
 			return nil, nil, err
 		}
+
+		// Evaluate new values.
+		iv.CurSourceRow = ib.rowVals
+		for j, e := range ib.updateExprs {
+			val, err := e.Eval(ib.evalCtx)
+			if err != nil {
+				return nil, roachpb.Key{}, sqlbase.NewInvalidSchemaDefinitionError(err)
+			}
+			if j < len(tableDesc.AddingColumns) && !tableDesc.AddingColumns[j].Nullable && val == tree.DNull {
+				return nil, roachpb.Key{}, sqlbase.NewNonNullViolationError(tableDesc.AddingColumns[j].Name)
+			}
+
+			if j < len(tableDesc.AddingColumns) {
+				iv.CurSourceRow = append(iv.CurSourceRow, val)
+			}
+			//z := len(iv.Cols) - len(tableDesc.AddingColumns) + j
+			z := len(iv.Cols) + j
+			fmt.Println(z, val)
+			ib.rowVals[z] = val
+			fmt.Printf("%v\n", ib.rowVals)
+		}
+
+		mapCopy := make(map[sqlbase.ColumnID]int)
+
+		count := 0
+		for k, v := range ib.colIdxMap {
+			count++
+			mapCopy[k] = v
+		}
+
+		for i := range tableDesc.AddingColumns {
+			mapCopy[tableDesc.AddingColumns[i].ID] = count
+			count++
+		}
+
+		// New val isn't being written to KVs.
 
 		// We're resetting the length of this slice for variable length indexes such as inverted
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
@@ -436,7 +514,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ib.evalCtx.Codec,
 			tableDesc.TableDesc(),
 			ib.added,
-			ib.colIdxMap,
+			mapCopy,
 			ib.rowVals,
 			buffer,
 			false, /* includeEmpty */
@@ -449,7 +527,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 }
 
 // RunIndexBackfillChunk runs an index backfill over a chunk of the table
-// by tracversing the span sp provided. The backfill is run for the added
+// by traversing the span sp provided. The backfill is run for the added
 // indexes.
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
@@ -466,7 +544,9 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	}
 	batch := txn.NewBatch()
 
+	// Need to write the KVs for the new columns.
 	for _, entry := range entries {
+		fmt.Println(entry)
 		if traceKV {
 			log.VEventf(ctx, 2, "InitPut %s -> %s", entry.Key, entry.Value.PrettyPrint())
 		}

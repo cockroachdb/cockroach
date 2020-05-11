@@ -750,8 +750,10 @@ func (desc *TableDescriptor) KeysPerRow(indexID IndexID) (int, error) {
 // AllNonDropColumns returns all the columns, including those being added
 // in the mutations.
 func (desc *TableDescriptor) AllNonDropColumns() []ColumnDescriptor {
-	cols := make([]ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+	cols := make([]ColumnDescriptor, 0,
+		len(desc.Columns)+len(desc.Mutations)+len(desc.AddingColumns))
 	cols = append(cols, desc.Columns...)
+	cols = append(cols, desc.AddingColumns...)
 	for _, m := range desc.Mutations {
 		if col := m.GetColumn(); col != nil {
 			if m.Direction == DescriptorMutation_ADD {
@@ -769,13 +771,24 @@ func (desc *TableDescriptor) AllNonDropIndexes() []*IndexDescriptor {
 	if desc.IsPhysicalTable() {
 		indexes = append(indexes, &desc.PrimaryIndex)
 	}
+
+	seen := make(map[IndexID]bool)
+	seen[desc.PrimaryIndex.ID] = true
 	for i := range desc.Indexes {
 		indexes = append(indexes, &desc.Indexes[i])
+		seen[desc.Indexes[i].ID] = true
 	}
+
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
 			if m.Direction == DescriptorMutation_ADD {
-				indexes = append(indexes, idx)
+				// Hack since if an add index mutation is created within a mutation,
+				// the index will be in both mutations and desc.Indexes.
+				// Need to find way around this.
+				if !seen[idx.ID] {
+					indexes = append(indexes, idx)
+					seen[idx.ID] = true
+				}
 			}
 		}
 	}
@@ -1224,6 +1237,9 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 	for i := range desc.Columns {
 		desc.MaybeFillColumnID(&desc.Columns[i], columnNames)
 	}
+	for i := range desc.AddingColumns {
+		desc.MaybeFillColumnID(&desc.AddingColumns[i], columnNames)
+	}
 	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
 			desc.MaybeFillColumnID(c, columnNames)
@@ -1362,8 +1378,15 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 	}
 
 	isCompositeColumn := make(map[ColumnID]struct{})
-	for i := range desc.Columns {
+	for i := range append(desc.Columns) {
 		col := &desc.Columns[i]
+		if HasCompositeKeyEncoding(col.Type) {
+			isCompositeColumn[col.ID] = struct{}{}
+		}
+	}
+
+	for i := range append(desc.AddingColumns) {
+		col := &desc.AddingColumns[i]
 		if HasCompositeKeyEncoding(col.Type) {
 			isCompositeColumn[col.ID] = struct{}{}
 		}
@@ -1452,7 +1475,7 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 		desc.NextFamilyID = 1
 	}
 
-	columnsInFamilies := make(map[ColumnID]struct{}, len(desc.Columns))
+	columnsInFamilies := make(map[ColumnID]struct{}, len(desc.Columns)+len(desc.AddingColumns))
 	for i := range desc.Families {
 		family := &desc.Families[i]
 		if family.ID == 0 && i != 0 {
@@ -1520,6 +1543,9 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 	}
 	for i := range desc.Columns {
 		ensureColumnInFamily(&desc.Columns[i])
+	}
+	for i := range desc.AddingColumns {
+		ensureColumnInFamily(&desc.AddingColumns[i])
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
@@ -1801,7 +1827,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 	}
 
 	columnNames := make(map[string]ColumnID, len(desc.Columns))
-	columnIDs := make(map[ColumnID]string, len(desc.Columns))
+	columnIDs := make(map[ColumnID]string, len(desc.Columns)+len(desc.AddingColumns))
 	for _, column := range desc.AllNonDropColumns() {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
@@ -1875,6 +1901,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 	// Only validate column families and indexes if this is actually a table, not
 	// if it's just a view.
 	if desc.IsPhysicalTable() {
+
+		for _, c := range desc.DroppingColumns {
+			columnIDs[c.ID] = c.Name
+		}
+
 		if err := desc.validateColumnFamilies(columnIDs); err != nil {
 			return err
 		}
@@ -1900,16 +1931,17 @@ func (desc *TableDescriptor) ValidateTable() error {
 		// If we have seen an alter primary key mutation, then
 		// m we are considering right now is invalid.
 		if foundAlterPK {
+			fmt.Println("warning, pk change")
 			if alterPKMutation == m.MutationID {
 				return unimplemented.NewWithIssue(
 					45615,
 					"cannot perform other schema changes in the same transaction as a primary key change",
 				)
 			}
-			return unimplemented.NewWithIssue(
-				45615,
-				"cannot perform a schema change operation while a primary key change is in progress",
-			)
+			//return unimplemented.NewWithIssue(
+			//	45615,
+			//	"cannot perform a schema change operation while a primary key change is in progress",
+			//)
 		}
 		if m.GetPrimaryKeySwap() != nil {
 			foundAlterPK = true
@@ -2006,7 +2038,8 @@ func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnI
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[IndexID]string{}
-	for _, index := range desc.AllNonDropIndexes() {
+	nonDropIndexes := desc.AllNonDropIndexes()
+	for _, index := range nonDropIndexes {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
 		}
@@ -2028,6 +2061,7 @@ func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnI
 		indexNames[index.Name] = struct{}{}
 
 		if other, ok := indexIDs[index.ID]; ok {
+			fmt.Println(nonDropIndexes)
 			return fmt.Errorf("index %q duplicate ID of index %q: %d",
 				index.Name, other, index.ID)
 		}
@@ -3198,6 +3232,21 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return err
 				}
 			}
+
+			// Swap columns after pk swap, should move this.
+			// Potentially not all AddingColumns should be moved into columns.
+			for i := range desc.AddingColumns {
+				col := &desc.AddingColumns[i]
+				desc.AddColumn(col)
+				desc.AddingColumns = append(desc.AddingColumns[:i:i], desc.AddingColumns[i+1:]...)
+			}
+
+			for _, c := range desc.DroppingColumns {
+				desc.RemoveColumnFromFamily(c.ID)
+			}
+
+			desc.AddingColumns = nil
+			desc.DroppingColumns = nil
 		}
 
 	case DescriptorMutation_DROP:

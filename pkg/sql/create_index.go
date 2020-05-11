@@ -309,6 +309,9 @@ func maybeCreateAndAddShardCol(
 		if isNewTable {
 			desc.AddColumn(shardCol)
 		} else {
+			// Adding this column using the PK swap method will fail right now
+			// since the index mutation and pk swap mutations are in the same
+			// transaction.
 			desc.AddColumnMutation(shardCol, sqlbase.DescriptorMutation_ADD)
 		}
 		created = true

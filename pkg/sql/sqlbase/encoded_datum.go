@@ -424,10 +424,10 @@ func EncDatumRowToDatums(
 	if len(types) != len(row) {
 		panic(fmt.Sprintf("mismatched types (%v) and row (%v)", types, row))
 	}
-	if len(row) != len(datums) {
-		return errors.Errorf(
-			"Length mismatch (%d and %d) between datums and row", len(datums), len(row))
-	}
+	//if len(row) != len(datums) {
+	//	return errors.Errorf(
+	//		"Length mismatch (%d and %d) between datums and row", len(datums), len(row))
+	//}
 	for i, encDatum := range row {
 		if encDatum.IsUnset() {
 			datums[i] = tree.DNull

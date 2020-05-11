@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
@@ -143,6 +144,9 @@ func (ib *indexBackfiller) runChunk(
 	chunkSize int64,
 	readAsOf hlc.Timestamp,
 ) (roachpb.Key, error) {
+	// Need index backfiller to know about new column ids.
+	// And backfill those values as well, directly here instead of
+	// using runChunk.
 	knobs := &ib.flowCtx.Cfg.TestingKnobs
 	if knobs.RunBeforeBackfillChunk != nil {
 		if err := knobs.RunBeforeBackfillChunk(sp); err != nil {
@@ -174,6 +178,7 @@ func (ib *indexBackfiller) runChunk(
 
 	start = timeutil.Now()
 	for _, i := range entries {
+		fmt.Println(i)
 		if err := ib.adder.Add(ctx, i.Key, i.Value.RawBytes); err != nil {
 			return nil, ib.wrapDupError(ctx, err)
 		}

@@ -212,6 +212,8 @@ func NewProcessor(
 		case execinfrapb.BackfillerSpec_Index:
 			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		case execinfrapb.BackfillerSpec_Column:
+
+			// Assume every ColumnBackfill has an index created.
 			return newColumnBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
 	}

@@ -447,6 +447,9 @@ message IndexDescriptor {
   // GeoConfig, if it's not the zero value, describes configuration for
   // this geospatial inverted index.
   optional geo.geoindex.Config geo_config = 22 [(gogoproto.nullable) = false];
+
+  repeated ColumnDescriptor columns_to_add = 23
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "ColumnsToAdd"];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
@@ -961,6 +964,11 @@ message TableDescriptor {
   // before 20.1 refer to persistent tables, so lack of the flag being set implies
   // the table is persistent.
   optional bool temporary = 39 [(gogoproto.nullable) = false];
+
+  // Columns that are being added via a PK swap but are not public yet.
+  // Adding columns are moved to columns once the pk swap mutation finishes.
+  repeated ColumnDescriptor adding_columns = 41 [(gogoproto.nullable) = false];
+  repeated ColumnDescriptor dropping_columns = 42 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

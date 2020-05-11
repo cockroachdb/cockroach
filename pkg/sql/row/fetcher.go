@@ -284,6 +284,8 @@ func (rf *Fetcher) Init(
 	for tableIdx, tableArgs := range tables {
 		oldTable := rf.tables[tableIdx]
 
+		// Need to add cols being added from index as well.
+		// Not yet added to desc.
 		table := tableInfo{
 			spans:            tableArgs.Spans,
 			desc:             tableArgs.Desc,
