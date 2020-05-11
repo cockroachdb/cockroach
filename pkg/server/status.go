@@ -1363,10 +1363,10 @@ func (s *statusServer) Ranges(
 			// Use IterateRangeDescriptors to read from the engine only
 			// because it's already exported.
 			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) (bool, error) {
+				func(desc roachpb.RangeDescriptor) (done bool, _ error) {
 					rep, err := store.GetReplica(desc.RangeID)
 					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-						return true, nil // continue
+						return false, nil // continue
 					}
 					if err != nil {
 						return true, err
