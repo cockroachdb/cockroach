@@ -495,10 +495,9 @@ func TestTypes(t *testing.T) {
 
 		// ENUMs
 		{MakeEnum(15210), &T{InternalType: InternalType{
-			Family: EnumFamily,
-			Locale: &emptyLocale,
-			// TODO (rohany): Oid will be populated in the future.
-			Oid:          0,
+			Family:       EnumFamily,
+			Locale:       &emptyLocale,
+			Oid:          StableTypeIDToOID(15210),
 			StableTypeID: 15210,
 		}}},
 	}

@@ -1002,17 +1002,13 @@ message TypeDescriptor {
   // id is the globally unique ID for this type.
   optional uint32 id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
-  // oid is the Postgres compatible OID for this type. It is intended to be
-  // used only within catalog tables.
-  optional uint32 oid = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "OID"];
-
   // Represents the kind of type that this type descriptor represents.
   enum Kind {
     // Represents a user defined enum type.
     ENUM = 0;
     // Add more entries as we support more user defined types.
   }
-  optional Kind kind = 6 [(gogoproto.nullable) = false];
+  optional Kind kind = 5 [(gogoproto.nullable) = false];
 
   // The fields below are used only when this type is an ENUM type.
 
@@ -1024,7 +1020,7 @@ message TypeDescriptor {
     // TODO (rohany): Add the state here.
   }
   // enum_members is the set of values in an enum.
-  repeated EnumMember enum_members = 7 [(gogoproto.nullable) = false];
+  repeated EnumMember enum_members = 6 [(gogoproto.nullable) = false];
 
   // TODO (rohany): Do we need a draining names like the table descriptor?
 }

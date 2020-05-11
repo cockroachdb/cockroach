@@ -409,6 +409,17 @@ func getDescriptorsFromTargetList(
 		for i := range tableNames {
 			descriptor, err := ResolveMutableExistingTableObject(ctx, p, &tableNames[i], true, ResolveAnyDescType)
 			if err != nil {
+				if sqlbase.IsUndefinedRelationError(err) {
+					// See if we errored out trying to access a type instead of a
+					// table descriptor. If so, continue to the next name.
+					_, err := p.ResolveType(tableNames[i].ToUnresolvedObjectName())
+					if err != nil {
+						return nil, err
+					}
+					// If we found a type with no problems, then continue on to the
+					// next object name.
+					continue
+				}
 				return nil, err
 			}
 			descs = append(descs, descriptor)

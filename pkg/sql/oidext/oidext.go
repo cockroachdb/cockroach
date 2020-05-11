@@ -16,6 +16,11 @@ package oidext
 
 import "github.com/lib/pq/oid"
 
+// CockroachPredefinedOIDMax defines the maximum OID allowed for use by
+// non user defined types. OIDs for user defined types will start at
+// CockroachPrefixedOIDMax and increase as new types are created.
+const CockroachPredefinedOIDMax = 100000
+
 // OIDs in this block are extensions of postgres, thus having no official OID.
 const (
 	T_geometry   = oid.Oid(90000)

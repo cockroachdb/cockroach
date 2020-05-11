@@ -940,6 +940,7 @@ func MakeTimestampTZ(precision int32) *T {
 func MakeEnum(typeID uint32) *T {
 	return &T{InternalType: InternalType{
 		Family:       EnumFamily,
+		Oid:          StableTypeIDToOID(typeID),
 		StableTypeID: typeID,
 		Locale:       &emptyLocale,
 	}}
@@ -2270,6 +2271,20 @@ func (t *T) stringTypeSQL() string {
 
 	return typName
 }
+
+// StableTypeIDToOID converts a stable descriptor ID into a type OID.
+func StableTypeIDToOID(id uint32) oid.Oid {
+	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
+}
+
+// UserDefinedTypeOIDToID converts a user defined type OID into a stable
+// descriptor ID.
+func UserDefinedTypeOIDToID(oid oid.Oid) uint32 {
+	return uint32(oid) - oidext.CockroachPredefinedOIDMax
+}
+
+// Silence unused warnings.
+var _ = UserDefinedTypeOIDToID
 
 var typNameLiterals map[string]*T
 

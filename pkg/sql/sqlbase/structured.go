@@ -4118,6 +4118,7 @@ func (desc *TypeDescriptor) SetName(name string) {
 //  ImmutableTypeDescriptor so that pointers to the cached info
 //  can be shared among callers.
 func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
+	typ.TypeMeta.Name = tree.NewUnqualifiedTypeName(tree.Name(desc.Name))
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
