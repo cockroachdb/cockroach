@@ -1231,7 +1231,7 @@ func (ef *execFactory) ConstructInsert(
 	}
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, checkFKs, fkTables, &ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, checkFKs, fkTables, ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1296,7 +1296,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, &ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1408,7 +1408,7 @@ func (ef *execFactory) ConstructUpdate(
 		row.UpdaterDefault,
 		checkFKs,
 		ef.planner.EvalContext(),
-		&ef.planner.alloc,
+		ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1554,7 +1554,7 @@ func (ef *execFactory) ConstructUpsert(
 		insertColDescs,
 		checkFKs,
 		fkTables,
-		&ef.planner.alloc,
+		ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1572,7 +1572,7 @@ func (ef *execFactory) ConstructUpsert(
 		row.UpdaterDefault,
 		checkFKs,
 		ef.planner.EvalContext(),
-		&ef.planner.alloc,
+		ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1599,7 +1599,7 @@ func (ef *execFactory) ConstructUpsert(
 			insertCols: ri.InsertCols,
 			tw: optTableUpserter{
 				ri:            ri,
-				alloc:         &ef.planner.alloc,
+				alloc:         ef.planner.alloc,
 				canaryOrdinal: int(canaryCol),
 				fkTables:      fkTables,
 				fetchCols:     fetchColDescs,
@@ -1688,7 +1688,7 @@ func (ef *execFactory) ConstructDelete(
 		fetchColDescs,
 		checkFKs,
 		ef.planner.EvalContext(),
-		&ef.planner.alloc,
+		ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1703,7 +1703,7 @@ func (ef *execFactory) ConstructDelete(
 	*del = deleteNode{
 		source: input.(planNode),
 		run: deleteRun{
-			td: tableDeleter{rd: rd, alloc: &ef.planner.alloc},
+			td: tableDeleter{rd: rd, alloc: ef.planner.alloc},
 		},
 	}
 

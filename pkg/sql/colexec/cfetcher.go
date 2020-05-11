@@ -162,7 +162,7 @@ func (m colIdxMap) get(c sqlbase.ColumnID) (int, bool) {
 //   }
 type cFetcher struct {
 	// table is the table that's configured for fetching.
-	table cTableInfo
+	table *cTableInfo
 
 	// reverse denotes whether or not the spans should be read in reverse
 	// or not when StartScan is invoked.
@@ -266,7 +266,6 @@ func (rf *cFetcher) Init(
 	}
 
 	tableArgs := tables[0]
-	oldTable := rf.table
 
 	m := colIdxMap{
 		vals: make(sqlbase.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
@@ -278,20 +277,13 @@ func (rf *cFetcher) Init(
 	}
 	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
-	table := cTableInfo{
+	table := &cTableInfo{
 		spans:            tableArgs.Spans,
 		desc:             tableArgs.Desc,
 		colIdxMap:        m,
 		index:            tableArgs.Index,
 		isSecondaryIndex: tableArgs.IsSecondaryIndex,
 		cols:             colDescriptors,
-
-		// These slice fields might get re-allocated below, so reslice them from
-		// the old table here in case they've got enough capacity already.
-		indexColOrdinals:       oldTable.indexColOrdinals[:0],
-		extraValColOrdinals:    oldTable.extraValColOrdinals[:0],
-		allIndexColOrdinals:    oldTable.allIndexColOrdinals[:0],
-		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
 
 	typs := make([]*types.T, len(colDescriptors))
@@ -403,7 +395,7 @@ func (rf *cFetcher) Init(
 	if err != nil {
 		return err
 	}
-	if cHasExtraCols(&table) {
+	if cHasExtraCols(table) {
 		// Unique secondary indexes have a value that is the
 		// primary index key.
 		// Primary indexes only contain ascendingly-encoded
@@ -908,7 +900,7 @@ func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int, typ *types.T) tree.Datum 
 func (rf *cFetcher) processValue(
 	ctx context.Context, familyID sqlbase.FamilyID,
 ) (prettyKey string, prettyValue string, err error) {
-	table := &rf.table
+	table := rf.table
 
 	if rf.traceKV {
 		var buf strings.Builder
@@ -1211,7 +1203,7 @@ func (rf *cFetcher) processValueTuple(
 }
 
 func (rf *cFetcher) fillNulls() error {
-	table := &rf.table
+	table := rf.table
 	if rf.machine.remainingValueColsByIdx.Empty() {
 		return nil
 	}
