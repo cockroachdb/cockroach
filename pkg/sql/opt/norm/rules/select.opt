@@ -373,10 +373,19 @@ $input
 # Union (All):        (A Union B) \ C => (A \ C) Union (B \ C)
 # Intersection (All): (A Intersect B) \ C => (A \ C) Intersect (B \ C)
 # Except (All):       (A Except B) \ C => (A \ C) Except (B \ C)
+#
+# We don't push a filter down if it references outer columns because doing so
+# prevents decorrelation.
 [PushFilterIntoSetOp, Normalize]
 (Select
     $input:(Set $left:* $right:* $colmap:*)
-    $filter:[ ... $item:* & (CanMapOnSetOp $item) ... ]
+    $filter:[
+        ...
+        $item:* &
+            (CanMapOnSetOp $item) &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
 )
 =>
 (Select
