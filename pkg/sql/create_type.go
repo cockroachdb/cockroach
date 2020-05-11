@@ -138,7 +138,11 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		}
 	}
 
-	// TODO (rohany): We need to generate an oid for this type!
+	// TODO (rohany): OID's are computed using an offset of
+	//  oidext.CockroachPredefinedOIDMax from the descriptor ID. Once we have
+	//  a free list of descriptor ID's (#48438), we should allocate an ID from
+	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
+	//  maximum uint32 value.
 	typeDesc := &sqlbase.TypeDescriptor{
 		ParentID:       db.ID,
 		ParentSchemaID: keys.PublicSchemaID,

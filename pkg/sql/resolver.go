@@ -402,16 +402,22 @@ func getDescriptorsFromTargetList(
 		if err != nil {
 			return nil, err
 		}
-		tableNames, err := expandTableGlob(ctx, p, tableGlob)
+		objectNames, err := expandTableGlob(ctx, p, tableGlob)
 		if err != nil {
 			return nil, err
 		}
-		for i := range tableNames {
-			descriptor, err := ResolveMutableExistingTableObject(ctx, p, &tableNames[i], true, ResolveAnyDescType)
+		for i := range objectNames {
+			// We set required to false here, because there could be type names in
+			// the returned set of names, so we don't want to error out if we
+			// couldn't resolve a name into a table.
+			descriptor, err := ResolveMutableExistingTableObject(
+				ctx, p, &objectNames[i], false /* required */, ResolveAnyDescType)
 			if err != nil {
 				return nil, err
 			}
-			descs = append(descs, descriptor)
+			if descriptor != nil {
+				descs = append(descs, descriptor)
+			}
 		}
 	}
 	if len(descs) == 0 {
@@ -599,7 +605,7 @@ func (p *planner) getTableAndIndex(
 	return sqlbase.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
-// expandTableGlob expands pattern into a list of tables represented
+// expandTableGlob expands pattern into a list of objects represented
 // as a tree.TableNames.
 func expandTableGlob(
 	ctx context.Context, p *planner, pattern tree.TablePattern,
