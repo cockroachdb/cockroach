@@ -112,6 +112,7 @@ message BackupManifest {
   repeated sql.stats.TableStatisticProto statistics = 21;
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
+  repeated string stmts = 23;
 }
 
 message BackupPartitionDescriptor{
