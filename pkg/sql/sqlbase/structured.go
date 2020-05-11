@@ -4174,6 +4174,20 @@ func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
 	}
 }
 
+// MakeTypeFromTypeDesc creates a types.T from the input type descriptor.
+func MakeTypeFromTypeDesc(desc *TypeDescriptor) (*types.T, error) {
+	switch t := desc.Kind; t {
+	case TypeDescriptor_ENUM:
+		typ := types.MakeEnum(uint32(desc.ID))
+		if err := desc.HydrateTypeInfo(typ); err != nil {
+			return nil, err
+		}
+		return typ, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
+	}
+}
+
 // NameResolutionResult implements the NameResolutionResult interface.
 func (desc *TypeDescriptor) NameResolutionResult() {}
 

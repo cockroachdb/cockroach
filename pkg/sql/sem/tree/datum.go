@@ -3815,6 +3815,21 @@ func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error
 	}, nil
 }
 
+// MakeAllDEnumsInType generates a slice of all values in an enum.
+// TODO (rohany): In the future, take an option of whether to include
+//  non-writeable enum values or not.
+func MakeAllDEnumsInType(typ *types.T) []Datum {
+	result := make([]Datum, len(typ.TypeMeta.EnumData.LogicalRepresentations))
+	for i := 0; i < len(result); i++ {
+		result[i] = &DEnum{
+			EnumTyp:     typ,
+			PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],
+			LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[i],
+		}
+	}
+	return result
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DEnum) Format(ctx *FmtCtx) {
 	s := DString(d.LogicalRep)

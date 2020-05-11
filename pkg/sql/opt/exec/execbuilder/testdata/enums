@@ -28,20 +28,20 @@ query T
 EXPLAIN (OPT) SELECT * FROM t WHERE x > 'hello'
 ----
 scan t
- └── constraint: /1: [/'howdy' - ]
+ └── constraint: /1: [/'howdy' - /'hi']
 
 # Test that we can perform constrained scans using secondary indexes too.
 query T
 EXPLAIN (OPT) SELECT * FROM t WHERE y = 'hello'
 ----
 scan t@i
- └── constraint: /2/1: [/'hello' - /'hello']
+ └── constraint: /2/1: [/'hello'/'hello' - /'hello'/'hi']
 
 query T
 EXPLAIN (OPT) SELECT * FROM t WHERE y > 'hello' AND y < 'hi'
 ----
 scan t@i
- └── constraint: /2/1: [/'howdy' - /'howdy']
+ └── constraint: /2/1: [/'howdy'/'hello' - /'howdy'/'hi']
 
 query T
 EXPLAIN (opt) SELECT * FROM t WHERE x IN ('hello', 'hi')
@@ -51,3 +51,18 @@ scan t
       ├── [/'hello' - /'hello']
       └── [/'hi' - /'hi']
 
+# TODO (rohany): Why is the NOT NULL important here? I couldn't get this
+#  plan otherwise. If x is NULL, why can't the optimizer also issue a scan
+#  for /Null/2? Instead, a plan that just filters on y=2 is generated.
+statement ok
+CREATE TABLE checks (x greeting NOT NULL, y int, INDEX (x, y))
+
+# Check that inferred check constraints from enum columns are used in plans.
+query T
+EXPLAIN (OPT) SELECT x, y FROM checks WHERE y = 2
+----
+scan checks@checks_x_y_idx
+ └── constraint: /1/2/3
+      ├── [/'hello'/2 - /'hello'/2]
+      ├── [/'howdy'/2 - /'howdy'/2]
+      └── [/'hi'/2 - /'hi'/2]

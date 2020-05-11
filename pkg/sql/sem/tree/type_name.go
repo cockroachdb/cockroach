@@ -143,7 +143,7 @@ func ResolveType(ref ResolvableTypeReference, resolver TypeReferenceResolver) (*
 
 // FormatTypeReference formats a ResolvableTypeReference.
 func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
-	if ctx.HasFlags(fmtFormatUserDefinedTypesAsIDs) {
+	if ctx.HasFlags(FmtFormatUserDefinedTypesAsIDs) {
 		switch t := ref.(type) {
 		case *types.T:
 			if t.UserDefined() {
