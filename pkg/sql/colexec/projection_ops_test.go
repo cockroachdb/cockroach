@@ -266,8 +266,8 @@ func TestRandomComparisons(t *testing.T) {
 			)
 		}
 		for i := range lDatums {
-			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, da, typ)
-			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, da, typ)
+			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, &da, typ)
+			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, &da, typ)
 		}
 		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 			for i := range lDatums {
