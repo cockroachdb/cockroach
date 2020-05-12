@@ -2416,7 +2416,7 @@ may increase either contention or retry errors, or both.`,
 				return ts.EvalAtTimeZone(ctx, loc)
 			},
 			Info:       "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
