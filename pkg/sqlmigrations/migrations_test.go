@@ -85,6 +85,7 @@ func (f *fakeLeaseManager) TimeRemaining(l *leasemanager.Lease) time.Duration {
 }
 
 type fakeDB struct {
+	codec   keys.SQLCodec
 	kvs     map[string][]byte
 	scanErr error
 	putErr  error
@@ -96,11 +97,13 @@ func (f *fakeDB) Scan(
 	if f.scanErr != nil {
 		return nil, f.scanErr
 	}
-	if !bytes.Equal(begin.(roachpb.Key), keys.MigrationPrefix) {
-		return nil, errors.Errorf("expected begin key %q, got %q", keys.MigrationPrefix, begin)
+	min := f.codec.MigrationKeyPrefix()
+	max := min.PrefixEnd()
+	if !bytes.Equal(begin.(roachpb.Key), min) {
+		return nil, errors.Errorf("expected begin key %q, got %q", min, begin)
 	}
-	if !bytes.Equal(end.(roachpb.Key), keys.MigrationKeyMax) {
-		return nil, errors.Errorf("expected end key %q, got %q", keys.MigrationKeyMax, end)
+	if !bytes.Equal(end.(roachpb.Key), max) {
+		return nil, errors.Errorf("expected end key %q, got %q", max, end)
 	}
 	var results []kv.KeyValue
 	for k, v := range f.kvs {
@@ -132,11 +135,13 @@ func (f *fakeDB) Txn(context.Context, func(context.Context, *kv.Txn) error) erro
 
 func TestEnsureMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
 		db:           db,
+		codec:        codec,
 	}
 	defer mgr.stopper.Stop(context.TODO())
 
@@ -201,7 +206,7 @@ func TestEnsureMigrations(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			db.kvs = make(map[string][]byte)
 			for _, name := range tc.preCompleted {
-				db.kvs[string(migrationKey(name))] = []byte{}
+				db.kvs[string(migrationKey(codec, name))] = []byte{}
 			}
 			backwardCompatibleMigrations = tc.migrations
 
@@ -214,8 +219,8 @@ func TestEnsureMigrations(t *testing.T) {
 			}
 
 			for _, migration := range tc.migrations {
-				if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
-					t.Errorf("expected key %s to be written, but it wasn't", migrationKey(migration))
+				if _, ok := db.kvs[string(migrationKey(codec, migration))]; !ok {
+					t.Errorf("expected key %s to be written, but it wasn't", migrationKey(codec, migration))
 				}
 			}
 			if len(db.kvs) != len(tc.migrations) {
@@ -232,11 +237,13 @@ func TestEnsureMigrations(t *testing.T) {
 func TestSkipMigrationsIncludedInBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	db := &fakeDB{}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
 		db:           db,
+		codec:        codec,
 	}
 	defer mgr.stopper.Stop(ctx)
 	defer func(prev []migrationDescriptor) {
@@ -263,13 +270,53 @@ func TestSkipMigrationsIncludedInBootstrap(t *testing.T) {
 	require.False(t, fnGotCalled)
 }
 
+func TestClusterWideMigrationOnlyRunBySystemTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutils.RunTrueAndFalse(t, "system tenant", func(t *testing.T, systemTenant bool) {
+		var codec keys.SQLCodec
+		if systemTenant {
+			codec = keys.SystemSQLCodec
+		} else {
+			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+		}
+
+		ctx := context.Background()
+		db := &fakeDB{codec: codec}
+		mgr := Manager{
+			stopper:      stop.NewStopper(),
+			leaseManager: &fakeLeaseManager{},
+			db:           db,
+			codec:        codec,
+		}
+		defer mgr.stopper.Stop(ctx)
+		defer func(prev []migrationDescriptor) {
+			backwardCompatibleMigrations = prev
+		}(backwardCompatibleMigrations)
+
+		fnGotCalled := false
+		backwardCompatibleMigrations = []migrationDescriptor{{
+			name:        "got-called-verifier",
+			clusterWide: true,
+			workFn: func(context.Context, runner) error {
+				fnGotCalled = true
+				return nil
+			},
+		}}
+		// The migration should only be run by the system tenant.
+		require.NoError(t, mgr.EnsureMigrations(ctx, roachpb.Version{} /* bootstrapVersion */))
+		require.Equal(t, systemTenant, fnGotCalled)
+	})
+}
+
 func TestDBErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
 		db:           db,
+		codec:        codec,
 	}
 	defer mgr.stopper.Stop(context.TODO())
 
@@ -309,8 +356,8 @@ func TestDBErrors(t *testing.T) {
 			if err != nil {
 				return
 			}
-			if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
-				t.Errorf("expected key %s to be written, but it wasn't", migrationKey(migration))
+			if _, ok := db.kvs[string(migrationKey(codec, migration))]; !ok {
+				t.Errorf("expected key %s to be written, but it wasn't", migrationKey(codec, migration))
 			}
 			if len(db.kvs) != len(backwardCompatibleMigrations) {
 				t.Errorf("expected %d key to be written, but %d were",
@@ -326,14 +373,16 @@ func TestDBErrors(t *testing.T) {
 // its retry settings to allow for testing it in a reasonable amount of time.
 func TestLeaseErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{kvs: make(map[string][]byte)}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
 	mgr := Manager{
 		stopper: stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{
 			extendErr:  fmt.Errorf("context deadline exceeded"),
 			releaseErr: fmt.Errorf("context deadline exceeded"),
 		},
-		db: db,
+		db:    db,
+		codec: codec,
 	}
 	defer mgr.stopper.Stop(context.TODO())
 
@@ -343,8 +392,8 @@ func TestLeaseErrors(t *testing.T) {
 	if err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */); err != nil {
 		t.Error(err)
 	}
-	if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
-		t.Errorf("expected key %s to be written, but it wasn't", migrationKey(migration))
+	if _, ok := db.kvs[string(migrationKey(codec, migration))]; !ok {
+		t.Errorf("expected key %s to be written, but it wasn't", migrationKey(codec, migration))
 	}
 	if len(db.kvs) != len(backwardCompatibleMigrations) {
 		t.Errorf("expected %d key to be written, but %d were",
@@ -356,11 +405,13 @@ func TestLeaseErrors(t *testing.T) {
 // cause the process to exit via a call to log.Fatal.
 func TestLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{kvs: make(map[string][]byte)}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{leaseTimeRemaining: time.Nanosecond},
 		db:           db,
+		codec:        codec,
 	}
 	defer mgr.stopper.Stop(context.TODO())
 
@@ -638,7 +689,7 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		lastMigration := backwardCompatibleMigrations[len(backwardCompatibleMigrations)-1]
-		if _, err := kvDB.Get(ctx, migrationKey(lastMigration)); err != nil {
+		if _, err := kvDB.Get(ctx, migrationKey(keys.SystemSQLCodec, lastMigration)); err != nil {
 			return errors.New("last migration has not completed")
 		}
 
