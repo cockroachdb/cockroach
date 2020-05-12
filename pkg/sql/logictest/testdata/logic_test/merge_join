@@ -58,3 +58,14 @@ SELECT * FROM t44798_0 NATURAL JOIN t44798_1
 ----
 0
 2
+
+# Regression test for batch type schema prefix mismatch after LEFT ANTI join
+# (48622).
+statement ok
+CREATE TABLE l (l INT PRIMARY KEY); INSERT INTO l VALUES (1), (2);
+CREATE TABLE r (r INT PRIMARY KEY); INSERT INTO r VALUES (1)
+
+query IB
+SELECT *, true FROM (SELECT l FROM l WHERE l NOT IN (SELECT r FROM r))
+----
+2 true
