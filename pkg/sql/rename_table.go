@@ -126,7 +126,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	descID := tableDesc.GetID()
 	parentSchemaID := tableDesc.GetParentSchemaID()
 
-	renameDetails := sqlbase.TableDescriptor_NameInfo{
+	renameDetails := sqlbase.NameInfo{
 		ParentID:       prevDbDesc.ID,
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
