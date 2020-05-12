@@ -130,6 +130,16 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 func NewPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, fs.FS, error) {
+	return newPebbleTempEngine(ctx, tempStorage, storeSpec)
+}
+
+var pebbleTempEngineTablePropertyCollectors = []func() pebble.TablePropertyCollector{
+	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
+}
+
+func newPebbleTempEngine(
+	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+) (*pebbleTempEngine, fs.FS, error) {
 	// Default options as copied over from pebble/cmd/pebble/db.go
 	opts := DefaultPebbleOptions()
 	// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
@@ -143,7 +153,7 @@ func NewPebbleTempEngine(
 	// Use the default bytes.Compare-like comparer.
 	opts.Comparer = pebble.DefaultComparer
 	opts.DisableWAL = true
-	opts.TablePropertyCollectors = nil
+	opts.TablePropertyCollectors = pebbleTempEngineTablePropertyCollectors
 
 	storageConfig := storageConfigFromTempStorageConfigAndStoreSpec(tempStorage, storeSpec)
 	if tempStorage.InMemory {
