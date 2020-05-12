@@ -1992,6 +1992,55 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+// TestChangefeedRespectCursorOnRestart ensures that even if a rangefeed with a
+// cursor fails before writing its first high water mark, it will retry and not
+// emit a backfill.
+//
+// Regression test for #48746.
+func TestChangefeedRespectCursorOnRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		beforeEmitRowCh := make(chan error)
+		done := make(chan struct{})
+		defer close(done)
+		knobs.AfterSinkFlush = func() error {
+			select {
+			case <-done:
+				return nil
+			case err := <-beforeEmitRowCh:
+				return err
+			}
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0), (1), (2), (3)`)
+
+		var afterInsert string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp() + 100`).Scan(&afterInsert)
+		startTime := parseTimeToHLC(t, afterInsert)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor = $1, resolved = $2, updated`, afterInsert, (10 * time.Millisecond).String()).(*cdctest.TableFeed)
+		defer closeFeed(t, foo)
+		beforeEmitRowCh <- MarkRetryableError(errors.New("boom"))
+		close(beforeEmitRowCh)
+		for {
+			if ts := expectResolvedTimestamp(t, foo); startTime.Less(ts) {
+				break
+			}
+		}
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (5)`)
+		assertPayloadsStripTs(t, foo, []string{
+			`foo: [5]->{"after": {"a": 5}}`,
+		})
+	}
+
+	t.Run("enterprise", enterpriseTest(testFn))
+}
+
 // Regression test for #41694
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
