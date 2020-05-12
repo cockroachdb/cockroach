@@ -1309,26 +1309,26 @@ with &1 (updates)
       ├── cardinality: [0 - 0]
       ├── side-effects, mutations
       ├── project
-      │    ├── columns: upsert_dealerid:38 upsert_isbuy:39 upsert_transactiondate:40 upsert_cardid:41 upsert_discount:44 sellprice:35 buyprice:36 "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 discount:24 transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondate:27 cardid:28 quantity:29 transactiondetails.sellprice:30 transactiondetails.buyprice:31 transactiondetails.version:32 transactiondetails.discount:33 transactiondetails.extra:34
+      │    ├── columns: upsert_dealerid:38 upsert_isbuy:39 upsert_transactiondate:40 upsert_cardid:41 upsert_discount:44 sellprice:35 buyprice:36 "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 discount:24!null transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondate:27 cardid:28 quantity:29 transactiondetails.sellprice:30 transactiondetails.buyprice:31 transactiondetails.version:32 transactiondetails.discount:33 transactiondetails.extra:34
       │    ├── side-effects
       │    ├── lax-key: (15-17,25-29)
       │    ├── fd: ()-->(13,14,24), (15-17)~~>(20), (25-29)-->(30-34), (25)-->(38), (25,26)-->(39), (15,25,27)-->(40), (16,25,28)-->(41), (15-17,25-29)~~>(20,35,36,44)
       │    ├── left-join (lookup transactiondetails)
-      │    │    ├── columns: "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 sellprice:22 buyprice:23 discount:24 transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondate:27 cardid:28 quantity:29 transactiondetails.sellprice:30 transactiondetails.buyprice:31 transactiondetails.version:32 transactiondetails.discount:33 transactiondetails.extra:34
+      │    │    ├── columns: "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 sellprice:22 buyprice:23 discount:24!null transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondate:27 cardid:28 quantity:29 transactiondetails.sellprice:30 transactiondetails.buyprice:31 transactiondetails.version:32 transactiondetails.discount:33 transactiondetails.extra:34
       │    │    ├── key columns: [13 14 15 16 17] = [25 26 27 28 29]
       │    │    ├── lookup columns are key
       │    │    ├── side-effects
       │    │    ├── lax-key: (15-17,25-29)
       │    │    ├── fd: ()-->(13,14,24), (15-17)~~>(20,22,23), (25-29)-->(30-34)
       │    │    ├── upsert-distinct-on
-      │    │    │    ├── columns: "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 sellprice:22 buyprice:23 discount:24
+      │    │    │    ├── columns: "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 sellprice:22 buyprice:23 discount:24!null
       │    │    │    ├── grouping columns: current_timestamp:15 int8:16 int8:17
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    ├── side-effects
       │    │    │    ├── lax-key: (15-17)
       │    │    │    ├── fd: ()-->(13,14,24), (15-17)~~>(13,14,20,22-24)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: sellprice:22 buyprice:23 discount:24 column20:20 "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17
+      │    │    │    │    ├── columns: sellprice:22 buyprice:23 discount:24!null column20:20 "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17
       │    │    │    │    ├── side-effects
       │    │    │    │    ├── fd: ()-->(13,14,24)
       │    │    │    │    ├── with-scan &1 (updates)
@@ -1338,7 +1338,7 @@ with &1 (updates)
       │    │    │    │    └── projections
       │    │    │    │         ├── crdb_internal.round_decimal_values((detail:12->'s')::STRING::DECIMAL(10,4), 4) [as=sellprice:22, outer=(12)]
       │    │    │    │         ├── crdb_internal.round_decimal_values((detail:12->'b')::STRING::DECIMAL(10,4), 4) [as=buyprice:23, outer=(12)]
-      │    │    │    │         ├── crdb_internal.round_decimal_values(0.00001, 4) [as=discount:24]
+      │    │    │    │         ├── 0.0000 [as=discount:24]
       │    │    │    │         ├── cluster_logical_timestamp() [as=column20:20, side-effects]
       │    │    │    │         ├── 1 [as="?column?":13]
       │    │    │    │         ├── false [as=bool:14]
