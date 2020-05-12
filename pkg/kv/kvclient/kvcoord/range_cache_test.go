@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -238,7 +239,7 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 			db.splitRange(t, keys.RangeMetaKey(roachpb.RKey(string(char))))
 		}
 	}
-	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10))
+	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10), stop.NewStopper())
 	return db
 }
 
@@ -499,16 +500,10 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 
 // TestRangeCacheContextCancellation tests the behavior that for an ongoing
 // RangeDescriptor lookup, if the context passed in gets canceled the lookup
-// returns with an error indicating so. The result of the context cancellation
-// differs between requests that lead RangeLookup requests and requests that
-// coalesce onto existing RangeLookup requests.
-// - If the context of a RangeLookup request follower is canceled, the follower
-//   will stop waiting on the inflight request, but will not have an effect on
-//   the inflight request.
-// - If the context of a RangeLookup request leader is canceled, the lookup
-//   itself will also be canceled. This means that any followers waiting on the
-//   inflight request will also see the context cancellation. This is ok, though,
-//   because DistSender will transparently retry the lookup.
+// returns with an error indicating so. Canceling the ctx does not stop the
+// in-flight lookup though, even the the requester has returned from
+// lookupRangeDescriptorInternal(); other requesters that joined the same flight
+// are unaffected by the ctx cancelation.
 func TestRangeCacheContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := initTestDescriptorDB(t)
@@ -536,59 +531,39 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 	}
 
 	expectContextCancellation := func(t *testing.T, c <-chan error) {
+		t.Helper()
 		if err := <-c; !errors.Is(err, context.Canceled) {
 			t.Errorf("expected context cancellation error, found %v", err)
 		}
 	}
 	expectNoError := func(t *testing.T, c <-chan error) {
+		t.Helper()
 		if err := <-c; err != nil {
 			t.Errorf("unexpected error, found %v", err)
 		}
 	}
 
-	// If a RangeDescriptor lookup joins an inflight RangeLookup, it can cancel
-	// its context to stop waiting on the range lookup. This context cancellation
-	// will not affect the "leader" of the inflight lookup or any other
-	// "followers" who are also waiting on the inflight request.
-	t.Run("Follower", func(t *testing.T) {
-		ctx1 := context.TODO() // leader
-		ctx2, cancel := context.WithCancel(context.TODO())
-		ctx3 := context.TODO()
+	ctx1, cancel := context.WithCancel(context.Background()) // leader
+	ctx2 := context.Background()
+	ctx3 := context.Background()
 
-		db.pauseRangeLookups()
-		key1 := roachpb.RKey("aa")
-		errC1 := lookupAndWaitUntilJoin(ctx1, key1, true)
-		errC2 := lookupAndWaitUntilJoin(ctx2, key1, false)
-		errC3 := lookupAndWaitUntilJoin(ctx3, key1, false)
+	db.pauseRangeLookups()
+	key1 := roachpb.RKey("aa")
+	errC1 := lookupAndWaitUntilJoin(ctx1, key1, true)
+	errC2 := lookupAndWaitUntilJoin(ctx2, key1, false)
 
-		cancel()
-		expectContextCancellation(t, errC2)
+	// Cancel the leader and check that it gets an error.
+	cancel()
+	expectContextCancellation(t, errC1)
 
-		db.resumeRangeLookups()
-		expectNoError(t, errC1)
-		expectNoError(t, errC3)
-	})
+	// While lookups are still blocked, launch another one. This new request
+	// should join the flight just like c2.
+	errC3 := lookupAndWaitUntilJoin(ctx3, key1, false)
 
-	// If a RangeDescriptor lookup leads a RangeLookup because there are no
-	// inflight lookups when it misses the cache,  the it can cancel it context
-	// to cancel the range lookup. This context cancellation will be propagated
-	// to all "followers" who are also waiting on the inflight request.
-	t.Run("Leader", func(t *testing.T) {
-		ctx1, cancel := context.WithCancel(context.TODO()) // leader
-		ctx2 := context.TODO()
-		ctx3 := context.TODO()
-
-		db.pauseRangeLookups()
-		key2 := roachpb.RKey("zz")
-		errC1 := lookupAndWaitUntilJoin(ctx1, key2, true)
-		errC2 := lookupAndWaitUntilJoin(ctx2, key2, false)
-		errC3 := lookupAndWaitUntilJoin(ctx3, key2, false)
-
-		cancel()
-		expectContextCancellation(t, errC1)
-		expectContextCancellation(t, errC2)
-		expectContextCancellation(t, errC3)
-	})
+	// Let the flight finish.
+	db.resumeRangeLookups()
+	expectNoError(t, errC2)
+	expectNoError(t, errC3)
 }
 
 // TestRangeCacheDetectSplit verifies that when the cache detects a split
@@ -965,7 +940,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 
 	// Now, add a new, overlapping set of descriptors.
@@ -1062,7 +1037,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
 	if err := cache.InsertRangeDescriptors(ctx, firstDesc, restDesc); err != nil {
 		t.Fatal(err)
 	}
@@ -1096,7 +1071,7 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
 	for _, rd := range testData {
 		cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), rd)
 	}
@@ -1243,7 +1218,7 @@ func TestRangeCacheGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
+			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
 			err := cache.InsertRangeDescriptors(ctx, *descAM1, *descMZ3, *tc.insertDesc)
 			if err != nil {
 				t.Fatal(err)

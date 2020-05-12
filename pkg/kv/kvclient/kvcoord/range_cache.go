@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -24,12 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/opentracing/opentracing-go"
 )
 
 // rangeCacheKey is the key type used to store and sort values in the
@@ -89,6 +93,7 @@ type RangeDescriptorCache struct {
 	// another in-flight one. Used by tests to block until a lookup request is
 	// blocked on the single-flight querying the db.
 	coalesced chan struct{}
+	stopper   *stop.Stopper
 }
 
 // RangeDescriptorCache implements the kvbase interface.
@@ -175,9 +180,9 @@ func makeLookupRequestKey(
 // uses the given RangeDescriptorDB as the underlying source of range
 // descriptors.
 func NewRangeDescriptorCache(
-	st *cluster.Settings, db RangeDescriptorDB, size func() int64,
+	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
 ) *RangeDescriptorCache {
-	rdc := &RangeDescriptorCache{st: st, db: db}
+	rdc := &RangeDescriptorCache{st: st, db: db, stopper: stopper}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
@@ -358,57 +363,70 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	}
 	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
 	resC, leader := rdc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
-		ctx := ctx // disable shadows linter
-		ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
-		defer tracing.FinishSpan(reqSpan)
-
-		rs, preRs, err := rdc.performRangeLookup(ctx, key, useReverseScan)
-		if err != nil {
-			return nil, err
-		}
-
 		var lookupRes lookupResult
-		switch len(rs) {
-		case 0:
-			return nil, fmt.Errorf("no range descriptors returned for %s", key)
-		case 1:
-			desc := &rs[0]
-			lookupRes = lookupResult{
-				desc: desc,
-				evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
-					return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
-				}),
-			}
-		case 2:
-			desc := &rs[0]
-			nextDesc := rs[1]
-			lookupRes = lookupResult{
-				desc: desc,
-				evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
-					return rdc.insertRangeDescriptorsLocked(ctx, nextDesc)
-				}),
-			}
-		default:
-			panic(fmt.Sprintf("more than 2 matching range descriptors returned for %s: %v", key, rs))
-		}
+		if err := rdc.stopper.RunTaskWithErr(ctx, "range lookup", func(ctx context.Context) error {
+			ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
+			defer tracing.FinishSpan(reqSpan)
+			// Clear the context's cancelation. This request services potentially many
+			// callers waiting for its result, and using the flight's leader's
+			// cancelation doesn't make sense.
+			ctx = logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+			ctx = opentracing.ContextWithSpan(ctx, reqSpan)
 
-		// We want to be assured that all goroutines which experienced a cache miss
-		// have joined our in-flight request, and all others will experience a
-		// cache hit. This requires atomicity across cache population and
-		// notification, hence this exclusive lock.
-		rdc.rangeCache.Lock()
-		defer rdc.rangeCache.Unlock()
+			// Since we don't inherit any other cancelation, let's put in a generous
+			// timeout as some protection against unavailable meta ranges.
+			var rs, preRs []roachpb.RangeDescriptor
+			if err := contextutil.RunWithTimeout(ctx, "range lookup", 10*time.Second,
+				func(ctx context.Context) error {
+					var err error
+					rs, preRs, err = rdc.performRangeLookup(ctx, key, useReverseScan)
+					return err
+				}); err != nil {
+				return err
+			}
 
-		// These need to be separate because we need to preserve the pointer to rs[0]
-		// so that the compare-and-evict logic works correctly in EvictCachedRangeDescriptor.
-		// An append could cause a copy, which would change the address of rs[0]. We insert
-		// the prefetched descriptors first to avoid any unintended overwriting. We then
-		// only insert the first desired descriptor, since any other descriptor in rs would
-		// overwrite rs[0]. Instead, these are handled with the evictToken.
-		if err := rdc.insertRangeDescriptorsLocked(ctx, preRs...); err != nil {
-			log.Warningf(ctx, "range cache inserting prefetched descriptors failed: %v", err)
-		}
-		if err := rdc.insertRangeDescriptorsLocked(ctx, rs[:1]...); err != nil {
+			switch len(rs) {
+			case 0:
+				return fmt.Errorf("no range descriptors returned for %s", key)
+			case 1:
+				desc := &rs[0]
+				lookupRes = lookupResult{
+					desc: desc,
+					evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
+						return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
+					}),
+				}
+			case 2:
+				desc := &rs[0]
+				nextDesc := rs[1]
+				lookupRes = lookupResult{
+					desc: desc,
+					evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
+						return rdc.insertRangeDescriptorsLocked(ctx, nextDesc)
+					}),
+				}
+			default:
+				panic(fmt.Sprintf("more than 2 matching range descriptors returned for %s: %v", key, rs))
+			}
+
+			// We want to be assured that all goroutines which experienced a cache miss
+			// have joined our in-flight request, and all others will experience a
+			// cache hit. This requires atomicity across cache population and
+			// notification, hence this exclusive lock.
+			rdc.rangeCache.Lock()
+			defer rdc.rangeCache.Unlock()
+
+			// These need to be separate because we need to preserve the pointer to rs[0]
+			// so that the compare-and-evict logic works correctly in EvictCachedRangeDescriptor.
+			// An append could cause a copy, which would change the address of rs[0]. We insert
+			// the prefetched descriptors first to avoid any unintended overwriting. We then
+			// only insert the first desired descriptor, since any other descriptor in rs would
+			// overwrite rs[0]. Instead, these are handled with the evictToken.
+			if err := rdc.insertRangeDescriptorsLocked(ctx, preRs...); err != nil {
+				log.Warningf(ctx, "range cache inserting prefetched descriptors failed: %v", err)
+			}
+			return rdc.insertRangeDescriptorsLocked(ctx, rs[:1]...)
+		}); err != nil {
 			return nil, err
 		}
 		return lookupRes, nil
@@ -419,15 +437,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	// we risk it racing with an inflight request.
 	rdc.rangeCache.RUnlock()
 
-	// We only want to wait on context cancellation here if we are not the
-	// leader of the lookupRequest. If we are the leader then we'll wait for
-	// lower levels to propagate the context cancellation error over resC. This
-	// assures that as the leader we always wait for the function passed to
-	// DoChan to return before returning from this method.
-	ctxDone := ctx.Done()
-	if leader {
-		ctxDone = nil
-	} else {
+	if !leader {
 		log.VEvent(ctx, 2, "coalesced range lookup request onto in-flight one")
 		if rdc.coalesced != nil {
 			rdc.coalesced <- struct{}{}
@@ -438,7 +448,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	var res singleflight.Result
 	select {
 	case res = <-resC:
-	case <-ctxDone:
+	case <-ctx.Done():
 		return nil, nil, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
 	}
 
