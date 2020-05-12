@@ -112,7 +112,11 @@ func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	lease := *r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
 	r.mu.RUnlock()
-	if lease.Expiration != nil {
+	// NB: We allow the lease.Expiration field to exist with a zero value
+	// to be robust to the randnullability protoutil behavior which can exist
+	// during testing. In the wild we should not see a non-nil, zero-value lease
+	// expiration.
+	if lease.Expiration != nil && !lease.Expiration.IsEmpty() {
 		return hlc.Timestamp{}, false
 	}
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
