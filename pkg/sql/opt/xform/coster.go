@@ -361,8 +361,25 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	}
 	cost += memo.Cost(rowsProcessed) * cpuCostFactor
 
-	// TODO(rytaft): Add a constant "setup" cost per extra ON condition similar
-	// to merge join and lookup join.
+	// Compute filter cost. Fetch the equality columns so they can be
+	// ignored later.
+	on := join.Child(2).(*memo.FiltersExpr)
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+		join.Child(0).(memo.RelExpr).Relational().OutputCols,
+		join.Child(1).(memo.RelExpr).Relational().OutputCols,
+		*on,
+	)
+	// Generate a quick way to lookup if two columns are join equality
+	// columns. We add in both directions because we don't know which way
+	// the equality filters will be defined.
+	eqMap := make(map[opt.ColumnID]opt.ColumnID, len(leftEq)*2)
+	for i, left := range leftEq {
+		right := rightEq[i]
+		eqMap[left] = right
+		eqMap[right] = left
+	}
+	cost += c.computeFiltersCost(*on, eqMap)
+
 	return cost
 }
 
@@ -382,10 +399,7 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	}
 	cost += memo.Cost(rowsProcessed) * cpuCostFactor
 
-	// Add a constant "setup" cost per ON condition to account for the fact that
-	// the rowsProcessed estimate alone cannot effectively discriminate between
-	// plans when RowCount is too small.
-	cost += cpuCostFactor * memo.Cost(len(join.On))
+	cost += c.computeFiltersCost(join.On, nil /* eqMap */)
 	return cost
 }
 
@@ -452,16 +466,46 @@ func (c *coster) computeLookupJoinCost(
 	}
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
-	// Add a constant "setup" cost per ON condition to account for the fact that
-	// the rowsProcessed estimate alone cannot effectively discriminate between
-	// plans when RowCount is too small.
-	cost += cpuCostFactor * memo.Cost(len(join.On))
+	cost += c.computeFiltersCost(join.On, nil /* eqMap */)
 	return cost
 }
 
 func (c *coster) computeGeoLookupJoinCost(join *memo.GeoLookupJoinExpr) memo.Cost {
 	// TODO(rytaft): add a real cost here.
 	return 0
+}
+
+func (c *coster) computeFiltersCost(
+	filters memo.FiltersExpr, eqMap map[opt.ColumnID]opt.ColumnID,
+) memo.Cost {
+	var cost memo.Cost
+	for i := range filters {
+		f := &filters[i]
+		switch f.Condition.Op() {
+		case opt.EqOp:
+			eq := f.Condition.(*memo.EqExpr)
+			leftVar, ok := eq.Left.(*memo.VariableExpr)
+			if !ok {
+				break
+			}
+			rightVar, ok := eq.Right.(*memo.VariableExpr)
+			if !ok {
+				break
+			}
+			if eqMap[leftVar.Col] == rightVar.Col {
+				// Equality filters on some joins are still in
+				// filters, while others have already removed
+				// them. They do not cost anything.
+				continue
+			}
+		}
+
+		// Add a constant "setup" cost per ON condition to account for the fact that
+		// the rowsProcessed estimate alone cannot effectively discriminate between
+		// plans when RowCount is too small.
+		cost += cpuCostFactor
+	}
+	return cost
 }
 
 func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
@@ -484,6 +528,8 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	// Double the cost of emitting rows as well as the cost of seeking rows,
 	// given two indexes will be accessed.
 	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost)
+
+	cost += c.computeFiltersCost(join.On, nil /* eqMap */)
 	return cost
 }
 
