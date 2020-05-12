@@ -1,5 +1,7 @@
 #! /usr/bin/env expect -f
 
+# disabled until #48413 is resolved.
+
 source [file join [file dirname $argv0] common.tcl]
 
 spawn /bin/bash
