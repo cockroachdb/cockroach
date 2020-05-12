@@ -880,7 +880,12 @@ func NewColOperator(
 			}
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
-			copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			if core.HashJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
+				core.HashJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
+			} else {
+				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			}
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.JoinType_INNER {
 				if err = result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, core.HashJoiner.OnExpr, streamingMemAccount, processorConstructor); err != nil {
@@ -943,7 +948,12 @@ func NewColOperator(
 			result.ToClose = append(result.ToClose, mj.(IdempotentCloser))
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
-			copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			if core.MergeJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
+				core.MergeJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
+			} else {
+				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			}
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, *onExpr, streamingMemAccount, processorConstructor); err != nil {
