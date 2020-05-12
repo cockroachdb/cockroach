@@ -611,6 +611,86 @@ message DescriptorMutation {
   optional bool rollback = 7 [(gogoproto.nullable) = false];
 }
 
+// A table descriptor is named through a name map stored in the
+// system.namespace table: a map from {parent_id, table_name} -> id.
+// This name map can be cached for performance on a node in the cluster
+// making reassigning a name complicated. In particular, since a
+// name cannot be withdrawn across a cluster in a transaction at
+// timestamp T, we have to worry about the following:
+//
+// 1. A table is dropped at T, and the name and descriptor are still
+// cached and used by transactions at timestamps >= T.
+// 2. A table is renamed from foo to bar at T, and both names foo and bar
+// can be used by transactions at timestamps >= T.
+// 3. A name foo is reassigned from one table to another at T, and the name
+// foo can reference two different tables at timestamps >= T.
+//
+// The system ensures that a name can be resolved only to a single
+// descriptor at a timestamp thereby permitting 1 and 2, but not 3
+// (the name references two tables).
+//
+// The transaction at T is followed by a time period when names no longer
+// a part of the namespace are drained from the system. Once the old name
+// is drained from the system another transaction at timestamp S is
+// executed to release the name for future use. The interval from T to S
+// is called the name drain interval: If the T transaction is removing
+// the name foo then, at timestamps above S, foo can no longer be resolved.
+//
+// Consider a transaction at T in which name B is dropped, a new name C is
+// created. Name C is viable as soon as the transaction commits.
+// When the transaction at S commits, the name B is released for reuse.
+//
+// The transaction at S runs through the schema changer, with the system
+// returning a response to the client initiating transaction T only after
+// transaction at S is committed. So effectively the SQL transaction once
+// it returns can be followed by SQL transactions that do not observe
+// old name mappings.
+//
+// Note: an exception to this is #19925 which needs to be fixed.
+//
+// In order for transaction at S to act properly the system.namespace
+// table entry for an old name references the descriptor who was the
+// prior owner of the name requiring draining.
+//
+// Before T:   B -> Desc B
+//
+// After T and before S: B -> Desc B, C -> Desc C
+//
+// After S: C -> Desc C
+//
+// Between T and S the name B is drained and the system is unable
+// to assign it to another descriptor.
+//
+// BEGIN;
+// RENAME foo TO bar;
+// CREATE foo;
+//
+// will fail because CREATE foo is executed at T.
+//
+// RENAME foo TO bar;
+// CREATE foo;
+//
+// will succeed because the RENAME returns after S and CREATE foo is
+// executed after S.
+//
+// The above scheme suffers from the problem that a transaction can observe
+// the partial effect of a committed transaction during the drain interval.
+// For instance during the drain interval a transaction can see the correct
+// assignment for C, and the old assignments for B.
+//
+message NameInfo {
+  option (gogoproto.equal) = true;
+  // The database that the table belonged to before the rename (tables can be
+  // renamed from one db to another).
+  optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  // The schemaID of the schema the table belongs to before the rename/drop.
+  // Required to correctly identify which namespace entry to reclaim.
+  optional uint32 parent_schema_id = 3 [(gogoproto.nullable) = false,
+                                       (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
+  optional string name = 2 [(gogoproto.nullable) = false];
+}
+
 // A TableDescriptor represents a table or view and is stored in a
 // structured metadata key. The TableDescriptor has a globally-unique ID,
 // while its member {Column,Index}Descriptors have locally-unique IDs.
@@ -619,21 +699,17 @@ message TableDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
+  // The following 5 fields: name, id, version, modification_time, and
+  // draining_names are metadata fields required by all descriptors to be
+  // leasable. The reason that they do not exist in a message of their own is
+  // to ease the migration burden as not all descriptors initially had all of
+  // these fields but many had some.
+
   // The table name. It should be normalized using NormalizeName() before
   // comparing it.
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-  // ID of the parent database.
-  optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
-  // ID of the parent schema. For backwards compatibility, 0 means the table is
-  // scoped under the public physical schema (id 29). Because of this backward
-  // compatibility issue, this field should not be accessed directly or through
-  // the generated getter. Instead, use GetParentSchemaID() which is defined in
-  // structured.go.
-  optional uint32 unexposed_parent_schema_id = 40 [(gogoproto.nullable) = false,
-        (gogoproto.customname) = "UnexposedParentSchemaID", (gogoproto.casttype) = "ID"];
+                         (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
   //
   // The design maintains two invariants:
@@ -651,9 +727,6 @@ message TableDescriptor {
   // Multiple schema change mutations can be grouped together on a
   // particular version increment.
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
-
-  reserved 6;
-
   // Last modification time of the table descriptor.
   // Starting in 19.2 this field's value may sometime be zero-valued in which
   // case the MVCC timestamp of the row containing the value should be used to
@@ -664,6 +737,27 @@ message TableDescriptor {
   // hlc timestamp to ensure that this field is set properly when extracted from
   // a Descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
+  // A list of draining names. The draining name entries are drained from
+  // the cluster wide name caches by incrementing the version for this
+  // descriptor and ensuring that there are no leases on prior
+  // versions of the descriptor. This field is then cleared and the version
+  // of the descriptor incremented.
+  repeated NameInfo draining_names = 21 [(gogoproto.nullable) = false];
+
+  // ID of the parent database.
+  optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  // ID of the parent schema. For backwards compatibility, 0 means the table is
+  // scoped under the public physical schema (id 29). Because of this backward
+  // compatibility issue, this field should not be accessed directly or through
+  // the generated getter. Instead, use GetParentSchemaID() which is defined in
+  // structured.go.
+  optional uint32 unexposed_parent_schema_id = 40 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "UnexposedParentSchemaID", (gogoproto.casttype) = "ID"];
+
+
+  reserved 6;
+
   repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
   optional uint32 next_column_id = 9 [(gogoproto.nullable) = false,
@@ -748,93 +842,6 @@ message TableDescriptor {
   }
 
   repeated CheckConstraint checks = 20;
-
-  // A table descriptor is named through a name map stored in the
-  // system.namespace table: a map from {parent_id, table_name} -> id.
-  // This name map can be cached for performance on a node in the cluster
-  // making reassigning a name complicated. In particular, since a
-  // name cannot be withdrawn across a cluster in a transaction at
-  // timestamp T, we have to worry about the following:
-  //
-  // 1. A table is dropped at T, and the name and descriptor are still
-  // cached and used by transactions at timestamps >= T.
-  // 2. A table is renamed from foo to bar at T, and both names foo and bar
-  // can be used by transactions at timestamps >= T.
-  // 3. A name foo is reassigned from one table to another at T, and the name
-  // foo can reference two different tables at timestamps >= T.
-  //
-  // The system ensures that a name can be resolved only to a single
-  // descriptor at a timestamp thereby permitting 1 and 2, but not 3
-  // (the name references two tables).
-  //
-  // The transaction at T is followed by a time period when names no longer
-  // a part of the namespace are drained from the system. Once the old name
-  // is drained from the system another transaction at timestamp S is
-  // executed to release the name for future use. The interval from T to S
-  // is called the name drain interval: If the T transaction is removing
-  // the name foo then, at timestamps above S, foo can no longer be resolved.
-  //
-  // Consider a transaction at T in which name B is dropped, a new name C is
-  // created. Name C is viable as soon as the transaction commits.
-  // When the transaction at S commits, the name B is released for reuse.
-  //
-  // The transaction at S runs through the schema changer, with the system
-  // returning a response to the client initiating transaction T only after
-  // transaction at S is committed. So effectively the SQL transaction once
-  // it returns can be followed by SQL transactions that do not observe
-  // old name mappings.
-  //
-  // Note: an exception to this is #19925 which needs to be fixed.
-  //
-  // In order for transaction at S to act properly the system.namespace
-  // table entry for an old name references the descriptor who was the
-  // prior owner of the name requiring draining.
-  //
-  // Before T:   B -> Desc B
-  //
-  // After T and before S: B -> Desc B, C -> Desc C
-  //
-  // After S: C -> Desc C
-  //
-  // Between T and S the name B is drained and the system is unable
-  // to assign it to another descriptor.
-  //
-  // BEGIN;
-  // RENAME foo TO bar;
-  // CREATE foo;
-  //
-  // will fail because CREATE foo is executed at T.
-  //
-  // RENAME foo TO bar;
-  // CREATE foo;
-  //
-  // will succeed because the RENAME returns after S and CREATE foo is
-  // executed after S.
-  //
-  // The above scheme suffers from the problem that a transaction can observe
-  // the partial effect of a committed transaction during the drain interval.
-  // For instance during the drain interval a transaction can see the correct
-  // assignment for C, and the old assignments for B.
-  //
-  message NameInfo {
-    option (gogoproto.equal) = true;
-    // The database that the table belonged to before the rename (tables can be
-    // renamed from one db to another).
-    optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
-    // The schemaID of the schema the table belongs to before the rename/drop.
-    // Required to correctly identify which namespace entry to reclaim.
-    optional uint32 parent_schema_id = 3 [(gogoproto.nullable) = false,
-          (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
-    optional string name = 2 [(gogoproto.nullable) = false];
-  }
-
-  // A list of draining names. The draining name entries are drained from
-  // the cluster wide name caches by incrementing the version for this
-  // descriptor and ensuring that there are no leases on prior
-  // versions of the descriptor. This field is then cleared and the version
-  // of the descriptor incremented.
-  repeated NameInfo draining_names = 21 [(gogoproto.nullable) = false];
 
   // The TableDescriptor is used for views in addition to tables. Views
   // use mostly the same fields as tables, but need to track the actual
@@ -1019,9 +1026,16 @@ message DatabaseDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
+  // Shared descriptor fields. See the discussion at the top of TableDescriptor.
+
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+  // Last modification time of the descriptor.
+  optional util.hlc.Timestamp modification_time = 4 [(gogoproto.nullable) = false];
+  optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  repeated NameInfo draining_names = 6 [(gogoproto.nullable) = false];
+
   optional PrivilegeDescriptor privileges = 3;
 }
 
@@ -1033,6 +1047,21 @@ message TypeDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
+  // Shared descriptor fields. See the discussion at the top of TableDescriptor.
+
+  // name is the current name of this user defined type.
+  optional string name = 3 [(gogoproto.nullable) = false];
+
+  // id is the globally unique ID for this type.
+  optional uint32 id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+
+  optional uint32 version = 9 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  // Last modification time of the descriptor.
+  optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
+  repeated NameInfo draining_names = 11 [(gogoproto.nullable) = false];
+
+
   // Fields that are shared among all kinds of user defined types.
 
   // parent_id represents the ID of the database that this type resides in.
@@ -1042,12 +1071,6 @@ message TypeDescriptor {
   // parent_schema_id represents the ID of the schema that this type resides in.
   optional uint32 parent_schema_id = 2
   [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
-
-  // name is the current name of this user defined type.
-  optional string name = 3 [(gogoproto.nullable) = false];
-
-  // id is the globally unique ID for this type.
-  optional uint32 id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
   // array_type_id is the globally unique ID for the implicitly created array
   // type for this type. It is only set when the type descriptor points to a
@@ -1083,7 +1106,6 @@ message TypeDescriptor {
   // alias is the types.T that this descriptor is an alias for.
   optional sql.sem.types.T alias = 7;
 
-  // TODO (rohany): Do we need a draining names like the table descriptor?
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured
@@ -1093,16 +1115,23 @@ message SchemaDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
-  // parent_id refers to the database the schema is in.
-  optional uint32 parent_id = 1
-  [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
-
+  // Shared descriptor fields. See the discussion at the top of TableDescriptor.
+  
   // name is the name of the schema.
   optional string name = 2 [(gogoproto.nullable) = false];
 
   // id is the schema ID, globally unique across all descriptors.
   optional uint32 id = 3
   [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+  // Last modification time of the descriptor.
+  optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];
+  optional uint32 version = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  repeated NameInfo draining_names = 7 [(gogoproto.nullable) = false];
+
+  // parent_id refers to the database the schema is in.
+  optional uint32 parent_id = 1
+  [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
 
   // privileges contains the privileges for the schema.
   optional PrivilegeDescriptor privileges = 4;

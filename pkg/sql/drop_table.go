@@ -380,7 +380,7 @@ func (p *planner) initiateDropTable(
 		parentSchemaID := tableDesc.GetParentSchemaID()
 
 		// Queue up name for draining.
-		nameDetails := sqlbase.TableDescriptor_NameInfo{
+		nameDetails := sqlbase.NameInfo{
 			ParentID:       tableDesc.ParentID,
 			ParentSchemaID: parentSchemaID,
 			Name:           tableDesc.Name}
