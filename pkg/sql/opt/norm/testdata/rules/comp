@@ -386,3 +386,99 @@ values
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── (true, false)
+
+# --------------------------------------------------
+# NormalizeCmpTimeZoneFunction
+# --------------------------------------------------
+exec-ddl
+CREATE TABLE t (ts TIMESTAMP, tz TIMESTAMPTZ)
+----
+
+norm expect=NormalizeCmpTimeZoneFunction
+SELECT timezone('America/Denver', ts) >= '2020-06-01 12:35:55-07' FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: ts:1
+ └── projections
+      └── ts:1 >= '2020-06-01 13:35:55+00:00' [as="?column?":4, outer=(1)]
+
+# Apply after commuting the inequality.
+norm expect=NormalizeCmpTimeZoneFunction
+SELECT '2020-06-01 12:35:55-07' >= timezone('America/Denver', ts)  FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: ts:1
+ └── projections
+      └── ts:1 <= '2020-06-01 13:35:55+00:00' [as="?column?":4, outer=(1)]
+
+# Don't normalize when the right-hand-side is not a constant.
+norm expect-not=NormalizeCmpTimeZoneFunction
+SELECT timezone('America/Denver', ts) >= tz FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: ts:1 tz:2
+ └── projections
+      └── tz:2 <= timezone('America/Denver', ts:1) [as="?column?":4, outer=(1,2)]
+
+# Don't normalize when the timezone() arguments are constants.
+norm expect-not=NormalizeCmpTimeZoneFunction
+SELECT timezone('America/Denver', '2020-06-01 12:35:55'::TIMESTAMP) >= tz FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: tz:2
+ └── projections
+      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":4, outer=(2)]
+
+# --------------------------------------------------
+# NormalizeCmpTimeZoneFunctionTZ
+# --------------------------------------------------
+norm expect=NormalizeCmpTimeZoneFunctionTZ
+SELECT timezone('America/Denver', tz) >= '2020-06-01 12:35:55' FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: tz:2
+ └── projections
+      └── tz:2 >= '2020-06-01 18:35:55+00:00' [as="?column?":4, outer=(2)]
+
+# Apply after commuting the inequality.
+norm expect=NormalizeCmpTimeZoneFunctionTZ
+SELECT '2020-06-01 12:35:55' >= timezone('America/Denver', tz)  FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: tz:2
+ └── projections
+      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":4, outer=(2)]
+
+# Don't normalize when the right-hand-side is not a constant.
+norm expect-not=NormalizeCmpTimeZoneFunctionTZ
+SELECT timezone('America/Denver', tz) >= ts FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: ts:1 tz:2
+ └── projections
+      └── ts:1 <= timezone('America/Denver', tz:2) [as="?column?":4, outer=(1,2)]
+
+# Don't normalize when the timezone() arguments are constants.
+norm expect-not=NormalizeCmpTimeZoneFunctionTZ
+SELECT timezone('America/Denver', '2020-06-01 12:35:55-07'::TIMESTAMPTZ) >= ts FROM t
+----
+project
+ ├── columns: "?column?":4
+ ├── scan t
+ │    └── columns: ts:1
+ └── projections
+      └── ts:1 <= '2020-06-01 13:35:55+00:00' [as="?column?":4, outer=(1)]

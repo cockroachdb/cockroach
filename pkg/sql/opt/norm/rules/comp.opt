@@ -148,3 +148,61 @@
 (Is | IsNot $left:(Null) $right:^(Null))
 =>
 ((OpName) $right $left)
+
+# NormalizeCmpTimeZoneFunction normalizes timezone functions within
+# comparison operators. It only matches expressions when:
+#
+#   1. The left side of the comparison is a timezone() function.
+#   2. The second argument to timezone() is a variable of type TIMESTAMP.
+#   3. The right side of the comparison is a constant value TIMESTAMPTZ.
+#
+# Here's an example:
+#
+#   timezone('America/Denver', ts) = '2020-06-01 12:35:55-07'
+#   =>
+#   ts = timezone('America/Denver', '2020-06-01 12:35:55-07')
+#
+# This normalization is valid because the overloaded function timezone(zone,
+# TIMESTAMP) is the inverse of timezone(zone, TIMESTAMPTZ).
+[NormalizeCmpTimeZoneFunction, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "timezone"))
+    $right:(ConstValue) &
+        (IsTimestampTZ $right) &
+        (IsTimestamp $ts:(SecondScalarListExpr $args)) &
+        ^(IsConstValueOrTuple $ts)
+)
+=>
+((OpName)
+    $ts
+    (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
+)
+
+# NormalizeCmpTimeZoneFunctionTZ normalizes timezone functions within
+# comparison operators. It only matches expressions when:
+#
+#   1. The left side of the comparison is a timezone() function.
+#   2. The second argument to timezone() is a variable of type TIMESTAMPTZ.
+#   3. The right side of the comparison is a constant value TIMESTAMP.
+#
+# Here's an example:
+#
+#   timezone('America/Denver', tz) = '2020-06-01 12:35:55'
+#   =>
+#   tz = timezone('America/Denver', '2020-06-01 12:35:55')
+#
+# This normalization is possible because the overloaded function timezone(zone,
+# TIMESTAMPTZ) is the inverse of timezone(zone, TIMESTAMP).
+[NormalizeCmpTimeZoneFunctionTZ, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "timezone"))
+    $right:(ConstValue) &
+        (IsTimestamp $right) &
+        (IsTimestampTZ $tz:(SecondScalarListExpr $args)) &
+        ^(IsConstValueOrTuple $tz)
+)
+=>
+((OpName)
+    $tz
+    (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
+)
