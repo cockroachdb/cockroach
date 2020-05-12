@@ -279,13 +279,13 @@ func GetProjectionOperator(
 		switch op {
 		// {{range .BinOps}}
 		case tree._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
 				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily[rightType.Family()] {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 					// {{range .RightFamilies}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
 						switch rightType.Width() {
@@ -306,13 +306,13 @@ func GetProjectionOperator(
 		switch op {
 		// {{range .CmpOps}}
 		case tree._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
 				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily[rightType.Family()] {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 					// {{range .RightFamilies}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
 						switch rightType.Width() {

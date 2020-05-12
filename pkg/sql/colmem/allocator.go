@@ -183,6 +183,12 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 			// We already have the vector of the desired type in place.
 			return
 		}
+		if presentType.Family() == types.UnknownFamily {
+			// We already have an unknown vector in place. If this is expected,
+			// then it will not be accessed and we're good; if this is not
+			// expected, then an error will occur later.
+			return
+		}
 		// We have a vector with an unexpected type, so we panic.
 		colexecerror.InternalError(errors.Errorf(
 			"trying to add a column of %s type at index %d but %s vector already present",
@@ -215,8 +221,18 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	operation()
 	after := getVecsMemoryFootprint(destVecs)
 
-	delta := after - before
-	if delta >= 0 {
+	a.AdjustMemoryUsage(after - before)
+}
+
+// Used returns the number of bytes currently allocated through this allocator.
+func (a *Allocator) Used() int64 {
+	return a.acc.Used()
+}
+
+// AdjustMemoryUsage adjusts the number of bytes currently allocated through
+// this allocator by delta bytes (which can be both positive or negative).
+func (a *Allocator) AdjustMemoryUsage(delta int64) {
+	if delta > 0 {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -225,14 +241,12 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	}
 }
 
-// Used returns the number of bytes currently allocated through this allocator.
-func (a *Allocator) Used() int64 {
-	return a.acc.Used()
-}
-
 // ReleaseMemory reduces the number of bytes currently allocated through this
-// allocator by (at most) size bytes.
+// allocator by (at most) size bytes. size must be non-negative.
 func (a *Allocator) ReleaseMemory(size int64) {
+	if size < 0 {
+		colexecerror.InternalError(fmt.Sprintf("unexpectedly negative size in ReleaseMemory: %d", size))
+	}
 	if size > a.acc.Used() {
 		size = a.acc.Used()
 	}
@@ -270,7 +284,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	// acc represents the number of bytes to represent a row in the batch.
 	acc := 0
 	for _, t := range vecTypes {
-		switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
 			acc += SizeOfBool
 		case types.BytesFamily:

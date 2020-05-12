@@ -20,10 +20,13 @@
 package colexec
 
 import (
+	"unsafe"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -59,13 +62,14 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newAvgAgg(t *types.T) (aggregateFunc, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+func newAvgAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
+			allocator.AdjustMemoryUsage(int64(sizeOfAvg_TYPEAgg))
 			return &avg_TYPEAgg{}, nil
 			// {{end}}
 		}
@@ -78,8 +82,6 @@ func newAvgAgg(t *types.T) (aggregateFunc, error) {
 // {{range .WidthOverloads}}
 
 type avg_TYPEAgg struct {
-	done bool
-
 	groups  []bool
 	scratch struct {
 		curIdx int
@@ -102,6 +104,8 @@ type avg_TYPEAgg struct {
 
 var _ aggregateFunc = &avg_TYPEAgg{}
 
+const sizeOfAvg_TYPEAgg = unsafe.Sizeof(&avg_TYPEAgg{})
+
 func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.scratch.vec = v.TemplateType()
@@ -115,7 +119,6 @@ func (a *avg_TYPEAgg) Reset() {
 	a.scratch.curCount = 0
 	a.scratch.foundNonNullForCurrentGroup = false
 	a.scratch.nulls.UnsetNulls()
-	a.done = false
 }
 
 func (a *avg_TYPEAgg) CurrentOutputIndex() int {
@@ -130,23 +133,7 @@ func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 }
 
 func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	if a.done {
-		return
-	}
 	inputLen := b.Length()
-	if inputLen == 0 {
-		// The aggregation is finished. Flush the last value. If we haven't found
-		// any non-nulls for this group so far, the output for this group should be
-		// NULL.
-		if !a.scratch.foundNonNullForCurrentGroup {
-			a.scratch.nulls.SetNull(a.scratch.curIdx)
-		} else {
-			_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
-		}
-		a.scratch.curIdx++
-		a.done = true
-		return
-	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	if nulls.MaybeHasNulls() {
@@ -174,6 +161,18 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *avg_TYPEAgg) Flush() {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should be
+	// NULL.
+	if !a.scratch.foundNonNullForCurrentGroup {
+		a.scratch.nulls.SetNull(a.scratch.curIdx)
+	} else {
+		_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
+	}
+	a.scratch.curIdx++
 }
 
 func (a *avg_TYPEAgg) HandleEmptyInputScalar() {

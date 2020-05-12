@@ -1436,7 +1436,7 @@ func (tc *joinTestCase) mutateTypes() []*joinTestCase {
 					if tups[i][j] == nil {
 						continue
 					}
-					switch typeconv.TypeFamilyToCanonicalTypeFamily[typ.Family()] {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 					case types.DecimalFamily:
 						var d apd.Decimal
 						_, _ = d.SetFloat64(float64(tups[i][j].(int)))

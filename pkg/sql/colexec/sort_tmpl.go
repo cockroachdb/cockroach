@@ -92,7 +92,7 @@ func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bo
 	switch dir {
 	// {{range .DirOverloads}}
 	case _DIR_ENUM:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		// {{range .FamilyOverloads}}
 		case _CANONICAL_TYPE_FAMILY:
 			switch t.Width() {
@@ -121,7 +121,7 @@ func newSingleSorter(
 		// {{range .DirOverloads}}
 		// {{$dir := .DirString}}
 		case _DIR_ENUM:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 			// {{range .FamilyOverloads}}
 			case _CANONICAL_TYPE_FAMILY:
 				switch t.Width() {

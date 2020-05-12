@@ -154,7 +154,7 @@ type memColumn struct {
 func NewMemColumn(t *types.T, n int) Vec {
 	nulls := NewNulls(n)
 
-	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()]; canonicalTypeFamily {
+	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
 	case types.BoolFamily:
 		return &memColumn{t: t, canonicalTypeFamily: canonicalTypeFamily, col: make([]bool, n), nulls: nulls}
 	case types.BytesFamily:

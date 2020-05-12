@@ -70,9 +70,16 @@ type aggregateFunc interface {
 	// index.
 	SetOutputIndex(idx int)
 
-	// Compute computes the aggregation on the input batch. A zero-length input
-	// batch tells the aggregate function that it should flush its results.
+	// Compute computes the aggregation on the input batch.
+	// Note: the implementations should be careful to account for their memory
+	// usage.
 	Compute(batch coldata.Batch, inputIdxs []uint32)
+
+	// Flush flushes the result of aggregation on the last group. It should be
+	// called once after input batches have been Compute()'d.
+	// Note: the implementations are free to not account for the memory used
+	// for the result of aggregation of the last group.
+	Flush()
 
 	// HandleEmptyInputScalar populates the output for a case of an empty input
 	// when the aggregate function is in scalar context. The output must always
@@ -239,21 +246,28 @@ func makeAggregateFuncs(
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
 			funcs[i], err = newAnyNotNullAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_AVG:
-			funcs[i], err = newAvgAgg(aggTyps[i][0])
+			funcs[i], err = newAvgAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
-			funcs[i], err = newSumAgg(aggTyps[i][0])
+			funcs[i], err = newSumAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
-			funcs[i] = newCountRowAgg()
+			funcs[i] = newCountRowsAgg(allocator)
 		case execinfrapb.AggregatorSpec_COUNT:
-			funcs[i] = newCountAgg()
+			funcs[i] = newCountAgg(allocator)
 		case execinfrapb.AggregatorSpec_MIN:
 			funcs[i], err = newMinAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_MAX:
 			funcs[i], err = newMaxAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_BOOL_AND:
-			funcs[i] = newBoolAndAgg()
+			funcs[i] = newBoolAndAgg(allocator)
 		case execinfrapb.AggregatorSpec_BOOL_OR:
-			funcs[i] = newBoolOrAgg()
+			funcs[i] = newBoolOrAgg(allocator)
+		// NOTE: if you're adding an implementation of a new aggregate
+		// function, make sure to account for the memory under that struct in
+		// its constructor.
+		// TODO(yuzefovich): at the moment, we're updating the allocator on
+		// every created aggregate function. This hits the performance of the
+		// hash aggregator when group sizes are small. We should "batch" the
+		// accounting to address it.
 		default:
 			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}
@@ -396,8 +410,14 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				a.scratch.resumeIdx = 0
 			}
 		} else {
-			for i, fn := range a.aggregateFuncs {
-				fn.Compute(batch, a.aggCols[i])
+			if batch.Length() > 0 {
+				for i, fn := range a.aggregateFuncs {
+					fn.Compute(batch, a.aggCols[i])
+				}
+			} else {
+				for _, fn := range a.aggregateFuncs {
+					fn.Flush()
+				}
 			}
 			a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		}
@@ -471,7 +491,7 @@ func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
 // columns of types 'inputTypes' (which can be empty in case of COUNT_ROWS) is
 // supported.
 func isAggregateSupported(
-	aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
+	allocator *colmem.Allocator, aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
 ) (bool, error) {
 	if err := typeconv.AreTypesSupported(inputTypes); err != nil {
 		return false, err
@@ -492,7 +512,7 @@ func isAggregateSupported(
 		}
 	}
 	_, err := makeAggregateFuncs(
-		nil, /* allocator */
+		allocator,
 		[][]*types.T{inputTypes},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
 	)
