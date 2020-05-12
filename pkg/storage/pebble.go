@@ -421,6 +421,44 @@ var _ Engine = &Pebble{}
 // code does not depend on CCL code.
 var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, EncryptionStatsHandler, error)
 
+// ResolveEncryptedEnvOptions fills in cfg.Opts.FS with an encrypted vfs if this
+// store has encryption-at-rest enabled. Also returns the associated file
+// registry and EncryptionStatsHandler.
+func ResolveEncryptedEnvOptions(
+	cfg *PebbleConfig,
+) (*PebbleFileRegistry, EncryptionStatsHandler, error) {
+	fileRegistry := &PebbleFileRegistry{FS: cfg.Opts.FS, DBDir: cfg.Dir, ReadOnly: cfg.Opts.ReadOnly}
+	if cfg.UseFileRegistry {
+		if err := fileRegistry.Load(); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		if err := fileRegistry.checkNoRegistryFile(); err != nil {
+			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
+				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
+		}
+		fileRegistry = nil
+	}
+
+	var statsHandler EncryptionStatsHandler
+	if len(cfg.ExtraOptions) > 0 {
+		// Encryption is enabled.
+		if !cfg.UseFileRegistry {
+			return nil, nil, fmt.Errorf("file registry is needed to support encryption")
+		}
+		if NewEncryptedEnvFunc == nil {
+			return nil, nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
+		}
+		var err error
+		cfg.Opts.FS, statsHandler, err =
+			NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.ExtraOptions)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return fileRegistry, statsHandler, nil
+}
+
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
@@ -454,34 +492,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		}
 	}
 
-	fileRegistry := &PebbleFileRegistry{FS: cfg.Opts.FS, DBDir: cfg.Dir, ReadOnly: cfg.Opts.ReadOnly}
-	if cfg.UseFileRegistry {
-		if err := fileRegistry.Load(); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := fileRegistry.checkNoRegistryFile(); err != nil {
-			return nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
-				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
-		}
-		fileRegistry = nil
-	}
-
-	var statsHandler EncryptionStatsHandler
-	if len(cfg.ExtraOptions) > 0 {
-		// Encryption is enabled.
-		if !cfg.UseFileRegistry {
-			return nil, fmt.Errorf("file registry is needed to support encryption")
-		}
-		if NewEncryptedEnvFunc == nil {
-			return nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
-		}
-		var err error
-		cfg.Opts.FS, statsHandler, err =
-			NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.ExtraOptions)
-		if err != nil {
-			return nil, err
-		}
+	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	// The context dance here is done so that we have a clean context without
