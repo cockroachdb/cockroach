@@ -504,6 +504,10 @@ func (b *changefeedResumer) Resume(
 	}
 	var err error
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if err := b.job.CheckStatus(ctx); err != nil {
+			log.Infof(ctx, `CHANGEFEED job %d exiting due to status: %v`, jobID, err)
+			return err
+		}
 		// TODO(dan): This is a workaround for not being able to set an initial
 		// progress high-water when creating a job (currently only the progress
 		// details can be set). I didn't want to pick off the refactor to get this
@@ -541,6 +545,7 @@ func (b *changefeedResumer) Resume(
 		// on the channel, causing the changefeed flow to block. Replace it with
 		// a dummy channel.
 		startedCh = make(chan tree.Datums, 1)
+
 	}
 	// We only hit this if `r.Next()` returns false, which right now only happens
 	// on context cancellation.

@@ -2041,6 +2041,66 @@ func TestChangefeedRespectCursorOnRestart(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn))
 }
 
+// TestCanceledRangefeedsStop ensures that rangefeeds stop if they are canceled
+// after hitting a retriable error. There previously was a bug whereby canceled
+// changefeeds which continued to hit retriable errors would never stop.
+func TestCanceledRangefeedsStop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		beforeEmitRowCh := make(chan struct{})
+		done := make(chan struct{})
+		defer close(done)
+		knobs.AfterSinkFlush = func() error {
+			select {
+			case <-done:
+				return nil
+			case <-beforeEmitRowCh:
+				return MarkRetryableError(errors.New("boom"))
+			}
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0), (1), (2), (3)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = $1`, (10 * time.Millisecond).String()).(*cdctest.TableFeed)
+		defer closeFeed(t, foo)
+		assertPayloadsStripTs(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+		scope := log.Scope(t)
+		defer scope.Close(t)
+		beforeEmitRowCh <- struct{}{}
+		sqlDB.Exec(t, `CANCEL JOB $1`, foo.JobID)
+		close(beforeEmitRowCh)
+		testutils.SucceedsSoon(t, func() error {
+			log.Flush()
+			entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
+				// This pattern is used when a changefeed exits due to cancelation.
+				regexp.MustCompile("exiting due to status"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) > 1 {
+				t.Fatalf("only ever expected 1 log line, got %v", entries)
+			}
+			if len(entries) != 1 {
+				return errors.Errorf("log line not found.")
+			}
+			return nil
+		})
+	}
+
+	t.Run("enterprise", enterpriseTest(testFn))
+}
+
 // Regression test for #41694
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
