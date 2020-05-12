@@ -150,14 +150,14 @@ func TestDiskRowContainer(t *testing.T) {
 					// Ensure the datum fields are set and no errors occur when
 					// decoding.
 					for i, encDatum := range readRow {
-						if err := encDatum.EnsureDecoded(typs[i], &d.datumAlloc); err != nil {
+						if err := encDatum.EnsureDecoded(typs[i], d.datumAlloc); err != nil {
 							t.Fatal(err)
 						}
 					}
 
 					// Check equality of the row we wrote and the row we read.
 					for i := range row {
-						if cmp, err := readRow[i].Compare(typs[i], &d.datumAlloc, &evalCtx, &row[i]); err != nil {
+						if cmp, err := readRow[i].Compare(typs[i], d.datumAlloc, &evalCtx, &row[i]); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("encoded %s but decoded %s", row.String(typs), readRow.String(typs))
@@ -213,14 +213,14 @@ func TestDiskRowContainer(t *testing.T) {
 					// Ensure datum fields are set and no errors occur when
 					// decoding.
 					for i, encDatum := range row {
-						if err := encDatum.EnsureDecoded(types[i], &d.datumAlloc); err != nil {
+						if err := encDatum.EnsureDecoded(types[i], d.datumAlloc); err != nil {
 							t.Fatal(err)
 						}
 					}
 
 					// Check sorted order.
 					if cmp, err := compareRows(
-						types, sortedRows.EncRow(numKeysRead), row, &evalCtx, &d.datumAlloc, ordering,
+						types, sortedRows.EncRow(numKeysRead), row, &evalCtx, d.datumAlloc, ordering,
 					); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {

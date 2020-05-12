@@ -182,7 +182,7 @@ type planner struct {
 	// Use a common datum allocator across all the plan nodes. This separates the
 	// plan lifetime from the lifetime of returned results allowing plan nodes to
 	// be pool allocated.
-	alloc sqlbase.DatumAlloc
+	alloc *sqlbase.DatumAlloc
 
 	// optPlanningCtx stores the optimizer planning context, which contains
 	// data structures that can be reused between queries (for efficiency).
@@ -269,7 +269,7 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg}
+	p := &planner{execCfg: execCfg, alloc: &sqlbase.DatumAlloc{}}
 
 	p.txn = txn
 	p.stmt = nil

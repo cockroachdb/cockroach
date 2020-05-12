@@ -15,12 +15,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestTypeAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p := planner{}
+	p := planner{alloc: &sqlbase.DatumAlloc{}}
 	testData := []struct {
 		expr        tree.Expr
 		expected    string

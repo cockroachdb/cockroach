@@ -104,7 +104,7 @@ func newCopyMachine(
 		columns: n.Columns,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
-		p:              planner{execCfg: execCfg},
+		p:              planner{execCfg: execCfg, alloc: &sqlbase.DatumAlloc{}},
 		execInsertPlan: execInsertPlan,
 	}
 

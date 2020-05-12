@@ -62,6 +62,11 @@ type StoreTestingKnobs struct {
 	// error returned to the client, or to simulate network failures.
 	TestingResponseFilter storagebase.ReplicaResponseFilter
 
+	// TestingRangefeedFilter is called before a replica processes a rangefeed
+	// in order for unit tests to modify the request, error returned to the client
+	// or data.
+	TestingRangefeedFilter storagebase.ReplicaRangefeedFilter
+
 	// A hack to manipulate the clock before sending a batch request to a replica.
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.

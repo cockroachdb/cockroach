@@ -6725,64 +6725,6 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	}
 }
 
-func TestProposalOverhead(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	key := roachpb.Key("k")
-	var overhead uint32
-
-	manual := hlc.NewManualClock(123)
-	tc := testContext{manualClock: manual}
-	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	cfg.TestingKnobs.TestingProposalFilter =
-		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-			if len(args.Req.Requests) != 1 {
-				return nil
-			}
-			req, ok := args.Req.GetArg(roachpb.Put)
-			if !ok {
-				return nil
-			}
-			put := req.(*roachpb.PutRequest)
-			if !bytes.Equal(put.Key, key) {
-				return nil
-			}
-			atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
-			// We don't want to print the WriteBatch because it's explicitly
-			// excluded from the size computation. Nil'ing it out does not
-			// affect the memory held by the caller because neither `args` nor
-			// `args.Cmd` are pointers.
-			args.Cmd.WriteBatch = nil
-			t.Logf(pretty.Sprint(args.Cmd))
-			return nil
-		}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.StartWithStoreConfig(t, stopper, cfg)
-
-	ba := roachpb.BatchRequest{}
-	// Use a realistic timestamp with no logical portion to guarantee that the
-	// timestamp in the proposal has a deterministic size.
-	ba.Timestamp = hlc.Timestamp{WallTime: 1588747910671904812}
-	ba.Add(&roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{Key: key},
-		Value:         roachpb.MakeValueFromString("v"),
-	})
-	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// NB: the expected overhead reflects the space overhead currently
-	// present in Raft commands. This test will fail if that overhead
-	// changes. Try to make this number go down and not up. It slightly
-	// undercounts because our proposal filter is called before
-	// maxLeaseIndex is filled in.
-	const expectedOverhead = 42
-	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
-		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
-	}
-}
-
 // TestReplicaLoadSystemConfigSpanIntent verifies that intents on the SystemConfigSpan
 // cause an error, but trigger asynchronous cleanup.
 func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {

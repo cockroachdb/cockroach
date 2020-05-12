@@ -101,6 +101,12 @@ type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 // been processed. This filter is invoked only by the command proposer.
 type ReplicaResponseFilter func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
 
+// ReplicaRangefeedFilter is used in unit tests to modify the request, inject
+// responses, or return errors from rangefeeds.
+type ReplicaRangefeedFilter func(
+	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+) *roachpb.Error
+
 // ContainsKey returns whether this range contains the specified key.
 func ContainsKey(desc *roachpb.RangeDescriptor, key roachpb.Key) bool {
 	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {

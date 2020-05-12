@@ -1168,8 +1168,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	hjOp, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 	hjOp.Op.Init()
-	for {
-		b := hjOp.Op.Next(ctx)
+	for b := hjOp.Op.Next(ctx); b.Length() > 0; b = hjOp.Op.Next(ctx) {
 		// The output types should be {Int64, Int64, Bool, Decimal, Float64, Bytes}
 		// and we check this explicitly.
 		b.ColVec(0).Int64()
@@ -1178,8 +1177,5 @@ func TestHashJoinerProjection(t *testing.T) {
 		b.ColVec(3).Decimal()
 		b.ColVec(4).Float64()
 		b.ColVec(5).Bytes()
-		if b.Length() == 0 {
-			break
-		}
 	}
 }

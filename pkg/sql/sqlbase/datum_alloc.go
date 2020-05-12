@@ -10,11 +10,17 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
+)
 
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
 // of the allocations.
+// NOTE: it *must* be passed in by a pointer.
 type DatumAlloc struct {
+	_ util.NoCopy
+
 	datumAlloc        []tree.Datum
 	dintAlloc         []tree.DInt
 	dfloatAlloc       []tree.DFloat
