@@ -95,12 +95,6 @@ func MakeMetadataSchema(
 	return ms
 }
 
-// forSystemTenant returns whether this MetadataSchema is associated with the
-// system tenant or with a secondary tenant.
-func (ms *MetadataSchema) forSystemTenant() bool {
-	return ms.codec == keys.SystemSQLCodec
-}
-
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
@@ -231,7 +225,11 @@ func (ms MetadataSchema) DescriptorIDs() IDs {
 var systemTableIDCache = func() map[string]ID {
 	cache := make(map[string]ID)
 
-	ms := MetadataSchema{}
+	// NOTE: we use the system tenant codec here. That means that any lookups in
+	// this cache for system descriptors that are only found in non-system
+	// tenants will not be found. That is ok for now, but we'll need to split
+	// this cache or do something smarter should it become a problem.
+	ms := MetadataSchema{codec: keys.SystemSQLCodec}
 	addSystemDescriptorsToSchema(&ms)
 	for _, d := range ms.descs {
 		t, ok := d.desc.(*TableDescriptor)

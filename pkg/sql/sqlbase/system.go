@@ -1527,7 +1527,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	// Only add the descriptor ID sequence if this is a non-system tenant.
 	// System tenants use the global DescIDGenerator key. See #48513.
-	if !target.forSystemTenant() {
+	if !target.codec.ForSystemTenant() {
 		target.AddDescriptor(keys.SystemDatabaseID, &DescIDSequence)
 	}
 

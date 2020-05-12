@@ -49,6 +49,7 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 type SQLCodec struct {
 	sqlEncoder
 	sqlDecoder
+	_ func() // incomparable
 }
 
 // sqlEncoder implements the encoding logic for SQL keys.
@@ -87,10 +88,8 @@ var SystemSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 // surrounding context.
 var TODOSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 
-// systemTenant returns whether the encoder is bound to the system tenant. This
-// information should not be exposed, but is used internally to the encoder when
-// key encoding for the system tenant differs from that of all other tenants.
-func (e sqlEncoder) systemTenant() bool {
+// ForSystemTenant returns whether the encoder is bound to the system tenant.
+func (e sqlEncoder) ForSystemTenant() bool {
 	return len(e.TenantPrefix()) == 0
 }
 
@@ -133,7 +132,7 @@ func (e sqlEncoder) SequenceKey(tableID uint32) roachpb.Key {
 
 // DescIDSequenceKey returns the key used for the descriptor ID sequence.
 func (e sqlEncoder) DescIDSequenceKey() roachpb.Key {
-	if e.systemTenant() {
+	if e.ForSystemTenant() {
 		// To maintain backwards compatibility, the system tenant uses a
 		// separate, non-SQL, key to store its descriptor ID sequence.
 		return DescIDGenerator
