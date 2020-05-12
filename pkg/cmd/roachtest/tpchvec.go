@@ -17,6 +17,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"os"
 	"regexp"
 	"runtime"
 	"sort"
@@ -98,7 +99,7 @@ type tpchVecTestCase interface {
 	preTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion)
 	// postQueryRunHook is called after each tpch query is run with the output and
 	// the vectorize mode it was run in.
-	postQueryRunHook(t *test, output []byte, vectorized bool)
+	postQueryRunHook(t *test, output []byte, vectorized bool, batchSize string)
 	// postTestRunHook is called after all tpch queries are run. Can be used to
 	// perform teardown or general validation.
 	postTestRunHook(t *test, conn *gosql.DB, version crdbVersion)
@@ -131,7 +132,10 @@ func (b tpchVecTestCaseBase) preTestRunHook(
 	}
 }
 
-func (b tpchVecTestCaseBase) postQueryRunHook(_ *test, _ []byte, _ bool) {}
+func (b tpchVecTestCaseBase) postQueryRunHook(
+	t *test, output []byte, vectorized bool, batchSize string,
+) {
+}
 
 func (b tpchVecTestCaseBase) postTestRunHook(_ *test, _ *gosql.DB, _ crdbVersion) {}
 
@@ -143,14 +147,16 @@ const (
 
 type tpchVecPerfTest struct {
 	tpchVecTestCaseBase
-	timeByQueryNum []map[int][]float64
+	timeByQueryNumAndBatchSize map[int]map[string][]float64
+	timeByQueryNum             []map[int][]float64
 }
 
 var _ tpchVecTestCase = &tpchVecPerfTest{}
 
 func newTpchVecPerfTest() *tpchVecPerfTest {
 	return &tpchVecPerfTest{
-		timeByQueryNum: []map[int][]float64{make(map[int][]float64), make(map[int][]float64)},
+		timeByQueryNum:             []map[int][]float64{make(map[int][]float64), make(map[int][]float64)},
+		timeByQueryNumAndBatchSize: make(map[int]map[string][]float64),
 	}
 }
 
@@ -164,27 +170,13 @@ func (p tpchVecPerfTest) numRunsPerQuery() int {
 	return tpchPerfTestNumRunsPerQuery
 }
 
-func (p tpchVecPerfTest) preTestRunHook(
-	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
-) {
-	p.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version)
-	// TODO(yuzefovich): remove this once we figure out the issue with random
-	// performance hits on query 7.
-	for node := 1; node <= c.spec.NodeCount; node++ {
-		nodeConn := c.Conn(ctx, node)
-		if _, err := nodeConn.Exec(
-			"SELECT crdb_internal.set_vmodule('vectorized_flow=1,spilling_queue=1,row_container=2,hash_row_container=2');",
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
+func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, _ bool, batchSize string) {
 
-func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bool) {
-	configIdx := tpchPerfTestVecOffConfigIdx
-	if vectorized {
-		configIdx = tpchPerfTestVecOnConfigIdx
-	}
+	/*
+		configIdx := tpchPerfTestVecOffConfigIdx
+		if vectorized {
+			configIdx = tpchPerfTestVecOnConfigIdx
+		}*/
 	runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
@@ -199,56 +191,110 @@ func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bo
 			if err != nil {
 				t.Fatalf("failed parsing %q as float with %s", match[2], err)
 			}
-			p.timeByQueryNum[configIdx][queryNum] = append(p.timeByQueryNum[configIdx][queryNum], queryTime)
+			if _, ok := p.timeByQueryNumAndBatchSize[queryNum]; !ok {
+				p.timeByQueryNumAndBatchSize[queryNum] = make(map[string][]float64)
+			}
+			p.timeByQueryNumAndBatchSize[queryNum][batchSize] = append(p.timeByQueryNumAndBatchSize[queryNum][batchSize], queryTime)
+
+			//p.timeByQueryNum[configIdx][queryNum] = append(p.timeByQueryNum[configIdx][queryNum], queryTime)
 		}
 	}
 }
 
+// Should output queryNum,batchSize,time. It would be great if it were queryNum, batchSize1time, batchSize2time
+
 func (p *tpchVecPerfTest) postTestRunHook(t *test, _ *gosql.DB, version crdbVersion) {
-	queriesToSkip := queriesToSkipByVersion[version]
-	t.Status("comparing the runtimes (only median values for each query are compared)")
-	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
-		if _, skipped := queriesToSkip[queryNum]; skipped {
+	f, err := os.Create("lookup_join_test_output")
+	if err != nil {
+		panic(p.timeByQueryNumAndBatchSize)
+	}
+	defer f.Close()
+
+	for _, queryNum := range orderedQueryNums {
+		if _, ok := p.timeByQueryNumAndBatchSize[queryNum]; !ok {
+			t.l.Printf("unexpectedly could not find times for query %d", queryNum)
 			continue
 		}
-		findMedian := func(times []float64) float64 {
+
+		// Get median time for each batch size.
+		medianTimes := make([]float64, len(orderedBatchSizes))
+		for i, batchSize := range orderedBatchSizes {
+			times, ok := p.timeByQueryNumAndBatchSize[queryNum][batchSize]
+			if !ok {
+				t.l.Printf("missing a time for query %d and batchSize %s", queryNum, batchSize)
+				medianTimes[i] = 0
+				continue
+			}
+
+			// Get median time.
 			sort.Float64s(times)
-			return times[len(times)/2]
+
+			median := len(times) / 2
+			if median == 0 {
+				medianTimes[i] = 0
+				continue
+			}
+			medianTimes[i] = times[median]
 		}
-		vecOnTimes := p.timeByQueryNum[tpchPerfTestVecOnConfigIdx][queryNum]
-		vecOffTimes := p.timeByQueryNum[tpchPerfTestVecOffConfigIdx][queryNum]
-		if len(vecOnTimes) != tpchPerfTestNumRunsPerQuery {
-			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-				"recorded with vec ON config: %v", queryNum, vecOnTimes))
+		// We now have all times for a given query ordered by batch size, write a cs
+		t.l.Printf("times for query %d are %v", queryNum, medianTimes)
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("%d", queryNum))
+		for _, time := range medianTimes {
+			b.WriteString(fmt.Sprintf(",%.2f", time))
 		}
-		if len(vecOffTimes) != tpchPerfTestNumRunsPerQuery {
-			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-				"recorded with vec OFF config: %v", queryNum, vecOffTimes))
-		}
-		vecOnTime := findMedian(vecOnTimes)
-		vecOffTime := findMedian(vecOffTimes)
-		if vecOffTime < vecOnTime {
-			t.l.Printf(
-				fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
-					"%.2fs ON vs %.2fs OFF --- WARNING\n"+
-					"vec ON times: %v\t vec OFF times: %v",
-					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
-					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-		} else {
-			t.l.Printf(
-				fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
-					"%.2fs ON vs %.2fs OFF\n"+
-					"vec ON times: %v\t vec OFF times: %v",
-					queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
-					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-		}
-		if vecOnTime >= slownessThresholdByVersion[version]*vecOffTime {
-			t.Fatal(fmt.Sprintf(
-				"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
-					"vec ON times: %v\nvec OFF times: %v",
-				queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
+		b.WriteString("\n")
+		if _, err := f.WriteString(b.String()); err != nil {
+			t.Fatal(err)
 		}
 	}
+
+	/*
+		queriesToSkip := queriesToSkipByVersion[version]
+		t.Status("comparing the runtimes (only median values for each query are compared)")
+		for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
+			if _, skipped := queriesToSkip[queryNum]; skipped {
+				continue
+			}
+			findMedian := func(times []float64) float64 {
+				sort.Float64s(times)
+				return times[len(times)/2]
+			}
+			vecOnTimes := p.timeByQueryNum[tpchPerfTestVecOnConfigIdx][queryNum]
+			vecOffTimes := p.timeByQueryNum[tpchPerfTestVecOffConfigIdx][queryNum]
+			if len(vecOnTimes) != tpchPerfTestNumRunsPerQuery {
+				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+					"recorded with vec ON config: %v", queryNum, vecOnTimes))
+			}
+			if len(vecOffTimes) != tpchPerfTestNumRunsPerQuery {
+				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+					"recorded with vec OFF config: %v", queryNum, vecOffTimes))
+			}
+			vecOnTime := findMedian(vecOnTimes)
+			vecOffTime := findMedian(vecOffTimes)
+			if vecOffTime < vecOnTime {
+				t.l.Printf(
+					fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
+						"%.2fs ON vs %.2fs OFF --- WARNING\n"+
+						"vec ON times: %v\t vec OFF times: %v",
+						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
+						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+			} else {
+				t.l.Printf(
+					fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
+						"%.2fs ON vs %.2fs OFF\n"+
+						"vec ON times: %v\t vec OFF times: %v",
+						queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
+						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+			}
+			if vecOnTime >= slownessThresholdByVersion[version]*vecOffTime {
+				t.Fatal(fmt.Sprintf(
+					"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
+						"vec ON times: %v\nvec OFF times: %v",
+					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
+			}
+		}
+	*/
 }
 
 type tpchVecDiskTest struct {
@@ -293,24 +339,30 @@ func (b tpchVecSmallBatchSizeTest) preTestRunHook(
 	setSmallBatchSize(t, conn, rng)
 }
 
+var orderedQueryNums = []int{1, 2, 4, 6, 7, 8, 9, 10, 11, 16, 20, 21}
+var orderedBatchSizes = []string{"warmup", "0", "2MiB", "4MiB", "6MiB", "10MiB", "20MiB", "30MiB", "54MiB"}
+
 func baseTestRun(
 	ctx context.Context, t *test, c *cluster, version crdbVersion, tc tpchVecTestCase,
 ) {
 	firstNode := c.Node(1)
-	queriesToSkip := queriesToSkipByVersion[version]
-	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
-		for _, vectorize := range tc.vectorizeOptions() {
-			if reason, skip := queriesToSkip[queryNum]; skip {
+	//queriesToSkip := queriesToSkipByVersion[version]
+	conn := c.Conn(ctx, 1)
+	for _, queryNum := range orderedQueryNums { //1; queryNum <= tpchVecNumQueries; queryNum++ {
+		for _, batchSize := range orderedBatchSizes { //tc.vectorizeOptions() {
+			/*if reason, skip := queriesToSkip[queryNum]; skip {
 				t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
 				continue
-			}
-			vectorizeSetting := "off"
-			if vectorize {
-				vectorizeSetting = vectorizeOnOptionByVersion[version]
+			}*/
+			if batchSize != "warmup" {
+				t.Status(fmt.Sprintf("running query %d with batchSize %s", queryNum, batchSize))
+				if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING ljbytes='%s'", batchSize)); err != nil {
+					t.Fatal(err)
+				}
 			}
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-				"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
-				tc.numRunsPerQuery(), queryNum, vectorizeSetting, tpchVecNodeCount)
+				"--max-ops=%d --vectorize=on --queries=%d {pgurl:1-%d}",
+				tc.numRunsPerQuery(), queryNum, tpchVecNodeCount)
 			workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
 			t.l.Printf("\n" + string(workloadOutput))
 			if err != nil {
@@ -318,7 +370,7 @@ func baseTestRun(
 				// by the erroneous output of the query.
 				t.Fatal(err)
 			}
-			tc.postQueryRunHook(t, workloadOutput, vectorize)
+			tc.postQueryRunHook(t, workloadOutput, false, batchSize)
 		}
 	}
 }

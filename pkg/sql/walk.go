@@ -251,6 +251,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
 			v.observer.attr(name, "type", joinTypeStr(n.joinType))
+			v.observer.attr(name, "jrordering", fmt.Sprintf("%t", len(n.reqOrdering) > 0))
 		}
 		var b bytes.Buffer
 		b.WriteByte('(')

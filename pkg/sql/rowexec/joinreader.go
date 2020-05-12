@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -40,6 +42,12 @@ import (
 // TODO(asubiotto): Eventually we might want to adjust this batch size
 //  dynamically based on whether the result row container spilled or not.
 const joinReaderDefaultLookupBatchSizeBytes = 6 << 20 /* 6 MiB */
+
+var SettingJoinReaderBatchSizeBytes = settings.RegisterByteSizeSetting(
+	"ljbytes",
+	"batch size for join reader",
+	1<<20,
+)
 
 // joinReaderState represents the state of the processor.
 type joinReaderState int
@@ -115,8 +123,13 @@ func newJoinReader(
 		input:          input,
 		inputTypes:     input.OutputTypes(),
 		lookupCols:     spec.LookupColumns,
-		batchSizeBytes: joinReaderDefaultLookupBatchSizeBytes,
+		batchSizeBytes: SettingJoinReaderBatchSizeBytes.Get(&flowCtx.Cfg.Settings.SV),
 	}
+	if jr.batchSizeBytes == 0 {
+		spec.MaintainOrdering = true
+	}
+
+	log.Infof(flowCtx.EvalCtx.Context, "planned join reader with required ordering=%t and batchSize=%s", spec.MaintainOrdering, humanizeutil.IBytes(jr.batchSizeBytes))
 
 	var err error
 	var isSecondary bool
@@ -336,7 +349,7 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata
 // readInput reads the next batch of input rows and starts an index scan.
 func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	// Read the next batch of input rows.
-	for jr.curBatchSize < jr.batchSizeBytes {
+	for jr.batchSizeBytes != 0 && jr.curBatchSize < jr.batchSizeBytes || jr.batchSizeBytes == 0 && len(jr.scratchInputRows) < 100 {
 		row, meta := jr.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
@@ -358,13 +371,14 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		jr.MoveToDraining(nil)
 		return jrStateUnknown, jr.DrainHelper()
 	}
-	log.VEventf(jr.Ctx, 1, "read %d input rows", len(jr.scratchInputRows))
+	log.Eventf(jr.Ctx, "read %d input rows", len(jr.scratchInputRows))
 
 	spans, err := jr.strategy.processLookupRows(jr.scratchInputRows)
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, jr.DrainHelper()
 	}
+	jr.curBatchSize = 0
 	jr.scratchInputRows = jr.scratchInputRows[:0]
 	if len(spans) == 0 {
 		// All of the input rows were filtered out. Skip the index lookup.
