@@ -219,12 +219,12 @@ func (e *encryptionStatsHandler) GetEncryptionStatus() ([]byte, error) {
 	if k != nil {
 		s.ActiveDataKey = k.Info
 	}
-	return []byte(s.String()), nil
+	return protoutil.Marshal(&s)
 }
 
 func (e *encryptionStatsHandler) GetDataKeysRegistry() ([]byte, error) {
 	r := e.dataKM.getScrubbedRegistry()
-	return []byte(r.String()), nil
+	return protoutil.Marshal(r)
 }
 
 func (e *encryptionStatsHandler) GetActiveDataKeyID() (string, error) {

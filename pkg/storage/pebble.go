@@ -18,6 +18,8 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,11 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/vfs"
-	"github.com/pkg/errors"
 )
 
 // MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
@@ -786,7 +788,10 @@ func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
 		}
 	}
 	if p.fileRegistry != nil {
-		rv.FileRegistry = []byte(p.fileRegistry.getRegistryCopy().String())
+		rv.FileRegistry, err = protoutil.Marshal(p.fileRegistry.getRegistryCopy())
+		if err != nil {
+			return nil, err
+		}
 	}
 	return rv, nil
 }
@@ -806,14 +811,28 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 		return nil, err
 	}
 	fr := p.fileRegistry.getRegistryCopy()
-	if fr != nil {
-		stats.TotalFiles = uint64(len(fr.Files))
-	}
 	activeKeyID, err := p.statsHandler.GetActiveDataKeyID()
 	if err != nil {
 		return nil, err
 	}
-	for _, entry := range fr.Files {
+
+	m := p.db.Metrics()
+	stats.TotalFiles = 3 /* CURRENT, MANIFEST, OPTIONS */
+	stats.TotalFiles += uint64(m.WAL.Files + m.Table.ZombieCount + m.WAL.ObsoleteFiles)
+	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize
+	for _, l := range m.Levels {
+		stats.TotalFiles += uint64(l.NumFiles)
+		stats.TotalBytes += l.Size
+	}
+
+	sstSizes := make(map[pebble.FileNum]uint64)
+	for _, ssts := range p.db.SSTables() {
+		for _, sst := range ssts {
+			sstSizes[sst.FileNum] = sst.Size
+		}
+	}
+
+	for filePath, entry := range fr.Files {
 		keyID, err := p.statsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
 		if err != nil {
 			return nil, err
@@ -821,9 +840,21 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 		if len(keyID) == 0 {
 			keyID = "plain"
 		}
-		if keyID == activeKeyID {
-			stats.ActiveKeyFiles++
+		if keyID != activeKeyID {
+			continue
 		}
+		stats.ActiveKeyFiles++
+
+		filename := p.fs.PathBase(filePath)
+		numStr := strings.TrimSuffix(filename, ".sst")
+		if len(numStr) == len(filename) {
+			continue // not a sstable
+		}
+		u, err := strconv.ParseUint(numStr, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parsing filename %q", errors.Safe(filename))
+		}
+		stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
 	}
 	return stats, nil
 }

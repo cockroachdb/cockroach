@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -218,15 +219,25 @@ func TestPebbleEncryption(t *testing.T) {
 			Opts: opts,
 		})
 	require.NoError(t, err)
-	// Only exercising the stats code paths and not checking the returned values.
-	// TODO(sbhola): Make this better once stats are complete. Also ensure that we are
-	// not returning the secret data keys by mistake.
+	// TODO(sbhola): Ensure that we are not returning the secret data keys by mistake.
 	r, err := db.GetEncryptionRegistries()
 	require.NoError(t, err)
-	t.Logf("FileRegistry:\n%s\n\n", r.FileRegistry)
-	t.Logf("KeyRegistry:\n%s\n\n", r.KeyRegistry)
+
+	var fileRegistry enginepb.FileRegistry
+	require.NoError(t, protoutil.Unmarshal(r.FileRegistry, &fileRegistry))
+	var keyRegistry enginepbccl.DataKeysRegistry
+	require.NoError(t, protoutil.Unmarshal(r.KeyRegistry, &keyRegistry))
+
 	stats, err := db.GetEnvStats()
 	require.NoError(t, err)
+	// Opening the DB should've created OPTIONS, CURRENT, MANIFEST and the
+	// WAL, all under the active key.
+	require.Equal(t, uint64(4), stats.TotalFiles)
+	require.Equal(t, uint64(4), stats.ActiveKeyFiles)
+	var s enginepbccl.EncryptionStatus
+	require.NoError(t, protoutil.Unmarshal(stats.EncryptionStatus, &s))
+	require.Equal(t, "16.key", s.ActiveStoreKey.Source)
+	require.Equal(t, int32(enginepbccl.EncryptionType_AES128_CTR), stats.EncryptionType)
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
 
 	batch := db.NewWriteOnlyBatch()
@@ -258,5 +269,14 @@ func TestPebbleEncryption(t *testing.T) {
 	val, err = db.Get(storage.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
+
+	// Flushing should've created a new sstable under the active key.
+	stats, err = db.GetEnvStats()
+	require.NoError(t, err)
+	require.Equal(t, uint64(5), stats.TotalFiles)
+	require.Equal(t, uint64(5), stats.ActiveKeyFiles)
+	require.Equal(t, stats.TotalBytes, stats.ActiveKeyBytes)
+	t.Logf("EnvStats:\n%+v\n\n", *stats)
+
 	db.Close()
 }
