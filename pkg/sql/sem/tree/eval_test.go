@@ -244,7 +244,6 @@ func TestEval(t *testing.T) {
 				0, /* processorID */
 				result.Op,
 				typs,
-				&execinfrapb.PostProcessSpec{},
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
 				nil, /* toClose */
