@@ -1180,7 +1180,7 @@ CREATE TABLE pg_catalog.pg_database (
 	datacl STRING[]
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, true, /* requiresPrivileges */
+		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
 			func(db *sqlbase.DatabaseDescriptor) error {
 				return addRow(
 					dbOid(db.ID),           // oid
