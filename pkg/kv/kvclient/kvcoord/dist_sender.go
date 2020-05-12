@@ -504,6 +504,11 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 // start its query is returned first. Next returned is an EvictionToken. In
 // case the descriptor is discovered stale, the returned EvictionToken's evict
 // method should be called; it evicts the cache appropriately.
+//
+// If useReverseScan is set and descKey is the boundary between the two ranges,
+// the left range will be returned (even though descKey is actually contained on
+// the right range). This is useful for ReverseScans, which call this method
+// with their exclusive EndKey.
 func (ds *DistSender) getDescriptor(
 	ctx context.Context, descKey roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
@@ -512,6 +517,19 @@ func (ds *DistSender) getDescriptor(
 	)
 	if err != nil {
 		return nil, returnToken, err
+	}
+
+	// Sanity check: the descriptor we're about to return must include the key
+	// we're interested in.
+	{
+		containsFn := (*roachpb.RangeDescriptor).ContainsKey
+		if useReverseScan {
+			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
+		}
+		if !containsFn(desc, descKey) {
+			log.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
+				"desc: %s, key: %s, reverse: %t", desc, descKey, log.Safe(useReverseScan))
+		}
 	}
 
 	return desc, returnToken, nil
@@ -1864,7 +1882,7 @@ func (ds *DistSender) sendToReplicas(
 
 		ds.metrics.NextReplicaErrCount.Inc(1)
 		curReplica = transport.NextReplica()
-		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica)
+		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica.String())
 		br, err = transport.SendNext(ctx, ba)
 	}
 }

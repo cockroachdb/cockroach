@@ -174,25 +174,6 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			continue
 		}
 
-		// It's possible that the returned descriptor misses parts of the
-		// keys it's supposed to include after it's truncated to match the
-		// descriptor. Example revscan [a,g), first desc lookup for "g"
-		// returns descriptor [c,d) -> [d,g) is never scanned.
-		// We evict and retry in such a case.
-		// TODO: this code is subject to removal. See
-		// https://groups.google.com/d/msg/cockroach-db/DebjQEgU9r4/_OhMe7atFQAJ
-		reverse := ri.scanDir == Descending
-		if (reverse && !ri.desc.ContainsKeyInverted(ri.key)) ||
-			(!reverse && !ri.desc.ContainsKey(ri.key)) {
-			log.Eventf(ctx, "addressing error: %s does not include key %s", ri.desc, ri.key)
-			if err := ri.token.Evict(ctx); err != nil {
-				ri.err = err
-				return
-			}
-			// On addressing errors, don't backoff; retry immediately.
-			r.Reset()
-			continue
-		}
 		if log.V(2) {
 			log.Infof(ctx, "returning; key: %s, desc: %s", ri.key, ri.desc)
 		}
