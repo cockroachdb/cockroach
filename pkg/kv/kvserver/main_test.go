@@ -17,9 +17,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -70,6 +72,11 @@ func TestMain(m *testing.M) {
 
 		// Confirm that our expected set is now empty; we don't want to cement any
 		// protos needlessly.
+		// Two exceptions: these are sometimes observed below raft, sometimes not.
+		// It supposedly depends on whether any test server runs for long enough to
+		// write internal time series.
+		delete(notBelowRaftProtos, reflect.TypeOf(&roachpb.InternalTimeSeriesData{}))
+		delete(notBelowRaftProtos, reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}))
 		for typ := range notBelowRaftProtos {
 			failed = true
 			fmt.Printf("%s: not observed below raft!\n", typ)
@@ -80,8 +87,6 @@ func TestMain(m *testing.M) {
 			code = 1
 		}
 	}
-
-	serverutils.InitTestServerFactory(server.TestServerFactory)
 
 	os.Exit(code)
 }
