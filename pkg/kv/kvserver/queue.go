@@ -248,13 +248,14 @@ type replicaInQueue interface {
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
-	// The Replica is guaranteed to be initialized.
 	shouldQueue(
 		context.Context, hlc.Timestamp, *Replica, *config.SystemConfig,
 	) (shouldQueue bool, priority float64)
 
 	// process accepts a replica, and the system config and executes
-	// queue-specific work on it. The Replica is guaranteed to be initialized.
+	// queue-specific work on it. The Replica will conform to the properties
+	// required by the baseQueue's queueConfig. In particular, if the queueConfig
+	// does not processUninitialized then the passed Replica will be initialized.
 	process(context.Context, *Replica, *config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
@@ -309,6 +310,9 @@ type queueConfig struct {
 	// processDestroyedReplicas controls whether or not we want to process replicas
 	// that have been destroyed but not GCed.
 	processDestroyedReplicas bool
+	// processUninitializedReplicas controls whether or not we want to process
+	// replicas that are not initialized.
+	processUninitializedReplicas bool
 	// processTimeout returns the timeout for processing a replica.
 	processTimeoutFunc queueProcessTimeoutFunc
 	// successes is a counter of replicas processed successfully.
@@ -620,7 +624,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		return
 	}
 
-	if !repl.IsInitialized() {
+	if !repl.IsInitialized() && !bq.processUninitializedReplicas {
 		return
 	}
 
@@ -677,7 +681,7 @@ func (bq *baseQueue) addInternal(
 ) (bool, error) {
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
 	// lock ordering constraints.
-	if !desc.IsInitialized() {
+	if !desc.IsInitialized() && !bq.processUninitializedReplicas {
 		// We checked this above in MaybeAdd(), but we need to check it
 		// again for Add().
 		return false, errors.New("replica not initialized")
@@ -913,7 +917,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
 
-			if !repl.IsInitialized() {
+			if !repl.IsInitialized() && !bq.processUninitializedReplicas {
 				// We checked this when adding the replica, but we need to check it again
 				// in case this is a different replica with the same range ID (see #14193).
 				// This is possible in the case where the replica was enqueued while not

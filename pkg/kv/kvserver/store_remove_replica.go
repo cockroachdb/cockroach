@@ -31,21 +31,28 @@ type RemoveOptions struct {
 }
 
 // RemoveReplica removes the replica from the store's replica map and from the
-// sorted replicasByKey btree.
+// sorted replicasByKey btree. If the replica has already been removed,
+// this method is a no-op and returns no error. This method is called from
+// the ReplicaGC queue and may, in rare case, race with synchronous removal
+// due to a response to a raft message.
 //
 // The NextReplicaID from the replica descriptor that was used to make the
 // removal decision is passed in. Removal is aborted if the replica ID has
 // advanced to or beyond the NextReplicaID since the removal decision was made.
 //
 // If opts.DestroyReplica is false, replica.destroyRaftMuLocked is not called.
-//
-// The passed replica must be initialized.
 func (s *Store) RemoveReplica(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
-	return s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
+	// Check the destroy status here as it can only be set under the raftMu.
+	// All other calls to the removeReplicaRaftMuLocked handle setting the
+	// destroy status directly.
+	if reason, _ := rep.IsDestroyed(); reason == destroyReasonRemoved {
+		return nil
+	}
+	return s.removeReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
 }
 
 // removeReplicaRaftMuLocked removes the passed replica. If the replica is

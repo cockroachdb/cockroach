@@ -196,7 +196,8 @@ type Replica struct {
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
-	creatingReplica *roachpb.ReplicaDescriptor
+	creatingReplica  *roachpb.ReplicaDescriptor
+	createdTimestamp hlc.Timestamp
 
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
@@ -355,6 +356,11 @@ type Replica struct {
 		// Used to determine whether a replica is new enough that we shouldn't
 		// penalize it for being slightly behind. These field gets cleared out once
 		// we know that the replica has caught up.
+		//
+		// Note that the replica considers itself to be the lastReplicaAdded when it
+		// is uninitialized. This timestamp is used to determine whether an
+		// uninitialized Replica is likely garbage needing to be collected by the
+		// replicaGCQueue.
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
 		// initialMaxClosed is the initial maxClosed timestamp for the replica as known

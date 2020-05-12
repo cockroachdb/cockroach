@@ -34,10 +34,12 @@ func forceScanAndProcess(s *Store, q *baseQueue) error {
 		return errors.Errorf("system config not available in gossip")
 	}
 
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		q.maybeAdd(context.Background(), repl, s.cfg.Clock.Now())
-		return true
-	})
+	newStoreReplicaVisitor(s).
+		includeUninitialized().
+		Visit(func(repl *Replica) bool {
+			q.maybeAdd(context.Background(), repl, s.cfg.Clock.Now())
+			return true
+		})
 
 	q.DrainQueue(s.stopper)
 	return nil

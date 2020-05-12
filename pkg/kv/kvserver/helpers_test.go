@@ -160,6 +160,19 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
+// VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
+// Replicas which are added to the Store after iteration begins may or may not be observed.
+func (s *Store) VisitReplicas(visitor func(*Replica) bool) {
+	v := newStoreReplicaVisitor(s)
+	v.Visit(visitor)
+}
+
+// InOrder tells the visitor to visit replicas in increasing RangeID order.
+func (rs *storeReplicaVisitor) InOrder() *storeReplicaVisitor {
+	rs.ordered = true
+	return rs
+}
+
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	cfg := s.Gossip().GetSystemConfig()
 	if cfg == nil {

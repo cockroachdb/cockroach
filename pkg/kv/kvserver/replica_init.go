@@ -95,6 +95,11 @@ func newUnloadedReplica(
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	r.mu.proposalBuf.Init((*replicaProposer)(r))
 
+	// lastReplicaAddedTime is initialized to the time when the uninitialized
+	// replica is constructed to detect when uninitialized replicas are
+	r.mu.lastReplicaAddedTime = store.Clock().PhysicalTime()
+	r.mu.lastReplicaAdded = replicaID
+
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -302,6 +307,12 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	if newMaxID > oldMaxID {
 		r.mu.lastReplicaAdded = newMaxID
 		r.mu.lastReplicaAddedTime = timeutil.Now()
+	} else if !desc.IsInitialized() {
+		// We consider ourselves to be the last added replica while the range is
+		// uninitialized. This gives us some information about the age of an
+		// uninitialized replica for the purpose of replica GC.
+		r.mu.lastReplicaAdded = r.mu.replicaID
+		r.mu.lastReplicaAddedTime = time.Time{}
 	} else if r.mu.lastReplicaAdded > newMaxID {
 		// The last replica added was removed.
 		r.mu.lastReplicaAdded = 0

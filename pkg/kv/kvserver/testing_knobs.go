@@ -235,6 +235,8 @@ type StoreTestingKnobs struct {
 	// RangeFeedPushTxnsAge overrides the default value for
 	// rangefeed.Config.PushTxnsAge.
 	RangeFeedPushTxnsAge time.Duration
+	// ReplicaGCQueueSuspectTimeout overrides the constant of the same name.
+	ReplicaGCQueueUninitializedTimeout func() time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
