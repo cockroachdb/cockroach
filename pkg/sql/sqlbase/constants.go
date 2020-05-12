@@ -160,5 +160,9 @@ const (
 	PgCatalogStatActivityTableID
 	PgCatalogSecurityLabelTableID
 	PgCatalogSharedSecurityLabelTableID
-	MinVirtualID = PgCatalogSharedSecurityLabelTableID
+	PgExtensionSchemaID
+	PgExtensionGeographyColumnsTableID
+	PgExtensionGeometryColumnsTableID
+	PgExtensionSpatialRefSysTableID
+	MinVirtualID = PgExtensionSpatialRefSysTableID
 )

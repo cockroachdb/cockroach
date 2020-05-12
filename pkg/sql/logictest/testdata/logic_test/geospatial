@@ -103,7 +103,8 @@ INSERT INTO parse_test (geom, geog) VALUES
   (ST_GeomFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'::jsonb), ST_GeogFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'::jsonb)),
   (ST_GeomFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
   (ST_GeomFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'), 3857), ST_GeogFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'), 3857)),
-  (ST_GeomFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')))
+  (ST_GeomFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
+  (st_geomfromgeojson('null':::jsonb), st_geogfromgeojson('null':::jsonb))
 
 query TTTTTTTT
 SELECT
@@ -141,6 +142,7 @@ POINT (1 1)                                    SRID=3857;POINT (1 1)            
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
 POINT (1 1)                                    POINT (1 1)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
+NULL                                           NULL                                                                                  NULL  NULL  NULL  NULL  NULL  NULL
 
 query TTTTTTTT
 SELECT
@@ -178,6 +180,7 @@ POINT (1 1)                                    SRID=3857;POINT (1 1)            
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
 POINT (1 1)                                    SRID=4326;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
+NULL                                           NULL                                                                                  NULL  NULL  NULL  NULL  NULL  NULL
 
 query TTTTTTTT
 SELECT
@@ -356,9 +359,13 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            true   false  true   false  false  true   false  false  false
 Square overlapping left and right square  Square overlapping left and right square  true   true   true   false  true   true   false  false  true
 
-subtest regression_48093
+subtest pg_extension
 
-query TT
-SELECT st_geogfromgeojson('null':::jsonb), st_geomfromgeojson('null':::jsonb)
-----
-NULL  NULL
+statement error not yet implemented
+SELECT * FROM pg_extension.geography_columns
+
+statement error not yet implemented
+SELECT * FROM pg_extension.geometry_columns
+
+statement error not yet implemented
+SELECT * FROM pg_extension.spatial_ref_sys ORDER BY srid ASC

@@ -228,6 +228,7 @@ oid         nspname             nspowner  nspacl
 3604332469  crdb_internal       NULL      NULL
 3672231114  information_schema  NULL      NULL
 2508829085  pg_catalog          NULL      NULL
+1841002695  pg_extension        NULL      NULL
 3426283741  public              NULL      NULL
 
 ## pg_catalog.pg_database
@@ -1584,6 +1585,9 @@ objoid      classoid    objsubid  description
 4294967193  4294967226  0         database users
 4294967192  4294967226  0         local to remote user mapping (empty - feature does not exist)
 4294967187  4294967226  0         view definitions (incomplete - see also information_schema.views)
+4294967182  4294967226  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+4294967181  4294967226  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+4294967180  4294967226  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
 
 ## pg_catalog.pg_shdescription
 

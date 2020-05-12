@@ -674,6 +674,9 @@ db2            information_schema  root      ALL
 db2            pg_catalog          admin     ALL
 db2            pg_catalog          newgroup  ALL
 db2            pg_catalog          root      ALL
+db2            pg_extension        admin     ALL
+db2            pg_extension        newgroup  ALL
+db2            pg_extension        root      ALL
 db2            public              admin     ALL
 db2            public              newgroup  ALL
 db2            public              root      ALL

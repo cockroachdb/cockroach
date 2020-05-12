@@ -13,6 +13,8 @@ a              information_schema  admin    ALL
 a              information_schema  root     ALL
 a              pg_catalog          admin    ALL
 a              pg_catalog          root     ALL
+a              pg_extension        admin    ALL
+a              pg_extension        root     ALL
 a              public              admin    ALL
 a              public              root     ALL
 
@@ -55,6 +57,10 @@ a  pg_catalog          admin      ALL
 a  pg_catalog          readwrite  ALL
 a  pg_catalog          root       ALL
 a  pg_catalog          test-user  ALL
+a  pg_extension        admin      ALL
+a  pg_extension        readwrite  ALL
+a  pg_extension        root       ALL
+a  pg_extension        test-user  ALL
 a  public              admin      ALL
 a  public              readwrite  ALL
 a  public              root       ALL
@@ -82,6 +88,8 @@ a  information_schema  readwrite  ALL
 a  information_schema  test-user  ALL
 a  pg_catalog          readwrite  ALL
 a  pg_catalog          test-user  ALL
+a  pg_extension        readwrite  ALL
+a  pg_extension        test-user  ALL
 a  public              readwrite  ALL
 a  public              test-user  ALL
 
@@ -133,6 +141,20 @@ a  pg_catalog          test-user  DROP
 a  pg_catalog          test-user  GRANT
 a  pg_catalog          test-user  SELECT
 a  pg_catalog          test-user  ZONECONFIG
+a  pg_extension        admin      ALL
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  DELETE
+a  pg_extension        readwrite  DROP
+a  pg_extension        readwrite  GRANT
+a  pg_extension        readwrite  SELECT
+a  pg_extension        readwrite  ZONECONFIG
+a  pg_extension        root       ALL
+a  pg_extension        test-user  CREATE
+a  pg_extension        test-user  DELETE
+a  pg_extension        test-user  DROP
+a  pg_extension        test-user  GRANT
+a  pg_extension        test-user  SELECT
+a  pg_extension        test-user  ZONECONFIG
 a  public              admin      ALL
 a  public              readwrite  CREATE
 a  public              readwrite  DELETE
@@ -187,6 +209,18 @@ a  pg_catalog          test-user  DROP
 a  pg_catalog          test-user  GRANT
 a  pg_catalog          test-user  SELECT
 a  pg_catalog          test-user  ZONECONFIG
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  DELETE
+a  pg_extension        readwrite  DROP
+a  pg_extension        readwrite  GRANT
+a  pg_extension        readwrite  SELECT
+a  pg_extension        readwrite  ZONECONFIG
+a  pg_extension        test-user  CREATE
+a  pg_extension        test-user  DELETE
+a  pg_extension        test-user  DROP
+a  pg_extension        test-user  GRANT
+a  pg_extension        test-user  SELECT
+a  pg_extension        test-user  ZONECONFIG
 a  public              readwrite  CREATE
 a  public              readwrite  DELETE
 a  public              readwrite  DROP
@@ -245,6 +279,19 @@ a  pg_catalog          test-user  DELETE
 a  pg_catalog          test-user  DROP
 a  pg_catalog          test-user  GRANT
 a  pg_catalog          test-user  ZONECONFIG
+a  pg_extension        admin      ALL
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  DELETE
+a  pg_extension        readwrite  DROP
+a  pg_extension        readwrite  GRANT
+a  pg_extension        readwrite  SELECT
+a  pg_extension        readwrite  ZONECONFIG
+a  pg_extension        root       ALL
+a  pg_extension        test-user  CREATE
+a  pg_extension        test-user  DELETE
+a  pg_extension        test-user  DROP
+a  pg_extension        test-user  GRANT
+a  pg_extension        test-user  ZONECONFIG
 a  public              admin      ALL
 a  public              readwrite  CREATE
 a  public              readwrite  DELETE
@@ -283,6 +330,12 @@ a  pg_catalog          readwrite  DROP
 a  pg_catalog          readwrite  GRANT
 a  pg_catalog          readwrite  SELECT
 a  pg_catalog          readwrite  ZONECONFIG
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  DELETE
+a  pg_extension        readwrite  DROP
+a  pg_extension        readwrite  GRANT
+a  pg_extension        readwrite  SELECT
+a  pg_extension        readwrite  ZONECONFIG
 a  public              readwrite  CREATE
 a  public              readwrite  DELETE
 a  public              readwrite  DROP
@@ -302,6 +355,8 @@ a  information_schema  admin  ALL
 a  information_schema  root   ALL
 a  pg_catalog          admin  ALL
 a  pg_catalog          root   ALL
+a  pg_extension        admin  ALL
+a  pg_extension        root   ALL
 a  public              admin  ALL
 a  public              root   ALL
 
