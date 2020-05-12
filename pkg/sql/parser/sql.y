@@ -523,6 +523,9 @@ func (u *sqlSymUnion) typeReference() tree.ResolvableTypeReference {
 func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
     return u.val.([]tree.ResolvableTypeReference)
 }
+func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacement {
+    return u.val.(*tree.AlterTypeAddValuePlacement)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -542,11 +545,11 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACTION ADD ADMIN AGGREGATE
+%token <str> ABORT ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT AUTHORIZATION AUTOMATIC
+%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
-%token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BUNDLE BY
 
@@ -600,7 +603,7 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
-%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
+%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POLYGON POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
@@ -667,6 +670,7 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
 %type <tree.Statement> alter_role_stmt
+%type <tree.Statement> alter_type_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1006,6 +1010,7 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 
 %type <tree.ResolvableTypeReference> typename simple_typename cast_target
 %type <*types.T> const_typename
+%type <*tree.AlterTypeAddValuePlacement> opt_add_val_placement
 %type <bool> opt_timezone
 %type <*types.T> numeric opt_numeric_modifiers
 %type <*types.T> opt_float
@@ -1199,6 +1204,7 @@ alter_ddl_stmt:
 | alter_database_stmt  // EXTEND WITH HELP: ALTER DATABASE
 | alter_range_stmt     // EXTEND WITH HELP: ALTER RANGE
 | alter_partition_stmt // EXTEND WITH HELP: ALTER PARTITION
+| alter_type_stmt      // EXTEND WITH HELP: ALTER TYPE
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1866,6 +1872,126 @@ opt_validate_behavior:
   {
     $$.val = tree.ValidationDefault
   }
+
+// %Help: ALTER TYPE - change the definition of a type.
+// %Category: DDL
+// %Text: ALTER TYPE <typename> <command>
+//
+// Commands:
+//   ALTER TYPE ... ADD VALUE [IF NOT EXISTS] <value> [ { BEFORE | AFTER } <value> ]
+//   ALTER TYPE ... RENAME VALUE <oldname> TO <newname>
+//   ALTER TYPE ... RENAME TO <newname>
+//   ALTER TYPE ... SET SCHEMA <newschemaname>
+//   ALTER TYPE ... OWNER TO {<newowner> | CURRENT_USER | SESSION_USER }
+//   ALTER TYPE ... RENAME ATTRIBUTE <oldname> TO <newname> [ CASCADE | RESTRICT ]
+//   ALTER TYPE ... <attributeaction> [, ... ]
+//
+// Attribute action:
+//   ADD ATTRIBUTE <name> <type> [ COLLATE <collation> ] [ CASCADE | RESTRICT ]
+//   DROP ATTRIBUTE [IF EXISTS] <name> [ CASCADE | RESTRICT ]
+//   ALTER ATTRIBUTE <name> [ SET DATA ] TYPE <type> [ COLLATE <collation> ] [ CASCADE | RESTRICT ]
+//
+// %SeeAlso: WEBDOCS/alter-type.html
+alter_type_stmt:
+  ALTER TYPE type_name ADD VALUE SCONST opt_add_val_placement
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeAddValue{
+        NewVal: $6,
+        IfNotExists: false,
+        Placement: $7.alterTypeAddValuePlacement(),
+      },
+    }
+  }
+| ALTER TYPE type_name ADD VALUE IF NOT EXISTS SCONST opt_add_val_placement
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeAddValue{
+        NewVal: $9,
+        IfNotExists: true,
+        Placement: $10.alterTypeAddValuePlacement(),
+      },
+    }
+  }
+| ALTER TYPE type_name RENAME VALUE SCONST TO SCONST
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeRenameValue{
+        OldVal: $6,
+        NewVal: $8,
+      },
+    }
+  }
+| ALTER TYPE type_name RENAME TO type_name
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeRename{
+        NewName: $6.unresolvedObjectName(),
+      },
+    }
+  }
+| ALTER TYPE type_name SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeSetSchema{
+        Schema: $6,
+      },
+    }
+  }
+| ALTER TYPE type_name OWNER TO role_spec
+  {
+    return unimplementedWithIssueDetail(sqllex, 48700, "ALTER TYPE OWNER TO")
+  }
+| ALTER TYPE type_name RENAME ATTRIBUTE column_name TO column_name opt_drop_behavior
+  {
+    return unimplementedWithIssueDetail(sqllex, 48701, "ALTER TYPE ATTRIBUTE")
+  }
+| ALTER TYPE type_name alter_attribute_action_list
+  {
+    return unimplementedWithIssueDetail(sqllex, 48701, "ALTER TYPE ATTRIBUTE")
+  }
+| ALTER TYPE error // SHOW HELP: ALTER TYPE
+
+opt_add_val_placement:
+  BEFORE SCONST
+  {
+    $$.val = &tree.AlterTypeAddValuePlacement{
+       Before: true,
+       ExistingVal: $2,
+    }
+  }
+| AFTER SCONST
+  {
+    $$.val = &tree.AlterTypeAddValuePlacement{
+       Before: false,
+       ExistingVal: $2,
+    }
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.AlterTypeAddValuePlacement)(nil)
+  }
+
+role_spec:
+  non_reserved_word_or_sconst
+| CURRENT_USER
+| SESSION_USER
+
+alter_attribute_action_list:
+  alter_attribute_action
+| alter_attribute_action_list ',' alter_attribute_action
+
+alter_attribute_action:
+  ADD ATTRIBUTE column_name type_name opt_collate opt_drop_behavior
+| DROP ATTRIBUTE column_name opt_drop_behavior
+| DROP ATTRIBUTE IF EXISTS column_name opt_drop_behavior
+| ALTER ATTRIBUTE column_name TYPE type_name opt_collate opt_drop_behavior
+| ALTER ATTRIBUTE column_name SET DATA TYPE type_name opt_collate opt_drop_behavior
 
 // %Help: BACKUP - back up data to external storage
 // %Category: CCL
@@ -10040,13 +10166,16 @@ unreserved_keyword:
 | ACTION
 | ADD
 | ADMIN
+| AFTER
 | AGGREGATE
 | ALTER
 | ALWAYS
 | AT
+| ATTRIBUTE
 | AUTOMATIC
 | AUTHORIZATION
 | BACKUP
+| BEFORE
 | BEGIN
 | BUCKET_COUNT
 | BUNDLE
@@ -10184,6 +10313,7 @@ unreserved_keyword:
 | OTHERS
 | OVER
 | OWNED
+| OWNER
 | PARENT
 | PARTIAL
 | PARTITION
