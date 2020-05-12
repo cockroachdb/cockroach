@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -483,7 +484,7 @@ func (e *confluentAvroEncoder) register(
 
 	schemaStr := schema.codec.Schema()
 	if log.V(1) {
-		log.Infof(context.TODO(), "registering avro schema %s %s", url, schemaStr)
+		log.Infof(ctx, "registering avro schema %s %s", url, schemaStr)
 	}
 
 	req := confluentSchemaVersionRequest{Schema: schemaStr}
@@ -492,21 +493,26 @@ func (e *confluentAvroEncoder) register(
 		return 0, err
 	}
 
-	// TODO(someone): connect the context to the caller to obey
-	// cancellation.
-	resp, err := httputil.Post(ctx, url.String(), confluentSchemaContentType, &buf)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return 0, errors.Errorf(`registering schema to %s %s: %s`, url.String(), resp.Status, body)
-	}
-	var res confluentSchemaVersionResponse
-	if err := gojson.NewDecoder(resp.Body).Decode(&res); err != nil {
+	var id int32
+	if err := retry.WithMaxAttempts(ctx, retry.Options{}, 10, func() error {
+		resp, err := httputil.Post(ctx, url.String(), confluentSchemaContentType, &buf)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := ioutil.ReadAll(resp.Body)
+			return errors.Errorf(`registering schema to %s %s: %s`, url.String(), resp.Status, body)
+		}
+		var res confluentSchemaVersionResponse
+		if err := gojson.NewDecoder(resp.Body).Decode(&res); err != nil {
+			return err
+		}
+		id = res.ID
+		return nil
+	}); err != nil {
 		return 0, err
 	}
 
-	return res.ID, nil
+	return id, nil
 }
