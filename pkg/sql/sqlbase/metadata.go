@@ -26,6 +26,8 @@ import (
 
 var _ DescriptorProto = &DatabaseDescriptor{}
 var _ DescriptorProto = &TableDescriptor{}
+var _ DescriptorProto = &TypeDescriptor{}
+var _ DescriptorProto = &SchemaDescriptor{}
 
 // DescriptorKey is the interface implemented by both
 // databaseKey and tableKey. It is used to easily get the
@@ -35,8 +37,7 @@ type DescriptorKey interface {
 	Name() string
 }
 
-// DescriptorProto is the interface implemented by DatabaseDescriptor,
-// TableDescriptor, and TypeDescriptor.
+// DescriptorProto is the interface implemented by all Descriptors.
 // TODO(marc): this is getting rather large.
 type DescriptorProto interface {
 	protoutil.Message
@@ -61,6 +62,8 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 		desc.Union = &Descriptor_Database{Database: t}
 	case *TypeDescriptor:
 		desc.Union = &Descriptor_Type{Type: t}
+	case *SchemaDescriptor:
+		desc.Union = &Descriptor_Schema{Schema: t}
 	default:
 		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
 	}
