@@ -196,6 +196,7 @@ catalog_name  schema_name         default_character_set_name  sql_path
 test          crdb_internal       NULL                        NULL
 test          information_schema  NULL                        NULL
 test          pg_catalog          NULL                        NULL
+test          pg_extension        NULL                        NULL
 test          public              NULL                        NULL
 
 query TTTT colnames
@@ -205,6 +206,7 @@ catalog_name  schema_name         default_character_set_name  sql_path
 test          crdb_internal       NULL                        NULL
 test          information_schema  NULL                        NULL
 test          pg_catalog          NULL                        NULL
+test          pg_extension        NULL                        NULL
 test          public              NULL                        NULL
 
 ## information_schema.tables
@@ -323,6 +325,9 @@ pg_catalog          pg_type
 pg_catalog          pg_user
 pg_catalog          pg_user_mapping
 pg_catalog          pg_views
+pg_extension        geography_columns
+pg_extension        geometry_columns
+pg_extension        spatial_ref_sys
 
 statement ok
 CREATE DATABASE other_db
@@ -467,6 +472,9 @@ pg_type
 pg_user
 pg_user_mapping
 pg_views
+geography_columns
+geometry_columns
+spatial_ref_sys
 xyz
 
 # Check that the other_db tables become visible to non-root when the current database is changed.
@@ -618,6 +626,9 @@ system         pg_catalog          pg_type                            SYSTEM VIE
 system         pg_catalog          pg_user                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_user_mapping                    SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_views                           SYSTEM VIEW  NO                  1
+system         pg_extension        geography_columns                  SYSTEM VIEW  NO                  1
+system         pg_extension        geometry_columns                   SYSTEM VIEW  NO                  1
+system         pg_extension        spatial_ref_sys                    SYSTEM VIEW  NO                  1
 system         public              namespace                          BASE TABLE   YES                 1
 system         public              descriptor                         BASE TABLE   YES                 1
 system         public              users                              BASE TABLE   YES                 1
@@ -1083,6 +1094,20 @@ system         public        eventlog                         reportingID       
 system         public        eventlog                         targetID                  3
 system         public        eventlog                         timestamp                 1
 system         public        eventlog                         uniqueID                  6
+system         pg_extension  geography_columns                coord_dimension           5
+system         pg_extension  geography_columns                f_geography_column        4
+system         pg_extension  geography_columns                f_table_catalog           1
+system         pg_extension  geography_columns                f_table_name              3
+system         pg_extension  geography_columns                f_table_schema            2
+system         pg_extension  geography_columns                srid                      6
+system         pg_extension  geography_columns                type                      7
+system         pg_extension  geometry_columns                 coord_dimension           5
+system         pg_extension  geometry_columns                 f_geometry_column         4
+system         pg_extension  geometry_columns                 f_table_catalog           1
+system         pg_extension  geometry_columns                 f_table_name              3
+system         pg_extension  geometry_columns                 f_table_schema            2
+system         pg_extension  geometry_columns                 srid                      6
+system         pg_extension  geometry_columns                 type                      7
 system         public        jobs                             created                   3
 system         public        jobs                             id                        1
 system         public        jobs                             payload                   4
@@ -1153,6 +1178,11 @@ system         public        settings                         lastUpdated       
 system         public        settings                         name                      1
 system         public        settings                         value                     2
 system         public        settings                         valueType                 4
+system         pg_extension  spatial_ref_sys                  auth_name                 2
+system         pg_extension  spatial_ref_sys                  auth_srid                 3
+system         pg_extension  spatial_ref_sys                  proj4text                 5
+system         pg_extension  spatial_ref_sys                  srid                      1
+system         pg_extension  spatial_ref_sys                  srtext                    4
 system         public        statement_bundle_chunks          data                      3
 system         public        statement_bundle_chunks          description               2
 system         public        statement_bundle_chunks          id                        1
@@ -1477,6 +1507,8 @@ admin    other_db       information_schema  ALL             NULL
 root     other_db       information_schema  ALL             NULL
 admin    other_db       pg_catalog          ALL             NULL
 root     other_db       pg_catalog          ALL             NULL
+admin    other_db       pg_extension        ALL             NULL
+root     other_db       pg_extension        ALL             NULL
 admin    other_db       public              ALL             NULL
 root     other_db       public              ALL             NULL
 
@@ -1496,6 +1528,9 @@ testuser  other_db       information_schema  SELECT          NULL
 admin     other_db       pg_catalog          ALL             NULL
 root      other_db       pg_catalog          ALL             NULL
 testuser  other_db       pg_catalog          SELECT          NULL
+admin     other_db       pg_extension        ALL             NULL
+root      other_db       pg_extension        ALL             NULL
+testuser  other_db       pg_extension        SELECT          NULL
 admin     other_db       public              ALL             NULL
 root      other_db       public              ALL             NULL
 testuser  other_db       public              SELECT          NULL
@@ -1616,6 +1651,9 @@ NULL     public   system         pg_catalog          pg_type                    
 NULL     public   system         pg_catalog          pg_user                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_user_mapping                    SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_views                           SELECT          NULL          YES
+NULL     public   system         pg_extension        geography_columns                  SELECT          NULL          YES
+NULL     public   system         pg_extension        geometry_columns                   SELECT          NULL          YES
+NULL     public   system         pg_extension        spatial_ref_sys                    SELECT          NULL          YES
 NULL     admin    system         public              comments                           DELETE          NULL          NO
 NULL     admin    system         public              comments                           GRANT           NULL          NO
 NULL     admin    system         public              comments                           INSERT          NULL          NO
@@ -1961,6 +1999,9 @@ NULL     public   system         pg_catalog          pg_type                    
 NULL     public   system         pg_catalog          pg_user                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_user_mapping                    SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_views                           SELECT          NULL          YES
+NULL     public   system         pg_extension        geography_columns                  SELECT          NULL          YES
+NULL     public   system         pg_extension        geometry_columns                   SELECT          NULL          YES
+NULL     public   system         pg_extension        spatial_ref_sys                    SELECT          NULL          YES
 NULL     admin    system         public              namespace                          GRANT           NULL          NO
 NULL     admin    system         public              namespace                          SELECT          NULL          YES
 NULL     root     system         public              namespace                          GRANT           NULL          NO

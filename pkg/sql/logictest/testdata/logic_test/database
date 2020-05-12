@@ -42,6 +42,7 @@ schema_name
 crdb_internal
 information_schema
 pg_catalog
+pg_extension
 public
 
 statement ok

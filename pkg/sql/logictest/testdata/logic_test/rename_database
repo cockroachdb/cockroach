@@ -15,6 +15,8 @@ test  information_schema  admin  ALL
 test  information_schema  root   ALL
 test  pg_catalog          admin  ALL
 test  pg_catalog          root   ALL
+test  pg_extension        admin  ALL
+test  pg_extension        root   ALL
 test  public              admin  ALL
 test  public              root   ALL
 
@@ -69,6 +71,8 @@ u  information_schema  admin  ALL
 u  information_schema  root   ALL
 u  pg_catalog          admin  ALL
 u  pg_catalog          root   ALL
+u  pg_extension        admin  ALL
+u  pg_extension        root   ALL
 u  public              admin  ALL
 u  public              root   ALL
 

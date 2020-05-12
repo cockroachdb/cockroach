@@ -29,6 +29,7 @@ var staticSchemaIDMap = map[sqlbase.ID]string{
 	sqlbase.PgCatalogID:         sessiondata.PgCatalogName,
 	sqlbase.InformationSchemaID: sessiondata.InformationSchemaName,
 	sqlbase.CrdbInternalID:      sessiondata.CRDBInternalSchemaName,
+	sqlbase.PgExtensionSchemaID: sessiondata.PgExtensionSchemaName,
 }
 
 // ResolveNameByID resolves a schema's name based on db and schema id.

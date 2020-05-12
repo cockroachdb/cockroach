@@ -38,7 +38,9 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 		}
 		schemaClause = fmt.Sprintf("AND ns.nspname = %s", schema)
 	} else {
-		schemaClause = "AND ns.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal')"
+		// These must be custom defined until the sql <-> sql/delegate cyclic dependency
+		// is resolved. When we have that, we should read the names off "virtualSchemas" instead.
+		schemaClause = "AND ns.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')"
 	}
 
 	var query string
