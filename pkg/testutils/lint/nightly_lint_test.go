@@ -14,16 +14,18 @@ package lint
 
 import (
 	"bytes"
+	"go/build"
 	"os"
 	"os/exec"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 	sqlparser "github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/ghemawat/stream"
 )
 
 func TestNightlyLint(t *testing.T) {
-	_, pkgSpecified := os.LookupEnv("PKG")
+	pkgVar, pkgSpecified := os.LookupEnv("PKG")
 
 	// RoachLint is expensive memory-wise and thus should not run with t.Parallel().
 	//
@@ -31,6 +33,16 @@ func TestNightlyLint(t *testing.T) {
 	// until issue https://github.com/cockroachdb/cockroach/issues/42594
 	// has been addressed.
 	t.Run("TestRoachLint", func(t *testing.T) {
+		crdb, err := build.Import(cockroachDB, "", build.FindOnly)
+		if err != nil {
+			t.Skip(err)
+		}
+
+		pkgScope := pkgVar
+		if !pkgSpecified {
+			pkgScope = "./pkg/..."
+		}
+
 		vetCmd(t, crdb.Dir, "roachlint", []string{pkgScope}, []stream.Filter{
 			// Ignore generated files.
 			stream.GrepNot(`pkg/.*\.pb\.go:`),
