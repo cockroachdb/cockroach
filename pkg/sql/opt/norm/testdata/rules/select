@@ -1517,3 +1517,473 @@ select
  │         └── generate_series(0, k:1, 10) [outer=(1), side-effects]
  └── filters
       └── generate_series:6 > 1 [outer=(6), constraints=(/6: [/2 - ]; tight)]
+
+
+# --------------------------------------------------
+# PushFilterIntoSetOp
+# --------------------------------------------------
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+  ((SELECT k FROM b)
+  UNION ALL
+  (SELECT k FROM b))
+WHERE k < 10
+----
+union-all
+ ├── columns: k:11!null
+ ├── left columns: b.k:1
+ ├── right columns: b.k:6
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── b.k:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+ └── select
+      ├── columns: b.k:6!null
+      ├── key: (6)
+      ├── scan b
+      │    ├── columns: b.k:6!null
+      │    └── key: (6)
+      └── filters
+           └── b.k:6 < 10 [outer=(6), constraints=(/6: (/NULL - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  UNION
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+union
+ ├── columns: k:11!null
+ ├── left columns: b.k:1
+ ├── right columns: a.i:7
+ ├── key: (11)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:7!null
+      ├── scan a
+      │    └── columns: a.i:7
+      └── filters
+           └── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  EXCEPT
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+except
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:7
+ ├── cardinality: [0 - 8]
+ ├── key: (1)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:7!null
+      ├── scan a
+      │    └── columns: a.i:7
+      └── filters
+           └── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  EXCEPT ALL
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+except-all
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:7
+ ├── cardinality: [0 - 8]
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:7!null
+      ├── scan a
+      │    └── columns: a.i:7
+      └── filters
+           └── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  INTERSECT
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+intersect
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:7
+ ├── cardinality: [0 - 8]
+ ├── key: (1)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:7!null
+      ├── scan a
+      │    └── columns: a.i:7
+      └── filters
+           └── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  INTERSECT ALL
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+intersect-all
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:7
+ ├── cardinality: [0 - 8]
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:7!null
+      ├── scan a
+      │    └── columns: a.i:7
+      └── filters
+           └── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  UNION
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1 AND random() < 0.5
+----
+union
+ ├── columns: k:11!null
+ ├── left columns: b.k:1
+ ├── right columns: a.i:7
+ ├── side-effects
+ ├── key: (11)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── side-effects
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         ├── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ │         └── random() < 0.5 [side-effects]
+ └── select
+      ├── columns: a.i:7!null
+      ├── side-effects
+      ├── scan a
+      │    └── columns: a.i:7
+      └── filters
+           ├── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+           └── random() < 0.5 [side-effects]
+
+norm expect=PushFilterIntoSetOp
+SELECT * FROM
+  (SELECT k FROM b
+    UNION ALL
+  SELECT k FROM b) t1
+  WHERE EXISTS(
+  SELECT * FROM a WHERE k=1)
+----
+union-all
+ ├── columns: k:11!null
+ ├── left columns: b.k:1
+ ├── right columns: b.k:6
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── exists [subquery]
+ │              └── select
+ │                   ├── columns: a.k:12!null a.i:13 a.f:14 a.s:15 a.j:16
+ │                   ├── cardinality: [0 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(12-16)
+ │                   ├── scan a
+ │                   │    ├── columns: a.k:12!null a.i:13 a.f:14 a.s:15 a.j:16
+ │                   │    ├── key: (12)
+ │                   │    └── fd: (12)-->(13-16)
+ │                   └── filters
+ │                        └── a.k:12 = 1 [outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
+ └── select
+      ├── columns: b.k:6!null
+      ├── key: (6)
+      ├── scan b
+      │    ├── columns: b.k:6!null
+      │    └── key: (6)
+      └── filters
+           └── exists [subquery]
+                └── select
+                     ├── columns: a.k:12!null a.i:13 a.f:14 a.s:15 a.j:16
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(12-16)
+                     ├── scan a
+                     │    ├── columns: a.k:12!null a.i:13 a.f:14 a.s:15 a.j:16
+                     │    ├── key: (12)
+                     │    └── fd: (12)-->(13-16)
+                     └── filters
+                          └── a.k:12 = 1 [outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
+
+norm expect=PushFilterIntoSetOp
+SELECT * FROM
+(SELECT k FROM (SELECT k FROM b UNION ALL SELECT k FROM b)
+  UNION ALL
+  SELECT k FROM (SELECT k FROM b UNION ALL SELECT k FROM b)) t1
+WHERE EXISTS(
+  SELECT * FROM a WHERE k=1) AND random() < 0.5
+----
+union-all
+ ├── columns: k:23!null
+ ├── left columns: k:11
+ ├── right columns: k:22
+ ├── side-effects
+ ├── union-all
+ │    ├── columns: k:11!null
+ │    ├── left columns: b.k:1
+ │    ├── right columns: b.k:6
+ │    ├── side-effects
+ │    ├── select
+ │    │    ├── columns: b.k:1!null
+ │    │    ├── side-effects
+ │    │    ├── key: (1)
+ │    │    ├── scan b
+ │    │    │    ├── columns: b.k:1!null
+ │    │    │    └── key: (1)
+ │    │    └── filters
+ │    │         ├── exists [subquery]
+ │    │         │    └── select
+ │    │         │         ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+ │    │         │         ├── cardinality: [0 - 1]
+ │    │         │         ├── key: ()
+ │    │         │         ├── fd: ()-->(24-28)
+ │    │         │         ├── scan a
+ │    │         │         │    ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+ │    │         │         │    ├── key: (24)
+ │    │         │         │    └── fd: (24)-->(25-28)
+ │    │         │         └── filters
+ │    │         │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
+ │    │         └── random() < 0.5 [side-effects]
+ │    └── select
+ │         ├── columns: b.k:6!null
+ │         ├── side-effects
+ │         ├── key: (6)
+ │         ├── scan b
+ │         │    ├── columns: b.k:6!null
+ │         │    └── key: (6)
+ │         └── filters
+ │              ├── exists [subquery]
+ │              │    └── select
+ │              │         ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+ │              │         ├── cardinality: [0 - 1]
+ │              │         ├── key: ()
+ │              │         ├── fd: ()-->(24-28)
+ │              │         ├── scan a
+ │              │         │    ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+ │              │         │    ├── key: (24)
+ │              │         │    └── fd: (24)-->(25-28)
+ │              │         └── filters
+ │              │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
+ │              └── random() < 0.5 [side-effects]
+ └── union-all
+      ├── columns: k:22!null
+      ├── left columns: b.k:12
+      ├── right columns: b.k:17
+      ├── side-effects
+      ├── select
+      │    ├── columns: b.k:12!null
+      │    ├── side-effects
+      │    ├── key: (12)
+      │    ├── scan b
+      │    │    ├── columns: b.k:12!null
+      │    │    └── key: (12)
+      │    └── filters
+      │         ├── exists [subquery]
+      │         │    └── select
+      │         │         ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+      │         │         ├── cardinality: [0 - 1]
+      │         │         ├── key: ()
+      │         │         ├── fd: ()-->(24-28)
+      │         │         ├── scan a
+      │         │         │    ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+      │         │         │    ├── key: (24)
+      │         │         │    └── fd: (24)-->(25-28)
+      │         │         └── filters
+      │         │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
+      │         └── random() < 0.5 [side-effects]
+      └── select
+           ├── columns: b.k:17!null
+           ├── side-effects
+           ├── key: (17)
+           ├── scan b
+           │    ├── columns: b.k:17!null
+           │    └── key: (17)
+           └── filters
+                ├── exists [subquery]
+                │    └── select
+                │         ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(24-28)
+                │         ├── scan a
+                │         │    ├── columns: a.k:24!null a.i:25 a.f:26 a.s:27 a.j:28
+                │         │    ├── key: (24)
+                │         │    └── fd: (24)-->(25-28)
+                │         └── filters
+                │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
+                └── random() < 0.5 [side-effects]
+
+# No-op case because the filter references outer columns.
+norm expect-not=PushFilterIntoSetOp
+SELECT
+  (
+    SELECT k
+    FROM ((SELECT k FROM b) UNION ALL (SELECT k FROM b))
+    WHERE k < i
+  )
+FROM a
+----
+project
+ ├── columns: k:17
+ ├── left-join-apply
+ │    ├── columns: a.i:2 k:16
+ │    ├── scan a
+ │    │    └── columns: a.i:2
+ │    ├── max1-row
+ │    │    ├── columns: k:16!null
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(16)
+ │    │    └── select
+ │    │         ├── columns: k:16!null
+ │    │         ├── outer: (2)
+ │    │         ├── union-all
+ │    │         │    ├── columns: k:16!null
+ │    │         │    ├── left columns: b.k:6
+ │    │         │    ├── right columns: b.k:11
+ │    │         │    ├── scan b
+ │    │         │    │    ├── columns: b.k:6!null
+ │    │         │    │    └── key: (6)
+ │    │         │    └── scan b
+ │    │         │         ├── columns: b.k:11!null
+ │    │         │         └── key: (11)
+ │    │         └── filters
+ │    │              └── k:16 < a.i:2 [outer=(2,16), constraints=(/2: (/NULL - ]; /16: (/NULL - ])]
+ │    └── filters (true)
+ └── projections
+      └── k:16 [as=k:17, outer=(16)]
+
+norm
+SELECT * FROM ((values (1,2))
+  EXCEPT (values (0,1)))
+WHERE 1 / column1 > 0
+----
+except
+ ├── columns: column1:1!null column2:2!null
+ ├── left columns: column1:1!null column2:2!null
+ ├── right columns: column1:3 column2:4
+ ├── cardinality: [0 - 1]
+ ├── side-effects
+ ├── key: (1,2)
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── (1, 2)
+ └── select
+      ├── columns: column1:3!null column2:4!null
+      ├── cardinality: [0 - 1]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(3,4)
+      ├── values
+      │    ├── columns: column1:3!null column2:4!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(3,4)
+      │    └── (0, 1)
+      └── filters
+           └── (1 / 0) > 0 [side-effects]
+
+norm
+SELECT * FROM ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
+----
+select
+ ├── columns: column1:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: (1)
+ ├── except
+ │    ├── columns: column1:1!null
+ │    ├── left columns: column1:1!null
+ │    ├── right columns: column1:2
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: (1)
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1.0,)
+ │    └── values
+ │         ├── columns: column1:2!null
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(2)
+ │         └── (1.00,)
+ └── filters
+      └── column1:1::STRING != '1.00' [outer=(1)]
