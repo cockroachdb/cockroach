@@ -99,7 +99,7 @@ type EncInvertedVal []byte
 // InvertedSpan is a span of the inverted index.
 type InvertedSpan struct {
 	// [start, end) iff end != nil, else represents [start, start].
-	start, end EncInvertedVal
+	Start, End EncInvertedVal
 }
 
 // SetOperator is an operator on sets.
@@ -326,13 +326,13 @@ func formatSpans(b *strings.Builder, spans []InvertedSpan) {
 }
 
 func formatSpan(b *strings.Builder, span InvertedSpan) {
-	end := span.end
+	end := span.End
 	spanEndOpenOrClosed := ')'
-	if span.end == nil {
-		end = span.start
+	if span.End == nil {
+		end = span.Start
 		spanEndOpenOrClosed = ']'
 	}
-	fmt.Fprintf(b, "[%s, %s%c", strconv.Quote(string(span.start)),
+	fmt.Fprintf(b, "[%s, %s%c", strconv.Quote(string(span.Start)),
 		strconv.Quote(string(end)), spanEndOpenOrClosed)
 }
 
@@ -589,7 +589,7 @@ func unionSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 	// is coming from the left.
 	// REQUIRES: i < len(left) || j < len(right).
 	makeMergeSpan := func() {
-		if i >= len(left) || (j < len(right) && bytes.Compare(left[i].start, right[j].start) > 0) {
+		if i >= len(left) || (j < len(right) && bytes.Compare(left[i].Start, right[j].Start) > 0) {
 			swapLeftRight()
 		}
 		mergeSpan = left[i]
@@ -645,7 +645,7 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 	// mergeSpan.
 	// REQUIRES: i < len(left) && j < len(right)
 	makeMergeSpan := func() {
-		if bytes.Compare(left[i].start, right[j].start) > 0 {
+		if bytes.Compare(left[i].Start, right[j].Start) > 0 {
 			swapLeftRight()
 		}
 		mergeSpan = left[i]
@@ -661,14 +661,14 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 			// The intersection of these spans is non-empty. Cases:
 			// - mergeSpan.end != nil
 			// - mergeSpan.end == nil and right[j].start == currSpan.start
-			mergeSpan.start = right[j].start
-			mergeSpanEnd := mergeSpan.end
+			mergeSpan.Start = right[j].Start
+			mergeSpanEnd := mergeSpan.End
 			cmpEnds := cmpEndsWhenEqualStarts(mergeSpan, right[j])
 			if cmpEnds > 0 {
 				// The right span constrains the end of the intersection.
 				// Note that this is only possible if mergeSpan.end != nil.
 				// It is possible that right[j].end == nil.
-				mergeSpan.end = right[j].end
+				mergeSpan.End = right[j].End
 			}
 			// Else the mergeSpan is not constrained by the right span,
 			// so it is already ready to be appended to the output.
@@ -686,8 +686,8 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 				// something leftover.
 				// Note that in this case right[j].end != nil
 				i++
-				mergeSpan.start = getExclusiveEnd(mergeSpan)
-				mergeSpan.end = right[j].end
+				mergeSpan.Start = getExclusiveEnd(mergeSpan)
+				mergeSpan.End = right[j].End
 				swapLeftRight()
 			} else if cmpEnds == 0 {
 				// Both spans end at the same key, so both are consumed.
@@ -699,8 +699,8 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 				// So there is something left of the original mergeSpan.
 				// Note that mergeSpanEnd != nil.
 				j++
-				mergeSpan.start = getExclusiveEnd(mergeSpan)
-				mergeSpan.end = mergeSpanEnd
+				mergeSpan.Start = getExclusiveEnd(mergeSpan)
+				mergeSpan.End = mergeSpanEnd
 			}
 		} else {
 			// Intersection is empty
@@ -738,18 +738,18 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 			// - mergeSpan.end != nil
 			// - mergeSpan.end == nil and right[j].start == mergeSpan.start and
 			//   right[j].end == mergeSpan.end.
-			if mergeSpan.end == nil {
+			if mergeSpan.End == nil {
 				i++
 				j++
 				mergeSpanInitialized = false
 				continue
 			}
-			cmpStart := bytes.Compare(mergeSpan.start, right[j].start)
+			cmpStart := bytes.Compare(mergeSpan.Start, right[j].Start)
 			if cmpStart < 0 {
 				// There is some part of mergeSpan before the right span starts. Add it
 				// to the output.
-				out = append(out, InvertedSpan{start: mergeSpan.start, end: right[j].start})
-				mergeSpan.start = right[j].start
+				out = append(out, InvertedSpan{Start: mergeSpan.Start, End: right[j].Start})
+				mergeSpan.Start = right[j].Start
 			}
 			// Else cmpStart == 0
 
@@ -764,7 +764,7 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 			}
 
 			// Invariant: cmp > 0
-			mergeSpan.start = getExclusiveEnd(right[j])
+			mergeSpan.Start = getExclusiveEnd(right[j])
 			j++
 		} else {
 			// Right span starts after mergeSpan ends.
@@ -789,16 +789,16 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 // [a, a\x00), [a, c) == +1
 // [a, c), [d, e) == -1
 func cmpExcEndWithIncStart(left, right InvertedSpan) int {
-	if left.end == nil {
-		rightLen := len(right.start)
-		if rightLen == len(left.start)+1 && right.start[rightLen-1] == '\x00' {
+	if left.End == nil {
+		rightLen := len(right.Start)
+		if rightLen == len(left.Start)+1 && right.Start[rightLen-1] == '\x00' {
 			// The exclusive end of left is left.start + '\x00' and right.start ends
 			// with '\x00'. So if we compare the two starts without the last
 			// character of right.start we get the real comparison between the
 			// exclusive end of left and right.start.
-			return bytes.Compare(left.start, right.start[:rightLen-1])
+			return bytes.Compare(left.Start, right.Start[:rightLen-1])
 		}
-		cmp := bytes.Compare(left.start, right.start)
+		cmp := bytes.Compare(left.Start, right.Start)
 		if cmp == 0 {
 			// left.start and right.start are equal. So the exclusive end of left
 			// is greater than right.start.
@@ -806,7 +806,7 @@ func cmpExcEndWithIncStart(left, right InvertedSpan) int {
 		}
 		return cmp
 	}
-	return bytes.Compare(left.end, right.start)
+	return bytes.Compare(left.End, right.Start)
 }
 
 // Extends the left span using the right span. Will return true if
@@ -816,30 +816,30 @@ func cmpExcEndWithIncStart(left, right InvertedSpan) int {
 func extendSpanEnd(left *InvertedSpan, right InvertedSpan, cmpExcEndIncStart int) bool {
 	if cmpExcEndIncStart == 0 {
 		// Definitely extends.
-		if right.end == nil {
-			left.end = roachpb.BytesNext(right.start)
+		if right.End == nil {
+			left.End = roachpb.BytesNext(right.Start)
 		} else {
-			left.end = right.end
+			left.End = right.End
 		}
 		return true
 	}
 	// cmpExcEndIncStart > 0, so left covers at least right.start. But may not
 	// cover right.end.
-	if right.end == nil {
+	if right.End == nil {
 		// right is [right.start, right.start], so no extension.
 		return false
 	}
 	// right.end != nil
-	if left.end == nil {
+	if left.End == nil {
 		// left.start == right.start, and left is [left.start, left.start].
 		// It is possible that right is [left.start, BytesNext(left.start)),
 		// in which case this is not really an extension, but that is harmless.
-		left.end = right.end
+		left.End = right.End
 		return true
 	}
 	// Both ends are non-nil. Simply compare them.
-	if bytes.Compare(left.end, right.end) < 0 {
-		left.end = right.end
+	if bytes.Compare(left.End, right.End) < 0 {
+		left.End = right.End
 		return true
 	}
 	return false
@@ -850,33 +850,33 @@ func extendSpanEnd(left *InvertedSpan, right InvertedSpan, cmpExcEndIncStart int
 // [a, c) returns c
 // [a, a] returns a\x00
 func getExclusiveEnd(s InvertedSpan) EncInvertedVal {
-	if s.end == nil {
-		return roachpb.BytesNext(s.start)
+	if s.End == nil {
+		return roachpb.BytesNext(s.Start)
 	}
-	return s.end
+	return s.End
 }
 
 // Compares the end keys of left and right given that the start
 // keys are the same.
 func cmpEndsWhenEqualStarts(left, right InvertedSpan) int {
-	if left.end == nil && right.end == nil {
+	if left.End == nil && right.End == nil {
 		return 0
 	}
 	cmpMultiplier := +1
-	if left.end == nil {
+	if left.End == nil {
 		cmpMultiplier = -1
 		left, right = right, left
 	}
-	if right.end == nil {
+	if right.End == nil {
 		// left.end = "c\x00", right = [c, c]. We need to return 0 for
 		// this case.
-		leftLen := len(left.end)
-		if leftLen == len(right.start)+1 && left.end[leftLen-1] == '\x00' {
-			return cmpMultiplier * bytes.Compare(left.end[:leftLen-1], right.start)
+		leftLen := len(left.End)
+		if leftLen == len(right.Start)+1 && left.End[leftLen-1] == '\x00' {
+			return cmpMultiplier * bytes.Compare(left.End[:leftLen-1], right.Start)
 		}
 		return cmpMultiplier
 	}
-	return cmpMultiplier * bytes.Compare(left.end, right.end)
+	return cmpMultiplier * bytes.Compare(left.End, right.End)
 }
 
 // Representing multi-column constraints

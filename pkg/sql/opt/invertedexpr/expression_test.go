@@ -56,11 +56,11 @@ func getSpan(t *testing.T, d *datadriven.TestData) InvertedSpan {
 	var str string
 	d.ScanArgs(t, "span", &str)
 	parts := strings.Split(str, ",")
-	span := InvertedSpan{start: []byte(parts[0])}
+	span := InvertedSpan{Start: []byte(parts[0])}
 	if len(parts) > 2 {
 		d.Fatalf(t, "incorrect span format: %s", str)
 	} else if len(parts) == 2 {
-		span.end = []byte(parts[1])
+		span.End = []byte(parts[1])
 	}
 	return span
 }
@@ -166,18 +166,18 @@ func TestExpression(t *testing.T) {
 }
 
 func span(start, end string) InvertedSpan {
-	return InvertedSpan{start: []byte(start), end: []byte(end)}
+	return InvertedSpan{Start: []byte(start), End: []byte(end)}
 }
 
 func single(start string) InvertedSpan {
-	return InvertedSpan{start: []byte(start)}
+	return InvertedSpan{Start: []byte(start)}
 }
 
 func checkEqual(t *testing.T, expected, actual []InvertedSpan) {
 	require.Equal(t, len(expected), len(actual))
 	for i := range expected {
-		require.Equal(t, expected[i].start, actual[i].start)
-		require.Equal(t, expected[i].end, actual[i].end)
+		require.Equal(t, expected[i].Start, actual[i].Start)
+		require.Equal(t, expected[i].End, actual[i].End)
 	}
 }
 
