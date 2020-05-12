@@ -248,6 +248,19 @@ oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  datta
 52   test           -1            0              NULL          NULL        0              NULL
 54   constraint_db  -1            0              NULL          NULL        0              NULL
 
+user testuser
+
+# Should be globally visible
+query OTIOIIOT colnames
+SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
+FROM pg_catalog.pg_database
+ORDER BY oid LIMIT 1
+----
+oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
+1    system         -1            0              NULL          NULL        0              NULL
+
+user root
+
 ## pg_catalog.pg_tables
 
 statement ok
