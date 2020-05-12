@@ -254,8 +254,6 @@ var (
 	// MigrationLease is the key that nodes must take a lease on in order to run
 	// system migrations on the cluster.
 	MigrationLease = roachpb.Key(makeKey(MigrationPrefix, roachpb.RKey("lease")))
-	// MigrationKeyMax is the maximum value for any system migration key.
-	MigrationKeyMax = MigrationPrefix.PrefixEnd()
 	//
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
