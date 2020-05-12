@@ -341,7 +341,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 	// Publish a new version with all the names drained after everyone
 	// has seen the version with the new name. All the draining names
 	// can be reused henceforth.
-	var namesToReclaim []sqlbase.TableDescriptor_NameInfo
+	var namesToReclaim []sqlbase.NameInfo
 	_, err := sc.leaseMgr.Publish(
 		ctx,
 		sc.tableID,

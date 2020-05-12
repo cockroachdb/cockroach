@@ -523,7 +523,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("defaultdb"),
 		}},
 		{"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1", []preparedQueryTest{
-			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12!\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100")),
+			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12%\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100\"\x00(\x00")),
 		}},
 		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.

@@ -77,7 +77,7 @@ func GetTableDescriptor(
 	descKey := MakeDescMetadataKey(codec, ID(gr.ValueInt()))
 	desc := &Descriptor{}
 	ts, err := kvDB.GetProtoTs(ctx, descKey, desc)
-	if err != nil || (*desc == Descriptor{}) {
+	if err != nil || desc.Equal(Descriptor{}) {
 		log.Fatalf(ctx, "proto with id %d missing. err: %v", gr.ValueInt(), err)
 	}
 	tableDesc := desc.Table(ts)
