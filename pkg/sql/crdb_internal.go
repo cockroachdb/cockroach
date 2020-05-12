@@ -2452,12 +2452,12 @@ CREATE TABLE crdb_internal.zones (
 				}
 
 				for i, s := range subzones {
-					index, err := table.FindIndexByID(sqlbase.IndexID(s.IndexID))
-					if err != nil {
-						if errors.Is(err, sqlbase.ErrIndexGCMutationsList) {
-							continue
-						}
-						return err
+					index := table.FindActiveIndexByID(sqlbase.IndexID(s.IndexID))
+					if index == nil {
+						// If we can't find an active index that corresponds to this index
+						// ID then continue, as the index is being dropped, or is already
+						// dropped and in the GC queue.
+						continue
 					}
 					if zoneSpecifier != nil {
 						zs := zs
