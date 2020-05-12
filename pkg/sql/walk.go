@@ -860,6 +860,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterIndexNode{}):        "alter index",
 	reflect.TypeOf(&alterSequenceNode{}):     "alter sequence",
 	reflect.TypeOf(&alterTableNode{}):        "alter table",
+	reflect.TypeOf(&alterTypeNode{}):         "alter type",
 	reflect.TypeOf(&alterRoleNode{}):         "alter role",
 	reflect.TypeOf(&applyJoinNode{}):         "apply-join",
 	reflect.TypeOf(&bufferNode{}):            "buffer node",
