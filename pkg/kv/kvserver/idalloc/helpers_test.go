@@ -11,6 +11,6 @@
 package idalloc
 
 // IDs returns the channel that the allocator uses to buffer available ids.
-func (ia *Allocator) IDs() <-chan uint32 {
+func (ia *Allocator) IDs() <-chan int64 {
 	return ia.ids
 }

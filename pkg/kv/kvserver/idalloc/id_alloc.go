@@ -12,7 +12,6 @@ package idalloc
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
+
+// Incrementer abstracts over the database which holds the key counter.
+type Incrementer func(_ context.Context, _ roachpb.Key, inc int64) (updated int64, _ error)
 
 // DBIncrementer wraps a suitable subset of *kv.DB for use with an allocator.
 func DBIncrementer(
@@ -39,16 +41,14 @@ func DBIncrementer(
 	}
 }
 
-// Incrementer abstracts over the database which holds the key counter.
-type Incrementer func(_ context.Context, _ roachpb.Key, inc int64) (new int64, _ error)
-
 // Options are the options passed to NewAllocator.
 type Options struct {
 	AmbientCtx  log.AmbientContext
 	Key         roachpb.Key
 	Incrementer Incrementer
-	BlockSize   uint32
+	BlockSize   int64
 	Stopper     *stop.Stopper
+	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.Fatalf
 }
 
 // An Allocator is used to increment a key in allocation blocks of arbitrary
@@ -57,7 +57,7 @@ type Allocator struct {
 	log.AmbientContext
 	opts Options
 
-	ids  chan uint32 // Channel of available IDs
+	ids  chan int64 // Channel of available IDs
 	once sync.Once
 }
 
@@ -70,16 +70,19 @@ func NewAllocator(opts Options) (*Allocator, error) {
 	if opts.BlockSize == 0 {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", opts.BlockSize)
 	}
+	if opts.Fatalf == nil {
+		opts.Fatalf = log.Fatalf
+	}
 	opts.AmbientCtx.AddLogTag("idalloc", nil)
 	return &Allocator{
 		AmbientContext: opts.AmbientCtx,
 		opts:           opts,
-		ids:            make(chan uint32, opts.BlockSize/2+1),
+		ids:            make(chan int64, opts.BlockSize/2+1),
 	}, nil
 }
 
 // Allocate allocates a new ID from the global KV DB.
-func (ia *Allocator) Allocate(ctx context.Context) (uint32, error) {
+func (ia *Allocator) Allocate(ctx context.Context) (int64, error) {
 	ia.once.Do(ia.start)
 
 	select {
@@ -99,13 +102,14 @@ func (ia *Allocator) start() {
 	ia.opts.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(ia.ids)
 
+		var prevValue int64 // for assertions
 		for {
 			var newValue int64
 			var err error
 			for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 				if stopperErr := ia.opts.Stopper.RunTask(ctx, "idalloc: allocating block",
 					func(ctx context.Context) {
-						newValue, err = ia.opts.Incrementer(ctx, ia.opts.Key, int64(ia.opts.BlockSize))
+						newValue, err = ia.opts.Incrementer(ctx, ia.opts.Key, ia.opts.BlockSize)
 					}); stopperErr != nil {
 					return
 				}
@@ -122,19 +126,30 @@ func (ia *Allocator) start() {
 				)
 			}
 			if err != nil {
-				panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
+				ia.opts.Fatalf(ctx, "unexpectedly exited id allocation retry loop: %s", err)
+				return
+			}
+			if prevValue != 0 && newValue < prevValue+ia.opts.BlockSize {
+				ia.opts.Fatalf(
+					ctx,
+					"counter corrupt: incremented to %d, expected at least %d + %d",
+					newValue, prevValue, ia.opts.BlockSize,
+				)
+				return
 			}
 
 			end := newValue + 1
-			start := end - int64(ia.opts.BlockSize)
+			start := end - ia.opts.BlockSize
 			if start <= 0 {
-				log.Fatalf(ctx, "allocator initialized with negative key")
+				ia.opts.Fatalf(ctx, "allocator initialized with negative key")
+				return
 			}
+			prevValue = newValue
 
 			// Add all new ids to the channel for consumption.
 			for i := start; i < end; i++ {
 				select {
-				case ia.ids <- uint32(i):
+				case ia.ids <- i:
 				case <-ia.opts.Stopper.ShouldStop():
 					return
 				}
