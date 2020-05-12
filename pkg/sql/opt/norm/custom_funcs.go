@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -67,6 +68,16 @@ func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physi
 //   scalar lists.
 //
 // ----------------------------------------------------------------------
+
+// FirstScalarListExpr returns the first ScalarExpr in the given list.
+func (c *CustomFuncs) FirstScalarListExpr(list memo.ScalarListExpr) opt.ScalarExpr {
+	return list[0]
+}
+
+// SecondScalarListExpr returns the second ScalarExpr in the given list.
+func (c *CustomFuncs) SecondScalarListExpr(list memo.ScalarListExpr) opt.ScalarExpr {
+	return list[1]
+}
 
 // NeedSortedUniqueList returns true if the given list is composed entirely of
 // constant values that are either not in sorted order or have duplicates. If
@@ -135,9 +146,32 @@ func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp *types.T) bool {
 	return scalar.DataType().Identical(dstTyp)
 }
 
+// EqualsString returns true if the given strings are equal. This function is
+// useful in matching expressions that have string fields.
+//
+// For example, NormalizeCmpTimeZoneFunction uses this function implicitly to
+// match a specific function, like so:
+//
+//   (Function $args:* (FunctionPrivate "timezone"))
+//
+func (c *CustomFuncs) EqualsString(left string, right string) bool {
+	return left == right
+}
+
 // IsString returns true if the given scalar expression is of type String.
 func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
 	return scalar.DataType().Family() == types.StringFamily
+}
+
+// IsTimestamp returns true if the given scalar expression is of type Timestamp.
+func (c *CustomFuncs) IsTimestamp(scalar opt.ScalarExpr) bool {
+	return scalar.DataType().Family() == types.TimestampFamily
+}
+
+// IsTimestampTZ returns true if the given scalar expression is of type
+// TimestampTZ.
+func (c *CustomFuncs) IsTimestampTZ(scalar opt.ScalarExpr) bool {
+	return scalar.DataType().Family() == types.TimestampTZFamily
 }
 
 // BoolType returns the boolean SQL type.
@@ -2155,6 +2189,43 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) op
 		}
 	}
 	return result
+}
+
+// MakeTimeZoneFunction constructs a new timezone() function with the given zone
+// and timestamp as arguments. The type of the function result is TIMESTAMPTZ if
+// ts is of type TIMESTAMP, or TIMESTAMP if is of type TIMESTAMPTZ.
+func (c *CustomFuncs) MakeTimeZoneFunction(zone opt.ScalarExpr, ts opt.ScalarExpr) opt.ScalarExpr {
+	argType := types.TimestampTZ
+	resultType := types.Timestamp
+	if ts.DataType().Family() == types.TimestampFamily {
+		argType, resultType = resultType, argType
+	}
+
+	args := make(memo.ScalarListExpr, 2)
+	args[0] = zone
+	args[1] = ts
+
+	props, overload := findTimeZoneFunction(argType)
+	return c.f.ConstructFunction(args, &memo.FunctionPrivate{
+		Name:       "timezone",
+		Typ:        resultType,
+		Properties: props,
+		Overload:   overload,
+	})
+}
+
+// findTimeZoneFunction returns the function properties and overload of the
+// timezone() function with a second argument that matches the given input type.
+// If no overload is found, findTimeZoneFunction panics.
+func findTimeZoneFunction(typ *types.T) (*tree.FunctionProperties, *tree.Overload) {
+	props, overloads := builtins.GetBuiltinProperties("timezone")
+	for o := range overloads {
+		overload := &overloads[o]
+		if overload.Types.MatchAt(typ, 1) {
+			return props, overload
+		}
+	}
+	panic(errors.AssertionFailedf("could not find overload for timezone"))
 }
 
 // ----------------------------------------------------------------------

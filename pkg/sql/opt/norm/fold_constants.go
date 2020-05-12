@@ -459,6 +459,7 @@ var FoldFunctionWhitelist = map[string]struct{}{
 	"sqrt":                         {},
 	"tan":                          {},
 	"trunc":                        {},
+	"timezone":                     {},
 	"string_to_array":              {},
 	"array_to_string":              {},
 	"array_length":                 {},

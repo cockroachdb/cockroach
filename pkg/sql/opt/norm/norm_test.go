@@ -91,7 +91,7 @@ func TestRuleFunctionAssumption(t *testing.T) {
 		}
 		if props.Category == categorySystemInfo || props.Category == categoryDateAndTime {
 			switch name {
-			case "crdb_internal.locality_value":
+			case "crdb_internal.locality_value", "timezone":
 				// OK to fold this function.
 
 			default:
