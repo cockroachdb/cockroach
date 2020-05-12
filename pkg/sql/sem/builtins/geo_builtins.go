@@ -740,6 +740,17 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			},
 		),
 	),
+	"st_containsproperly": makeBuiltin(
+		defProps(),
+		geometryOverload2BinaryPredicate(
+			geomfn.ContainsProperly,
+			infoBuilder{
+				info:        "Returns true if geometry_b intersects the interior of geometry_a but not the boundary or exterior of geometry_a.",
+				usesGEOS:    true,
+				canUseIndex: true,
+			},
+		),
+	),
 	"st_crosses": makeBuiltin(
 		defProps(),
 		geometryOverload2BinaryPredicate(
@@ -808,6 +819,56 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 				canUseIndex: true,
 			},
 		),
+	),
+
+	//
+	// DE-9IM related
+	//
+
+	"st_relate": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.Relate(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			types.String,
+			infoBuilder{
+				info:     `Returns the DE-9IM spatial relation between geometry_a and geometry_b.`,
+				usesGEOS: true,
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"pattern", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeometry)
+				b := args[1].(*tree.DGeometry)
+				pattern := args[2].(*tree.DString)
+				relation, err := geomfn.Relate(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geomfn.MatchesDE9IM(relation, string(*pattern))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info:     `Returns whether the DE-9IM spatial relation between geometry_a and geometry_b matches the DE-9IM pattern.`,
+				usesGEOS: true,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 }
 
