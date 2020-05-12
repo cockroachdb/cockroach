@@ -69,8 +69,8 @@ type snapshotStrategy interface {
 	Receive(context.Context, incomingSnapshotStream, SnapshotRequest_Header) (IncomingSnapshot, error)
 
 	// Send streams SnapshotRequests created from the OutgoingSnapshot in to the
-	// provided stream.
-	Send(context.Context, outgoingSnapshotStream, SnapshotRequest_Header, *OutgoingSnapshot) error
+	// provided stream. On nil error, the number of bytes sent is returned.
+	Send(context.Context, outgoingSnapshotStream, SnapshotRequest_Header, *OutgoingSnapshot) (int64, error)
 
 	// Status provides a status report on the work performed during the
 	// snapshot. Only valid if the strategy succeeded.
@@ -101,6 +101,10 @@ type kvBatchSnapshotStrategy struct {
 	limiter *rate.Limiter
 	// Only used on the sender side.
 	newBatch func() storage.Batch
+	// bytesSent is updated in sendBatch and returned from Send(). It does not
+	// reflect the log entries sent (which are never sent in newer versions of
+	// CRDB, as of VersionUnreplicatedTruncatedState).
+	bytesSent int64
 
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk. Only used on the receiver side.
@@ -311,7 +315,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	stream outgoingSnapshotStream,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
-) error {
+) (int64, error) {
 	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
 
 	// Iterate over all keys using the provided iterator and stream out batches
@@ -320,7 +324,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	var b storage.Batch
 	for iter := snap.Iter; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
-			return err
+			return 0, err
 		} else if !ok {
 			break
 		}
@@ -332,12 +336,12 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		if err := b.Put(key, value); err != nil {
 			b.Close()
-			return err
+			return 0, err
 		}
 
 		if int64(b.Len()) >= kvSS.batchSize {
 			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
-				return err
+				return 0, err
 			}
 			b = nil
 			// We no longer need the keys and values in the batch we just sent,
@@ -348,7 +352,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	}
 	if b != nil {
 		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -381,7 +385,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	rangeID := header.State.Desc.RangeID
 
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
-		return err
+		return 0, err
 	}
 
 	// The difference between the snapshot index (applied index at the time of
@@ -394,12 +398,12 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		// of the underlying storage engine.
 		entriesRange, err := extractRangeFromEntries(logEntries)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
 			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
 			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
-		return errMalformedSnapshot
+		return 0, errMalformedSnapshot
 	}
 
 	// Inline the payloads for all sideloaded proposals.
@@ -412,7 +416,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		var ent raftpb.Entry
 		for i := range logEntries {
 			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
-				return err
+				return 0, err
 			}
 			if !sniffSideloadedRaftCommand(ent.Data) {
 				continue
@@ -444,22 +448,25 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					// instance by pre-loading them into memory. Or we can make
 					// log truncation less aggressive about removing sideloaded
 					// files, by delaying trailing file deletion for a bit.
-					return &errMustRetrySnapshotDueToTruncation{
+					return 0, &errMustRetrySnapshotDueToTruncation{
 						index: ent.Index,
 						term:  ent.Term,
 					}
 				}
-				return err
+				return 0, err
 			}
 			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
 			var err error
 			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
 	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
-	return stream.Send(&SnapshotRequest{LogEntries: logEntries})
+	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries}); err != nil {
+		return 0, err
+	}
+	return kvSS.bytesSent, nil
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
@@ -469,6 +476,7 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 		return err
 	}
 	repr := batch.Repr()
+	kvSS.batchSize += int64(len(repr))
 	batch.Close()
 	return stream.Send(&SnapshotRequest{KVBatch: repr})
 }
@@ -894,7 +902,10 @@ func sendSnapshot(
 	if err := stream.Send(&SnapshotRequest{Header: &header}); err != nil {
 		return err
 	}
-	// Wait until we get a response from the server.
+	// Wait until we get a response from the server. The recipient may queue us
+	// (only a limited number of snapshots are allowed concurrently) or flat-out
+	// reject the snapshot. After the initial message exchange, we'll go and send
+	// the actual snapshot (if not rejected).
 	resp, err := stream.Recv()
 	if err != nil {
 		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
@@ -928,7 +939,8 @@ func sendSnapshot(
 		return err
 	}
 
-	log.Infof(ctx, "sending %s", snap)
+	durQueued := timeutil.Since(start)
+	start = timeutil.Now()
 
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
@@ -960,9 +972,11 @@ func sendSnapshot(
 		log.Fatalf(ctx, "unknown snapshot strategy: %s", header.Strategy)
 	}
 
-	if err := ss.Send(ctx, stream, header, snap); err != nil {
+	numBytesSent, err := ss.Send(ctx, stream, header, snap)
+	if err != nil {
 		return err
 	}
+	durSent := timeutil.Since(start)
 
 	// Notify the sent callback before the final snapshot request is sent so that
 	// the snapshots generated metric gets incremented before the snapshot is
@@ -971,9 +985,17 @@ func sendSnapshot(
 	if err := stream.Send(&SnapshotRequest{Final: true}); err != nil {
 		return err
 	}
-	log.Infof(ctx, "streamed snapshot to %s: %s, rate-limit: %s/sec, %.2fs",
-		to, ss.Status(), humanizeutil.IBytes(int64(targetRate)),
-		timeutil.Since(start).Seconds())
+	log.Infof(
+		ctx,
+		"streamed %s to %s in %.2fs @ %s/s: %s, rate-limit: %s/s, queued: %.2fs",
+		snap,
+		to,
+		durSent.Seconds(),
+		humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds())),
+		ss.Status(),
+		humanizeutil.IBytes(int64(targetRate)),
+		durQueued.Seconds(),
+	)
 
 	resp, err = stream.Recv()
 	if err != nil {
