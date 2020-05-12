@@ -10,14 +10,7 @@
 
 package idalloc
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
-
-// SetIDKey sets the key which the allocator increments.
-func (ia *Allocator) SetIDKey(idKey roachpb.Key) {
-	ia.idKey.Store(idKey)
-}
-
 // IDs returns the channel that the allocator uses to buffer available ids.
-func (ia *Allocator) IDs() <-chan uint32 {
+func (ia *Allocator) IDs() <-chan int64 {
 	return ia.ids
 }
