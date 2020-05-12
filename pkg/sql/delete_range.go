@@ -192,7 +192,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
 		false, /* isCheck */
-		&params.p.alloc,
+		params.p.alloc,
 		allTables...,
 	); err != nil {
 		return err

@@ -112,12 +112,20 @@ func newDistinct(
 	var returnProcessor execinfra.RowSourcedProcessor = d
 	if allSorted {
 		// We can use the faster sortedDistinct processor.
-		sd := &sortedDistinct{
-			distinct: *d,
-		}
-		// Set d to the new distinct copy for further initialization.
 		// TODO(asubiotto): We should have a distinctBase, rather than making a copy
 		// of a distinct processor.
+		sd := &sortedDistinct{
+			distinct: distinct{
+				input:            input,
+				orderedCols:      spec.OrderedColumns,
+				distinctCols:     distinctCols,
+				memAcc:           memMonitor.MakeBoundAccount(),
+				types:            input.OutputTypes(),
+				nullsAreDistinct: spec.NullsAreDistinct,
+				errorOnDup:       spec.ErrorOnDup,
+			},
+		}
+		// Set d to the new distinct copy for further initialization.
 		d = &sd.distinct
 		returnProcessor = sd
 	}

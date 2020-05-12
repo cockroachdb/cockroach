@@ -106,7 +106,7 @@ func (ib *indexBackfiller) prepare(ctx context.Context) error {
 	return nil
 }
 
-func (ib indexBackfiller) close(ctx context.Context) {
+func (ib *indexBackfiller) close(ctx context.Context) {
 	ib.adder.Close(ctx)
 }
 

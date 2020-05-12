@@ -14,10 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.etcd.io/etcd/raft/confchange"
-	"go.etcd.io/etcd/raft/quorum"
 	"go.etcd.io/etcd/raft/raftpb"
-	"go.etcd.io/etcd/raft/tracker"
 )
 
 // ReplicaTypeVoterFull returns a VOTER_FULL pointer suitable for use in a
@@ -331,41 +328,43 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 // replication layer. This is more complicated than just counting the number
 // of replicas due to the existence of joint quorums.
 func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
-	voters := d.Voters()
-	var c int
-	// Take the fast path when there are only "current and future" voters, i.e.
-	// no learners and no voters of type VOTER_OUTGOING. The config may be joint,
-	// but the outgoing conf is subsumed by the incoming one.
-	if n := len(d.wrapped); len(voters) == n {
-		for _, rDesc := range voters {
-			if liveFunc(rDesc) {
-				c++
-			}
+	isVoterOldConfig := func(rDesc ReplicaDescriptor) bool {
+		switch rDesc.GetType() {
+		case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING:
+			return true
+		default:
+			return false
 		}
-		return c >= n/2+1
+	}
+	isVoterNewConfig := func(rDesc ReplicaDescriptor) bool {
+		switch rDesc.GetType() {
+		case VOTER_FULL, VOTER_INCOMING:
+			return true
+		default:
+			return false
+		}
+	}
+	// isBoth takes two replica predicates and returns their conjunction.
+	isBoth := func(
+		pred1 func(rDesc ReplicaDescriptor) bool,
+		pred2 func(rDesc ReplicaDescriptor) bool) func(ReplicaDescriptor) bool {
+		return func(rDesc ReplicaDescriptor) bool {
+			return pred1(rDesc) && pred2(rDesc)
+		}
 	}
 
-	// Slow path. For simplicity, don't try to duplicate the logic that already
-	// exists in raft.
-	cfg, _, err := confchange.Restore(
-		confchange.Changer{Tracker: tracker.MakeProgressTracker(1)},
-		d.ConfState(),
-	)
-	if err != nil {
-		panic(err)
+	votersOldGroup := d.Filter(isVoterOldConfig)
+	liveVotersOldGroup := d.Filter(isBoth(isVoterOldConfig, liveFunc))
+
+	n := len(votersOldGroup)
+	// Empty groups succeed by default, to match the Raft implementation.
+	if n > 0 && len(liveVotersOldGroup) < n/2+1 {
+		return false
 	}
-	// Simulate a voting round in which the live replicas vote affirmatively and
-	// the dead replicas don't vote at all. We'll then check if the live votes are
-	// enough to commit commands (an outcome of VoteWon) or not (an outcome of
-	// VotePending).
-	votes := make(map[uint64]bool, len(d.wrapped))
-	for _, rDesc := range d.wrapped {
-		// NB: it doesn't matter for the outcome whether we count unavailable
-		// replicas as abstaining or rejecting, as we're checking only for VoteWon
-		// below.
-		if liveFunc(rDesc) {
-			votes[uint64(rDesc.ReplicaID)] = true
-		}
-	}
-	return cfg.Voters.VoteResult(votes) == quorum.VoteWon
+
+	votersNewGroup := d.Filter(isVoterNewConfig)
+	liveVotersNewGroup := d.Filter(isBoth(isVoterNewConfig, liveFunc))
+
+	n = len(votersNewGroup)
+	return len(liveVotersNewGroup) >= n/2+1
 }
