@@ -1634,15 +1634,16 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 // TODO(rytaft): add ST_DFullyWithin (geoindex.Covers) and ST_DWithin
 //  (geoindex.Intersects) once we add support for extending a geometry.
 var geoRelationshipMap = map[string]geoindex.RelationshipType{
-	"st_covers":     geoindex.Covers,
-	"st_coveredby":  geoindex.CoveredBy,
-	"st_contains":   geoindex.Covers,
-	"st_crosses":    geoindex.Intersects,
-	"st_equals":     geoindex.Intersects,
-	"st_intersects": geoindex.Intersects,
-	"st_overlaps":   geoindex.Intersects,
-	"st_touches":    geoindex.Intersects,
-	"st_within":     geoindex.CoveredBy,
+	"st_covers":           geoindex.Covers,
+	"st_coveredby":        geoindex.CoveredBy,
+	"st_contains":         geoindex.Covers,
+	"st_containsproperly": geoindex.Covers,
+	"st_crosses":          geoindex.Intersects,
+	"st_equals":           geoindex.Intersects,
+	"st_intersects":       geoindex.Intersects,
+	"st_overlaps":         geoindex.Intersects,
+	"st_touches":          geoindex.Intersects,
+	"st_within":           geoindex.CoveredBy,
 }
 
 // IsGeoIndexFunction returns true if the given function is a geospatial

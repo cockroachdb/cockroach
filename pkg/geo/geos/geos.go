@@ -399,3 +399,23 @@ func Within(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	}
 	return ret == 1, nil
 }
+
+//
+// DE-9IM related
+//
+
+// Relate returns the DE-9IM relation between A and B.
+func Relate(a geopb.EWKB, b geopb.EWKB) (string, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return "", err
+	}
+	var ret C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Relate(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return "", err
+	}
+	if ret.data == nil {
+		return "", errors.Newf("expected DE-9IM string but found nothing")
+	}
+	return string(cStringToSafeGoBytes(ret)), nil
+}
