@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"testing"
 
@@ -406,72 +407,95 @@ func TestJoinReader(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
-			t.Run(fmt.Sprintf("%d/%s", i, c.description), func(t *testing.T) {
-				evalCtx := tree.MakeTestingEvalContext(st)
-				defer evalCtx.Stop(ctx)
-				flowCtx := execinfra.FlowCtx{
-					EvalCtx: &evalCtx,
-					Cfg: &execinfra.ServerConfig{
-						Settings:    st,
-						TempStorage: tempEngine,
-						DiskMonitor: &diskMonitor,
-					},
-					Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
-				}
-				encRows := make(sqlbase.EncDatumRows, len(c.input))
-				for rowIdx, row := range c.input {
-					encRow := make(sqlbase.EncDatumRow, len(row))
-					for i, d := range row {
-						encRow[i] = sqlbase.DatumToEncDatum(c.inputTypes[i], d)
+			for _, reqOrdering := range []bool{true, false} {
+				t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s", i, reqOrdering, c.description), func(t *testing.T) {
+					evalCtx := tree.MakeTestingEvalContext(st)
+					defer evalCtx.Stop(ctx)
+					flowCtx := execinfra.FlowCtx{
+						EvalCtx: &evalCtx,
+						Cfg: &execinfra.ServerConfig{
+							Settings:    st,
+							TempStorage: tempEngine,
+							DiskMonitor: &diskMonitor,
+						},
+						Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 					}
-					encRows[rowIdx] = encRow
-				}
-				in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
-
-				out := &distsqlutils.RowBuffer{}
-				jr, err := newJoinReader(
-					&flowCtx,
-					0, /* processorID */
-					&execinfrapb.JoinReaderSpec{
-						Table:         *td,
-						IndexIdx:      c.indexIdx,
-						LookupColumns: c.lookupCols,
-						OnExpr:        execinfrapb.Expression{Expr: c.onExpr},
-						Type:          c.joinType,
-					},
-					in,
-					&c.post,
-					out,
-				)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				// Set a lower batch size to force multiple batches.
-				jr.(*joinReader).SetBatchSize(3 /* batchSize */)
-
-				jr.Run(ctx)
-
-				if !in.Done {
-					t.Fatal("joinReader didn't consume all the rows")
-				}
-				if !out.ProducerClosed() {
-					t.Fatalf("output RowReceiver not closed")
-				}
-
-				var res sqlbase.EncDatumRows
-				for {
-					row := out.NextNoMeta(t)
-					if row == nil {
-						break
+					encRows := make(sqlbase.EncDatumRows, len(c.input))
+					for rowIdx, row := range c.input {
+						encRow := make(sqlbase.EncDatumRow, len(row))
+						for i, d := range row {
+							encRow[i] = sqlbase.DatumToEncDatum(c.inputTypes[i], d)
+						}
+						encRows[rowIdx] = encRow
 					}
-					res = append(res, row)
-				}
+					in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
 
-				if result := res.String(c.outputTypes); result != c.expected {
-					t.Errorf("invalid results: %s, expected %s'", result, c.expected)
-				}
-			})
+					out := &distsqlutils.RowBuffer{}
+					jr, err := newJoinReader(
+						&flowCtx,
+						0, /* processorID */
+						&execinfrapb.JoinReaderSpec{
+							Table:            *td,
+							IndexIdx:         c.indexIdx,
+							LookupColumns:    c.lookupCols,
+							OnExpr:           execinfrapb.Expression{Expr: c.onExpr},
+							Type:             c.joinType,
+							MaintainOrdering: reqOrdering,
+						},
+						in,
+						&c.post,
+						out,
+					)
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					// Set a lower batch size to force multiple batches.
+					jr.(*joinReader).SetBatchSize(3 /* batchSize */)
+
+					jr.Run(ctx)
+
+					if !in.Done {
+						t.Fatal("joinReader didn't consume all the rows")
+					}
+					if !out.ProducerClosed() {
+						t.Fatalf("output RowReceiver not closed")
+					}
+
+					var res sqlbase.EncDatumRows
+					for {
+						row := out.NextNoMeta(t)
+						if row == nil {
+							break
+						}
+						res = append(res, row)
+					}
+
+					// processOutputRows is a helper function that takes a stringified
+					// EncDatumRows output (e.g. [[1 2] [3 1]]) and returns a slice of
+					// stringified rows without brackets (e.g. []string{"1 2", "3 1"}).
+					processOutputRows := func(output string) []string {
+						// Comma-separate the rows.
+						output = strings.ReplaceAll(output, "] [", ",")
+						// Remove leading and trailing bracket.
+						output = strings.Trim(output, "[]")
+						// Split on the commas that were introduced and return that.
+						return strings.Split(output, ",")
+					}
+
+					result := processOutputRows(res.String(c.outputTypes))
+					expected := processOutputRows(c.expected)
+
+					if !reqOrdering {
+						// An ordering was not required, so sort both the result and
+						// expected slice to reuse equality comparison.
+						sort.Strings(result)
+						sort.Strings(expected)
+					}
+
+					require.Equal(t, expected, result)
+				})
+			}
 		}
 	}
 }
@@ -549,6 +573,8 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			IndexIdx:      1,
 			LookupColumns: []uint32{0},
 			Type:          sqlbase.InnerJoin,
+			// Disk storage is only used when the input ordering must be maintained.
+			MaintainOrdering: true,
 		},
 		distsqlutils.NewRowBuffer(sqlbase.OneIntCol, inputRows, distsqlutils.RowBufferArgs{}),
 		&execinfrapb.PostProcessSpec{
@@ -803,96 +829,98 @@ func BenchmarkJoinReader(b *testing.B) {
 	createRightSideTable(rightSz)
 	// Create a new txn after the table has been created.
 	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), s.NodeID())
-	for columnIdx, columnDef := range rightSideColumnDefs {
-		for _, numLookupRows := range []int{1, 1 << 4 /* 16 */, 1 << 8 /* 256 */, 1 << 10 /* 1024 */, 1 << 12 /* 4096 */, 1 << 13 /* 8192 */, 1 << 14 /* 16384 */, 1 << 15 /* 32768 */, 1 << 16 /* 65,536 */, 1 << 19 /* 524,288 */} {
-			if rightSz/columnDef.matchesPerLookupRow < numLookupRows {
-				// This case does not make sense since we won't have distinct lookup
-				// rows. We don't currently merge spans which could make this an
-				// interesting case to benchmark, but we probably should.
-				continue
-			}
-
-			eqColsAreKey := []bool{false}
-			if numLookupRows == 1 {
-				// For this case, execute the parallel lookup case as well.
-				eqColsAreKey = []bool{true, false}
-			}
-			for _, parallel := range eqColsAreKey {
-				benchmarkName := fmt.Sprintf("matchratio=oneto%s/lookuprows=%d", columnDef.name, numLookupRows)
-				if parallel {
-					benchmarkName += "/parallel=true"
+	for _, reqOrdering := range []bool{true, false} {
+		for columnIdx, columnDef := range rightSideColumnDefs {
+			for _, numLookupRows := range []int{1, 1 << 4 /* 16 */, 1 << 8 /* 256 */, 1 << 10 /* 1024 */, 1 << 12 /* 4096 */, 1 << 13 /* 8192 */, 1 << 14 /* 16384 */, 1 << 15 /* 32768 */, 1 << 16 /* 65,536 */, 1 << 19 /* 524,288 */} {
+				if rightSz/columnDef.matchesPerLookupRow < numLookupRows {
+					// This case does not make sense since we won't have distinct lookup
+					// rows. We don't currently merge spans which could make this an
+					// interesting case to benchmark, but we probably should.
+					continue
 				}
-				b.Run(benchmarkName, func(b *testing.B) {
-					tableName := tableSizeToName(rightSz)
 
-					// Get the table descriptor and find the index that will provide us with
-					// the expected match ratio.
-					tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
-					indexIdx := uint32(0)
-					for i := range tableDesc.Indexes {
-						require.Equal(b, 1, len(tableDesc.Indexes[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
-						if tableDesc.Indexes[i].ColumnNames[0] == columnDef.name {
-							// Found indexIdx.
-							indexIdx = uint32(i + 1)
-							break
+				eqColsAreKey := []bool{false}
+				if numLookupRows == 1 {
+					// For this case, execute the parallel lookup case as well.
+					eqColsAreKey = []bool{true, false}
+				}
+				for _, parallel := range eqColsAreKey {
+					benchmarkName := fmt.Sprintf("reqOrdering=%t/matchratio=oneto%s/lookuprows=%d", reqOrdering, columnDef.name, numLookupRows)
+					if parallel {
+						benchmarkName += "/parallel=true"
+					}
+					b.Run(benchmarkName, func(b *testing.B) {
+						tableName := tableSizeToName(rightSz)
+
+						// Get the table descriptor and find the index that will provide us with
+						// the expected match ratio.
+						tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+						indexIdx := uint32(0)
+						for i := range tableDesc.Indexes {
+							require.Equal(b, 1, len(tableDesc.Indexes[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
+							if tableDesc.Indexes[i].ColumnNames[0] == columnDef.name {
+								// Found indexIdx.
+								indexIdx = uint32(i + 1)
+								break
+							}
 						}
-					}
-					if indexIdx == 0 {
-						b.Fatalf("failed to find secondary index for column %s", columnDef.name)
-					}
-
-					input := newRowGeneratingSource(sqlbase.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
-						// Convert to 0-based.
-						return tree.NewDInt(tree.DInt(rowIdx - 1))
-					}), numLookupRows)
-					output := rowDisposer{}
-
-					spec := execinfrapb.JoinReaderSpec{
-						Table:               *tableDesc,
-						LookupColumns:       []uint32{0},
-						LookupColumnsAreKey: parallel,
-						IndexIdx:            indexIdx,
-					}
-					// Post specifies that only the columns contained in the secondary index
-					// need to be output.
-					post := execinfrapb.PostProcessSpec{
-						Projection:    true,
-						OutputColumns: []uint32{uint32(columnIdx + 1)},
-					}
-
-					expectedNumOutputRows := numLookupRows * columnDef.matchesPerLookupRow
-					b.ResetTimer()
-					// The number of bytes processed in this benchmark is the number of
-					// lookup bytes processed + the number of result bytes. We only look
-					// up using a single int column and the request only a single int column
-					// contained in the index.
-					b.SetBytes(int64((numLookupRows * 8) + (expectedNumOutputRows * 8)))
-
-					spilled := false
-					for i := 0; i < b.N; i++ {
-						jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
-						if err != nil {
-							b.Fatal(err)
+						if indexIdx == 0 {
+							b.Fatalf("failed to find secondary index for column %s", columnDef.name)
 						}
-						jr.Run(ctx)
-						if !spilled && jr.(*joinReader).Spilled() {
-							spilled = true
-						}
-						meta := output.DrainMeta(ctx)
-						if meta != nil {
-							b.Fatalf("unexpected metadata: %v", meta)
-						}
-						if output.NumRowsDisposed() != expectedNumOutputRows {
-							b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), expectedNumOutputRows)
-						}
-						output.ResetNumRowsDisposed()
-						input.Reset()
-					}
+						input := newRowGeneratingSource(sqlbase.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
+							// Convert to 0-based.
+							return tree.NewDInt(tree.DInt(rowIdx - 1))
+						}), numLookupRows)
+						output := rowDisposer{}
 
-					if spilled {
-						b.Log("joinReader spilled to disk in at least one of the benchmark iterations")
-					}
-				})
+						spec := execinfrapb.JoinReaderSpec{
+							Table:               *tableDesc,
+							LookupColumns:       []uint32{0},
+							LookupColumnsAreKey: parallel,
+							IndexIdx:            indexIdx,
+							MaintainOrdering:    reqOrdering,
+						}
+						// Post specifies that only the columns contained in the secondary index
+						// need to be output.
+						post := execinfrapb.PostProcessSpec{
+							Projection:    true,
+							OutputColumns: []uint32{uint32(columnIdx + 1)},
+						}
+
+						expectedNumOutputRows := numLookupRows * columnDef.matchesPerLookupRow
+						b.ResetTimer()
+						// The number of bytes processed in this benchmark is the number of
+						// lookup bytes processed + the number of result bytes. We only look
+						// up using a single int column and the request only a single int column
+						// contained in the index.
+						b.SetBytes(int64((numLookupRows * 8) + (expectedNumOutputRows * 8)))
+
+						spilled := false
+						for i := 0; i < b.N; i++ {
+							jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+							if err != nil {
+								b.Fatal(err)
+							}
+							jr.Run(ctx)
+							if !spilled && jr.(*joinReader).Spilled() {
+								spilled = true
+							}
+							meta := output.DrainMeta(ctx)
+							if meta != nil {
+								b.Fatalf("unexpected metadata: %v", meta)
+							}
+							if output.NumRowsDisposed() != expectedNumOutputRows {
+								b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), expectedNumOutputRows)
+							}
+							output.ResetNumRowsDisposed()
+							input.Reset()
+						}
+
+						if spilled {
+							b.Log("joinReader spilled to disk in at least one of the benchmark iterations")
+						}
+					})
+				}
 			}
 		}
 	}
