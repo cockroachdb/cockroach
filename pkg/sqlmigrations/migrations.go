@@ -1020,9 +1020,25 @@ func migrateMutationJobForTable(
 			continue
 		}
 		log.VEventf(
-			ctx, 2, "job %d: found corresponding mutation %d on table %d",
+			ctx, 2, "job %d: found corresponding MutationJob %d on table %d",
 			*job.ID(), mutationJob.MutationID, tableDesc.ID,
 		)
+		var mutation *sqlbase.DescriptorMutation
+		for i := range tableDesc.Mutations {
+			if tableDesc.Mutations[i].MutationID == mutationJob.MutationID {
+				mutation = &tableDesc.Mutations[i]
+				break
+			}
+		}
+		if mutation == nil {
+			// In theory, MutationJobs[i] corresponds to Mutations[i] in 19.2 and
+			// earlier versions, so this should never happen. However, we've seen this
+			// happen (#48786), so we have to be defensive.
+			mutationNotFoundError := errors.AssertionFailedf("mutation %d not found for MutationJob %d",
+				mutationJob.MutationID, mutationJob.JobID)
+			log.Errorf(ctx, "%v", mutationNotFoundError)
+			return registry.Failed(ctx, txn, *job.ID(), mutationNotFoundError)
+		}
 
 		// Update the job details and status based on the table descriptor
 		// state.
@@ -1041,7 +1057,6 @@ func migrateMutationJobForTable(
 			md.Payload.Lease = &jobspb.Lease{}
 			ju.UpdatePayload(md.Payload)
 
-			mutation := &tableDesc.Mutations[i]
 			// If the mutation exists on the table descriptor, then the schema
 			// change isn't actually in a terminal state, regardless of what the
 			// job status is. So we force the status to Reverting if there's any
