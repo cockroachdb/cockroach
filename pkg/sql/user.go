@@ -40,7 +40,10 @@ func GetUserHashedPassword(
 	if values == nil {
 		return false, nil, nil
 	}
-	hashedPassword := []byte(*(values[0].(*tree.DBytes)))
+	var hashedPassword []byte
+	if v := values[0]; v != tree.DNull {
+		hashedPassword = []byte(*(v.(*tree.DBytes)))
+	}
 	return true, hashedPassword, nil
 }
 
