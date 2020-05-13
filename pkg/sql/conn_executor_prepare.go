@@ -359,9 +359,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	// Create the new PreparedPortal.
-	if err := ex.addPortal(
-		ctx, portalName, bindCmd.PreparedStatementName, ps, qargs, columnFormatCodes,
-	); err != nil {
+	if err := ex.addPortal(ctx, portalName, ps, qargs, columnFormatCodes); err != nil {
 		return retErr(err)
 	}
 
@@ -380,7 +378,6 @@ func (ex *connExecutor) execBind(
 func (ex *connExecutor) addPortal(
 	ctx context.Context,
 	portalName string,
-	psName string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
@@ -389,13 +386,22 @@ func (ex *connExecutor) addPortal(
 		panic(fmt.Sprintf("portal already exists: %q", portalName))
 	}
 
-	portal, err := ex.newPreparedPortal(ctx, portalName, stmt, qargs, outFormats)
+	portal, err := ex.makePreparedPortal(ctx, portalName, stmt, qargs, outFormats)
 	if err != nil {
 		return err
 	}
 
 	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
 	return nil
+}
+
+func (ex *connExecutor) exhaustPortal(portalName string) {
+	if portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; !ok {
+		panic(fmt.Sprintf("portal %s doesn't exist", portalName))
+	} else {
+		portal.exhausted = true
+		ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
+	}
 }
 
 func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
@@ -412,7 +418,7 @@ func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
 	if !ok {
 		return
 	}
-	portal.decRef(ctx)
+	portal.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 	delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 }
 

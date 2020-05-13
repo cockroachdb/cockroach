@@ -37,8 +37,8 @@ import (
 )
 
 // Test portal implicit destruction. Unless destroying a portal is explicitly
-// requested, portals live until the end of the transaction in which
-// they'recreated. If they're created outside of a transaction, they live until
+// requested, portals live until the end of the transaction in which they're
+// created. If they're created outside of a transaction, they live until
 // the next transaction completes (so until the next statement is executed,
 // which statement is expected to be the execution of the portal that was just
 // created).

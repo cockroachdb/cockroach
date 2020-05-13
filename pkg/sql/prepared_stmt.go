@@ -39,7 +39,7 @@ const (
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
 //
-// Note that PreparedStatemts maintain a reference counter internally.
+// Note that PreparedStatements maintain a reference counter internally.
 // References need to be registered with incRef() and de-registered with
 // decRef().
 type PreparedStatement struct {
@@ -111,7 +111,7 @@ type preparedStatementsAccessor interface {
 	// The method returns true if statement with that name was found and removed,
 	// false otherwise.
 	Delete(ctx context.Context, name string) bool
-	// DeleteAll removes all prepared statements and portals from the coolection.
+	// DeleteAll removes all prepared statements and portals from the collection.
 	DeleteAll(ctx context.Context)
 }
 
@@ -129,36 +129,35 @@ type PreparedPortal struct {
 
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
-	// Once refCount hits 0 (through calls to decRef()), the following memAcc is
-	// closed.
 	// Most references are being held by portals created from this prepared
 	// statement.
 	refCount int
 
-	memAcc mon.BoundAccount
+	// exhausted tracks whether this portal has already been fully exhausted,
+	// meaning that any additional attempts to execute it should return no
+	// rows.
+	exhausted bool
 }
 
-// newPreparedPortal creates a new PreparedPortal.
+// makePreparedPortal creates a new PreparedPortal.
 //
 // incRef() doesn't need to be called on the result.
 // When no longer in use, the PreparedPortal needs to be decRef()d.
-func (ex *connExecutor) newPreparedPortal(
+func (ex *connExecutor) makePreparedPortal(
 	ctx context.Context,
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
-) (*PreparedPortal, error) {
-	portal := &PreparedPortal{
+) (PreparedPortal, error) {
+	portal := PreparedPortal{
 		Stmt:       stmt,
 		Qargs:      qargs,
 		OutFormats: outFormats,
-		memAcc:     ex.sessionMon.MakeBoundAccount(),
 		refCount:   1,
 	}
-	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
-	if err := portal.memAcc.Grow(ctx, sz); err != nil {
-		return nil, err
+	if err := ex.extraTxnState.prepStmtsNamespaceMemAcc.Grow(ctx, portal.size(name)); err != nil {
+		return PreparedPortal{}, err
 	}
 	// The portal keeps a reference to the PreparedStatement, so register it.
 	stmt.incRef(ctx)
@@ -167,19 +166,27 @@ func (ex *connExecutor) newPreparedPortal(
 
 func (p *PreparedPortal) incRef(ctx context.Context) {
 	if p.refCount <= 0 {
-		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+		log.Fatal(ctx, "corrupt PreparedPortal refcount")
 	}
 	p.refCount++
 }
 
-func (p *PreparedPortal) decRef(ctx context.Context) {
+// decRef decrements the number of references to this portal. If the refCount
+// reaches 0, then the memory account is shrunk accordingly.
+func (p *PreparedPortal) decRef(
+	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
+) {
 	if p.refCount <= 0 {
-		log.Fatal(ctx, "corrupt PreparedPrepared refcount")
+		log.Fatal(ctx, "corrupt PreparedPortal refcount")
 	}
 	p.refCount--
 
 	if p.refCount == 0 {
-		p.memAcc.Close(ctx)
+		prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 		p.Stmt.decRef(ctx)
 	}
+}
+
+func (p PreparedPortal) size(portalName string) int64 {
+	return int64(uintptr(len(portalName)) + unsafe.Sizeof(p))
 }
