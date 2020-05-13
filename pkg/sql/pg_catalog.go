@@ -458,36 +458,19 @@ CREATE TABLE pg_catalog.pg_attribute (
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
 		addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colID sqlbase.ColumnID) error {
 			colTyp := column.Type
-			attTypMod := int32(-1)
-			if width := colTyp.Width(); width != 0 {
-				switch colTyp.Family() {
-				case types.StringFamily:
-					// Postgres adds 4 to the attypmod for bounded string types, the
-					// var header size.
-					attTypMod = width + 4
-				case types.BitFamily:
-					attTypMod = width
-				case types.DecimalFamily:
-					// attTypMod is calculated by putting the precision in the upper
-					// bits and the scale in the lower bits of a 32-bit int, and adding
-					// 4 (the var header size). We mock this for clients' sake. See
-					// numeric.c.
-					attTypMod = ((colTyp.Precision() << 16) | width) + 4
-				}
-			}
 			return addRow(
-				attRelID,                           // attrelid
-				tree.NewDName(column.Name),         // attname
-				typOid(colTyp),                     // atttypid
-				zeroVal,                            // attstattarget
-				typLen(colTyp),                     // attlen
-				tree.NewDInt(tree.DInt(colID)),     // attnum
-				zeroVal,                            // attndims
-				negOneVal,                          // attcacheoff
-				tree.NewDInt(tree.DInt(attTypMod)), // atttypmod
-				tree.DNull,                         // attbyval (see pg_type.typbyval)
-				tree.DNull,                         // attstorage
-				tree.DNull,                         // attalign
+				attRelID,                       // attrelid
+				tree.NewDName(column.Name),     // attname
+				typOid(colTyp),                 // atttypid
+				zeroVal,                        // attstattarget
+				typLen(colTyp),                 // attlen
+				tree.NewDInt(tree.DInt(colID)), // attnum
+				zeroVal,                        // attndims
+				negOneVal,                      // attcacheoff
+				tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
+				tree.DNull, // attbyval (see pg_type.typbyval)
+				tree.DNull, // attstorage
+				tree.DNull, // attalign
 				tree.MakeDBool(tree.DBool(!column.Nullable)),          // attnotnull
 				tree.MakeDBool(tree.DBool(column.DefaultExpr != nil)), // atthasdef
 				tree.DBoolFalse,    // attisdropped
