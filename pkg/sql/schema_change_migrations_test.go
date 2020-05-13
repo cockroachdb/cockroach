@@ -905,3 +905,75 @@ func TestGCJobCreated(t *testing.T) {
 		[][]string{{"1"}},
 	)
 }
+
+// TestMissingMutation tests that a malformed table descriptor with a
+// MutationJob but no Mutation for the given job causes the job to fail with an
+// error.
+func TestMissingMutation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	schemaChangeBlocked, descriptorUpdated := make(chan struct{}), make(chan struct{})
+	var schemaChangeJobID int64
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLMigrationManager = &sqlmigrations.MigrationManagerTestingKnobs{
+		AlwaysRunJobMigration: true,
+	}
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		RunBeforeResume: func(jobID int64) error {
+			if schemaChangeBlocked != nil {
+				close(schemaChangeBlocked)
+				schemaChangeBlocked = nil
+				schemaChangeJobID = jobID
+			}
+
+			<-descriptorUpdated
+			return jobs.NewRetryJobError("stop this job until cluster upgrade")
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer s.Stopper().Stop(ctx)
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	_, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test(k INT PRIMARY KEY, v INT);`)
+	require.NoError(t, err)
+
+	bg := ctxgroup.WithContext(ctx)
+	// Start a schema change on the table in a separate goroutine.
+	bg.Go(func() error {
+		if _, err := sqlDB.ExecContext(ctx, `ALTER TABLE t.test ADD COLUMN a INT;`); err != nil {
+			cancel()
+			return err
+		}
+		return nil
+	})
+
+	<-schemaChangeBlocked
+
+	// Rewrite the job to be a 19.2-style job.
+	require.NoError(t, migrateJobToOldFormat(kvDB, registry, schemaChangeJobID, AddColumn))
+
+	// To get the table descriptor into the (invalid) state we're trying to test,
+	// clear the mutations on the table descriptor.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc.Mutations = nil
+	require.NoError(
+		t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
+			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+				keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+			)
+		}),
+	)
+
+	// Run the migration.
+	migMgr := s.MigrationManager().(*sqlmigrations.Manager)
+	require.NoError(t, migMgr.StartSchemaChangeJobMigration(ctx))
+
+	close(descriptorUpdated)
+
+	err = bg.Wait()
+	require.Regexp(t, fmt.Sprintf("mutation %d not found for MutationJob %d", 1, schemaChangeJobID), err)
+}
