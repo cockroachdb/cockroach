@@ -139,7 +139,7 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 	}
 
 	var db storage.Engine
-	storageEngine := resolveStorageEngineType(storage.DefaultStorageEngine, storageConfig.Dir)
+	storageEngine := resolveStorageEngineType(context.Background(), storage.DefaultStorageEngine, storageConfig)
 
 	switch storageEngine {
 	case enginepb.EngineTypePebble:
