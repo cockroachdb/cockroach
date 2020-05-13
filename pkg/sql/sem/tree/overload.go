@@ -581,6 +581,71 @@ func typeCheckOverloadedExprs(
 			return typedExprs, fns, err
 		}
 
+		// This case attempts to perform a basic version of postgres's implicit
+		// casts for the special case of binary comparisons on user defined types.
+		// In particular, it circumvents the following problem in our overload
+		// infrastructure: Say we attempt to type check 'hello'::t = 'hello', where
+		// t is a user defined enum type. Our predefined comparison operations are
+		// typed with AnyEnum X AnyEnum -> bool, so we wouldn't match the above
+		// expression (typed Enum X Str -> bool) in our overload matching without
+		// an implicit cast from Str -> Enum. In particular, we check
+		// * we are type checking a binop
+		// * have only one overload left
+		// * the remaining overload is on two equivalent and ambiguous user defined
+		//   types and we have an instance
+		// * one of the arguments is a resolved instance of the user defined type
+		// * the other argument is a constant
+		// If these checks are met, then we attempt to convert the constant into
+		// an instance of the user defined type.
+		// This case of operations on user defined types is used heavily in queries
+		// like `SELECT * FROM t WHERE x = 'hello'`, where x is of an enum type
+		// containing the value 'hello'. This case will likely arise enough that
+		// it is worth including this special case until we move over completely
+		// to a postgres style implicit cast based overloading system.
+		if inBinOp && len(s.exprs) == 2 && len(s.overloadIdxs) == 1 {
+			left := s.typedExprs[0]
+			right := s.typedExprs[1]
+			idx := s.overloadIdxs[0]
+			p := s.overloads[idx].params()
+			// We know we are a binary operation.
+			lType, rType := p.GetAt(0), p.GetAt(1)
+			switch {
+			case !(lType.UserDefined() && rType.UserDefined() &&
+				lType.IsAmbiguous() && rType.IsAmbiguous() && lType.Equivalent(rType)):
+				// If the left and right aren't both user defined, ambiguous
+				// and equivalent then do nothing.
+			case (left == nil && right == nil) || (left != nil && right != nil):
+				// If both expressions aren't resolved, or are both
+				// resolved, do nothing.
+			case left != nil && left.ResolvedType().UserDefined() && left.ResolvedType().Equivalent(lType):
+				// If the left is resolved, then see if the right is a constant.
+				_, isConst := s.exprs[1].(Constant)
+				if isConst {
+					// Note that we can return in this case, because it is the last
+					// overload that we have left to consider.
+					typ, err := s.exprs[1].TypeCheck(ctx, left.ResolvedType())
+					if err != nil {
+						return nil, nil, err
+					}
+					s.typedExprs[1] = typ
+					return s.typedExprs, s.overloads[idx : idx+1], nil
+				}
+			case right != nil && right.ResolvedType().UserDefined() && right.ResolvedType().Equivalent(rType):
+				// If the right is resolved, then see if the left is a constant.
+				_, isConst := s.exprs[0].(Constant)
+				if isConst {
+					// Note that we can return in this case, because it is the last
+					// overload that we have left to consider.
+					typ, err := s.exprs[0].TypeCheck(ctx, right.ResolvedType())
+					if err != nil {
+						return nil, nil, err
+					}
+					s.typedExprs[0] = typ
+					return s.typedExprs, s.overloads[idx : idx+1], nil
+				}
+			}
+		}
+
 		// At this point, it's worth seeing if we have constants that can't actually
 		// parse as the type that canConstantBecome claims they can. For example,
 		// every string literal will report that it can become an interval, but most

@@ -97,14 +97,14 @@ hello
 
 query BBBBBBBBBBB
 SELECT 'hello'::greeting < 'howdy'::greeting,
-       'howdy'::greeting < 'hi':: greeting,
-       'hi'::greeting > 'hello'::greeting,
+       'howdy'::greeting < 'hi',
+       'hi' > 'hello'::greeting,
        'howdy'::greeting < 'hello'::greeting,
-       'hi'::greeting <= 'hi'::greeting,
+       'hi'::greeting <= 'hi',
        NULL < 'hello'::greeting,
        'hi'::greeting < NULL,
        'hello'::greeting = 'hello'::greeting,
-       'hello'::greeting != 'hi'::greeting,
+       'hello' != 'hi'::greeting,
        'howdy'::greeting IS NOT DISTINCT FROM NULL,
        'hello'::greeting IN ('hi'::greeting, 'howdy'::greeting, 'hello'::greeting)
 ----
@@ -132,6 +132,18 @@ CREATE TYPE greeting2 AS ENUM ('hello')
 
 statement error pq: invalid cast: greeting -> greeting2
 SELECT 'hello'::greeting::greeting2
+
+# Ensure that we can perform a limited form of implicit casts for
+# the case of ENUM binary operations with strings.
+query BB
+SELECT 'hello'::greeting != 'howdy', 'hi' > 'hello'::greeting
+----
+true true
+
+# Check that the implicit cast gives an appropriate error message
+# when firing but unable to complete the type check.
+statement error pq: invalid input value for enum greeting: "notagreeting"
+SELECT 'hello'::greeting = 'notagreeting'
 
 statement error pq: value type greeting cannot be used for table columns
 CREATE TABLE bad (x greeting)
