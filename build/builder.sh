@@ -42,7 +42,8 @@ if [ "$(uname)" = "Darwin" ]; then
   cached_volume_mode=:cached
 fi
 
-GOPATH=$(go env GOPATH)
+# We don't want this to emit -json output.
+GOPATH=$(GOFLAGS=; go env GOPATH)
 gopath0=${GOPATH%%:*}
 gocache=${GOCACHEPATH-$gopath0}
 
