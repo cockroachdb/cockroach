@@ -38,6 +38,7 @@ type crdbVersion int
 const (
 	tpchVecVersion19_2 crdbVersion = iota
 	tpchVecVersion20_1
+	tpchVecVersion20_2
 )
 
 func toCRDBVersion(v string) (crdbVersion, error) {
@@ -45,6 +46,8 @@ func toCRDBVersion(v string) (crdbVersion, error) {
 		return tpchVecVersion19_2, nil
 	} else if strings.HasPrefix(v, "v20.1") {
 		return tpchVecVersion20_1, nil
+	} else if strings.HasPrefix(v, "v20.2") {
+		return tpchVecVersion20_2, nil
 	} else {
 		return 0, errors.Errorf("unrecognized version: %s", v)
 	}
@@ -54,6 +57,7 @@ var (
 	vectorizeOnOptionByVersion = map[crdbVersion]string{
 		tpchVecVersion19_2: "experimental_on",
 		tpchVecVersion20_1: "on",
+		tpchVecVersion20_2: "on",
 	}
 
 	// queriesToSkipByVersion is a map keyed by version that contains query numbers
@@ -77,6 +81,7 @@ var (
 	slownessThresholdByVersion = map[crdbVersion]float64{
 		tpchVecVersion19_2: 1.5,
 		tpchVecVersion20_1: 1.2,
+		tpchVecVersion20_2: 1.2,
 	}
 )
 
