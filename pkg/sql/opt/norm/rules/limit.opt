@@ -26,15 +26,15 @@ $input
 (Limit
     (Project $input:* $projections:* $passthrough:*)
     $limit:*
-    $ordering:* & (HasColsInOrdering $input $ordering)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $input)
+        )
 )
 =>
 (Project
-    (Limit
-        $input
-        $limit
-        (PruneOrdering $ordering (OutputCols $input))
-    )
+    (Limit $input $limit (PruneOrdering $ordering $cols))
     $projections
     $passthrough
 )
@@ -46,15 +46,15 @@ $input
 (Offset
     (Project $input:* $projections:* $passthrough:*)
     $offset:*
-    $ordering:* & (HasColsInOrdering $input $ordering)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $input)
+        )
 )
 =>
 (Project
-    (Offset
-        $input
-        $offset
-        (PruneOrdering $ordering (OutputCols $input))
-    )
+    (Offset $input $offset (PruneOrdering $ordering $cols))
     $projections
     $passthrough
 )
@@ -101,7 +101,10 @@ $input
     (Ordinality $input:* $private:*)
     $limit:*
     $limitOrdering:* &
-        (HasColsInOrdering $input $limitOrdering) &
+        (OrderingCanProjectCols
+            $limitOrdering
+            (OutputCols $input)
+        ) &
         (OrderingIntersects
             (OrdinalityOrdering $private)
             $limitOrdering
@@ -131,16 +134,16 @@ $input
     $limitExpr:(Const $limit:*) &
         (IsPositiveInt $limit) &
         ^(LimitGeMaxRows $limit $left)
-    $ordering:* & (HasColsInOrdering $left $ordering)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $left)
+        )
 )
 =>
 (Limit
     (LeftJoin
-        (Limit
-            $left
-            $limitExpr
-            (PruneOrdering $ordering (OutputCols $left))
-        )
+        (Limit $left $limitExpr (PruneOrdering $ordering $cols))
         $right
         $on
         $private
