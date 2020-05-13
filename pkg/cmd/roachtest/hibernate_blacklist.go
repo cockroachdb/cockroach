@@ -17,11 +17,14 @@ var hibernateBlacklists = blacklistsForVersion{
 	{"v19.1", "hibernateBlackList19_1", hibernateBlackList19_1, "", nil},
 	{"v19.2", "hibernateBlackList19_2", hibernateBlackList19_2, "", nil},
 	{"v20.1", "hibernateBlackList20_1", hibernateBlackList20_1, "", nil},
+	{"v20.2", "hibernateBlackList20_2", hibernateBlackList20_2, "", nil},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
+var hibernateBlackList20_2 = blacklist{}
+
 var hibernateBlackList20_1 = blacklist{}
 
 var hibernateBlackList19_2 = blacklist{}

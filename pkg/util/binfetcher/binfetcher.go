@@ -135,7 +135,7 @@ func (opts Options) filename() string {
 
 // Downloading binaries may take some time, so give ourselves
 // some room before the timeout expires.
-var httpClient = httputil.NewClientWithTimeout(30 * time.Second)
+var httpClient = httputil.NewClientWithTimeout(300 * time.Second)
 
 // Download downloads the binary for the given version, and skips the download
 // if the archive is already present in `destDir`.

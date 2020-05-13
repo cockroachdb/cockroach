@@ -681,6 +681,41 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 	}
 }
 
+// OutputColumnIsAlwaysNull returns true if the expression produces only NULL
+// values for the given column. Used to elide foreign key checks.
+//
+// This could be a logical property but we only care about simple cases (NULLs
+// in Projections and Values).
+func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
+	switch e.Op() {
+	case opt.ProjectOp:
+		p := e.(*ProjectExpr)
+		if p.Passthrough.Contains(col) {
+			return OutputColumnIsAlwaysNull(p.Input, col)
+		}
+		for i := range p.Projections {
+			if p.Projections[i].Col == col {
+				return p.Projections[i].Element.Op() == opt.NullOp
+			}
+		}
+
+	case opt.ValuesOp:
+		v := e.(*ValuesExpr)
+		colOrdinal, ok := v.Cols.Find(col)
+		if !ok {
+			return false
+		}
+		for i := range v.Rows {
+			if v.Rows[i].(*TupleExpr).Elems[colOrdinal].Op() != opt.NullOp {
+				return false
+			}
+		}
+		return true
+	}
+
+	return false
+}
+
 // FKCascades stores metadata necessary for building cascading queries.
 type FKCascades []FKCascade
 

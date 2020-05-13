@@ -13,6 +13,7 @@ package main
 var gopgBlacklists = blacklistsForVersion{
 	{"v19.2", "gopgBlackList19_2", gopgBlackList19_2, "gopgIgnoreList19_2", gopgIgnoreList19_2},
 	{"v20.1", "gopgBlackList20_1", gopgBlackList20_1, "gopgIgnoreList20_1", gopgIgnoreList20_1},
+	{"v20.2", "gopgBlackList20_2", gopgBlackList20_2, "gopgIgnoreList20_2", gopgIgnoreList20_2},
 }
 
 // These are lists of known gopg test errors and failures.
@@ -23,6 +24,8 @@ var gopgBlacklists = blacklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
+
+var gopgBlackList20_2 = gopgBlackList20_1
 
 var gopgBlackList20_1 = blacklist{
 	"pg | CopyFrom/CopyTo | copies corrupted data to a table":         "41608",
@@ -89,6 +92,8 @@ var gopgBlackList19_2 = blacklist{
 	"v9.TestGocheck":    "5807",
 	"v9.TestUnixSocket": "31113",
 }
+
+var gopgIgnoreList20_2 = gopgIgnoreList20_1
 
 var gopgIgnoreList20_1 = gopgIgnoreList19_2
 

@@ -171,6 +171,40 @@ insert child_nullable
                 └── filters
                      └── column2:5 = parent.p:6
 
+# In this case, we know that we are inserting *only* NULL values, so we don't
+# need to check any FKs. We need to use norm because internally the values
+# become NULL::INT and the normalization rules are needed to fold the cast.
+norm
+INSERT INTO child_nullable VALUES (100, NULL), (200, NULL)
+----
+insert child_nullable
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:3 => c:1
+ │    └── column2:4 => p:2
+ └── values
+      ├── columns: column1:3!null column2:4
+      ├── (100, NULL)
+      └── (200, NULL)
+
+# Same as above.
+norm
+INSERT INTO child_nullable (c) VALUES (100), (200)
+----
+insert child_nullable
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:3 => c:1
+ │    └── column4:4 => p:2
+ └── project
+      ├── columns: column4:4 column1:3!null
+      ├── values
+      │    ├── columns: column1:3!null
+      │    ├── (100,)
+      │    └── (200,)
+      └── projections
+           └── CAST(NULL AS INT8) [as=column4:4]
+
 # Check planning of filter with FULL match (which should be the same on a
 # single column).
 exec-ddl
@@ -207,6 +241,24 @@ insert child_nullable_full
                 └── filters
                      └── column2:5 = parent.p:6
 
+# No FK check needed.
+norm
+INSERT INTO child_nullable_full (c) VALUES (100), (200)
+----
+insert child_nullable_full
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:3 => c:1
+ │    └── column4:4 => p:2
+ └── project
+      ├── columns: column4:4 column1:3!null
+      ├── values
+      │    ├── columns: column1:3!null
+      │    ├── (100,)
+      │    └── (200,)
+      └── projections
+           └── CAST(NULL AS INT8) [as=column4:4]
+
 # Tests with multicolumn FKs.
 exec-ddl
 CREATE TABLE multi_col_parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r))
@@ -222,7 +274,7 @@ CREATE TABLE multi_col_child  (
 
 # All columns are nullable and must be part of the filter.
 build
-INSERT INTO multi_col_child VALUES (4, NULL, NULL, NULL)
+INSERT INTO multi_col_child VALUES (4, NULL, NULL, NULL), (5, 1, 2, 3)
 ----
 insert multi_col_child
  ├── columns: <none>
@@ -234,7 +286,8 @@ insert multi_col_child
  ├── input binding: &1
  ├── values
  │    ├── columns: column1:5!null column2:6 column3:7 column4:8
- │    └── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    └── (5, 1, 2, 3)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -328,6 +381,21 @@ insert multi_col_child
                      ├── column3:10 = multi_col_parent.q:13
                      └── column4:11 = multi_col_parent.r:14
 
+# No FK check needed - we have only NULL values for a FK column.
+norm
+INSERT INTO multi_col_child VALUES (1, 10, NULL, 10)
+----
+insert multi_col_child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => c:1
+ │    ├── column2:6 => p:2
+ │    ├── column3:7 => q:3
+ │    └── column4:8 => r:4
+ └── values
+      ├── columns: column1:5!null column2:6!null column3:7 column4:8!null
+      └── (1, 10, NULL, 10)
+
 exec-ddl
 CREATE TABLE multi_col_child_full  (
   c INT PRIMARY KEY,
@@ -338,7 +406,7 @@ CREATE TABLE multi_col_child_full  (
 
 # All columns are nullable and must be part of the filter.
 build
-INSERT INTO multi_col_child_full VALUES (4, NULL, NULL, NULL)
+INSERT INTO multi_col_child_full VALUES (4, NULL, NULL, NULL), (5, 1, 2, 3)
 ----
 insert multi_col_child_full
  ├── columns: <none>
@@ -350,7 +418,8 @@ insert multi_col_child_full
  ├── input binding: &1
  ├── values
  │    ├── columns: column1:5!null column2:6 column3:7 column4:8
- │    └── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    └── (5, 1, 2, 3)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -426,6 +495,54 @@ insert multi_col_child_full
                 ├── columns: column2:9!null column3:10!null column4:11!null
                 ├── with-scan &1
                 │    ├── columns: column2:9!null column3:10!null column4:11!null
+                │    └── mapping:
+                │         ├──  column2:6 => column2:9
+                │         ├──  column3:7 => column3:10
+                │         └──  column4:8 => column4:11
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
+                └── filters
+                     ├── column2:9 = multi_col_parent.p:12
+                     ├── column3:10 = multi_col_parent.q:13
+                     └── column4:11 = multi_col_parent.r:14
+
+# No FK check needed when all FK columns only have NULL values.
+norm
+INSERT INTO multi_col_child_full VALUES (1, NULL, NULL, NULL)
+----
+insert multi_col_child_full
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => c:1
+ │    ├── column2:6 => p:2
+ │    ├── column3:7 => q:3
+ │    └── column4:8 => r:4
+ └── values
+      ├── columns: column1:5!null column2:6 column3:7 column4:8
+      └── (1, NULL, NULL, NULL)
+
+# But with MATCH FULL, the FK check is needed when only a subset of the columns
+# only have NULL values.
+norm
+INSERT INTO multi_col_child_full VALUES (1, NULL, 2, NULL)
+----
+insert multi_col_child_full
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => c:1
+ │    ├── column2:6 => multi_col_child_full.p:2
+ │    ├── column3:7 => multi_col_child_full.q:3
+ │    └── column4:8 => multi_col_child_full.r:4
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:5!null column2:6 column3:7!null column4:8
+ │    └── (1, NULL, 2, NULL)
+ └── f-k-checks
+      └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
+           └── anti-join (hash)
+                ├── columns: column2:9 column3:10!null column4:11
+                ├── with-scan &1
+                │    ├── columns: column2:9 column3:10!null column4:11
                 │    └── mapping:
                 │         ├──  column2:6 => column2:9
                 │         ├──  column3:7 => column3:10

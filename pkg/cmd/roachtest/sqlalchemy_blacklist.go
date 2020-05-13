@@ -15,7 +15,10 @@ var sqlAlchemyBlacklists = blacklistsForVersion{
 	{"v19.1", "sqlAlchemyBlacklist", sqlAlchemyBlacklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
 	{"v19.2", "sqlAlchemyBlacklist", sqlAlchemyBlacklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
 	{"v20.1", "sqlAlchemyBlacklist20_1", sqlAlchemyBlacklist20_1, "sqlAlchemyIgnoreList20_1", sqlAlchemyIgnoreList20_1},
+	{"v20.2", "sqlAlchemyBlacklist20_2", sqlAlchemyBlacklist20_2, "sqlAlchemyIgnoreList20_2", sqlAlchemyIgnoreList20_2},
 }
+
+var sqlAlchemyBlacklist20_2 = sqlAlchemyBlacklist20_1
 
 var sqlAlchemyBlacklist20_1 = blacklist{
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_autoincrement_col":                  "5807",
@@ -156,6 +159,8 @@ var sqlAlchemyBlacklist = blacklist{
 	"test/dialect/test_suite.py::ServerSideCursorsTest_cockroachdb+psycopg2_9_5_0::test_text_ss_option":                       "41412",
 	"test/dialect/test_suite.py::TableDDLTest_cockroachdb+psycopg2_9_5_0::test_create_table_schema":                           "26443",
 }
+
+var sqlAlchemyIgnoreList20_2 = sqlAlchemyIgnoreList
 
 var sqlAlchemyIgnoreList20_1 = sqlAlchemyIgnoreList
 

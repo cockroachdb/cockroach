@@ -168,9 +168,12 @@ var enabledDjangoTests = []string{
 var djangoBlacklists = blacklistsForVersion{
 	{"v19.2", "djangoBlacklist19_2", djangoBlacklist19_2, "djangoIgnoreList19_2", djangoIgnoreList19_2},
 	{"v20.1", "djangoBlacklist20_1", djangoBlacklist20_1, "djangoIgnoreList20_1", djangoIgnoreList20_1},
+	{"v20.2", "djangoBlacklist20_2", djangoBlacklist20_2, "djangoIgnoreList20_2", djangoIgnoreList20_2},
 }
 
 // Maintain that this list is alphabetized.
+var djangoBlacklist20_2 = blacklist{}
+
 var djangoBlacklist20_1 = blacklist{}
 
 var djangoBlacklist19_2 = blacklist{
@@ -214,6 +217,8 @@ var djangoBlacklist19_2 = blacklist{
 	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_syy_general":                                  "41274",
 	//"postgres_tests.test_array.TestOtherTypesExactQuerying.test_exact_decimals":                                     "23468",
 }
+
+var djangoIgnoreList20_2 = blacklist{}
 
 var djangoIgnoreList20_1 = blacklist{}
 
