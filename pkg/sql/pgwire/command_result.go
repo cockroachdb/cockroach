@@ -312,13 +312,14 @@ func (c *conn) newCommandResult(
 	portalName string,
 	implicitTxn bool,
 ) sql.CommandResult {
+	stmtTag := stmt.StatementTag()
 	r := c.allocCommandResult()
 	*r = commandResult{
 		conn:           c,
 		conv:           conv,
 		pos:            pos,
 		typ:            commandComplete,
-		cmdCompleteTag: stmt.StatementTag(),
+		cmdCompleteTag: stmtTag,
 		stmtType:       stmt.StatementType(),
 		descOpt:        descOpt,
 		formatCodes:    formatCodes,
@@ -327,11 +328,16 @@ func (c *conn) newCommandResult(
 		return r
 	}
 	telemetry.Inc(sqltelemetry.PortalWithLimitRequestCounter)
+	suspensionStrategy := nonSelectPortalSuspensionStrategy
+	if stmtTag == "SELECT" {
+		suspensionStrategy = selectPortalSuspensionStrategy
+	}
 	return &limitedCommandResult{
-		limit:         limit,
-		portalName:    portalName,
-		implicitTxn:   implicitTxn,
-		commandResult: r,
+		limit:              limit,
+		portalName:         portalName,
+		suspensionStrategy: suspensionStrategy,
+		implicitTxn:        implicitTxn,
+		commandResult:      r,
 	}
 }
 
@@ -344,6 +350,27 @@ func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResu
 	}
 	return r
 }
+
+// portalSuspensionStrategy determines how the suspension of the portal should
+// be handled by limitedCommandResult. It mirrors relevant enum values from PG
+// (https://github.com/postgres/postgres/blob/2f9661311b83dc481fc19f6e3bda015392010a40/src/include/utils/portal.h#L89)
+// and is currently used only to populate the command tag with the correct
+// number of "affected rows."
+type portalSuspensionStrategy int
+
+const (
+	// selectPortalSuspensionStrategy is a portalSuspensionStrategy for a
+	// portal that consists of a SELECT statement. The execution of such
+	// statements can be "truly" suspended, so PG emits the actual number of
+	// returned rows since the previous suspension (if there was one).
+	selectPortalSuspensionStrategy portalSuspensionStrategy = iota
+	// nonSelectPortalSuspensionStrategy is a portalSuspensionStrategy for a
+	// portal that consists of any non-SELECT statement. Such statements are
+	// fully executed at once, and PG buffers the number of rows affected and
+	// returns that number in the command tag when the portal is attempted to
+	// be executed again.
+	nonSelectPortalSuspensionStrategy
+)
 
 // limitedCommandResult is a commandResult that has a limit, after which calls
 // to AddRow will block until the associated client connection asks for more
@@ -366,8 +393,9 @@ func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResu
 // per statement instead of once per portal.
 type limitedCommandResult struct {
 	*commandResult
-	portalName  string
-	implicitTxn bool
+	portalName         string
+	implicitTxn        bool
+	suspensionStrategy portalSuspensionStrategy
 
 	seenTuples int
 	// If set, an error will be sent to the client if more rows are produced than
@@ -445,8 +473,19 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 					"cannot execute a portal while a different one is open")
 			}
 			r.limit = c.Limit
-			// In order to get the correct command tag, we need to reset the seen rows.
-			r.rowsAffected = 0
+			switch r.suspensionStrategy {
+			case selectPortalSuspensionStrategy:
+				// In order to get the correct command tag for a SELECT
+				// statement we need to reset the seen rows.
+				r.rowsAffected = 0
+			case nonSelectPortalSuspensionStrategy:
+				// In order to get the correct command tag for a non-SELECT
+				// statement we need to keep the number of already seen rows.
+			default:
+				return errors.AssertionFailedf(
+					"unexpected portalSuspensionStrategy %d", r.suspensionStrategy,
+				)
+			}
 			return nil
 		case sql.Sync:
 			// The client wants to see a ready for query message
