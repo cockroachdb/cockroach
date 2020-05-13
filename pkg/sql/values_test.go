@@ -182,56 +182,57 @@ func TestGolangQueryArgs(t *testing.T) {
 	// type
 	testCases := []struct {
 		value        interface{}
-		expectedType reflect.Type
+		expectedType *types.T
 	}{
 		// Null type.
-		{nil, reflect.TypeOf(types.Unknown)},
+		{nil, types.Unknown},
+		{[]byte(nil), types.Unknown},
 
 		// Bool type.
-		{true, reflect.TypeOf(types.Bool)},
+		{true, types.Bool},
 
 		// Primitive Integer types.
-		{int(1), reflect.TypeOf(types.Int)},
-		{int8(1), reflect.TypeOf(types.Int)},
-		{int16(1), reflect.TypeOf(types.Int)},
-		{int32(1), reflect.TypeOf(types.Int)},
-		{int64(1), reflect.TypeOf(types.Int)},
-		{uint(1), reflect.TypeOf(types.Int)},
-		{uint8(1), reflect.TypeOf(types.Int)},
-		{uint16(1), reflect.TypeOf(types.Int)},
-		{uint32(1), reflect.TypeOf(types.Int)},
-		{uint64(1), reflect.TypeOf(types.Int)},
+		{int(1), types.Int},
+		{int8(1), types.Int},
+		{int16(1), types.Int},
+		{int32(1), types.Int},
+		{int64(1), types.Int},
+		{uint(1), types.Int},
+		{uint8(1), types.Int},
+		{uint16(1), types.Int},
+		{uint32(1), types.Int},
+		{uint64(1), types.Int},
 
 		// Primitive Float types.
-		{float32(1.0), reflect.TypeOf(types.Float)},
-		{float64(1.0), reflect.TypeOf(types.Float)},
+		{float32(1.0), types.Float},
+		{float64(1.0), types.Float},
 
 		// Decimal type.
-		{apd.New(55, 1), reflect.TypeOf(types.Decimal)},
+		{apd.New(55, 1), types.Decimal},
 
 		// String type.
-		{"test", reflect.TypeOf(types.String)},
+		{"test", types.String},
 
 		// Bytes type.
-		{[]byte("abc"), reflect.TypeOf(types.Bytes)},
+		{[]byte("abc"), types.Bytes},
 
 		// Interval and timestamp.
-		{time.Duration(1), reflect.TypeOf(types.Interval)},
-		{timeutil.Now(), reflect.TypeOf(types.Timestamp)},
+		{time.Duration(1), types.Interval},
+		{timeutil.Now(), types.Timestamp},
 
 		// Primitive type aliases.
-		{roachpb.NodeID(1), reflect.TypeOf(types.Int)},
-		{sqlbase.ID(1), reflect.TypeOf(types.Int)},
-		{floatAlias(1), reflect.TypeOf(types.Float)},
-		{boolAlias(true), reflect.TypeOf(types.Bool)},
-		{stringAlias("string"), reflect.TypeOf(types.String)},
+		{roachpb.NodeID(1), types.Int},
+		{sqlbase.ID(1), types.Int},
+		{floatAlias(1), types.Float},
+		{boolAlias(true), types.Bool},
+		{stringAlias("string"), types.String},
 
 		// Byte slice aliases.
-		{roachpb.Key("key"), reflect.TypeOf(types.Bytes)},
-		{roachpb.RKey("key"), reflect.TypeOf(types.Bytes)},
+		{roachpb.Key("key"), types.Bytes},
+		{roachpb.RKey("key"), types.Bytes},
 
 		// Bit array.
-		{bitarray.MakeBitArrayFromInt64(8, 58, 7), reflect.TypeOf(types.VarBit)},
+		{bitarray.MakeBitArrayFromInt64(8, 58, 7), types.VarBit},
 	}
 
 	for i, tcase := range testCases {
@@ -241,7 +242,7 @@ func TestGolangQueryArgs(t *testing.T) {
 			t.Fatalf("expected 1 datum, got: %d", len(datums))
 		}
 		d := datums[0]
-		if a, e := reflect.TypeOf(d.ResolvedType()), tcase.expectedType; a != e {
+		if a, e := d.ResolvedType(), tcase.expectedType; !a.Equal(e) {
 			t.Errorf("case %d failed: expected type %s, got %s", i, e.String(), a.String())
 		}
 	}
