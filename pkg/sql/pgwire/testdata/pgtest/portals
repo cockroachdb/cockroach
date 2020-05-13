@@ -342,3 +342,151 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"here"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression for #48448
+send
+Query {"String": "DROP TABLE IF EXISTS foo; CREATE TABLE foo (id INT8); INSERT INTO foo (id) VALUES (1), (2), (3)"}
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM foo ORDER BY id"}
+Bind
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "SELECT * FROM foo ORDER BY id"}
+Bind
+Execute {"MaxRows": 4}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Execute statements of "Ack" statement type.
+
+send
+Query {"String": "CREATE ROLE foo"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE ROLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "COMMIT"}
+Bind
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "ALTER ROLE \"foo\" WITH LOGIN"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ALTER ROLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# TODO(yuzefovich): I can't figure out how to drop the role we've just created.
+# When running against PG database I'm getting "portal \"\" cannot be run" error.
+# send
+# Query {"String": "COMMIT"}
+# Query {"String": "DROP ROLE foo"}
+# ----
+
+# until
+# ReadyForQuery
+# ----

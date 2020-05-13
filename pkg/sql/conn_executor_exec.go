@@ -455,10 +455,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	// is re-configured, re-set etc without using NewTxnWithSteppingEnabled().
 	//
 	// Manually hunting them down and calling ConfigureStepping() each
-	// time would be error prone (and increase the change that a future
+	// time would be error prone (and increase the chance that a future
 	// change would forget to add the call).
 	//
-	// TODO(andrei): really the code should be re-architectued to ensure
+	// TODO(andrei): really the code should be rearchitected to ensure
 	// that all uses of SQL execution initialize the client.Txn using a
 	// single/common function. That would be where the stepping mode
 	// gets enabled once for all SQL statements executed "underneath".

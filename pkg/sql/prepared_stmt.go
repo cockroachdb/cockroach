@@ -39,7 +39,7 @@ const (
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
 //
-// Note that PreparedStatemts maintain a reference counter internally.
+// Note that PreparedStatements maintain a reference counter internally.
 // References need to be registered with incRef() and de-registered with
 // decRef().
 type PreparedStatement struct {
@@ -111,7 +111,7 @@ type preparedStatementsAccessor interface {
 	// The method returns true if statement with that name was found and removed,
 	// false otherwise.
 	Delete(ctx context.Context, name string) bool
-	// DeleteAll removes all prepared statements and portals from the coolection.
+	// DeleteAll removes all prepared statements and portals from the collection.
 	DeleteAll(ctx context.Context)
 }
 
@@ -121,6 +121,16 @@ type preparedStatementsAccessor interface {
 // References need to be registered with incRef() and de-registered with
 // decRef().
 type PreparedPortal struct {
+	*immutablePreparedPortal
+
+	// exhausted tracks whether this portal has already been fully exhausted,
+	// meaning that any additional attempts to execute it should return no
+	// rows.
+	exhausted bool
+}
+
+// immutablePreparedPortal is the immutable "core" of PreparedPortal.
+type immutablePreparedPortal struct {
 	Stmt  *PreparedStatement
 	Qargs tree.QueryArguments
 
@@ -149,13 +159,13 @@ func (ex *connExecutor) newPreparedPortal(
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
 ) (*PreparedPortal, error) {
-	portal := &PreparedPortal{
+	portal := &PreparedPortal{immutablePreparedPortal: &immutablePreparedPortal{
 		Stmt:       stmt,
 		Qargs:      qargs,
 		OutFormats: outFormats,
 		memAcc:     ex.sessionMon.MakeBoundAccount(),
 		refCount:   1,
-	}
+	}}
 	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
 	if err := portal.memAcc.Grow(ctx, sz); err != nil {
 		return nil, err
