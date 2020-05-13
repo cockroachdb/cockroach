@@ -2693,10 +2693,10 @@ func (c *CustomFuncs) MapScanFilterCols(
 	}
 
 	// Map the columns of each filter in the FiltersExpr.
-	newFilters := make([]memo.FiltersItem, 0, len(filters))
+	newFilters := make([]memo.FiltersItem, len(filters))
 	for i := range filters {
 		expr := c.MapFiltersItemCols(&filters[i], colMap)
-		newFilters = append(newFilters, c.e.f.ConstructFiltersItem(expr))
+		newFilters[i] = c.e.f.ConstructFiltersItem(expr)
 	}
 
 	return newFilters
