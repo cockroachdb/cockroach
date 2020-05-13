@@ -325,8 +325,8 @@
 # join's left input will match at least one row in the right input. Since every
 # row matches, NULL-extended rows will never be added by the outer join, and
 # therefore can be mapped to an InnerJoin (or RightJoin in case of FullJoin).
-# See JoinConditionMatchesAllLeftRows comment for conditions in which this rule
-# can match.
+# See filtersMatchAllLeftRows in multiplicity_builder.go comment for conditions
+# in which this rule can match.
 #
 # Self-join example:
 #   SELECT * FROM xy LEFT JOIN xy AS xy2 ON xy.y = xy2.y

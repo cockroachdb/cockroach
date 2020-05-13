@@ -308,3 +308,55 @@ func (c *CustomFuncs) areRowsDistinct(
 
 	return true
 }
+
+// CanEliminateGroupByJoinLeft returns true if the given join can be eliminated.
+// It should be called only when the join is under a grouping operator that is
+// only using columns from the join's left input.
+func (c *CustomFuncs) CanEliminateGroupByJoinLeft(
+	joinExpr memo.RelExpr, aggs memo.AggregationsExpr,
+) bool {
+	return canEliminateGroupByJoin(
+		c.JoinWillNotDuplicateLeftRows(joinExpr),
+		c.JoinPreservesLeftRows(joinExpr),
+		aggs,
+	)
+}
+
+// CanEliminateGroupByJoinRight returns true if the given join can be
+// eliminated. It should be called only when the join is under a grouping
+// operator that is only using columns from the join's right input.
+func (c *CustomFuncs) CanEliminateGroupByJoinRight(
+	joinExpr memo.RelExpr, aggs memo.AggregationsExpr,
+) bool {
+	return canEliminateGroupByJoin(
+		c.JoinWillNotDuplicateRightRows(joinExpr),
+		c.JoinPreservesRightRows(joinExpr),
+		aggs,
+	)
+}
+
+// canEliminateGroupByJoin returns true if a join expression that has the given
+// effects on its input rows can be safely eliminated. This is the case if the
+// join does not affect the outputs of the GroupBy aggregate functions and it
+// does not remove any rows from the left input expression. For more details on
+// the conditions this function verifies, see the EliminateGroupByJoinLeft
+// comment in groupby.opt.
+func canEliminateGroupByJoin(
+	noRowsDuplicated, allRowsPreserved bool, aggs memo.AggregationsExpr,
+) bool {
+	// ignoresDuplicates is true when duplicate values do not affect the output of
+	// any of the aggregate operators in the GroupBy aggregations.
+	ignoresDuplicates := true
+	for i := range aggs {
+		aggOp := memo.ExtractAggFunc(aggs[i].Agg).Op()
+		if !opt.AggregateIgnoresDuplicates(aggOp) {
+			ignoresDuplicates = false
+			break
+		}
+	}
+
+	if ignoresDuplicates {
+		return allRowsPreserved
+	}
+	return allRowsPreserved && noRowsDuplicated
+}

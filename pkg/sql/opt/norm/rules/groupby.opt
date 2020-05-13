@@ -9,6 +9,111 @@
 =>
 (DistinctOn $input $aggregations $groupingPrivate)
 
+# EliminateGroupByProject discards a nested Project operator that is only
+# removing columns from its input (and not synthesizing new ones). That's
+# something the GroupBy operators can do on their own.
+#
+# Note: EliminateGroupByProject should be located above EliminateGroupByJoinLeft
+# so that it can remove any interfering Projects.
+[EliminateGroupByProject, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
+        | UpsertDistinctOn | EnsureUpsertDistinctOn
+    $input:(Project $innerInput:*) &
+        (ColsAreSubset
+            (OutputCols $input)
+            (OutputCols $innerInput)
+        )
+    $aggregations:*
+    $groupingPrivate:*
+)
+=>
+((OpName) $innerInput $aggregations $groupingPrivate)
+
+# EliminateGroupByJoinLeft removes a Join operator if it can be proven that the
+# presence or absence of the Join does not affect the output of the GroupBy
+# operator. This is the case if:
+#
+# 1. Only columns from the left input are being used by the grouping operator.
+#
+# 2. It can be proven that removal of the Join does not affect the result of the
+#    grouping operator's aggregate functions.
+#
+# 3. The OrderingChoice of the grouping operator can be expressed with only
+#    columns from the left input. Or in other words, at least one column in
+#    every ordering group is one of the left output columns.
+#
+# Condition #2 is only true when the following are all true:
+#
+# 1. All left rows are included in the output of the join. See the comment above
+#    filtersMatchAllLeftRows in multiplicity_builder.go for more information on
+#    when this is the case.
+# 2. Either the join does not duplicate any left rows, or the join duplicates
+#    left rows but the grouping operator's aggregate functions ignore duplicate
+#    values. See the comment above filtersMatchLeftRowsAtMostOnce in
+#    multiplicity_builder.go for more information on when rows are duplicated.
+# 3. The join does not null-extend the left columns.
+#
+# EliminateGroupByJoinLeft should stay at the top of the file so that it has a
+# chance to fire before rules like EliminateDistinctOn that might prevent
+# matching.
+[EliminateGroupByJoinLeft, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn
+    $input:(InnerJoin | LeftJoin $left:*)
+    $aggs:*
+    $private:(GroupingPrivate $groupingCols:* $ordering:*) &
+        (OrderingSatisfiedByCols
+            $ordering
+            $leftCols:(OutputCols $left)
+        ) &
+        (ColsAreSubset
+            (UnionCols
+                $groupingCols
+                (AggregationOuterCols $aggs)
+            )
+            $leftCols
+        ) &
+        (CanEliminateGroupByJoinLeft $input $aggs)
+)
+=>
+((OpName)
+    $left
+    $aggs
+    (MakeGrouping
+        $groupingCols
+        (PruneOrdering $ordering $leftCols)
+    )
+)
+
+# EliminateGroupByJoinRight is symmetric with EliminateGroupByJoinLeft, except
+# that it only matches on InnerJoins.
+[EliminateGroupByJoinRight, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn
+    $input:(InnerJoin * $right:*)
+    $aggs:*
+    $private:(GroupingPrivate $groupingCols:* $ordering:*) &
+        (OrderingSatisfiedByCols
+            $ordering
+            $rightCols:(OutputCols $right)
+        ) &
+        (ColsAreSubset
+            (UnionCols
+                $groupingCols
+                (AggregationOuterCols $aggs)
+            )
+            $rightCols
+        ) &
+        (CanEliminateGroupByJoinRight $input $aggs)
+)
+=>
+((OpName)
+    $right
+    $aggs
+    (MakeGrouping
+        $groupingCols
+        (PruneOrdering $ordering $rightCols)
+    )
+)
+
 # EliminateDistinct discards a DistinctOn operator that is eliminating duplicate
 # rows by using grouping columns that are statically known to form a strong key.
 # By definition, a strong key does not allow duplicate values, so the GroupBy is
@@ -26,23 +131,6 @@
 )
 =>
 (Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
-
-# EliminateGroupByProject discards a nested Project operator that is only
-# removing columns from its input (and not synthesizing new ones). That's
-# something the GroupBy operators can do on their own.
-[EliminateGroupByProject, Normalize]
-(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
-        | UpsertDistinctOn | EnsureUpsertDistinctOn
-    $input:(Project $innerInput:*) &
-        (ColsAreSubset
-            (OutputCols $input)
-            (OutputCols $innerInput)
-        )
-    $aggregations:*
-    $groupingPrivate:*
-)
-=>
-((OpName) $innerInput $aggregations $groupingPrivate)
 
 # ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
 # operator and replaces them by ConstAgg aggregate functions. A grouping

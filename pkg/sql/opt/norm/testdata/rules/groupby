@@ -20,6 +20,16 @@ CREATE TABLE xy
 ----
 
 exec-ddl
+CREATE TABLE fks
+(
+    k INT PRIMARY KEY,
+    v INT,
+    r1 INT NOT NULL REFERENCES xy(x),
+    r2 INT REFERENCES xy(x)
+)
+----
+
+exec-ddl
 CREATE TABLE abc
 (
     a INT,
@@ -99,6 +109,374 @@ group-by
       └── sum [as=sum:6, outer=(3)]
            └── f:3
 
+# --------------------------------------------------
+# EliminateGroupByJoinLeft
+# --------------------------------------------------
+
+# Simple DistinctOn case with a LeftJoin on an equality between primary keys.
+norm expect=EliminateGroupByJoinLeft
+SELECT DISTINCT ON (x) x, y FROM xy LEFT JOIN fks ON x=k
+----
+scan xy
+ ├── columns: x:1!null y:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# RightJoin case. The RightJoin is turned into a LeftJoin, so
+# EliminateGroupByJoinLeft matches it.
+norm expect=EliminateGroupByJoinLeft
+SELECT DISTINCT ON (x) x, y FROM fks RIGHT JOIN xy ON x=k
+----
+scan xy
+ ├── columns: x:5!null y:6
+ ├── key: (5)
+ └── fd: (5)-->(6)
+
+# InnerJoin case. The Values operator in the join guarantees cardinality of at
+# least one, so rows from the left input are guaranteed to be included in the
+# join at least once.
+norm expect=EliminateGroupByJoinLeft
+SELECT k, max(r1) FROM fks INNER JOIN (SELECT * FROM (VALUES (1), (2)) f(t)) ON True GROUP BY k
+----
+group-by
+ ├── columns: k:1!null max:6!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(6)
+ ├── scan fks
+ │    ├── columns: k:1!null r1:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3)
+ └── aggregations
+      └── max [as=max:6, outer=(3)]
+           └── r1:3
+
+# Case with ScalarGroupBy with a sum aggregate that doesn't ignore duplicates.
+# The join can be eliminated because r1 is a foreign key referencing x, which
+# implies that the rows of fks are not being duplicated by the join.
+norm expect=EliminateGroupByJoinLeft
+SELECT sum(k) FROM fks LEFT JOIN xy ON x=r1
+----
+scalar-group-by
+ ├── columns: sum:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan fks
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── aggregations
+      └── sum [as=sum:7, outer=(1)]
+           └── k:1
+
+# LeftJoin case with possible duplicate rows. The rule can fire because the
+# output of the max aggregate is not affected by duplicate rows.
+norm expect=EliminateGroupByJoinLeft
+SELECT x, max(y) FROM xy LEFT JOIN fks ON True GROUP BY x
+----
+group-by
+ ├── columns: x:1!null max:7
+ ├── grouping columns: x:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations
+      └── max [as=max:7, outer=(2)]
+           └── y:2
+
+# LeftJoin case with a not-null foreign key equality filter and a sum aggregate.
+norm expect=EliminateGroupByJoinLeft
+SELECT k, sum(r1) FROM fks LEFT JOIN xy ON x=r1 GROUP BY k
+----
+group-by
+ ├── columns: k:1!null sum:7!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── scan fks
+ │    ├── columns: k:1!null r1:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3)
+ └── aggregations
+      └── sum [as=sum:7, outer=(3)]
+           └── r1:3
+
+# The LeftJoin guarantees that all left rows will be included in the output, and
+# since k is a key column, no rows from xy will be duplicated. Therefore the sum
+# aggregate will not be affected by join removal.
+norm expect=EliminateGroupByJoinLeft
+SELECT x, sum(y) FROM xy LEFT JOIN fks ON x=k GROUP BY x
+----
+group-by
+ ├── columns: x:1!null sum:7
+ ├── grouping columns: x:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations
+      └── sum [as=sum:7, outer=(2)]
+           └── y:2
+
+# The LeftJoin guarantees that all left rows will be included in the output, and
+# since r2 is a foreign key referencing x, it is guaranteed that no left rows
+# will be matched more than once. Therefore, the sum aggregate will be
+# unaffected by join removal.
+norm expect=EliminateGroupByJoinLeft
+SELECT k, sum(r1) FROM fks LEFT JOIN xy ON x=r2 GROUP BY k
+----
+group-by
+ ├── columns: k:1!null sum:7!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── scan fks
+ │    ├── columns: k:1!null r1:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3)
+ └── aggregations
+      └── sum [as=sum:7, outer=(3)]
+           └── r1:3
+
+# InnerJoin case. Because r1 is a non-null foreign key that references x, the
+# join output is guaranteed to include every left row exactly once.
+norm expect=EliminateGroupByJoinLeft
+SELECT k, sum(r1) FROM fks INNER JOIN xy ON x=r1 GROUP BY k
+----
+group-by
+ ├── columns: k:1!null sum:7!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── scan fks
+ │    ├── columns: k:1!null r1:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3)
+ └── aggregations
+      └── sum [as=sum:7, outer=(3)]
+           └── r1:3
+
+# Case with an ordering on left columns.
+norm expect=EliminateGroupByJoinLeft
+SELECT max(y) FROM xy LEFT JOIN fks ON x = k GROUP BY x ORDER BY x
+----
+group-by
+ ├── columns: max:7  [hidden: x:1!null]
+ ├── grouping columns: x:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ └── aggregations
+      └── max [as=max:7, outer=(2)]
+           └── y:2
+
+# No-op case because the InnerJoin will return no rows if fks is empty.
+norm expect-not=EliminateGroupByJoinLeft
+SELECT DISTINCT ON (x) x, y FROM xy INNER JOIN fks ON True
+----
+distinct-on
+ ├── columns: x:1!null y:2
+ ├── grouping columns: x:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (cross)
+ │    ├── columns: x:1!null y:2
+ │    ├── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan fks
+ │    └── filters (true)
+ └── aggregations
+      └── first-agg [as=y:2, outer=(2)]
+           └── y:2
+
+# No-op case because the DistinctOn is using columns from the right input.
+norm expect-not=EliminateGroupByJoinLeft
+SELECT DISTINCT ON (x) y, k FROM xy LEFT JOIN fks ON True
+----
+distinct-on
+ ├── columns: y:2 k:3  [hidden: x:1!null]
+ ├── grouping columns: x:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── left-join (cross)
+ │    ├── columns: x:1!null y:2 k:3
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan fks
+ │    │    ├── columns: k:3!null
+ │    │    └── key: (3)
+ │    └── filters (true)
+ └── aggregations
+      ├── first-agg [as=y:2, outer=(2)]
+      │    └── y:2
+      └── first-agg [as=k:3, outer=(3)]
+           └── k:3
+
+# No-op case because an InnerJoin on true may create duplicate rows that will
+# affect the output of the sum on r1.
+norm expect-not=EliminateGroupByJoinLeft
+SELECT k, sum(r1) FROM fks INNER JOIN xy ON True GROUP BY k
+----
+group-by
+ ├── columns: k:1!null sum:7!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── inner-join (cross)
+ │    ├── columns: k:1!null r1:3!null
+ │    ├── fd: (1)-->(3)
+ │    ├── scan fks
+ │    │    ├── columns: k:1!null r1:3!null
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    ├── scan xy
+ │    └── filters (true)
+ └── aggregations
+      └── sum [as=sum:7, outer=(3)]
+           └── r1:3
+
+# No-op case with a foreign key equality filter and a sum aggregate. No-op
+# because r2 is nullable and therefore the InnerJoin may filter out rows.
+norm expect-not=EliminateGroupByJoinLeft
+SELECT k, sum(r1) FROM fks INNER JOIN xy ON x=r2 GROUP BY k
+----
+group-by
+ ├── columns: k:1!null sum:7!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null r1:3!null r2:4!null x:5!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3,4), (4)==(5), (5)==(4)
+ │    ├── scan fks
+ │    │    ├── columns: k:1!null r1:3!null r2:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3,4)
+ │    ├── scan xy
+ │    │    ├── columns: x:5!null
+ │    │    └── key: (5)
+ │    └── filters
+ │         └── x:5 = r2:4 [outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
+ └── aggregations
+      └── sum [as=sum:7, outer=(3)]
+           └── r1:3
+
+# No-op case because the ordering includes a column from the right input.
+norm expect-not=EliminateGroupByJoinLeft
+SELECT x, max(y) FROM xy LEFT JOIN fks ON True GROUP BY x, k ORDER BY x, k
+----
+group-by
+ ├── columns: x:1!null max:7  [hidden: k:3]
+ ├── grouping columns: x:1!null k:3
+ ├── key: (1,3)
+ ├── fd: (1,3)-->(7)
+ ├── ordering: +1,+3
+ ├── sort
+ │    ├── columns: x:1!null y:2 k:3
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1,+3
+ │    └── left-join (cross)
+ │         ├── columns: x:1!null y:2 k:3
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2)
+ │         ├── scan xy
+ │         │    ├── columns: x:1!null y:2
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan fks
+ │         │    ├── columns: k:3!null
+ │         │    └── key: (3)
+ │         └── filters (true)
+ └── aggregations
+      └── max [as=max:7, outer=(2)]
+           └── y:2
+
+# Currently a no-op case even though we could hypothetically remove the join,
+# since the presence of a not-null foreign key in fks implies that either both
+# tables will have a cardinality of at least one, or both will have a
+# cardinality of zero.
+norm expect-not=EliminateGroupByJoinLeft
+SELECT DISTINCT ON (k) k, v FROM fks INNER JOIN xy ON True
+----
+distinct-on
+ ├── columns: k:1!null v:2
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (cross)
+ │    ├── columns: k:1!null v:2
+ │    ├── fd: (1)-->(2)
+ │    ├── scan fks
+ │    │    ├── columns: k:1!null v:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan xy
+ │    └── filters (true)
+ └── aggregations
+      └── first-agg [as=v:2, outer=(2)]
+           └── v:2
+
+# --------------------------------------------------
+# EliminateGroupByJoinRight
+# --------------------------------------------------
+
+# InnerJoin case.
+norm expect=EliminateGroupByJoinRight
+SELECT k, sum(r1) FROM xy INNER JOIN fks ON x = r1 GROUP BY k
+----
+group-by
+ ├── columns: k:3!null sum:7!null
+ ├── grouping columns: k:3!null
+ ├── key: (3)
+ ├── fd: (3)-->(7)
+ ├── scan fks
+ │    ├── columns: k:3!null r1:5!null
+ │    ├── key: (3)
+ │    └── fd: (3)-->(5)
+ └── aggregations
+      └── sum [as=sum:7, outer=(5)]
+           └── r1:5
+
+# No-op case because columns from the right side of a left join are being used.
+norm expect-not=EliminateGroupByJoinRight
+SELECT max(r1) FROM xy LEFT JOIN fks ON x = r1
+----
+scalar-group-by
+ ├── columns: max:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── left-join (hash)
+ │    ├── columns: x:1!null r1:5
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null
+ │    │    └── key: (1)
+ │    ├── scan fks
+ │    │    └── columns: r1:5!null
+ │    └── filters
+ │         └── x:1 = r1:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ └── aggregations
+      └── max [as=max:7, outer=(5)]
+           └── r1:5
 
 # --------------------------------------------------
 # EliminateDistinct

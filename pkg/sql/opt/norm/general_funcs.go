@@ -514,10 +514,13 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 //
 // ----------------------------------------------------------------------
 
-// HasColsInOrdering returns true if all columns that appear in an ordering are
-// output columns of the input expression.
-func (c *CustomFuncs) HasColsInOrdering(input memo.RelExpr, ordering physical.OrderingChoice) bool {
-	return ordering.CanProjectCols(input.Relational().OutputCols)
+// OrderingSatisfiedByCols returns true if the given OrderingChoice can be
+// expressed using only the given columns. Or in other words, at least one
+// column from every ordering group is a member of the given ColSet.
+func (c *CustomFuncs) OrderingSatisfiedByCols(
+	ordering physical.OrderingChoice, cols opt.ColSet,
+) bool {
+	return ordering.CanProjectCols(cols)
 }
 
 // OrderingCols returns all non-optional columns that are part of the given
@@ -527,8 +530,8 @@ func (c *CustomFuncs) OrderingCols(ordering physical.OrderingChoice) opt.ColSet 
 }
 
 // PruneOrdering removes any columns referenced by an OrderingChoice that are
-// not part of the needed column set. Should only be called if HasColsInOrdering
-// is true.
+// not part of the needed column set. Should only be called if
+// OrderingSatisfiedByCols is true.
 func (c *CustomFuncs) PruneOrdering(
 	ordering physical.OrderingChoice, needed opt.ColSet,
 ) physical.OrderingChoice {
@@ -834,6 +837,44 @@ func (c *CustomFuncs) ExtractGroupingOrdering(
 	private *memo.GroupingPrivate,
 ) physical.OrderingChoice {
 	return private.Ordering
+}
+
+// ----------------------------------------------------------------------
+//
+// Join functions
+//   General functions related to join operators.
+//
+// ----------------------------------------------------------------------
+
+// JoinWillNotDuplicateLeftRows returns true if the given InnerJoin, LeftJoin or
+// FullJoin is guaranteed not to output any given row from its left input more
+// than once.
+func (c *CustomFuncs) JoinWillNotDuplicateLeftRows(join memo.RelExpr) bool {
+	mult := memo.DeriveJoinMultiplicity(join)
+	return mult.JoinDoesNotDuplicateLeftRows()
+}
+
+// JoinWillNotDuplicateRightRows returns true if the given InnerJoin, LeftJoin or
+// FullJoin is guaranteed not to output any given row from its right input more
+// than once.
+func (c *CustomFuncs) JoinWillNotDuplicateRightRows(join memo.RelExpr) bool {
+	mult := memo.DeriveJoinMultiplicity(join)
+	return mult.JoinDoesNotDuplicateRightRows()
+}
+
+// JoinPreservesLeftRows returns true if the given InnerJoin, LeftJoin or
+// FullJoin is guaranteed to output every row from its left input at least once.
+func (c *CustomFuncs) JoinPreservesLeftRows(join memo.RelExpr) bool {
+	mult := memo.DeriveJoinMultiplicity(join)
+	return mult.JoinPreservesLeftRows()
+}
+
+// JoinPreservesRightRows returns true if the given InnerJoin, LeftJoin or
+// FullJoin is guaranteed to output every row from its right input at least
+// once.
+func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
+	mult := memo.DeriveJoinMultiplicity(join)
+	return mult.JoinPreservesRightRows()
 }
 
 // ----------------------------------------------------------------------
