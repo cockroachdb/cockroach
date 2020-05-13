@@ -61,6 +61,8 @@ var roachtestOwners = map[Owner]OwnerMetadata{
 	`unittest`: {},
 }
 
+const defaultTag = "default"
+
 type testRegistry struct {
 	m map[string]*testSpec
 	// buildVersion is the version of the Cockroach binary that tests will run against.
@@ -133,6 +135,10 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 	if _, ok := roachtestOwners[spec.Owner]; !ok {
 		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
 	}
+	if len(spec.Tags) == 0 {
+		spec.Tags = []string{defaultTag}
+	}
+	spec.Tags = append(spec.Tags, "owner-"+string(spec.Owner))
 
 	return nil
 }
@@ -211,8 +217,8 @@ func newFilter(filter []string) *testFilter {
 	}
 
 	if len(tag) == 0 {
-		tag = []string{"default"}
-		rawTag = []string{"tag:default"}
+		tag = []string{defaultTag}
+		rawTag = []string{"tag:" + defaultTag}
 	}
 
 	makeRE := func(strs []string) *regexp.Regexp {
