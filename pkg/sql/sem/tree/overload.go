@@ -539,20 +539,21 @@ func typeCheckOverloadedExprs(
 	}
 
 	if len(s.constIdxs) > 0 {
+		allConstantsAreHomogenous := false
 		if ok, typedExprs, fns, err := filterAttempt(ctx, &s, func() {
 			// The second heuristic is to prefer candidates where all constants can
 			// become a homogeneous type, if all resolvable expressions became one.
-			// This is only possible resolvable expressions were resolved
+			// This is only possible if resolvable expressions were resolved
 			// homogeneously up to this point.
 			if homogeneousTyp != nil {
-				all := true
+				allConstantsAreHomogenous = true
 				for _, i := range s.constIdxs {
 					if !canConstantBecome(exprs[i].(Constant), homogeneousTyp) {
-						all = false
+						allConstantsAreHomogenous = false
 						break
 					}
 				}
-				if all {
+				if allConstantsAreHomogenous {
 					for _, i := range s.constIdxs {
 						s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 							func(o overloadImpl) bool {
@@ -581,6 +582,70 @@ func typeCheckOverloadedExprs(
 			return typedExprs, fns, err
 		}
 
+		// This case attempts to perform a basic version of postgres's implicit
+		// casts for the special case of binary comparisons on user defined types.
+		// In particular, it circumvents the following problem in our overload
+		// infrastructure: Say we attempt to type check 'hello'::t = 'hello', where
+		// t is a user defined enum type. Our predefined comparison operations are
+		// typed with AnyEnum X AnyEnum -> bool, so we wouldn't match the above
+		// expression (typed Enum X Str -> bool) in our overload matching without
+		// an implicit cast from Str -> Enum. In particular, we check
+		// * we are type checking a binop
+		// * have only one overload left (this is a special case, so we only want
+		//   to enter it if there isn't ambiguity in overloads anymore)
+		// * the remaining overload is on two equivalent and ambiguous user defined
+		//   types and we have an instance
+		// * one of the arguments is a resolved instance of the user defined type
+		// * the other argument is a constant
+		// If these checks are met, then we attempt to convert the constant into
+		// an instance of the user defined type.
+		// This case of operations on user defined types is used heavily in queries
+		// like `SELECT * FROM t WHERE x = 'hello'`, where x is of an enum type
+		// containing the value 'hello'. This case will likely arise enough that
+		// it is worth including this special case until we move over completely
+		// to a postgres style implicit cast based overloading system.
+		//if inBinOp && len(s.exprs) == 2 && len(s.overloadIdxs) == 1 {
+		//	left := s.typedExprs[0]
+		//	right := s.typedExprs[1]
+		//	idx := s.overloadIdxs[0]
+		//	p := s.overloads[idx].params()
+		//	// We know we are a binary operation.
+		//	lType, rType := p.GetAt(0), p.GetAt(1)
+		//	switch {
+		//	case !(lType.UserDefined() && rType.UserDefined() &&
+		//		lType.IsAmbiguous() && rType.IsAmbiguous() && lType.Equivalent(rType)):
+		//		// If the left and right aren't both user defined, ambiguous
+		//		// and equivalent then do nothing.
+		//	case (left == nil && right == nil) || (left != nil && right != nil):
+		//		// If both expressions aren't resolved, or are both
+		//		// resolved, do nothing.
+		//	case left != nil && left.ResolvedType().UserDefined() && left.ResolvedType().Equivalent(lType):
+		//		// If the left is resolved, then see if the right is a constant.
+		//		if _, isConst := s.exprs[1].(Constant); isConst {
+		//			// Note that we can return in this case, because it is the last
+		//			// overload that we have left to consider.
+		//			typ, err := s.exprs[1].TypeCheck(ctx, left.ResolvedType())
+		//			if err != nil {
+		//				return nil, nil, err
+		//			}
+		//			s.typedExprs[1] = typ
+		//			return s.typedExprs, s.overloads[idx : idx+1], nil
+		//		}
+		//	case right != nil && right.ResolvedType().UserDefined() && right.ResolvedType().Equivalent(rType):
+		//		// If the right is resolved, then see if the left is a constant.
+		//		if _, isConst := s.exprs[0].(Constant); isConst {
+		//			// Note that we can return in this case, because it is the last
+		//			// overload that we have left to consider.
+		//			typ, err := s.exprs[0].TypeCheck(ctx, right.ResolvedType())
+		//			if err != nil {
+		//				return nil, nil, err
+		//			}
+		//			s.typedExprs[0] = typ
+		//			return s.typedExprs, s.overloads[idx : idx+1], nil
+		//		}
+		//	}
+		//}
+
 		// At this point, it's worth seeing if we have constants that can't actually
 		// parse as the type that canConstantBecome claims they can. For example,
 		// every string literal will report that it can become an interval, but most
@@ -593,6 +658,48 @@ func typeCheckOverloadedExprs(
 		// against a limited set of types. We can't hold off on this parsing any
 		// longer, though: the remaining heuristics are overly aggressive and will
 		// falsely reject the only valid overload in some cases.
+		//
+		// This case is broken into two parts. We first attempt to use the
+		// information about the homogeneity of our constants collected by previous
+		// heuristic passes. If:
+		// * all our constants are homogeneous
+		// * we only have a single overload left
+		// * the constant overload parameters are homogeneous as well
+		// then match this overload with the homogeneous constants. Otherwise,
+		// continue to filter overloads by whether or not the constants can parse
+		// into the desired types of the overloads.
+		// This first case is important when resolving overloads for operations
+		// between user-defined types, where we need to propagate the concrete
+		// resolved type information over to the constants, rather than attempting
+		// to resolve constants as the placeholder type for the user defined type
+		// family (like `AnyEnum`).
+		if len(s.overloadIdxs) == 1 && allConstantsAreHomogenous {
+			overloadParamsAreHomogenous := true
+			p := s.overloads[s.overloadIdxs[0]].params()
+			for _, i := range s.constIdxs {
+				if !p.GetAt(i).Equivalent(homogeneousTyp) {
+					overloadParamsAreHomogenous = false
+					break
+				}
+			}
+			if overloadParamsAreHomogenous {
+				// Typecheck our constants using the homogeneous type rather than
+				// the type in overload parameter. This lets us typecheck user defined
+				// types with a concrete type instance, rather than an ambiguous type.
+				for _, i := range s.constIdxs {
+					typ, err := s.exprs[i].TypeCheck(ctx, homogeneousTyp)
+					if err != nil {
+						return nil, nil, err
+					}
+					s.typedExprs[i] = typ
+				}
+				// Mark s.constIdxs as empty so that checkReturn doesn't attempt to
+				// typecheck them.
+				s.constIdxs = s.constIdxs[:0]
+				_, typedExprs, fn, err := checkReturn(ctx, &s)
+				return typedExprs, fn, err
+			}
+		}
 		for _, i := range s.constIdxs {
 			constExpr := exprs[i].(Constant)
 			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
