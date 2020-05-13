@@ -126,12 +126,6 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
-// livenessProvider provides just the methods of storage.NodeLiveness that the
-// DistSQLPlanner needs, to avoid importing all of storage.
-type livenessProvider interface {
-	IsLive(roachpb.NodeID) (bool, error)
-}
-
 // NewDistSQLPlanner initializes a DistSQLPlanner.
 //
 // nodeDesc is the descriptor of the node on which this planner runs. It is used
@@ -148,12 +142,9 @@ func NewDistSQLPlanner(
 	distSender *kvcoord.DistSender,
 	gw gossip.DeprecatedGossip,
 	stopper *stop.Stopper,
-	liveness livenessProvider,
+	isLive func(roachpb.NodeID) (bool, error),
 	nodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
-	if liveness == nil {
-		log.Fatal(ctx, "must specify liveness")
-	}
 	dsp := &DistSQLPlanner{
 		planVersion: planVersion,
 		st:          st,
@@ -165,12 +156,12 @@ func NewDistSQLPlanner(
 		nodeHealth: distSQLNodeHealth{
 			gossip:     gw,
 			connHealth: nodeDialer.ConnHealth,
+			isLive:  isLive,
 		},
 		distSender:            distSender,
 		rpcCtx:                rpcCtx,
 		metadataTestTolerance: execinfra.NoExplain,
 	}
-	dsp.nodeHealth.isLive = liveness.IsLive
 
 	dsp.initRunners()
 	return dsp
