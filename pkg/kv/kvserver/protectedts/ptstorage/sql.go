@@ -59,7 +59,7 @@ FROM (
         version + 1 AS new_version,
         num_records + 1 AS new_num_records, 
         num_spans + $3 AS new_num_spans, 
-        total_bytes + length($9) + length($6) + length($7) AS new_total_bytes
+        total_bytes + length($9) + length($6) + coalesce(length($7:::BYTES),0) AS new_total_bytes
     FROM
         current_meta
 )
@@ -135,7 +135,7 @@ RETURNING
 SELECT
     id,
     num_spans AS record_spans,
-    length(spans) + length(meta_type) + length(meta) AS record_bytes
+    length(spans) + length(meta_type) + coalesce(length(meta),0) AS record_bytes
 FROM
     system.protected_ts_records
 WHERE

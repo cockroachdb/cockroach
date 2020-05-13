@@ -146,6 +146,15 @@ func (n *alterRoleNode) startExec(params runParams) error {
 				"setting or updating a password is not supported in insecure mode")
 		}
 
+		if hashedPassword == nil {
+			// v20.1 and below crash during authentication if they find a NULL value
+			// in system.users.hashedPassword. v20.2 and above handle this correctly,
+			// but we need to maintain mixed version compatibility for at least one
+			// release.
+			// TODO(nvanbenschoten): remove this for v21.1.
+			hashedPassword = []byte{}
+		}
+
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
 		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
