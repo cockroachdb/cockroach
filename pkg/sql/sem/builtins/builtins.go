@@ -2416,7 +2416,7 @@ may increase either contention or retry errors, or both.`,
 				return ts.EvalAtTimeZone(ctx, loc)
 			},
 			Info:       "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2484,7 +2484,9 @@ may increase either contention or retry errors, or both.`,
 				durationDelta := time.Duration(-beforeOffsetSecs) * time.Second
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta))), nil
 			},
-			Info:       "Treat given time without time zone as located in the specified time zone.",
+			Info: "Treat given time without time zone as located in the specified time zone.",
+			// TODO(mgartner): This overload might be stable, not volatile.
+			// See: https://github.com/cockroachdb/cockroach/pull/48756#issuecomment-627672686
 			Volatility: tree.VolatilityVolatile,
 		},
 		tree.Overload{
@@ -2507,7 +2509,9 @@ may increase either contention or retry errors, or both.`,
 				tTime := tArg.TimeTZ.ToTime()
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
 			},
-			Info:       "Convert given time with time zone to the new time zone.",
+			Info: "Convert given time with time zone to the new time zone.",
+			// TODO(mgartner): This overload might be stable, not volatile.
+			// See: https://github.com/cockroachdb/cockroach/pull/48756#issuecomment-627672686
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
