@@ -340,5 +340,5 @@ func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 		}
 		return memo.FalseSingleton
 	}
-	return f.ConstructConst(d)
+	return f.ConstructConst(d, t)
 }
