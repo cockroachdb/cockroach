@@ -539,20 +539,21 @@ func typeCheckOverloadedExprs(
 	}
 
 	if len(s.constIdxs) > 0 {
+		allConstantsAreHomogenous := false
 		if ok, typedExprs, fns, err := filterAttempt(ctx, &s, func() {
 			// The second heuristic is to prefer candidates where all constants can
 			// become a homogeneous type, if all resolvable expressions became one.
-			// This is only possible resolvable expressions were resolved
+			// This is only possible if resolvable expressions were resolved
 			// homogeneously up to this point.
 			if homogeneousTyp != nil {
-				all := true
+				allConstantsAreHomogenous = true
 				for _, i := range s.constIdxs {
 					if !canConstantBecome(exprs[i].(Constant), homogeneousTyp) {
-						all = false
+						allConstantsAreHomogenous = false
 						break
 					}
 				}
-				if all {
+				if allConstantsAreHomogenous {
 					for _, i := range s.constIdxs {
 						s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 							func(o overloadImpl) bool {
@@ -593,6 +594,45 @@ func typeCheckOverloadedExprs(
 		// against a limited set of types. We can't hold off on this parsing any
 		// longer, though: the remaining heuristics are overly aggressive and will
 		// falsely reject the only valid overload in some cases.
+		//
+		// This case is broken into two parts. We first attempt to use the
+		// information about the homogeneity of our constants collected by previous
+		// heuristic passes. If:
+		// * all our constants are homogeneous
+		// * we only have a single overload left
+		// * the constant overload parameters are homogeneous as well
+		// then match this overload with the homogeneous constants. Otherwise,
+		// continue to filter overloads by whether or not the constants can parse
+		// into the desired types of the overloads.
+		// This first case is important when resolving overloads for operations
+		// between user-defined types, where we need to propagate the concrete
+		// resolved type information over to the constants, rather than attempting
+		// to resolve constants as the placeholder type for the user defined type
+		// family (like `AnyEnum`).
+		if len(s.overloadIdxs) == 1 && allConstantsAreHomogenous {
+			overloadParamsAreHomogenous := true
+			p := s.overloads[s.overloadIdxs[0]].params()
+			for _, i := range s.constIdxs {
+				if !p.GetAt(i).Equivalent(homogeneousTyp) {
+					overloadParamsAreHomogenous = false
+					break
+				}
+			}
+			if overloadParamsAreHomogenous {
+				// Type check our constants using the homogeneous type rather than
+				// the type in overload parameter. This lets us type check user defined
+				// types with a concrete type instance, rather than an ambiguous type.
+				for _, i := range s.constIdxs {
+					typ, err := s.exprs[i].TypeCheck(ctx, homogeneousTyp)
+					if err != nil {
+						return nil, nil, err
+					}
+					s.typedExprs[i] = typ
+				}
+				_, typedExprs, fn, err := checkReturnPlaceholdersAtIdx(ctx, &s, int(s.overloadIdxs[0]))
+				return typedExprs, fn, err
+			}
+		}
 		for _, i := range s.constIdxs {
 			constExpr := exprs[i].(Constant)
 			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
@@ -814,22 +854,33 @@ func checkReturn(
 			s.typedExprs[i] = typ
 		}
 
-		for _, i := range s.placeholderIdxs {
-			des := p.GetAt(i)
-			typ, err := s.exprs[i].TypeCheck(ctx, des)
-			if err != nil {
-				if des.IsAmbiguous() {
-					return false, nil, nil, nil
-				}
-				return false, nil, nil, err
-			}
-			s.typedExprs[i] = typ
-		}
-		return true, s.typedExprs, s.overloads[idx : idx+1], nil
+		return checkReturnPlaceholdersAtIdx(ctx, s, int(idx))
 
 	default:
 		return false, nil, nil, nil
 	}
+}
+
+// checkReturnPlaceholdersAtIdx checks that the placeholders for the
+// overload at the input index are valid. It has the same return values
+// as checkReturn.
+func checkReturnPlaceholdersAtIdx(
+	ctx *SemaContext, s *typeCheckOverloadState, idx int,
+) (bool, []TypedExpr, []overloadImpl, error) {
+	o := s.overloads[idx]
+	p := o.params()
+	for _, i := range s.placeholderIdxs {
+		des := p.GetAt(i)
+		typ, err := s.exprs[i].TypeCheck(ctx, des)
+		if err != nil {
+			if des.IsAmbiguous() {
+				return false, nil, nil, nil
+			}
+			return false, nil, nil, err
+		}
+		s.typedExprs[i] = typ
+	}
+	return true, s.typedExprs, s.overloads[idx : idx+1], nil
 }
 
 func formatCandidates(prefix string, candidates []overloadImpl) string {
