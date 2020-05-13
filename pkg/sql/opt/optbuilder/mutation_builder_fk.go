@@ -118,7 +118,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 //
 // -- Cascades --
 //
-// See deleteCascadeBuilder for details.
+// See onDeleteCascadeBuilder, onDeleteSetBuilder for details.
 //
 func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 	if mb.tab.InboundForeignKeyCount() == 0 {
@@ -143,26 +143,35 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 		//  - with Restrict/NoAction, we create a check that causes an error if
 		//    there are any "orhpaned" rows in the child table.
 		if a := h.fk.DeleteReferenceAction(); a != tree.Restrict && a != tree.NoAction {
-			if mb.b.evalCtx.SessionData.OptimizerFKCascades && a == tree.Cascade {
-				cols := make(opt.ColList, len(h.tabOrdinals))
-				for i := range cols {
-					cols[i] = mb.scopeOrdToColID(mb.fetchOrds[h.tabOrdinals[i]])
-				}
-
-				mb.cascades = append(mb.cascades, memo.FKCascade{
-					FKName:    h.fk.Name(),
-					Builder:   newDeleteCascadeBuilder(mb.tab, i, h.otherTab),
-					WithID:    mb.withID,
-					OldValues: cols,
-					NewValues: nil,
-				})
-				continue
+			if !mb.b.evalCtx.SessionData.OptimizerFKCascades {
+				// Bail, so that exec FK checks pick up on FK checks and perform them.
+				mb.setFKFallback()
+				telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
+				return
 			}
 
-			// Bail, so that exec FK checks pick up on FK checks and perform them.
-			mb.setFKFallback()
-			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-			return
+			var builder memo.CascadeBuilder
+			switch a {
+			case tree.Cascade:
+				builder = newOnDeleteCascadeBuilder(mb.tab, i, h.otherTab)
+			case tree.SetNull, tree.SetDefault:
+				builder = newOnDeleteSetBuilder(mb.tab, i, h.otherTab, a)
+			default:
+				panic(errors.AssertionFailedf("unhandled action type %s", a))
+			}
+
+			cols := make(opt.ColList, len(h.tabOrdinals))
+			for i := range cols {
+				cols[i] = mb.scopeOrdToColID(mb.fetchOrds[h.tabOrdinals[i]])
+			}
+			mb.cascades = append(mb.cascades, memo.FKCascade{
+				FKName:    h.fk.Name(),
+				Builder:   builder,
+				WithID:    mb.withID,
+				OldValues: cols,
+				NewValues: nil,
+			})
+			continue
 		}
 
 		fkInput, withScanCols, _ := h.makeFKInputScan(fkInputScanFetchedVals)
