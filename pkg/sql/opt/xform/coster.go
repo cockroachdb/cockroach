@@ -473,8 +473,19 @@ func (c *coster) computeLookupJoinCost(
 }
 
 func (c *coster) computeGeoLookupJoinCost(join *memo.GeoLookupJoinExpr) memo.Cost {
-	// TODO(rytaft): add a real cost here.
-	return 0
+	lookupCount := join.Input.Relational().Stats.RowCount
+
+	// The rows in the (left) input are used to probe into the (right) table.
+	// Since the matching rows in the table may not all be in the same range, this
+	// counts as random I/O.
+	perLookupCost := memo.Cost(randIOCostFactor)
+	cost := memo.Cost(lookupCount) * perLookupCost
+
+	// TODO: support GeoLookupJoinExpr in c.mem.RowsProcessed. See
+	// computeLookupJoinCost.
+
+	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	return cost
 }
 
 func (c *coster) computeFiltersCost(filters memo.FiltersExpr, eqMap util.FastIntMap) memo.Cost {
