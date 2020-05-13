@@ -1534,10 +1534,12 @@ func createSchemaChangeEvalCtx(
 			// TODO(andrei): This is wrong (just like on the main code path on
 			// setupFlow). Each processor should override Ctx with its own context.
 			Context:            ctx,
-			Sequence:           &sqlbase.DummySequenceOperators{},
 			Planner:            &sqlbase.DummyEvalPlanner{},
-			SessionAccessor:    &sqlbase.DummySessionAccessor{},
 			PrivilegedAccessor: &sqlbase.DummyPrivilegedAccessor{},
+			SessionAccessor:    &sqlbase.DummySessionAccessor{},
+			ClientNoticeSender: &sqlbase.DummyClientNoticeSender{},
+			Sequence:           &sqlbase.DummySequenceOperators{},
+			Tenant:             &sqlbase.DummyTenantOperator{},
 			Settings:           execCfg.Settings,
 			TestingKnobs:       execCfg.EvalContextTestingKnobs,
 			ClusterID:          execCfg.ClusterID(),

@@ -623,6 +623,7 @@ system         public              descriptor                         BASE TABLE
 system         public              users                              BASE TABLE   YES                 1
 system         public              zones                              BASE TABLE   YES                 1
 system         public              settings                           BASE TABLE   YES                 1
+system         public              tenants                            BASE TABLE   YES                 1
 system         public              lease                              BASE TABLE   YES                 1
 system         public              eventlog                           BASE TABLE   YES                 1
 system         public              rangelog                           BASE TABLE   YES                 1
@@ -811,6 +812,9 @@ system              public             630200280_20_6_not_null  system         p
 system              public             630200280_20_7_not_null  system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_8_not_null  system         public        table_statistics                 CHECK            NO             NO
 system              public             primary                  system         public        table_statistics                 PRIMARY KEY      NO             NO
+system              public             630200280_8_1_not_null   system         public        tenants                          CHECK            NO             NO
+system              public             630200280_8_2_not_null   system         public        tenants                          CHECK            NO             NO
+system              public             primary                  system         public        tenants                          PRIMARY KEY      NO             NO
 system              public             630200280_14_1_not_null  system         public        ui                               CHECK            NO             NO
 system              public             630200280_14_3_not_null  system         public        ui                               CHECK            NO             NO
 system              public             primary                  system         public        ui                               PRIMARY KEY      NO             NO
@@ -932,6 +936,8 @@ system              public             630200280_5_1_not_null   id IS NOT NULL
 system              public             630200280_6_1_not_null   name IS NOT NULL
 system              public             630200280_6_2_not_null   value IS NOT NULL
 system              public             630200280_6_3_not_null   lastUpdated IS NOT NULL
+system              public             630200280_8_1_not_null   id IS NOT NULL
+system              public             630200280_8_2_not_null   active IS NOT NULL
 system              public             check_singleton          ((singleton))
 
 query TTTTTTT colnames
@@ -983,6 +989,7 @@ system         public        statement_diagnostics            id              sy
 system         public        statement_diagnostics_requests   id              system              public             primary
 system         public        table_statistics                 statisticID     system              public             primary
 system         public        table_statistics                 tableID         system              public             primary
+system         public        tenants                          id              system              public             primary
 system         public        ui                               key             system              public             primary
 system         public        users                            username        system              public             primary
 system         public        web_sessions                     id              system              public             primary
@@ -1177,6 +1184,9 @@ system         public        table_statistics                 nullCount         
 system         public        table_statistics                 rowCount                  6
 system         public        table_statistics                 statisticID               2
 system         public        table_statistics                 tableID                   1
+system         public        tenants                          active                    2
+system         public        tenants                          id                        1
+system         public        tenants                          info                      3
 system         public        ui                               key                       1
 system         public        ui                               lastUpdated               3
 system         public        ui                               value                     2
@@ -1807,6 +1817,10 @@ NULL     root     system         public              table_statistics           
 NULL     root     system         public              table_statistics                   INSERT          NULL          NO
 NULL     root     system         public              table_statistics                   SELECT          NULL          YES
 NULL     root     system         public              table_statistics                   UPDATE          NULL          NO
+NULL     admin    system         public              tenants                            GRANT           NULL          NO
+NULL     admin    system         public              tenants                            SELECT          NULL          YES
+NULL     root     system         public              tenants                            GRANT           NULL          NO
+NULL     root     system         public              tenants                            SELECT          NULL          YES
 NULL     admin    system         public              ui                                 DELETE          NULL          NO
 NULL     admin    system         public              ui                                 GRANT           NULL          NO
 NULL     admin    system         public              ui                                 INSERT          NULL          NO
@@ -1999,6 +2013,10 @@ NULL     root     system         public              settings                   
 NULL     root     system         public              settings                           INSERT          NULL          NO
 NULL     root     system         public              settings                           SELECT          NULL          YES
 NULL     root     system         public              settings                           UPDATE          NULL          NO
+NULL     admin    system         public              tenants                            GRANT           NULL          NO
+NULL     admin    system         public              tenants                            SELECT          NULL          YES
+NULL     root     system         public              tenants                            GRANT           NULL          NO
+NULL     root     system         public              tenants                            SELECT          NULL          YES
 NULL     admin    system         public              lease                              DELETE          NULL          NO
 NULL     admin    system         public              lease                              GRANT           NULL          NO
 NULL     admin    system         public              lease                              INSERT          NULL          NO

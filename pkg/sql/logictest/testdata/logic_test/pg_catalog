@@ -655,6 +655,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
+2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL
 2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0               0 0       2 2        NULL      NULL
 2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
@@ -706,6 +707,7 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2101708905  0                           1
 2148104569  0                           1
 2148104569  0                           2
+2361445172  0                           1
 2407840836  0                           1
 2407840836  0                           2
 2407840836  0                           3

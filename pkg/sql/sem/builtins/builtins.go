@@ -75,17 +75,18 @@ const maxAllocatedStringSize = 128 * 1024 * 1024
 const errInsufficientArgsFmtString = "unknown signature: %s()"
 
 const (
+	categoryArray         = "Array"
 	categoryComparison    = "Comparison"
 	categoryCompatibility = "Compatibility"
 	categoryDateAndTime   = "Date and time"
-	categoryIDGeneration  = "ID generation"
+	categoryGenerator     = "Set-returning"
 	categoryGeospatial    = "Geospatial"
+	categoryIDGeneration  = "ID generation"
+	categoryJSON          = "JSONB"
+	categoryMultiTenancy  = "Multi-tenancy"
 	categorySequences     = "Sequence"
 	categoryString        = "String and byte"
-	categoryArray         = "Array"
 	categorySystemInfo    = "System info"
-	categoryGenerator     = "Set-returning"
-	categoryJSON          = "JSONB"
 )
 
 func categorizeType(t *types.T) string {
@@ -99,7 +100,7 @@ func categorizeType(t *types.T) string {
 	}
 }
 
-var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
+var digitNames = [...]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 
 // builtinDefinition represents a built-in function before it becomes
 // a tree.FunctionDefinition.
@@ -3050,6 +3051,76 @@ may increase either contention or retry errors, or both.`,
 				return tree.NewDString(ctx.ClusterName), nil
 			},
 			Info:       "Returns the cluster name.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.create_tenant": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryMultiTenancy,
+			Impure:   true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sTenID := int64(tree.MustBeDInt(args[0]))
+				if sTenID <= 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				}
+				if err := ctx.Tenant.CreateTenant(ctx.Context, uint64(sTenID), nil); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"info", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sTenID := int64(tree.MustBeDInt(args[0]))
+				if sTenID <= 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				}
+				tenInfo := []byte(tree.MustBeDBytes(args[1]))
+				if err := ctx.Tenant.CreateTenant(ctx.Context, uint64(sTenID), tenInfo); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.destroy_tenant": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryMultiTenancy,
+			Impure:   true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sTenID := int64(tree.MustBeDInt(args[0]))
+				if sTenID <= 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				}
+				if err := ctx.Tenant.DestroyTenant(ctx.Context, uint64(sTenID)); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Destroys a tenant with the provided ID. Must be run by the System tenant.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

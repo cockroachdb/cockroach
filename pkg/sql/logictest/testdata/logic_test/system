@@ -31,6 +31,7 @@ public  statement_bundle_chunks          table
 public  statement_diagnostics            table
 public  statement_diagnostics_requests   table
 public  table_statistics                 table
+public  tenants                          table
 public  ui                               table
 public  users                            table
 public  web_sessions                     table
@@ -45,6 +46,7 @@ SELECT id FROM system.descriptor
 4
 5
 6
+8
 11
 12
 13
@@ -372,6 +374,10 @@ system  public  table_statistics                 root    GRANT
 system  public  table_statistics                 root    INSERT
 system  public  table_statistics                 root    SELECT
 system  public  table_statistics                 root    UPDATE
+system  public  tenants                          admin   GRANT
+system  public  tenants                          admin   SELECT
+system  public  tenants                          root    GRANT
+system  public  tenants                          root    SELECT
 system  public  ui                               admin   DELETE
 system  public  ui                               admin   GRANT
 system  public  ui                               admin   INSERT

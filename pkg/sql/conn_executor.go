@@ -1938,11 +1938,12 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Planner:            p,
-			Sequence:           p,
-			SessionData:        ex.sessionData,
-			SessionAccessor:    p,
 			PrivilegedAccessor: p,
+			SessionAccessor:    p,
 			ClientNoticeSender: p,
+			Sequence:           p,
+			Tenant:             p,
+			SessionData:        ex.sessionData,
 			Settings:           ex.server.cfg.Settings,
 			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,
 			ClusterID:          ex.server.cfg.ClusterID(),
