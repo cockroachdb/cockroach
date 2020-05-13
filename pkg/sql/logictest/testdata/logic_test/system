@@ -173,6 +173,10 @@ system  pg_catalog          admin  GRANT
 system  pg_catalog          admin  SELECT
 system  pg_catalog          root   GRANT
 system  pg_catalog          root   SELECT
+system  pg_extension        admin  GRANT
+system  pg_extension        admin  SELECT
+system  pg_extension        root   GRANT
+system  pg_extension        root   SELECT
 system  public              admin  GRANT
 system  public              admin  SELECT
 system  public              root   GRANT

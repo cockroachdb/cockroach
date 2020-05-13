@@ -170,6 +170,7 @@ schema_name
 crdb_internal
 information_schema
 pg_catalog
+pg_extension
 public
 
 query T colnames
@@ -261,6 +262,7 @@ schema_name
 crdb_internal
 information_schema
 pg_catalog
+pg_extension
 public
 
 query TTT colnames

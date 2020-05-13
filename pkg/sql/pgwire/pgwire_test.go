@@ -553,7 +553,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("public", "comments", "table").Others(25),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
-			baseTest.Results("crdb_internal").Others(3),
+			baseTest.Results("crdb_internal").Others(4),
 		}},
 		{"SHOW CONSTRAINTS FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true),
