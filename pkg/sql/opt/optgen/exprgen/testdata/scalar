@@ -11,7 +11,7 @@ eq [type=bool]
  └── false [type=bool]
 
 expr
-(Plus (Const 1) (Const 2))
+(Plus (Const 1 "int") (Const 2 "int"))
 ----
 plus [type=int]
  ├── const: 1 [type=int]

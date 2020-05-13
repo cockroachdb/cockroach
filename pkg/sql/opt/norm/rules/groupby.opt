@@ -180,7 +180,7 @@
 (ConstructProjectionFromDistinctOn
     (Limit
         $input
-        (Const 1)
+        (IntConst 1)
         (GroupingInputOrdering $groupingPrivate)
     )
     (MakeEmptyColSet)

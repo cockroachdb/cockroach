@@ -22,11 +22,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 var (
 	write   = flag.Bool("w", false, "write result to (source) file instead of stdout")
-	list    = flag.Bool("l", false, "list files whose formatting differs from optfmt's")
+	list    = flag.Bool("l", false, "list diffs when formatting differs from optfmt's")
 	verify  = flag.Bool("verify", false, "verify output order")
 	exprgen = flag.Bool("e", false, "format an exprgen expression")
 )
@@ -87,7 +88,15 @@ func main() {
 			}
 		}
 		if *list {
-			fmt.Println(name)
+			diff := difflib.UnifiedDiff{
+				A:        difflib.SplitLines(string(orig)),
+				FromFile: name,
+				B:        difflib.SplitLines(prettied),
+				ToFile:   name,
+				Context:  4,
+			}
+			diffText, _ := difflib.GetUnifiedDiffString(diff)
+			fmt.Print(diffText)
 		} else if !*write {
 			fmt.Print(prettied)
 		}

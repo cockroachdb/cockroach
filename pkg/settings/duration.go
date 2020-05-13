@@ -117,6 +117,7 @@ func RegisterPublicNonNegativeDurationSetting(
 
 // RegisterPublicNonNegativeDurationSettingWithMaximum defines a new setting with
 // type duration, makes it public, and sets a maximum value.
+// The maximum value is an allowed value.
 func RegisterPublicNonNegativeDurationSettingWithMaximum(
 	key, desc string, defaultValue time.Duration, maxValue time.Duration,
 ) *DurationSetting {
@@ -124,7 +125,7 @@ func RegisterPublicNonNegativeDurationSettingWithMaximum(
 		if v < 0 {
 			return errors.Errorf("cannot set %s to a negative duration: %s", key, v)
 		}
-		if v >= maxValue {
+		if v > maxValue {
 			return errors.Errorf("cannot set %s to a value larger than %s", key, maxValue)
 		}
 		return nil

@@ -19,7 +19,7 @@ import (
 )
 
 // Area returns the area of a given Geography.
-func Area(g *geo.Geography, useSphereOrSpheroid useSphereOrSpheroid) (float64, error) {
+func Area(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
 	regions, err := g.AsS2()
 	if err != nil {
 		return 0, err
@@ -51,7 +51,7 @@ func Area(g *geo.Geography, useSphereOrSpheroid useSphereOrSpheroid) (float64, e
 }
 
 // Perimeter returns the perimeter of a given Geography.
-func Perimeter(g *geo.Geography, useSphereOrSpheroid useSphereOrSpheroid) (float64, error) {
+func Perimeter(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return 0, err
@@ -67,7 +67,7 @@ func Perimeter(g *geo.Geography, useSphereOrSpheroid useSphereOrSpheroid) (float
 }
 
 // Length returns length of a given Geography.
-func Length(g *geo.Geography, useSphereOrSpheroid useSphereOrSpheroid) (float64, error) {
+func Length(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return 0, err
@@ -84,7 +84,7 @@ func Length(g *geo.Geography, useSphereOrSpheroid useSphereOrSpheroid) (float64,
 
 // length returns the sum of the lengtsh and perimeters in the shapes of the Geography.
 // In OGC parlance, length returns both LineString lengths _and_ Polygon perimeters.
-func length(regions []s2.Region, useSphereOrSpheroid useSphereOrSpheroid) (float64, error) {
+func length(regions []s2.Region, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
 	spheroid := geographiclib.WGS84Spheroid
 
 	var totalLength float64
