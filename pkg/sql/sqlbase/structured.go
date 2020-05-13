@@ -4158,6 +4158,26 @@ func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
 // NameResolutionResult implements the NameResolutionResult interface.
 func (desc *TypeDescriptor) NameResolutionResult() {}
 
+// GetAuditMode implements the DescriptorProto interface.
+func (desc *SchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {
+	return TableDescriptor_DISABLED
+}
+
+// SetID implements the DescriptorProto interface.
+func (desc *SchemaDescriptor) SetID(id ID) {
+	desc.ID = id
+}
+
+// TypeName implements the DescriptorProto interface.
+func (desc *SchemaDescriptor) TypeName() string {
+	return "schema"
+}
+
+// SetName implements the DescriptorProto interface.
+func (desc *SchemaDescriptor) SetName(name string) {
+	desc.Name = name
+}
+
 // DatabaseKey implements DescriptorKey.
 type DatabaseKey struct {
 	name string
