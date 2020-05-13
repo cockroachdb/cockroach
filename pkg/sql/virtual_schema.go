@@ -253,6 +253,7 @@ var virtualSchemas = map[sqlbase.ID]virtualSchema{
 	sqlbase.InformationSchemaID: informationSchema,
 	sqlbase.PgCatalogID:         pgCatalog,
 	sqlbase.CrdbInternalID:      crdbInternal,
+	sqlbase.PgExtensionSchemaID: pgExtension,
 }
 
 //

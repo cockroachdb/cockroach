@@ -193,7 +193,7 @@ render                                       ·            ·
                 │                            type         inner
                 │                            equality     (oid) = (relnamespace)
                 ├── filter                   ·            ·
-                │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
+                │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
                 │    └── render              ·            ·
                 │         └── virtual table  ·            ·
                 │                            source       pg_namespace@primary
@@ -219,7 +219,7 @@ render                                            ·            ·
                 │    │                            type         inner
                 │    │                            equality     (oid) = (relnamespace)
                 │    ├── filter                   ·            ·
-                │    │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
+                │    │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
                 │    │    └── render              ·            ·
                 │    │         └── virtual table  ·            ·
                 │    │                            source       pg_namespace@primary
