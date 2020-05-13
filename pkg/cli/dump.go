@@ -441,12 +441,12 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 		}
 
 		// Transform the type name to an internal coltype.
-		sql := fmt.Sprintf("ALTER TABLE woo ALTER COLUMN woo SET DATA TYPE %s", typ)
+		sql := fmt.Sprintf("CREATE TABLE woo (x %s)", typ)
 		stmt, err := parser.ParseOne(sql)
 		if err != nil {
 			return tableMetadata{}, fmt.Errorf("type %s is not a valid CockroachDB type", typ)
 		}
-		coltyp := stmt.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAlterColumnType).ToType
+		coltyp := stmt.AST.(*tree.CreateTable).Defs[0].(*tree.ColumnTableDef).Type
 
 		coltypes[name] = coltyp
 		if colnames.Len() > 0 {
@@ -550,6 +550,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 		return err
 	}
 
+	var collationEnv tree.CollationEnvironment
 	bs := fmt.Sprintf("SELECT %s FROM %s AS OF SYSTEM TIME %s ORDER BY PRIMARY KEY %[2]s",
 		md.columnNames,
 		md.name,
@@ -620,7 +621,17 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				case float64:
 					d = tree.NewDFloat(tree.DFloat(t))
 				case string:
-					d = tree.NewDString(t)
+					switch ct := md.columnTypes[cols[si]]; ct.Family() {
+					case types.StringFamily:
+						d = tree.NewDString(t)
+					case types.CollatedStringFamily:
+						d, err = tree.NewDCollatedString(t, ct.Locale(), &collationEnv)
+						if err != nil {
+							return err
+						}
+					default:
+						return errors.AssertionFailedf("unknown string type %s", ct)
+					}
 				case []byte:
 					// TODO(knz): this approach is brittle+flawed, see #28948.
 					switch ct := md.columnTypes[cols[si]]; ct.Family() {
