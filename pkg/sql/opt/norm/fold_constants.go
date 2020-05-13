@@ -273,14 +273,21 @@ func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr
 func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) opt.ScalarExpr {
 	// Index is 1-based, so convert to 0-based.
 	indexD := memo.ExtractConstDatum(index)
-	indexI := int(*indexD.(*tree.DInt)) - 1
 
 	// Case 1: The input is a static array constructor.
 	if arr, ok := input.(*memo.ArrayExpr); ok {
-		if indexI >= 0 && indexI < len(arr.Elems) {
-			return arr.Elems[indexI]
+		indexInt, ok := indexD.(*tree.DInt)
+		if ok {
+			indexI := int(*indexInt) - 1
+			if indexI >= 0 && indexI < len(arr.Elems) {
+				return arr.Elems[indexI]
+			}
 		}
-		return c.f.ConstructNull(arr.Typ.ArrayContents())
+		// If the index is NULL or was out of range return
+		// NULL. Otherwise return with nil below.
+		if ok || indexD == tree.DNull {
+			return c.f.ConstructNull(arr.Typ.ArrayContents())
+		}
 	}
 
 	// Case 2: The input is a constant DArray.
