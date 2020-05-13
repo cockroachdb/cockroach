@@ -136,10 +136,10 @@ SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
 
 # Regression tests for #15050
 
-statement error unsupported comparison operator: <timestamptz> < <string>
+statement error pq: parsing as type timestamp: could not parse "Not Timestamp"
 CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN now() < 'Not Timestamp' THEN 2 ELSE 2 END);
 
-statement error unsupported comparison operator: <timestamptz> < <string>
+statement error pq: parsing as type timestamp: could not parse "Not Timestamp"
 CREATE TABLE t15050b (c DECIMAL DEFAULT IF(now() < 'Not Timestamp', 2, 2));
 
 # Regression tests for #15632

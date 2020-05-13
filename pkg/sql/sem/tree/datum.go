@@ -3788,6 +3788,10 @@ func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) *DEnum {
 // and input logical representation. It returns an error if the input
 // logical representation is invalid.
 func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error) {
+	// Return a nice error if the input requested type is types.AnyEnum.
+	if typ.Oid() == oid.T_anyenum {
+		return nil, errors.New("cannot create enum of unspecified type")
+	}
 	// Take a pointer into the enum metadata rather than holding on
 	// to a pointer to the input string.
 	idx, err := typ.EnumGetIdxOfLogical(rep)

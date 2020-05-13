@@ -1102,7 +1102,7 @@ func (t *T) StableTypeID() uint32 {
 
 // UserDefined returns whether or not t is a user defined type.
 func (t *T) UserDefined() bool {
-	return t.StableTypeID() != 0
+	return t.Family() == EnumFamily
 }
 
 // Name returns a single word description of the type that describes it
