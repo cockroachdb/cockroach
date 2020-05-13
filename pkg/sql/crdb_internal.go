@@ -1411,8 +1411,7 @@ CREATE TABLE crdb_internal.create_statements (
 					if err != nil {
 						return err
 					}
-					allIdx := append(table.Indexes, table.PrimaryIndex)
-					if err := showAlterStatementWithInterleave(ctx, tn, contextName, lCtx, allIdx, table, alterStmts, validateStmts); err != nil {
+					if err := showAlterStatementWithInterleave(ctx, tn, contextName, lCtx, table.Indexes, table, alterStmts, validateStmts); err != nil {
 						return err
 					}
 					stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, IncludeFkClausesInCreate)
