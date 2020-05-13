@@ -605,6 +605,7 @@ var (
 		"fakedist-vec-auto-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
+		"3node-tenant",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	fiveNodeDefaultConfigName  = "5node-default-configs"

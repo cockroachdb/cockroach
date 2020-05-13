@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 # Disable automatic stats to avoid flakiness (sometimes causes retry errors).
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
