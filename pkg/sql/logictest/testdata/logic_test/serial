@@ -94,7 +94,7 @@ DROP TABLE serials, smallbig, serial
 subtest serial_virtual_sequence
 
 statement ok
-SET experimental_serial_normalization = virtual_sequence
+SET serial_normalization = virtual_sequence
 
 # Force the sequence for column "c" to bump to 2.
 statement ok
@@ -199,7 +199,7 @@ DROP TABLE serials, smallbig, serial
 subtest serial_sql_sequence
 
 statement ok
-SET experimental_serial_normalization = sql_sequence
+SET serial_normalization = sql_sequence
 
 statement ok
 CREATE TABLE serial (
