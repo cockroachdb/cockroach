@@ -905,8 +905,10 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 			case reflect.String:
 				d = tree.NewDString(val.String())
 			case reflect.Slice:
-				// Handle byte slices.
-				if val.Type().Elem().Kind() == reflect.Uint8 {
+				switch {
+				case val.IsNil():
+					d = tree.DNull
+				case val.Type().Elem().Kind() == reflect.Uint8:
 					d = tree.NewDBytes(tree.DBytes(val.Bytes()))
 				}
 			}
