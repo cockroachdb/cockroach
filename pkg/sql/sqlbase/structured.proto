@@ -964,8 +964,8 @@ message TableDescriptor {
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
-// in a structured metadata key. The DatabaseDescriptor has a globally-unique
-// ID shared with the TableDescriptor ID.
+// in a structured metadata key. The DatabaseDescriptor has a globally-unique ID
+// shared with other Descriptors.
 // Permissions are applied to all tables in the namespace.
 message DatabaseDescriptor {
   option (gogoproto.equal) = true;
@@ -979,8 +979,8 @@ message DatabaseDescriptor {
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
-// metadata key. The TypeDescriptor has a globally-unique ID shared with the
-// TableDescriptor and DatabaseDescriptor ID's.
+// metadata key. The TypeDescriptor has a globally-unique ID shared with other
+// Descriptors.
 message TypeDescriptor {
   option (gogoproto.equal) = true;
   // Needed for the descriptorProto interface.
@@ -1029,12 +1029,36 @@ message TypeDescriptor {
   // TODO (rohany): Do we need a draining names like the table descriptor?
 }
 
-// Descriptor is a union type holding either a table or database descriptor.
+// SchemaDescriptor represents a physical schema and is stored in a structured
+// metadata key.
+message SchemaDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  // parent_id refers to the database the schema is in.
+  optional uint32 parent_id = 1
+  [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+
+  // name is the name of the schema.
+  optional string name = 2 [(gogoproto.nullable) = false];
+
+  // id is the schema ID, globally unique across all descriptors.
+  optional uint32 id = 3
+  [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+  // privileges contains the privileges for the schema.
+  optional PrivilegeDescriptor privileges = 4;
+}
+
+// Descriptor is a union type for descriptors for tables, schemas, databases,
+// and types.
 message Descriptor {
   option (gogoproto.equal) = true;
   oneof union {
     TableDescriptor table = 1;
     DatabaseDescriptor database = 2;
     TypeDescriptor type = 3;
+    SchemaDescriptor schema = 4;
   }
 }
