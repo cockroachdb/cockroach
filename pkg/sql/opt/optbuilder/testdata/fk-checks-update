@@ -217,9 +217,8 @@ CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p))
 ----
 
 # We don't need the FK check in this case because we are only setting NULL
-# values. We need to use norm because internally the value becomes NULL::INT
-# and the normalization rules are needed to fold the cast.
-norm
+# values.
+build
 UPDATE child_nullable SET p = NULL
 ----
 update child_nullable
@@ -232,7 +231,7 @@ update child_nullable
       ├── scan child_nullable
       │    └── columns: c:3!null p:4
       └── projections
-           └── CAST(NULL AS INT8) [as=column5:5]
+           └── NULL::INT8 [as=column5:5]
 
 # Multiple grandchild tables
 exec-ddl
@@ -348,7 +347,7 @@ CREATE TABLE child_multicol_simple (
 ----
 
 # With MATCH SIMPLE, we can elide the FK check if any FK column is NULL.
-norm
+build
 UPDATE child_multicol_simple SET a = 1, b = NULL, c = 1 WHERE k = 1
 ----
 update child_multicol_simple
@@ -368,7 +367,7 @@ update child_multicol_simple
       │         └── k:5 = 1
       └── projections
            ├── 1 [as=column9:9]
-           └── CAST(NULL AS INT8) [as=column10:10]
+           └── NULL::INT8 [as=column10:10]
 
 exec-ddl
 CREATE TABLE child_multicol_full (
@@ -379,7 +378,7 @@ CREATE TABLE child_multicol_full (
 ----
 
 # With MATCH FULL, we can elide the FK check only if all FK columns are NULL.
-norm
+build
 UPDATE child_multicol_full SET a = 1, b = NULL, c = 1 WHERE k = 1
 ----
 update child_multicol_full
@@ -400,7 +399,7 @@ update child_multicol_full
  │    │         └── k:5 = 1
  │    └── projections
  │         ├── 1 [as=column9:9]
- │         └── CAST(NULL AS INT8) [as=column10:10]
+ │         └── NULL::INT8 [as=column10:10]
  └── f-k-checks
       └── f-k-checks-item: child_multicol_full(a,b,c) -> parent_multicol(a,b,c)
            └── anti-join (hash)
@@ -418,7 +417,7 @@ update child_multicol_full
                      ├── column10:12 = parent_multicol.b:15
                      └── column9:13 = parent_multicol.c:16
 
-norm
+build
 UPDATE child_multicol_full SET a = NULL, b = NULL, c = NULL WHERE k = 1
 ----
 update child_multicol_full
@@ -437,7 +436,7 @@ update child_multicol_full
       │    └── filters
       │         └── k:5 = 1
       └── projections
-           └── CAST(NULL AS INT8) [as=column9:9]
+           └── NULL::INT8 [as=column9:9]
 
 exec-ddl
 CREATE TABLE two (a int, b int, primary key (a, b))
