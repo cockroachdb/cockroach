@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // FakeNodeID is a dummy node ID for use in tests. It always stores 1.
@@ -85,6 +86,10 @@ func (nl *FakeNodeLiveness) GetLivenesses() (out []storagepb.Liveness) {
 		out = append(out, *liveness)
 	}
 	return out
+}
+
+func (nl *FakeNodeLiveness) IsLive(roachpb.NodeID) (bool, error) {
+	return false, errors.New("unsupported here")
 }
 
 // FakeIncrementEpoch increments the epoch for the node with the specified ID.

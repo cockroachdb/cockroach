@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -411,22 +410,6 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	return ts.Server.Start(ctx)
 }
 
-type allErrorsFakeLiveness struct{}
-
-var _ jobs.NodeLiveness = (*allErrorsFakeLiveness)(nil)
-
-func (allErrorsFakeLiveness) Self() (storagepb.Liveness, error) {
-	return storagepb.Liveness{}, errors.New("fake liveness")
-
-}
-func (allErrorsFakeLiveness) GetLivenesses() []storagepb.Liveness {
-	return nil
-}
-
-func (allErrorsFakeLiveness) IsLive(roachpb.NodeID) (bool, error) {
-	return false, errors.New("fake liveness")
-}
-
 type dummyProtectedTSProvider struct {
 	protectedts.Provider
 }
@@ -443,8 +426,6 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 
 	clock := hlc.NewClock(hlc.UnixNano, 1)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-
-	nl := allErrorsFakeLiveness{}
 
 	ds := ts.DistSender()
 
@@ -491,7 +472,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 			rpcContext:   rpcContext,
 			distSender:   ds,
 			statusServer: noStatusServer,
-			nodeLiveness: nl,
+			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
 			gossip:       gossip.MakeUnexposedGossip(g),
 			nodeDialer:   nd,
 			grpcServer:   dummyRPCServer,
