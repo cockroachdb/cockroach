@@ -19,7 +19,7 @@ import (
 
 // DWithin returns whether a is within distance d of b, i.e. Distance(a, b) <= d.
 func DWithin(
-	a *geo.Geography, b *geo.Geography, distance float64, useSphereOrSpheroid useSphereOrSpheroid,
+	a *geo.Geography, b *geo.Geography, distance float64, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
