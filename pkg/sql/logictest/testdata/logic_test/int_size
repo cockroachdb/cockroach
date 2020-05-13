@@ -84,7 +84,7 @@ subtest serial_rowid
 # return type of unique_rowid()
 
 statement ok
-SET default_int_size=4; SET experimental_serial_normalization='rowid';
+SET default_int_size=4; SET serial_normalization='rowid';
 
 statement ok
 CREATE TABLE i4_rowid (a SERIAL)
@@ -98,7 +98,7 @@ i4_rowid  CREATE TABLE i4_rowid (
 )
 
 statement ok
-SET default_int_size=8; SET experimental_serial_normalization='rowid';
+SET default_int_size=8; SET serial_normalization='rowid';
 
 statement ok
 CREATE TABLE i8_rowid (a SERIAL)
@@ -115,7 +115,7 @@ subtest serial_sql_sequence
 # When using rowid, we should see an INTx that matches the current size setting.
 
 statement ok
-SET default_int_size=4; SET experimental_serial_normalization='sql_sequence';
+SET default_int_size=4; SET serial_normalization='sql_sequence';
 
 statement ok
 CREATE TABLE i4_sql_sequence (a SERIAL)
@@ -129,7 +129,7 @@ i4_sql_sequence  CREATE TABLE i4_sql_sequence (
 )
 
 statement ok
-SET default_int_size=8; SET experimental_serial_normalization='sql_sequence';
+SET default_int_size=8; SET serial_normalization='sql_sequence';
 
 statement ok
 CREATE TABLE i8_sql_sequence (a SERIAL)
@@ -147,7 +147,7 @@ subtest serial_virtual_sequence
 # return an INT8 value.
 
 statement ok
-SET default_int_size=4; SET experimental_serial_normalization='virtual_sequence';
+SET default_int_size=4; SET serial_normalization='virtual_sequence';
 
 statement ok
 CREATE TABLE i4_virtual_sequence (a SERIAL)
@@ -161,7 +161,7 @@ i4_virtual_sequence  CREATE TABLE i4_virtual_sequence (
 )
 
 statement ok
-SET default_int_size=8; SET experimental_serial_normalization='virtual_sequence';
+SET default_int_size=8; SET serial_normalization='virtual_sequence';
 
 statement ok
 CREATE TABLE i8_virtual_sequence (a SERIAL)
