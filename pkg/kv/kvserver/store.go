@@ -1007,9 +1007,30 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 		return
 	}
 
+	baseCtx := logtags.AddTag(context.Background(), "drain", nil)
+
+	// In a running server, the code below (transferAllAway and the loop
+	// that calls it) does not need to be conditional on messaging by
+	// the Stopper. This is because the top level Server calls SetDrain
+	// upon a graceful shutdown, and waits until the SetDrain calls
+	// completes, at which point the work has terminated on its own. If
+	// the top-level server is forcefully shut down, it does not matter
+	// if some of the code below is still running.
+	//
+	// However, the situation is different in unit tests where we also
+	// assert there are no leaking goroutines when a test terminates.
+	// If a test terminates with a timed out lease transfer, it's
+	// possible for the transferAllAway() closure to be still running
+	// when the closer shuts down the test server.
+	//
+	// To prevent this, we add this code here which adds the missing
+	// cancel + wait in the particular case where the stopper is
+	// completing a shutdown while a graceful SetDrain is still ongoing.
+	ctx, cancelFn := s.stopper.WithCancelOnStop(baseCtx)
+	defer cancelFn()
+
 	var wg sync.WaitGroup
 
-	ctx := logtags.AddTag(context.Background(), "drain", nil)
 	transferAllAway := func(transferCtx context.Context) int {
 		// Limit the number of concurrent lease transfers.
 		const leaseTransferConcurrency = 100
