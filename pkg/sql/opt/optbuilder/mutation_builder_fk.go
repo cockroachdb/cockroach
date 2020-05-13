@@ -81,8 +81,9 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 
 	h := &mb.fkCheckHelper
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
-		h.initWithOutboundFK(mb, i)
-		mb.checks = append(mb.checks, h.buildInsertionCheck())
+		if h.initWithOutboundFK(mb, i) {
+			mb.checks = append(mb.checks, h.buildInsertionCheck())
+		}
 	}
 	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
@@ -265,8 +266,9 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
 		// Verify that at least one FK column is actually updated.
 		if mb.outboundFKColsUpdated(i) {
-			h.initWithOutboundFK(mb, i)
-			mb.checks = append(mb.checks, h.buildInsertionCheck())
+			if h.initWithOutboundFK(mb, i) {
+				mb.checks = append(mb.checks, h.buildInsertionCheck())
+			}
 		}
 	}
 
@@ -368,8 +370,9 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 
 	h := &mb.fkCheckHelper
 	for i := 0; i < numOutbound; i++ {
-		h.initWithOutboundFK(mb, i)
-		mb.checks = append(mb.checks, h.buildInsertionCheck())
+		if h.initWithOutboundFK(mb, i) {
+			mb.checks = append(mb.checks, h.buildInsertionCheck())
+		}
 	}
 
 	for i := 0; i < numInbound; i++ {
@@ -465,6 +468,9 @@ type fkCheckHelper struct {
 }
 
 // initWithOutboundFK initializes the helper with an outbound FK constraint.
+//
+// Returns false if the FK relation should be ignored (e.g. because the new
+// values for the FK columns are known to be always NULL).
 func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) bool {
 	*h = fkCheckHelper{
 		mb:         mb,
@@ -492,6 +498,26 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 		h.tabOrdinals[i] = h.fk.OriginColumnOrdinal(mb.tab, i)
 		h.otherTabOrdinals[i] = h.fk.ReferencedColumnOrdinal(h.otherTab, i)
 	}
+
+	// Check if we are setting NULL values for the FK columns, like when this
+	// mutation is the result of a SET NULL cascade action.
+	numNullCols := 0
+	for _, tabOrd := range h.tabOrdinals {
+		col := mb.scopeOrdToColID(mb.mapToReturnScopeOrd(tabOrd))
+		if memo.OutputColumnIsAlwaysNull(mb.outScope.expr, col) {
+			numNullCols++
+		}
+	}
+	if numNullCols == numCols {
+		// All FK columns are getting NULL values; FK check not needed.
+		return false
+	}
+	if numNullCols > 0 && h.fk.MatchMethod() == tree.MatchSimple {
+		// At least one FK column is getting a NULL value and we are using MATCH
+		// SIMPLE; FK check not needed.
+		return false
+	}
+
 	return true
 }
 

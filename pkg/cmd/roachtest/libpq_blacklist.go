@@ -13,7 +13,10 @@ package main
 var libPQBlacklists = blacklistsForVersion{
 	{"v19.2", "libPQBlacklist19_2", libPQBlacklist19_2, "libPQIgnorelist19_2", libPQIgnorelist19_2},
 	{"v20.1", "libPQBlacklist20_1", libPQBlacklist20_1, "libPQIgnorelist20_1", libPQIgnorelist20_1},
+	{"v20.2", "libPQBlacklist20_2", libPQBlacklist20_2, "libPQIgnorelist20_2", libPQIgnorelist20_2},
 }
+
+var libPQBlacklist20_2 = libPQBlacklist20_1
 
 var libPQBlacklist20_1 = blacklist{
 	"pq.TestBinaryByteSliceToInt":        "41547",
@@ -97,6 +100,8 @@ var libPQBlacklist19_2 = blacklist{
 	"pq.TestStringWithNul":               "26366",
 	"pq.TestTimestampWithTimeZone":       "41565",
 }
+
+var libPQIgnorelist20_2 = libPQIgnorelist20_1
 
 var libPQIgnorelist20_1 = libPQIgnorelist19_2
 

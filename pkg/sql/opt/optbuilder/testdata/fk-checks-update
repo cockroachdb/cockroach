@@ -212,6 +212,28 @@ update child
                 └── filters
                      └── c:11 = grandchild.c:14
 
+exec-ddl
+CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p))
+----
+
+# We don't need the FK check in this case because we are only setting NULL
+# values. We need to use norm because internally the value becomes NULL::INT
+# and the normalization rules are needed to fold the cast.
+norm
+UPDATE child_nullable SET p = NULL
+----
+update child_nullable
+ ├── columns: <none>
+ ├── fetch columns: c:3 p:4
+ ├── update-mapping:
+ │    └── column5:5 => p:2
+ └── project
+      ├── columns: column5:5 c:3!null p:4
+      ├── scan child_nullable
+      │    └── columns: c:3!null p:4
+      └── projections
+           └── CAST(NULL AS INT8) [as=column5:5]
+
 # Multiple grandchild tables
 exec-ddl
 CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
@@ -312,6 +334,110 @@ update self
                 │    └── columns: y:9!null
                 └── filters
                      └── x:6 = y:9
+
+exec-ddl
+CREATE TABLE parent_multicol (a INT, b INT, c INT, PRIMARY KEY (a,b,c))
+----
+
+exec-ddl
+CREATE TABLE child_multicol_simple (
+  k INT PRIMARY KEY,
+  a INT, b INT, c INT,
+  CONSTRAINT fk FOREIGN KEY(a,b,c) REFERENCES parent_multicol(a,b,c) MATCH SIMPLE
+)
+----
+
+# With MATCH SIMPLE, we can elide the FK check if any FK column is NULL.
+norm
+UPDATE child_multicol_simple SET a = 1, b = NULL, c = 1 WHERE k = 1
+----
+update child_multicol_simple
+ ├── columns: <none>
+ ├── fetch columns: k:5 a:6 b:7 c:8
+ ├── update-mapping:
+ │    ├── column9:9 => a:2
+ │    ├── column10:10 => b:3
+ │    └── column9:9 => c:4
+ └── project
+      ├── columns: column9:9!null column10:10 k:5!null a:6 b:7 c:8
+      ├── select
+      │    ├── columns: k:5!null a:6 b:7 c:8
+      │    ├── scan child_multicol_simple
+      │    │    └── columns: k:5!null a:6 b:7 c:8
+      │    └── filters
+      │         └── k:5 = 1
+      └── projections
+           ├── 1 [as=column9:9]
+           └── CAST(NULL AS INT8) [as=column10:10]
+
+exec-ddl
+CREATE TABLE child_multicol_full (
+  k INT PRIMARY KEY,
+  a INT, b INT, c INT,
+  CONSTRAINT fk FOREIGN KEY(a,b,c) REFERENCES parent_multicol(a,b,c) MATCH FULL
+)
+----
+
+# With MATCH FULL, we can elide the FK check only if all FK columns are NULL.
+norm
+UPDATE child_multicol_full SET a = 1, b = NULL, c = 1 WHERE k = 1
+----
+update child_multicol_full
+ ├── columns: <none>
+ ├── fetch columns: k:5 child_multicol_full.a:6 child_multicol_full.b:7 child_multicol_full.c:8
+ ├── update-mapping:
+ │    ├── column9:9 => child_multicol_full.a:2
+ │    ├── column10:10 => child_multicol_full.b:3
+ │    └── column9:9 => child_multicol_full.c:4
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: column9:9!null column10:10 k:5!null child_multicol_full.a:6 child_multicol_full.b:7 child_multicol_full.c:8
+ │    ├── select
+ │    │    ├── columns: k:5!null child_multicol_full.a:6 child_multicol_full.b:7 child_multicol_full.c:8
+ │    │    ├── scan child_multicol_full
+ │    │    │    └── columns: k:5!null child_multicol_full.a:6 child_multicol_full.b:7 child_multicol_full.c:8
+ │    │    └── filters
+ │    │         └── k:5 = 1
+ │    └── projections
+ │         ├── 1 [as=column9:9]
+ │         └── CAST(NULL AS INT8) [as=column10:10]
+ └── f-k-checks
+      └── f-k-checks-item: child_multicol_full(a,b,c) -> parent_multicol(a,b,c)
+           └── anti-join (hash)
+                ├── columns: column9:11!null column10:12 column9:13!null
+                ├── with-scan &1
+                │    ├── columns: column9:11!null column10:12 column9:13!null
+                │    └── mapping:
+                │         ├──  column9:9 => column9:11
+                │         ├──  column10:10 => column10:12
+                │         └──  column9:9 => column9:13
+                ├── scan parent_multicol
+                │    └── columns: parent_multicol.a:14!null parent_multicol.b:15!null parent_multicol.c:16!null
+                └── filters
+                     ├── column9:11 = parent_multicol.a:14
+                     ├── column10:12 = parent_multicol.b:15
+                     └── column9:13 = parent_multicol.c:16
+
+norm
+UPDATE child_multicol_full SET a = NULL, b = NULL, c = NULL WHERE k = 1
+----
+update child_multicol_full
+ ├── columns: <none>
+ ├── fetch columns: k:5 a:6 b:7 c:8
+ ├── update-mapping:
+ │    ├── column9:9 => a:2
+ │    ├── column9:9 => b:3
+ │    └── column9:9 => c:4
+ └── project
+      ├── columns: column9:9 k:5!null a:6 b:7 c:8
+      ├── select
+      │    ├── columns: k:5!null a:6 b:7 c:8
+      │    ├── scan child_multicol_full
+      │    │    └── columns: k:5!null a:6 b:7 c:8
+      │    └── filters
+      │         └── k:5 = 1
+      └── projections
+           └── CAST(NULL AS INT8) [as=column9:9]
 
 exec-ddl
 CREATE TABLE two (a int, b int, primary key (a, b))
