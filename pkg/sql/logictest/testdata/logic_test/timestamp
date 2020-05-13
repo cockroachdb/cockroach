@@ -258,7 +258,7 @@ subtest localtimestamp_test
 query TTTT
 select pg_typeof(localtimestamp), pg_typeof(current_timestamp), pg_typeof(localtimestamp(3)), pg_typeof(current_timestamp(3))
 ----
-timestamp  timestamptz  timestamp  timestamptz
+timestamp without time zone  timestamp with time zone  timestamp without time zone  timestamp with time zone
 
 query B
 select localtimestamp(3) - localtimestamp <= '1ms'::interval

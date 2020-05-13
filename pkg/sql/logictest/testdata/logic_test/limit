@@ -119,13 +119,15 @@ SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123))
 1  1
 2  -4
 3  9
+4  -16
+5  25
+6  -36
 
 query II
 SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123)) OFFSET length(pg_typeof(123))-2
 ----
-2  -4
-3  9
-4  -16
+5  25
+6  -36
 
 query II
 SELECT k, v FROM t ORDER BY k OFFSET (SELECT count(*)-3 FROM t)
