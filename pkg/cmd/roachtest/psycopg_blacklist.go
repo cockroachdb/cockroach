@@ -15,6 +15,7 @@ var psycopgBlacklists = blacklistsForVersion{
 	{"v19.1", "psycopgBlackList19_1", psycopgBlackList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
 	{"v19.2", "psycopgBlackList19_2", psycopgBlackList19_2, "psycopgIgnoreList19_2", psycopgIgnoreList19_2},
 	{"v20.1", "psycopgBlackList20_1", psycopgBlackList20_1, "psycopgIgnoreList20_1", psycopgIgnoreList20_1},
+	{"v20.2", "psycopgBlackList20_2", psycopgBlackList20_2, "psycopgIgnoreList20_2", psycopgIgnoreList20_2},
 }
 
 // These are lists of known psycopg test errors and failures.
@@ -28,6 +29,8 @@ var psycopgBlacklists = blacklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
+var psycopgBlackList20_2 = psycopgBlackList20_1
+
 var psycopgBlackList20_1 = blacklist{
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "44701",
 	"tests.test_async.AsyncTests.test_error":                                                                 "44706",
@@ -815,6 +818,8 @@ var psycopgBlackList19_1 = blacklist{
 	"tests.test_with.WithCursorTestCase.test_exception_swallow":                                              "30352",
 	"tests.test_with.WithCursorTestCase.test_named_with_noop":                                                "30352",
 }
+
+var psycopgIgnoreList20_2 = psycopgIgnoreList20_1
 
 var psycopgIgnoreList20_1 = psycopgIgnoreList19_2
 
