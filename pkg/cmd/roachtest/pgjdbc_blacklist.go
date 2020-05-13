@@ -17,11 +17,14 @@ var pgjdbcBlacklists = blacklistsForVersion{
 	{"v19.1", "pgjdbcBlackList19_1", pgjdbcBlackList19_1, "", pgjdbcIgnoreList19_1},
 	{"v19.2", "pgjdbcBlackList19_2", pgjdbcBlackList19_2, "pgjdbcIgnoreList19_2", pgjdbcIgnoreList19_2},
 	{"v20.1", "pgjdbcBlackList20_1", pgjdbcBlackList20_1, "pgjdbcIgnoreList20_1", pgjdbcIgnoreList20_1},
+	{"v20.2", "pgjdbcBlackList20_2", pgjdbcBlackList20_2, "pgjdbcIgnoreList20_2", pgjdbcIgnoreList20_2},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
+var pgjdbcBlackList20_2 = pgjdbcBlackList20_1
+
 var pgjdbcBlackList20_1 = blacklist{
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testDeepInternalsBatchedQueryDecorator": "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testUnspecifiedParameterType":           "26508",
@@ -5616,6 +5619,8 @@ var pgjdbcBlackList2_0 = blacklist{
 	"org.postgresql.test.jdbc42.GetObject310InfinityTests.test[binary = REGULAR, expr = infinity, pgType = timestamp, klass = class java.time.LocalDateTime]":                  "41786",
 	"org.postgresql.test.jdbc42.GetObject310InfinityTests.test[binary = REGULAR, expr = infinity, pgType = timestamp, klass = class java.time.OffsetDateTime]":                 "41786",
 }
+
+var pgjdbcIgnoreList20_2 = pgjdbcIgnoreList20_1
 
 var pgjdbcIgnoreList20_1 = pgjdbcIgnoreList19_2
 

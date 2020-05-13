@@ -13,11 +13,14 @@ package main
 var pgxBlacklists = blacklistsForVersion{
 	{"v19.2", "pgxBlacklist19_2", pgxBlacklist19_2, "pgxIgnorelist19_2", pgxIgnorelist19_2},
 	{"v20.1", "pgxBlacklist20_1", pgxBlacklist20_1, "pgxIgnorelist20_1", pgxIgnorelist20_1},
+	{"v20.2", "pgxBlacklist20_2", pgxBlacklist20_2, "pgxIgnorelist20_2", pgxIgnorelist20_2},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
+var pgxBlacklist20_2 = pgxBlacklist20_1
+
 var pgxBlacklist20_1 = blacklist{
 	"v4.Example_CustomType":                                        "27796",
 	"v4.TestConnBeginBatchDeferredError":                           "31632",
@@ -59,6 +62,8 @@ var pgxBlacklist20_1 = blacklist{
 	"v4.TestTxNestedTransactionRollback":                           "31632",
 	"v4.TestUnregisteredTypeUsableAsStringArgumentAndBaseResult":   "27796",
 }
+
+var pgxIgnorelist20_2 = pgxIgnorelist20_1
 
 var pgxIgnorelist20_1 = blacklist{
 	"v4.TestBeginIsoLevels":   "We don't support isolation levels",
