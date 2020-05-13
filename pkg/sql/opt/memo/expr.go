@@ -687,6 +687,19 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 // This could be a logical property but we only care about simple cases (NULLs
 // in Projections and Values).
 func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
+	isNullScalar := func(scalar opt.ScalarExpr) bool {
+		switch scalar.Op() {
+		case opt.NullOp:
+			return true
+		case opt.CastOp:
+			// Normally this cast should have been folded, but we want this to work
+			// in "build" opttester mode (disabled normalization rules).
+			return scalar.Child(0).Op() == opt.NullOp
+		default:
+			return false
+		}
+	}
+
 	switch e.Op() {
 	case opt.ProjectOp:
 		p := e.(*ProjectExpr)
@@ -695,7 +708,7 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 		}
 		for i := range p.Projections {
 			if p.Projections[i].Col == col {
-				return p.Projections[i].Element.Op() == opt.NullOp
+				return isNullScalar(p.Projections[i].Element)
 			}
 		}
 
@@ -706,7 +719,7 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 			return false
 		}
 		for i := range v.Rows {
-			if v.Rows[i].(*TupleExpr).Elems[colOrdinal].Op() != opt.NullOp {
+			if !isNullScalar(v.Rows[i].(*TupleExpr).Elems[colOrdinal]) {
 				return false
 			}
 		}
