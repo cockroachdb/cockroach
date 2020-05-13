@@ -332,9 +332,9 @@ const (
 	// Class 22C - Semantic errors in the structure of a SQL statement.
 
 	// ScalarOperationCannotRunWithoutFullSessionContext signals that an
-	// operator or built-in function was used that requires a full
-	// session contextand thus cannot be run in a background job or away
-	// from the SQL gateway.
+	// operator or built-in function was used that requires a full session
+	// context and thus cannot be run in a background job or away from the SQL
+	// gateway.
 	ScalarOperationCannotRunWithoutFullSessionContext = "22C01"
 
 	// Class 55C - Object Not In Prerequisite State (Cockroach extension)

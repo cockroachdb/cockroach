@@ -222,47 +222,65 @@ func (ms MetadataSchema) DescriptorIDs() IDs {
 	return descriptorIDs
 }
 
-// systemTableIDCache is used to accelerate name lookups
-// on table descriptors. It relies on the fact that
-// table IDs under MaxReservedDescID are fixed.
-var systemTableIDCache = func() map[string]ID {
-	cache := make(map[string]ID)
+// systemTableIDCache is used to accelerate name lookups on table descriptors.
+// It relies on the fact that table IDs under MaxReservedDescID are fixed.
+//
+// Mapping: [systemTenant][tableName] => tableID
+var systemTableIDCache = func() [2]map[string]ID {
+	cacheForTenant := func(systemTenant bool) map[string]ID {
+		cache := make(map[string]ID)
 
-	// NOTE: we use the system tenant codec here. That means that any lookups in
-	// this cache for system descriptors that are only found in non-system
-	// tenants will not be found. That is ok for now, but we'll need to split
-	// this cache or do something smarter should it become a problem.
-	ms := MetadataSchema{codec: keys.SystemSQLCodec}
-	addSystemDescriptorsToSchema(&ms)
-	for _, d := range ms.descs {
-		t, ok := d.desc.(*TableDescriptor)
-		if !ok || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
-			// We only cache table descriptors under 'system' with a reserved table ID.
-			continue
+		codec := keys.SystemSQLCodec
+		if !systemTenant {
+			codec = keys.MakeSQLCodec(roachpb.MinTenantID)
 		}
-		cache[t.Name] = t.ID
+
+		ms := MetadataSchema{codec: codec}
+		addSystemDescriptorsToSchema(&ms)
+		for _, d := range ms.descs {
+			t, ok := d.desc.(*TableDescriptor)
+			if !ok || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
+				// We only cache table descriptors under 'system' with a
+				// reserved table ID.
+				continue
+			}
+			cache[t.Name] = t.ID
+		}
+
+		// This special case exists so that we resolve "namespace" to the new
+		// namespace table ID (30) in 20.1, while the Name in the "namespace"
+		// descriptor is still set to "namespace2" during the 20.1 cycle. We
+		// couldn't set the new namespace table's Name to "namespace" in 20.1,
+		// because it had to co-exist with the old namespace table, whose name
+		// must *remain* "namespace" - and you can't have duplicate descriptor
+		// Name fields.
+		//
+		// This can be removed in 20.2, when we add a migration to change the
+		// new namespace table's Name to "namespace" again.
+		// TODO(solon): remove this in 20.2.
+		cache[NamespaceTableName] = keys.NamespaceTableID
+
+		return cache
 	}
 
-	// This special case exists so that we resolve "namespace" to the new
-	// namespace table ID (30) in 20.1, while the Name in the "namespace"
-	// descriptor is still set to "namespace2" during the
-	// 20.1 cycle. We couldn't set the new namespace table's Name to "namespace"
-	// in 20.1, because it had to co-exist with the old namespace table, whose
-	// name must *remain* "namespace" - and you can't have duplicate descriptor
-	// Name fields.
-	//
-	// This can be removed in 20.2, when we add a migration to change the new
-	// namespace table's Name to "namespace" again.
-	// TODO(solon): remove this in 20.2.
-	cache[NamespaceTableName] = keys.NamespaceTableID
-
+	var cache [2]map[string]ID
+	for _, b := range []bool{false, true} {
+		cache[boolToInt(b)] = cacheForTenant(b)
+	}
 	return cache
 }()
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
 
 // LookupSystemTableDescriptorID uses the lookup cache above
 // to bypass a KV lookup when resolving the name of system tables.
 func LookupSystemTableDescriptorID(
-	ctx context.Context, settings *cluster.Settings, dbID ID, tableName string,
+	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, dbID ID, tableName string,
 ) ID {
 	if dbID != SystemDB.ID {
 		return InvalidID
@@ -273,7 +291,8 @@ func LookupSystemTableDescriptorID(
 		tableName == NamespaceTableName {
 		return DeprecatedNamespaceTable.ID
 	}
-	dbID, ok := systemTableIDCache[tableName]
+	systemTenant := boolToInt(codec.ForSystemTenant())
+	dbID, ok := systemTableIDCache[systemTenant][tableName]
 	if !ok {
 		return InvalidID
 	}

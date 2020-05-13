@@ -1114,6 +1114,19 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
+### Multi-tenancy functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.create_tenant"></a><code>crdb_internal.create_tenant(id: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Creates a new tenant with the provided ID. Must be run by the System tenant.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.create_tenant"></a><code>crdb_internal.create_tenant(id: <a href="int.html">int</a>, info: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Creates a new tenant with the provided ID. Must be run by the System tenant.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.destroy_tenant"></a><code>crdb_internal.destroy_tenant(id: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Destroys a tenant with the provided ID. Must be run by the System tenant.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Sequence functions
 
 <table>
