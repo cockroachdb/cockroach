@@ -146,6 +146,7 @@ var i1A = settings.RegisterIntSetting("i.1", "desc", 0)
 var i2A = settings.RegisterIntSetting("i.2", "desc", 5)
 var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
+var _ = settings.RegisterPublicNonNegativeDurationSettingWithMaximum("d_with_maximum", "desc", time.Second, time.Hour)
 var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
 var mA = settings.RegisterStateMachineSettingImpl("statemachine", "foo", &dummyTransformer{})
@@ -180,6 +181,26 @@ var iVal = settings.RegisterValidatedIntSetting(
 		}
 		return nil
 	})
+
+func TestValidation(t *testing.T) {
+	sv := &settings.Values{}
+	sv.Init(settings.TestOpaque)
+
+	u := settings.NewUpdater(sv)
+	t.Run("d_with_maximum", func(t *testing.T) {
+		err := u.Set("d_with_maximum", "1h", "d")
+		require.NoError(t, err)
+		err = u.Set("d_with_maximum", "0h", "d")
+		require.NoError(t, err)
+		err = u.Set("d_with_maximum", "30m", "d")
+		require.NoError(t, err)
+
+		err = u.Set("d_with_maximum", "-1m", "d")
+		require.Error(t, err)
+		err = u.Set("d_with_maximum", "1h1s", "d")
+		require.Error(t, err)
+	})
+}
 
 func TestCache(t *testing.T) {
 	ctx := context.Background()
