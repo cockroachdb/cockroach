@@ -642,11 +642,11 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_serial_normalization`: {
+	`serial_normalization`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.SerialNormalizationModeFromString(s)
 			if !ok {
-				return newVarValueError(`experimental_serial_normalization`, s,
+				return newVarValueError(`serial_normalization`, s,
 					"rowid", "virtual_sequence", "sql_sequence")
 			}
 			m.SetSerialNormalizationMode(mode)

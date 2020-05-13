@@ -44,7 +44,6 @@ enable_zigzag_join                           on
 experimental_enable_hash_sharded_indexes     off
 experimental_enable_temp_tables              off
 experimental_optimizer_foreign_key_cascades  off
-experimental_serial_normalization            rowid
 extra_float_digits                           0
 force_savepoint_restart                      off
 foreign_key_cascades_limit                   10000
@@ -64,6 +63,7 @@ require_explicit_primary_keys                off
 results_buffer_size                          16384
 row_security                                 off
 search_path                                  public
+serial_normalization                         rowid
 server_encoding                              UTF8
 server_version                               9.5.0
 server_version_num                           90500

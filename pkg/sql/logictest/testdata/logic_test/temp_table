@@ -199,7 +199,7 @@ DROP SEQUENCE pg_temp.temp_seq
 
 # Allow temporary tables to use serial for temporary schemas.
 statement ok
-SET experimental_serial_normalization='sql_sequence'
+SET serial_normalization='sql_sequence'
 
 statement ok
 CREATE TEMP TABLE ref_temp_table (a SERIAL)
@@ -216,7 +216,7 @@ statement ok
 DROP SEQUENCE pg_temp.temp_seq; DROP SEQUENCE pg_temp.ref_temp_table_a_seq; DROP TABLE a
 
 statement ok
-SET experimental_serial_normalization='rowid'
+SET serial_normalization='rowid'
 
 subtest table_with_on_commit
 
