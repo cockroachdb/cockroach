@@ -201,7 +201,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// Note: we can only bypass name to ID resolution. The desc
 	// lookup below must still go through KV because system descriptors
 	// can be modified on a running cluster.
-	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, dbID, object)
+	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
 	if descID == sqlbase.InvalidID {
 		var found bool
 		found, descID, err = sqlbase.LookupObjectID(ctx, txn, codec, dbID, schemaID, object)

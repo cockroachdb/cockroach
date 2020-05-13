@@ -54,7 +54,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, n.expirationTime); err != nil {
+	if err := params.ExecCfg().DB.AdminSplit(params.ctx, rowKey, rowKey, n.expirationTime); err != nil {
 		return false, err
 	}
 

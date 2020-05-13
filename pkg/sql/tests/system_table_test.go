@@ -12,6 +12,8 @@ package tests_test
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -21,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/datadriven"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -32,54 +36,104 @@ func TestInitialKeys(t *testing.T) {
 	const keysPerDesc = 2
 	const nonDescKeys = 9
 
-	ms := sqlbase.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-	kv, _ /* splits */ := ms.GetInitialValues()
-	expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
-	if actual := len(kv); actual != expected {
-		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
-	}
-
-	// Add an additional table.
-	sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
-	desc, err := sql.CreateTestTableDescriptor(
-		context.TODO(),
-		keys.SystemDatabaseID,
-		keys.MaxReservedDescID,
-		"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-		sqlbase.NewDefaultPrivilegeDescriptor(),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
-	kv, _ /* splits */ = ms.GetInitialValues()
-	expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
-	if actual := len(kv); actual != expected {
-		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
-	}
-
-	// Verify that IDGenerator value is correct.
-	found := false
-	var idgenkv roachpb.KeyValue
-	for _, v := range kv {
-		if v.Key.Equal(keys.DescIDGenerator) {
-			idgenkv = v
-			found = true
-			break
+	testutils.RunTrueAndFalse(t, "system tenant", func(t *testing.T, systemTenant bool) {
+		var codec keys.SQLCodec
+		if systemTenant {
+			codec = keys.SystemSQLCodec
+		} else {
+			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
 		}
-	}
 
-	if !found {
-		t.Fatal("Could not find descriptor ID generator in initial key set")
-	}
-	// Expect 2 non-reserved IDs to have been allocated.
-	i, err := idgenkv.Value.GetInt()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := i, int64(keys.MinUserDescID); a != e {
-		t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
-	}
+		ms := sqlbase.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+		kv, _ /* splits */ := ms.GetInitialValues()
+		expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
+		if actual := len(kv); actual != expected {
+			t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
+		}
+
+		// Add an additional table.
+		sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
+		desc, err := sql.CreateTestTableDescriptor(
+			context.TODO(),
+			keys.SystemDatabaseID,
+			keys.MaxReservedDescID,
+			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
+			sqlbase.NewDefaultPrivilegeDescriptor(),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ms.AddDescriptor(keys.SystemDatabaseID, &desc)
+		kv, _ /* splits */ = ms.GetInitialValues()
+		expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
+		if actual := len(kv); actual != expected {
+			t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
+		}
+
+		// Verify that IDGenerator value is correct.
+		found := false
+		idgen := codec.DescIDSequenceKey()
+		var idgenkv roachpb.KeyValue
+		for _, v := range kv {
+			if v.Key.Equal(idgen) {
+				idgenkv = v
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Fatal("Could not find descriptor ID generator in initial key set")
+		}
+		// Expect 2 non-reserved IDs to have been allocated.
+		i, err := idgenkv.Value.GetInt()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a, e := i, int64(keys.MinUserDescID); a != e {
+			t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
+		}
+	})
+}
+
+func TestInitialKeysAndSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	datadriven.RunTest(t, "testdata/initial_keys", func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "initial-keys":
+			var tenant string
+			d.ScanArgs(t, "tenant", &tenant)
+
+			var codec keys.SQLCodec
+			if tenant == "system" {
+				codec = keys.SystemSQLCodec
+			} else {
+				id, err := strconv.ParseUint(tenant, 10, 64)
+				if err != nil {
+					t.Fatal(err)
+				}
+				codec = keys.MakeSQLCodec(roachpb.MakeTenantID(id))
+			}
+
+			ms := sqlbase.MakeMetadataSchema(
+				codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+			)
+			kvs, splits := ms.GetInitialValues()
+
+			var buf strings.Builder
+			fmt.Fprintf(&buf, "%d keys:\n", len(kvs))
+			for _, kv := range kvs {
+				fmt.Fprintf(&buf, " %s\n", kv.Key)
+			}
+			fmt.Fprintf(&buf, "%d splits:\n", len(splits))
+			for _, k := range splits {
+				fmt.Fprintf(&buf, " %s\n", k.AsRawKey())
+			}
+			return buf.String()
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+	})
 }
 
 // TestSystemTableLiterals compares the result of evaluating the `CREATE TABLE`
@@ -113,6 +167,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable},
 		{keys.SettingsTableID, sqlbase.SettingsTableSchema, sqlbase.SettingsTable},
 		{keys.DescIDSequenceID, sqlbase.DescIDSequenceSchema, sqlbase.DescIDSequence},
+		{keys.TenantsTableID, sqlbase.TenantsTableSchema, sqlbase.TenantsTable},
 		{keys.WebSessionsTableID, sqlbase.WebSessionsTableSchema, sqlbase.WebSessionsTable},
 		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable},
 		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable},

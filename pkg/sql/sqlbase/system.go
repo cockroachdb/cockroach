@@ -100,6 +100,14 @@ CREATE TABLE system.settings (
 
 	DescIDSequenceSchema = `
 CREATE SEQUENCE system.descriptor_id_seq;`
+
+	TenantsTableSchema = `
+CREATE TABLE system.tenants (
+	id     INT8 NOT NULL PRIMARY KEY,
+	active BOOL NOT NULL DEFAULT true,
+	info   BYTES,
+	FAMILY "primary" (id, active, info)
+);`
 )
 
 // These system tables are not part of the system config.
@@ -320,6 +328,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	// read-only privs to make that migration possible later.
 	keys.SettingsTableID:   privilege.ReadWriteData,
 	keys.DescIDSequenceID:  privilege.ReadData,
+	keys.TenantsTableID:    privilege.ReadData,
 	keys.LeaseTableID:      privilege.ReadWriteData,
 	keys.EventLogTableID:   privilege.ReadWriteData,
 	keys.RangeEventTableID: privilege.ReadWriteData,
@@ -605,6 +614,37 @@ var (
 		},
 		Privileges:    NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescIDSequenceID]),
 		FormatVersion: InterleavedFormatVersion,
+	}
+
+	TenantsTable = TableDescriptor{
+		Name:                    "tenants",
+		ID:                      keys.TenantsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int},
+			{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
+			// NOTE: info is currently a placeholder and may be kept, replaced,
+			// or even just removed. The idea is to provide users of
+			// multi-tenancy with some ability to store associated metadata with
+			// each tenant. For instance, it might prove to be useful to map a
+			// tenant in a cluster back to the corresponding user ID in CC.
+			{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{{
+			Name:        "primary",
+			ID:          0,
+			ColumnNames: []string{"id", "active", "info"},
+			ColumnIDs:   []ColumnID{1, 2, 3},
+		}},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("id"),
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TenantsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
 	}
 )
 
@@ -1529,6 +1569,11 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// System tenants use the global descIDGenerator key. See #48513.
 	if !target.codec.ForSystemTenant() {
 		target.AddDescriptor(keys.SystemDatabaseID, &DescIDSequence)
+	}
+
+	// Only add the tenant table if this is the system tenant.
+	if target.codec.ForSystemTenant() {
+		target.AddDescriptor(keys.SystemDatabaseID, &TenantsTable)
 	}
 
 	// Add all the other system tables.
