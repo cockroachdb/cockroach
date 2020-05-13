@@ -297,17 +297,6 @@ $input
 =>
 (Select $input (RemoveFiltersItem $filters $item))
 
-# InlineConstVar inlines variables which are restricted to be constant, as in
-#   SELECT * FROM foo WHERE a = 4 AND a IN (1, 2, 3, 4).
-# =>
-#   SELECT * FROM foo WHERE a = 4 AND 4 IN (1, 2, 3, 4).
-# Note that a single iteration of this rule might not be sufficient to inline
-# all variables, in which case it will trigger itself again.
-[InlineConstVar, Normalize]
-(Select $input:* $filters:* & (CanInlineConstVar $filters))
-=>
-(Select $input (InlineConstVar $filters))
-
 # PushSelectIntoProjectSet pushes filters into a ProjectSet. In particular,
 # the filters that are bound to the input columns of the ProjectSet are
 # pushed down into it, in hopes of being pushed down further into joins

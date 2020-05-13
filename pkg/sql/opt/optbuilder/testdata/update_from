@@ -142,10 +142,8 @@ update abc
  │    └── column11:11 => abc.c:3
  └── project
       ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
-      ├── inner-join (merge)
+      ├── inner-join (cross)
       │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
-      │    ├── left ordering: +4
-      │    ├── right ordering: +7
       │    ├── scan abc
       │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── constraint: /4: [/2 - /2]
