@@ -119,7 +119,9 @@ func retrieveUserAndPassword(
 		}
 		if values != nil {
 			exists = true
-			hashedPassword = []byte(*(values[0].(*tree.DBytes)))
+			if v := values[0]; v != tree.DNull {
+				hashedPassword = []byte(*(v.(*tree.DBytes)))
+			}
 		}
 
 		if !exists {
