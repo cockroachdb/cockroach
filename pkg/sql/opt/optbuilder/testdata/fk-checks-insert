@@ -172,9 +172,8 @@ insert child_nullable
                      └── column2:5 = parent.p:6
 
 # In this case, we know that we are inserting *only* NULL values, so we don't
-# need to check any FKs. We need to use norm because internally the values
-# become NULL::INT and the normalization rules are needed to fold the cast.
-norm
+# need to check any FKs.
+build
 INSERT INTO child_nullable VALUES (100, NULL), (200, NULL)
 ----
 insert child_nullable
@@ -184,11 +183,11 @@ insert child_nullable
  │    └── column2:4 => p:2
  └── values
       ├── columns: column1:3!null column2:4
-      ├── (100, NULL)
-      └── (200, NULL)
+      ├── (100, NULL::INT8)
+      └── (200, NULL::INT8)
 
 # Same as above.
-norm
+build
 INSERT INTO child_nullable (c) VALUES (100), (200)
 ----
 insert child_nullable
@@ -203,7 +202,7 @@ insert child_nullable
       │    ├── (100,)
       │    └── (200,)
       └── projections
-           └── CAST(NULL AS INT8) [as=column4:4]
+           └── NULL::INT8 [as=column4:4]
 
 # Check planning of filter with FULL match (which should be the same on a
 # single column).
@@ -242,7 +241,7 @@ insert child_nullable_full
                      └── column2:5 = parent.p:6
 
 # No FK check needed.
-norm
+build
 INSERT INTO child_nullable_full (c) VALUES (100), (200)
 ----
 insert child_nullable_full
@@ -257,7 +256,7 @@ insert child_nullable_full
       │    ├── (100,)
       │    └── (200,)
       └── projections
-           └── CAST(NULL AS INT8) [as=column4:4]
+           └── NULL::INT8 [as=column4:4]
 
 # Tests with multicolumn FKs.
 exec-ddl
@@ -382,7 +381,7 @@ insert multi_col_child
                      └── column4:11 = multi_col_parent.r:14
 
 # No FK check needed - we have only NULL values for a FK column.
-norm
+build
 INSERT INTO multi_col_child VALUES (1, 10, NULL, 10)
 ----
 insert multi_col_child
@@ -394,7 +393,7 @@ insert multi_col_child
  │    └── column4:8 => r:4
  └── values
       ├── columns: column1:5!null column2:6!null column3:7 column4:8!null
-      └── (1, 10, NULL, 10)
+      └── (1, 10, NULL::INT8, 10)
 
 exec-ddl
 CREATE TABLE multi_col_child_full  (
@@ -507,7 +506,7 @@ insert multi_col_child_full
                      └── column4:11 = multi_col_parent.r:14
 
 # No FK check needed when all FK columns only have NULL values.
-norm
+build
 INSERT INTO multi_col_child_full VALUES (1, NULL, NULL, NULL)
 ----
 insert multi_col_child_full
@@ -519,11 +518,11 @@ insert multi_col_child_full
  │    └── column4:8 => r:4
  └── values
       ├── columns: column1:5!null column2:6 column3:7 column4:8
-      └── (1, NULL, NULL, NULL)
+      └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
 
 # But with MATCH FULL, the FK check is needed when only a subset of the columns
 # only have NULL values.
-norm
+build
 INSERT INTO multi_col_child_full VALUES (1, NULL, 2, NULL)
 ----
 insert multi_col_child_full
@@ -536,7 +535,7 @@ insert multi_col_child_full
  ├── input binding: &1
  ├── values
  │    ├── columns: column1:5!null column2:6 column3:7!null column4:8
- │    └── (1, NULL, 2, NULL)
+ │    └── (1, NULL::INT8, 2, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -574,7 +573,7 @@ CREATE TABLE multi_ref_child (
 ----
 
 build
-INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+INSERT INTO multi_ref_child VALUES (1, 1, NULL, NULL), (2, NULL, 2, NULL), (3, NULL, NULL, 3)
 ----
 insert multi_ref_child
  ├── columns: <none>
@@ -586,7 +585,9 @@ insert multi_ref_child
  ├── input binding: &1
  ├── values
  │    ├── columns: column1:5!null column2:6 column3:7 column4:8
- │    └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    ├── (1, 1, NULL::INT8, NULL::INT8)
+ │    ├── (2, NULL::INT8, 2, NULL::INT8)
+ │    └── (3, NULL::INT8, NULL::INT8, 3)
  └── f-k-checks
       ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
       │    └── anti-join (hash)
@@ -621,3 +622,17 @@ insert multi_ref_child
                 └── filters
                      ├── column3:12 = multi_ref_parent_bc.b:14
                      └── column4:13 = multi_ref_parent_bc.c:15
+
+build
+INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+----
+insert multi_ref_child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => k:1
+ │    ├── column2:6 => a:2
+ │    ├── column3:7 => b:3
+ │    └── column4:8 => c:4
+ └── values
+      ├── columns: column1:5!null column2:6 column3:7 column4:8
+      └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
