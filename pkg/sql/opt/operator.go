@@ -348,6 +348,24 @@ func AggregateIsNeverNull(op Operator) bool {
 	return false
 }
 
+// AggregateIgnoresDuplicates returns true if the output of the given aggregate
+// operator does not change when duplicate rows are added to the input.
+func AggregateIgnoresDuplicates(op Operator) bool {
+	switch op {
+	case AnyNotNullAggOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
+		ConstAggOp, ConstNotNullAggOp, FirstAggOp, MaxOp, MinOp:
+		return true
+
+	case ArrayAggOp, AvgOp, ConcatAggOp, CountOp, CorrOp, CountRowsOp, SumIntOp,
+		SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, JsonAggOp, JsonbAggOp,
+		StringAggOp, PercentileDiscOp, PercentileContOp:
+		return false
+
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
+	}
+}
+
 // OpaqueMetadata is an object stored in OpaqueRelExpr and passed
 // through to the exec factory.
 type OpaqueMetadata interface {
