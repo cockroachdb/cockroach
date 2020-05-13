@@ -400,7 +400,7 @@ func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumn
 	}
 
 	// Set up the rest of the scanNode.
-	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
+	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.desc.GetID(), n.cols)
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i

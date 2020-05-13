@@ -231,13 +231,17 @@ func newInvalidVirtualDefEntryError() error {
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
+func (e virtualDefEntry) getPlanInfo(
+	table *sqlbase.TableDescriptor,
+) (sqlbase.ResultColumns, virtualTableConstructor) {
 	var columns sqlbase.ResultColumns
 	for i := range e.desc.Columns {
 		col := &e.desc.Columns[i]
 		columns = append(columns, sqlbase.ResultColumn{
-			Name: col.Name,
-			Typ:  &col.Type,
+			Name:           col.Name,
+			Typ:            &col.Type,
+			TableID:        table.GetID(),
+			PGAttributeNum: col.ID,
 		})
 	}
 

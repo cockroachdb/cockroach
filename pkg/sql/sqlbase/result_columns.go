@@ -24,6 +24,12 @@ type ResultColumn struct {
 
 	// If set, this is an implicit column; used internally.
 	Hidden bool
+
+	// TableID/PGAttributeNum identify the source of the column, if it is a simple
+	// reference to a column of a base table (or view). If it is not a simple
+	// reference, these fields are zeroes.
+	TableID        ID       // OID of column's source table (pg_attribute.attrelid).
+	PGAttributeNum ColumnID // Column's number in source table (pg_attribute.attnum).
 }
 
 // ResultColumns is the type used throughout the sql module to
@@ -31,7 +37,7 @@ type ResultColumn struct {
 type ResultColumns []ResultColumn
 
 // ResultColumnsFromColDescs converts ColumnDescriptors to ResultColumns.
-func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
+func ResultColumnsFromColDescs(tableID ID, colDescs []ColumnDescriptor) ResultColumns {
 	cols := make(ResultColumns, 0, len(colDescs))
 	for i := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
@@ -42,7 +48,16 @@ func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 		}
 
 		hidden := colDesc.Hidden
-		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, Hidden: hidden})
+		cols = append(
+			cols,
+			ResultColumn{
+				Name:           colDesc.Name,
+				Typ:            typ,
+				Hidden:         hidden,
+				TableID:        tableID,
+				PGAttributeNum: colDesc.ID,
+			},
+		)
 	}
 	return cols
 }
