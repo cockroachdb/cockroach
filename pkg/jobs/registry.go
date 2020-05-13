@@ -1253,3 +1253,9 @@ func (r *Registry) unregister(jobID int64) {
 		delete(r.mu.jobs, jobID)
 	}
 }
+
+// TestingNudgeAdoptionQueue is used by tests to tell the registry that there is
+// a job to be adopted.
+func (r *Registry) TestingNudgeAdoptionQueue() {
+	r.adoptionCh <- struct{}{}
+}
