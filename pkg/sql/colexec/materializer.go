@@ -165,7 +165,7 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 		typs := m.OutputTypes()
 		for colIdx := 0; colIdx < len(typs); colIdx++ {
 			col := m.batch.ColVec(colIdx)
-			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, m.da, &typs[colIdx])
+			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, &m.da, &typs[colIdx])
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}

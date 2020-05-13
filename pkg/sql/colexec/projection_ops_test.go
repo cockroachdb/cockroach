@@ -213,8 +213,8 @@ func TestRandomComparisons(t *testing.T) {
 		RandomVec(rng, typ, bytesFixedLength, lVec, numTuples, 0)
 		RandomVec(rng, typ, bytesFixedLength, rVec, numTuples, 0)
 		for i := range lDatums {
-			lDatums[i] = PhysicalTypeColElemToDatum(lVec, uint16(i), da, ct)
-			rDatums[i] = PhysicalTypeColElemToDatum(rVec, uint16(i), da, ct)
+			lDatums[i] = PhysicalTypeColElemToDatum(lVec, uint16(i), &da, ct)
+			rDatums[i] = PhysicalTypeColElemToDatum(rVec, uint16(i), &da, ct)
 		}
 		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 			for i := range lDatums {
