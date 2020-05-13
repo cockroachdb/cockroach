@@ -20,18 +20,9 @@ import (
 	"github.com/golang/geo/s2"
 )
 
-type useSphereOrSpheroid bool
-
-const (
-	// UseSpheroid indicates to use the spheroid for calculations.
-	UseSpheroid useSphereOrSpheroid = true
-	// UseSphere indicates to use the sphere for calculations.
-	UseSphere useSphereOrSpheroid = false
-)
-
 // Distance returns the distance between geographies a and b on a sphere or spheroid.
 func Distance(
-	a *geo.Geography, b *geo.Geography, useSphereOrSpheroid useSphereOrSpheroid,
+	a *geo.Geography, b *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (float64, error) {
 	if a.SRID() != b.SRID() {
 		return 0, geo.NewMismatchingSRIDsError(a, b)
