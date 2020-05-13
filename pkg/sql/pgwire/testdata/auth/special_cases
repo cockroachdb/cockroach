@@ -93,3 +93,34 @@ DROP USER testuser; CREATE USER testuser
 ok
 
 subtest end user_has_both_cert_and_passwd
+
+subtest user_has_null_hashed_password_column
+
+# This test manually adds a user to the system.users table with a NULL (not
+# empty) hashedPassword and attempts to log in as that user. This used to crash
+# the server (and this test) because the authentication routine only properly
+# handled empty hashedPassword values. See #48769.
+
+sql
+INSERT INTO system.users (username, "hashedPassword") VALUES ('nopassword', NULL)
+----
+ok
+
+set_hba
+host all nopassword 0.0.0.0/0 password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all nopassword 0.0.0.0/0 password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER       ADDRESS   METHOD        OPTIONS
+host   all      root       all       cert-password
+host   all      nopassword 0.0.0.0/0 password
+
+connect user=nopassword
+----
+ERROR: password authentication failed for user nopassword
+
+subtest end user_has_null_hashed_password_column
