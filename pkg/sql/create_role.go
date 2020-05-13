@@ -125,6 +125,13 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			return pgerror.New(pgcode.InvalidPassword,
 				"setting or updating a password is not supported in insecure mode")
 		}
+	} else {
+		// v20.1 and below crash during authentication if they find a NULL value
+		// in system.users.hashedPassword. v20.2 and above handle this correctly,
+		// but we need to maintain mixed version compatibility for at least one
+		// release.
+		// TODO(nvanbenschoten): remove this for v21.1.
+		hashedPassword = []byte{}
 	}
 
 	// Reject the "public" role. It does not have an entry in the users table but is reserved.
