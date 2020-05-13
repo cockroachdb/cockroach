@@ -29,8 +29,14 @@ eexpect ":/# "
 # NB: we can't just grep for the broken pipe output, because it may take
 # a while for the server to initiate the next log line where it will detect
 # the broken pipe error.
+#
 # We use -F and not -f because the log file may be rotated during the test.
-send "tail -F logs/db/logs/cockroach.log\r"
+#
+# We also watch both the main log file and the pebble log in the
+# directory, because the error is only reported on the logger which is
+# writing first after stderr is has been broken, and that may be the
+# secondary logger.
+send "tail -F logs/db/logs/cockroach{,-pebble}.log\r"
 eexpect "log: exiting because of error: write /dev/stderr: broken pipe"
 interrupt
 eexpect ":/# "
