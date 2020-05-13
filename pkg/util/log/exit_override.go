@@ -79,7 +79,11 @@ func (l *loggerT) exitLocked(err error) {
 	f := logging.mu.exitOverride.f
 	logging.mu.Unlock()
 	if f != nil {
+		// Avoid conflicting lock order between l.mu and locks in f.
+		l.mu.Unlock()
 		f(2, err)
+		// Avoid double unlock on l.mu.
+		l.mu.Lock()
 	} else {
 		os.Exit(2)
 	}
