@@ -1406,7 +1406,29 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			AnonymizedStr: portal.Stmt.AnonymizedStr,
 		}
 		stmtCtx := withStatement(ctx, ex.curStmt)
-		ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
+		switch ex.machine.CurState().(type) {
+		case stateOpen:
+			// We're about the execute the statement in an open state which
+			// could trigger the dispatch to the execution engine. However, it
+			// is possible that we're trying to execute already exhausted
+			// portal - in such scenario we should return no rows, but the
+			// execution engine is not aware of that and would run the
+			// statement as if it was running it for the first time. In order
+			// to prevent such behavior we check whether the portal has been
+			// exhausted and execute the statement only if it hasn't. If it has
+			// been exhausted, then we simply do nothing because there is
+			// nothing to return on an exhausted portal.
+			if !portal.exhausted {
+				ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
+				// The query execution has been complete (because we only
+				// supports execution of portals to completion) which means
+				// that all rows from this portal have been returned - the
+				// portal is now exhausted.
+				portal.exhausted = true
+			}
+		default:
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
+		}
 		if err != nil {
 			return err
 		}

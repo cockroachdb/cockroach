@@ -127,6 +127,11 @@ type PreparedPortal struct {
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
 
+	// exhausted tracks whether this portal has already been fully exhausted,
+	// meaning that any additional attempts to execute it should return no
+	// rows.
+	exhausted bool
+
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
 	// Once refCount hits 0 (through calls to decRef()), the following memAcc is
