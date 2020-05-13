@@ -67,13 +67,22 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}
+	meta := r.Meta
+	if meta == nil {
+		// v20.1 crashes in rowToRecord and storage.Release if it finds a NULL
+		// value in system.protected_ts_records.meta. v20.2 and above handle
+		// this correctly, but we need to maintain mixed version compatibility
+		// for at least one release.
+		// TODO(nvanbenschoten): remove this for v21.1.
+		meta = []byte{}
+	}
 	s := makeSettings(p.settings)
 	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
 		r.ID.GetBytesMut(), r.Timestamp.AsOfSystemTime(),
-		r.MetaType, r.Meta,
+		r.MetaType, meta,
 		len(r.Spans), encodedSpans)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
@@ -218,8 +227,10 @@ func rowToRecord(ctx context.Context, row tree.Datums, r *ptpb.Record) error {
 	r.Timestamp = ts
 
 	r.MetaType = string(*row[2].(*tree.DString))
-	if meta := row[3].(*tree.DBytes); meta != nil && len(*meta) > 0 {
-		r.Meta = []byte(*meta)
+	if row[3] != tree.DNull {
+		if meta := row[3].(*tree.DBytes); len(*meta) > 0 {
+			r.Meta = []byte(*meta)
+		}
 	}
 	var spans Spans
 	if err := protoutil.Unmarshal([]byte(*row[4].(*tree.DBytes)), &spans); err != nil {
