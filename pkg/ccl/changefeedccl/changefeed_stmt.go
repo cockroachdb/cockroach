@@ -493,16 +493,6 @@ func (b *changefeedResumer) Resume(
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
-	// TODO(dan): This is a workaround for not being able to set an initial
-	// progress high-water when creating a job (currently only the progress
-	// details can be set). I didn't want to pick off the refactor to get this
-	// fix in, but it'd be nice to remove this hack.
-	if _, ok := details.Opts[optCursor]; ok {
-		if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
-			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
-		}
-	}
-
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
 	// could be because the sink is down or because a cockroach node has crashed
@@ -514,6 +504,19 @@ func (b *changefeedResumer) Resume(
 	}
 	var err error
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if err := b.job.CheckStatus(ctx); err != nil {
+			log.Infof(ctx, `CHANGEFEED job %d exiting due to status: %v`, jobID, err)
+			return err
+		}
+		// TODO(dan): This is a workaround for not being able to set an initial
+		// progress high-water when creating a job (currently only the progress
+		// details can be set). I didn't want to pick off the refactor to get this
+		// fix in, but it'd be nice to remove this hack.
+		if _, ok := details.Opts[optCursor]; ok {
+			if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
+				progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
+			}
+		}
 		if err = distChangefeedFlow(ctx, phs, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
@@ -542,6 +545,7 @@ func (b *changefeedResumer) Resume(
 		// on the channel, causing the changefeed flow to block. Replace it with
 		// a dummy channel.
 		startedCh = make(chan tree.Datums, 1)
+
 	}
 	// We only hit this if `r.Next()` returns false, which right now only happens
 	// on context cancellation.
