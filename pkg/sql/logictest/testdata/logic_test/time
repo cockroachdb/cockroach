@@ -417,7 +417,7 @@ true
 query TTTT
 select pg_typeof(localtime), pg_typeof(current_time), pg_typeof(localtime(3)), pg_typeof(current_time(3))
 ----
-time  timetz  time  timetz
+time without time zone  time with time zone  time without time zone  time with time zone
 
 subtest regression_42749
 
