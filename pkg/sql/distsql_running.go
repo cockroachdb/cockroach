@@ -1067,6 +1067,11 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 
 		evalCtx := evalCtxFactory()
 		execFactory := makeExecFactory(planner)
+		// The cascading query is allowed to autocommit only if it is the last
+		// casacade and there are no check queries to run.
+		if len(plan.checkPlans) > 0 || i < len(plan.cascades)-1 {
+			execFactory.disableAutoCommit()
+		}
 		cascadePlan, err := plan.cascades[i].PlanFn(
 			ctx, &planner.semaCtx, &evalCtx.EvalContext, &execFactory, buf, buf.bufferedRows.Len(),
 		)

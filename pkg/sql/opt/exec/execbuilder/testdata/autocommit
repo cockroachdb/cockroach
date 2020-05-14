@@ -616,7 +616,8 @@ statement ok
 CREATE TABLE fk_parent (p INT PRIMARY KEY, q INT, FAMILY f1 (p, q));
 INSERT INTO fk_parent VALUES (1, 10), (2, 20), (3, 30);
 CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p), FAMILY f1 (a, b));
-SET optimizer_foreign_keys = true
+SET optimizer_foreign_keys = true;
+SET experimental_optimizer_foreign_key_cascades = true
 
 # Populate table descriptor cache.
 statement ok
@@ -694,6 +695,33 @@ dist sender send  r32: sending batch 1 Del to (n1,s1):1
 dist sender send  r32: sending batch 1 Scan to (n1,s1):1
 dist sender send  r32: sending batch 1 EndTxn to (n1,s1):1
 
+# Test with a single cascade, which should use autocommit.
+statement ok
+DROP TABLE fk_child;
+CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p) ON DELETE CASCADE, FAMILY f1 (a, b));
+INSERT INTO fk_child VALUES (1, 1), (2, 2)
+
+# Populate table descriptor cache.
+statement ok
+SELECT * FROM fk_parent JOIN fk_child ON p = b
+
+statement ok
+SET TRACING=ON;
+  DELETE FROM fk_parent WHERE p = 2;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message       LIKE '%r32: sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
+----
+dist sender send  r32: sending batch 1 Scan to (n1,s1):1
+dist sender send  r32: sending batch 1 Del to (n1,s1):1
+dist sender send  r32: sending batch 1 Scan to (n1,s1):1
+dist sender send  r32: sending batch 2 Del, 1 EndTxn to (n1,s1):1
+
 # -----------------------
 # Multiple mutation tests
 # -----------------------
@@ -748,3 +776,10 @@ WHERE message       LIKE '%r32: sending batch%'
 dist sender send  r32: sending batch 2 CPut to (n1,s1):1
 dist sender send  r32: sending batch 2 CPut to (n1,s1):1
 dist sender send  r32: sending batch 1 EndTxn to (n1,s1):1
+
+# Tests for autocommit of optimizer-driven cascades.
+statement ok
+SET optimizer_foreign_keys = true
+
+statement ok
+SET experimental_optimizer_foreign_key_cascades = true

@@ -37,13 +37,21 @@ import (
 )
 
 type execFactory struct {
-	planner *planner
+	planner         *planner
+	allowAutoCommit bool
 }
 
 var _ exec.Factory = &execFactory{}
 
 func makeExecFactory(p *planner) execFactory {
-	return execFactory{planner: p}
+	return execFactory{
+		planner:         p,
+		allowAutoCommit: p.autoCommit,
+	}
+}
+
+func (ef *execFactory) disableAutoCommit() {
+	ef.allowAutoCommit = false
 }
 
 // ConstructValues is part of the exec.Factory interface.
@@ -1331,7 +1339,7 @@ func (ef *execFactory) ConstructInsert(
 		ins.run.rowsNeeded = true
 	}
 
-	if allowAutoCommit && ef.planner.autoCommit {
+	if allowAutoCommit && ef.allowAutoCommit {
 		ins.enableAutoCommit()
 	}
 
@@ -1409,7 +1417,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 		return &zeroNode{columns: ins.columns}, nil
 	}
 
-	if ef.planner.autoCommit {
+	if ef.allowAutoCommit {
 		ins.enableAutoCommit()
 	}
 
@@ -1535,7 +1543,7 @@ func (ef *execFactory) ConstructUpdate(
 		upd.run.rowsNeeded = true
 	}
 
-	if allowAutoCommit && ef.planner.autoCommit {
+	if allowAutoCommit && ef.allowAutoCommit {
 		upd.enableAutoCommit()
 	}
 
@@ -1694,7 +1702,7 @@ func (ef *execFactory) ConstructUpsert(
 		ups.run.tw.collectRows = true
 	}
 
-	if allowAutoCommit && ef.planner.autoCommit {
+	if allowAutoCommit && ef.allowAutoCommit {
 		ups.enableAutoCommit()
 	}
 
@@ -1790,7 +1798,7 @@ func (ef *execFactory) ConstructDelete(
 		del.run.rowsNeeded = true
 	}
 
-	if allowAutoCommit && ef.planner.autoCommit {
+	if allowAutoCommit && ef.allowAutoCommit {
 		del.enableAutoCommit()
 	}
 
@@ -1838,7 +1846,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	// request doesn't work properly if the limit is hit. So, we permit autocommit
 	// here if we can guarantee that the number of returned keys is finite and
 	// relatively small.
-	autoCommitEnabled := allowAutoCommit && ef.planner.autoCommit
+	autoCommitEnabled := allowAutoCommit && ef.allowAutoCommit
 	// If maxReturnedKeys is 0, it indicates that we weren't able to determine
 	// the maximum number of returned keys, so we'll give up and not permit
 	// autocommit.
