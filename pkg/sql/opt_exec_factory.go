@@ -285,9 +285,9 @@ func (ef *execFactory) ConstructSimpleProject(
 	for i, col := range cols {
 		v := rb.r.ivarHelper.IndexedVar(int(col))
 		if colNames == nil {
-			rb.addExpr(v, inputCols[col].Name, inputCols[col].TableID, inputCols[col].PGAttributeNum)
+			rb.addExpr(v, inputCols[col].Name, inputCols[col].TableID, inputCols[col].PGAttributeNum, inputCols[col].GetTypeModifier())
 		} else {
-			rb.addExpr(v, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */)
+			rb.addExpr(v, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */, v.ResolvedType().TypeModifier())
 		}
 	}
 	return rb.res, nil
@@ -312,7 +312,7 @@ func (ef *execFactory) ConstructRender(
 	rb.init(n, reqOrdering, len(exprs))
 	for i, expr := range exprs {
 		expr = rb.r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		rb.addExpr(expr, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */)
+		rb.addExpr(expr, colNames[i], 0 /* tableID */, 0 /* pgAttributeNum */, -1 /* typeModifier */)
 	}
 	return rb.res, nil
 }
@@ -2046,7 +2046,11 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap 
 
 // addExpr adds a new render expression with the given name.
 func (rb *renderBuilder) addExpr(
-	expr tree.TypedExpr, colName string, tableID sqlbase.ID, pgAttributeNum sqlbase.ColumnID,
+	expr tree.TypedExpr,
+	colName string,
+	tableID sqlbase.ID,
+	pgAttributeNum sqlbase.ColumnID,
+	typeModifier int32,
 ) {
 	rb.r.render = append(rb.r.render, expr)
 	rb.r.columns = append(
@@ -2056,6 +2060,7 @@ func (rb *renderBuilder) addExpr(
 			Typ:            expr.ResolvedType(),
 			TableID:        tableID,
 			PGAttributeNum: pgAttributeNum,
+			TypeModifier:   typeModifier,
 		},
 	)
 }
