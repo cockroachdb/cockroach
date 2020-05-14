@@ -45,14 +45,6 @@ othererror.XXUUU.crdb_internal.set_vmodule()
 
 # 0A000 is pgcode.FeatureNotSupported.
 feature-usage
-SELECT json_object_agg()
-----
-error: pq: json_object_agg(): unimplemented: this function is not supported
-errorcodes.0A000
-unimplemented.#33285.json_object_agg
-
-# 0A000 is pgcode.FeatureNotSupported.
-feature-usage
 CREATE TABLE foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))
 ----
 error: pq: unimplemented: use CREATE INDEX to make interleaved indexes
