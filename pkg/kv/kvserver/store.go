@@ -1947,7 +1947,7 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 
 // VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
 // Replicas which are added to the Store after iteration begins may or may not be observed.
-func (s *Store) VisitReplicas(visitor func(*Replica) bool) {
+func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
 	v := newStoreReplicaVisitor(s)
 	v.Visit(visitor)
 }
