@@ -1188,7 +1188,7 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.Geo, nil
 	case types.DecimalFamily:
 		return encoding.Decimal, nil
-	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily:
+	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily, types.EnumFamily:
 		return encoding.Bytes, nil
 	case types.TimestampFamily, types.TimestampTZFamily:
 		return encoding.Time, nil
@@ -1276,6 +1276,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
 	case *tree.DOidWrapper:
 		return encodeArrayElement(b, t.Wrapped)
+	case *tree.DEnum:
+		return encoding.EncodeUntaggedBytesValue(b, t.PhysicalRep), nil
 	default:
 		return nil, errors.Errorf("don't know how to encode %s (%T)", d, d)
 	}
