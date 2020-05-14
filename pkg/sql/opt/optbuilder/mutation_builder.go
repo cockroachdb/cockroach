@@ -998,6 +998,11 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
 		return
 	}
 
+	// See if we can cast this with the assign context.
+	if _, ok := tree.FindCast(typ.Oid(), col.DatumType().Oid(), tree.CastContextAssignment); ok {
+		return
+	}
+
 	colName := string(col.ColName())
 	panic(pgerror.Newf(pgcode.DatatypeMismatch,
 		"value type %s doesn't match type %s of column %q",

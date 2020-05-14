@@ -589,34 +589,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
-			LeftType:   types.Decimal,
-			RightType:  types.Int,
-			ReturnType: types.Decimal,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				l := &left.(*DDecimal).Decimal
-				r := MustBeDInt(right)
-				dd := &DDecimal{}
-				dd.SetInt64(int64(r))
-				_, err := ExactCtx.Add(&dd.Decimal, l, &dd.Decimal)
-				return dd, err
-			},
-			Volatility: VolatilityImmutable,
-		},
-		&BinOp{
-			LeftType:   types.Int,
-			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				l := MustBeDInt(left)
-				r := &right.(*DDecimal).Decimal
-				dd := &DDecimal{}
-				dd.SetInt64(int64(l))
-				_, err := ExactCtx.Add(&dd.Decimal, &dd.Decimal, r)
-				return dd, err
-			},
-			Volatility: VolatilityImmutable,
-		},
-		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Int,
 			ReturnType: types.Date,
@@ -879,34 +851,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
 				_, err := ExactCtx.Sub(&dd.Decimal, l, r)
-				return dd, err
-			},
-			Volatility: VolatilityImmutable,
-		},
-		&BinOp{
-			LeftType:   types.Decimal,
-			RightType:  types.Int,
-			ReturnType: types.Decimal,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				l := &left.(*DDecimal).Decimal
-				r := MustBeDInt(right)
-				dd := &DDecimal{}
-				dd.SetInt64(int64(r))
-				_, err := ExactCtx.Sub(&dd.Decimal, l, &dd.Decimal)
-				return dd, err
-			},
-			Volatility: VolatilityImmutable,
-		},
-		&BinOp{
-			LeftType:   types.Int,
-			RightType:  types.Decimal,
-			ReturnType: types.Decimal,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				l := MustBeDInt(left)
-				r := &right.(*DDecimal).Decimal
-				dd := &DDecimal{}
-				dd.SetInt64(int64(l))
-				_, err := ExactCtx.Sub(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
 			Volatility: VolatilityImmutable,
@@ -2070,11 +2014,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Date, types.Timestamp, VolatilityImmutable),
 		makeEqFn(types.Date, types.TimestampTZ, VolatilityStable),
 		makeEqFn(types.Decimal, types.Float, VolatilityLeakProof),
-		makeEqFn(types.Decimal, types.Int, VolatilityLeakProof),
 		makeEqFn(types.Float, types.Decimal, VolatilityLeakProof),
-		makeEqFn(types.Float, types.Int, VolatilityLeakProof),
-		makeEqFn(types.Int, types.Decimal, VolatilityLeakProof),
-		makeEqFn(types.Int, types.Float, VolatilityLeakProof),
 		makeEqFn(types.Timestamp, types.Date, VolatilityImmutable),
 		makeEqFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
 		makeEqFn(types.TimestampTZ, types.Date, VolatilityStable),
@@ -2123,11 +2063,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Date, types.Timestamp, VolatilityImmutable),
 		makeLtFn(types.Date, types.TimestampTZ, VolatilityStable),
 		makeLtFn(types.Decimal, types.Float, VolatilityLeakProof),
-		makeLtFn(types.Decimal, types.Int, VolatilityLeakProof),
 		makeLtFn(types.Float, types.Decimal, VolatilityLeakProof),
-		makeLtFn(types.Float, types.Int, VolatilityLeakProof),
-		makeLtFn(types.Int, types.Decimal, VolatilityLeakProof),
-		makeLtFn(types.Int, types.Float, VolatilityLeakProof),
 		makeLtFn(types.Timestamp, types.Date, VolatilityImmutable),
 		makeLtFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
 		makeLtFn(types.TimestampTZ, types.Date, VolatilityStable),
@@ -2176,11 +2112,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Date, types.Timestamp, VolatilityImmutable),
 		makeLeFn(types.Date, types.TimestampTZ, VolatilityStable),
 		makeLeFn(types.Decimal, types.Float, VolatilityLeakProof),
-		makeLeFn(types.Decimal, types.Int, VolatilityLeakProof),
 		makeLeFn(types.Float, types.Decimal, VolatilityLeakProof),
-		makeLeFn(types.Float, types.Int, VolatilityLeakProof),
-		makeLeFn(types.Int, types.Decimal, VolatilityLeakProof),
-		makeLeFn(types.Int, types.Float, VolatilityLeakProof),
 		makeLeFn(types.Timestamp, types.Date, VolatilityImmutable),
 		makeLeFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
 		makeLeFn(types.TimestampTZ, types.Date, VolatilityStable),
@@ -2200,15 +2132,6 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	},
 
 	IsNotDistinctFrom: {
-		&CmpOp{
-			LeftType:     types.Unknown,
-			RightType:    types.Unknown,
-			Fn:           cmpOpScalarIsFn,
-			NullableArgs: true,
-			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
-			isPreferred: true,
-			Volatility:  VolatilityLeakProof,
-		},
 		// Single-type comparisons.
 		makeIsFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
 		makeIsFn(types.Bool, types.Bool, VolatilityLeakProof),

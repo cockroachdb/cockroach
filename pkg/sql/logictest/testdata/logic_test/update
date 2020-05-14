@@ -1,20 +1,26 @@
 statement ok
+CREATE TABLE invalid_assign_cast (
+  k TIMESTAMPTZ PRIMARY KEY,
+  v TIMESTAMPTZ
+)
+
+statement error value type tuple{int, int} doesn't match type timestamptz of column "v"
+UPDATE invalid_assign_cast SET v = (SELECT (10, 11))
+
+statement error value type decimal doesn't match type timestamptz of column "v"
+UPDATE invalid_assign_cast SET v = 3.2
+
+statement error value type int doesn't match type timestamptz of column "k"
+UPDATE invalid_assign_cast SET (k, v) = (3, 3.2)
+
+statement error value type int doesn't match type timestamptz of column "k"
+UPDATE invalid_assign_cast SET (k, v) = (SELECT 3, 3.2)
+
+statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT
 )
-
-statement error value type tuple{int, int} doesn't match type int of column "v"
-UPDATE kv SET v = (SELECT (10, 11))
-
-statement error value type decimal doesn't match type int of column "v"
-UPDATE kv SET v = 3.2
-
-statement error value type decimal doesn't match type int of column "v"
-UPDATE kv SET (k, v) = (3, 3.2)
-
-statement error value type decimal doesn't match type int of column "v"
-UPDATE kv SET (k, v) = (SELECT 3, 3.2)
 
 statement count 4
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)

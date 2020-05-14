@@ -313,7 +313,8 @@ func (expr *BinaryExpr) TypeCheck(
 ) (TypedExpr, error) {
 	ops := BinOps[expr.Operator]
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, ops, true, expr.Left, expr.Right)
+	//	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, ops, true, expr.Left, expr.Right)
+	typedSubExprs, fns, err := pgUseOverload(ctx, semaCtx, ops, expr.Left, expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +368,10 @@ func (expr *BinaryExpr) TypeCheck(
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.Fn = binOp
 	expr.typ = binOp.returnType()(typedSubExprs)
+	if desired != types.Any && desired.Oid() != expr.typ.Oid() {
+		// fmt.Printf("desired %s, found %s (impl: %s)\n", desired.String(), expr.typ.String(), expr.fn.Signature(true))
+		return NewTypedCastExpr(expr, desired), nil
+	}
 	return expr, nil
 }
 
@@ -907,6 +912,7 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
+	//typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, def.Definition, false, expr.Exprs...)
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
@@ -1040,6 +1046,10 @@ func (expr *FuncExpr) TypeCheck(
 	}
 	if overloadImpl.counter != nil {
 		telemetry.Inc(overloadImpl.counter)
+	}
+	if desired != types.Any && desired.Oid() != expr.typ.Oid() {
+		// fmt.Printf("desired %s, found %s (impl: %s)\n", desired.String(), expr.typ.String(), expr.fn.Signature(true))
+		return NewTypedCastExpr(expr, desired), nil
 	}
 	return expr, nil
 }
@@ -1287,7 +1297,8 @@ func (expr *UnaryExpr) TypeCheck(
 ) (TypedExpr, error) {
 	ops := UnaryOps[expr.Operator]
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, ops, false, expr.Expr)
+	//	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, ops, false, expr.Expr)
+	typedSubExprs, fns, err := pgUseOverload(ctx, semaCtx, ops, expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -1330,6 +1341,10 @@ func (expr *UnaryExpr) TypeCheck(
 	expr.Expr = exprTyped
 	expr.fn = unaryOp
 	expr.typ = unaryOp.returnType()(typedSubExprs)
+	if desired != types.Any && desired.Oid() != expr.typ.Oid() {
+		// fmt.Printf("desired %s, found %s (impl: %s)\n", desired.String(), expr.typ.String(), expr.fn.Signature(true))
+		return NewTypedCastExpr(expr, desired), nil
+	}
 	return expr, nil
 }
 
@@ -1945,9 +1960,10 @@ func typeCheckComparisonOp(
 	// defined to return NULL anyways. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(
-		ctx, semaCtx, types.Any, ops, true /* inBinOp */, foldedLeft, foldedRight,
-	)
+	//	typedSubExprs, fns, err := typeCheckOverloadedExprs(
+	//	ctx, semaCtx, types.Any, ops, true /* inBinOp */, foldedLeft, foldedRight,
+	//	)
+	typedSubExprs, fns, err := pgUseOverload(ctx, semaCtx, ops, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}

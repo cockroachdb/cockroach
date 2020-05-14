@@ -298,7 +298,6 @@ func TestCreateSession(t *testing.T) {
 SELECT "hashedSecret", "username", "createdAt", "lastUsedAt", "expiresAt", "revokedAt", "auditInfo"
 FROM system.web_sessions
 WHERE id = $1`
-
 	result := db.QueryRow(query, id)
 	var (
 		sessHashedSecret []byte

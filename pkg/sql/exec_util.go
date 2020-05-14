@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -1032,6 +1033,7 @@ func checkResultType(typ *types.T) error {
 		}
 	case types.AnyFamily:
 		// Placeholder case.
+		debug.PrintStack()
 		return errors.Errorf("could not determine data type of %s", typ)
 	default:
 		return errors.Errorf("unsupported result type: %s", typ)
