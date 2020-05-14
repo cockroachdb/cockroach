@@ -27,5 +27,5 @@ import (
 func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
-	logictest.RunLogicTest(t, "testdata/[^.]*")
+	logictest.RunLogicTest(t, logictest.TestServerArgs{}, "testdata/[^.]*")
 }
