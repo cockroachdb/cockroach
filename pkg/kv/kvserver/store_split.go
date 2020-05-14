@@ -308,16 +308,6 @@ func (s *Store) SplitRange(
 	// clear them.
 	leftRepl.concMgr.OnRangeSplit()
 
-	// The rangefeed processor will no longer be provided logical ops for
-	// its entire range, so it needs to be shut down and all registrations
-	// need to retry.
-	// TODO(nvanbenschoten): It should be possible to only reject registrations
-	// that overlap with the new range of the split and keep registrations that
-	// are only interested in keys that are still on the original range running.
-	leftRepl.disconnectRangefeedWithReason(
-		roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
-	)
-
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
 	leftRepl.leaseholderStats.resetRequestCounts()

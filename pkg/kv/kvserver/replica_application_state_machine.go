@@ -615,6 +615,16 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
 		splitPreApply(ctx, b.batch, res.Split.SplitTrigger, b.r)
+
+		// The rangefeed processor will no longer be provided logical ops for
+		// its entire range, so it needs to be shut down and all registrations
+		// need to retry.
+		// TODO(nvanbenschoten): It should be possible to only reject registrations
+		// that overlap with the new range of the split and keep registrations that
+		// are only interested in keys that are still on the original range running.
+		b.r.disconnectRangefeedWithReason(
+			roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+		)
 	}
 
 	if merge := res.Merge; merge != nil {
@@ -632,6 +642,9 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
 		}
+		// We should already have acquired the raftMu for the rhsRepl and now hold
+		// its unlock method in cmd.splitMergeUnlock.
+		rhsRepl.raftMu.AssertHeld()
 
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
@@ -645,6 +658,29 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before merge")
 		}
+
+		// Shut down rangefeed processors on either side of the merge.
+		//
+		// NB: It is critical to shut-down a rangefeed processor on the surviving
+		// replica primarily do deal with the possibility that there are logical ops
+		// for the RHS to resolve intents written by the merge transaction. In
+		// practice, the only such intents that exist are on the RangeEventTable,
+		// but it's good to be consistent here and allow the merge transaction to
+		// write to the RHS of a merge. See batcheval.resolveLocalLocks for details
+		// on why we resolve RHS intents when committing a merge transaction.
+		//
+		// TODO(nvanbenschoten): Alternatively we could just adjust the bounds of
+		// b.r.Processor to include the rhsRepl span.
+		//
+		// NB: removeInitializedReplicaRaftMuLocked also disconnects any initialized
+		// rangefeeds with REASON_REPLICA_REMOVED. That's ok because we will have
+		// already disconnected the rangefeed here.
+		b.r.disconnectRangefeedWithReason(
+			roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+		)
+		rhsRepl.disconnectRangefeedWithReason(
+			roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+		)
 	}
 
 	if res.State != nil && res.State.TruncatedState != nil {
