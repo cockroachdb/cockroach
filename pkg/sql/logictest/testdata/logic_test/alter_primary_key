@@ -1130,3 +1130,11 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 6  i1
 7  i2
 8  i3
+
+# Regression for #49079.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT, y INT, z INT, PRIMARY KEY (x, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y);
+SET sql_safe_updates=false;
+ALTER TABLE t DROP COLUMN z
