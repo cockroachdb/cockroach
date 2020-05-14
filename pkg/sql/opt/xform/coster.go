@@ -133,6 +133,11 @@ const (
 	// If the final expression has this cost or larger, it means that there was no
 	// plan that could satisfy the hints.
 	hugeCost memo.Cost = 1e100
+
+	// Some benchmarks showed that these geo functions were atleast 10
+	// times slower than some float functions, so this is a somewhat
+	// data-backed guess.
+	geoFnCost = cpuCostFactor * 10
 )
 
 // Init initializes a new coster structure with the given memo.
@@ -380,7 +385,7 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 		eqMap.Set(left, right)
 		eqMap.Set(right, left)
 	}
-	cost += c.computeFiltersCost(*on, eqMap)
+	cost += c.computeFiltersCost(*on, eqMap, rowsProcessed)
 
 	return cost
 }
@@ -401,7 +406,7 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	}
 	cost += memo.Cost(rowsProcessed) * cpuCostFactor
 
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += c.computeFiltersCost(join.On, util.FastIntMap{}, rowsProcessed)
 	return cost
 }
 
@@ -468,7 +473,7 @@ func (c *coster) computeLookupJoinCost(
 	}
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += c.computeFiltersCost(join.On, util.FastIntMap{}, rowsProcessed)
 	return cost
 }
 
@@ -484,11 +489,13 @@ func (c *coster) computeGeoLookupJoinCost(join *memo.GeoLookupJoinExpr) memo.Cos
 	// TODO: support GeoLookupJoinExpr in c.mem.RowsProcessed. See
 	// computeLookupJoinCost.
 
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += c.computeFiltersCost(join.On, util.FastIntMap{}, lookupCount)
 	return cost
 }
 
-func (c *coster) computeFiltersCost(filters memo.FiltersExpr, eqMap util.FastIntMap) memo.Cost {
+func (c *coster) computeFiltersCost(
+	filters memo.FiltersExpr, eqMap util.FastIntMap, rowCount float64,
+) memo.Cost {
 	var cost memo.Cost
 	for i := range filters {
 		f := &filters[i]
@@ -509,6 +516,11 @@ func (c *coster) computeFiltersCost(filters memo.FiltersExpr, eqMap util.FastInt
 				// them. They do not cost anything.
 				continue
 			}
+		case opt.FunctionOp:
+			if IsGeoIndexFunction(f.Condition) {
+				cost += geoFnCost * memo.Cost(rowCount)
+			}
+			// TODO(mjibson): do we need to cost other functions?
 		}
 
 		// Add a constant "setup" cost per ON condition to account for the fact that
@@ -540,7 +552,7 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	// given two indexes will be accessed.
 	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost)
 
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += c.computeFiltersCost(join.On, util.FastIntMap{}, rowCount)
 	return cost
 }
 

@@ -1693,16 +1693,16 @@ memo (optimized, ~23KB, required=[presentation: name:13,popn_per_sqkm:16])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:13,popn_per_sqkm:16]
  │         ├── best: (project G2 G3 name)
- │         └── cost: 5110.53
+ │         └── cost: 5188.11
  ├── G2: (group-by G4 G5 cols=(13,14))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(13,14))
- │         └── cost: 5110.48
+ │         └── cost: 5188.06
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,12-14))
  │    └── []
  │         ├── best: (lookup-join G10 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,12-14))
- │         └── cost: 4903.53
+ │         └── cost: 4981.12
  ├── G5: (aggregations G11)
  ├── G6: (div G12 G13)
  ├── G7: (scan c,cols=(3,9,10))
