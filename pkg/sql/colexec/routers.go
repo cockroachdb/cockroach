@@ -226,7 +226,11 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		o.mu.unlimitedAllocator.ReleaseBatch(b)
 		o.mu.pendingBatch = nil
 	} else {
-		b, o.mu.drainState.err = o.mu.data.dequeue(ctx)
+		if dequeueErr := colexecerror.CatchVectorizedRuntimeError(func() {
+			b, o.mu.drainState.err = o.mu.data.dequeue(ctx)
+		}); o.mu.drainState.err == nil && dequeueErr != nil {
+			o.mu.drainState.err = dequeueErr
+		}
 		if o.mu.drainState.err != nil {
 			o.mu.state = routerOutputOpDraining
 			return coldata.ZeroBatch
@@ -237,9 +241,10 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		o.maybeUnblockLocked()
 	}
 	if b.Length() == 0 {
-		// This is the last batch. closeLocked will set done to protect against
-		// further calls to Next since this is allowed by the interface as well as
-		// cleaning up and releasing possible disk infrastructure.
+		// This is the last batch. closeLocked will set state to "draining" to
+		// protect against further calls to Next since this is allowed by the
+		// interface as well as cleaning up and releasing possible disk
+		// infrastructure.
 		o.closeLocked(ctx)
 	}
 	return b
@@ -262,8 +267,8 @@ func (o *routerOutputOp) cancel(ctx context.Context) {
 	o.mu.Lock()
 	o.closeLocked(ctx)
 	// Some goroutine might be waiting on the condition variable, so wake it up.
-	// Note that read goroutines check o.mu.done, so won't wait on the condition
-	// variable after we unlock the mutex.
+	// Note that read goroutines check o.mu.state, so won't wait on the
+	// condition variable after we unlock the mutex.
 	o.mu.cond.Signal()
 	o.mu.Unlock()
 }
