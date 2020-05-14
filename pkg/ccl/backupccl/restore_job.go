@@ -1075,6 +1075,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 	}
 	log.Event(ctx, "making tables live")
 
+	newSchemaChangeJobs := make([]*jobs.StartableJob, 0)
 	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Write the new TableDescriptors and flip state over to public so they can be
 		// accessed.
@@ -1083,6 +1084,13 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			tableDesc := *tbl
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+			// Convert any mutations that were in progress on the table descriptor
+			// when the backup was taken, and convert them to schema change jobs.
+			newJobs, err := createSchemaChangeJobsFromMutations(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, &tableDesc)
+			if err != nil {
+				return err
+			}
+			newSchemaChangeJobs = append(newSchemaChangeJobs, newJobs...)
 			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
 			if err != nil {
 				return errors.Wrap(err, "validating table descriptor has not changed")
@@ -1101,6 +1109,11 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 		// Update and persist the state of the job.
 		details.TablesPublished = true
 		if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+			for _, newJob := range newSchemaChangeJobs {
+				if cleanupErr := newJob.CleanupOnRollback(ctx); cleanupErr != nil {
+					log.Warningf(ctx, "failed to clean up job %d: %v", newJob.ID(), cleanupErr)
+				}
+			}
 			return errors.Wrap(err, "updating job details after publishing tables")
 		}
 
@@ -1108,6 +1121,13 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// Start the schema change jobs we created.
+	for _, newJob := range newSchemaChangeJobs {
+		if _, err := newJob.Start(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
