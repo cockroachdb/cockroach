@@ -89,6 +89,9 @@ func (g *defaultSpanGenerator) generateSpans(rows []sqlbase.EncDatumRow) (roachp
 }
 
 type joinReaderStrategy interface {
+	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
+	// rows.
+	getLookupRowsBatchSizeHint() int64
 	// processLookupRows consumes the rows the joinReader has buffered and should
 	// return the lookup spans.
 	processLookupRows(rows []sqlbase.EncDatumRow) (roachpb.Spans, error)
@@ -139,6 +142,15 @@ type joinReaderNoOrderingStrategy struct {
 		matchingInputRowIndices       []int
 		lookedUpRow                   sqlbase.EncDatumRow
 	}
+}
+
+// getLookupRowsBatchSizeHint returns the batch size for the join reader no
+// ordering strategy. This number was chosen by running TPCH queries 7, 9, 10,
+// and 11 with varying batch sizes and choosing the smallest batch size that
+// offered a significant performance improvement. Larger batch sizes offered
+// small to no marginal improvements.
+func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+	return 2 << 20 /* 2 MiB */
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
@@ -292,6 +304,12 @@ type joinReaderOrderingStrategy struct {
 		// match means that there's no need to output an outer or anti join row.
 		seenMatch bool
 	}
+}
+
+func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+	// TODO(asubiotto): Eventually we might want to adjust this batch size
+	//  dynamically based on whether the result row container spilled or not.
+	return 10 << 10 /* 10 KiB */
 }
 
 func (s *joinReaderOrderingStrategy) processLookupRows(
