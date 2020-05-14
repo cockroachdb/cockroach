@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/gogo/protobuf/proto"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/raft/tracker"
@@ -132,14 +131,12 @@ func prepareSplitDescs(
 	}
 
 	leftDesc.IncrementGeneration()
-	leftDesc.GenerationComparable = proto.Bool(true)
 	leftDesc.EndKey = splitKey
 
 	// Set the generation of the right hand side descriptor to match that of the
 	// (updated) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
-	rightDesc.GenerationComparable = proto.Bool(true)
 
 	setStickyBit(rightDesc, expiration)
 	return leftDesc, rightDesc
@@ -648,7 +645,6 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
-		updatedLeftDesc.GenerationComparable = proto.Bool(true)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
@@ -1405,7 +1401,6 @@ func prepareChangeReplicasTrigger(
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 	updatedDesc.IncrementGeneration()
-	updatedDesc.GenerationComparable = proto.Bool(true)
 
 	var added, removed []roachpb.ReplicaDescriptor
 	if !chgs.leaveJoint() {

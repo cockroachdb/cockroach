@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,6 +89,7 @@ func (db *testDescriptorDB) getDescriptors(
 			rs = append(rs, desc)
 			// Fake an intent.
 			desc.RangeID++
+			desc.Generation = desc.Generation + 1
 			rs = append(rs, desc)
 		} else if db.disablePrefetch {
 			break
@@ -180,16 +180,19 @@ func (db *testDescriptorDB) splitRange(t *testing.T, key roachpb.RKey) {
 	if bytes.Equal(val.EndKey, key) {
 		t.Fatalf("Attempt to split existing range at Endkey: %s", string(key))
 	}
+	newGen := val.Generation + 1
 	db.data.Insert(testDescriptorNode{
 		&roachpb.RangeDescriptor{
-			StartKey: val.StartKey,
-			EndKey:   key,
+			StartKey:   val.StartKey,
+			EndKey:     key,
+			Generation: newGen,
 		},
 	})
 	db.data.Insert(testDescriptorNode{
 		&roachpb.RangeDescriptor{
-			StartKey: key,
-			EndKey:   val.EndKey,
+			StartKey:   key,
+			EndKey:     val.EndKey,
+			Generation: newGen,
 		},
 	})
 }
@@ -206,6 +209,10 @@ func newTestDescriptorDB() *testDescriptorDB {
 	db := &testDescriptorDB{
 		pauseChan: make(chan struct{}),
 	}
+	// NOTE: The range descriptors created below are not initialized with a
+	// generation. The ones created by splitting them will have generations,
+	// though. Not putting generations in these initial ones is done for diversity
+	// in the tests.
 	td1 := &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKey(keys.Meta2Prefix),
@@ -957,11 +964,12 @@ func TestRangeCacheUseIntents(t *testing.T) {
 // cached entries are cleared when adding a new entry.
 func TestRangeCacheClearOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	defDesc := &roachpb.RangeDescriptor{
-		StartKey: roachpb.RKeyMin,
-		EndKey:   roachpb.RKeyMax,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		Generation: 0,
 	}
 
 	st := cluster.MakeTestingClusterSettings()
@@ -970,25 +978,28 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 
 	// Now, add a new, overlapping set of descriptors.
 	minToBDesc := &roachpb.RangeDescriptor{
-		StartKey: roachpb.RKeyMin,
-		EndKey:   roachpb.RKey("b"),
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKey("b"),
+		Generation: 1,
 	}
 	bToMaxDesc := &roachpb.RangeDescriptor{
-		StartKey: roachpb.RKey("b"),
-		EndKey:   roachpb.RKeyMax,
+		StartKey:   roachpb.RKey("b"),
+		EndKey:     roachpb.RKeyMax,
+		Generation: 1,
 	}
-	if _, err := cache.clearOverlappingCachedRangeDescriptors(ctx, minToBDesc); err != nil {
-		t.Fatal(err)
-	}
+	curGeneration := int64(1)
+	ok, err := cache.clearOverlappingCachedRangeDescriptors(ctx, minToBDesc)
+	require.NoError(t, err)
+	require.True(t, ok)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), minToBDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
 		t.Fatal(err)
 	} else if desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	if _, err := cache.clearOverlappingCachedRangeDescriptors(ctx, bToMaxDesc); err != nil {
-		t.Fatal(err)
-	}
+	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, bToMaxDesc)
+	require.NoError(t, err)
+	require.True(t, ok)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), bToMaxDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
 		t.Fatal(err)
@@ -997,9 +1008,12 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	// Add default descriptor back which should remove two split descriptors.
-	if _, err := cache.clearOverlappingCachedRangeDescriptors(ctx, defDesc); err != nil {
-		t.Fatal(err)
-	}
+	defDescCpy := *defDesc
+	curGeneration++
+	defDescCpy.Generation = curGeneration
+	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, &defDescCpy)
+	require.NoError(t, err)
+	require.True(t, ok)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
 		if desc, err := cache.GetCachedRangeDescriptor(key, false); err != nil {
@@ -1010,13 +1024,15 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	// Insert ["b", "c") and then insert ["a", b"). Verify that the former is not evicted by the latter.
+	curGeneration++
 	bToCDesc := &roachpb.RangeDescriptor{
-		StartKey: roachpb.RKey("b"),
-		EndKey:   roachpb.RKey("c"),
+		StartKey:   roachpb.RKey("b"),
+		EndKey:     roachpb.RKey("c"),
+		Generation: curGeneration,
 	}
-	if _, err := cache.clearOverlappingCachedRangeDescriptors(ctx, bToCDesc); err != nil {
-		t.Fatal(err)
-	}
+	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, bToCDesc)
+	require.NoError(t, err)
+	require.True(t, ok)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))), bToCDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
 		t.Fatal(err)
@@ -1024,13 +1040,15 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		t.Errorf("expected descriptor %s; got %s", bToCDesc, desc)
 	}
 
+	curGeneration++
 	aToBDesc := &roachpb.RangeDescriptor{
-		StartKey: roachpb.RKey("a"),
-		EndKey:   roachpb.RKey("b"),
+		StartKey:   roachpb.RKey("a"),
+		EndKey:     roachpb.RKey("b"),
+		Generation: curGeneration,
 	}
-	if _, err := cache.clearOverlappingCachedRangeDescriptors(ctx, aToBDesc); err != nil {
-		t.Fatal(err)
-	}
+	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, aToBDesc)
+	require.NoError(t, err)
+	require.True(t, ok)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), aToBDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
 		t.Fatal(err)
@@ -1164,39 +1182,30 @@ func TestRangeCacheGeneration(t *testing.T) {
 	ctx := context.TODO()
 
 	descAM1 := &roachpb.RangeDescriptor{
-		StartKey:             roachpb.RKey("a"),
-		EndKey:               roachpb.RKey("m"),
-		Generation:           1,
-		GenerationComparable: proto.Bool(true),
+		StartKey:   roachpb.RKey("a"),
+		EndKey:     roachpb.RKey("m"),
+		Generation: 1,
 	}
 	descMZ3 := &roachpb.RangeDescriptor{
-		StartKey:             roachpb.RKey("m"),
-		EndKey:               roachpb.RKey("z"),
-		Generation:           3,
-		GenerationComparable: proto.Bool(true),
+		StartKey:   roachpb.RKey("m"),
+		EndKey:     roachpb.RKey("z"),
+		Generation: 3,
 	}
 
 	descBY0 := &roachpb.RangeDescriptor{
-		StartKey:             roachpb.RKey("b"),
-		EndKey:               roachpb.RKey("y"),
-		Generation:           0,
-		GenerationComparable: proto.Bool(true),
+		StartKey:   roachpb.RKey("b"),
+		EndKey:     roachpb.RKey("y"),
+		Generation: 0,
 	}
 	descBY2 := &roachpb.RangeDescriptor{
-		StartKey:             roachpb.RKey("b"),
-		EndKey:               roachpb.RKey("y"),
-		Generation:           2,
-		GenerationComparable: proto.Bool(true),
+		StartKey:   roachpb.RKey("b"),
+		EndKey:     roachpb.RKey("y"),
+		Generation: 2,
 	}
 	descBY4 := &roachpb.RangeDescriptor{
-		StartKey:             roachpb.RKey("b"),
-		EndKey:               roachpb.RKey("y"),
-		Generation:           4,
-		GenerationComparable: proto.Bool(true),
-	}
-	descBYIncomparable := &roachpb.RangeDescriptor{
-		StartKey: roachpb.RKey("b"),
-		EndKey:   roachpb.RKey("y"),
+		StartKey:   roachpb.RKey("b"),
+		EndKey:     roachpb.RKey("y"),
+		Generation: 4,
 	}
 
 	testCases := []struct {
@@ -1208,7 +1217,7 @@ func TestRangeCacheGeneration(t *testing.T) {
 		{
 			// descBY0 is ignored since the existing keyspace is covered by
 			// descriptors of generations 1 and 3, respectively.
-			name:         "generation comparable evict 0",
+			name:         "evict 0",
 			insertDesc:   descBY0,
 			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
 			expectedDesc: []*roachpb.RangeDescriptor{descAM1, descMZ3},
@@ -1217,26 +1226,17 @@ func TestRangeCacheGeneration(t *testing.T) {
 			// descBY2 evicts descAM1, but not descMZ3 based on Generation. Since
 			// there is an overlapping descriptor with higher Generation (descMZ3),
 			// it is not inserted.
-			name:         "generation comparable evict 1",
+			name:         "evict 1",
 			insertDesc:   descBY2,
 			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
 			expectedDesc: []*roachpb.RangeDescriptor{nil, descMZ3},
 		},
 		{
 			// descBY4 replaces both existing descriptors and it is inserted.
-			name:         "generation comparable evict 2",
+			name:         "evict 2",
 			insertDesc:   descBY4,
 			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
 			expectedDesc: []*roachpb.RangeDescriptor{descBY4, nil},
-		},
-		{
-			// descBYIncomparable has an incomparable Generation, so it evicts all
-			// overlapping descriptors. This behavior is clearly less desirable in
-			// general, but there's no better option in this case.
-			name:         "generation incomparable evict 2",
-			insertDesc:   descBYIncomparable,
-			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
-			expectedDesc: []*roachpb.RangeDescriptor{descBYIncomparable, nil},
 		},
 	}
 
