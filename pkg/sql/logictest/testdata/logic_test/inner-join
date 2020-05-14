@@ -56,7 +56,7 @@ SELECT a, b, c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 #    are equal but have different string representations.
 #    The DistinctOn on the RHS would omit important rows in that case.
 #
-# This tests that the InnerJoin commute rule for semi joins bhaves sanely in
+# This tests that the InnerJoin commute rule for semi joins behaves sanely in
 # these cases.
 statement ok
 CREATE TABLE abc_decimal (a DECIMAL, b DECIMAL, c DECIMAL);
