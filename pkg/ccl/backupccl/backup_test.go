@@ -10,6 +10,7 @@ package backupccl_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -72,6 +74,7 @@ const (
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
 	localFoo                    = "nodelocal://0/foo"
+	zipType                     = "application/x-gzip"
 )
 
 func backupRestoreTestSetupEmptyWithParams(
@@ -275,7 +278,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	if err := verifyBackupRestoreStatementResult(
@@ -283,6 +286,20 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	// The GZipBackupManifest subtest is to verify that BackupManifest objects
+	// have been stored in the GZip compressed format.
+	t.Run("GZipBackupManifest", func(t *testing.T) {
+		backupDir := fmt.Sprintf("%s/foo", dir)
+		backupManifestFile := backupDir + "/" + backupccl.BackupManifestName
+		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fileType := http.DetectContentType(backupManifestBytes)
+		if fileType != zipType {
+			t.Errorf("Expect manifest files to be compressed but the format is" + fileType)
+		}
+	})
 
 	sqlDB.Exec(t, "CREATE DATABASE data2")
 
@@ -380,6 +397,32 @@ func TestBackupRestorePartitioned(t *testing.T) {
 			t.Fatalf("no SSTs found in %s", subDir)
 		}
 	}
+	// The PartitionGZip subtest is to verify that partition descriptor files
+	// are in the GZip compressed format.
+	t.Run("PartitionGZip", func(t *testing.T) {
+		partitionMatcher := regexp.MustCompile(`^BACKUP_PART_`)
+		for i := 1; i <= 3; i++ {
+			subDir := fmt.Sprintf("%s/foo/%d", dir, i)
+			files, err := ioutil.ReadDir(subDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range files {
+				fName := f.Name()
+				if partitionMatcher.MatchString(fName) {
+					backupPartitionFile := subDir + "/" + fName
+					backupPartitionBytes, err := ioutil.ReadFile(backupPartitionFile)
+					if err != nil {
+						t.Fatal(err)
+					}
+					fileType := http.DetectContentType(backupPartitionBytes)
+					if fileType != zipType {
+						t.Errorf("Expect partition descriptor files to be compressed but the format is" + fileType)
+					}
+				}
+			}
+		}
+	})
 }
 
 func TestBackupRestoreAppend(t *testing.T) {
@@ -1085,6 +1128,14 @@ func TestBackupRestoreResume(t *testing.T) {
 		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
+		}
+		// This part relies on the assumption that a manifest, if compressed,
+		// is in the gzip format (and not others).
+		fileType := http.DetectContentType(backupManifestBytes)
+		if fileType == zipType {
+			b := bytes.NewBuffer(backupManifestBytes)
+			r, _ := gzip.NewReader(b)
+			backupManifestBytes, _ = ioutil.ReadAll(r)
 		}
 		var backupManifest backupccl.BackupManifest
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
@@ -2542,6 +2593,12 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupccl.BackupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
+		}
+		fileType := http.DetectContentType(backupManifestBytes)
+		if fileType == zipType {
+			b := bytes.NewBuffer(backupManifestBytes)
+			r, _ := gzip.NewReader(b)
+			backupManifestBytes, _ = ioutil.ReadAll(r)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatalf("%+v", err)
