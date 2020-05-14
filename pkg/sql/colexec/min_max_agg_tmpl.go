@@ -127,7 +127,7 @@ type _AGG_TYPEAgg struct {
 
 var _ aggregateFunc = &_AGG_TYPEAgg{}
 
-const sizeOf_AGG_TYPEAgg = unsafe.Sizeof(&_AGG_TYPEAgg{})
+const sizeOf_AGG_TYPEAgg = unsafe.Sizeof(_AGG_TYPEAgg{})
 
 func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups

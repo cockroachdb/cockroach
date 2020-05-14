@@ -443,7 +443,7 @@ type hashAggFuncs struct {
 	fns []aggregateFunc
 }
 
-const sizeOfHashAggFuncs = unsafe.Sizeof(&hashAggFuncs{})
+const sizeOfHashAggFuncs = unsafe.Sizeof(hashAggFuncs{})
 
 // TODO(yuzefovich): we need to account for memory used by this map. It is
 // likely that we will replace Golang's map with our vectorized hash table, so

@@ -104,7 +104,7 @@ type avg_TYPEAgg struct {
 
 var _ aggregateFunc = &avg_TYPEAgg{}
 
-const sizeOfAvg_TYPEAgg = unsafe.Sizeof(&avg_TYPEAgg{})
+const sizeOfAvg_TYPEAgg = unsafe.Sizeof(avg_TYPEAgg{})
 
 func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups

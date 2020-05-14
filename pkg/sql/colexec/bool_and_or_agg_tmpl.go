@@ -61,7 +61,7 @@ type bool_OP_TYPEAgg struct {
 
 var _ aggregateFunc = &bool_OP_TYPEAgg{}
 
-const sizeOfBool_OP_TYPEAgg = unsafe.Sizeof(&bool_OP_TYPEAgg{})
+const sizeOfBool_OP_TYPEAgg = unsafe.Sizeof(bool_OP_TYPEAgg{})
 
 func (b *bool_OP_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	b.groups = groups
