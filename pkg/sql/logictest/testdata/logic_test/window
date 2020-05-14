@@ -1,4 +1,4 @@
-# LogicTest: default-configs 5node-default-configs
+# LogicTest: default-configs !3node-tenant 5node-default-configs
 
 statement ok
 CREATE TABLE kv (
