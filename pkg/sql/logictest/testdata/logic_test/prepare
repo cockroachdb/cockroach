@@ -1141,7 +1141,7 @@ EXECUTE e
 select
  ├── columns: k:1 str:2
  ├── stats: [rows=333.333333]
- ├── cost: 1050.03
+ ├── cost: 1050.04
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)

@@ -321,6 +321,7 @@ func (c *coster) computeSelectCost(sel *memo.SelectExpr) memo.Cost {
 	// The filter has to be evaluated on each input row.
 	inputRowCount := sel.Input.Relational().Stats.RowCount
 	cost := memo.Cost(inputRowCount) * cpuCostFactor
+	cost += c.computeFiltersCost(sel.Filters, util.FastIntMap{}, inputRowCount)
 	return cost
 }
 
