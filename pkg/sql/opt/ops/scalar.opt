@@ -834,6 +834,18 @@ define JsonbAgg {
 }
 
 [Scalar, Aggregate]
+define JsonObjectAgg {
+    Key ScalarExpr
+    Value ScalarExpr
+}
+
+[Scalar, Aggregate]
+define JsonbObjectAgg {
+    Key ScalarExpr
+    Value ScalarExpr
+}
+
+[Scalar, Aggregate]
 define StringAgg {
     Input ScalarExpr
 

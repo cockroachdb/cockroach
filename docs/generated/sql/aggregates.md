@@ -77,7 +77,11 @@
 </span></td></tr>
 <tr><td><a name="json_agg"></a><code>json_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB array.</p>
 </span></td></tr>
+<tr><td><a name="json_object_agg"></a><code>json_object_agg(arg1: <a href="string.html">string</a>, arg2: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB object.</p>
+</span></td></tr>
 <tr><td><a name="jsonb_agg"></a><code>jsonb_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB array.</p>
+</span></td></tr>
+<tr><td><a name="jsonb_object_agg"></a><code>jsonb_object_agg(arg1: <a href="string.html">string</a>, arg2: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB object.</p>
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
