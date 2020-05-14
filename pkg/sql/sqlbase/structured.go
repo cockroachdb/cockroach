@@ -3076,6 +3076,9 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			}
 			newIndex.Name = "primary"
 			desc.PrimaryIndex = *protoutil.Clone(newIndex).(*IndexDescriptor)
+			// The primary index "implicitly" stores all columns in the table.
+			// Explicitly including them in the stored columns list is incorrect.
+			desc.PrimaryIndex.StoreColumnNames, desc.PrimaryIndex.StoreColumnIDs = nil, nil
 			idx, err := getIndexIdxByID(newIndex.ID)
 			if err != nil {
 				return err
