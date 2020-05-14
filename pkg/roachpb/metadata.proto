@@ -214,6 +214,9 @@ message RangeDescriptor {
   // Cockroach prior to v2.1. To maintain backwards compatibility with these old
   // versions of Cockroach, we cannot enable the gogoproto.nullable option, as
   // we need to be able to encode this mesage with the generation field unset.
+  // TODO(andrei): The compatibility issues went away (we no longer perform
+  // CPuts with unmarshalled/marshalled descriptors), so this field should
+  // become nullable.
   //
   // Note also that when the generation counter was first introduced, it only
   // ever incremented (by one) the generation of the left hand side on merges
