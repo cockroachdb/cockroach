@@ -195,6 +195,8 @@ var AggregateOpReverseMap = map[Operator]string{
 	XorAggOp:          "xor_agg",
 	JsonAggOp:         "json_agg",
 	JsonbAggOp:        "jsonb_agg",
+	JsonObjectAggOp:   "json_object_agg",
+	JsonbObjectAggOp:  "jsonb_object_agg",
 	StringAggOp:       "string_agg",
 	ConstAggOp:        "any_not_null",
 	ConstNotNullAggOp: "any_not_null",
@@ -283,7 +285,7 @@ func AggregateIgnoresNulls(op Operator) bool {
 		return true
 
 	case ArrayAggOp, ConcatAggOp, ConstAggOp, CountRowsOp, FirstAggOp, JsonAggOp,
-		JsonbAggOp:
+		JsonbAggOp, JsonObjectAggOp, JsonbObjectAggOp:
 		return false
 
 	default:
@@ -301,7 +303,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
 		ConstNotNullAggOp, CorrOp, FirstAggOp, JsonAggOp, JsonbAggOp,
 		MaxOp, MinOp, SqrDiffOp, StdDevOp, StringAggOp, SumOp, SumIntOp,
-		VarianceOp, XorAggOp, PercentileDiscOp, PercentileContOp:
+		VarianceOp, XorAggOp, PercentileDiscOp, PercentileContOp, JsonObjectAggOp, JsonbObjectAggOp:
 		return true
 
 	case CountOp, CountRowsOp:
@@ -326,7 +328,7 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
 		ConstNotNullAggOp, CountOp, CountRowsOp, FirstAggOp,
 		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp,
-		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileDiscOp, PercentileContOp:
+		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileDiscOp, PercentileContOp, JsonObjectAggOp, JsonbObjectAggOp:
 		return true
 
 	case VarianceOp, StdDevOp, CorrOp:
