@@ -77,38 +77,35 @@ project
  │    ├── cardinality: [0 - 10]
  │    ├── fd: (3)==(5), (5)==(3)
  │    ├── ordering: +2
- │    ├── sort
+ │    ├── inner-join (lookup b)
  │    │    ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
+ │    │    ├── key columns: [5] = [3]
+ │    │    ├── lookup columns are key
  │    │    ├── fd: (3)==(5), (5)==(3)
  │    │    ├── ordering: +2
  │    │    ├── limit hint: 10.00
- │    │    └── inner-join (hash)
- │    │         ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
- │    │         ├── fd: (3)==(5), (5)==(3)
- │    │         ├── scan b
- │    │         │    ├── columns: b.x:3(string!null)
- │    │         │    └── key: (3)
- │    │         ├── project
- │    │         │    ├── columns: column5:5(string!null) y:2(int!null)
- │    │         │    ├── select
- │    │         │    │    ├── columns: a.x:1(int!null) y:2(int!null)
- │    │         │    │    ├── key: (1)
- │    │         │    │    ├── fd: (1)-->(2)
- │    │         │    │    ├── scan a
- │    │         │    │    │    ├── columns: a.x:1(int!null) y:2(int)
- │    │         │    │    │    ├── key: (1)
- │    │         │    │    │    └── fd: (1)-->(2)
- │    │         │    │    └── filters
- │    │         │    │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- │    │         │    │              ├── variable: y:2 [type=int]
- │    │         │    │              └── const: 1 [type=int]
- │    │         │    └── projections
- │    │         │         └── cast: STRING [as=column5:5, type=string, outer=(1)]
- │    │         │              └── variable: a.x:1 [type=int]
- │    │         └── filters
- │    │              └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
- │    │                   ├── variable: column5:5 [type=string]
- │    │                   └── variable: b.x:3 [type=string]
+ │    │    ├── sort
+ │    │    │    ├── columns: y:2(int!null) column5:5(string!null)
+ │    │    │    ├── ordering: +2
+ │    │    │    ├── limit hint: 100.00
+ │    │    │    └── project
+ │    │    │         ├── columns: column5:5(string!null) y:2(int!null)
+ │    │    │         ├── select
+ │    │    │         │    ├── columns: a.x:1(int!null) y:2(int!null)
+ │    │    │         │    ├── key: (1)
+ │    │    │         │    ├── fd: (1)-->(2)
+ │    │    │         │    ├── scan a
+ │    │    │         │    │    ├── columns: a.x:1(int!null) y:2(int)
+ │    │    │         │    │    ├── key: (1)
+ │    │    │         │    │    └── fd: (1)-->(2)
+ │    │    │         │    └── filters
+ │    │    │         │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+ │    │    │         │              ├── variable: y:2 [type=int]
+ │    │    │         │              └── const: 1 [type=int]
+ │    │    │         └── projections
+ │    │    │              └── cast: STRING [as=column5:5, type=string, outer=(1)]
+ │    │    │                   └── variable: a.x:1 [type=int]
+ │    │    └── filters (true)
  │    └── const: 10 [type=int]
  └── projections
       └── plus [as=c:6, type=int, outer=(2)]
@@ -126,22 +123,22 @@ memo (optimized, ~18KB, required=[presentation: y:2,x:3,c:6] [ordering: +2])
  ├── G1: (project G2 G3 y x)
  │    ├── [presentation: y:2,x:3,c:6] [ordering: +2]
  │    │    ├── best: (project G2="[ordering: +2]" G3 y x)
- │    │    └── cost: 2171.27
+ │    │    └── cost: 1722.59
  │    └── []
  │         ├── best: (project G2 G3 y x)
- │         └── cost: 2171.27
+ │         └── cost: 1722.59
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── [ordering: +2]
  │    │    ├── best: (limit G4="[ordering: +2] [limit hint: 10.00]" G5 ordering=+2)
- │    │    └── cost: 2171.06
+ │    │    └── cost: 1722.38
  │    └── []
  │         ├── best: (limit G4="[ordering: +2] [limit hint: 10.00]" G5 ordering=+2)
- │         └── cost: 2171.06
+ │         └── cost: 1722.38
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G7 G10 b,keyCols=[5],outCols=(2,3,5)) (merge-join G8 G7 G10 inner-join,+3,+5)
  │    ├── [ordering: +2] [limit hint: 10.00]
- │    │    ├── best: (sort G4)
- │    │    └── cost: 2170.95
+ │    │    ├── best: (lookup-join G7="[ordering: +2] [limit hint: 100.00]" G10 b,keyCols=[5],outCols=(2,3,5))
+ │    │    └── cost: 1722.27
  │    └── []
  │         ├── best: (inner-join G8 G7 G9)
  │         └── cost: 2108.40

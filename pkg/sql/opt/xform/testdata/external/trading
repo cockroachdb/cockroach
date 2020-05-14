@@ -607,45 +607,59 @@ project
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(30)
- │    ├── inner-join (hash)
+ │    ├── limit
  │    │    ├── columns: c.id:1!null cardid:8!null max:29!null
- │    │    ├── stats: [rows=56607.9417, distinct(1)=56607.9417, null(1)=0, distinct(8)=56607.9417, null(8)=0]
- │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(29), (1)==(8), (8)==(1)
- │    │    ├── scan c@cardsnamesetnumber
- │    │    │    ├── columns: c.id:1!null
- │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0]
- │    │    │    └── key: (1)
- │    │    ├── group-by
- │    │    │    ├── columns: cardid:8!null max:29!null
- │    │    │    ├── grouping columns: cardid:8!null
- │    │    │    ├── stats: [rows=56607.9417, distinct(8)=56607.9417, null(8)=0, distinct(29)=56607.9417, null(29)=0]
+ │    │    ├── internal-ordering: -29
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,8,29)
+ │    │    ├── inner-join (lookup cards)
+ │    │    │    ├── columns: c.id:1!null cardid:8!null max:29!null
+ │    │    │    ├── key columns: [8] = [1]
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── stats: [rows=56607.9417, distinct(1)=56607.9417, null(1)=0, distinct(8)=56607.9417, null(8)=0]
  │    │    │    ├── key: (8)
- │    │    │    ├── fd: (8)-->(29)
- │    │    │    ├── inner-join (hash)
- │    │    │    │    ├── columns: dealerid:7!null cardid:8!null version:15!null cards.id:16!null
- │    │    │    │    ├── stats: [rows=233333.333, distinct(8)=56607.9417, null(8)=0, distinct(16)=56607.9417, null(16)=0]
- │    │    │    │    ├── key: (7,16)
- │    │    │    │    ├── fd: (7,8)-->(15), (7,15)-->(8), (8)==(16), (16)==(8)
- │    │    │    │    ├── scan cardsinfo@cardsinfoversionindex
- │    │    │    │    │    ├── columns: dealerid:7!null cardid:8!null version:15!null
- │    │    │    │    │    ├── constraint: /7/15: [/1 - /4]
- │    │    │    │    │    ├── stats: [rows=233333.333, distinct(7)=4, null(7)=0, distinct(8)=56607.9417, null(8)=0, distinct(15)=233333.333, null(15)=0]
- │    │    │    │    │    ├── key: (7,8)
- │    │    │    │    │    └── fd: (7,8)-->(15), (7,15)-->(8)
- │    │    │    │    ├── scan cards@cardsnamesetnumber
- │    │    │    │    │    ├── columns: cards.id:16!null
- │    │    │    │    │    ├── stats: [rows=57000, distinct(16)=57000, null(16)=0]
- │    │    │    │    │    └── key: (16)
- │    │    │    │    └── filters
- │    │    │    │         └── cardid:8 = cards.id:16 [outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
- │    │    │    └── aggregations
- │    │    │         └── max [as=max:29, outer=(15)]
- │    │    │              └── version:15
- │    │    └── filters
- │    │         └── c.id:1 = cardid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │    │    ├── fd: (8)-->(29), (1)==(8), (8)==(1)
+ │    │    │    ├── ordering: -29
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    ├── sort
+ │    │    │    │    ├── columns: cardid:8!null max:29!null
+ │    │    │    │    ├── stats: [rows=56607.9417, distinct(8)=56607.9417, null(8)=0, distinct(29)=56607.9417, null(29)=0]
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    ├── fd: (8)-->(29)
+ │    │    │    │    ├── ordering: -29
+ │    │    │    │    ├── limit hint: 100.00
+ │    │    │    │    └── group-by
+ │    │    │    │         ├── columns: cardid:8!null max:29!null
+ │    │    │    │         ├── grouping columns: cardid:8!null
+ │    │    │    │         ├── stats: [rows=56607.9417, distinct(8)=56607.9417, null(8)=0, distinct(29)=56607.9417, null(29)=0]
+ │    │    │    │         ├── key: (8)
+ │    │    │    │         ├── fd: (8)-->(29)
+ │    │    │    │         ├── inner-join (hash)
+ │    │    │    │         │    ├── columns: dealerid:7!null cardid:8!null version:15!null cards.id:16!null
+ │    │    │    │         │    ├── stats: [rows=233333.333, distinct(8)=56607.9417, null(8)=0, distinct(16)=56607.9417, null(16)=0]
+ │    │    │    │         │    ├── key: (7,16)
+ │    │    │    │         │    ├── fd: (7,8)-->(15), (7,15)-->(8), (8)==(16), (16)==(8)
+ │    │    │    │         │    ├── scan cardsinfo@cardsinfoversionindex
+ │    │    │    │         │    │    ├── columns: dealerid:7!null cardid:8!null version:15!null
+ │    │    │    │         │    │    ├── constraint: /7/15: [/1 - /4]
+ │    │    │    │         │    │    ├── stats: [rows=233333.333, distinct(7)=4, null(7)=0, distinct(8)=56607.9417, null(8)=0, distinct(15)=233333.333, null(15)=0]
+ │    │    │    │         │    │    ├── key: (7,8)
+ │    │    │    │         │    │    └── fd: (7,8)-->(15), (7,15)-->(8)
+ │    │    │    │         │    ├── scan cards@cardsnamesetnumber
+ │    │    │    │         │    │    ├── columns: cards.id:16!null
+ │    │    │    │         │    │    ├── stats: [rows=57000, distinct(16)=57000, null(16)=0]
+ │    │    │    │         │    │    └── key: (16)
+ │    │    │    │         │    └── filters
+ │    │    │    │         │         └── cardid:8 = cards.id:16 [outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
+ │    │    │    │         └── aggregations
+ │    │    │    │              └── max [as=max:29, outer=(15)]
+ │    │    │    │                   └── version:15
+ │    │    │    └── filters (true)
+ │    │    └── 1
  │    └── aggregations
- │         └── max [as=max:30, outer=(29)]
+ │         └── const-agg [as=max:30, outer=(29)]
  │              └── max:29
  └── projections
       └── COALESCE(max:30, 0) [as=coalesce:31, outer=(30)]
