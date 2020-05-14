@@ -39,18 +39,19 @@ func TestDatabaseDescriptor(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
+	codec := keys.SystemSQLCodec
 	expectedCounter := int64(keys.MinNonPredefinedUserDescID)
 
 	// Test values before creating the database.
 	// descriptor ID counter.
-	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
-	nameKey := sqlbase.NewDatabaseKey("test").Key(keys.SystemSQLCodec)
+	nameKey := sqlbase.NewDatabaseKey("test").Key(codec)
 	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -58,7 +59,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(expectedCounter))
+	dbDescKey := sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(expectedCounter))
 	dbDesc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Database{
 			Database: &sqlbase.DatabaseDescriptor{
@@ -81,18 +82,18 @@ func TestDatabaseDescriptor(t *testing.T) {
 	// (that's performed non-transactionally).
 	expectedCounter++
 
-	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
-	start := keys.SystemSQLCodec.TablePrefix(uint32(keys.NamespaceTableID))
+	start := codec.TablePrefix(uint32(keys.NamespaceTableID))
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0 /* maxRows */); err != nil {
 		t.Fatal(err)
 	} else {
 		descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(
-			ctx, kvDB, keys.SystemSQLCodec, &s.(*server.TestServer).Cfg.DefaultZoneConfig, &s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
+			ctx, kvDB, codec, &s.(*server.TestServer).Cfg.DefaultZoneConfig, &s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -113,7 +114,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbDescKey = sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(expectedCounter))
+	dbDescKey = sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(expectedCounter))
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +122,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 
 	// Check keys again.
 	// descriptor ID counter.
-	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
@@ -148,7 +149,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 
 	// Check keys again.
 	// descriptor ID counter.
-	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
@@ -292,7 +293,7 @@ func TestParallelCreateTables(t *testing.T) {
 	// Get the id descriptor generator count.
 	kvDB := tc.Servers[0].DB()
 	var descIDStart sqlbase.ID
-	if descID, err := kvDB.Get(context.Background(), keys.DescIDGenerator); err != nil {
+	if descID, err := kvDB.Get(context.Background(), keys.SystemSQLCodec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else {
 		descIDStart = sqlbase.ID(descID.ValueInt())
@@ -346,7 +347,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	// Get the id descriptor generator count.
 	kvDB := tc.Servers[0].DB()
 	var descIDStart sqlbase.ID
-	if descID, err := kvDB.Get(context.Background(), keys.DescIDGenerator); err != nil {
+	if descID, err := kvDB.Get(context.Background(), keys.SystemSQLCodec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else {
 		descIDStart = sqlbase.ID(descID.ValueInt())

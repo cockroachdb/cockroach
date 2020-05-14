@@ -1169,3 +1169,11 @@ t  CREATE TABLE t (
    UNIQUE INDEX t_crdb_internal_x_shard_2_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
    FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2)
 )
+
+# Regression for #49079.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT, y INT, z INT, PRIMARY KEY (x, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y);
+SET sql_safe_updates=false;
+ALTER TABLE t DROP COLUMN z

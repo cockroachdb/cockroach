@@ -206,6 +206,10 @@ const InvalidMutationID MutationID = 0
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
+	// SequenceColumnID is the ID of the sole column in a sequence.
+	SequenceColumnID = 1
+	// SequenceColumnName is the name of the sole column in a sequence.
+	SequenceColumnName = "value"
 )
 
 // ErrMissingColumns indicates a table with no columns.
@@ -3161,6 +3165,9 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			}
 			newIndex.Name = "primary"
 			desc.PrimaryIndex = *protoutil.Clone(newIndex).(*IndexDescriptor)
+			// The primary index "implicitly" stores all columns in the table.
+			// Explicitly including them in the stored columns list is incorrect.
+			desc.PrimaryIndex.StoreColumnNames, desc.PrimaryIndex.StoreColumnIDs = nil, nil
 			idx, err := getIndexIdxByID(newIndex.ID)
 			if err != nil {
 				return err

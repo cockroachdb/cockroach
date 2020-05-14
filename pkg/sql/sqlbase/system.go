@@ -12,6 +12,7 @@ package sqlbase
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -95,6 +96,17 @@ CREATE TABLE system.settings (
 	"lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
 	"valueType"       STRING,
 	FAMILY (name, value, "lastUpdated", "valueType")
+);`
+
+	DescIDSequenceSchema = `
+CREATE SEQUENCE system.descriptor_id_seq;`
+
+	TenantsTableSchema = `
+CREATE TABLE system.tenants (
+	id     INT8 NOT NULL PRIMARY KEY,
+	active BOOL NOT NULL DEFAULT true,
+	info   BYTES,
+	FAMILY "primary" (id, active, info)
 );`
 )
 
@@ -290,7 +302,7 @@ create table system.statement_diagnostics(
 
 func pk(name string) IndexDescriptor {
 	return IndexDescriptor{
-		Name:             "primary",
+		Name:             PrimaryKeyIndexName,
 		ID:               1,
 		Unique:           true,
 		ColumnNames:      []string{name},
@@ -315,6 +327,8 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	// the use of a validating, logging accessor, so we'll go ahead and tolerate
 	// read-only privs to make that migration possible later.
 	keys.SettingsTableID:   privilege.ReadWriteData,
+	keys.DescIDSequenceID:  privilege.ReadData,
+	keys.TenantsTableID:    privilege.ReadData,
 	keys.LeaseTableID:      privilege.ReadWriteData,
 	keys.EventLogTableID:   privilege.ReadWriteData,
 	keys.RangeEventTableID: privilege.ReadWriteData,
@@ -564,6 +578,71 @@ var (
 		PrimaryIndex:   pk("name"),
 		NextIndexID:    2,
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// DescIDSequence is the descriptor for the descriptor ID sequence.
+	DescIDSequence = TableDescriptor{
+		Name:                    "descriptor_id_seq",
+		ID:                      keys.DescIDSequenceID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: SequenceColumnName, ID: SequenceColumnID, Type: types.Int},
+		},
+		Families: []ColumnFamilyDescriptor{{
+			Name:            "primary",
+			ID:              keys.SequenceColumnFamilyID,
+			ColumnNames:     []string{SequenceColumnName},
+			ColumnIDs:       []ColumnID{SequenceColumnID},
+			DefaultColumnID: SequenceColumnID,
+		}},
+		PrimaryIndex: IndexDescriptor{
+			ID:               keys.SequenceIndexID,
+			Name:             PrimaryKeyIndexName,
+			ColumnIDs:        []ColumnID{SequenceColumnID},
+			ColumnNames:      []string{SequenceColumnName},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+		},
+		SequenceOpts: &TableDescriptor_SequenceOpts{
+			Increment: 1,
+			MinValue:  1,
+			MaxValue:  math.MaxInt64,
+			Start:     1,
+		},
+		Privileges:    NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescIDSequenceID]),
+		FormatVersion: InterleavedFormatVersion,
+	}
+
+	TenantsTable = TableDescriptor{
+		Name:                    "tenants",
+		ID:                      keys.TenantsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int},
+			{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
+			// NOTE: info is currently a placeholder and may be kept, replaced,
+			// or even just removed. The idea is to provide users of
+			// multi-tenancy with some ability to store associated metadata with
+			// each tenant. For instance, it might prove to be useful to map a
+			// tenant in a cluster back to the corresponding user ID in CC.
+			{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{{
+			Name:        "primary",
+			ID:          0,
+			ColumnNames: []string{"id", "active", "info"},
+			ColumnIDs:   []ColumnID{1, 2, 3},
+		}},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("id"),
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TenantsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -1456,20 +1535,6 @@ var (
 	}
 )
 
-// Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(
-	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
-) roachpb.KeyValue {
-	value := roachpb.Value{}
-	if err := value.SetProto(zoneConfig); err != nil {
-		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
-	}
-	return roachpb.KeyValue{
-		Key:   codec.ZoneKey(uint32(keyID)),
-		Value: value,
-	}
-}
-
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
 // with the system database and table descriptors. The descriptors for
 // these objects exist statically in this file, but a MetadataSchema
@@ -1483,8 +1548,19 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &NamespaceTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	if target.codec.ForSystemTenant() {
+		target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	}
 	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
+	if !target.codec.ForSystemTenant() {
+		// Only add the descriptor ID sequence if this is a non-system tenant.
+		// System tenants use the global descIDGenerator key. See #48513.
+		target.AddDescriptor(keys.SystemDatabaseID, &DescIDSequence)
+	}
+	if target.codec.ForSystemTenant() {
+		// Only add the tenant table if this is the system tenant.
+		target.AddDescriptor(keys.SystemDatabaseID, &TenantsTable)
+	}
 
 	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
@@ -1516,16 +1592,38 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsTable)
 }
 
-// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
-// System database, its tables and zone configurations.
-func addSystemDatabaseToSchema(
+// addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
+// MetadataSchema.
+func addSplitIDs(target *MetadataSchema) {
+	target.AddSplitIDs(keys.PseudoTableIDs...)
+}
+
+// Create a kv pair for the zone config for the given key and config value.
+func createZoneConfigKV(
+	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
+) roachpb.KeyValue {
+	value := roachpb.Value{}
+	if err := value.SetProto(zoneConfig); err != nil {
+		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
+	}
+	return roachpb.KeyValue{
+		Key:   codec.ZoneKey(uint32(keyID)),
+		Value: value,
+	}
+}
+
+// addZoneConfigKVsToSchema adds a kv pair for each of the statically defined
+// zone configurations that should be populated in a newly bootstrapped cluster.
+func addZoneConfigKVsToSchema(
 	target *MetadataSchema,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
-	addSystemDescriptorsToSchema(target)
-
-	target.AddSplitIDs(keys.PseudoTableIDs...)
+	// If this isn't the system tenant, don't add any zone configuration keys.
+	// Only the system tenant has a zone table.
+	if !target.codec.ForSystemTenant() {
+		return
+	}
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older cluster. The includedInBootstrap
@@ -1563,6 +1661,18 @@ func addSystemDatabaseToSchema(
 		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
 	target.otherKV = append(target.otherKV,
 		createZoneConfigKV(keys.ReplicationStatsTableID, target.codec, replicationStatsZoneConf))
+}
+
+// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
+// System database, its tables and zone configurations.
+func addSystemDatabaseToSchema(
+	target *MetadataSchema,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+) {
+	addSystemDescriptorsToSchema(target)
+	addSplitIDs(target)
+	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.

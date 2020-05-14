@@ -10,7 +10,10 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+import (
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+)
 
 // InternalExecutorSessionDataOverride is used by the InternalExecutor interface
 // to allow control over some of the session data.
@@ -28,3 +31,7 @@ type InternalExecutorSessionDataOverride struct {
 // NoSessionDataOverride is the empty InternalExecutorSessionDataOverride which
 // does not override any session data.
 var NoSessionDataOverride = InternalExecutorSessionDataOverride{}
+
+// NodeUserSessionDataOverride is an InternalExecutorSessionDataOverride which
+// overrides the users to the NodeUser.
+var NodeUserSessionDataOverride = InternalExecutorSessionDataOverride{User: security.NodeUser}

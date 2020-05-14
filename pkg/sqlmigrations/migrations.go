@@ -91,8 +91,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v1.0. Permanent migration.
-		name:   "enable diagnostics reporting",
-		workFn: optInToDiagnosticsStatReporting,
+		name:        "enable diagnostics reporting",
+		workFn:      optInToDiagnosticsStatReporting,
+		clusterWide: true,
 	},
 	{
 		// Introduced in v1.1. Baked into v2.0.
@@ -104,8 +105,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v1.1. Permanent migration.
-		name:   "populate initial version cluster setting table entry",
-		workFn: populateVersionSetting,
+		name:        "populate initial version cluster setting table entry",
+		workFn:      populateVersionSetting,
+		clusterWide: true,
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
@@ -163,8 +165,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
-		name:   "initialize cluster.secret",
-		workFn: initializeClusterSecret,
+		name:        "initialize cluster.secret",
+		workFn:      initializeClusterSecret,
+		clusterWide: true,
 	},
 	{
 		// Introduced in v2.0. Repeated in v2.1 below.
@@ -232,8 +235,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v19.1.
 		// TODO(knz): bake this migration into v19.2.
-		name:   "propagate the ts purge interval to the new setting names",
-		workFn: retireOldTsPurgeIntervalSettings,
+		name:        "propagate the ts purge interval to the new setting names",
+		workFn:      retireOldTsPurgeIntervalSettings,
+		clusterWide: true,
 	},
 	{
 		// Introduced in v19.2.
@@ -365,6 +369,11 @@ type migrationDescriptor struct {
 	includedInBootstrap roachpb.Version
 	// doesBackfill should be set to true if the migration triggers a backfill.
 	doesBackfill bool
+	// clusterWide migrations are only run by the system tenant. All other
+	// migrations are run by each individual tenant. clusterWide migrations
+	// typically have to do with cluster settings, which is a cluster-wide
+	// concept.
+	clusterWide bool
 	// newDescriptorIDs is a function that returns the IDs of any additional
 	// descriptors that were added by this migration. This is needed to automate
 	// certain tests, which check the number of ranges/descriptors present on
@@ -490,7 +499,7 @@ func ExpectedDescriptorIDs(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (sqlbase.IDs, error) {
-	completedMigrations, err := getCompletedMigrations(ctx, db)
+	completedMigrations, err := getCompletedMigrations(ctx, db, codec)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +511,7 @@ func ExpectedDescriptorIDs(
 			(migration.includedInBootstrap != roachpb.Version{}) {
 			continue
 		}
-		if _, ok := completedMigrations[string(migrationKey(migration))]; ok {
+		if _, ok := completedMigrations[string(migrationKey(codec, migration))]; ok {
 			newIDs, err := migration.newDescriptorIDs(ctx, db, codec)
 			if err != nil {
 				return nil, err
@@ -519,16 +528,13 @@ func ExpectedDescriptorIDs(
 // safe to run).
 func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb.Version) error {
 	// First, check whether there are any migrations that need to be run.
-	completedMigrations, err := getCompletedMigrations(ctx, m.db)
+	completedMigrations, err := getCompletedMigrations(ctx, m.db, m.codec)
 	if err != nil {
 		return err
 	}
 	allMigrationsCompleted := true
 	for _, migration := range backwardCompatibleMigrations {
-		minVersion := migration.includedInBootstrap
-		if migration.workFn == nil || // has the migration been baked in?
-			// is the migration unnecessary? It's not if it's been baked in.
-			(minVersion != roachpb.Version{} && !bootstrapVersion.Less(minVersion)) {
+		if !m.shouldRunMigration(migration, bootstrapVersion) {
 			continue
 		}
 		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
@@ -536,7 +542,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 				migration.name)
 			break
 		}
-		key := migrationKey(migration)
+		key := migrationKey(m.codec, migration)
 		if _, ok := completedMigrations[string(key)]; !ok {
 			allMigrationsCompleted = false
 		}
@@ -555,7 +561,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		log.Info(ctx, "trying to acquire lease")
 	}
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		lease, err = m.leaseManager.AcquireLease(ctx, keys.MigrationLease)
+		lease, err = m.leaseManager.AcquireLease(ctx, m.codec.MigrationLeaseKey())
 		if err == nil {
 			break
 		}
@@ -608,7 +614,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 
 	// Re-get the list of migrations in case any of them were completed between
 	// our initial check and our grabbing of the lease.
-	completedMigrations, err = getCompletedMigrations(ctx, m.db)
+	completedMigrations, err = getCompletedMigrations(ctx, m.db, m.codec)
 	if err != nil {
 		return err
 	}
@@ -621,14 +627,11 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		settings:    m.settings,
 	}
 	for _, migration := range backwardCompatibleMigrations {
-		minVersion := migration.includedInBootstrap
-		if migration.workFn == nil || // has the migration been baked in?
-			// is the migration unnecessary? It's not if it's been baked in.
-			(minVersion != roachpb.Version{} && !bootstrapVersion.Less(minVersion)) {
+		if !m.shouldRunMigration(migration, bootstrapVersion) {
 			continue
 		}
 
-		key := migrationKey(migration)
+		key := migrationKey(m.codec, migration)
 		if _, ok := completedMigrations[string(key)]; ok {
 			continue
 		}
@@ -656,12 +659,39 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	return nil
 }
 
-var (
-	schemaChangeJobMigrationName = "upgrade schema change job format"
-	// schemaChangeJobMigrationKey is used for storing the completion status of
-	// the schema change job migration.
-	schemaChangeJobMigrationKey = append(keys.MigrationPrefix, roachpb.RKey(schemaChangeJobMigrationName)...)
-)
+func (m *Manager) shouldRunMigration(
+	migration migrationDescriptor, bootstrapVersion roachpb.Version,
+) bool {
+	if migration.workFn == nil {
+		// The migration has been baked in.
+		return false
+	}
+	minVersion := migration.includedInBootstrap
+	if minVersion != (roachpb.Version{}) && !bootstrapVersion.Less(minVersion) {
+		// The migration is unnecessary.
+		return false
+	}
+	if migration.clusterWide && !m.codec.ForSystemTenant() {
+		// The migration is a cluster-wide migration and we are not the
+		// system tenant.
+		return false
+	}
+	return true
+}
+
+var schemaChangeJobMigrationName = "upgrade schema change job format"
+
+func schemaChangeJobMigrationKey(codec keys.SQLCodec) roachpb.Key {
+	return append(codec.MigrationKeyPrefix(), roachpb.RKey(schemaChangeJobMigrationName)...)
+}
+
+// schemaChangeJobMigrationKeyForTable returns a key prefixed with
+// schemaChangeJobMigrationKey for a specific table, to store the completion
+// status for adding a new job if the table was being added or needed to drain
+// names.
+func schemaChangeJobMigrationKeyForTable(codec keys.SQLCodec, tableID sqlbase.ID) roachpb.Key {
+	return encoding.EncodeUint32Ascending(schemaChangeJobMigrationKey(codec), uint32(tableID))
+}
 
 // StartSchemaChangeJobMigration starts an async task to run the migration that
 // upgrades 19.2-style jobs to the 20.1 job format, so that the jobs can be
@@ -669,6 +699,7 @@ var (
 // is finalized before running the migration. The migration is retried until
 // it succeeds (on any node).
 func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
+	migrationKey := schemaChangeJobMigrationKey(m.codec)
 	return m.stopper.RunAsyncTask(ctx, "run-schema-change-job-migration", func(ctx context.Context) {
 		log.Info(ctx, "starting wait for upgrade finalization before schema change job migration")
 		// First wait for the cluster to finalize the upgrade to 20.1. These values
@@ -693,7 +724,7 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 
 		if !m.testingKnobs.AlwaysRunJobMigration {
 			// Check whether this migration has already been completed.
-			if kv, err := m.db.Get(ctx, schemaChangeJobMigrationKey); err != nil {
+			if kv, err := m.db.Get(ctx, migrationKey); err != nil {
 				log.Infof(ctx, "error getting record of schema change job migration: %s", err.Error())
 			} else if kv.Exists() {
 				log.Infof(ctx, "schema change job migration already complete")
@@ -723,7 +754,7 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 				continue
 			}
 			log.Infof(ctx, "schema change job migration completed")
-			if err := m.db.Put(ctx, schemaChangeJobMigrationKey, startTime); err != nil {
+			if err := m.db.Put(ctx, migrationKey, startTime); err != nil {
 				log.Warningf(ctx, "error persisting record of schema change job migration, will retry: %s", err.Error())
 			}
 			break
@@ -732,14 +763,6 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 			fn()
 		}
 	})
-}
-
-// schemaChangeMigrationKeyForTable returns a key prefixed with
-// schemaChangeJobMigrationKey for a specific table, to store the completion
-// status for adding a new job if the table was being added or needed to drain
-// names.
-func schemaChangeMigrationKeyForTable(tableID sqlbase.ID) roachpb.Key {
-	return encoding.EncodeUint32Ascending(schemaChangeJobMigrationKey, uint32(tableID))
 }
 
 // migrateSchemaChangeJobs runs the schema change job migration. The migration
@@ -960,7 +983,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 			}
 
 			if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				key := schemaChangeMigrationKeyForTable(desc.ID)
+				key := schemaChangeJobMigrationKeyForTable(r.codec, desc.ID)
 				startTime := timeutil.Now().String()
 				if kv, err := txn.Get(ctx, key); err != nil {
 					return err
@@ -1226,11 +1249,14 @@ func migrateDropTablesOrDatabaseJob(
 	return err
 }
 
-func getCompletedMigrations(ctx context.Context, db db) (map[string]struct{}, error) {
+func getCompletedMigrations(
+	ctx context.Context, db db, codec keys.SQLCodec,
+) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
-	keyvals, err := db.Scan(ctx, keys.MigrationPrefix, keys.MigrationKeyMax, 0 /* maxRows */)
+	prefix := codec.MigrationKeyPrefix()
+	keyvals, err := db.Scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 	}
@@ -1241,8 +1267,8 @@ func getCompletedMigrations(ctx context.Context, db db) (map[string]struct{}, er
 	return completedMigrations, nil
 }
 
-func migrationKey(migration migrationDescriptor) roachpb.Key {
-	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
+func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Key {
+	return append(codec.MigrationKeyPrefix(), roachpb.RKey(migration.name)...)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {

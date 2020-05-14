@@ -316,10 +316,11 @@ func (ds *ServerImpl) setupFlow(
 			// ProcessorBase. StartInternal().
 			Context:            ctx,
 			Planner:            &sqlbase.DummyEvalPlanner{},
-			SessionAccessor:    &sqlbase.DummySessionAccessor{},
 			PrivilegedAccessor: &sqlbase.DummyPrivilegedAccessor{},
-			Sequence:           &sqlbase.DummySequenceOperators{},
+			SessionAccessor:    &sqlbase.DummySessionAccessor{},
 			ClientNoticeSender: &sqlbase.DummyClientNoticeSender{},
+			Sequence:           &sqlbase.DummySequenceOperators{},
+			Tenant:             &sqlbase.DummyTenantOperator{},
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
 		}

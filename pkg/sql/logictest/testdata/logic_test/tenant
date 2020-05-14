@@ -1,0 +1,59 @@
+query IBT colnames
+SELECT * FROM system.tenants ORDER BY id
+----
+id  active  info
+
+# Create two tenants.
+
+query I
+SELECT crdb_internal.create_tenant(5)
+----
+5
+
+query I
+SELECT crdb_internal.create_tenant(10, '{cc_id: 12345}')
+----
+10
+
+query IBT colnames
+SELECT * FROM system.tenants ORDER BY id
+----
+id  active  info
+5   true    NULL
+10  true    {cc_id: 12345}
+
+# Destroy a tenant.
+
+query I
+SELECT crdb_internal.destroy_tenant(5)
+----
+5
+
+query IBT colnames
+SELECT * FROM system.tenants ORDER BY id
+----
+id  active  info
+5   false   NULL
+10  true    {cc_id: 12345}
+
+# Try to recreate an existing tenant.
+
+query error pgcode 42710 tenant "5" already exists
+SELECT crdb_internal.create_tenant(5)
+
+query error pgcode 42710 tenant "10" already exists
+SELECT crdb_internal.create_tenant(10)
+
+# Try to manipulate system.tenants directly as the root user.
+
+statement error pgcode 42501 user root does not have INSERT privilege on relation tenants
+INSERT INTO system.tenants VALUES (15)
+
+statement error pgcode 42501 user root does not have INSERT privilege on relation tenants
+UPSERT INTO system.tenants VALUES (20)
+
+statement error pgcode 42501 user root does not have UPDATE privilege on relation tenants
+UPDATE system.tenants SET active = false WHERE id = 10
+
+statement error pgcode 42501 user root does not have DELETE privilege on relation tenants
+DELETE FROM system.tenants WHERE id = 10

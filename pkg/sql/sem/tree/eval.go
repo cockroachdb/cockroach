@@ -2778,6 +2778,19 @@ type SequenceOperators interface {
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
 }
 
+// TenantOperator is capable of interacting with tenant state, allowing SQL
+// builtin functions to create and destroy tenants. The methods will return
+// errors when run by any tenant other than the system tenant.
+type TenantOperator interface {
+	// CreateTenant attempts to install a new tenant in the system. It returns
+	// an error if the tenant already exists.
+	CreateTenant(ctx context.Context, tenantID uint64, tenantInfo []byte) error
+
+	// DestroyTenant attempts to uninstall an existing tenant from the system.
+	// It returns an error if the tenant does not exist.
+	DestroyTenant(ctx context.Context, tenantID uint64) error
+}
+
 // EvalContextTestingKnobs contains test knobs.
 type EvalContextTestingKnobs struct {
 	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations
@@ -2893,6 +2906,8 @@ type EvalContext struct {
 	ClientNoticeSender ClientNoticeSender
 
 	Sequence SequenceOperators
+
+	Tenant TenantOperator
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn

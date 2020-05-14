@@ -49,6 +49,7 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 type SQLCodec struct {
 	sqlEncoder
 	sqlDecoder
+	_ func() // incomparable
 }
 
 // sqlEncoder implements the encoding logic for SQL keys.
@@ -87,6 +88,11 @@ var SystemSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 // surrounding context.
 var TODOSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 
+// ForSystemTenant returns whether the encoder is bound to the system tenant.
+func (e sqlEncoder) ForSystemTenant() bool {
+	return len(e.TenantPrefix()) == 0
+}
+
 // TenantPrefix returns the key prefix used for the tenants's data.
 func (e sqlEncoder) TenantPrefix() roachpb.Key {
 	return *e.buf
@@ -124,16 +130,43 @@ func (e sqlEncoder) SequenceKey(tableID uint32) roachpb.Key {
 	return k
 }
 
+// DescIDSequenceKey returns the key used for the descriptor ID sequence.
+func (e sqlEncoder) DescIDSequenceKey() roachpb.Key {
+	if e.ForSystemTenant() {
+		// To maintain backwards compatibility, the system tenant uses a
+		// separate, non-SQL, key to store its descriptor ID sequence.
+		return descIDGenerator
+	}
+	return e.SequenceKey(DescIDSequenceID)
+}
+
 // ZoneKeyPrefix returns the key prefix for id's row in the system.zones table.
 func (e sqlEncoder) ZoneKeyPrefix(id uint32) roachpb.Key {
+	if !e.ForSystemTenant() {
+		panic("zone keys only exist in the system tenant's keyspace")
+	}
 	k := e.IndexPrefix(ZonesTableID, ZonesTablePrimaryIndexID)
 	return encoding.EncodeUvarintAscending(k, uint64(id))
 }
 
 // ZoneKey returns the key for id's entry in the system.zones table.
 func (e sqlEncoder) ZoneKey(id uint32) roachpb.Key {
+	if !e.ForSystemTenant() {
+		panic("zone keys only exist in the system tenant's keyspace")
+	}
 	k := e.ZoneKeyPrefix(id)
 	return MakeFamilyKey(k, uint32(ZonesTableConfigColumnID))
+}
+
+// MigrationKeyPrefix returns the key prefix to store all migration details.
+func (e sqlEncoder) MigrationKeyPrefix() roachpb.Key {
+	return append(e.TenantPrefix(), MigrationPrefix...)
+}
+
+// MigrationLeaseKey returns the key that nodes must take a lease on in order to
+// run system migrations on the cluster.
+func (e sqlEncoder) MigrationLeaseKey() roachpb.Key {
+	return append(e.TenantPrefix(), MigrationLease...)
 }
 
 // unexpected to avoid colliding with sqlEncoder.tenantPrefix.

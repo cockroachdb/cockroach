@@ -164,3 +164,21 @@ var _ tree.ClientNoticeSender = &DummyClientNoticeSender{}
 
 // SendClientNotice is part of the tree.ClientNoticeSender interface.
 func (c *DummyClientNoticeSender) SendClientNotice(context.Context, error) {}
+
+// DummyTenantOperator implements the tree.TenantOperator interface.
+type DummyTenantOperator struct{}
+
+var _ tree.TenantOperator = &DummyTenantOperator{}
+
+var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
+	"cannot evaluate tenant operation in this context")
+
+// CreateTenant is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ uint64, _ []byte) error {
+	return errors.WithStack(errEvalTenant)
+}
+
+// DestroyTenant is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) DestroyTenant(_ context.Context, _ uint64) error {
+	return errors.WithStack(errEvalTenant)
+}

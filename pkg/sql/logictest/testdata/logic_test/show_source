@@ -187,6 +187,7 @@ public       descriptor                       table
 public       users                            table
 public       zones                            table
 public       settings                         table
+public       tenants                          table
 public       lease                            table
 public       eventlog                         table
 public       rangelog                         table
@@ -218,6 +219,7 @@ public       descriptor                       table  ·
 public       users                            table  ·
 public       zones                            table  ·
 public       settings                         table  ·
+public       tenants                          table  ·
 public       lease                            table  ·
 public       eventlog                         table  ·
 public       rangelog                         table  ·

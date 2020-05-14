@@ -18,12 +18,12 @@ import (
 // MakeZoneKeyPrefix returns the key prefix for id's row in the system.zones
 // table.
 func MakeZoneKeyPrefix(id uint32) roachpb.Key {
-	return keys.TODOSQLCodec.ZoneKeyPrefix(id)
+	return keys.SystemSQLCodec.ZoneKeyPrefix(id)
 }
 
 // MakeZoneKey returns the key for id's entry in the system.zones table.
 func MakeZoneKey(id uint32) roachpb.Key {
-	return keys.TODOSQLCodec.ZoneKey(id)
+	return keys.SystemSQLCodec.ZoneKey(id)
 }
 
 // DecodeObjectID decodes the object ID from the front of key. It returns the
