@@ -864,6 +864,9 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			b.CPut(key, &val, nil)
 		} else {
 			expVal := oldLiveness
+			// TODO(andrei): Plumb along oldLiveness as the raw bytes we read from the
+			// database, not as a proto, so that the proto's encoding can change. See
+			// #38308. If we do that, we can remove Liveness from belowRaftProtos.
 			b.CPutDeprecated(key, &val, &expVal)
 		}
 		// Use a trigger on EndTxn to indicate that node liveness should be
