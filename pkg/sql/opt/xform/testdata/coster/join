@@ -422,13 +422,13 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2'
 project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
  ├── stats: [rows=500.488759]
- ├── cost: 3155.07489
+ ├── cost: 3165.05489
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null a:6!null b:7!null c:8!null
       ├── key columns: [1 2 3] = [6 7 8]
       ├── stats: [rows=500.488759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=25, null(8)=0]
-      ├── cost: 3150.06
+      ├── cost: 3160.04
       ├── fd: ()-->(1,2,6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null
@@ -532,13 +532,13 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2' AND (i,j,k,l,m,n)
 project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
  ├── stats: [rows=1.25e-15]
- ├── cost: 12200.07
+ ├── cost: 12200.05
  ├── fd: ()-->(1,2)
- └── inner-join (lookup abcde@idx_abcd)
+ └── inner-join (lookup abcde@idx_abd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:12!null b:13!null c:14!null
-      ├── key columns: [1 2 3] = [12 13 14]
+      ├── key columns: [1 2] = [12 13]
       ├── stats: [rows=1.25e-15, distinct(1)=1e-20, null(1)=0, distinct(2)=1e-20, null(2)=0, distinct(3)=1e-20, null(3)=0, distinct(12)=1e-20, null(12)=0, distinct(13)=1e-20, null(13)=0, distinct(14)=1e-20, null(14)=0]
-      ├── cost: 12200.06
+      ├── cost: 12200.04
       ├── fd: ()-->(1,2,5-10,12,13), (1)==(12), (12)==(1), (2)==(13), (13)==(2), (3)==(14), (14)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
@@ -559,6 +559,7 @@ project
       │         ├── m:9 = 5 [outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
       │         └── n:10 = 6 [outer=(10), constraints=(/10: [/6 - /6]; tight), fd=()-->(10)]
       └── filters
+           ├── y:3 = c:14 [outer=(3,14), constraints=(/3: (/NULL - ]; /14: (/NULL - ]), fd=(3)==(14), (14)==(3)]
            ├── a:12 = 'foo' [outer=(12), constraints=(/12: [/'foo' - /'foo']; tight), fd=()-->(12)]
            └── b:13 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(13), constraints=(/13: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(13)]
 
@@ -655,7 +656,7 @@ project
  ├── columns: w:1!null x:2!null y:3!null z:4!null  [hidden: d:8!null]
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 699.541329
+ ├── cost: 700.322111
  ├── key: (8)
  ├── fd: ()-->(1,2), (3)-->(4,8), (8)-->(3,4)
  ├── ordering: +8 opt(1,2) [actual: +8]
@@ -664,7 +665,7 @@ project
       ├── internal-ordering: +8 opt(1,2,5,6)
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
-      ├── cost: 699.431329
+      ├── cost: 700.212111
       ├── key: (7)
       ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       ├── ordering: +8 opt(1,2,5,6) [actual: +8]
@@ -673,7 +674,7 @@ project
       │    ├── key columns: [5 6 7] = [1 2 3]
       │    ├── lookup columns are key
       │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0]
-      │    ├── cost: 699.321329
+      │    ├── cost: 700.102111
       │    ├── key: (7)
       │    ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       │    ├── ordering: +8 opt(1,2,5,6) [actual: +8]
