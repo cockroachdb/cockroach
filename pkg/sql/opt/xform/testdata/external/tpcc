@@ -608,12 +608,12 @@ insert history
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── values
- │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column7:16!null column8:17!null column18:18 h_amount:19
+ │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column7:16!null column8:17!null column18:18 h_amount:19!null
  │    ├── cardinality: [1 - 1]
  │    ├── side-effects
  │    ├── key: ()
  │    ├── fd: ()-->(10-14,16-19)
- │    └── (1343, 5, 10, 5, 10, '2019-08-26 16:50:41+00:00', '8    Kdcgphy3', gen_random_uuid(), crdb_internal.round_decimal_values(3860.61, 2))
+ │    └── (1343, 5, 10, 5, 10, '2019-08-26 16:50:41+00:00', '8    Kdcgphy3', gen_random_uuid(), 3860.61)
  └── f-k-checks
       ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
       │    └── anti-join (lookup customer)

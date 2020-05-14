@@ -1643,30 +1643,17 @@ upsert decimals
  │    └── upsert_d:22 => decimals.d:4
  ├── check columns: check1:23 check2:24
  └── project
-      ├── columns: check1:23 check2:24 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 b:17 upsert_d:22
+      ├── columns: check1:23 check2:24 a:8!null c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 b:17 upsert_d:22
       ├── project
-      │    ├── columns: upsert_a:20 upsert_d:22 b:17 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    ├── left-join (lookup decimals)
-      │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    │    ├── key columns: [8] = [13]
-      │    │    ├── lookup columns are key
-      │    │    ├── upsert-distinct-on
-      │    │    │    ├── columns: a:8 b:9 c:10 d:12
-      │    │    │    ├── grouping columns: a:8
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: a:8 b:9 c:10
-      │    │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(ARRAY[0.95], 1), crdb_internal.round_decimal_values(1.23, 1))
-      │    │    │    │    └── projections
-      │    │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
-      │    │    │    └── aggregations
-      │    │    │         ├── first-agg [as=b:9]
-      │    │    │         │    └── b:9
-      │    │    │         ├── first-agg [as=c:10]
-      │    │    │         │    └── c:10
-      │    │    │         └── first-agg [as=d:12]
-      │    │    │              └── d:12
+      │    ├── columns: upsert_a:20 upsert_d:22 b:17 a:8!null c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    ├── left-join (cross)
+      │    │    ├── columns: a:8!null b:9 c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    ├── values
+      │    │    │    ├── columns: a:8!null b:9 c:10!null d:12!null
+      │    │    │    └── (1, crdb_internal.round_decimal_values(ARRAY[0.95], 1), 1.2, 2.2)
+      │    │    ├── scan decimals
+      │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    │    └── constraint: /13: [/1 - /1]
       │    │    └── filters (true)
       │    └── projections
       │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:20]
@@ -1693,30 +1680,17 @@ upsert decimals
  │    └── upsert_d:22 => decimals.d:4
  ├── check columns: check1:23 check2:24
  └── project
-      ├── columns: check1:23 check2:24 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 upsert_d:22
+      ├── columns: check1:23 check2:24 a:8!null b:9 c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 upsert_d:22
       ├── project
-      │    ├── columns: upsert_a:19 upsert_b:20 upsert_d:22 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    ├── left-join (lookup decimals)
-      │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    │    ├── key columns: [8] = [13]
-      │    │    ├── lookup columns are key
-      │    │    ├── upsert-distinct-on
-      │    │    │    ├── columns: a:8 b:9 c:10 d:12
-      │    │    │    ├── grouping columns: a:8
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: a:8 b:9 c:10
-      │    │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(CAST(NULL AS DECIMAL(5,1)[]), 1), crdb_internal.round_decimal_values(1.23, 1))
-      │    │    │    │    └── projections
-      │    │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
-      │    │    │    └── aggregations
-      │    │    │         ├── first-agg [as=b:9]
-      │    │    │         │    └── b:9
-      │    │    │         ├── first-agg [as=c:10]
-      │    │    │         │    └── c:10
-      │    │    │         └── first-agg [as=d:12]
-      │    │    │              └── d:12
+      │    ├── columns: upsert_a:19 upsert_b:20 upsert_d:22 a:8!null b:9 c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    ├── left-join (cross)
+      │    │    ├── columns: a:8!null b:9 c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    ├── values
+      │    │    │    ├── columns: a:8!null b:9 c:10!null d:12!null
+      │    │    │    └── (1, crdb_internal.round_decimal_values(CAST(NULL AS DECIMAL(5,1)[]), 1), 1.2, 2.2)
+      │    │    ├── scan decimals
+      │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    │    └── constraint: /13: [/1 - /1]
       │    │    └── filters (true)
       │    └── projections
       │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:19]
@@ -1746,30 +1720,17 @@ upsert decimals
  │    └── upsert_d:24 => decimals.d:4
  ├── check columns: check1:25 check2:26
  └── project
-      ├── columns: check1:25 check2:26 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 upsert_b:22 upsert_d:24
+      ├── columns: check1:25 check2:26 a:8!null b:9 c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 upsert_b:22 upsert_d:24
       ├── project
-      │    ├── columns: upsert_a:21 upsert_b:22 upsert_d:24 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    ├── left-join (lookup decimals)
-      │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    │    ├── key columns: [8] = [13]
-      │    │    ├── lookup columns are key
-      │    │    ├── upsert-distinct-on
-      │    │    │    ├── columns: a:8 b:9 c:10 d:12
-      │    │    │    ├── grouping columns: a:8
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: a:8 b:9 c:10
-      │    │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(ARRAY[0.95], 1), crdb_internal.round_decimal_values(1.23, 1))
-      │    │    │    │    └── projections
-      │    │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
-      │    │    │    └── aggregations
-      │    │    │         ├── first-agg [as=b:9]
-      │    │    │         │    └── b:9
-      │    │    │         ├── first-agg [as=c:10]
-      │    │    │         │    └── c:10
-      │    │    │         └── first-agg [as=d:12]
-      │    │    │              └── d:12
+      │    ├── columns: upsert_a:21 upsert_b:22 upsert_d:24 a:8!null b:9 c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    ├── left-join (cross)
+      │    │    ├── columns: a:8!null b:9 c:10!null d:12!null decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    ├── values
+      │    │    │    ├── columns: a:8!null b:9 c:10!null d:12!null
+      │    │    │    └── (1, crdb_internal.round_decimal_values(ARRAY[0.95], 1), 1.2, 2.2)
+      │    │    ├── scan decimals
+      │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    │    └── constraint: /13: [/1 - /1]
       │    │    └── filters (true)
       │    └── projections
       │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:21]
