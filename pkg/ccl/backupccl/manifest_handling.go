@@ -10,8 +10,10 @@ package backupccl
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"path"
 	"sort"
@@ -46,6 +48,8 @@ const (
 	BackupManifestCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
+	// zipType is the format of a GZipped compressed file.
+	zipType = "application/x-gzip"
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
@@ -123,6 +127,19 @@ func readBackupManifest(
 	if err != nil {
 		return BackupManifest{}, err
 	}
+	// Decompresses the file when BackupManifest is compressed by GZip.
+	// Currently doesn't support other types of compression.
+	fileType := http.DetectContentType(descBytes)
+	if fileType == zipType {
+		r, err = gzip.NewReader(bytes.NewBuffer(descBytes))
+		if err != nil {
+			return BackupManifest{}, err
+		}
+		descBytes, err = ioutil.ReadAll(r)
+		if err != nil {
+			return BackupManifest{}, err
+		}
+	}
 	if encryption != nil {
 		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
 		if err != nil {
@@ -172,6 +189,19 @@ func readBackupPartitionDescriptor(
 	if err != nil {
 		return BackupPartitionDescriptor{}, err
 	}
+	// Decompresses the file when BackupPartitionDescriptor is compressed by GZip.
+	// Currently doesn't support other types of compression.
+	fileType := http.DetectContentType(descBytes)
+	if fileType == zipType {
+		r, err = gzip.NewReader(bytes.NewBuffer(descBytes))
+		if err != nil {
+			return BackupPartitionDescriptor{}, err
+		}
+		descBytes, err = ioutil.ReadAll(r)
+		if err != nil {
+			return BackupPartitionDescriptor{}, err
+		}
+	}
 	if encryption != nil {
 		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
 		if err != nil {
@@ -205,6 +235,13 @@ func writeBackupManifest(
 			return err
 		}
 	}
+	// This part of the code applies GZip compression to BackupManifest.
+	b := bytes.NewBuffer([]byte{})
+	gz := gzip.NewWriter(b)
+	gz.Write(descBuf)
+	gz.Close()
+	descBuf = b.Bytes()
+
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
 
@@ -228,6 +265,13 @@ func writeBackupPartitionDescriptor(
 			return err
 		}
 	}
+
+	// This part of the code applies GZip compression to BackupPartitionDescriptor.
+	b := bytes.NewBuffer([]byte{})
+	gz := gzip.NewWriter(b)
+	gz.Write(descBuf)
+	gz.Close()
+	descBuf = b.Bytes()
 
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
