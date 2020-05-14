@@ -645,6 +645,29 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before merge")
 		}
+
+		// Shut down rangefeed processors on either side of the merge.
+		//
+		// NB: It is critical to shut-down a rangefeed processor on the surviving
+		// replica primarily do deal with the possibility that there are logical ops
+		// for the RHS to resolve intents written by the merge transaction. In
+		// practice, the only such intents that exist are on the RangeEventTable,
+		// but it's good to be consistent here and allow the merge transaction to
+		// write to the RHS of a merge. See batcheval.resolveLocalLocks for details
+		// on why we resolve RHS intents when committing a merge transaction.
+		//
+		// TODO(nvanbenschoten): Alternatively we could just adjust the bounds of
+		// b.r.Processor to include the rhsRepl span.
+		//
+		// NB: removeInitializedReplicaRaftMuLocked also disconnects any initialized
+		// rangefeeds with REASON_REPLICA_REMOVED. That's ok because we will have
+		// already disconnected the rangefeed here.
+		b.r.disconnectRangefeedWithReason(
+			roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+		)
+		rhsRepl.disconnectRangefeedWithReason(
+			roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+		)
 	}
 
 	if res.State != nil && res.State.TruncatedState != nil {
