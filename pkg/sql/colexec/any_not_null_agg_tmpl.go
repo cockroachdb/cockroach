@@ -60,15 +60,16 @@ const _TYPE_WIDTH = 0
 
 // */}}
 
-func newAnyNotNullAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
+func newAnyNotNullAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			allocator.AdjustMemoryUsage(int64(sizeOfAnyNotNull_TYPEAgg))
-			return &anyNotNull_TYPEAgg{allocator: allocator}, nil
+			return &anyNotNull_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -94,7 +95,7 @@ type anyNotNull_TYPEAgg struct {
 
 var _ aggregateFunc = &anyNotNull_TYPEAgg{}
 
-const sizeOfAnyNotNull_TYPEAgg = unsafe.Sizeof(anyNotNull_TYPEAgg{})
+const sizeOfAnyNotNull_TYPEAgg = int64(unsafe.Sizeof(anyNotNull_TYPEAgg{}))
 
 func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
@@ -171,6 +172,25 @@ func (a *anyNotNull_TYPEAgg) Flush() {
 
 func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
 	a.nulls.SetNull(0)
+}
+
+type anyNotNull_TYPEAggAlloc struct {
+	allocator *colmem.Allocator
+	allocSize int64
+	aggFuncs  []anyNotNull_TYPEAgg
+}
+
+var _ aggregateFuncAlloc = &anyNotNull_TYPEAggAlloc{}
+
+func (a *anyNotNull_TYPEAggAlloc) newAggFunc() aggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNull_TYPEAgg * a.allocSize)
+		a.aggFuncs = make([]anyNotNull_TYPEAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
 }
 
 // {{end}}

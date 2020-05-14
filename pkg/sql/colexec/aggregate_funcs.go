@@ -11,6 +11,8 @@
 package colexec
 
 import (
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -86,39 +88,65 @@ type aggregateFunc interface {
 	HandleEmptyInputScalar()
 }
 
-func makeAggregateFuncs(
-	allocator *colmem.Allocator, aggTyps [][]*types.T, aggFns []execinfrapb.AggregatorSpec_Func,
-) ([]aggregateFunc, error) {
-	funcs := make([]aggregateFunc, len(aggFns))
+// aggregateFuncAlloc is an aggregate function allocator that pools allocations
+// of the structs of the same statically-typed aggregate function.
+type aggregateFuncAlloc interface {
+	// newAggFunc returns the aggregate function from the pool with all
+	// necessary fields initialized.
+	newAggFunc() aggregateFunc
+}
 
+// aggregateFuncsAlloc is a utility struct that pools allocations of multiple
+// aggregate functions simultaneously (i.e. it supports a "schema of aggregate
+// functions"). It will resolve the aggregate functions in its constructor to
+// instantiate aggregateFuncAlloc objects and will use those to populate slices
+// of new aggregation functions when requested.
+type aggregateFuncsAlloc struct {
+	allocator *colmem.Allocator
+	// allocSize determines the number of objects allocated when the previous
+	// allocations have been used up.
+	allocSize int64
+	// returnFuncs is the pool for the slice to be returned in
+	// makeAggregateFuncs.
+	returnFuncs []aggregateFunc
+	// aggFuncAllocs are all necessary aggregate function allocators. Note that
+	// a separate aggregateFuncAlloc will be created for each aggFn from the
+	// schema (even if there are "duplicates" - exactly the same functions - in
+	// the function schema).
+	aggFuncAllocs []aggregateFuncAlloc
+}
+
+func newAggregateFuncsAlloc(
+	allocator *colmem.Allocator,
+	aggTyps [][]*types.T,
+	aggFns []execinfrapb.AggregatorSpec_Func,
+	allocSize int64,
+) (*aggregateFuncsAlloc, error) {
+	funcAllocs := make([]aggregateFuncAlloc, len(aggFns))
 	for i := range aggFns {
 		var err error
 		switch aggFns[i] {
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
-			funcs[i], err = newAnyNotNullAgg(allocator, aggTyps[i][0])
+			funcAllocs[i], err = newAnyNotNullAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_AVG:
-			funcs[i], err = newAvgAgg(allocator, aggTyps[i][0])
+			funcAllocs[i], err = newAvgAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
-			funcs[i], err = newSumAgg(allocator, aggTyps[i][0])
+			funcAllocs[i], err = newSumAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
-			funcs[i] = newCountRowsAgg(allocator)
+			funcAllocs[i] = newCountRowsAggAlloc(allocator, allocSize)
 		case execinfrapb.AggregatorSpec_COUNT:
-			funcs[i] = newCountAgg(allocator)
+			funcAllocs[i] = newCountAggAlloc(allocator, allocSize)
 		case execinfrapb.AggregatorSpec_MIN:
-			funcs[i], err = newMinAgg(allocator, aggTyps[i][0])
+			funcAllocs[i], err = newMinAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_MAX:
-			funcs[i], err = newMaxAgg(allocator, aggTyps[i][0])
+			funcAllocs[i], err = newMaxAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_BOOL_AND:
-			funcs[i] = newBoolAndAgg(allocator)
+			funcAllocs[i] = newBoolAndAggAlloc(allocator, allocSize)
 		case execinfrapb.AggregatorSpec_BOOL_OR:
-			funcs[i] = newBoolOrAgg(allocator)
+			funcAllocs[i] = newBoolOrAggAlloc(allocator, allocSize)
 		// NOTE: if you're adding an implementation of a new aggregate
 		// function, make sure to account for the memory under that struct in
 		// its constructor.
-		// TODO(yuzefovich): at the moment, we're updating the allocator on
-		// every created aggregate function. This hits the performance of the
-		// hash aggregator when group sizes are small. We should "batch" the
-		// accounting to address it.
 		default:
 			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}
@@ -127,8 +155,34 @@ func makeAggregateFuncs(
 			return nil, err
 		}
 	}
+	return &aggregateFuncsAlloc{
+		allocator:     allocator,
+		allocSize:     allocSize,
+		aggFuncAllocs: funcAllocs,
+	}, nil
+}
 
-	return funcs, nil
+// sizeOfAggregateFunc is the size of some aggregateFunc implementation.
+// countAgg was chosen arbitrarily, but it's important that we use a pointer to
+// the aggregate function struct.
+const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countAgg{}))
+
+func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
+	if len(a.returnFuncs) == 0 {
+		// We have exhausted the previously allocated pools of objects, so we
+		// need to allocate a new slice for a.returnFuncs, and we need it to be
+		// of 'allocSize x number of funcs in schema' length. Every
+		// aggFuncAlloc will allocate allocSize of objects on the newAggFunc
+		// call below.
+		a.allocator.AdjustMemoryUsage(sizeOfAggregateFunc * a.allocSize)
+		a.returnFuncs = make([]aggregateFunc, len(a.aggFuncAllocs)*int(a.allocSize))
+	}
+	funcs := a.returnFuncs[:len(a.aggFuncAllocs)]
+	a.returnFuncs = a.returnFuncs[len(a.aggFuncAllocs):]
+	for i, alloc := range a.aggFuncAllocs {
+		funcs[i] = alloc.newAggFunc()
+	}
+	return funcs
 }
 
 func makeAggregateFuncsOutputTypes(
@@ -201,10 +255,15 @@ func isAggregateSupported(
 			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
 		}
 	}
-	_, err := makeAggregateFuncs(
+
+	// We're only interested in resolving the aggregate functions and will not
+	// be actually creating them with the alloc, so we use 0 as the allocation
+	// size.
+	_, err := newAggregateFuncsAlloc(
 		allocator,
 		[][]*types.T{inputTypes},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
+		0, /* allocSize */
 	)
 	if err != nil {
 		return false, err

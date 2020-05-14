@@ -28,9 +28,8 @@ import (
 
 // {{range .}}
 
-func newCount_KINDAgg(allocator *colmem.Allocator) *count_KINDAgg {
-	allocator.AdjustMemoryUsage(int64(sizeOfCount_KINDAgg))
-	return &count_KINDAgg{}
+func newCount_KINDAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
+	return &count_KINDAggAlloc{allocator: allocator, allocSize: allocSize}
 }
 
 // count_KINDAgg supports either COUNT(*) or COUNT(col) aggregate.
@@ -44,7 +43,7 @@ type count_KINDAgg struct {
 
 var _ aggregateFunc = &count_KINDAgg{}
 
-const sizeOfCount_KINDAgg = unsafe.Sizeof(count_KINDAgg{})
+const sizeOfCount_KINDAgg = int64(unsafe.Sizeof(count_KINDAgg{}))
 
 func (a *count_KINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
@@ -111,6 +110,24 @@ func (a *count_KINDAgg) Flush() {
 
 func (a *count_KINDAgg) HandleEmptyInputScalar() {
 	a.vec[0] = 0
+}
+
+type count_KINDAggAlloc struct {
+	allocator *colmem.Allocator
+	allocSize int64
+	aggFuncs  []count_KINDAgg
+}
+
+var _ aggregateFuncAlloc = &count_KINDAggAlloc{}
+
+func (a *count_KINDAggAlloc) newAggFunc() aggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(sizeOfCount_KINDAgg * a.allocSize)
+		a.aggFuncs = make([]count_KINDAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
 }
 
 // {{end}}

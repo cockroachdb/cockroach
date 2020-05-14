@@ -162,12 +162,19 @@ type hashAggregator struct {
 	// hashBuffer stores hash values for each tuple in the buffered batch.
 	hashBuffer []uint64
 
-	alloc          hashAggFuncsAlloc
+	aggFnsAlloc    *aggregateFuncsAlloc
+	hashAlloc      hashAggFuncsAlloc
 	cancelChecker  CancelChecker
 	decimalScratch decimalOverloadScratch
 }
 
 var _ colexecbase.Operator = &hashAggregator{}
+
+// hashAggregatorAllocSize determines the allocation size used by the hash
+// aggregator's allocators. This number was chosen after running benchmarks of
+// 'sum' aggregation on ints and decimals with varying group sizes (powers of 2
+// from 1 to 4096).
+const hashAggregatorAllocSize = 64
 
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
@@ -193,6 +200,8 @@ func NewHashAggregator(
 		groupTypes[i] = typs[colIdx]
 	}
 
+	aggFnsAlloc, err := newAggregateFuncsAlloc(allocator, aggTyps, aggFns, hashAggregatorAllocSize)
+
 	return &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -210,7 +219,8 @@ func NewHashAggregator(
 		groupTypes:                 groupTypes,
 		groupCanonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(groupTypes),
 
-		alloc: hashAggFuncsAlloc{allocator: allocator},
+		aggFnsAlloc: aggFnsAlloc,
+		hashAlloc:   hashAggFuncsAlloc{allocator: allocator},
 	}, err
 }
 
@@ -370,7 +380,7 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 
 			// Build new agg functions.
 			keyIdx := op.keyMapping.Length()
-			aggFunc := op.alloc.newHashAggFuncs()
+			aggFunc := op.hashAlloc.newHashAggFuncs()
 			aggFunc.keyIdx = keyIdx
 
 			// Store the key of the current aggregating group into keyMapping.
@@ -389,7 +399,7 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 				op.keyMapping.SetLength(keyIdx + 1)
 			})
 
-			aggFunc.fns, _ = makeAggregateFuncs(op.allocator, op.aggTypes, op.aggFuncs)
+			aggFunc.fns = op.aggFnsAlloc.makeAggregateFuncs()
 			op.aggFuncMap[hashCode] = append(op.aggFuncMap[hashCode], aggFunc)
 
 			// Select rest of the tuples that matches the current key. We don't need
@@ -462,12 +472,6 @@ func (v *hashAggFuncs) compute(b coldata.Batch, aggCols [][]uint32) {
 	}
 }
 
-// hashAggFuncsAllocSize determines the allocation size used by
-// hashAggFuncsAlloc. This number was chosen after running benchmarks of 'sum'
-// aggregation on ints and decimals with varying group sizes (powers of 2 from
-// 1 to 4096).
-const hashAggFuncsAllocSize = 64
-
 // hashAggFuncsAlloc is a utility struct that batches allocations of
 // hashAggFuncs.
 type hashAggFuncsAlloc struct {
@@ -477,8 +481,8 @@ type hashAggFuncsAlloc struct {
 
 func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
 	if len(a.buf) == 0 {
-		a.allocator.AdjustMemoryUsage(int64(hashAggFuncsAllocSize * sizeOfHashAggFuncs))
-		a.buf = make([]hashAggFuncs, hashAggFuncsAllocSize)
+		a.allocator.AdjustMemoryUsage(int64(hashAggregatorAllocSize * sizeOfHashAggFuncs))
+		a.buf = make([]hashAggFuncs, hashAggregatorAllocSize)
 	}
 	ret := &a.buf[0]
 	a.buf = a.buf[1:]
