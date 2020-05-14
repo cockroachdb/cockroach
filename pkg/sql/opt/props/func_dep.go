@@ -1146,18 +1146,136 @@ func (f *FuncDepSet) MakeApply(inner *FuncDepSet) {
 // MakeLeftOuter modifies the cartesian product FD set to reflect the impact of
 // adding NULL-extended rows to the results of an inner join. An inner join can
 // be modeled as a cartesian product + ON filtering, and an outer join is
-// modeled as an inner join + union of NULL-extended rows. MakeLeftOuter
-// performs the final step, given the set of columns that will be null-extended
-// (i.e. columns from the null-providing side(s) of the join), as well as the
-// set of input columns from both sides of the join that are not null.
+// modeled as an inner join + union of NULL-extended rows. MakeLeftOuter uses
+// nullExtendRightRows to perform the final step for a left join. If it is
+// possible to prove that there is a key over the join result that consists only
+// of columns from the left input, that key will be used.
 //
 // This same logic applies for right joins as well (by reversing sides).
 //
 // See the "Left outer join" section on page 84 of the Master's Thesis for the
 // impact of outer joins on FDs.
-func (f *FuncDepSet) MakeLeftOuter(rightCols, notNullInputCols opt.ColSet) {
+func (f *FuncDepSet) MakeLeftOuter(
+	leftFDs, filtersFDs *FuncDepSet, leftCols, rightCols, notNullInputCols opt.ColSet,
+) {
+	// The columns from the left input form a key over the result of the LeftJoin
+	// if the following conditions are met:
+	//
+	//  1. The left input has a strict key.
+	//
+	//  2. The left columns form a strict key over the filtered cartesian product.
+	//     (In other words, the left columns would form a key over an inner join
+	//      with the same filters).
+	//
+	// The above conditions are sufficient because a strict key (over the filtered
+	// cartesian product) that only contains columns from the left side implies
+	// that no left rows were duplicated. This is because even a single duplicated
+	// row would prohibit a strict key containing only those columns. And if there
+	// was already a strict key in the original left input, adding back filtered
+	// left rows will not create any duplicates. This means that the LeftJoin will
+	// not duplicate any of the left rows. Therefore, a key over the left input
+	// must also be a key over the result of the join.
+	//
+	// If the conditions are not met, a key over the unfiltered cartesian product
+	// (if one exists) is used. This is valid because rows are only filtered from
+	// this point on, aside from null-extending the right rows. The null-extension
+	// does not affect the presence of a key because a strict key over a cartesian
+	// product must contain columns from the left side of the join. This means
+	// that adding null-extended rows to the the right side of the output will not
+	// affect the key's status as strict (or lax).
+	//
+	// TODO(drewk): support for lax keys/dependencies from the right input can be
+	//  added if it turns out to be useful.
+
+	// Save a strict key from the left input, if one exists.
+	leftKey, leftHasKey := leftFDs.StrictKey()
+
+	// Save a key from the unfiltered cartesian product, if one exists.
+	oldKey := f.key
+	oldKeyType := f.hasKey
+
+	// Add the FDs from the join filters to a copy of the cartesian product FD
+	// set. Next, check whether the columns of the left input form a strict key
+	// over the result of applying the join filters to the cartesian product.
+	//
+	// We have to apply the filters to a copy because filter FDs are often not
+	// valid after null-extended rows are added. For example:
+	//
+	//   a  b  c     d     e
+	//   ----------------------
+	//   1  1  1     NULL  1
+	//   1  2  NULL  NULL  NULL
+	//   2  1  NULL  NULL  NULL
+	//
+	// Let's say this table is the result of a join between 'ab' and 'cde'. The
+	// join condition might have included e = 1, but it would not be correct to
+	// add the corresponding constant FD to the final join FD set because the e
+	// column has been null extended, and therefore the condition doesn't hold for
+	// the final outer join result.
+	c := FuncDepSet{}
+	c.CopyFrom(f)
+	c.AddFrom(filtersFDs)
+	leftColsAreInnerJoinKey := c.ColsAreStrictKey(leftCols)
+
+	// Modify the cartesian product FD set to reflect the impact of adding
+	// NULL-extended rows to the results of the filtered cartesian product (or, in
+	// other words, the results of an inner join).
+	f.nullExtendRightRows(rightCols, notNullInputCols)
+
+	// If the conditions have been met, use the key from the left side. Otherwise,
+	// use the key from the cartesian product.
+	if leftHasKey && leftColsAreInnerJoinKey {
+		f.setKey(leftKey, strictKey)
+	} else {
+		f.setKey(oldKey, oldKeyType)
+	}
+	// Call tryToReduceKey with only the left columns from notNullInputCols
+	// because the right columns may have been null-extended.
+	f.tryToReduceKey(leftCols.Intersection(notNullInputCols))
+	f.ensureKeyClosure(leftCols.Union(rightCols))
+}
+
+// MakeFullOuter modifies the cartesian product FD set to reflect the impact of
+// adding NULL-extended rows to the results of an inner join. An inner join can
+// be modeled as a cartesian product + ON filtering, and an outer join is
+// modeled as an inner join + union of NULL-extended rows. MakeFullOuter
+// performs the final step for a full join, given the set of columns on each
+// side, as well as the set of input columns from both sides of the join that
+// are not null.
+func (f *FuncDepSet) MakeFullOuter(leftCols, rightCols, notNullInputCols opt.ColSet) {
+	if f.hasKey == strictKey {
+		if f.key.Empty() {
+			// The cartesian product has an empty key when both sides have an empty key;
+			// but the outer join can have two rows so the empty key doesn't hold.
+			f.hasKey = noKey
+			f.key = opt.ColSet{}
+		} else if !f.key.Intersects(notNullInputCols) {
+			// If the cartesian product has a strict key, the key holds on the full
+			// outer result only if one of the key columns is known to be not-null in
+			// the input. Otherwise, a row where all the key columns are NULL can
+			// "conflict" with a row where these columns are NULL because of
+			// null-extension. For example:
+			//   -- t1 and t2 each have one row containing NULL for column x.
+			//   SELECT * FROM t1 FULL JOIN t2 ON t1.x=t2.x
+			//
+			//   t1.x  t2.x
+			//   ----------
+			//   NULL  NULL
+			//   NULL  NULL
+			f.hasKey = laxKey
+		}
+	}
+	f.nullExtendRightRows(leftCols, notNullInputCols)
+	f.nullExtendRightRows(rightCols, notNullInputCols)
+	f.ensureKeyClosure(leftCols.Union(rightCols))
+}
+
+// nullExtendRightRows is used by MakeLeftOuter and MakeFullOuter to modify the
+// cartesian product FD set to reflect the impact of adding NULL-extended rows
+// to the results of an inner join. See the MakeLeftOuter comment for more
+// information.
+func (f *FuncDepSet) nullExtendRightRows(rightCols, notNullInputCols opt.ColSet) {
 	var newFDs []funcDep
-	allCols := f.ColSet()
 
 	n := 0
 	for i := range f.deps {
@@ -1255,48 +1373,6 @@ func (f *FuncDepSet) MakeLeftOuter(rightCols, notNullInputCols opt.ColSet) {
 		fd := &newFDs[i]
 		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 	}
-
-	// Note that there is no impact on any key that may be present for the
-	// relation. If there is a key, then that means the row-providing side of
-	// the join had its own key, and any added rows will therefore be unique.
-	// However, the key's closure may no longer include all columns in the
-	// relation, due to removing FDs and/or making them lax, so if necessary,
-	// add a new strict FD that ensures the key's closure is maintained.
-	f.ensureKeyClosure(allCols)
-}
-
-// MakeFullOuter modifies the cartesian product FD set to reflect the impact of
-// adding NULL-extended rows to the results of an inner join. An inner join can
-// be modeled as a cartesian product + ON filtering, and an outer join is
-// modeled as an inner join + union of NULL-extended rows. MakeFullOuter
-// performs the final step for a full join, given the set of columns on each
-// side, as well as the set of input columns from both sides of the join that
-// are not null.
-func (f *FuncDepSet) MakeFullOuter(leftCols, rightCols, notNullInputCols opt.ColSet) {
-	if f.hasKey == strictKey {
-		if f.key.Empty() {
-			// The cartesian product has an empty key when both sides have an empty key;
-			// but the outer join can have two rows so the empty key doesn't hold.
-			f.hasKey = noKey
-			f.key = opt.ColSet{}
-		} else if !f.key.Intersects(notNullInputCols) {
-			// If the cartesian product has a strict key, the key holds on the full
-			// outer result only if one of the key columns is known to be not-null in
-			// the input. Otherwise, a row where all the key columns are NULL can
-			// "conflict" with a row where these columns are NULL because of
-			// null-extension. For example:
-			//   -- t1 and t2 each have one row containing NULL for column x.
-			//   SELECT * FROM t1 FULL JOIN t2 ON t1.x=t2.x
-			//
-			//   t1.x  t2.x
-			//   ----------
-			//   NULL  NULL
-			//   NULL  NULL
-			f.hasKey = laxKey
-		}
-	}
-	f.MakeLeftOuter(leftCols, notNullInputCols)
-	f.MakeLeftOuter(rightCols, notNullInputCols)
 }
 
 // EquivReps returns one "representative" column from each equivalency group in

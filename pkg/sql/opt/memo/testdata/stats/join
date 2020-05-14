@@ -138,8 +138,8 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 right-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
- ├── key: (1,7)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(1-6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
@@ -719,8 +719,8 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 right-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=4323.45892, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
- ├── key: (1,7)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(1-6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
