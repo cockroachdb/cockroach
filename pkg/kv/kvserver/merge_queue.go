@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -139,6 +140,13 @@ func (mq *mergeQueue) shouldQueue(
 
 	if desc.EndKey.Equal(roachpb.RKeyMax) {
 		// The last range has no right-hand neighbor to merge with.
+		return false, 0
+	}
+	if !roachpb.RKey(keys.UserTableDataMin).Less(desc.EndKey) {
+		// Don't merge system ranges. This is a temporary mitigation for
+		// #48770.
+		//
+		// TODO(ajwerner): Remove this after fixing the associated bug.
 		return false, 0
 	}
 
