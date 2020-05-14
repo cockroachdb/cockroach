@@ -28,7 +28,7 @@ and delete the require definitions for the `cockroachdb/*` versions of these for
 
 ----
 
-# Current Issue
+# Current Issue as of Oliver's work:
 
 ```
 $ make buildshort
@@ -49,3 +49,48 @@ error writing go.mod: open /Users/otan/go/pkg/mod/github.com/!puerkito!bio/goque
 
 Also, when deleting the vendor directory and doing `go mod vendor`, `make buildshort` complains that the directories installed by `go mod vendor` are missing (because they have no go files inside them). Example, `./vendor/github.com/gogo/protobuf/protobuf` is missing because it contains only .proto files. 
 
+----
+
+# Continued by Jordan:
+
+8. `go mod tidy`
+9. bugfix to prereqs that was causing the permission denied issue above
+10. manually vendor the proto-only packages
+11. manually move everything to apd v2 and change the go mod version to point to that
+
+# New current issue:
+
+make build and make buildshort work up until linking, when we get this error:
+
+```
+# github.com/cockroachdb/cockroach/pkg/cmd/cockroach-short
+/usr/local/Cellar/go@1.13/1.13.10_1/libexec/pkg/tool/darwin_amd64/link: running clang++ failed: exit status 1
+Undefined symbols for architecture x86_64:
+  "_tgetent", referenced from:
+      _terminal_set in libedit.a(terminal.o)
+  "_tgetflag", referenced from:
+      _terminal_set in libedit.a(terminal.o)
+  "_tgetnum", referenced from:
+      _terminal_set in libedit.a(terminal.o)
+  "_tgetstr", referenced from:
+      _terminal_set in libedit.a(terminal.o)
+      _terminal_echotc in libedit.a(terminal.o)
+  "_tgoto", referenced from:
+      _terminal_move_to_line in libedit.a(terminal.o)
+      _terminal_move_to_char in libedit.a(terminal.o)
+      _terminal_deletechars in libedit.a(terminal.o)
+      _terminal_insertwrite in libedit.a(terminal.o)
+      _terminal_echotc in libedit.a(terminal.o)
+  "_tputs", referenced from:
+      _terminal_tputs in libedit.a(terminal.o)
+ld: symbol(s) not found for architecture x86_64
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+make: *** [cockroachshort] Error 2
+```
+
+Using `go build -ldflags=-v ./pkg/cmd/cockroach`, you can see that `-lncurses`
+is not included, which causes the errors above. That linker flag is supposed to
+be set by the `vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go` file.
+That file is properly generated as of this branch, but does not get "picked up"
+by the linker flags somehow. Not sure why.
