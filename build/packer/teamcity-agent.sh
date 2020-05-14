@@ -115,6 +115,33 @@ WantedBy=multi-user.target
 EOF
 systemctl enable teamcity-agent.service
 
+# Enable LRU pruning of Docker images.
+# https://github.com/stepchowfun/docuum#running-docuum-in-a-docker-container
+DOCUUM_VERSION=0.9.4
+cat > /etc/systemd/system/docuum.service <<EOF
+[Unit]
+Description=Remove Stale Docker Images
+After=docker.service
+Requires=docker.service
+
+[Service]
+ExecStart=/usr/bin/docker run \
+          --init \
+          --rm \
+          --tty \
+          --name docuum \
+          --volume /var/run/docker.sock:/var/run/docker.sock \
+          --volume docuum:/root stephanmisc/docuum:$DOCUUM_VERSION \
+          --threshold '128 GB'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable docuum.service
+# Prefetch the image
+docker pull stephanmisc/docuum:$DOCUUM_VERSION
+
 # Boot the TeamCity agent so it can be upgraded by the server (i.e., download
 # and install whatever plugins the server has installed) before we bake the
 # image.
