@@ -22,7 +22,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -258,16 +257,15 @@ func joinTestRelations(
 	left testRelation,
 	numRightCols int,
 	right testRelation,
+	filters []testOp,
 	leftOuter bool,
 	rightOuter bool,
 ) testRelation {
 	var res testRelation
 
+	// Adds the given rows to the join result.
 	add := func(l, r testRow) {
 		newRow := make(testRow, numLeftCols+numRightCols)
-		for i := range newRow {
-			newRow[i] = null
-		}
 		if l != nil {
 			copy(newRow, l)
 		}
@@ -277,33 +275,57 @@ func joinTestRelations(
 		res = append(res, newRow)
 	}
 
-	// If this is a right or full join, select the right-hand-side rows that won't
-	// "match" any other rows and will be null-extended.
-	var nullExtRight util.FastIntSet
-	if rightOuter {
-		for i, rightRow := range right {
-			if rand.Intn(2) == 0 || len(left) == 0 {
-				add(nil, rightRow)
-				nullExtRight.Add(i)
-			}
-		}
-	}
+	// Perform a cross join between the left and right relations.
 	for _, leftRow := range left {
-		// If this is a left / full join, this row has to be null-extended if there
-		// are no rows left on the other side; otherwise randomly decide.
-		if leftOuter && (len(right) == nullExtRight.Len() || rand.Intn(2) == 0) {
-			add(leftRow, nil)
-			continue
+		for _, rightRow := range right {
+			add(leftRow, rightRow)
 		}
-		for j, rightRow := range right {
-			if !nullExtRight.Contains(j) {
-				add(leftRow, rightRow)
+	}
+
+	// Apply the filters to the result of the cross join.
+	for i := range filters {
+		res = filters[i].FilterRelation(res)
+	}
+
+	// Walk through the now-filtered cartesian product and keep track of all
+	// unique left and right rows.
+	leftCols := makeCols(numLeftCols)
+	rightCols := makeCols(numRightCols)
+	matchedLeftRows := map[rowKey]struct{}{}
+	matchedRightRows := map[rowKey]struct{}{}
+	for _, row := range res {
+		leftKey, _ := row.key(leftCols)
+		rightKey, _ := row.key(shiftSet(rightCols, numLeftCols))
+		matchedLeftRows[leftKey] = struct{}{}
+		matchedRightRows[rightKey] = struct{}{}
+	}
+
+	// If leftOuter is true, add back any left rows that were filtered out,
+	// null-extending the right side.
+	if leftOuter {
+		for _, row := range left {
+			key, _ := row.key(leftCols)
+			if _, ok := matchedLeftRows[key]; !ok {
+				add(row, nil)
 			}
 		}
 	}
+
+	// If rightOuter is true, add back any right rows that were filtered out,
+	// null-extending the left side.
+	if rightOuter {
+		for _, row := range right {
+			key, _ := row.key(rightCols)
+			if _, ok := matchedRightRows[key]; !ok {
+				add(nil, row)
+			}
+		}
+	}
+
 	if debug {
 		fmt.Printf("left:\n%s", left)
 		fmt.Printf("right:\n%s", right)
+		fmt.Printf("filters:\n%s", filters)
 		fmt.Printf("join(leftOuter=%t, rightOuter=%t):\n%s", leftOuter, rightOuter, res)
 	}
 	return res
@@ -358,11 +380,7 @@ func (tc *testConfig) randColSet(minLen, maxLen int) opt.ColSet {
 }
 
 func (tc *testConfig) allCols() opt.ColSet {
-	var allCols opt.ColSet
-	for i := opt.ColumnID(1); i <= opt.ColumnID(tc.numCols); i++ {
-		allCols.Add(i)
-	}
-	return allCols
+	return makeCols(tc.numCols)
 }
 
 // initTestRelation creates a testRelation with all possible combinations of
@@ -716,11 +734,10 @@ func (ts *testState) String() string {
 	return b.String()
 }
 
-func initialTestState(cfg *testConfig) *testState {
-	return &testState{
-		cfg: cfg,
-		rel: cfg.initTestRelation(),
-	}
+func newTestState(cfg *testConfig) *testState {
+	state := &testState{cfg: cfg}
+	state.rel = cfg.initTestRelation()
+	return state
 }
 
 func (ts *testState) child(t *testing.T, op testOp) *testState {
@@ -783,9 +800,9 @@ func TestFuncDepOpsRandom(t *testing.T) {
 		{
 			testConfig: testConfig{
 				numCols:  3,
-				valRange: 3,
+				valRange: 2,
 			},
-			maxDepth:  5,
+			maxDepth:  2,
 			branching: 3,
 			ops: []testOpGenerator{
 				genAddKey(0 /* minKeyCols */, 2 /* maxKeyCols */),
@@ -801,7 +818,7 @@ func TestFuncDepOpsRandom(t *testing.T) {
 				numCols:  5,
 				valRange: 2,
 			},
-			maxDepth:  8,
+			maxDepth:  5,
 			branching: 2,
 			ops: []testOpGenerator{
 				genAddKey(1 /* minKeyCols */, 5 /* maxKeyCols */),
@@ -812,6 +829,54 @@ func TestFuncDepOpsRandom(t *testing.T) {
 			},
 		},
 	}
+
+	filterConfigs := []testParams{
+		{
+			testConfig: testConfig{
+				numCols:  6,
+				valRange: 2,
+			},
+			maxDepth:  3,
+			branching: 3,
+			ops: []testOpGenerator{
+				genMakeNotNull(1 /* minCols */, 4 /* maxCols */),
+				genAddConst(0 /* minCols */, 6 /* maxCols */),
+				genAddEquiv(),
+			},
+		},
+
+		{
+			testConfig: testConfig{
+				numCols:  8,
+				valRange: 2,
+			},
+			maxDepth:  2,
+			branching: 3,
+			ops: []testOpGenerator{
+				genMakeNotNull(0 /* minCols */, 8 /* maxCols */),
+				genAddConst(3 /* minCols */, 5 /* maxCols */),
+				genAddEquiv(),
+			},
+		},
+
+		{
+			testConfig: testConfig{
+				numCols:  10,
+				valRange: 2,
+			},
+			maxDepth:  3,
+			branching: 6,
+			ops: []testOpGenerator{
+				genMakeNotNull(2 /* minCols */, 7 /* maxCols */),
+				genAddConst(2 /* minCols */, 3 /* maxCols */),
+				genAddEquiv(),
+			},
+		},
+	}
+
+	// Allows a set of filters to be chosen based on the total number of columns
+	// in the input relations.
+	filterIndex := map[int]int{6: 0, 8: 1, 10: 2}
 
 	const repeats = 100
 
@@ -837,15 +902,16 @@ func TestFuncDepOpsRandom(t *testing.T) {
 					}
 				}
 			}
-			run(initialTestState(&cfg.testConfig), 1 /* depth */)
+			run(newTestState(&cfg.testConfig), 1 /* depth */)
 		}
 	}
 
 	// Run tests for joins.
 	for r := 0; r < repeats; r++ {
+		// Generate left and right input op chains.
 		genRandChain := func() *testState {
 			cfg := testConfigs[rand.Intn(len(testConfigs))]
-			state := initialTestState(&cfg.testConfig)
+			state := newTestState(&cfg.testConfig)
 
 			steps := 1 + rand.Intn(cfg.maxDepth)
 			for i := 0; i < steps; i++ {
@@ -855,7 +921,6 @@ func TestFuncDepOpsRandom(t *testing.T) {
 			}
 			return state
 		}
-
 		left := genRandChain()
 		nLeft := left.cfg.numCols
 		leftCols := left.cfg.allCols()
@@ -864,54 +929,75 @@ func TestFuncDepOpsRandom(t *testing.T) {
 		rightCols := shiftSet(right.cfg.allCols(), nLeft)
 		rightFDs := shiftColumns(right.fds, nLeft)
 
+		// Generate filter ops.
+		var filters []testOp
+		filtersFDs := FuncDepSet{}
+		cfg := filterConfigs[filterIndex[nLeft+nRight]]
+		steps := 1 + rand.Intn(cfg.maxDepth)
+		for i := 0; i < steps; i++ {
+			opGenIdx := rand.Intn(len(cfg.ops))
+			op := cfg.ops[opGenIdx](&cfg.testConfig)
+			filters = append(filters, op)
+			filtersFDs = op.ApplyToFDs(filtersFDs)
+		}
+
 		// Test inner join.
 		join := joinTestRelations(
-			nLeft, left.rel, nRight, right.rel, false /* leftOuter */, false, /* rightOuter */
+			nLeft, left.rel, nRight, right.rel, filters, false /* leftOuter */, false, /* rightOuter */
 		)
+
 		var fd FuncDepSet
 		fd.CopyFrom(&left.fds)
 		fd.MakeProduct(&rightFDs)
+		fd.AddFrom(&filtersFDs)
 		if err := join.checkFDs(&fd); err != nil {
 			t.Fatalf(
-				"MakeProduct returned incorrect FDs\n"+
-					"left:   %s\n"+
-					"right:  %s\n"+
-					"result: %s\n"+
-					"error:  %+v\n\n"+
+				"MakeProduct and AddFrom returned incorrect FDs\n"+
+					"left:    %s\n"+
+					"right:   %s\n"+
+					"filters: %s\n"+
+					"result:  %s\n"+
+					"error:   %+v\n\n"+
 					"left side: %s\n"+
-					"right side (cols shifted by %d): %s",
-				&left.fds, &rightFDs, &fd, err, left, nLeft, right,
+					"right side (cols shifted by %d): %s\n"+
+					"filter steps: %s",
+				&left.fds, &rightFDs, &filtersFDs, &fd, err, left, nLeft, right, filters,
 			)
 		}
-		// Since we already have the cartesian product, use it to determine the
-		// not-null input columns.
-		notNullInputCols := join.notNullCols(nLeft + nRight)
+
+		leftNotNullCols := left.rel.notNullCols(nLeft)
+		rightNotNullCols := shiftSet(right.rel.notNullCols(nRight), nLeft)
+		notNullInputCols := leftNotNullCols.Union(rightNotNullCols)
 
 		// Test left join.
 		join = joinTestRelations(
-			nLeft, left.rel, nRight, right.rel, true /* leftOuter */, false, /* rightOuter */
+			nLeft, left.rel, nRight, right.rel, filters, true /* leftOuter */, false, /* rightOuter */
 		)
+
 		fd.CopyFrom(&left.fds)
 		fd.MakeProduct(&rightFDs)
-		fd.MakeLeftOuter(rightCols, notNullInputCols)
+		fd.MakeLeftOuter(&left.fds, &filtersFDs, leftCols, rightCols, notNullInputCols)
 		if err := join.checkFDs(&fd); err != nil {
 			t.Fatalf(
-				"MakeLeftOuter(%s, %s) returned incorrect FDs\n"+
-					"left:   %s\n"+
-					"right:  %s\n"+
-					"result: %s\n"+
-					"error:  %+v\n\n"+
+				"MakeLeftOuter(..., %s, %s, %s) returned incorrect FDs\n"+
+					"left:    %s\n"+
+					"right:   %s\n"+
+					"filters: %s\n"+
+					"result:  %s\n"+
+					"error:   %+v\n\n"+
 					"left side: %s\n"+
-					"right side (cols shifted by %d): %s",
-				rightCols, notNullInputCols,
-				&left.fds, &rightFDs, &fd, err, left, nLeft, right,
+					"right side (cols shifted by %d): %s\n"+
+					"filter steps: %s",
+				leftCols, rightCols, notNullInputCols,
+				&left.fds, &rightFDs, &filtersFDs, &fd, err, left, nLeft, right, filters,
 			)
 		}
 
 		// Test outer join.
 		join = joinTestRelations(
-			nLeft, left.rel, nRight, right.rel, true /* leftOuter */, true, /* rightOuter */
+			nLeft, left.rel, nRight, right.rel, nil, true /* leftOuter */, true, /* rightOuter */
 		)
+
 		fd.CopyFrom(&left.fds)
 		fd.MakeProduct(&rightFDs)
 		fd.MakeFullOuter(leftCols, rightCols, notNullInputCols)
@@ -954,4 +1040,12 @@ func shiftColumns(fd FuncDepSet, delta int) FuncDepSet {
 	}
 	res.key = shiftSet(res.key, delta)
 	return res
+}
+
+func makeCols(numCols int) opt.ColSet {
+	var allCols opt.ColSet
+	for i := opt.ColumnID(1); i <= opt.ColumnID(numCols); i++ {
+		allCols.Add(i)
+	}
+	return allCols
 }
