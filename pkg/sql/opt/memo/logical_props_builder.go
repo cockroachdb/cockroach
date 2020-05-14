@@ -1965,10 +1965,16 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			addOuterColsToFuncDep(rel.OuterCols, &rel.FuncDeps)
 
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-			rel.FuncDeps.MakeLeftOuter(h.rightProps.OutputCols, notNullInputCols)
+			rel.FuncDeps.MakeLeftOuter(
+				&h.leftProps.FuncDeps, &h.filtersFD,
+				h.leftProps.OutputCols, h.rightProps.OutputCols, notNullInputCols,
+			)
 
 		case opt.RightJoinOp:
-			rel.FuncDeps.MakeLeftOuter(h.leftProps.OutputCols, notNullInputCols)
+			rel.FuncDeps.MakeLeftOuter(
+				&h.rightProps.FuncDeps, &h.filtersFD,
+				h.rightProps.OutputCols, h.leftProps.OutputCols, notNullInputCols,
+			)
 
 		case opt.FullJoinOp:
 			rel.FuncDeps.MakeFullOuter(h.leftProps.OutputCols, h.rightProps.OutputCols, notNullInputCols)

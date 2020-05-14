@@ -1783,13 +1783,14 @@ sort
       │    ├── side-effects, mutations
       │    └── project
       │         ├── columns: upsert_a:11!null upsert_b:12 upsert_c:13 x:4!null y:5!null z:6!null abc.a:7 abc.b:8 abc.c:9
-      │         ├── key: (4-9)
-      │         ├── fd: (4,7)-->(11), (5,7,8)-->(12), (6,7,9)-->(13)
+      │         ├── key: (4-6)
+      │         ├── fd: (4-6)-->(7-9), (4,7)-->(11), (5,7,8)-->(12), (6,7,9)-->(13)
       │         ├── left-join (lookup abc)
       │         │    ├── columns: x:4!null y:5!null z:6!null abc.a:7 abc.b:8 abc.c:9
       │         │    ├── key columns: [4 5 6] = [7 8 9]
       │         │    ├── lookup columns are key
-      │         │    ├── key: (4-9)
+      │         │    ├── key: (4-6)
+      │         │    ├── fd: (4-6)-->(7-9)
       │         │    ├── ensure-upsert-distinct-on
       │         │    │    ├── columns: x:4!null y:5!null z:6!null
       │         │    │    ├── grouping columns: x:4!null y:5!null z:6!null

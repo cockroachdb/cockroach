@@ -313,7 +313,7 @@ distinct-on
 # EliminateMax1Row is disabled to ensure that an EnsureDistinctOn operator is
 # created.
 norm expect=EliminateGroupByProject disable=EliminateMax1Row
-SELECT (SELECT y FROM xy WHERE x=k) FROM a
+SELECT (SELECT y FROM xy WHERE x+y=k) FROM a
 ----
 project
  ├── columns: y:8
@@ -324,18 +324,20 @@ project
  │    ├── key: (1)
  │    ├── fd: (1)-->(7)
  │    ├── left-join (hash)
- │    │    ├── columns: k:1!null x:6 xy.y:7
- │    │    ├── key: (1,6)
- │    │    ├── fd: (6)-->(7)
+ │    │    ├── columns: k:1!null xy.y:7 column9:9
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null
  │    │    │    └── key: (1)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:6!null xy.y:7
- │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7)
+ │    │    ├── project
+ │    │    │    ├── columns: column9:9 xy.y:7
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:6!null xy.y:7
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    └── fd: (6)-->(7)
+ │    │    │    └── projections
+ │    │    │         └── x:6 + xy.y:7 [as=column9:9, outer=(6,7)]
  │    │    └── filters
- │    │         └── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── k:1 = column9:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    └── aggregations
  │         └── const-agg [as=xy.y:7, outer=(7)]
  │              └── xy.y:7
@@ -684,12 +686,14 @@ upsert xy
  ├── side-effects, mutations
  └── project
       ├── columns: upsert_y:10 y:4!null column5:5 x:6 y:7
-      ├── key: (6)
-      ├── fd: ()-->(4,5), (6)-->(7), (6)-->(10)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(4-7,10)
       ├── left-join (hash)
       │    ├── columns: y:4!null column5:5 x:6 y:7
-      │    ├── key: (6)
-      │    ├── fd: ()-->(4,5), (6)-->(7)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(4-7)
       │    ├── max1-row
       │    │    ├── columns: y:4!null column5:5
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -839,8 +843,8 @@ upsert abc
  ├── side-effects, mutations
  └── left-join (hash)
       ├── columns: b:5!null "?column?":7!null "?column?":8!null a:9 b:10 c:11
-      ├── key: (5,9-11)
-      ├── fd: ()-->(7,8)
+      ├── key: (5)
+      ├── fd: ()-->(7,8), (5)-->(9-11)
       ├── ensure-upsert-distinct-on
       │    ├── columns: b:5!null "?column?":7!null "?column?":8!null
       │    ├── grouping columns: b:5!null
@@ -1462,12 +1466,14 @@ upsert a
  ├── side-effects, mutations
  └── project
       ├── columns: upsert_f:23 i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 k:15 i:16 f:17 s:18 j:19
-      ├── key: (15)
-      ├── fd: ()-->(7,11-14), (15)-->(16-19,23), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,11-19,23)
       ├── left-join (hash)
       │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 k:15 i:16 f:17 s:18 j:19
-      │    ├── key: (15)
-      │    ├── fd: ()-->(7,11-14), (15)-->(16-19), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7,11-19)
       │    ├── max1-row
       │    │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
@@ -1891,13 +1897,13 @@ upsert a
  └── project
       ├── columns: upsert_f:19 column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
       ├── cardinality: [1 - ]
-      ├── key: (7,8,11)
-      ├── fd: ()-->(9,10), (7,8)-->(6), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15), (7,8,11)-->(19)
+      ├── key: (7,8)
+      ├── fd: ()-->(9,10), (7,8)-->(6,11-15,19), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
       ├── left-join (hash)
       │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
       │    ├── cardinality: [1 - ]
-      │    ├── key: (7,8,11)
-      │    ├── fd: ()-->(9,10), (7,8)-->(6), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    ├── key: (7,8)
+      │    ├── fd: ()-->(9,10), (7,8)-->(6,11-15), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       │    │    ├── grouping columns: column2:7!null column3:8!null

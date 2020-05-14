@@ -52,8 +52,8 @@ SELECT * FROM a RIGHT JOIN b ON k=x
 ----
 left-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6!null y:7
- ├── key: (1,6)
- ├── fd: (6)-->(7), (1)-->(2-5)
+ ├── key: (6)
+ ├── fd: (6)-->(1-5,7), (1)-->(2-5)
  ├── scan b
  │    ├── columns: x:6!null y:7
  │    ├── key: (6)
@@ -147,8 +147,8 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.i=1
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), (6)-->(7)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
@@ -236,8 +236,8 @@ SELECT * FROM b LEFT JOIN a ON (a.i<0 OR a.i>10) AND b.y=1 AND a.s='foo' AND b.x
 ----
 left-join (hash)
  ├── columns: x:1!null y:2 k:3 i:4 f:5 s:6 j:7
- ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4,5,7), (1,3)-->(6)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), (3)-->(4,5,7)
  ├── scan b
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
@@ -263,8 +263,8 @@ SELECT * FROM b RIGHT JOIN a ON b.x=a.k AND a.i=1
 ----
 left-join (hash)
  ├── columns: x:1 y:2 k:3!null i:4 f:5!null s:6 j:7
- ├── key: (1,3)
- ├── fd: (3)-->(4-7), (1)-->(2)
+ ├── key: (3)
+ ├── fd: (3)-->(1,2,4-7), (1)-->(2)
  ├── scan a
  │    ├── columns: k:3!null i:4 f:5!null s:6 j:7
  │    ├── key: (3)
@@ -467,8 +467,8 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), (6)-->(7)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
@@ -492,8 +492,8 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.k > 5 AND b.x IN (3, 7, 10)
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), (6)-->(7)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
@@ -1744,8 +1744,8 @@ SELECT * FROM a FULL JOIN (SELECT * FROM a WHERE k>0) AS a2 ON a.k=a2.k
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6 i:7 f:8 s:9 j:10
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7-10)
+ ├── key: (1)
+ ├── fd: (1)-->(2-10), (6)-->(7-10)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
@@ -1909,8 +1909,8 @@ ON c.z = a.k
 ----
 left-join (hash)
  ├── columns: x:1!null y:2!null z:3!null k:4 i:5 f:6 s:7 j:8
- ├── key: (1,4)
- ├── fd: (1)-->(2,3), (4)-->(5-8)
+ ├── key: (1)
+ ├── fd: (1)-->(2-8), (4)-->(5-8)
  ├── scan c
  │    ├── columns: x:1!null y:2!null z:3!null
  │    ├── key: (1)
@@ -1931,8 +1931,8 @@ ON c.x = a.k
 ----
 left-join (hash)
  ├── columns: x:1!null y:2!null z:3!null k:4 i:5 f:6 s:7 j:8
- ├── key: (1,4)
- ├── fd: (1)-->(2,3), (4)-->(5-8)
+ ├── key: (1)
+ ├── fd: (1)-->(2-8), (4)-->(5-8)
  ├── scan c
  │    ├── columns: x:1!null y:2!null z:3!null
  │    ├── key: (1)
@@ -2129,8 +2129,8 @@ ON c.y = a.k
 ----
 left-join (hash)
  ├── columns: x:1!null y:2!null z:3!null k:4 i:5 f:6 s:7 j:8
- ├── key: (1,4)
- ├── fd: (1)-->(2,3), (4)-->(5-8)
+ ├── key: (1)
+ ├── fd: (1)-->(2-8), (4)-->(5-8)
  ├── scan c
  │    ├── columns: x:1!null y:2!null z:3!null
  │    ├── key: (1)
@@ -2275,12 +2275,12 @@ SELECT * FROM a LEFT JOIN (SELECT x FROM b WHERE y=10) ON x=k
 ----
 project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6
- ├── key: (1,6)
- ├── fd: (1)-->(2-5)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
  └── left-join (hash)
       ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
-      ├── key: (1,6)
-      ├── fd: (1)-->(2-5), (1,6)-->(7)
+      ├── key: (1)
+      ├── fd: (1)-->(2-7)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
       │    ├── key: (1)
@@ -2337,12 +2337,12 @@ SELECT * FROM (SELECT x FROM b WHERE y=10) LEFT JOIN a ON x=k
 ----
 project
  ├── columns: x:1!null k:3 i:4 f:5 s:6 j:7
- ├── key: (1,3)
- ├── fd: (3)-->(4-7)
+ ├── key: (1)
+ ├── fd: (3)-->(4-7), (1)-->(3-7)
  └── left-join (hash)
       ├── columns: x:1!null y:2!null k:3 i:4 f:5 s:6 j:7
-      ├── key: (1,3)
-      ├── fd: ()-->(2), (3)-->(4-7)
+      ├── key: (1)
+      ├── fd: ()-->(2), (3)-->(4-7), (1)-->(3-7)
       ├── select
       │    ├── columns: x:1!null y:2!null
       │    ├── key: (1)
