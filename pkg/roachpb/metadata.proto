@@ -210,14 +210,6 @@ message RangeDescriptor {
   // the replica it's supposed to update, and no splits and merges have taken
   // place at all).
   //
-  // Note that the generation counter is not incremented by versions of
-  // Cockroach prior to v2.1. To maintain backwards compatibility with these old
-  // versions of Cockroach, we cannot enable the gogoproto.nullable option, as
-  // we need to be able to encode this mesage with the generation field unset.
-  // TODO(andrei): The compatibility issues went away (we no longer perform
-  // CPuts with unmarshalled/marshalled descriptors), so this field should
-  // become nullable.
-  //
   // Note also that when the generation counter was first introduced, it only
   // ever incremented (by one) the generation of the left hand side on merges
   // and splits, so the above overlap arguments only hold if we know that the
@@ -234,7 +226,7 @@ message RangeDescriptor {
   // generational counter can answer the question whether the overlapping
   // replica is gc'able or not. If it is not gc'able, then by definition the
   // replica applying the merge is.
-  optional int64 generation = 6;
+  optional int64 generation = 6 [(gogoproto.nullable) = false];
   // generation_comparable is additional state to mark descriptors as obeying
   // the new generation rules. We can determine the causality of two range
   // descriptors if they overlap and both their generation_comparable are set.

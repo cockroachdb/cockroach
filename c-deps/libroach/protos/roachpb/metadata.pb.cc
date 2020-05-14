@@ -1464,7 +1464,6 @@ bool RangeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
-      // optional int64 generation = 6;
       case 6: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(48u /* 48 & 0xFF */)) {
@@ -1557,7 +1556,6 @@ void RangeDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(5, this->next_replica_id(), output);
   }
 
-  // optional int64 generation = 6;
   if (cached_has_bits & 0x00000010u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->generation(), output);
   }
@@ -1620,7 +1618,6 @@ size_t RangeDescriptor::ByteSizeLong() const {
           this->range_id());
     }
 
-    // optional int64 generation = 6;
     if (has_generation()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(

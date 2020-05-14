@@ -919,8 +919,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 		}
 	}
 	// Tweak the descriptor so that the gossip callback will be invoked.
-	desc.Generation = new(int64)
-	*desc.Generation = 1
+	desc.Generation = 1
 	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &desc, 0); err != nil {
 		t.Fatal(err)
 	}
