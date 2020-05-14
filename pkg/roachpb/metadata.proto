@@ -210,16 +210,6 @@ message RangeDescriptor {
   // the replica it's supposed to update, and no splits and merges have taken
   // place at all).
   //
-  // Note also that when the generation counter was first introduced, it only
-  // ever incremented (by one) the generation of the left hand side on merges
-  // and splits, so the above overlap arguments only hold if we know that the
-  // descriptors involved never used that code. Generations were first introduced
-  // in the 19.1 release, though, the behavior described here was only introduced
-  // in a late release candidate. If we allow such a release candidate cluster
-  // to transition into the final 19.1 release, we will need to introduce
-  // additional state to mark descriptors as obeying the new rules. If we don't,
-  // then we are free to assume that the semantics always hold.
-  //
   // For a third note, observe that the generational semantics above may
   // possibly allow range merges without colocation, at least in the sense that
   // the counter examples in #28071 are defused. This is because the
@@ -227,16 +217,6 @@ message RangeDescriptor {
   // replica is gc'able or not. If it is not gc'able, then by definition the
   // replica applying the merge is.
   optional int64 generation = 6 [(gogoproto.nullable) = false];
-  // generation_comparable is additional state to mark descriptors as obeying
-  // the new generation rules. We can determine the causality of two range
-  // descriptors if they overlap and both their generation_comparable are set.
-  // If one or both of their generation_comparable is not set, we cannot
-  // determine which range descriptor is newer. This is needed because older
-  // versions of Cockroach did not set the generation in some cases where it is
-  // currently set. Code that relies on a total order of range descriptor
-  // generations can determine when this order is ensured from this state. See
-  // #36654 for more details.
-  optional bool generation_comparable = 8;
   // The presence of the sticky_bit indicates that the range should not be
   // automatically merged by the merge queue with the range to its left. It is
   // set during a split operation and unset during an unsplit operation. Note
@@ -253,6 +233,8 @@ message RangeDescriptor {
   // queue is enabled. With sticky_bit, users can manually split ranges without
   // diabling the merge queue.
   optional util.hlc.Timestamp sticky_bit = 7;
+
+  reserved 8;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize

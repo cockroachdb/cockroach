@@ -1673,9 +1673,8 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 				learner,
 				repl3,
 			},
-			NextReplicaID:        10,
-			Generation:           proto.Int64(5),
-			GenerationComparable: proto.Bool(true),
+			NextReplicaID: 10,
+			Generation:    proto.Int64(5),
 		},
 	}
 	act := crt.String()
