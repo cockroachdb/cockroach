@@ -142,12 +142,18 @@ func (e sqlEncoder) DescIDSequenceKey() roachpb.Key {
 
 // ZoneKeyPrefix returns the key prefix for id's row in the system.zones table.
 func (e sqlEncoder) ZoneKeyPrefix(id uint32) roachpb.Key {
+	if !e.ForSystemTenant() {
+		panic("zone keys only exist in the system tenant's keyspace")
+	}
 	k := e.IndexPrefix(ZonesTableID, ZonesTablePrimaryIndexID)
 	return encoding.EncodeUvarintAscending(k, uint64(id))
 }
 
 // ZoneKey returns the key for id's entry in the system.zones table.
 func (e sqlEncoder) ZoneKey(id uint32) roachpb.Key {
+	if !e.ForSystemTenant() {
+		panic("zone keys only exist in the system tenant's keyspace")
+	}
 	k := e.ZoneKeyPrefix(id)
 	return MakeFamilyKey(k, uint32(ZonesTableConfigColumnID))
 }

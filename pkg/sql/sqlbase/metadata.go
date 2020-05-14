@@ -87,7 +87,9 @@ type metadataDescriptor struct {
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
-// the "system" database.
+// the "system" database. Default zone configurations are required to create
+// a MetadataSchema for the system tenant, but do not need to be supplied for
+// any other tenant.
 func MakeMetadataSchema(
 	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,

@@ -1535,20 +1535,6 @@ var (
 	}
 )
 
-// Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(
-	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
-) roachpb.KeyValue {
-	value := roachpb.Value{}
-	if err := value.SetProto(zoneConfig); err != nil {
-		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
-	}
-	return roachpb.KeyValue{
-		Key:   codec.ZoneKey(uint32(keyID)),
-		Value: value,
-	}
-}
-
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
 // with the system database and table descriptors. The descriptors for
 // these objects exist statically in this file, but a MetadataSchema
@@ -1562,17 +1548,17 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &NamespaceTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	if target.codec.ForSystemTenant() {
+		target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	}
 	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
-
-	// Only add the descriptor ID sequence if this is a non-system tenant.
-	// System tenants use the global descIDGenerator key. See #48513.
 	if !target.codec.ForSystemTenant() {
+		// Only add the descriptor ID sequence if this is a non-system tenant.
+		// System tenants use the global descIDGenerator key. See #48513.
 		target.AddDescriptor(keys.SystemDatabaseID, &DescIDSequence)
 	}
-
-	// Only add the tenant table if this is the system tenant.
 	if target.codec.ForSystemTenant() {
+		// Only add the tenant table if this is the system tenant.
 		target.AddDescriptor(keys.SystemDatabaseID, &TenantsTable)
 	}
 
@@ -1606,16 +1592,38 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsTable)
 }
 
-// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
-// System database, its tables and zone configurations.
-func addSystemDatabaseToSchema(
+// addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
+// MetadataSchema.
+func addSplitIDs(target *MetadataSchema) {
+	target.AddSplitIDs(keys.PseudoTableIDs...)
+}
+
+// Create a kv pair for the zone config for the given key and config value.
+func createZoneConfigKV(
+	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
+) roachpb.KeyValue {
+	value := roachpb.Value{}
+	if err := value.SetProto(zoneConfig); err != nil {
+		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
+	}
+	return roachpb.KeyValue{
+		Key:   codec.ZoneKey(uint32(keyID)),
+		Value: value,
+	}
+}
+
+// addZoneConfigKVsToSchema adds a kv pair for each of the statically defined
+// zone configurations that should be populated in a newly bootstrapped cluster.
+func addZoneConfigKVsToSchema(
 	target *MetadataSchema,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
-	addSystemDescriptorsToSchema(target)
-
-	target.AddSplitIDs(keys.PseudoTableIDs...)
+	// If this isn't the system tenant, don't add any zone configuration keys.
+	// Only the system tenant has a zone table.
+	if !target.codec.ForSystemTenant() {
+		return
+	}
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older cluster. The includedInBootstrap
@@ -1653,6 +1661,18 @@ func addSystemDatabaseToSchema(
 		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
 	target.otherKV = append(target.otherKV,
 		createZoneConfigKV(keys.ReplicationStatsTableID, target.codec, replicationStatsZoneConf))
+}
+
+// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
+// System database, its tables and zone configurations.
+func addSystemDatabaseToSchema(
+	target *MetadataSchema,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+) {
+	addSystemDescriptorsToSchema(target)
+	addSplitIDs(target)
+	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
