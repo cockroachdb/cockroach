@@ -36,7 +36,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -2616,19 +2615,19 @@ func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
 	}
 
 	// Determining whether or not to randomize vectorized batch size.
-	rng, _ := randutil.NewPseudoRand()
-	randVal := rng.Float64()
-	randomizedVectorizedBatchSize := coldata.BatchSize()
-	if randVal < 0.25 {
-		randomizedVectorizedBatchSize = 1
-	} else if randVal < 0.375 {
-		randomizedVectorizedBatchSize = 2
-	} else if randVal < 0.5 {
-		randomizedVectorizedBatchSize = 3
-	}
-	if randomizedVectorizedBatchSize != coldata.BatchSize() {
-		t.Log(fmt.Sprintf("randomize batchSize to %d", randomizedVectorizedBatchSize))
-	}
+	//rng, _ := randutil.NewPseudoRand()
+	//randVal := rng.Float64()
+	randomizedVectorizedBatchSize := 1
+	//if randVal < 0.25 {
+	//	randomizedVectorizedBatchSize = 1
+	//} else if randVal < 0.375 {
+	//	randomizedVectorizedBatchSize = 2
+	//} else if randVal < 0.5 {
+	//	randomizedVectorizedBatchSize = 3
+	//}
+	//if randomizedVectorizedBatchSize != coldata.BatchSize() {
+	//	t.Log(fmt.Sprintf("randomize batchSize to %d", randomizedVectorizedBatchSize))
+	//}
 
 	// The tests below are likely to run concurrently; `log` is shared
 	// between all the goroutines and thus all tests, so it doesn't make

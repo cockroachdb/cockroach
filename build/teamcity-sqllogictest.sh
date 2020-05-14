@@ -16,4 +16,4 @@ export BUILDER_HIDE_GOPATH_SRC=0
 # numeric typing differences.
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
-  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$'
+  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='8h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$'

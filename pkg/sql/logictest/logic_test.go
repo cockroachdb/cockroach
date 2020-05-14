@@ -108,7 +108,7 @@ func runSQLLiteLogicTest(t *testing.T, globs ...string) {
 	// SQLLite logic tests can be very disk (with '-disk' configs) intensive,
 	// so we give them larger temp storage limit than other logic tests get.
 	serverArgs := TestServerArgs{
-		tempStorageDiskLimit: 1 << 29, // 512 MiB
+		tempStorageDiskLimit: 1 << 25, // 32 MiB
 	}
 	RunLogicTest(t, serverArgs, prefixedGlobs...)
 }
