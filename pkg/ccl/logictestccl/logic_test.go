@@ -18,5 +18,5 @@ import (
 
 func TestCCLLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	logictest.RunLogicTest(t, "testdata/logic_test/[^.]*")
+	logictest.RunLogicTest(t, logictest.TestServerArgs{}, "testdata/logic_test/[^.]*")
 }
