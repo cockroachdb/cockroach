@@ -391,6 +391,7 @@ func init() {
 		// --join, because it delegates its logic to that of 'start', and
 		// 'start' will check that the flag is properly defined.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		BoolFlag(f, &serverCfg.JoinPreferSRVRecords, cliflags.JoinPreferSRVRecords, serverCfg.JoinPreferSRVRecords)
 		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		BoolFlag(f, &baseCfg.DisableClusterNameVerification,
 			cliflags.DisableClusterNameVerification, baseCfg.DisableClusterNameVerification)
