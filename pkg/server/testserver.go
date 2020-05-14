@@ -475,7 +475,10 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 
 	dummyRecorder := &status.MetricsRecorder{}
 
-	const fakeNodeID = roachpb.NodeID(9999)
+	// TODO(asubiotto): Jobs don't play well with a weird node ID in a multitenant
+	//  environment, so a node ID of 1 is used here to get tests to pass. Fixing
+	//  this is tracked in https://github.com/cockroachdb/cockroach/issues/47892.
+	const fakeNodeID = roachpb.NodeID(1)
 	var c base.NodeIDContainer
 	c.Set(context.Background(), fakeNodeID)
 	const sqlInstanceID = base.SQLInstanceID(10001)

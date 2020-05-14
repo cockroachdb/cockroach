@@ -1,3 +1,5 @@
+# LogicTest: !3node-tenant
+
 statement ok
 CREATE TABLE other (b INT PRIMARY KEY)
 

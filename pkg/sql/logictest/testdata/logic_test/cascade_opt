@@ -1,3 +1,6 @@
+# This test times out when run with 3node-tenant.
+# LogicTest: !3node-tenant
+
 # The tests in this file target the new optimizer-driven FK paths (with
 # fall back on the legacy paths for unsupported cases).
 statement ok

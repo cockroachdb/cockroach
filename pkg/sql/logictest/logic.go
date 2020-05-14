@@ -565,8 +565,10 @@ var logicTestConfigs = []testClusterConfig{
 		skipShort:           true,
 	},
 	{
-		name:              "3node-tenant",
-		numNodes:          3,
+		name:     "3node-tenant",
+		numNodes: 3,
+		// overrideAutoStats will disable automatic stats on the cluster this tenant
+		// is connected to.
 		overrideAutoStats: "false",
 		useTenant:         true,
 	},
@@ -605,6 +607,7 @@ var (
 		"fakedist-vec-auto-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
+		"3node-tenant",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	fiveNodeDefaultConfigName  = "5node-default-configs"
