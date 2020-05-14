@@ -41,6 +41,10 @@ type Materializer struct {
 	curIdx int
 	// batch is the current Batch the Materializer is processing.
 	batch coldata.Batch
+	// colvecs is the unwrapped batch.
+	colvecs []coldata.Vec
+	// sel is the selection vector on the batch.
+	sel []int
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
@@ -166,18 +170,17 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 				return nil, m.DrainHelper()
 			}
 			m.curIdx = 0
+			m.colvecs = m.batch.ColVecs()
+			m.sel = m.batch.Selection()
 		}
-		sel := m.batch.Selection()
-
 		rowIdx := m.curIdx
-		if sel != nil {
-			rowIdx = sel[m.curIdx]
+		if m.sel != nil {
+			rowIdx = m.sel[m.curIdx]
 		}
 		m.curIdx++
 
-		for colIdx := 0; colIdx < len(m.typs); colIdx++ {
-			col := m.batch.ColVec(colIdx)
-			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, &m.da, m.typs[colIdx])
+		for colIdx, typ := range m.typs {
+			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(m.colvecs[colIdx], rowIdx, &m.da, typ)
 		}
 		// Note that there is no post-processing to be done in the
 		// materializer, so we do not use ProcessRowHelper and emit the row
