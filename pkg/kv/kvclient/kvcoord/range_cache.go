@@ -166,7 +166,7 @@ func makeLookupRequestKey(
 	// two cases, we can use the generation of the previous descriptor.
 	if prevDesc != nil && prevDesc.GetGenerationComparable() {
 		ret.WriteString(":")
-		ret.WriteString(strconv.FormatInt(prevDesc.GetGeneration(), 10))
+		ret.WriteString(strconv.FormatInt(prevDesc.Generation, 10))
 	}
 	return ret.String()
 }
@@ -547,7 +547,7 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 	// doing it again (which would prompt another expensive lookup).
 	if seenDesc != nil {
 		if seenDesc.GetGenerationComparable() && cachedDesc.GetGenerationComparable() {
-			if seenDesc.GetGeneration() != cachedDesc.GetGeneration() {
+			if seenDesc.Generation != cachedDesc.Generation {
 				return nil
 			}
 		} else if !seenDesc.GetGenerationComparable() && !cachedDesc.GetGenerationComparable() {
@@ -684,7 +684,7 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 		// the end key is inclusive.
 		if cached.StartKey.Less(desc.EndKey) && !cached.EndKey.Less(desc.EndKey) {
 			if desc.GetGenerationComparable() && cached.GetGenerationComparable() {
-				if desc.GetGeneration() <= cached.GetGeneration() {
+				if desc.Generation <= cached.Generation {
 					// Generations are comparable and a newer descriptor already exists in
 					// cache.
 					continueWithInsert = false
@@ -718,7 +718,7 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 		if desc.GetGenerationComparable() && descriptor.GetGenerationComparable() {
 			// If generations are comparable, then check generations to see if we
 			// evict.
-			if desc.GetGeneration() <= descriptor.GetGeneration() {
+			if desc.Generation <= descriptor.Generation {
 				continueWithInsert = false
 			} else {
 				entriesToEvict = append(entriesToEvict, e)
