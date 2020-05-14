@@ -188,11 +188,14 @@ func populateExplain(
 ) error {
 	// Determine the "distributed" and "vectorized" values, which we will emit as
 	// special rows.
-	var isDistSQL, isVec bool
+	var willDistribute, willVectorize bool
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	isDistSQL, _ = willDistributePlan(distSQLPlanner, plan.main, params)
+	willDistribute = willDistributePlan(
+		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
+	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, stmtType, plan.subqueryPlans, isDistSQL)
+	planCtx := makeExplainPlanningCtx(distSQLPlanner, params, stmtType, plan.subqueryPlans, willDistribute)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
@@ -211,21 +214,21 @@ func populateExplain(
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData
 		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
-		isVec = true
+		willVectorize = true
 		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
-			isVec = false
+			willVectorize = false
 		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
-			isVec = false
+			willVectorize = false
 		} else {
 			thisNodeID := distSQLPlanner.nodeDesc.NodeID
 			for nodeID, flow := range flows {
 				fuseOpt := flowinfra.FuseNormally
-				if nodeID == thisNodeID && !isDistSQL {
+				if nodeID == thisNodeID && !willDistribute {
 					fuseOpt = flowinfra.FuseAggressively
 				}
 				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, fuseOpt, nil /* output */)
-				isVec = isVec && (err == nil)
-				if !isVec {
+				willVectorize = willVectorize && (err == nil)
+				if !willVectorize {
 					break
 				}
 			}
@@ -258,10 +261,10 @@ func populateExplain(
 	}
 
 	// First, emit the "distributed" and "vectorized" information rows.
-	if err := emitRow("", 0, "", "distributed", fmt.Sprintf("%t", isDistSQL), "", ""); err != nil {
+	if err := emitRow("", 0, "", "distributed", fmt.Sprintf("%t", willDistribute), "", ""); err != nil {
 		return err
 	}
-	if err := emitRow("", 0, "", "vectorized", fmt.Sprintf("%t", isVec), "", ""); err != nil {
+	if err := emitRow("", 0, "", "vectorized", fmt.Sprintf("%t", willVectorize), "", ""); err != nil {
 		return err
 	}
 

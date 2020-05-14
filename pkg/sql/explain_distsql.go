@@ -65,9 +65,12 @@ type distSQLExplainable interface {
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	shouldPlanDistribute, recommendation := willDistributePlan(distSQLPlanner, n.plan.main, params)
+	willDistribute := willDistributePlan(
+		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
+	)
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !shouldPlanDistribute
+	planCtx.isLocal = !willDistribute
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
@@ -258,7 +261,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	}
 
 	n.run.values = tree.Datums{
-		tree.MakeDBool(tree.DBool(recommendation == shouldDistribute)),
+		tree.MakeDBool(tree.DBool(willDistribute)),
 		tree.NewDString(planURL.String()),
 		tree.NewDString(planJSON),
 	}
@@ -276,22 +279,6 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) {
 	n.plan.close(ctx)
-}
-
-// willDistributePlan checks if the given plan will run with distributed
-// execution. It takes into account whether a distSQL plan can be made at all
-// and the session setting for distSQL.
-func willDistributePlan(
-	distSQLPlanner *DistSQLPlanner, plan planNode, params runParams,
-) (bool, distRecommendation) {
-	var recommendation distRecommendation
-	if _, ok := plan.(distSQLExplainable); ok {
-		recommendation = shouldDistribute
-	} else {
-		recommendation, _ = distSQLPlanner.checkSupportForNode(plan)
-	}
-	shouldDistribute := shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
-	return shouldDistribute, recommendation
 }
 
 func makePhysicalPlan(

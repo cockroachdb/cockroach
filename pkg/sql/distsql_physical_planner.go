@@ -198,7 +198,7 @@ func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver physicalplan.SpanResolve
 }
 
 // distSQLExprCheckVisitor is a tree.Visitor that checks if expressions
-// contain things not supported by distSQL (like subqueries).
+// contain things not supported by distSQL, like distSQL-blacklisted functions.
 type distSQLExprCheckVisitor struct {
 	err error
 }
@@ -232,8 +232,8 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 func (v *distSQLExprCheckVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // checkExpr verifies that an expression doesn't contain things that are not yet
-// supported by distSQL, like subqueries.
-func (dsp *DistSQLPlanner) checkExpr(expr tree.Expr) error {
+// supported by distSQL, like distSQL-blacklisted functions.
+func checkExpr(expr tree.Expr) error {
 	if expr == nil {
 		return nil
 	}
@@ -342,23 +342,23 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 // The error doesn't indicate complete failure - it's instead the reason that
 // this plan couldn't be distributed.
 // TODO(radu): add tests for this.
-func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendation, error) {
+func checkSupportForNode(node planNode) (distRecommendation, error) {
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
 	case *distinctNode:
-		return dsp.checkSupportForNode(n.plan)
+		return checkSupportForNode(n.plan)
 
 	case *exportNode:
-		return dsp.checkSupportForNode(n.source)
+		return checkSupportForNode(n.source)
 
 	case *filterNode:
-		if err := dsp.checkExpr(n.filter); err != nil {
+		if err := checkExpr(n.filter); err != nil {
 			return cannotDistribute, err
 		}
-		return dsp.checkSupportForNode(n.source.plan)
+		return checkSupportForNode(n.source.plan)
 
 	case *groupNode:
-		rec, err := dsp.checkSupportForNode(n.plan)
+		rec, err := checkSupportForNode(n.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -368,20 +368,20 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *indexJoinNode:
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
-		if _, err := dsp.checkSupportForNode(n.table); err != nil {
+		if _, err := checkSupportForNode(n.table); err != nil {
 			return cannotDistribute, err
 		}
-		return dsp.checkSupportForNode(n.input)
+		return checkSupportForNode(n.input)
 
 	case *joinNode:
-		if err := dsp.checkExpr(n.pred.onCond); err != nil {
+		if err := checkExpr(n.pred.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		recLeft, err := dsp.checkSupportForNode(n.left.plan)
+		recLeft, err := checkSupportForNode(n.left.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := dsp.checkSupportForNode(n.right.plan)
+		recRight, err := checkSupportForNode(n.right.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -395,33 +395,33 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return rec, nil
 
 	case *limitNode:
-		if err := dsp.checkExpr(n.countExpr); err != nil {
+		if err := checkExpr(n.countExpr); err != nil {
 			return cannotDistribute, err
 		}
-		if err := dsp.checkExpr(n.offsetExpr); err != nil {
+		if err := checkExpr(n.offsetExpr); err != nil {
 			return cannotDistribute, err
 		}
-		return dsp.checkSupportForNode(n.plan)
+		return checkSupportForNode(n.plan)
 
 	case *lookupJoinNode:
-		if err := dsp.checkExpr(n.onCond); err != nil {
+		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		if _, err := dsp.checkSupportForNode(n.input); err != nil {
+		if _, err := checkSupportForNode(n.input); err != nil {
 			return cannotDistribute, err
 		}
 		return shouldDistribute, nil
 
 	case *projectSetNode:
-		return dsp.checkSupportForNode(n.source)
+		return checkSupportForNode(n.source)
 
 	case *renderNode:
 		for _, e := range n.render {
-			if err := dsp.checkExpr(e); err != nil {
+			if err := checkExpr(e); err != nil {
 				return cannotDistribute, err
 			}
 		}
-		return dsp.checkSupportForNode(n.source.plan)
+		return checkSupportForNode(n.source.plan)
 
 	case *scanNode:
 		if n.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
@@ -442,7 +442,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		// We recommend running scans distributed if we have a filtering
 		// expression or if we have a full table scan.
 		if n.filter != nil {
-			if err := dsp.checkExpr(n.filter); err != nil {
+			if err := checkExpr(n.filter); err != nil {
 				return cannotDistribute, err
 			}
 			rec = rec.compose(shouldDistribute)
@@ -454,7 +454,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return rec, nil
 
 	case *sortNode:
-		rec, err := dsp.checkSupportForNode(n.plan)
+		rec, err := checkSupportForNode(n.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -466,11 +466,11 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return canDistribute, nil
 
 	case *unionNode:
-		recLeft, err := dsp.checkSupportForNode(n.left)
+		recLeft, err := checkSupportForNode(n.left)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := dsp.checkSupportForNode(n.right)
+		recRight, err := checkSupportForNode(n.right)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -486,7 +486,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 		for _, tuple := range n.tuples {
 			for _, expr := range tuple {
-				if err := dsp.checkExpr(expr); err != nil {
+				if err := checkExpr(expr); err != nil {
 					return cannotDistribute, err
 				}
 			}
@@ -494,13 +494,13 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return canDistribute, nil
 
 	case *windowNode:
-		return dsp.checkSupportForNode(n.plan)
+		return checkSupportForNode(n.plan)
 
 	case *zeroNode:
 		return canDistribute, nil
 
 	case *zigzagJoinNode:
-		if err := dsp.checkExpr(n.onCond); err != nil {
+		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
 		return shouldDistribute, nil
