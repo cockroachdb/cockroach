@@ -69,8 +69,8 @@ update xy
  ├── side-effects, mutations
  └── left-join (hash)
       ├── columns: x:3!null y:4 u:5 v:6
-      ├── key: (3,5)
-      ├── fd: (3)-->(4), (5)-->(6)
+      ├── key: (3)
+      ├── fd: (3)-->(4-6), (5)-->(6)
       ├── scan xy
       │    ├── columns: x:3!null y:4
       │    ├── key: (3)
@@ -879,8 +879,8 @@ project
  │    ├── fd: (1)-->(10)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null x:6 notnull:9
- │    │    ├── key: (1,6)
- │    │    ├── fd: (6)-->(9)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (6)-->(9), (1)-->(6,9)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null
  │    │    │    └── key: (1)
@@ -960,8 +960,8 @@ project
  │    ├── fd: (1)-->(10)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null x:6 notnull:9
- │    │    ├── key: (1,6)
- │    │    ├── fd: (6)-->(9)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (6)-->(9), (1)-->(6,9)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null
  │    │    │    └── key: (1)
@@ -1002,8 +1002,8 @@ project
  │    ├── fd: (1)-->(2,10)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null i:2 x:6 y:7 notnull:9
- │    │    ├── key: (1,6)
- │    │    ├── fd: (1)-->(2), (6)-->(7), (7)~~>(9), (1,6)-->(9)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,6,7,9), (6)-->(7), (7)~~>(9)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null i:2
  │    │    │    ├── key: (1)
@@ -1042,8 +1042,8 @@ project
  │    ├── fd: (1)-->(9,11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null x:6 y:7 scalar:9 notnull:10
- │    │    ├── key: (1,6)
- │    │    ├── fd: (1)-->(9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(6,7,9,10), (6)-->(7), (7)~~>(10)
  │    │    ├── project
  │    │    │    ├── columns: scalar:9 k:1!null
  │    │    │    ├── key: (1)
@@ -1270,8 +1270,8 @@ project
  │    ├── fd: (1)-->(11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null x:6 column10:10
- │    │    ├── key: (1,6)
- │    │    ├── fd: (6)-->(10)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (6)-->(10), (1)-->(6,10)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null
  │    │    │    └── key: (1)
@@ -1389,8 +1389,8 @@ project
       │    ├── fd: (1)-->(10)
       │    ├── left-join (hash)
       │    │    ├── columns: k:1!null x:6 u:8
-      │    │    ├── key: (1,8)
-      │    │    ├── fd: (6)==(8), (8)==(6)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (6)==(8), (8)==(6), (1)-->(6,8)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
@@ -1431,7 +1431,8 @@ semi-join-apply
  ├── left-join (hash)
  │    ├── columns: x:6!null u:8
  │    ├── outer: (1)
- │    ├── key: (6,8)
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(8)
  │    ├── scan xy
  │    │    ├── columns: x:6!null
  │    │    └── key: (6)
@@ -1545,15 +1546,16 @@ WHERE (SELECT i FROM a WHERE k=x) IS DISTINCT FROM u
 ----
 project
  ├── columns: x:1!null y:2 u:3!null v:4
+ ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
  └── select
       ├── columns: x:1!null y:2 u:3!null v:4 k:5 i:6
-      ├── key: (1,3,5)
-      ├── fd: (1)-->(2), (3)-->(4), (5)-->(6)
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (3)-->(4), (5)-->(6), (1,3)-->(5,6)
       ├── left-join (hash)
       │    ├── columns: x:1!null y:2 u:3!null v:4 k:5 i:6
-      │    ├── key: (1,3,5)
-      │    ├── fd: (1)-->(2), (3)-->(4), (5)-->(6)
+      │    ├── key: (1,3)
+      │    ├── fd: (1)-->(2), (3)-->(4), (5)-->(6), (1,3)-->(5,6)
       │    ├── inner-join (cross)
       │    │    ├── columns: x:1!null y:2 u:3!null v:4
       │    │    ├── key: (1,3)
@@ -1796,8 +1798,8 @@ project
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
       │    ├── left-join (hash)
       │    │    ├── columns: x:1!null y:2 u:3!null v:4!null k:5 i:6
-      │    │    ├── key: (3,5)
-      │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4), (4)==(1), (5)-->(6)
+      │    │    ├── key: (3)
+      │    │    ├── fd: (1)-->(2), (3)-->(4-6), (1)==(4), (4)==(1), (5)-->(6)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: x:1!null y:2 u:3!null v:4!null
       │    │    │    ├── key: (3)
@@ -2459,8 +2461,8 @@ project
       │    │    ├── fd: (1)-->(2,3,6)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: c:1!null d:2!null x:3 y:4
-      │    │    │    ├── key: (1,3)
-      │    │    │    ├── fd: (1)-->(2), (3)-->(4)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-4), (3)-->(4)
       │    │    │    ├── scan cd
       │    │    │    │    ├── columns: c:1!null d:2!null
       │    │    │    │    ├── key: (1)
@@ -2505,8 +2507,8 @@ project
       │    │    ├── fd: (1)-->(2-5,10,11)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 column8:8 canary:10
-      │    │    │    ├── key: (1,6)
-      │    │    │    ├── fd: (1)-->(2-5), (6)-->(8), (1,6)-->(10)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-6,8,10), (6)-->(8)
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    │    ├── key: (1)
@@ -2557,8 +2559,8 @@ project
  │    ├── fd: (1)-->(12)
  │    ├── left-join (hash)
  │    │    ├── columns: a2.k:1!null a2.i:2 a.k:6 a.s:9 column11:11
- │    │    ├── key: (1,6)
- │    │    ├── fd: (1)-->(2), (6)-->(9), (1,6)-->(11)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,6,9,11), (6)-->(9)
  │    │    ├── scan a2
  │    │    │    ├── columns: a2.k:1!null a2.i:2
  │    │    │    ├── key: (1)
@@ -3850,8 +3852,8 @@ project
       │    ├── fd: (1)-->(2-5,8)
       │    ├── left-join (hash)
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 u:6
-      │    │    ├── key: (1,6)
-      │    │    ├── fd: (1)-->(2-5)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-6)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
@@ -3945,8 +3947,8 @@ project
       │    │    ├── fd: (1)-->(2-5,9)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7 notnull:8
-      │    │    │    ├── key: (1,6)
-      │    │    │    ├── fd: (1)-->(2-5), (6)-->(7), (7)~~>(8), (1,6)-->(8)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-8), (6)-->(7), (7)~~>(8)
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    │    ├── key: (1)
@@ -4013,8 +4015,8 @@ project
  │    ├── fd: (1)-->(4,9,11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null s:4 x:6 y:7 scalar:9 notnull:10
- │    │    ├── key: (1,6)
- │    │    ├── fd: (1)-->(4,9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(4,6,7,9,10), (6)-->(7), (7)~~>(10)
  │    │    ├── project
  │    │    │    ├── columns: scalar:9 k:1!null s:4
  │    │    │    ├── key: (1)
@@ -4068,8 +4070,8 @@ project
       │    ├── fd: (1)-->(2-5,11)
       │    ├── left-join (hash)
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 true:10
-      │    │    ├── key: (1,8)
-      │    │    ├── fd: (1)-->(2-5), (1,8)-->(10)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-5,8,10)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
@@ -4122,7 +4124,8 @@ project
  ├── columns: x:8
  ├── left-join (hash)
  │    ├── columns: k:1!null xy.x:6
- │    ├── key: (1,6)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
@@ -4150,14 +4153,16 @@ project
  ├── fd: ()-->(17,19-21)
  ├── group-by
  │    ├── columns: k:1!null xy.x:6 count_rows:16!null
- │    ├── grouping columns: k:1!null xy.x:6
- │    ├── key: (1,6)
- │    ├── fd: (1,6)-->(16)
+ │    ├── grouping columns: k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6,16)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null xy.x:6 xy.y:15
+ │    │    ├── fd: (1)-->(6)
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: k:1!null xy.x:6
- │    │    │    ├── key: (1,6)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(6)
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1!null
  │    │    │    │    └── key: (1)
@@ -4171,8 +4176,10 @@ project
  │    │    └── filters
  │    │         └── xy.y:15 = k:1 [outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
  │    └── aggregations
- │         └── count [as=count_rows:16, outer=(15)]
- │              └── xy.y:15
+ │         ├── count [as=count_rows:16, outer=(15)]
+ │         │    └── xy.y:15
+ │         └── const-agg [as=xy.x:6, outer=(6)]
+ │              └── xy.x:6
  └── projections
       ├── 5 [as=a:17]
       ├── xy.x:6 [as=x:18, outer=(6)]
@@ -4428,8 +4435,8 @@ project
       │    │    ├── fd: (6)-->(11)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: x:6!null y:7 u:8 true:10
-      │    │    │    ├── key: (6,8)
-      │    │    │    ├── fd: (6)-->(7), (6,8)-->(10)
+      │    │    │    ├── key: (6)
+      │    │    │    ├── fd: (6)-->(7,8,10)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:6!null y:7
       │    │    │    │    ├── key: (6)
@@ -4472,8 +4479,8 @@ project
       │    │    ├── fd: (1)-->(5), (6)-->(7), (1,6)-->(5,7,11)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: k:1!null i:2 j:5 x:6!null y:7 u:8 v:9 notnull:10
-      │    │    │    ├── key: (1,6,8)
-      │    │    │    ├── fd: (1)-->(2,5), (6)-->(7), (8)-->(9), (9)~~>(10), (1,6,8)-->(10)
+      │    │    │    ├── key: (1,6)
+      │    │    │    ├── fd: (1)-->(2,5), (6)-->(7), (8)-->(9), (9)~~>(10), (1,6)-->(8-10)
       │    │    │    ├── inner-join (cross)
       │    │    │    │    ├── columns: k:1!null i:2 j:5 x:6!null y:7
       │    │    │    │    ├── key: (1,6)
@@ -4750,8 +4757,8 @@ project
       │    ├── columns: v:4
       │    └── left-join (hash)
       │         ├── columns: x:1!null u:3 v:4
-      │         ├── key: (1,3)
-      │         ├── fd: (3)-->(4)
+      │         ├── key: (1)
+      │         ├── fd: (3)-->(4), (1)-->(3,4)
       │         ├── scan xy
       │         │    ├── columns: x:1!null
       │         │    └── key: (1)
@@ -4777,14 +4784,15 @@ group-by
  ├── project-set
  │    ├── columns: x:1!null y:2 v:4 generate_series:5
  │    ├── side-effects
- │    ├── fd: (1)-->(2)
+ │    ├── fd: (1)-->(2,4)
  │    ├── project
  │    │    ├── columns: x:1!null y:2 v:4
- │    │    ├── fd: (1)-->(2)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,4)
  │    │    └── left-join (hash)
  │    │         ├── columns: x:1!null y:2 u:3 v:4
- │    │         ├── key: (1,3)
- │    │         ├── fd: (1)-->(2), (3)-->(4)
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2-4), (3)-->(4)
  │    │         ├── scan xy
  │    │         │    ├── columns: x:1!null y:2
  │    │         │    ├── key: (1)
@@ -4815,12 +4823,12 @@ project
       │    ├── columns: y:7 v:9
       │    └── left-join (hash)
       │         ├── columns: k:1!null x:6 y:7 u:8 v:9
-      │         ├── key: (1,6,8)
-      │         ├── fd: (6)-->(7), (8)-->(9)
+      │         ├── key: (1)
+      │         ├── fd: (6)-->(7), (1)-->(6-9), (8)-->(9)
       │         ├── left-join (hash)
       │         │    ├── columns: k:1!null x:6 y:7
-      │         │    ├── key: (1,6)
-      │         │    ├── fd: (6)-->(7)
+      │         │    ├── key: (1)
+      │         │    ├── fd: (6)-->(7), (1)-->(6,7)
       │         │    ├── scan a
       │         │    │    ├── columns: k:1!null
       │         │    │    └── key: (1)
@@ -4856,12 +4864,12 @@ project
  │    │    ├── columns: v:7 xy.x:9
  │    │    └── left-join (hash)
  │    │         ├── columns: k:1!null u:6 v:7 xy.x:9
- │    │         ├── key: (1,6,9)
- │    │         ├── fd: (6)-->(7)
+ │    │         ├── key: (1)
+ │    │         ├── fd: (6)-->(7), (1)-->(6,7,9)
  │    │         ├── left-join (hash)
  │    │         │    ├── columns: k:1!null u:6 v:7
- │    │         │    ├── key: (1,6)
- │    │         │    ├── fd: (6)-->(7)
+ │    │         │    ├── key: (1)
+ │    │         │    ├── fd: (6)-->(7), (1)-->(6,7)
  │    │         │    ├── scan a
  │    │         │    │    ├── columns: k:1!null
  │    │         │    │    └── key: (1)

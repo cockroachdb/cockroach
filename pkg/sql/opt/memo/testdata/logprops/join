@@ -317,8 +317,8 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 ----
 right-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
- ├── key: (1,7)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(1-6)
  ├── prune: (2-4,6,7)
  ├── reject-nulls: (1-4)
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
@@ -1372,8 +1372,8 @@ right-join (merge)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── left ordering: +1
  ├── right ordering: +5
- ├── key: (1,7)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(1-6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)

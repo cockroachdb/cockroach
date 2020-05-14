@@ -130,15 +130,16 @@ SELECT * FROM a WHERE (CASE WHEN i<0 THEN 5 ELSE (SELECT y FROM xy WHERE x=i LIM
 ----
 project
  ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
       ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7
-      ├── key: (1,6)
-      ├── fd: (1)-->(2-5), (6)-->(7)
+      ├── key: (1)
+      ├── fd: (1)-->(2-7), (6)-->(7)
       ├── left-join (hash)
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7
-      │    ├── key: (1,6)
-      │    ├── fd: (1)-->(2-5), (6)-->(7)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-7), (6)-->(7)
       │    ├── scan a
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    ├── key: (1)
@@ -292,16 +293,17 @@ SELECT * FROM a WHERE IFERROR(1/0, (SELECT y::DECIMAL FROM xy WHERE x = i))=k
 project
  ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── side-effects
+ ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
       ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:8
       ├── side-effects
-      ├── key: (1,6)
-      ├── fd: (1)-->(2-5), (6)-->(8)
+      ├── key: (1)
+      ├── fd: (1)-->(2-6,8), (6)-->(8)
       ├── left-join (hash)
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:8
-      │    ├── key: (1,6)
-      │    ├── fd: (1)-->(2-5), (6)-->(8)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6,8), (6)-->(8)
       │    ├── scan a
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    ├── key: (1)
