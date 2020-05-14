@@ -2843,6 +2843,118 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_array_length": makeBuiltin(jsonProps(), jsonArrayLengthImpl),
 
+	// Enum functions.
+	"enum_first": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
+			ReturnType: tree.IdentityReturnType(0),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return nil, errors.New("argument cannot be NULL")
+				}
+				arg := args[0].(*tree.DEnum)
+				min, ok := arg.Min(evalCtx)
+				if !ok {
+					return nil, errors.Newf("enum %s contains no values", arg.ResolvedType().Name())
+				}
+				return min, nil
+			},
+			Info: "Returns the first value of the input enum type",
+		},
+	),
+
+	"enum_last": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
+			ReturnType: tree.IdentityReturnType(0),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return nil, errors.New("argument cannot be NULL")
+				}
+				arg := args[0].(*tree.DEnum)
+				min, ok := arg.Max(evalCtx)
+				if !ok {
+					return nil, errors.Newf("enum %s contains no values", arg.ResolvedType().Name())
+				}
+				return min, nil
+			},
+			Info: "Returns the last value of the input enum type",
+		},
+	),
+
+	"enum_range": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
+			ReturnType: tree.ArrayOfFirstNonNullReturnType(),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return nil, errors.New("argument cannot be NULL")
+				}
+				arg := args[0].(*tree.DEnum)
+				typ := arg.EnumTyp
+				arr := tree.NewDArray(typ)
+				for i := range typ.TypeMeta.EnumData.LogicalRepresentations {
+					enum := &tree.DEnum{
+						EnumTyp:     typ,
+						PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],
+						LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[i],
+					}
+					if err := arr.Append(enum); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info: "Returns all values of the input enum in an ordered array",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"lower", types.AnyEnum}, {"upper", types.AnyEnum}},
+			ReturnType: tree.ArrayOfFirstNonNullReturnType(),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull && args[1] == tree.DNull {
+					return nil, errors.New("both arguments cannot be NULL")
+				}
+				var bottom, top int
+				var typ *types.T
+				switch {
+				case args[0] == tree.DNull:
+					right := args[1].(*tree.DEnum)
+					typ = right.ResolvedType()
+					bottom, top = 0, typ.EnumGetIdxOfPhysical(right.PhysicalRep)
+				case args[1] == tree.DNull:
+					left := args[0].(*tree.DEnum)
+					typ = left.ResolvedType()
+					bottom, top = typ.EnumGetIdxOfPhysical(left.PhysicalRep), len(typ.TypeMeta.EnumData.PhysicalRepresentations)-1
+				default:
+					left, right := args[0].(*tree.DEnum), args[1].(*tree.DEnum)
+					if !left.ResolvedType().Equivalent(right.ResolvedType()) {
+						return nil, pgerror.Newf(
+							pgcode.DatatypeMismatch,
+							"mismatched types %s and %s",
+							left.ResolvedType(),
+							right.ResolvedType(),
+						)
+					}
+					typ = left.ResolvedType()
+					bottom, top = typ.EnumGetIdxOfPhysical(left.PhysicalRep), typ.EnumGetIdxOfPhysical(right.PhysicalRep)
+				}
+				arr := tree.NewDArray(typ)
+				for i := bottom; i <= top; i++ {
+					enum := &tree.DEnum{
+						EnumTyp:     typ,
+						PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],
+						LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[i],
+					}
+					if err := arr.Append(enum); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info: "Returns all values of the input enum in an ordered array between the two arguments",
+		},
+	),
+
 	// Metadata functions.
 
 	// https://www.postgresql.org/docs/10/static/functions-info.html
