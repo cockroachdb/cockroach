@@ -1,4 +1,12 @@
-# So far.
+# Instructions for future spelunkers:
+
+1. mv vendor ../vendor.bak
+2. go mod vendor
+3. make buildshort
+
+This should hopefully fail with the errors at the bottom of this document.
+
+# What we did so far: (Oliver)
 
 1. run `go mod init github.com/cockroachdb/cockroach`
 * check go.mod has no `go/src` in front of it.
