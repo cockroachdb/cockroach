@@ -16,7 +16,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
