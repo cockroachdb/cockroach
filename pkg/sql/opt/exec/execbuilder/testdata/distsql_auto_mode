@@ -5,6 +5,11 @@
 # The cluster size or distsql mode aren't important for these tests.
 #
 
+# "local" logic test configuration overrides the DistSQL mode to 'off', but
+# we're interested in behavior with 'auto' in this test file.
+statement ok
+SET distsql=auto
+
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
