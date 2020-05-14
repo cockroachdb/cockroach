@@ -94,7 +94,7 @@ type anyNotNull_TYPEAgg struct {
 
 var _ aggregateFunc = &anyNotNull_TYPEAgg{}
 
-const sizeOfAnyNotNull_TYPEAgg = unsafe.Sizeof(&anyNotNull_TYPEAgg{})
+const sizeOfAnyNotNull_TYPEAgg = unsafe.Sizeof(anyNotNull_TYPEAgg{})
 
 func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups

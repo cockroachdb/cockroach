@@ -44,7 +44,7 @@ type count_KINDAgg struct {
 
 var _ aggregateFunc = &count_KINDAgg{}
 
-const sizeOfCount_KINDAgg = unsafe.Sizeof(&count_KINDAgg{})
+const sizeOfCount_KINDAgg = unsafe.Sizeof(count_KINDAgg{})
 
 func (a *count_KINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
