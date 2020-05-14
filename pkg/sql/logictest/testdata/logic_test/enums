@@ -159,3 +159,43 @@ ALTER TYPE greeting RENAME TO greetings
 
 statement error pq: unimplemented: ALTER TYPE SET SCHEMA unsupported
 ALTER TYPE greeting SET SCHEMA newschema
+
+# Tests for enum builtins.
+statement ok
+CREATE TYPE dbs AS ENUM ('postgres', 'mysql', 'spanner', 'cockroach')
+
+query TT
+SELECT enum_first('mysql'::dbs), enum_last('spanner'::dbs)
+----
+postgres cockroach
+
+query T
+SELECT enum_range('cockroach'::dbs)
+----
+{postgres,mysql,spanner,cockroach}
+
+query TT
+SELECT enum_range(NULL, 'mysql'::dbs), enum_range('spanner'::dbs, NULL)
+----
+{postgres,mysql} {spanner,cockroach}
+
+query TT
+SELECT enum_range('postgres'::dbs, 'spanner'::dbs), enum_range('spanner'::dbs, 'cockroach'::dbs)
+----
+{postgres,mysql,spanner} {spanner,cockroach}
+
+query T
+SELECT enum_range('cockroach'::dbs, 'cockroach'::dbs)
+----
+{cockroach}
+
+query T
+SELECT enum_range('cockroach'::dbs, 'spanner'::dbs)
+----
+{}
+
+query error pq: enum_range\(\): both arguments cannot be NULL
+SELECT enum_range(NULL::dbs, NULL::dbs)
+
+query error pq: enum_range\(\): mismatched types
+SELECT enum_range('cockroach'::dbs, 'hello'::greeting)
