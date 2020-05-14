@@ -1,3 +1,7 @@
+# This and all the rename_* variants fail due to
+# https://github.com/cockroachdb/cockroach/issues/47900. Specifically, being
+# unable to access a node ID during EXPLAIN.
+# LogicTest: !3node-tenant
 statement ok
 CREATE TABLE users (
   uid    INT PRIMARY KEY,

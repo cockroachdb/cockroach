@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 query error job with ID 1 does not exist
 PAUSE JOB 1
 
