@@ -1267,12 +1267,11 @@ func init() {
 		return mvccValueFormatter{kv: storage.MVCCKeyValue{Key: decoded, Value: value}}
 	}
 
-	pebbleTool := tool.New()
 	// To be able to read Cockroach-written RocksDB manifests/SSTables, comparator
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
-	pebbleTool.RegisterMerger(storage.MVCCMerger)
-	pebbleTool.RegisterComparer(storage.MVCCComparer)
+	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
+		tool.DefaultComparer(storage.MVCCComparer))
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
