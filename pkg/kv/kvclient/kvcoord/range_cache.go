@@ -164,7 +164,7 @@ func makeLookupRequestKey(
 	// split again into [a, b) and [b, c), we don't want to the requests on [a,
 	// b) to be coalesced with the retried requests on [c, e). To distinguish the
 	// two cases, we can use the generation of the previous descriptor.
-	if prevDesc != nil && prevDesc.GetGenerationComparable() {
+	if prevDesc != nil {
 		ret.WriteString(":")
 		ret.WriteString(strconv.FormatInt(prevDesc.Generation, 10))
 	}
@@ -540,23 +540,12 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil, we
 	// want to clean the cache only if it equals the cached range descriptor. We
-	// try to use Generation and GenerationComparable to determine if the range
-	// descriptors are equal, but if we cannot, we fallback to
-	// pointer-comparison. If the range descriptors are not equal, then likely
-	// some other caller already evicted previously, and we can save work by not
-	// doing it again (which would prompt another expensive lookup).
+	// use Generation to determine if the range descriptors are equal. If the
+	// range descriptors are not equal, then likely some other caller already
+	// evicted previously, and we can save work by not doing it again (which would
+	// prompt another expensive lookup).
 	if seenDesc != nil {
-		if seenDesc.GetGenerationComparable() && cachedDesc.GetGenerationComparable() {
-			if seenDesc.Generation != cachedDesc.Generation {
-				return nil
-			}
-		} else if !seenDesc.GetGenerationComparable() && !cachedDesc.GetGenerationComparable() {
-			if seenDesc != cachedDesc {
-				return nil
-			}
-		} else {
-			// One descriptor's generation is comparable, while the other is
-			// incomparable, so the descriptors are guaranteed to be different.
+		if seenDesc.Generation != cachedDesc.Generation {
 			return nil
 		}
 	}
@@ -683,15 +672,8 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 		// check ["c", "d"). We do, however, want to check ["b", "c"), which is why
 		// the end key is inclusive.
 		if cached.StartKey.Less(desc.EndKey) && !cached.EndKey.Less(desc.EndKey) {
-			if desc.GetGenerationComparable() && cached.GetGenerationComparable() {
-				if desc.Generation <= cached.Generation {
-					// Generations are comparable and a newer descriptor already exists in
-					// cache.
-					continueWithInsert = false
-				}
-			} else if desc.Equal(*cached) {
-				// Generations are incomparable so we don't continue with insertion
-				// only if the descriptor already exists.
+			if desc.Generation <= cached.Generation {
+				// A newer descriptor already exists in cache.
 				continueWithInsert = false
 			}
 			if continueWithInsert {
@@ -715,16 +697,10 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 	// cache unconditionally.
 	rdc.rangeCache.cache.DoRangeEntry(func(e *cache.Entry) bool {
 		descriptor := e.Value.(*roachpb.RangeDescriptor)
-		if desc.GetGenerationComparable() && descriptor.GetGenerationComparable() {
-			// If generations are comparable, then check generations to see if we
-			// evict.
-			if desc.Generation <= descriptor.Generation {
-				continueWithInsert = false
-			} else {
-				entriesToEvict = append(entriesToEvict, e)
-			}
+		// Check generations to see if we evict.
+		if desc.Generation <= descriptor.Generation {
+			continueWithInsert = false
 		} else {
-			// If generations are not comparable, evict.
 			entriesToEvict = append(entriesToEvict, e)
 		}
 		return false

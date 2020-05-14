@@ -243,14 +243,6 @@ func (r *RangeDescriptor) IncrementGeneration() {
 	r.Generation++
 }
 
-// GetGenerationComparable returns if the generation of this RangeDescriptor is comparable.
-func (r *RangeDescriptor) GetGenerationComparable() bool {
-	if r.GenerationComparable == nil {
-		return false
-	}
-	return *r.GenerationComparable
-}
-
 // GetStickyBit returns the sticky bit of this RangeDescriptor.
 func (r *RangeDescriptor) GetStickyBit() hlc.Timestamp {
 	if r.StickyBit == nil {
@@ -310,9 +302,6 @@ func (r RangeDescriptor) String() string {
 		buf.WriteString("<no replicas>")
 	}
 	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.Generation)
-	if !r.GetGenerationComparable() {
-		buf.WriteString("?")
-	}
 	if s := r.GetStickyBit(); !s.IsEmpty() {
 		fmt.Fprintf(&buf, ", sticky=%s", s)
 	}

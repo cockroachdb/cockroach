@@ -3416,6 +3416,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
+	initGen := int64(1)
 	testUserRangeDescriptor := roachpb.RangeDescriptor{
 		RangeID:  2,
 		StartKey: roachpb.RKey("a"),
@@ -3426,6 +3427,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 				StoreID: 1,
 			},
 		},
+		Generation: initGen,
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -3491,7 +3493,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 			if err := testutils.SucceedsSoonError(func() error {
 				// Since the previously fetched RangeDescriptor was ["a", "d"), the request keys
 				// would be coalesced to "a".
-				numCalls := ds.rangeCache.lookupRequests.NumCalls(string(roachpb.RKey("a")) + ":false")
+				numCalls := ds.rangeCache.lookupRequests.NumCalls(fmt.Sprintf("a:false:%d", initGen))
 				if numCalls != 2 {
 					return errors.Errorf("expected %d in-flight requests, got %d", 2, numCalls)
 				}
@@ -3543,7 +3545,7 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x")}
 	{
 		exp := `have been waiting 8.16s (120 attempts) for RPC to` +
-			` r9:{-} [<no replicas>, next=0, gen=0?]: boom`
+			` r9:{-} [<no replicas>, next=0, gen=0]: boom`
 		act := slowRangeRPCWarningStr(
 			dur,
 			120,
