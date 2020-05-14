@@ -59,15 +59,16 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newSumAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
+func newSumAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			allocator.AdjustMemoryUsage(int64(sizeOfSum_TYPEAgg))
-			return &sum_TYPEAgg{}, nil
+			return &sum_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -97,7 +98,7 @@ type sum_TYPEAgg struct {
 
 var _ aggregateFunc = &sum_TYPEAgg{}
 
-const sizeOfSum_TYPEAgg = unsafe.Sizeof(sum_TYPEAgg{})
+const sizeOfSum_TYPEAgg = int64(unsafe.Sizeof(sum_TYPEAgg{}))
 
 func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
@@ -168,6 +169,24 @@ func (a *sum_TYPEAgg) Flush() {
 
 func (a *sum_TYPEAgg) HandleEmptyInputScalar() {
 	a.scratch.nulls.SetNull(0)
+}
+
+type sum_TYPEAggAlloc struct {
+	allocator *colmem.Allocator
+	allocSize int64
+	aggFuncs  []sum_TYPEAgg
+}
+
+var _ aggregateFuncAlloc = &sum_TYPEAggAlloc{}
+
+func (a *sum_TYPEAggAlloc) newAggFunc() aggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(sizeOfSum_TYPEAgg * a.allocSize)
+		a.aggFuncs = make([]sum_TYPEAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
 }
 
 // {{end}}

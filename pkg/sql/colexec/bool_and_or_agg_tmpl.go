@@ -43,9 +43,8 @@ func _ASSIGN_BOOL_OP(_, _, _ string) {
 
 // {{range .}}
 
-func newBool_OP_TYPEAgg(allocator *colmem.Allocator) aggregateFunc {
-	allocator.AdjustMemoryUsage(int64(sizeOfBool_OP_TYPEAgg))
-	return &bool_OP_TYPEAgg{}
+func newBool_OP_TYPEAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
+	return &bool_OP_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}
 }
 
 type bool_OP_TYPEAgg struct {
@@ -61,7 +60,7 @@ type bool_OP_TYPEAgg struct {
 
 var _ aggregateFunc = &bool_OP_TYPEAgg{}
 
-const sizeOfBool_OP_TYPEAgg = unsafe.Sizeof(bool_OP_TYPEAgg{})
+const sizeOfBool_OP_TYPEAgg = int64(unsafe.Sizeof(bool_OP_TYPEAgg{}))
 
 func (b *bool_OP_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	b.groups = groups
@@ -117,6 +116,24 @@ func (b *bool_OP_TYPEAgg) Flush() {
 
 func (b *bool_OP_TYPEAgg) HandleEmptyInputScalar() {
 	b.nulls.SetNull(0)
+}
+
+type bool_OP_TYPEAggAlloc struct {
+	allocator *colmem.Allocator
+	allocSize int64
+	aggFuncs  []bool_OP_TYPEAgg
+}
+
+var _ aggregateFuncAlloc = &bool_OP_TYPEAggAlloc{}
+
+func (a *bool_OP_TYPEAggAlloc) newAggFunc() aggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(sizeOfBool_OP_TYPEAgg * a.allocSize)
+		a.aggFuncs = make([]bool_OP_TYPEAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
 }
 
 // {{end}}

@@ -151,12 +151,15 @@ func NewOrderedAggregator(
 		isScalar:  isScalar,
 	}
 
-	a.aggregateFuncs, err = makeAggregateFuncs(a.allocator, aggTypes, aggFns)
+	// We will be reusing the same aggregate functions, so we use 1 as the
+	// allocation size.
+	funcsAlloc, err := newAggregateFuncsAlloc(a.allocator, aggTypes, aggFns, 1 /* allocSize */)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,
 		)
 	}
+	a.aggregateFuncs = funcsAlloc.makeAggregateFuncs()
 	a.outputTypes, err = makeAggregateFuncsOutputTypes(aggTypes, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
