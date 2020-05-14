@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // CreateTestTableDescriptor converts a SQL string to a table for test purposes.
@@ -38,22 +39,38 @@ func CreateTestTableDescriptor(
 	}
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
-	desc, err := MakeTableDesc(
-		ctx,
-		nil, /* txn */
-		nil, /* vt */
-		st,
-		stmt.AST.(*tree.CreateTable),
-		parentID, keys.PublicSchemaID, id,
-		hlc.Timestamp{}, /* creationTime */
-		privileges,
-		nil, /* affected */
-		&semaCtx,
-		&evalCtx,
-		&sessiondata.SessionData{}, /* sessionData */
-		false,                      /* temporary */
-	)
-	return desc.TableDescriptor, err
+	switch n := stmt.AST.(type) {
+	case *tree.CreateTable:
+		desc, err := MakeTableDesc(
+			ctx,
+			nil, /* txn */
+			nil, /* vt */
+			st,
+			n,
+			parentID, keys.PublicSchemaID, id,
+			hlc.Timestamp{}, /* creationTime */
+			privileges,
+			nil, /* affected */
+			&semaCtx,
+			&evalCtx,
+			&sessiondata.SessionData{}, /* sessionData */
+			false,                      /* temporary */
+		)
+		return desc.TableDescriptor, err
+	case *tree.CreateSequence:
+		desc, err := MakeSequenceTableDesc(
+			n.Name.Table(),
+			n.Options,
+			parentID, keys.PublicSchemaID, id,
+			hlc.Timestamp{}, /* creationTime */
+			privileges,
+			false, /* temporary */
+			nil,   /* params */
+		)
+		return desc.TableDescriptor, err
+	default:
+		return sqlbase.TableDescriptor{}, errors.Errorf("unexpected AST %T", stmt.AST)
+	}
 }
 
 // StmtBufReader is an exported interface for reading a StmtBuf.

@@ -1103,7 +1103,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		sqlDB.Exec(t, `BACKUP DATABASE DATA TO $1`, restoreDir)
 		sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 		restoreDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "restoredb")
-		restoreTableID, err := sql.GenerateUniqueDescID(ctx, tc.Servers[0].DB())
+		restoreTableID, err := sql.GenerateUniqueDescID(ctx, tc.Servers[0].DB(), keys.SystemSQLCodec)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1203,7 +1203,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	// than make a huge table, dial down the zone config for the bank table.
 	init := func(tc *testcluster.TestCluster) {
 		config.TestingSetupZoneConfigHook(tc.Stopper())
-		v, err := tc.Servers[0].DB().Get(context.TODO(), keys.DescIDGenerator)
+		v, err := tc.Servers[0].DB().Get(context.TODO(), keys.SystemSQLCodec.DescIDSequenceKey())
 		if err != nil {
 			t.Fatal(err)
 		}

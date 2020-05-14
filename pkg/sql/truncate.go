@@ -221,7 +221,7 @@ func (p *planner) truncateTable(
 		return err
 	}
 
-	newID, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+	newID, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return err
 	}

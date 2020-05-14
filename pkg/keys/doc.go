@@ -230,7 +230,7 @@ var _ = [...]interface{}{
 	SystemPrefix,
 	NodeLivenessPrefix,  // "\x00liveness-"
 	BootstrapVersionKey, // "bootstrap-version"
-	DescIDGenerator,     // "desc-idgen"
+	descIDGenerator,     // "desc-idgen"
 	NodeIDGenerator,     // "node-idgen"
 	RangeIDGenerator,    // "range-idgen"
 	StatusPrefix,        // "status-"
