@@ -263,14 +263,18 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		)
 		defer recv.Release()
 
-		rec, err := sc.distSQLPlanner.checkSupportForNode(localPlanner.curPlan.main)
+		willDistribute := willDistributePlan(
+			ctx, localPlanner.execCfg.NodeID,
+			localPlanner.extendedEvalCtx.SessionData.DistSQLMode,
+			localPlanner.curPlan.main,
+		)
 		var planAndRunErr error
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
 			// Resolve subqueries before running the queries' physical plan.
 			if len(localPlanner.curPlan.subqueryPlans) != 0 {
 				if !sc.distSQLPlanner.PlanAndRunSubqueries(
 					ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
-					localPlanner.curPlan.subqueryPlans, recv, rec == canDistribute,
+					localPlanner.curPlan.subqueryPlans, recv, willDistribute,
 				) {
 					if planAndRunErr = rw.Err(); planAndRunErr != nil {
 						return
@@ -281,7 +285,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 				}
 			}
 
-			isLocal := err != nil || rec == cannotDistribute
+			isLocal := !willDistribute
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table,
 			}}
