@@ -1155,14 +1155,13 @@ insert decimals
  │    └── d:12 => decimals.d:4
  ├── check columns: check1:13 check2:14
  └── project
-      ├── columns: check1:13 check2:14 d:12 a:8 b:9 c:10
+      ├── columns: check1:13!null check2:14 a:8!null b:9 c:10!null d:12!null
       ├── values
-      │    ├── columns: a:8 b:9 c:10
-      │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(ARRAY[0.95,NULL,15], 1), crdb_internal.round_decimal_values(1.23, 1))
+      │    ├── columns: a:8!null b:9 c:10!null d:12!null
+      │    └── (1, crdb_internal.round_decimal_values(ARRAY[0.95,NULL,15], 1), 1.2, 2.2)
       └── projections
-           ├── a:8 = round(a:8) [as=check1:13]
-           ├── b:9[0] > 1 [as=check2:14]
-           └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
+           ├── true [as=check1:13]
+           └── b:9[0] > 1 [as=check2:14]
 
 # Regression test for #38293; the default values should be separate projections.
 exec-ddl

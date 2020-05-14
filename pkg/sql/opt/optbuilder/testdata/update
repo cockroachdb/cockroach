@@ -1633,18 +1633,18 @@ update decimals
  │    └── d:14 => decimals.d:4
  ├── check columns: check1:15 check2:16
  └── project
-      ├── columns: check1:15 check2:16 d:14 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11 b:12
+      ├── columns: check1:15!null check2:16 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11!null b:12 d:14
       ├── project
-      │    ├── columns: a:11 b:12 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
+      │    ├── columns: d:14 a:11!null b:12 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
       │    ├── scan decimals
       │    │    ├── columns: decimals.a:5!null decimals.b:6 c:7 decimals.d:8
       │    │    └── computed column expressions
       │    │         └── decimals.d:8
       │    │              └── decimals.a:5 + c:7
       │    └── projections
-      │         ├── crdb_internal.round_decimal_values(1.1, 0) [as=a:11]
+      │         ├── crdb_internal.round_decimal_values(c:7 + 1, 1) [as=d:14]
+      │         ├── 1 [as=a:11]
       │         └── crdb_internal.round_decimal_values(ARRAY[0.95,NULL,15], 1) [as=b:12]
       └── projections
-           ├── a:11 = round(a:11) [as=check1:15]
-           ├── b:12[0] > 1 [as=check2:16]
-           └── crdb_internal.round_decimal_values(a:11 + c:7, 1) [as=d:14]
+           ├── true [as=check1:15]
+           └── b:12[0] > 1 [as=check2:16]
