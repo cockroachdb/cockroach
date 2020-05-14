@@ -973,13 +973,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
 
-	// Start the admin UI server. This opens the HTTP listen socket,
-	// optionally sets up TLS, and dispatches the server worker for the
-	// web UI.
-	if err := s.startServeUI(ctx, workersCtx, connManager, uiTLSConfig); err != nil {
-		return err
-	}
-
 	s.engines, err = s.cfg.CreateEngines(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to create engines")
@@ -1088,12 +1081,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
 
-	s.node.startAssertEngineHealth(ctx, s.engines)
-
-	// Start the RPC server. This opens the RPC/SQL listen socket,
-	// and dispatches the server worker for the RPC.
-	// The SQL listener is returned, to start the SQL server later
-	// below when the server has initialized.
+	// Set up the listeners. This returns the SQL listener (for starting the SQL
+	// server later) and a method that starts handling the RPC (i.e. KV) listener,
+	// to be invoked when we're ready to do so below. That is, at this point
+	// clients can reach out (ports are open) but they'll hang until we're ready
+	// to service them.
 	pgL, startRPCServer, err := s.startListenRPCAndSQL(ctx, workersCtx)
 	if err != nil {
 		return err
@@ -1175,12 +1167,61 @@ func (s *Server) Start(ctx context.Context) error {
 			return err
 		}
 	}
-	// Handle /health early. This is necessary for orchestration.  Note
-	// that /health is not authenticated, on purpose. This is both
-	// because it needs to be available before the cluster is up and can
-	// serve authentication requests, and also because it must work for
-	// monitoring tools which operate without authentication.
+
+	// Note that /health is not authenticated, on purpose. This is both because it
+	// needs to be available before the cluster is up and can serve authentication
+	// requests, and also because it must work for monitoring tools which operate
+	// without authentication.
 	s.mux.Handle("/health", gwMux)
+
+	// Serve UI assets.
+	//
+	// The authentication mux used here is created in "allow anonymous" mode so that the UI
+	// assets are served up whether or not there is a session. If there is a session, the mux
+	// adds it to the context, and it is templated into index.html so that the UI can show
+	// the username of the currently-logged-in user.
+	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
+		s.authentication,
+		ui.Handler(ui.Config{
+			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+			LoginEnabled:         s.cfg.RequireWebSession(),
+			NodeID:               s.nodeIDContainer,
+			GetUser: func(ctx context.Context) *string {
+				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
+					return &u
+				}
+				return nil
+			},
+		}),
+	)
+	s.mux.Handle("/", authenticatedUIHandler)
+
+	// Register gRPC-gateway endpoints used by the admin UI.
+	var authHandler http.Handler = gwMux
+	if s.cfg.RequireWebSession() {
+		authHandler = newAuthenticationMux(s.authentication, authHandler)
+	}
+
+	s.mux.Handle(adminPrefix, authHandler)
+	// Exempt the health check endpoint from authentication.
+	// This mirrors the handling of /health above.
+	s.mux.Handle("/_admin/v1/health", gwMux)
+	s.mux.Handle(ts.URLPrefix, authHandler)
+	s.mux.Handle(statusPrefix, authHandler)
+	// The /login endpoint is, by definition, available pre-authentication.
+	s.mux.Handle(loginPath, gwMux)
+	s.mux.Handle(logoutPath, authHandler)
+	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+
+	// Start the admin UI server. This opens the HTTP listen socket,
+	// optionally sets up TLS, and dispatches the server worker for the
+	// web UI.
+	if err := s.startServeUI(ctx, workersCtx, connManager, uiTLSConfig); err != nil {
+		return err
+	}
+
+	log.Event(ctx, "serving HTTP endpoints")
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
@@ -1418,47 +1459,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
-	// Serve UI assets.
-	//
-	// The authentication mux used here is created in "allow anonymous" mode so that the UI
-	// assets are served up whether or not there is a session. If there is a session, the mux
-	// adds it to the context, and it is templated into index.html so that the UI can show
-	// the username of the currently-logged-in user.
-	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
-		s.authentication,
-		ui.Handler(ui.Config{
-			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
-			LoginEnabled:         s.cfg.RequireWebSession(),
-			NodeID:               s.nodeIDContainer,
-			GetUser: func(ctx context.Context) *string {
-				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
-					return &u
-				}
-				return nil
-			},
-		}),
-	)
-	s.mux.Handle("/", authenticatedUIHandler)
-
-	// Register gRPC-gateway endpoints used by the admin UI.
-	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
-	}
-
-	s.mux.Handle(adminPrefix, authHandler)
-	// Exempt the health check endpoint from authentication.
-	// This mirrors the handling of /health above.
-	s.mux.Handle("/_admin/v1/health", gwMux)
-	s.mux.Handle(ts.URLPrefix, authHandler)
-	s.mux.Handle(statusPrefix, authHandler)
-	// The /login endpoint is, by definition, available pre-authentication.
-	s.mux.Handle(loginPath, gwMux)
-	s.mux.Handle(logoutPath, authHandler)
-	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-	log.Event(ctx, "added http endpoints")
-
 	if err := s.sqlServer.start(
 		workersCtx,
 		s.stopper,
@@ -1479,6 +1479,8 @@ func (s *Server) Start(ctx context.Context) error {
 // well as some one-off operations. This serves to keep the Start method itself
 // focused.
 func (s *Server) startPost(ctx context.Context) error {
+	s.node.startAssertEngineHealth(ctx, s.engines)
+
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent()
