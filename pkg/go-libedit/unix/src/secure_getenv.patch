@@ -1,0 +1,30 @@
+--- a/c-libedit/el.c
++++ b/c-libedit/el.c
+@@ -66,15 +66,23 @@ __RCSID("$NetBSD: el.c,v 1.92 2016/05/22 19:44:26 christos Exp $");
+ #		define secure_getenv __secure_getenv
+ #		define HAVE_SECURE_GETENV 1
+ #	else
+-#		ifdef HAVE_ISSETUGID
+-#			include <unistd.h>
+-#		else
++#		include <unistd.h>
++#		ifndef HAVE_ISSETUGID
+ #			undef issetugid
+-#			define issetugid() 1
++#			define issetugid() (getuid() != geteuid() || getgid() != getegid())
+ #		endif
+ #	endif
+ #endif
+ 
++#if !defined(HAVE_SECURE_GETENV) && defined(__GLIBC__)
++#      if __GLIBC__ >= 2
++#              if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 17)
++#                      define secure_getenv __secure_getenv
++#              endif
++#              define HAVE_SECURE_GETENV 1
++#      endif
++#endif
++
+ #ifndef HAVE_SECURE_GETENV
+ char *secure_getenv(char const *name)
+ {

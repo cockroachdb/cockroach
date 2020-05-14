@@ -533,12 +533,12 @@ CGO_PKGS := \
 	pkg/storage \
 	pkg/ccl/storageccl/engineccl \
 	pkg/ccl/gssapiccl \
-	vendor/github.com/knz/go-libedit/unix
-vendor/github.com/knz/go-libedit/unix-package := libedit_unix
+	pkg/go-libedit/unix
+pkg/go-libedit/unix-package := libedit_unix
 CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix ./,$(addsuffix /zcgo_flags.go,$(CGO_PKGS)))
 CGO_SUFFIXED_FLAGS_FILES   := $(addprefix ./,$(addsuffix /zcgo_flags_$(native-tag).go,$(CGO_PKGS)))
 BASE_CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
-CGO_FLAGS_FILES := $(BASE_CGO_FLAGS_FILES) vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go
+CGO_FLAGS_FILES := $(BASE_CGO_FLAGS_FILES) pkg/go-libedit/unix/zcgo_flags_extra.go
 
 $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialized
 	@echo "regenerating $@"
@@ -552,7 +552,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(LIBEDIT_DIR)/src/.libs $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
-vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
+pkg/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
 	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@

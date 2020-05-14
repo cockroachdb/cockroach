@@ -102,3 +102,14 @@ is not included, which causes the errors above. That linker flag is supposed to
 be set by the `vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go` file.
 That file is properly generated as of this branch, but does not get "picked up"
 by the linker flags somehow. Not sure why.
+
+----
+
+# Continued by Oliver
+
+12. manually vendor knz/go-libedit, modifying imports. note the above is fixed
+with adding `go build ... -mod=vendor`, but since the `knz/go-libedit/unix/src`
+and `knz/go-libedit/unix/shim` folders are not imported with vendor, we don't
+get anything.
+13. NOW IT WORKS!!!
+
