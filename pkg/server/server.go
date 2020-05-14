@@ -1101,128 +1101,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	// Enable the debug endpoints first to provide an earlier window into what's
-	// going on with the node in advance of exporting node functionality.
-	//
-	// TODO(marc): when cookie-based authentication exists, apply it to all web
-	// endpoints.
-	s.mux.Handle(debug.Endpoint, s.debug)
-
-	// Initialize grpc-gateway mux and context in order to get the /health
-	// endpoint working even before the node has fully initialized.
-	jsonpb := &protoutil.JSONPb{
-		EnumsAsInts:  true,
-		EmitDefaults: true,
-		Indent:       "  ",
-	}
-	protopb := new(protoutil.ProtoPb)
-	gwMux := gwruntime.NewServeMux(
-		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
-		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
-		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
-		gwruntime.WithMetadata(forwardAuthenticationMetadata),
-	)
-	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
-	s.stopper.AddCloser(stop.CloserFn(gwCancel))
-
-	// loopback handles the HTTP <-> RPC loopback connection.
-	loopback := newLoopbackListener(workersCtx, s.stopper)
-
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		_ = loopback.Close()
-	})
-
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		netutil.FatalIfUnexpected(s.grpc.Serve(loopback))
-	})
-
-	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
-	// uniquely in-process connection.
-	dialOpts, err := s.rpcContext.GRPCDialOptions()
-	if err != nil {
-		return err
-	}
-	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
-		dialOpts,
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return loopback.Connect(ctx)
-		}),
-	)...)
-	if err != nil {
-		return err
-	}
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		if err := conn.Close(); err != nil {
-			log.Fatalf(workersCtx, "%v", err)
-		}
-	})
-
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer} {
-		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return err
-		}
-	}
-
-	// Note that /health is not authenticated, on purpose. This is both because it
-	// needs to be available before the cluster is up and can serve authentication
-	// requests, and also because it must work for monitoring tools which operate
-	// without authentication.
-	s.mux.Handle("/health", gwMux)
-
-	// Serve UI assets.
-	//
-	// The authentication mux used here is created in "allow anonymous" mode so that the UI
-	// assets are served up whether or not there is a session. If there is a session, the mux
-	// adds it to the context, and it is templated into index.html so that the UI can show
-	// the username of the currently-logged-in user.
-	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
-		s.authentication,
-		ui.Handler(ui.Config{
-			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
-			LoginEnabled:         s.cfg.RequireWebSession(),
-			NodeID:               s.nodeIDContainer,
-			GetUser: func(ctx context.Context) *string {
-				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
-					return &u
-				}
-				return nil
-			},
-		}),
-	)
-	s.mux.Handle("/", authenticatedUIHandler)
-
-	// Register gRPC-gateway endpoints used by the admin UI.
-	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
-	}
-
-	s.mux.Handle(adminPrefix, authHandler)
-	// Exempt the health check endpoint from authentication.
-	// This mirrors the handling of /health above.
-	s.mux.Handle("/_admin/v1/health", gwMux)
-	s.mux.Handle(ts.URLPrefix, authHandler)
-	s.mux.Handle(statusPrefix, authHandler)
-	// The /login endpoint is, by definition, available pre-authentication.
-	s.mux.Handle(loginPath, gwMux)
-	s.mux.Handle(logoutPath, authHandler)
-	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-
-	// Start the admin UI server. This opens the HTTP listen socket,
-	// optionally sets up TLS, and dispatches the server worker for the
-	// web UI.
-	if err := s.startServeUI(ctx, workersCtx, connManager, uiTLSConfig); err != nil {
-		return err
-	}
-
-	log.Event(ctx, "serving HTTP endpoints")
-
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
 		listenRPC:    s.cfg.Addr,
@@ -1243,6 +1121,12 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 		}
 	}
+
+	if err := s.startServeUI(ctx, workersCtx, connManager, uiTLSConfig); err != nil {
+		return err
+	}
+
+	log.Event(ctx, "serving HTTP endpoints")
 
 	// Filter the gossip bootstrap resolvers based on the listen and
 	// advertise addresses.
@@ -1712,6 +1596,124 @@ func (s *Server) startListenRPCAndSQL(
 func (s *Server) startServeUI(
 	ctx, workersCtx context.Context, connManager netutil.Server, uiTLSConfig *tls.Config,
 ) error {
+
+	// Enable the debug endpoints first to provide an earlier window into what's
+	// going on with the node in advance of exporting node functionality.
+	//
+	// TODO(marc): when cookie-based authentication exists, apply it to all web
+	// endpoints.
+	s.mux.Handle(debug.Endpoint, s.debug)
+
+	// Initialize grpc-gateway mux and context in order to get the /health
+	// endpoint working even before the node has fully initialized.
+	jsonpb := &protoutil.JSONPb{
+		EnumsAsInts:  true,
+		EmitDefaults: true,
+		Indent:       "  ",
+	}
+	protopb := new(protoutil.ProtoPb)
+	gwMux := gwruntime.NewServeMux(
+		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
+		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
+		gwruntime.WithMetadata(forwardAuthenticationMetadata),
+	)
+	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
+	s.stopper.AddCloser(stop.CloserFn(gwCancel))
+
+	// loopback handles the HTTP <-> RPC loopback connection.
+	loopback := newLoopbackListener(workersCtx, s.stopper)
+
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		_ = loopback.Close()
+	})
+
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		netutil.FatalIfUnexpected(s.grpc.Serve(loopback))
+	})
+
+	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
+	// uniquely in-process connection.
+	dialOpts, err := s.rpcContext.GRPCDialOptions()
+	if err != nil {
+		return err
+	}
+	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
+		dialOpts,
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return loopback.Connect(ctx)
+		}),
+	)...)
+	if err != nil {
+		return err
+	}
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		if err := conn.Close(); err != nil {
+			log.Fatalf(workersCtx, "%v", err)
+		}
+	})
+
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+			return err
+		}
+	}
+
+	// Note that /health is not authenticated, on purpose. This is both because it
+	// needs to be available before the cluster is up and can serve authentication
+	// requests, and also because it must work for monitoring tools which operate
+	// without authentication.
+	s.mux.Handle("/health", gwMux)
+
+	// Serve UI assets.
+	//
+	// The authentication mux used here is created in "allow anonymous" mode so that the UI
+	// assets are served up whether or not there is a session. If there is a session, the mux
+	// adds it to the context, and it is templated into index.html so that the UI can show
+	// the username of the currently-logged-in user.
+	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
+		s.authentication,
+		ui.Handler(ui.Config{
+			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+			LoginEnabled:         s.cfg.RequireWebSession(),
+			NodeID:               s.nodeIDContainer,
+			GetUser: func(ctx context.Context) *string {
+				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
+					return &u
+				}
+				return nil
+			},
+		}),
+	)
+	s.mux.Handle("/", authenticatedUIHandler)
+
+	// Register gRPC-gateway endpoints used by the admin UI.
+	var authHandler http.Handler = gwMux
+	if s.cfg.RequireWebSession() {
+		authHandler = newAuthenticationMux(s.authentication, authHandler)
+	}
+
+	s.mux.Handle(adminPrefix, authHandler)
+	// Exempt the health check endpoint from authentication.
+	// This mirrors the handling of /health above.
+	s.mux.Handle("/_admin/v1/health", gwMux)
+	s.mux.Handle(ts.URLPrefix, authHandler)
+	s.mux.Handle(statusPrefix, authHandler)
+	// The /login endpoint is, by definition, available pre-authentication.
+	s.mux.Handle(loginPath, gwMux)
+	s.mux.Handle(logoutPath, authHandler)
+	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+
+	// Start the admin UI server. This opens the HTTP listen socket,
+	// optionally sets up TLS, and dispatches the server worker for the
+	// web UI.
+
 	httpLn, err := listen(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, "http")
 	if err != nil {
 		return err
