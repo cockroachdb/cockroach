@@ -1693,16 +1693,16 @@ memo (optimized, ~23KB, required=[presentation: name:13,popn_per_sqkm:16])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:13,popn_per_sqkm:16]
  │         ├── best: (project G2 G3 name)
- │         └── cost: 5204.90
+ │         └── cost: 6811.94
  ├── G2: (group-by G4 G5 cols=(13,14))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(13,14))
- │         └── cost: 5204.85
+ │         └── cost: 6811.89
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,12-14))
  │    └── []
  │         ├── best: (lookup-join G10 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,12-14))
- │         └── cost: 4997.91
+ │         └── cost: 6604.95
  ├── G5: (aggregations G11)
  ├── G6: (div G12 G13)
  ├── G7: (scan c,cols=(3,9,10))
@@ -1717,7 +1717,7 @@ memo (optimized, ~23KB, required=[presentation: name:13,popn_per_sqkm:16])
  ├── G10: (geo-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
  │    └── []
  │         ├── best: (geo-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
- │         └── cost: 148.65
+ │         └── cost: 1755.69
  ├── G11: (sum G19)
  ├── G12: (variable sum)
  ├── G13: (div G20 G21)
