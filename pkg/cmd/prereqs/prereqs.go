@@ -87,9 +87,9 @@ func collectFilesImpl(
 	}
 
 	// Import the package.
-	pkg, err := buildCtx.Import(path, srcDir, 0)
+	pkg, err := buildCtx.Import(path, srcDir, build.FindOnly)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to import %w", err)
 	}
 
 	sourceFileSets := [][]string{
