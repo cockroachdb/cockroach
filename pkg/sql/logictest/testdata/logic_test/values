@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 # Tests for the implicit one row, zero column values operator.
 query I
 SELECT 1

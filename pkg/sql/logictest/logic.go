@@ -109,6 +109,17 @@ import (
 // logicTestConfigs. If the directive is missing, the test is run in the
 // default configuration.
 //
+// The directive also supports blacklists, i.e. running all specified
+// configurations apart from a blacklisted configuration:
+//
+//   # LogicTest: default-configs !3node-tenant
+//
+// If a blacklist is specified without an accompanying configuration, the
+// default config is assumed. i.e., the following directive is equivalent to the
+// one above:
+//
+//   # LogicTest: !3node-tenant
+//
 // The Test-Script language is extended here for use with CockroachDB. The
 // supported directives are:
 //
@@ -554,10 +565,21 @@ var logicTestConfigs = []testClusterConfig{
 		skipShort:           true,
 	},
 	{
-		name:      "3node-tenant",
-		numNodes:  3,
-		useTenant: true,
+		name:     "3node-tenant",
+		numNodes: 3,
+		// overrideAutoStats will disable automatic stats on the cluster this tenant
+		// is connected to.
+		overrideAutoStats: "false",
+		useTenant:         true,
 	},
+}
+
+var logicTestConfigIdxToName = make(map[logicTestConfigIdx]string)
+
+func init() {
+	for i, cfg := range logicTestConfigs {
+		logicTestConfigIdxToName[logicTestConfigIdx(i)] = cfg.name
+	}
 }
 
 func parseTestConfig(names []string) []logicTestConfigIdx {
@@ -585,6 +607,7 @@ var (
 		"fakedist-vec-auto-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
+		"3node-tenant",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	fiveNodeDefaultConfigName  = "5node-default-configs"
@@ -1345,6 +1368,70 @@ CREATE DATABASE test;
 	t.unsupported = 0
 }
 
+// applyBlacklistToConfigIdxs applies the given blacklist to config idxs,
+// returning the result.
+func applyBlacklistToConfigIdxs(
+	configIdxs []logicTestConfigIdx, blacklist map[string]struct{},
+) []logicTestConfigIdx {
+	if len(blacklist) == 0 {
+		return configIdxs
+	}
+	var newConfigIdxs []logicTestConfigIdx
+	for _, idx := range configIdxs {
+		if _, ok := blacklist[logicTestConfigIdxToName[idx]]; ok {
+			continue
+		}
+		newConfigIdxs = append(newConfigIdxs, idx)
+	}
+	return newConfigIdxs
+}
+
+// processConfigs, given a list of configNames, returns the list of
+// corresponding logicTestConfigIdxs.
+func processConfigs(t *testing.T, path string, configNames []string) []logicTestConfigIdx {
+	const blacklistChar = '!'
+	blacklist := make(map[string]struct{})
+	allConfigNamesAreBlacklistDirectives := true
+	for _, configName := range configNames {
+		if configName[0] != blacklistChar {
+			allConfigNamesAreBlacklistDirectives = false
+			continue
+		}
+		blacklist[configName[1:]] = struct{}{}
+	}
+
+	var configs []logicTestConfigIdx
+	if len(blacklist) != 0 && allConfigNamesAreBlacklistDirectives {
+		// No configs specified, this blacklist applies to the default config.
+		return applyBlacklistToConfigIdxs(defaultConfig, blacklist)
+	}
+
+	for _, configName := range configNames {
+		if configName[0] == blacklistChar {
+			continue
+		}
+		if _, ok := blacklist[configName]; ok {
+			continue
+		}
+
+		idx, ok := findLogicTestConfig(configName)
+		if !ok {
+			switch configName {
+			case defaultConfigName:
+				configs = append(configs, applyBlacklistToConfigIdxs(defaultConfig, blacklist)...)
+			case fiveNodeDefaultConfigName:
+				configs = append(configs, applyBlacklistToConfigIdxs(fiveNodeDefaultConfig, blacklist)...)
+			default:
+				t.Fatalf("%s: unknown config name %s", path, configName)
+			}
+		} else {
+			configs = append(configs, idx)
+		}
+	}
+
+	return configs
+}
+
 // readTestFileConfigs reads any LogicTest directive at the beginning of a
 // test file. A line that starts with "# LogicTest:" specifies a list of
 // configuration names. The test file is run against each of those
@@ -1378,23 +1465,7 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
-			var configs []logicTestConfigIdx
-			for _, configName := range fields[2:] {
-				idx, ok := findLogicTestConfig(configName)
-				if !ok {
-					switch configName {
-					case defaultConfigName:
-						configs = append(configs, defaultConfig...)
-					case fiveNodeDefaultConfigName:
-						configs = append(configs, fiveNodeDefaultConfig...)
-					default:
-						t.Fatalf("%s: unknown config name %s", path, configName)
-					}
-				} else {
-					configs = append(configs, idx)
-				}
-			}
-			return configs
+			return processConfigs(t, path, fields[2:])
 		}
 	}
 	// No directive found, return the default config.
