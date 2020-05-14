@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -414,12 +413,28 @@ func initTempStorageConfig(
 // Checks if the passed-in engine type is default, and if so, resolves it to
 // the storage engine last used to write to the store at dir (or rocksdb if
 // a store wasn't found).
-func resolveStorageEngineType(engineType enginepb.EngineType, dir string) enginepb.EngineType {
+func resolveStorageEngineType(
+	ctx context.Context, engineType enginepb.EngineType, cfg base.StorageConfig,
+) enginepb.EngineType {
 	if engineType == enginepb.EngineTypeDefault {
 		engineType = enginepb.EngineTypeRocksDB
+		pebbleCfg := &storage.PebbleConfig{
+			StorageConfig: cfg,
+			Opts:          storage.DefaultPebbleOptions(),
+		}
+		pebbleCfg.Opts.EnsureDefaults()
+		pebbleCfg.Opts.ReadOnly = true
+		// Resolve encrypted env options in pebbleCfg and populate pebbleCfg.Opts.FS
+		// if necessary (eg. encrypted-at-rest is enabled).
+		_, _, err := storage.ResolveEncryptedEnvOptions(pebbleCfg)
+		if err != nil {
+			log.Infof(ctx, "unable to setup encrypted env to resolve past engine type: %s", err)
+			return engineType
+		}
+
 		// Check if this storage directory was last written to by pebble. In that
 		// case, default to opening a Pebble engine.
-		if version, err := pebble.GetVersion(dir, vfs.Default); err == nil {
+		if version, err := pebble.GetVersion(cfg.Dir, pebbleCfg.Opts.FS); err == nil {
 			if version != "" && !strings.HasPrefix(version, "rocksdb") {
 				engineType = enginepb.EngineTypePebble
 			}
@@ -542,10 +557,21 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
+
+	// Build a minimal StorageConfig out of the first store's spec, with enough
+	// attributes to be able to read encrypted-at-rest store directories.
+	firstSpec := serverCfg.Stores.Specs[0]
+	firstStoreConfig := base.StorageConfig{
+		Attrs:           firstSpec.Attributes,
+		Dir:             firstSpec.Path,
+		Settings:        serverCfg.Settings,
+		UseFileRegistry: firstSpec.UseFileRegistry,
+		ExtraOptions:    firstSpec.ExtraOptions,
+	}
 	// If the storage engine is set to "default", check the engine type used in
 	// this store directory in a past run. If this check fails for any reason,
-	// use RocksDB as the default engine type.
-	serverCfg.StorageEngine = resolveStorageEngineType(serverCfg.StorageEngine, serverCfg.Stores.Specs[0].Path)
+	// use Pebble as the default engine type.
+	serverCfg.StorageEngine = resolveStorageEngineType(ctx, serverCfg.StorageEngine, firstStoreConfig)
 
 	// Next we initialize the target directory for temporary storage.
 	// If encryption at rest is enabled in any fashion, we'll want temp
