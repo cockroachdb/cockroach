@@ -23,10 +23,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	lookupSRV = net.LookupSRV
-)
-
 // Resolver is an interface which provides an abstract factory for
 // net.Addr addresses. Resolvers are not thread safe.
 type Resolver interface {
@@ -116,4 +112,18 @@ func ensureHostPort(addr string, defaultPort string) string {
 	}
 
 	return net.JoinHostPort(host, port)
+}
+
+var (
+	lookupSRV = net.LookupSRV
+)
+
+// TestingOverrideSRVLookupFn enables a test to temporarily override
+// the SRV lookup function.
+func TestingOverrideSRVLookupFn(
+	fn func(service, proto, name string) (cname string, addrs []*net.SRV, err error),
+) func() {
+	prevFn := lookupSRV
+	lookupSRV = fn
+	return func() { lookupSRV = prevFn }
 }

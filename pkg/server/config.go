@@ -148,6 +148,11 @@ type Config struct {
 	// connecting to the gossip network.
 	JoinList base.JoinListType
 
+	// JoinPreferSRVRecords, if set, causes the lookup logic for the
+	// names in JoinList to prefer SRV records from DNS, if available,
+	// to A/AAAA records.
+	JoinPreferSRVRecords bool
+
 	// RetryOptions controls the retry behavior of the server.
 	RetryOptions retry.Options
 
@@ -647,25 +652,35 @@ func (cfg *Config) readEnvironmentVariables() {
 func (cfg *Config) parseGossipBootstrapResolvers(ctx context.Context) ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
 	for _, address := range cfg.JoinList {
-		srvAddrs, err := resolver.SRV(ctx, address)
-		if err != nil {
-			return nil, err
-		}
-
-		// setup resolvers with SRV results if there were any
-		if len(srvAddrs) > 0 {
-			for _, sa := range srvAddrs {
-				resolver, err := resolver.NewResolver(sa)
-				if err != nil {
-					return nil, err
-				}
-				bootstrapResolvers = append(bootstrapResolvers, resolver)
+		if cfg.JoinPreferSRVRecords {
+			// The following code substitutes the entry in --join by the
+			// result of SRV resolution, if suitable SRV records are found
+			// for that name.
+			//
+			// TODO(knz): Delay this lookup. The logic for "regular" resolvers
+			// is delayed until the point the connection is attempted, so that
+			// fresh DNS records are used for a new connection. This makes
+			// it possible to update DNS records without restarting the node.
+			// The SRV logic here does not have this property (yet).
+			srvAddrs, err := resolver.SRV(ctx, address)
+			if err != nil {
+				return nil, err
 			}
 
-			continue
+			if len(srvAddrs) > 0 {
+				for _, sa := range srvAddrs {
+					resolver, err := resolver.NewResolver(sa)
+					if err != nil {
+						return nil, err
+					}
+					bootstrapResolvers = append(bootstrapResolvers, resolver)
+				}
+
+				continue
+			}
 		}
 
-		// otherwise use the address
+		// Otherwise, use the address.
 		resolver, err := resolver.NewResolver(address)
 		if err != nil {
 			return nil, err
