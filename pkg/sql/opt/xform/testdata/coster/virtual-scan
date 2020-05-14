@@ -4,7 +4,7 @@ SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME='public'
 select
  ├── columns: catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
  ├── stats: [rows=10, distinct(3)=1, null(3)=0]
- ├── cost: 1100.03
+ ├── cost: 1110.03
  ├── fd: ()-->(3)
  ├── scan information_schema.schemata
  │    ├── columns: catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5

@@ -145,13 +145,13 @@ SELECT * FROM abc  WHERE a = b ORDER BY b, a, c
 sort (segmented)
  ├── columns: a:1!null b:2!null c:3
  ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
- ├── cost: 11239.0614
+ ├── cost: 11339.0614
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2),+3 [actual: +1,+3]
  └── select
       ├── columns: a:1!null b:2!null c:3
       ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
-      ├── cost: 10800.02
+      ├── cost: 10900.02
       ├── fd: (1)==(2), (2)==(1)
       ├── ordering: +1
       ├── scan abc@ab
