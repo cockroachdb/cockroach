@@ -1532,6 +1532,13 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		panic(fmt.Sprintf("unexpected advance code: %s", advInfo.code))
 	}
 
+	cl := ex.clientComm.LockCommunication()
+	if pos := cl.ClientPos(); pos >= 0 && pos >= ex.extraTxnState.txnRewindPos {
+		// Trim statements that cannot be retried to reclaim memory.
+		ex.stmtBuf.ltrim(ctx, pos)
+	}
+	cl.Close()
+
 	return ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo)
 }
 
