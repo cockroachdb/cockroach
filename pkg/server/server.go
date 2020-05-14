@@ -1217,12 +1217,6 @@ func (s *Server) Start(ctx context.Context) error {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
 
-	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
-	// determines when `./cockroach [...] --background` returns. For any initialized
-	// nodes (i.e. already part of a cluster) this is when this method returns
-	// (assuming there's no error). For nodes that need to join a cluster, we
-	// return once the initServer is ready to accept requests.
-	var onSuccessfulReturnFn, onInitServerReady func()
 	selfBootstrap := initServer.NeedsInit() && len(s.cfg.GossipBootstrapResolvers) == 0
 	if selfBootstrap {
 		// If a new node is started without join flags, self-bootstrap.
@@ -1238,16 +1232,48 @@ func (s *Server) Start(ctx context.Context) error {
 			// Process is shutting down.
 		}
 	}
+	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
+	// determines when we signal the systemd readiness protocol (it's also the point
+	// at which './cockroach start --background' returns). The semantics here are
+	// tricky. We definitely want to signal only when the listeners have been
+	// created (i.e. connections to the endpoints can be opened, though they're
+	// not being accept()ed from yet). We enforce that but we want more, namely
+	// that the services actually work when they do respond.
+	//
+	// First off, when the node needs to be initialized "externally" (i.e.
+	// either via Gossip, or through a client-initiated BootstrapRequest), then
+	// we return once the initServer is listening for those events. This makes
+	// sure that a cluster can be bootstrapped simply by starting a number of
+	// nodes in turn on empty disks. Most endpoints at that point will not work
+	// (in fact we inject errors to make sure they don't), but it's difficult to
+	// do better.
+	//
+	// When the node *is* already initialized, morally we would like to signal
+	// only when this method returns. However, since both `(*Node).start` and
+	// `(*sqlServer).Start` use KV syrchronously, and this node may be part of the
+	// quorum necessary for KV to be available, we have to signal before that (or
+	// sequentially restarting a down cluster would deadlock). In practice that
+	// should work fine - by the time we start the node we've done all of the
+	// "plumbing" to make sure endpoints do their job - but it's hard to be sure.
+	//
+	// TODO(tbg): rework (*Node).start to never require KV. Once that is the case,
+	// we can signal readiness just before (*sqlServer).Start at which point we
+	// are basically ready to serve any gRPC/HTTP endpoints.
+	//
+	// TODO(tbg): instead of injecting errors when the grpc server is not ready,
+	// we could also delay the connections. It's unclear whether that is better,
+	// though.
+	var onReadyToServe, onInitServerReady func()
 	{
 		readyFn := func(bool) {}
 		if s.cfg.ReadyFn != nil {
 			readyFn = s.cfg.ReadyFn
 		}
 		if !initServer.NeedsInit() || selfBootstrap {
-			onSuccessfulReturnFn = func() { readyFn(false /* waitForInit */) }
+			onReadyToServe = func() { readyFn(false /* waitForInit */) }
 			onInitServerReady = func() {}
 		} else {
-			onSuccessfulReturnFn = func() {}
+			onReadyToServe = func() {}
 			onInitServerReady = func() { readyFn(true /* waitForInit */) }
 		}
 	}
@@ -1307,22 +1333,6 @@ func (s *Server) Start(ctx context.Context) error {
 		defer unregister()
 	}
 
-	// Spawn a goroutine that will print a nice message when Gossip connects.
-	// Note that we already know the clusterID, but we don't know that Gossip
-	// has connected. The pertinent case is that of restarting an entire
-	// cluster. Someone has to gossip the ClusterID before Gossip is connected,
-	// but this gossip only happens once the first range has a leaseholder, i.e.
-	// when a quorum of nodes has gone fully operational.
-	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
-		log.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
-		select {
-		case <-s.gossip.Connected:
-			log.Infof(ctx, "node connected via gossip")
-		case <-ctx.Done():
-		case <-s.stopper.ShouldQuiesce():
-		}
-	})
-
 	// NB: if this store is freshly bootstrapped (or no upper bound was
 	// persisted), hlcUpperBound will be zero.
 	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
@@ -1347,7 +1357,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// TODO(tbg): clarify the contract here and move closer to usage if possible.
 	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
 
-	onSuccessfulReturnFn()
+	onReadyToServe()
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
@@ -1365,19 +1375,26 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	log.Event(ctx, "started node")
-	if err := s.startPersistingHLCUpperBound(
-		ctx,
-		hlcUpperBound > 0,
-		func(t int64) error { /* function to persist upper bound of HLC to all stores */
-			return s.node.SetHLCUpperBound(context.Background(), t)
-		},
-		time.NewTicker,
-	); err != nil {
-		return err
-	}
-	s.replicationReporter.Start(ctx, s.stopper)
+	// Begin the node liveness heartbeat. Add a callback which records the local
+	// store "last up" timestamp for every store whenever the liveness record is
+	// updated.
+	//
+	// TODO(tbg): push nodeLiveness into *Node and start it from (*Node).start().
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, s.engines, func(ctx context.Context) {
+		now := s.clock.Now()
+		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
+			return s.WriteLastUpTimestamp(ctx, now)
+		}); err != nil {
+			log.Warningf(ctx, "writing last up timestamp: %v", err)
+		}
+	})
 
+	log.Event(ctx, "started node")
+	// Set crash reporting info early (as early as possible anyway) so that crashes
+	// during the rest of Start() are reported properly.
+
+	// Launch settings refresher early to make it more likely that settings are up
+	// to date when things start moving.
 	s.refreshSettings()
 
 	raven.SetTagsContext(map[string]string{
@@ -1385,28 +1402,6 @@ func (s *Server) Start(ctx context.Context) error {
 		"node":        s.NodeID().String(),
 		"server_id":   fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
 		"engine_type": s.cfg.StorageEngine.String(),
-	})
-
-	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
-
-	// Begin recording runtime statistics.
-	if err := s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval); err != nil {
-		return err
-	}
-
-	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
-	)
-
-	var graphiteOnce sync.Once
-	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
-		if graphiteEndpoint.Get(&s.st.SV) != "" {
-			graphiteOnce.Do(func() {
-				s.node.startGraphiteStatsExporter(s.st)
-			})
-		}
 	})
 
 	s.grpc.setMode(modeOperational)
@@ -1422,56 +1417,6 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
-
-	if state.bootstrapped {
-		// If a new cluster is just starting up, force all the system ranges
-		// through the replication queue so they upreplicate as quickly as
-		// possible when a new node joins. Without this code, the upreplication
-		// would be up to the whim of the scanner, which might be too slow for
-		// new clusters.
-		// TODO(tbg): instead of this dubious band-aid we should make the
-		// replication queue reactive enough to avoid relying on the scanner
-		// alone.
-		var done bool
-		return s.node.stores.VisitStores(func(store *kvserver.Store) error {
-			if !done {
-				done = true
-				return store.ForceReplicationScanAndProcess()
-			}
-			return nil
-		})
-	}
-
-	// Begin the node liveness heartbeat. Add a callback which records the local
-	// store "last up" timestamp for every store whenever the liveness record is
-	// updated.
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, s.engines, func(ctx context.Context) {
-		now := s.clock.Now()
-		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
-			return s.WriteLastUpTimestamp(ctx, now)
-		}); err != nil {
-			log.Warningf(ctx, "writing last up timestamp: %v", err)
-		}
-	})
-
-	// Begin recording status summaries.
-	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
-
-	// Start the protected timestamp subsystem.
-	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
-		return err
-	}
-	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
-		return err
-	}
-
-	// Start garbage collecting system events.
-	//
-	// NB: As written, this falls awkwardly between SQL and KV. KV is used only
-	// to make sure this runs only on one node. SQL is used to actually GC. We
-	// count it as a KV operation since it grooms cluster-wide data, not
-	// something associated to SQL tenants.
-	s.startSystemLogsGC(ctx)
 
 	// Serve UI assets.
 	//
@@ -1514,8 +1459,29 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
-	// Attempt to upgrade cluster version.
-	s.startAttemptUpgrade(ctx)
+	if err := s.sqlServer.start(
+		workersCtx,
+		s.stopper,
+		s.cfg.TestingKnobs,
+		connManager,
+		pgL,
+		s.cfg.SocketFile,
+		orphanedLeasesTimeThresholdNanos,
+	); err != nil {
+		return err
+	}
+
+	log.Event(ctx, "server ready")
+	return s.startPost(ctx)
+}
+
+// startPost is called from Start and starts a number of auxiliary workers as
+// well as some one-off operations. This serves to keep the Start method itself
+// focused.
+func (s *Server) startPost(ctx context.Context) error {
+	// Record that this node joined the cluster in the event log. Since this
+	// executes a SQL query, this must be done after the SQL layer is ready.
+	s.node.recordJoinEvent()
 
 	// Record node start in telemetry. Get the right counter for this storage
 	// engine type as well as type of start (initial boot vs restart).
@@ -1537,23 +1503,102 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	telemetry.Count(nodeStartCounter)
 
-	// Record that this node joined the cluster in the event log. Since this
-	// executes a SQL query, this must be done after the SQL layer is ready.
-	s.node.recordJoinEvent()
+	// Spawn a goroutine that will print a nice message when Gossip connects.
+	// Note that we already know the clusterID, but we don't know that Gossip
+	// has connected. The pertinent case is that of restarting an entire
+	// cluster. Someone has to gossip the ClusterID before Gossip is connected,
+	// but this gossip only happens once the first range has a leaseholder, i.e.
+	// when a quorum of nodes has gone fully operational.
+	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
+		log.Infof(ctx, "connecting to gossip network to verify cluster ID")
+		select {
+		case <-s.gossip.Connected:
+			log.Infof(ctx, "node connected via gossip")
+		case <-ctx.Done():
+		case <-s.stopper.ShouldQuiesce():
+		}
+	})
 
-	if err := s.sqlServer.start(
-		workersCtx,
-		s.stopper,
-		s.cfg.TestingKnobs,
-		connManager,
-		pgL,
-		s.cfg.SocketFile,
-		orphanedLeasesTimeThresholdNanos,
+	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
+	if err != nil {
+		return errors.Wrap(err, "reading max HLC upper bound")
+	}
+	if err := s.startPersistingHLCUpperBound(
+		ctx,
+		hlcUpperBound > 0,
+		func(t int64) error { /* function to persist upper bound of HLC to all stores */
+			return s.node.SetHLCUpperBound(context.Background(), t)
+		},
+		time.NewTicker,
 	); err != nil {
 		return err
 	}
 
-	log.Event(ctx, "server ready")
+	s.replicationReporter.Start(ctx, s.stopper)
+
+	// Begin recording runtime statistics.
+	if err := s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval); err != nil {
+		return err
+	}
+
+	// Add node to recorder and begin recording time series data collected by the
+	// status monitor.
+	s.recorder.AddNode(
+		s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr,
+		s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
+	s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+	)
+
+	// Start garbage collecting system events.
+	//
+	// NB: As written, this falls awkwardly between SQL and KV. KV is used only
+	// to make sure this runs only on one node. SQL is used to actually GC. We
+	// count it as a KV operation since it grooms cluster-wide data, not
+	// something associated to SQL tenants.
+	s.startSystemLogsGC(ctx)
+
+	// Start the protected timestamp subsystem.
+	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+
+	var graphiteOnce sync.Once
+	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
+		if graphiteEndpoint.Get(&s.st.SV) != "" {
+			graphiteOnce.Do(func() {
+				s.node.startGraphiteStatsExporter(s.st)
+			})
+		}
+	})
+
+	// Attempt to upgrade cluster version.
+	s.startAttemptUpgrade(ctx)
+
+	// Begin recording status summaries, including a synchronous write.
+	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
+
+	if s.InitialBoot() {
+		// If a new cluster is just starting up, force all the system ranges
+		// through the replication queue so they upreplicate as quickly as
+		// possible when a new node joins. Without this code, the upreplication
+		// would be up to the whim of the scanner, which might be too slow for
+		// new clusters.
+		// TODO(tbg): instead of this dubious band-aid we should make the
+		// replication queue reactive enough to avoid relying on the scanner
+		// alone.
+		var done bool
+		return s.node.stores.VisitStores(func(store *kvserver.Store) error {
+			if !done {
+				done = true
+				return store.ForceReplicationScanAndProcess()
+			}
+			return nil
+		})
+	}
 	return nil
 }
 
