@@ -44,8 +44,8 @@ func init() {
 	for name, def := range builtins {
 		fDef := tree.NewFunctionDefinition(name, &def.props, def.overloads)
 		tree.FunDefs[name] = fDef
-		if fDef.Private {
-			// Avoid listing help for private functions.
+		if !fDef.ShouldDocument() {
+			// Avoid listing help for undocumented functions.
 			continue
 		}
 		AllBuiltinNames = append(AllBuiltinNames, name)

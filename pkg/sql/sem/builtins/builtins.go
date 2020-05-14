@@ -3061,8 +3061,9 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.create_tenant": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryMultiTenancy,
-			Impure:   true,
+			Category:     categoryMultiTenancy,
+			Undocumented: true,
+			Impure:       true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3106,8 +3107,9 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.destroy_tenant": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryMultiTenancy,
-			Impure:   true,
+			Category:     categoryMultiTenancy,
+			Undocumented: true,
+			Impure:       true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{

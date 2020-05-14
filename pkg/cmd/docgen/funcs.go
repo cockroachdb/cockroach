@@ -182,7 +182,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 		}
 		seen[name] = struct{}{}
 		props, fns := builtins.GetBuiltinProperties(name)
-		if props.Private {
+		if !props.ShouldDocument() {
 			continue
 		}
 		for _, fn := range fns {
