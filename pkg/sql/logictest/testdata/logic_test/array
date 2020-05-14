@@ -832,7 +832,7 @@ SELECT ARRAY['a','b','c'] || 'd'::text
 ----
 {a,b,c,d}
 
-query error unsupported binary operator
+query error pq: could not parse "d" as type string\[\]
 SELECT ARRAY['a','b','c'] || 'd'
 
 query T

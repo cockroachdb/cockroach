@@ -2715,7 +2715,7 @@ corr(int, float) -> float
 build
 SELECT corr('foo', v) FROM kv
 ----
-error (42883): unknown signature: corr(string, int)
+error (22P02): corr(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 
 # Tests for string_agg.
 
