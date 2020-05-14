@@ -1598,10 +1598,13 @@ func (s *Server) startServeUI(
 ) error {
 
 	// Enable the debug endpoints first to provide an earlier window into what's
-	// going on with the node in advance of exporting node functionality.
+	// going on with the node in advance of exporting node functionality. Note
+	// that these are not authenticated (to ease debugging) but instead default to
+	// allowing connections from localhost only. See the
+	// 'server.remote_debugging.mode' cluster setting.
 	//
-	// TODO(marc): when cookie-based authentication exists, apply it to all web
-	// endpoints.
+	// TODO(knz): this is not secure enough, revisit. Customers often flip this
+	// setting during debug sessions and may never flip it back.
 	s.mux.Handle(debug.Endpoint, s.debug)
 
 	// Initialize grpc-gateway mux and context in order to get the /health
