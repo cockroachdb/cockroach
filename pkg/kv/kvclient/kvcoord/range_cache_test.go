@@ -1166,32 +1166,32 @@ func TestRangeCacheGeneration(t *testing.T) {
 	descAM1 := &roachpb.RangeDescriptor{
 		StartKey:             roachpb.RKey("a"),
 		EndKey:               roachpb.RKey("m"),
-		Generation:           proto.Int64(1),
+		Generation:           1,
 		GenerationComparable: proto.Bool(true),
 	}
 	descMZ3 := &roachpb.RangeDescriptor{
 		StartKey:             roachpb.RKey("m"),
 		EndKey:               roachpb.RKey("z"),
-		Generation:           proto.Int64(3),
+		Generation:           3,
 		GenerationComparable: proto.Bool(true),
 	}
 
 	descBY0 := &roachpb.RangeDescriptor{
 		StartKey:             roachpb.RKey("b"),
 		EndKey:               roachpb.RKey("y"),
-		Generation:           proto.Int64(0),
+		Generation:           0,
 		GenerationComparable: proto.Bool(true),
 	}
 	descBY2 := &roachpb.RangeDescriptor{
 		StartKey:             roachpb.RKey("b"),
 		EndKey:               roachpb.RKey("y"),
-		Generation:           proto.Int64(2),
+		Generation:           2,
 		GenerationComparable: proto.Bool(true),
 	}
 	descBY4 := &roachpb.RangeDescriptor{
 		StartKey:             roachpb.RKey("b"),
 		EndKey:               roachpb.RKey("y"),
-		Generation:           proto.Int64(4),
+		Generation:           4,
 		GenerationComparable: proto.Bool(true),
 	}
 	descBYIncomparable := &roachpb.RangeDescriptor{

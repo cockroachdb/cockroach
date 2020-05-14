@@ -1674,7 +1674,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 				repl3,
 			},
 			NextReplicaID:        10,
-			Generation:           proto.Int64(5),
+			Generation:           5,
 			GenerationComparable: proto.Bool(true),
 		},
 	}

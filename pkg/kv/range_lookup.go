@@ -219,7 +219,7 @@ func RangeLookup(
 					// Since we support scanning non-transactionally, it's possible that
 					// we pick up both the pre- and post-split descriptor for a range.
 					if desc.GetGenerationComparable() && matchingRanges[0].GetGenerationComparable() {
-						if desc.GetGeneration() > matchingRanges[0].GetGeneration() {
+						if desc.Generation > matchingRanges[0].Generation {
 							// If both generations are comparable, we take the range
 							// descriptor with the newer generation.
 							matchingRanges[0] = *desc

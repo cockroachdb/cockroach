@@ -33,21 +33,21 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 		RangeID:              1,
 		StartKey:             roachpb.RKey("j"),
 		EndKey:               roachpb.RKey("p"),
-		Generation:           proto.Int64(0),
+		Generation:           0,
 		GenerationComparable: proto.Bool(true),
 	}
 	desc1AfterSplit := roachpb.RangeDescriptor{
 		RangeID:              1,
 		StartKey:             roachpb.RKey("j"),
 		EndKey:               roachpb.RKey("m"),
-		Generation:           proto.Int64(1),
+		Generation:           1,
 		GenerationComparable: proto.Bool(true),
 	}
 	desc2AfterSplit := roachpb.RangeDescriptor{
 		RangeID:              2,
 		StartKey:             roachpb.RKey("m"),
 		EndKey:               roachpb.RKey("p"),
-		Generation:           proto.Int64(1),
+		Generation:           1,
 		GenerationComparable: proto.Bool(true),
 	}
 

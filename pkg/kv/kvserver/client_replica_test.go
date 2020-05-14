@@ -1678,7 +1678,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldGeneration := repl.Desc().GetGeneration()
+	oldGeneration := repl.Desc().Generation
 	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
 		NodeID:  mtc.idents[1].NodeID,
 		StoreID: mtc.idents[1].StoreID,
@@ -1686,9 +1686,9 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+2)
+	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+2)
 
-	oldGeneration = repl.Desc().GetGeneration()
+	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
 	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs)
@@ -1699,7 +1699,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	// +1 for entering joint config due to demotion
 	// +1 for transitioning out of joint config
 	// +1 for removing learner
-	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
+	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
 }
 
 func TestSystemZoneConfigs(t *testing.T) {
