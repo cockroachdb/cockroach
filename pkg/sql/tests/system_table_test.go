@@ -34,14 +34,16 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const keysPerDesc = 2
-	const nonDescKeys = 9
 
 	testutils.RunTrueAndFalse(t, "system tenant", func(t *testing.T, systemTenant bool) {
 		var codec keys.SQLCodec
+		var nonDescKeys int
 		if systemTenant {
 			codec = keys.SystemSQLCodec
+			nonDescKeys = 9
 		} else {
 			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+			nonDescKeys = 2
 		}
 
 		ms := sqlbase.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())

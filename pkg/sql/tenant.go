@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -63,8 +62,8 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64, tenInfo []byte
 	// Initialize the tenant's keyspace.
 	schema := sqlbase.MakeMetadataSchema(
 		keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)),
-		zonepb.DefaultZoneConfigRef(),
-		zonepb.DefaultSystemZoneConfigRef(),
+		nil, /* defaultZoneConfig */
+		nil, /* defaultZoneConfig */
 	)
 	kvs, splits := schema.GetInitialValues()
 	b := p.Txn().NewBatch()
