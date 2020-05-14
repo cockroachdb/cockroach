@@ -282,8 +282,6 @@ func EndTxn(
 		reply.Txn.Update(h.Txn)
 	}
 
-	var pd result.Result
-
 	// Attempt to commit or abort the transaction per the args.Commit parameter.
 	if args.Commit {
 		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args); retry {
@@ -313,27 +311,6 @@ func EndTxn(
 
 		// Else, the transaction can be explicitly committed.
 		reply.Txn.Status = roachpb.COMMITTED
-
-		// Merge triggers must run before lock resolution as the merge trigger
-		// itself contains intents, in the RightData snapshot, that will be owned
-		// and thus resolved by the new range.
-		//
-		// While it might seem cleaner to simply rely on asynchronous lock
-		// resolution here, these locks must be resolved synchronously. We
-		// maintain the invariant that there are no locks on local range
-		// descriptors that belong to committed transactions. This allows nodes,
-		// during startup, to infer that any lingering intents belong to in-progress
-		// transactions and thus the pre-intent value can safely be used.
-		if mt := args.InternalCommitTrigger.GetMergeTrigger(); mt != nil {
-			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, readWriter.(storage.Batch),
-				ms, mt, reply.Txn.WriteTimestamp)
-			if err != nil {
-				return result.Result{}, err
-			}
-			if err := pd.MergeAndDestroy(mergeResult); err != nil {
-				return result.Result{}, err
-			}
-		}
 	} else {
 		reply.Txn.Status = roachpb.ABORTED
 	}
@@ -350,32 +327,6 @@ func EndTxn(
 	}
 	if err := updateFinalizedTxn(ctx, readWriter, ms, key, args, reply.Txn, externalLocks); err != nil {
 		return result.Result{}, err
-	}
-
-	// Run the rest of the commit triggers if successfully committed.
-	if reply.Txn.Status == roachpb.COMMITTED {
-		triggerResult, err := RunCommitTrigger(ctx, cArgs.EvalCtx, readWriter.(storage.Batch),
-			ms, args, reply.Txn)
-		if err != nil {
-			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
-		}
-		if err := pd.MergeAndDestroy(triggerResult); err != nil {
-			return result.Result{}, err
-		}
-	} else if reply.Txn.Status == roachpb.ABORTED {
-		// If this is the system config span and we're aborted, add a trigger to
-		// potentially gossip now that we've removed an intent. This is important
-		// to deal with cases where previously committed values were not gossipped
-		// due to an outstanding intent.
-		if cArgs.EvalCtx.ContainsKey(keys.SystemConfigSpan.Key) {
-			if err := pd.MergeAndDestroy(result.Result{
-				Local: result.LocalResult{
-					MaybeGossipSystemConfigIfHaveFailure: true,
-				},
-			}); err != nil {
-				return result.Result{}, err
-			}
-		}
 	}
 
 	// Note: there's no need to clear the AbortSpan state if we've successfully
@@ -403,10 +354,29 @@ func EndTxn(
 	txnResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
 	txnResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
 	txnResult.Local.ResolvedLocks = resolvedLocks
-	if err := pd.MergeAndDestroy(txnResult); err != nil {
-		return result.Result{}, err
+
+	// Run the rest of the commit triggers if successfully committed.
+	if reply.Txn.Status == roachpb.COMMITTED {
+		triggerResult, err := RunCommitTrigger(
+			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
+		)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
+		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
+			return result.Result{}, err
+		}
+	} else if reply.Txn.Status == roachpb.ABORTED {
+		// If this is the system config span and we're aborted, add a trigger to
+		// potentially gossip now that we've removed an intent. This is important
+		// to deal with cases where previously committed values were not gossipped
+		// due to an outstanding intent.
+		if cArgs.EvalCtx.ContainsKey(keys.SystemConfigSpan.Key) {
+			txnResult.Local.MaybeGossipSystemConfigIfHaveFailure = true
+		}
 	}
-	return pd, nil
+
+	return txnResult, nil
 }
 
 // IsEndTxnExceedingDeadline returns true if the transaction exceeded its
@@ -629,6 +599,9 @@ func RunCommitTrigger(
 		*ms = newMS
 		return trigger, err
 	}
+	if mt := ct.GetMergeTrigger(); mt != nil {
+		return mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 		// TODO(tbg): once we support atomic replication changes, check that
 		// crt.Added() and crt.Removed() don't intersect (including mentioning
@@ -675,10 +648,6 @@ func RunCommitTrigger(
 			}
 		}
 		return pd, nil
-	}
-	if ct.GetMergeTrigger() != nil {
-		// Merge triggers were handled earlier, before lock resolution.
-		return result.Result{}, nil
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
