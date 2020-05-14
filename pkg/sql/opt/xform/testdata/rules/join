@@ -637,11 +637,11 @@ memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 2249.93
+ │         └── cost: 2249.94
  ├── G2: (select G5 G6) (select G7 G6) (select G8 G6)
  │    └── []
  │         ├── best: (select G7 G6)
- │         └── cost: 1069.22
+ │         └── cost: 1069.23
  ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    └── []
  │         ├── best: (scan xyz,cols=(5-7))
@@ -1693,16 +1693,16 @@ memo (optimized, ~23KB, required=[presentation: name:13,popn_per_sqkm:16])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:13,popn_per_sqkm:16]
  │         ├── best: (project G2 G3 name)
- │         └── cost: 5188.11
+ │         └── cost: 5188.12
  ├── G2: (group-by G4 G5 cols=(13,14))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(13,14))
- │         └── cost: 5188.06
+ │         └── cost: 5188.07
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,12-14))
  │    └── []
  │         ├── best: (lookup-join G10 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,12-14))
- │         └── cost: 4981.12
+ │         └── cost: 4981.13
  ├── G5: (aggregations G11)
  ├── G6: (div G12 G13)
  ├── G7: (scan c,cols=(3,9,10))
@@ -1712,12 +1712,12 @@ memo (optimized, ~23KB, required=[presentation: name:13,popn_per_sqkm:16])
  ├── G8: (select G14 G15)
  │    └── []
  │         ├── best: (select G14 G15)
- │         └── cost: 139.35
+ │         └── cost: 139.36
  ├── G9: (filters G16 G17)
  ├── G10: (geo-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
  │    └── []
  │         ├── best: (geo-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
- │         └── cost: 147.36
+ │         └── cost: 147.37
  ├── G11: (sum G19)
  ├── G12: (variable sum)
  ├── G13: (div G20 G21)
@@ -2104,7 +2104,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G12: (index-join G20 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G20 pqr,cols=(1-4))
- │         └── cost: 15.47
+ │         └── cost: 15.48
  ├── G13: (index-join G21 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G21 pqr,cols=(1-4))
@@ -2124,7 +2124,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G20: (select G27 G28)
  │    └── []
  │         ├── best: (select G27 G28)
- │         └── cost: 10.72
+ │         └── cost: 10.73
  ├── G21: (scan pqr@rs,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
@@ -2167,7 +2167,7 @@ memo (optimized, ~9KB, required=[presentation: q:2,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,t:5]
  │         ├── best: (select G4 G5)
- │         └── cost: 51.33
+ │         └── cost: 51.34
  ├── G2: (scan pqr,cols=(2,5))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,5))

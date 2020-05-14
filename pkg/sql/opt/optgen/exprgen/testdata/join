@@ -114,7 +114,7 @@ expr
 inner-join-apply
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  ├── stats: [rows=333333.333]
- ├── cost: 5611.39451
+ ├── cost: 5611.40451
  ├── prune: (7)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
@@ -128,7 +128,7 @@ inner-join-apply
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    ├── outer: (1)
  │    ├── stats: [rows=333.333333, distinct(1)=1, null(1)=0]
- │    ├── cost: 1080.03
+ │    ├── cost: 1080.04
  │    ├── prune: (7)
  │    ├── scan t.public.def
  │    │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
