@@ -74,7 +74,7 @@ func makePredicate(
 ) (*joinPredicate, error) {
 	// For anti and semi joins, the right columns are omitted from the output (but
 	// they must be available internally for the ON condition evaluation).
-	omitRightColumns := joinType == sqlbase.JoinType_LEFT_SEMI || joinType == sqlbase.JoinType_LEFT_ANTI
+	omitRightColumns := joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin
 
 	// Prepare the metadata for the result columns.
 	// The structure of the join data source results is like this:

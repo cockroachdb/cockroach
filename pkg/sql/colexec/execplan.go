@@ -257,7 +257,7 @@ func isSupported(
 
 	case core.MergeJoiner != nil:
 		if !core.MergeJoiner.OnExpr.Empty() &&
-			core.MergeJoiner.Type != sqlbase.JoinType_INNER {
+			core.MergeJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
 		if core.MergeJoiner.Type.IsSetOpJoin() {
@@ -878,14 +878,13 @@ func NewColOperator(
 			}
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
-			if core.HashJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
-				core.HashJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+			if !core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
 				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
 			} else {
 				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
 			}
 
-			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.JoinType_INNER {
+			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.InnerJoin {
 				if err = result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, core.HashJoiner.OnExpr, streamingMemAccount, processorConstructor); err != nil {
 					return result, err
 				}
@@ -913,7 +912,7 @@ func NewColOperator(
 			joinType := core.MergeJoiner.Type
 			var onExpr *execinfrapb.Expression
 			if !core.MergeJoiner.OnExpr.Empty() {
-				if joinType != sqlbase.JoinType_INNER {
+				if joinType != sqlbase.InnerJoin {
 					return result, errors.AssertionFailedf(
 						"ON expression (%s) was unexpectedly planned for merge joiner with join type %s",
 						core.MergeJoiner.OnExpr.String(), core.MergeJoiner.Type.String(),
@@ -946,8 +945,7 @@ func NewColOperator(
 			result.ToClose = append(result.ToClose, mj.(IdempotentCloser))
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
-			if core.MergeJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
-				core.MergeJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+			if !core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
 				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
 			} else {
 				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
