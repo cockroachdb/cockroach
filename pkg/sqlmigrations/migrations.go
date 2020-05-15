@@ -283,9 +283,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
 	},
 	{
-		// Introduced in v20.1.
-		name:                "migrate system.namespace_deprecated entries into system.namespace",
-		workFn:              migrateSystemNamespace,
+		// Introduced in v20.1. Replaced in v20.1.1 and 20.2 by the StartSystemNamespaceMigration
+		// post-finalization-style migration.
+		name: "migrate system.namespace_deprecated entries into system.namespace",
+		// workFn:              migrateSystemNamespace,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 	},
 	{
@@ -685,6 +686,12 @@ func schemaChangeJobMigrationKey(codec keys.SQLCodec) roachpb.Key {
 	return append(codec.MigrationKeyPrefix(), roachpb.RKey(schemaChangeJobMigrationName)...)
 }
 
+var systemNamespaceMigrationName = "upgrade system.namespace post-20.1-finalization"
+
+func systemNamespaceMigrationKey(codec keys.SQLCodec) roachpb.Key {
+	return append(codec.MigrationKeyPrefix(), roachpb.RKey(systemNamespaceMigrationName)...)
+}
+
 // schemaChangeJobMigrationKeyForTable returns a key prefixed with
 // schemaChangeJobMigrationKey for a specific table, to store the completion
 // status for adding a new job if the table was being added or needed to drain
@@ -762,6 +769,80 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 		if fn := m.testingKnobs.AfterJobMigration; fn != nil {
 			fn()
 		}
+	})
+}
+
+// StartSystemNamespaceMigration starts an async task to run the migration that
+// migrates entries from system.namespace (descriptor 2) to system.namespace2
+// (descriptor 30). The task first waits until the upgrade to 20.1 is finalized
+// before running the migration. The migration is retried until it succeeds (on
+// any node).
+func (m *Manager) StartSystemNamespaceMigration(ctx context.Context) error {
+	return m.stopper.RunAsyncTask(ctx, "run-system-namespace-migration", func(ctx context.Context) {
+		log.Info(ctx, "starting wait for upgrade finalization before system.namespace migration")
+		// First wait for the cluster to finalize the upgrade to 20.1. These values
+		// were chosen to be similar to the retry loop for finalizing the cluster
+		// upgrade.
+		waitRetryOpts := retry.Options{
+			InitialBackoff: 10 * time.Second,
+			MaxBackoff:     10 * time.Second,
+			Closer:         m.stopper.ShouldQuiesce(),
+		}
+		for retry := retry.StartWithCtx(ctx, waitRetryOpts); retry.Next(); {
+			if m.settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+				break
+			}
+		}
+		select {
+		case <-m.stopper.ShouldQuiesce():
+			return
+		default:
+		}
+		log.VEventf(ctx, 2, "detected upgrade finalization for system.namespace migration")
+
+		// TODO (jordan): add testing knobs here if necessary.
+		if true { //!m.testingKnobs.AlwaysRunNamespaceMigration {
+			// Check whether this migration has already been completed.
+			if kv, err := m.db.Get(ctx, systemNamespaceMigrationKey); err != nil {
+				log.Infof(ctx, "error getting record of schema change job migration: %s", err.Error())
+			} else if kv.Exists() {
+				log.Infof(ctx, "schema change job migration already complete")
+				return
+			}
+		}
+
+		// Now run the migration. This is retried indefinitely until it finishes.
+		log.Infof(ctx, "starting system.namespace migration")
+		r := runner{
+			db:          m.db,
+			codec:       m.codec,
+			sqlExecutor: m.sqlExecutor,
+			settings:    m.settings,
+		}
+		migrationRetryOpts := retry.Options{
+			InitialBackoff: 1 * time.Minute,
+			MaxBackoff:     10 * time.Minute,
+			Closer:         m.stopper.ShouldQuiesce(),
+		}
+		startTime := timeutil.Now().String()
+		for migRetry := retry.Start(migrationRetryOpts); migRetry.Next(); {
+			migrateCtx, _ := m.stopper.WithCancelOnQuiesce(context.Background())
+			migrateCtx = logtags.AddTag(migrateCtx, "system-namespace-migration", nil)
+			if err := migrateSystemNamespace(migrateCtx, r); err != nil {
+				log.Errorf(ctx, "error attempting running system.namespace migration, will retry: %s %s", err.Error(),
+					startTime)
+				continue
+			}
+			log.Infof(ctx, "system.namespace migration completed")
+			if err := m.db.Put(ctx, systemNamespaceMigrationKey, startTime); err != nil {
+				log.Warningf(ctx, "error persisting record of system.namespace migration, will retry: %s", err.Error())
+			}
+			break
+		}
+		// TODO (jordan): add testing knobs here if necessary.
+		//if fn := m.testingKnobs.AfterNamespaceMigration; fn != nil {
+		//		fn()
+		//	}
 	})
 }
 
@@ -1405,6 +1486,8 @@ func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
 // 'public' schema. Each table entry is copied over with the public schema as
 // as its parentSchemaID.
 //
+// Only entries that do not exist in the new table are copied.
+//
 // New database and table entries continue to be written to the deprecated
 // namespace table until VersionNamespaceTableWithSchemas is active. This means
 // that an additional migration will be necessary in 20.2 to catch any new
@@ -1412,49 +1495,59 @@ func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
 // lookups fall back to the deprecated table if a name is not found in the new
 // one.
 func migrateSystemNamespace(ctx context.Context, r runner) error {
-	q := fmt.Sprintf(
-		`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]`,
-		sqlbase.DeprecatedNamespaceTable.ID)
-	rows, err := r.sqlExecutor.QueryEx(
-		ctx, "read-deprecated-namespace-table", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{
-			User: security.RootUser,
-		},
-		q)
-	if err != nil {
-		return err
-	}
-	for _, row := range rows {
-		parentID := sqlbase.ID(tree.MustBeDInt(row[0]))
-		name := string(tree.MustBeDString(row[1]))
-		id := sqlbase.ID(tree.MustBeDInt(row[2]))
-		if parentID == keys.RootNamespaceID {
-			// This row represents a database. Add it to the new namespace table.
-			databaseKey := sqlbase.NewDatabaseKey(name)
-			if err := r.db.Put(ctx, databaseKey.Key(r.codec), id); err != nil {
-				return err
-			}
-			// Also create a 'public' schema for this database.
-			schemaKey := sqlbase.NewSchemaKey(id, "public")
-			if err := r.db.Put(ctx, schemaKey.Key(r.codec), keys.PublicSchemaID); err != nil {
-				return err
-			}
-		} else {
-			// This row represents a table. Add it to the new namespace table with the
-			// schema set to 'public'.
-			if id == keys.DeprecatedNamespaceTableID {
-				// The namespace table itself was already handled in
-				// createNewSystemNamespaceDescriptor. Do not overwrite it with the
-				// deprecated ID.
-				continue
-			}
-			tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
-			if err := r.db.Put(ctx, tableKey.Key(r.codec), id); err != nil {
-				return err
+	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Fetch all entries that are not present in the new namespace table. Each
+		// of these entries will be copied to the new table.
+		//
+		// Note that we are very careful to always delete from both tables in 20.1,
+		// so there's no possibility that we'll be overwriting a deleted table that
+		// existed in the old table and the new table but was deleted from only the
+		// new table.
+		q := fmt.Sprintf(
+			`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]
+              WHERE id NOT IN (SELECT id FROM [%d AS namespace])`,
+			sqlbase.DeprecatedNamespaceTable.ID, sqlbase.NamespaceTable.ID)
+		rows, err := r.sqlExecutor.QueryEx(
+			ctx, "read-deprecated-namespace-table", txn,
+			sqlbase.InternalExecutorSessionDataOverride{
+				User: security.RootUser,
+			},
+			q)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			parentID := sqlbase.ID(tree.MustBeDInt(row[0]))
+			name := string(tree.MustBeDString(row[1]))
+			id := sqlbase.ID(tree.MustBeDInt(row[2]))
+			if parentID == keys.RootNamespaceID {
+				// This row represents a database. Add it to the new namespace table.
+				databaseKey := sqlbase.NewDatabaseKey(name)
+				if err := txn.Put(ctx, databaseKey.Key(r.codec), id); err != nil {
+					return err
+				}
+				// Also create a 'public' schema for this database.
+				schemaKey := sqlbase.NewSchemaKey(id, "public")
+				if err := txn.Put(ctx, schemaKey.Key(r.codec), keys.PublicSchemaID); err != nil {
+					return err
+				}
+			} else {
+				// This row represents a table. Add it to the new namespace table with the
+				// schema set to 'public'.
+				if id == keys.DeprecatedNamespaceTableID {
+					// The namespace table itself was already handled in
+					// createNewSystemNamespaceDescriptor. Do not overwrite it with the
+					// deprecated ID.
+					continue
+				}
+				tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
+				if err := txn.Put(ctx, tableKey.Key(r.codec), id); err != nil {
+					return err
+				}
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {
