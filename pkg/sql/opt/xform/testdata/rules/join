@@ -1784,7 +1784,7 @@ memo (optimized, ~13KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (zigzag-join G3 pqr@q pqr@r) (select G4 G5) (select G6 G7) (select G8 G7)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 0.24
+ │         └── cost: 1.92
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
@@ -1865,7 +1865,7 @@ memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4)) (select G6 G7) (select G8 G9) (select G10 G9)
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 0.86
+ │         └── cost: 7.46
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
@@ -1874,7 +1874,7 @@ memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
  ├── G4: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 0.24
+ │         └── cost: 1.93
  ├── G5: (filters)
  ├── G6: (index-join G13 pqr,cols=(2-4))
  │    └── []
@@ -1930,7 +1930,7 @@ memo (optimized, ~11KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (zigzag-join G3 pqr@q pqr@s) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 0.24
+ │         └── cost: 1.93
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
@@ -1984,7 +1984,7 @@ memo (optimized, ~13KB, required=[presentation: r:3,t:5])
  ├── G1: (select G2 G3) (zigzag-join G3 pqr@rs pqr@ts) (select G4 G5) (select G6 G5) (select G7 G8)
  │    └── [presentation: r:3,t:5]
  │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
- │         └── cost: 0.24
+ │         └── cost: 1.94
  ├── G2: (scan pqr,cols=(3,5))
  │    └── []
  │         ├── best: (scan pqr,cols=(3,5))
@@ -2075,7 +2075,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G6 G7 pqr,keyCols=[1],outCols=(1-4)) (select G8 G9) (select G10 G11) (select G12 G7) (select G13 G7)
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 0.04
+ │         └── cost: 1.94
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
@@ -2084,12 +2084,12 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G4: (zigzag-join G17 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G17 pqr@q pqr@r)
- │         └── cost: 0.24
+ │         └── cost: 1.93
  ├── G5: (filters G16)
  ├── G6: (zigzag-join G9 pqr@r pqr@s)
  │    └── []
  │         ├── best: (zigzag-join G9 pqr@r pqr@s)
- │         └── cost: 0.24
+ │         └── cost: 1.94
  ├── G7: (filters G14)
  ├── G8: (index-join G18 pqr,cols=(1-4))
  │    └── []
@@ -2108,7 +2108,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G13: (index-join G21 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G21 pqr,cols=(1-4))
- │         └── cost: 0.54
+ │         └── cost: 4.72
  ├── G14: (eq G22 G23)
  ├── G15: (eq G24 G23)
  ├── G16: (eq G25 G26)
@@ -2128,7 +2128,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G21: (scan pqr@rs,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
- │         └── cost: 0.12
+ │         └── cost: 0.98
  ├── G22: (variable q)
  ├── G23: (const 1)
  ├── G24: (variable r)
