@@ -44,7 +44,8 @@ type Batch interface {
 	// AppendCol appends the given Vec to this batch.
 	AppendCol(Vec)
 	// ReplaceCol replaces the current Vec at the provided index with the
-	// provided Vec.
+	// provided Vec. The original and the replacement vectors *must* be of the
+	// same type.
 	ReplaceCol(Vec, int)
 	// Reset modifies the caller in-place to have the given length and columns
 	// with the given types. If it's possible, Reset will reuse the existing
@@ -108,6 +109,9 @@ func NewMemBatchWithSize(typs []*types.T, size int) Batch {
 	b := NewMemBatchNoCols(typs, size).(*MemBatch)
 	for i, t := range typs {
 		b.b[i] = NewMemColumn(t, size)
+		if b.b[i].CanonicalTypeFamily() == types.BytesFamily {
+			b.bytesVecIdxs = append(b.bytesVecIdxs, i)
+		}
 	}
 	return b
 }
@@ -165,8 +169,13 @@ type MemBatch struct {
 	// length of batch or sel in tuples
 	n int
 	// slice of columns in this batch.
-	b      []Vec
-	useSel bool
+	b []Vec
+	// bytesVecIdxs stores the indices of all vectors of Bytes type in b. Bytes
+	// vectors require special handling, so rather than iterating over all
+	// vectors and checking whether they are of Bytes type we store this slice
+	// separately.
+	bytesVecIdxs []int
+	useSel       bool
 	// if useSel is true, a selection vector from upstream. a selection vector is
 	// a list of selected column indexes in this memBatch's columns.
 	sel []int
@@ -208,20 +217,27 @@ func (m *MemBatch) SetSelection(b bool) {
 // SetLength implements the Batch interface.
 func (m *MemBatch) SetLength(n int) {
 	m.n = n
-	for _, v := range m.b {
-		if v != nil && v.CanonicalTypeFamily() == types.BytesFamily {
-			v.Bytes().UpdateOffsetsToBeNonDecreasing(n)
+	if n > 0 {
+		for _, bytesVecIdx := range m.bytesVecIdxs {
+			m.b[bytesVecIdx].Bytes().UpdateOffsetsToBeNonDecreasing(n)
 		}
 	}
 }
 
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
+	if col.CanonicalTypeFamily() == types.BytesFamily {
+		m.bytesVecIdxs = append(m.bytesVecIdxs, len(m.b))
+	}
 	m.b = append(m.b, col)
 }
 
 // ReplaceCol implements the Batch interface.
 func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
+	if m.b[colIdx] != nil && !m.b[colIdx].Type().Identical(col.Type()) {
+		panic(fmt.Sprintf("unexpected replacement: original vector is %s "+
+			"whereas the replacement is %s", m.b[colIdx].Type(), col.Type()))
+	}
 	m.b[colIdx] = col
 }
 
@@ -251,6 +267,12 @@ func (m *MemBatch) Reset(typs []*types.T, length int) {
 	m.SetLength(length)
 	m.sel = m.sel[:length]
 	m.b = m.b[:len(typs)]
+	for i, idx := range m.bytesVecIdxs {
+		if idx >= len(typs) {
+			m.bytesVecIdxs = m.bytesVecIdxs[:i]
+			break
+		}
+	}
 	m.ResetInternalBatch()
 }
 
@@ -258,13 +280,12 @@ func (m *MemBatch) Reset(typs []*types.T, length int) {
 func (m *MemBatch) ResetInternalBatch() {
 	m.SetSelection(false)
 	for _, v := range m.b {
-		canonicalTypeFamily := v.CanonicalTypeFamily()
-		if canonicalTypeFamily != types.UnknownFamily {
+		if v.CanonicalTypeFamily() != types.UnknownFamily {
 			v.Nulls().UnsetNulls()
 		}
-		if canonicalTypeFamily == types.BytesFamily {
-			v.Bytes().Reset()
-		}
+	}
+	for _, bytesVecIdx := range m.bytesVecIdxs {
+		m.b[bytesVecIdx].Bytes().Reset()
 	}
 }
 
