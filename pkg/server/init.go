@@ -139,6 +139,13 @@ type initState struct {
 	bootstrapped bool
 }
 
+// NeedsInit returns true if (and only if) none if the engines are initialized.
+// In this case, server startup is blocked until either an initialized node
+// is reached via Gossip, or this node itself is bootstrapped.
+func (s *initServer) NeedsInit() bool {
+	return len(s.inspectState.initializedEngines) == 0
+}
+
 // ServeAndWait waits until the server is ready to bootstrap. In the common case
 // of restarting an existing node, this immediately returns. When starting with
 // a blank slate (i.e. only empty engines), it waits for incoming Bootstrap
@@ -154,7 +161,7 @@ type initState struct {
 func (s *initServer) ServeAndWait(
 	ctx context.Context, stopper *stop.Stopper, sv *settings.Values, g *gossip.Gossip,
 ) (*initState, error) {
-	if len(s.inspectState.initializedEngines) != 0 {
+	if !s.NeedsInit() {
 		// If already bootstrapped, return early.
 		return &initState{
 			initDiskState: *s.inspectState,
