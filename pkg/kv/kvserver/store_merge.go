@@ -43,25 +43,6 @@ func (s *Store) MergeRange(
 	leftRepl.raftMu.AssertHeld()
 	rightRepl.raftMu.AssertHeld()
 
-	// Shut down rangefeed processors on either side of the merge.
-	//
-	// It isn't strictly necessary to shut-down a rangefeed processor on the
-	// surviving replica in a merge, but we choose to in order to avoid clients
-	// who were monitoring both sides of the merge from establishing multiple
-	// partial rangefeeds to the surviving range.
-	// TODO(nvanbenschoten): does this make sense? We could just adjust the
-	// bounds of the leftRepl.Processor.
-	//
-	// NB: removeInitializedReplicaRaftMuLocked also disconnects any initialized
-	// rangefeeds with REASON_REPLICA_REMOVED. That's ok because we will have
-	// already disconnected the rangefeed here.
-	leftRepl.disconnectRangefeedWithReason(
-		roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
-	)
-	rightRepl.disconnectRangefeedWithReason(
-		roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
-	)
-
 	if err := rightRepl.postDestroyRaftMuLocked(ctx, rightRepl.GetMVCCStats()); err != nil {
 		return err
 	}
