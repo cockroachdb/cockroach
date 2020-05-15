@@ -31,10 +31,20 @@ var NoticesEnabled = settings.RegisterPublicBoolSetting(
 // sending notices.
 type noticeSender interface {
 	AppendNotice(error)
+	SendNotice(ctx context.Context, noticeErr error) error
 }
 
 // SendClientNotice implements the tree.ClientNoticeSender interface.
 func (p *planner) SendClientNotice(ctx context.Context, err error) {
+	p.sendClientNoticeInternal(ctx, false, err)
+}
+
+// SendClientNoticeImmediately implements the tree.ClientNoticeSender interface.
+func (p *planner) SendClientNoticeImmediately(ctx context.Context, err error) {
+	p.sendClientNoticeInternal(ctx, true, err)
+}
+
+func (p *planner) sendClientNoticeInternal(ctx context.Context, flush bool, err error) {
 	if log.V(2) {
 		log.Infof(ctx, "out-of-band notice: %+v", err)
 	}
@@ -51,5 +61,12 @@ func (p *planner) SendClientNotice(ctx context.Context, err error) {
 		// * the notice protocol was disabled
 		return
 	}
-	p.noticeSender.AppendNotice(err)
+
+	if flush {
+		if err := p.noticeSender.SendNotice(ctx, err); err != nil {
+			log.Errorf(ctx, "error sending notice: %v", err)
+		}
+	} else {
+		p.noticeSender.AppendNotice(err)
+	}
 }

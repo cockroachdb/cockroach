@@ -2712,6 +2712,9 @@ type EvalSessionAccessor interface {
 type ClientNoticeSender interface {
 	// SendClientNotice sends a notice out-of-band to the client.
 	SendClientNotice(ctx context.Context, notice error)
+
+	// SendClientNoticeImmediately sends client notice immediately.
+	SendClientNoticeImmediately(ctx context.Context, notice error)
 }
 
 // InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is

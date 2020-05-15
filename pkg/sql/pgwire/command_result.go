@@ -212,6 +212,14 @@ func (r *commandResult) AppendNotice(noticeErr error) {
 	)
 }
 
+// SendNotice is part of the CommandResult interface.
+func (r *commandResult) SendNotice(ctx context.Context, noticeErr error) error {
+	if err := r.conn.bufferNotice(ctx, noticeErr); err != nil {
+		return err
+	}
+	return r.conn.Flush(r.pos)
+}
+
 // SetColumns is part of the CommandResult interface.
 func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColumns) {
 	r.assertNotReleased()

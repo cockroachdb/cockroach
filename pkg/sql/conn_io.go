@@ -689,6 +689,9 @@ type RestrictedCommandResult interface {
 	// This gets flushed only when the CommandResult is closed.
 	AppendNotice(noticeErr error)
 
+	// SendNotice is similar to AppendNotice, but flushes the notice immediately.
+	SendNotice(ctx context.Context, noticeErr error) error
+
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
 	//
@@ -878,6 +881,11 @@ func (r *bufferedCommandResult) AppendParamStatusUpdate(key string, val string) 
 
 // AppendNotice is part of the RestrictedCommandResult interface.
 func (r *bufferedCommandResult) AppendNotice(noticeErr error) {
+	panic("unimplemented")
+}
+
+// SendNotice is part of the RestrictedCommandResult interface.
+func (r *bufferedCommandResult) SendNotice(ctx context.Context, noticeErr error) error {
 	panic("unimplemented")
 }
 

@@ -692,6 +692,11 @@ func importPlanHook(
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
 
+		if err := warnIfImportFileTooLarge(
+			ctx, files, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, 6); err != nil {
+			p.ExtendedEvalContext().ClientNoticeSender.SendClientNoticeImmediately(ctx, err)
+		}
+
 		// Here we create the job and protected timestamp records in a side
 		// transaction and then kick off the job. This is awful. Rather we should be
 		// disallowing this statement in an explicit transaction and then we should
@@ -755,6 +760,36 @@ func importPlanHook(
 		return sj.Run(ctx)
 	}
 	return fn, backupccl.RestoreHeader, nil, false, nil
+}
+
+func warnIfImportFileTooLarge(
+	ctx context.Context,
+	files []string,
+	fileFactory cloud.ExternalStorageFromURIFactory,
+	maxSize int64,
+) error {
+	for i := range files {
+		store, err := fileFactory(ctx, files[i])
+		if err != nil {
+			log.Errorf(ctx, "error opening external file: %v", err)
+			return nil
+		}
+
+		sz, err := store.Size(ctx, "")
+		if err != nil {
+			log.Errorf(ctx, "error statting external file: %v", err)
+			return nil
+		}
+
+		if err = store.Close(); err != nil {
+			log.Errorf(ctx, "error closing external file: %v", err)
+			return nil
+		}
+		if sz > maxSize {
+			return pgerror.New(pgcode.Warning, "Yo files 2 large, man!")
+		}
+	}
+	return nil
 }
 
 func parseAvroOptions(
