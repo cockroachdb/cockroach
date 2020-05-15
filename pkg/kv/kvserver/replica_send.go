@@ -128,20 +128,45 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 	// on errors because the code doesn't currently support returning both a br
 	// and a pErr here. Also, some errors (e.g. NotLeaseholderError) have custom
 	// ways of returning range info.
-	if ba.ReturnRangeInfo && pErr == nil {
-		desc, lease := r.GetDescAndLease(ctx)
-		br.RangeInfos = []roachpb.RangeInfo{{Desc: desc, Lease: lease}}
+	if pErr == nil {
+		if ba.ReturnRangeInfo {
+			desc, lease := r.GetDescAndLease(ctx)
+			br.RangeInfos = []roachpb.RangeInfo{{Desc: desc, Lease: lease}}
 
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
-			// Also set the RangeInfo on the individual responses, for compatibility
-			// with 20.1.
-			for _, r := range br.Responses {
-				reply := r.GetInner()
-				header := reply.Header()
-				header.DeprecatedRangeInfos = br.RangeInfos
-				reply.SetHeader(header)
+			if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
+				// Also set the RangeInfo on the individual responses, for compatibility
+				// with 20.1.
+				for _, r := range br.Responses {
+					reply := r.GetInner()
+					header := reply.Header()
+					header.DeprecatedRangeInfos = br.RangeInfos
+					reply.SetHeader(header)
+				}
 			}
+		} else if ba.ClientRangeInfo != nil {
+			returnRangeInfoIfClientStale(ctx, br, r, *ba.ClientRangeInfo)
 		}
+	}
+}
+
+// returnRangeInfoIfClientStale populates br.RangeInfos if the client doesn't
+// have up-to-date info about the range's descriptor and lease.
+func returnRangeInfoIfClientStale(
+	ctx context.Context, br *roachpb.BatchResponse, r *Replica, cinfo roachpb.ClientRangeInfo,
+) {
+	lease, _ := r.GetLease()
+	desc := r.Desc()
+	needInfo := (cinfo.LeaseSequence < lease.Sequence) ||
+		(cinfo.DescriptorGeneration < desc.Generation)
+	if !needInfo {
+		return
+	}
+	log.VEventf(ctx, 2, "client had stale range info; returning an update")
+	br.RangeInfos = []roachpb.RangeInfo{
+		{
+			Desc:  *desc,
+			Lease: lease,
+		},
 	}
 }
 

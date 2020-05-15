@@ -12775,3 +12775,52 @@ support contract. Otherwise, please open an issue at:
 
 	require.Equal(t, exp, act)
 }
+
+// Test that, depending on the request's ClientRangeInfo, descriptor and lease
+// updates are returned.
+func TestRangeInfoReturned(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	var tc testContext
+	tc.Start(t, stopper)
+
+	key := roachpb.Key("a")
+	gArgs := getArgs(key)
+
+	// If ClientRangeInfo is not set on the response, RangeInfos should be empty
+	// on the result.
+	ba := roachpb.BatchRequest{}
+	ba.Add(&gArgs)
+	br, pErr := tc.Sender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	require.Empty(t, br.RangeInfos)
+
+	desc, lease := tc.repl.GetDescAndLease(ctx)
+
+	// If ClientRangeInfo is set but empty, RangeInfos should be returned.
+	ba.Header.ClientRangeInfo = &roachpb.ClientRangeInfo{}
+	br, pErr = tc.Sender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	require.Equal(t, []roachpb.RangeInfo{{Desc: desc, Lease: lease}}, br.RangeInfos)
+
+	// If ClientRangeInfo has the right descriptor generation but no lease,
+	// RangeInfos should still be returned.
+	ba.Header.ClientRangeInfo = &roachpb.ClientRangeInfo{DescriptorGeneration: desc.Generation}
+	br, pErr = tc.Sender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	require.Equal(t, []roachpb.RangeInfo{{Desc: desc, Lease: lease}}, br.RangeInfos)
+
+	// If ClientRangeInfo has the right descriptor generation and lease sequence,
+	// RangeInfos are not returned.
+	ba.Header.ClientRangeInfo = &roachpb.ClientRangeInfo{
+		DescriptorGeneration: desc.Generation,
+		LeaseSequence:        lease.Sequence,
+	}
+	br, pErr = tc.Sender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	require.Empty(t, br.RangeInfos)
+}
