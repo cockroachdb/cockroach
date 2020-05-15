@@ -501,13 +501,13 @@ func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
 }
 
 func (nl *NodeLiveness) SetDrainingInternal(
-	ctx context.Context, liveness kvserverpb.Liveness, drain bool,
+	ctx context.Context, liveness LivenessRecord, drain bool,
 ) error {
 	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
 }
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness kvserverpb.Liveness, decommission bool,
+	ctx context.Context, nodeID roachpb.NodeID, liveness LivenessRecord, decommission bool,
 ) (changeCommitted bool, err error) {
 	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
 }
