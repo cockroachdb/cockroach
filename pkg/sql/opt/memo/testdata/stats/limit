@@ -187,12 +187,12 @@ SELECT * FROM a WHERE s = 'foo' LIMIT 5
 limit
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  ├── cardinality: [0 - 5]
- ├── stats: [rows=5, distinct(2)=4.99009771, null(2)=2.5, distinct(3)=0.994079471, null(3)=0, distinct(2,3)=5, null(2,3)=0]
+ ├── stats: [rows=5, distinct(2)=4.99009771, null(2)=2.5, distinct(3)=0.994079471, null(3)=0, distinct(2,3)=4.99009771, null(2,3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- │    ├── stats: [rows=100, distinct(2)=92.7652197, null(2)=50, distinct(3)=1, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    ├── stats: [rows=100, distinct(2)=92.7652197, null(2)=50, distinct(3)=1, null(3)=0, distinct(2,3)=92.7652197, null(2,3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  │    ├── limit hint: 5.00
