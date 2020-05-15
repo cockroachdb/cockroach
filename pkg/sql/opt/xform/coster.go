@@ -411,12 +411,34 @@ func (c *coster) computeLookupJoinCost(
 ) memo.Cost {
 	lookupCount := join.Input.Relational().Stats.RowCount
 
+	// Take into account that the "internal" row count is higher, according to
+	// the selectivities of the conditions. In particular, we need to ignore
+	// left-over conditions that are not selective.
+	// For example:
+	//   ab JOIN xy ON a=x AND x=10
+	// becomes (during normalization):
+	//   ab JOIN xy ON a=x AND a=10 AND x=10
+	// which can become a lookup join with left-over condition x=10 which doesn't
+	// actually filter anything.
+	rowsProcessed, ok := c.mem.RowsProcessed(join)
+	if !ok {
+		// We shouldn't ever get here. Since we don't allow the memo
+		// to be optimized twice, the coster should never be used after
+		// logPropsBuilder.clear() is called.
+		panic(errors.AssertionFailedf("could not get rows processed for lookup join"))
+	}
+
 	// Lookup joins can return early if enough rows have been found. An otherwise
 	// expensive lookup join might have a lower cost if its limit hint estimates
 	// that most rows will not be needed.
-	if required.LimitHint != 0 {
+	if required.LimitHint != 0 && lookupCount > 0 {
 		outputRows := join.Relational().Stats.RowCount
-		lookupCount = lookupJoinInputLimitHint(lookupCount, outputRows, required.LimitHint)
+		unlimitedLookupCount := lookupCount
+		lookupCount = lookupJoinInputLimitHint(unlimitedLookupCount, outputRows, required.LimitHint)
+		// We scale the number of rows processed by the same factor (we are
+		// calculating the average number of rows processed per lookup and
+		// multiplying by the new lookup count).
+		rowsProcessed = (rowsProcessed / unlimitedLookupCount) * lookupCount
 	}
 
 	// The rows in the (left) input are used to probe into the (right) table.
@@ -440,22 +462,6 @@ func (c *coster) computeLookupJoinCost(
 	perRowCost := lookupJoinRetrieveRowCost +
 		c.rowScanCost(join.Table, join.Index, numLookupCols)
 
-	// Take into account that the "internal" row count is higher, according to
-	// the selectivities of the conditions. In particular, we need to ignore
-	// left-over conditions that are not selective.
-	// For example:
-	//   ab JOIN xy ON a=x AND x=10
-	// becomes (during normalization):
-	//   ab JOIN xy ON a=x AND a=10 AND x=10
-	// which can become a lookup join with left-over condition x=10 which doesn't
-	// actually filter anything.
-	rowsProcessed, ok := c.mem.RowsProcessed(join)
-	if !ok {
-		// We shouldn't ever get here. Since we don't allow the memo
-		// to be optimized twice, the coster should never be used after
-		// logPropsBuilder.clear() is called.
-		panic(errors.AssertionFailedf("could not get rows processed for lookup join"))
-	}
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
 	// Add a constant "setup" cost per ON condition to account for the fact that
