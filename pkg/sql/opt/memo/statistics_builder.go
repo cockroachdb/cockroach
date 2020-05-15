@@ -549,7 +549,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				// Make sure the values are consistent in case some of the column stats
 				// were added at different times (and therefore have a different row
 				// count).
-				sb.finalizeFromRowCount(colStat, stats.RowCount)
+				sb.finalizeFromRowCountAndDistinctCounts(colStat, stats)
 			}
 		}
 	}
@@ -637,7 +637,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 		colStat.NullCount = 0
 	}
 
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -709,7 +709,7 @@ func (sb *statisticsBuilder) colStatSelect(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -795,7 +795,7 @@ func (sb *statisticsBuilder) colStatProject(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1093,7 +1093,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		// Column stats come from left side of join.
 		colStat := sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
 		colStat.ApplySelectivity(s.Selectivity, leftProps.Stats.RowCount)
-		sb.finalizeFromRowCount(colStat, s.RowCount)
+		sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 		return colStat
 
 	default:
@@ -1185,7 +1185,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		if colSet.Intersects(relProps.NotNullCols) {
 			colStat.NullCount = 0
 		}
-		sb.finalizeFromRowCount(colStat, s.RowCount)
+		sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 		return colStat
 	}
 }
@@ -1363,7 +1363,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1559,7 +1559,7 @@ func (sb *statisticsBuilder) colStatGroupBy(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1657,7 +1657,7 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 	if outputCols.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1720,7 +1720,7 @@ func (sb *statisticsBuilder) colStatValues(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = float64(len(distinct))
 	colStat.NullCount = float64(nullCount)
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1766,7 +1766,7 @@ func (sb *statisticsBuilder) colStatLimit(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1818,7 +1818,7 @@ func (sb *statisticsBuilder) colStatOffset(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1848,7 +1848,7 @@ func (sb *statisticsBuilder) colStatMax1Row(
 	if colSet.Intersects(max1Row.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1891,7 +1891,7 @@ func (sb *statisticsBuilder) colStatOrdinality(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -1957,7 +1957,7 @@ func (sb *statisticsBuilder) colStatWindow(
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -2090,7 +2090,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	if colSet.Intersects(projectSet.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -2131,7 +2131,7 @@ func (sb *statisticsBuilder) colStatWithScan(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -2168,7 +2168,7 @@ func (sb *statisticsBuilder) colStatMutation(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -2191,7 +2191,7 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = 0
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -2209,12 +2209,12 @@ func (sb *statisticsBuilder) buildUnknown(relProps *props.Relational) {
 func (sb *statisticsBuilder) colStatUnknown(
 	colSet opt.ColSet, relProps *props.Relational,
 ) *props.ColumnStatistic {
-	s := relProps.Stats
+	s := &relProps.Stats
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = s.RowCount
 	colStat.NullCount = 0
-	sb.finalizeFromRowCount(colStat, s.RowCount)
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
 
@@ -2286,16 +2286,42 @@ func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational)
 
 	for i, n := 0, s.ColStats.Count(); i < n; i++ {
 		colStat := s.ColStats.Get(i)
-		sb.finalizeFromRowCount(colStat, s.RowCount)
+		sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	}
 }
 
-func (sb *statisticsBuilder) finalizeFromRowCount(
-	colStat *props.ColumnStatistic, rowCount float64,
+func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
+	colStat *props.ColumnStatistic, s *props.Statistics,
 ) {
+	rowCount := s.RowCount
+
 	// We should always have at least one distinct value if row count > 0.
 	if rowCount > 0 && colStat.DistinctCount == 0 {
 		panic(errors.AssertionFailedf("estimated distinct count must be non-zero"))
+	}
+
+	// If this is a multi-column statistic, the distinct count should be no
+	// larger than the product of all the distinct counts of its individual
+	// columns, and no smaller than the distinct count of any single column.
+	if colStat.Cols.Len() > 1 && rowCount > 1 {
+		product := 1.0
+		maxDistinct := 0.0
+		colStat.Cols.ForEach(func(col opt.ColumnID) {
+			if singleColStat, ok := s.ColStats.Lookup(opt.MakeColSet(col)); ok {
+				if singleColStat.DistinctCount > 1 {
+					product *= singleColStat.DistinctCount
+				}
+				if singleColStat.DistinctCount > maxDistinct {
+					maxDistinct = singleColStat.DistinctCount
+				}
+			} else {
+				// This is just a best-effort check, so if we don't have one of the
+				// column stats, assume its distinct count equals the row count.
+				product *= rowCount
+			}
+		})
+		colStat.DistinctCount = min(colStat.DistinctCount, product)
+		colStat.DistinctCount = max(colStat.DistinctCount, maxDistinct)
 	}
 
 	// The distinct and null counts should be no larger than the row count.
