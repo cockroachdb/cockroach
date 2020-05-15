@@ -651,6 +651,12 @@ func (s *sqlServer) start(
 		return err
 	}
 
+	// Start the async migration to upgrade namespace entries from the old
+	// namespace table (id 2) to the new one (id 30).
+	if err := migMgr.StartSystemNamespaceMigration(ctx); err != nil {
+		return err
+	}
+
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
