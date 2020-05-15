@@ -32,6 +32,12 @@ enum ConstraintValidity {
   Dropping = 3;
 }
 
+// ForeignKeyReference is deprecated, replaced by ForeignKeyConstraint in v19.2.
+//
+// It is still used to describe interleavings (see
+// IndexDescriptor.InterleavedBy), for which it is a poor choice: only the Table
+// and Index fields are used, and the interleaving has nothing to do with
+// traditional foreign key references.
 message ForeignKeyReference {
   option (gogoproto.equal) = true;
   enum Action {
@@ -418,7 +424,16 @@ message IndexDescriptor {
 
   // InterleavedBy contains a reference to every table/index that is interleaved
   // into this one.
-  repeated ForeignKeyReference interleaved_by = 12  [(gogoproto.nullable) = false];
+  //
+  // Note that any of these indexes can themselves be interleaved by other
+  // tables but this list contains only those for which this index is a direct
+  // interleave parent.
+  //
+  // Only the Table and Index fields of the ForeignKeyReference are used. And
+  // despite the message used here, interleavings don't have to have
+  // corresponding foreign key references (and whether they do or not is
+  // irrelevant for this field).
+  repeated ForeignKeyReference interleaved_by = 12 [(gogoproto.nullable) = false];
 
   // Partitioning, if it's not the zero value, describes how this index's data
   // is partitioned into spans of keys each addressable by zone configs.
