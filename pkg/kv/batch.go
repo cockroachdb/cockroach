@@ -428,20 +428,6 @@ func (b *Batch) CPut(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, false)
 }
 
-// CPutDeprecated conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue. Note that this must be an interface{}(nil), not a
-// typed nil value (e.g. []byte(nil)).
-//
-// A new result will be appended to the batch which will contain a single row
-// and Result.Err will indicate success or failure.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc).
-func (b *Batch) CPutDeprecated(key, value, expValue interface{}) {
-	b.cputInternalDeprecated(key, value, expValue, false)
-}
-
 // CPutAllowingIfNotExists is like CPut except it also allows the Put when the
 // existing entry does not exist -- i.e. it succeeds if there is no existing
 // entry or the existing entry has the expected value.
@@ -461,26 +447,6 @@ func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotEx
 		return
 	}
 	b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
-	b.initResult(1, 1, notRaw, nil)
-}
-
-func (b *Batch) cputInternalDeprecated(key, value, expValue interface{}, allowNotExist bool) {
-	k, err := marshalKey(key)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	v, err := marshalValue(value)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	ev, err := marshalValue(expValue)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, ev.TagAndDataBytes(), allowNotExist))
 	b.initResult(1, 1, notRaw, nil)
 }
 
