@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -233,7 +234,7 @@ func TestReportUsage(t *testing.T) {
 			},
 		},
 		Knobs: base.TestingKnobs{
-			SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			SQLLeaseManager: &lease.LeaseManagerTestingKnobs{
 				// Disable SELECT called for delete orphaned leases to keep
 				// query stats stable.
 				DisableDeleteOrphanedLeases: true,

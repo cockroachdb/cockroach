@@ -14,6 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -35,11 +37,11 @@ type renameTableNode struct {
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
 	oldTn := n.Name.ToTableName()
 	newTn := n.NewName.ToTableName()
-	toRequire := ResolveRequireTableOrViewDesc
+	toRequire := resolver.ResolveRequireTableOrViewDesc
 	if n.IsView {
-		toRequire = ResolveRequireViewDesc
+		toRequire = resolver.ResolveRequireViewDesc
 	} else if n.IsSequence {
-		toRequire = ResolveRequireSequenceDesc
+		toRequire = resolver.ResolveRequireSequenceDesc
 	}
 
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)
@@ -142,7 +144,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
-	err = writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	err = catalogkv.WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc.TableDesc())
 	if err != nil {
 		return err
@@ -153,7 +155,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := getDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
+		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
 			return err
 		}

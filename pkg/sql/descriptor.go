@@ -18,13 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 //
@@ -138,7 +137,7 @@ func (p *planner) createDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 	b.CPut(idKey, descID, nil)
-	if err := WriteNewDescToBatch(
+	if err := catalogkv.WriteNewDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		st,
@@ -155,7 +154,7 @@ func (p *planner) createDescriptorWithID(
 		if err := mutDesc.ValidateTable(); err != nil {
 			return err
 		}
-		if err := p.Tables().addUncommittedTable(*mutDesc); err != nil {
+		if err := p.Tables().AddUncommittedTable(*mutDesc); err != nil {
 			return err
 		}
 	}
@@ -173,241 +172,5 @@ func (p *planner) createDescriptorWithID(
 			return err
 		}
 	}
-	return nil
-}
-
-// getDescriptorID looks up the ID for plainKey.
-// InvalidID is returned if the name cannot be resolved.
-func getDescriptorID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey sqlbase.DescriptorKey,
-) (sqlbase.ID, error) {
-	key := plainKey.Key(codec)
-	log.Eventf(ctx, "looking up descriptor ID for name key %q", key)
-	gr, err := txn.Get(ctx, key)
-	if err != nil {
-		return sqlbase.InvalidID, err
-	}
-	if !gr.Exists() {
-		return sqlbase.InvalidID, nil
-	}
-	return sqlbase.ID(gr.ValueInt()), nil
-}
-
-// resolveSchemaID resolves a schema's ID based on db and name.
-func resolveSchemaID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
-) (bool, sqlbase.ID, error) {
-	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
-	// checking for public schema.
-	if scName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
-	}
-
-	sKey := sqlbase.NewSchemaKey(dbID, scName)
-	schemaID, err := getDescriptorID(ctx, txn, codec, sKey)
-	if err != nil || schemaID == sqlbase.InvalidID {
-		return false, sqlbase.InvalidID, err
-	}
-
-	return true, schemaID, nil
-}
-
-// lookupDescriptorByID looks up the descriptor for `id` and returns it.
-// It can be a table or database descriptor.
-// Returns the descriptor (if found), a bool representing whether the
-// descriptor was found and an error if any.
-func lookupDescriptorByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
-) (sqlbase.DescriptorProto, bool, error) {
-	var desc sqlbase.DescriptorProto
-	for _, lookupFn := range []func() (sqlbase.DescriptorProto, error){
-		func() (sqlbase.DescriptorProto, error) {
-			return sqlbase.GetTableDescFromID(ctx, txn, codec, id)
-		},
-		func() (sqlbase.DescriptorProto, error) {
-			return sqlbase.GetDatabaseDescFromID(ctx, txn, codec, id)
-		},
-	} {
-		var err error
-		desc, err = lookupFn()
-		if err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
-				continue
-			}
-			return nil, false, err
-		}
-		return desc, true, nil
-	}
-	return nil, false, nil
-}
-
-// getDescriptorByID looks up the descriptor for `id`, validates it.
-//
-// In most cases you'll want to use wrappers: `getDatabaseDescByID` or
-// `getTableDescByID`.
-func getDescriptorByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
-) (sqlbase.DescriptorProto, error) {
-	log.Eventf(ctx, "fetching descriptor with ID %d", id)
-	descKey := sqlbase.MakeDescMetadataKey(codec, id)
-	desc := &sqlbase.Descriptor{}
-	ts, err := txn.GetProtoTs(ctx, descKey, desc)
-	if err != nil {
-		return nil, err
-	}
-	table, database, typ := desc.Table(ts), desc.GetDatabase(), desc.GetType()
-	switch {
-	case table != nil:
-		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
-			return nil, err
-		}
-		if err := table.Validate(ctx, txn, codec); err != nil {
-			return nil, err
-		}
-		return table, nil
-	case database != nil:
-		if err := database.Validate(); err != nil {
-			return nil, err
-		}
-		return database, nil
-	case typ != nil:
-		return typ, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown proto: %s", desc.String())
-	}
-}
-
-// IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
-// present at the time of starting a cluster.
-func IsDefaultCreatedDescriptor(descID sqlbase.ID) bool {
-	return descID <= MaxDefaultDescriptorID
-}
-
-// CountUserDescriptors returns the number of descriptors present that were
-// created by the user (i.e. not present when the cluster started).
-func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
-	allDescs, err := GetAllDescriptors(ctx, txn, codec)
-	if err != nil {
-		return 0, err
-	}
-
-	count := 0
-	for _, desc := range allDescs {
-		if !IsDefaultCreatedDescriptor(desc.GetID()) {
-			count++
-		}
-	}
-
-	return count, nil
-}
-
-// GetAllDescriptors looks up and returns all available descriptors.
-func GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]sqlbase.DescriptorProto, error) {
-	log.Eventf(ctx, "fetching all descriptors")
-	descsKey := sqlbase.MakeAllDescsMetadataKey(codec)
-	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
-	}
-
-	descs := make([]sqlbase.DescriptorProto, 0, len(kvs))
-	for _, kv := range kvs {
-		desc := &sqlbase.Descriptor{}
-		if err := kv.ValueProto(desc); err != nil {
-			return nil, err
-		}
-		switch t := desc.Union.(type) {
-		case *sqlbase.Descriptor_Table:
-			table := desc.Table(kv.Value.Timestamp)
-			if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
-				return nil, err
-			}
-			descs = append(descs, table)
-		case *sqlbase.Descriptor_Database:
-			descs = append(descs, desc.GetDatabase())
-		default:
-			return nil, errors.AssertionFailedf("Descriptor.Union has unexpected type %T", t)
-		}
-	}
-	return descs, nil
-}
-
-// GetAllDatabaseDescriptorIDs looks up and returns all available database
-// descriptor IDs.
-func GetAllDatabaseDescriptorIDs(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]sqlbase.ID, error) {
-	log.Eventf(ctx, "fetching all database descriptor IDs")
-	nameKey := sqlbase.NewDatabaseKey("" /* name */).Key(codec)
-	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /*maxRows */)
-	if err != nil {
-		return nil, err
-	}
-	// See the comment in physical_schema_accessors.go,
-	// func (a UncachedPhysicalAccessor) GetObjectNames. Same concept
-	// applies here.
-	// TODO(solon): This complexity can be removed in 20.2.
-	nameKey = sqlbase.NewDeprecatedDatabaseKey("" /* name */).Key(codec)
-	dkvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
-	if err != nil {
-		return nil, err
-	}
-	kvs = append(kvs, dkvs...)
-
-	descIDs := make([]sqlbase.ID, 0, len(kvs))
-	alreadySeen := make(map[sqlbase.ID]bool)
-	for _, kv := range kvs {
-		ID := sqlbase.ID(kv.ValueInt())
-		if alreadySeen[ID] {
-			continue
-		}
-		alreadySeen[ID] = true
-		descIDs = append(descIDs, ID)
-	}
-	return descIDs, nil
-}
-
-// writeDescToBatch adds a Put command writing a descriptor proto to the
-// descriptors table. It writes the descriptor desc at the id descID. If kvTrace
-// is enabled, it will log an event explaining the put that was performed.
-func writeDescToBatch(
-	ctx context.Context,
-	kvTrace bool,
-	s *cluster.Settings,
-	b *kv.Batch,
-	codec keys.SQLCodec,
-	descID sqlbase.ID,
-	desc sqlbase.DescriptorProto,
-) (err error) {
-	descKey := sqlbase.MakeDescMetadataKey(codec, descID)
-	descDesc := sqlbase.WrapDescriptor(desc)
-	if kvTrace {
-		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
-	}
-	b.Put(descKey, descDesc)
-	return nil
-}
-
-// WriteNewDescToBatch adds a CPut command writing a descriptor proto to the
-// descriptors table. It writes the descriptor desc at the id descID, asserting
-// that there was no previous descriptor at that id present already. If kvTrace
-// is enabled, it will log an event explaining the CPut that was performed.
-func WriteNewDescToBatch(
-	ctx context.Context,
-	kvTrace bool,
-	s *cluster.Settings,
-	b *kv.Batch,
-	codec keys.SQLCodec,
-	tableID sqlbase.ID,
-	desc sqlbase.DescriptorProto,
-) (err error) {
-	descKey := sqlbase.MakeDescMetadataKey(codec, tableID)
-	descDesc := sqlbase.WrapDescriptor(desc)
-	if kvTrace {
-		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
-	}
-	b.CPut(descKey, descDesc, nil)
 	return nil
 }

@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Note that there's also a lease_test.go, in package sql_test.
+// Note that there's also a lease_test.go, in package lease_test.
 
-package sql
+package lease
 
 import (
 	"context"
@@ -173,9 +173,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 
-	// Verifies that errDidntUpdateDescriptor doesn't leak from Publish().
+	// Verifies that ErrDidntUpdateDescriptor doesn't leak from Publish().
 	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
-		return errDidntUpdateDescriptor
+		return ErrDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

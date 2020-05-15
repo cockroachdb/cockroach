@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -66,7 +67,7 @@ type sqlServer struct {
 	distSQLServer    *distsql.ServerImpl
 	execCfg          *sql.ExecutorConfig
 	internalExecutor *sql.InternalExecutor
-	leaseMgr         *sql.LeaseManager
+	leaseMgr         *lease.LeaseManager
 	blobService      *blobs.Service
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
@@ -216,11 +217,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	cfg.registry.AddMetricStruct(distSQLMetrics)
 
 	// Set up Lease Manager
-	var lmKnobs sql.LeaseManagerTestingKnobs
+	var lmKnobs lease.LeaseManagerTestingKnobs
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
-		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
+		lmKnobs = *leaseManagerTestingKnobs.(*lease.LeaseManagerTestingKnobs)
 	}
-	leaseMgr := sql.NewLeaseManager(
+	leaseMgr := lease.NewLeaseManager(
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
 		cfg.db,

@@ -14,7 +14,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -86,7 +89,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
 	lookupFlags.AvoidCached = true
-	schemas, err := p.Tables().getSchemasForDatabase(ctx, p.txn, dbDesc.ID)
+	schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, dbDesc.ID)
 	if err != nil {
 		return err
 	}
@@ -203,6 +206,49 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	}
 
 	return p.renameDatabase(ctx, dbDesc, n.newName)
+}
+
+// renameDatabase implements the DatabaseDescEditor interface.
+func (p *planner) renameDatabase(
+	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
+) error {
+	oldName := oldDesc.Name
+	oldDesc.SetName(newName)
+	if err := oldDesc.Validate(); err != nil {
+		return err
+	}
+
+	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, newName); err == nil && exists {
+		return pgerror.Newf(pgcode.DuplicateDatabase,
+			"the new database name %q already exists", newName)
+	} else if err != nil {
+		return err
+	}
+
+	newKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key(p.ExecCfg().Codec)
+
+	descID := oldDesc.GetID()
+	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
+	descDesc := sqlbase.WrapDescriptor(oldDesc)
+
+	b := &kv.Batch{}
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
+		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
+	}
+	b.CPut(newKey, descID, nil)
+	b.Put(descKey, descDesc)
+	err := sqlbase.RemoveDatabaseNamespaceEntry(
+		ctx, p.txn, p.ExecCfg().Codec, oldName, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+	)
+	if err != nil {
+		return err
+	}
+
+	p.Tables().AddUncommittedDatabase(oldName, descID, accessors.DBDropped)
+	p.Tables().AddUncommittedDatabase(newName, descID, accessors.DBCreated)
+
+	return p.txn.Run(ctx, b)
 }
 
 // isAllowedDependentDescInRename determines when rename database is allowed with

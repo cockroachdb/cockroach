@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+// Package lease exports functionality to manage leases over sql schema objects.
+package lease
 
 import (
 	"bytes"
@@ -31,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -167,6 +170,14 @@ type LeaseStore struct {
 	testingKnobs LeaseStoreTestingKnobs
 }
 
+func (s *LeaseStore) DB() *kv.DB {
+	return s.db
+}
+
+func (s *LeaseStore) Codec() keys.SQLCodec {
+	return s.codec
+}
+
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
 func (s LeaseStore) jitteredLeaseDuration() time.Duration {
@@ -204,7 +215,7 @@ func (s LeaseStore) acquire(
 		if err != nil {
 			return err
 		}
-		if err := FilterTableState(tableDesc); err != nil {
+		if err := catalog.FilterTableState(tableDesc); err != nil {
 			return err
 		}
 		if err := tableDesc.MaybeFillInDescriptor(ctx, txn, s.codec); err != nil {
@@ -342,7 +353,7 @@ func (s LeaseStore) WaitForOneVersion(
 	return tableDesc.Version, nil
 }
 
-var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
+var ErrDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 
 // PublishMultiple updates multiple table descriptors, maintaining the invariant
 // that there are at most two versions of each descriptor out in the wild at any
@@ -437,7 +448,7 @@ func (s LeaseStore) PublishMultiple(
 
 			b := txn.NewBatch()
 			for tableID, tableDesc := range tableDescs {
-				if err := writeDescToBatch(ctx, false /* kvTrace */, s.settings, b, s.codec, tableID, tableDesc.TableDesc()); err != nil {
+				if err := catalogkv.WriteDescToBatch(ctx, false /* kvTrace */, s.settings, b, s.codec, tableID, tableDesc.TableDesc()); err != nil {
 					return err
 				}
 			}
@@ -461,8 +472,8 @@ func (s LeaseStore) PublishMultiple(
 		})
 
 		switch {
-		case err == nil || errors.Is(err, errDidntUpdateDescriptor):
-			immutTableDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
+		case err == nil || errors.Is(err, ErrDidntUpdateDescriptor):
+			immutTableDescs := make(map[sqlbase.ID]*catalog.ImmutableTableDescriptor)
 			for id, tableDesc := range tableDescs {
 				immutTableDescs[id] = sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor)
 			}
@@ -519,14 +530,14 @@ func (s LeaseStore) Publish(
 type IDVersion struct {
 	// name only provided for pretty printing.
 	name    string
-	id      sqlbase.ID
-	version sqlbase.DescriptorVersion
+	ID      sqlbase.ID
+	Version sqlbase.DescriptorVersion
 }
 
 // NewIDVersionPrev returns an initialized IDVersion with the
 // previous version of the descriptor.
 func NewIDVersionPrev(desc *sqlbase.TableDescriptor) IDVersion {
-	return IDVersion{name: desc.Name, id: desc.ID, version: desc.Version - 1}
+	return IDVersion{name: desc.Name, ID: desc.ID, Version: desc.Version - 1}
 }
 
 // CountLeases returns the number of unexpired leases for a number of tables
@@ -538,7 +549,7 @@ func CountLeases(
 	for _, t := range tables {
 		whereClauses = append(whereClauses,
 			fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
-				t.id, t.version),
+				t.ID, t.Version),
 		)
 	}
 
@@ -1175,7 +1186,7 @@ func purgeOldVersions(
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
 	table, _, err := t.findForTimestamp(ctx, m.clock.Now())
-	if isInactive := errors.HasType(err, (*inactiveTableError)(nil)); err == nil || isInactive {
+	if isInactive := catalog.HasInactiveTableError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if table != nil {
 			s, err := t.release(&table.ImmutableTableDescriptor, m.removeOnceDereferenced())
@@ -1354,7 +1365,7 @@ func (c *tableNameCache) get(
 
 	defer table.mu.Unlock()
 
-	if !nameMatchesTable(
+	if !NameMatchesTable(
 		&table.ImmutableTableDescriptor.TableDescriptor,
 		dbID,
 		schemaID,
@@ -1506,7 +1517,7 @@ func NewLeaseManager(
 	return lm
 }
 
-func nameMatchesTable(
+func NameMatchesTable(
 	table *sqlbase.TableDescriptor, dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
 ) bool {
 	return table.ParentID == dbID && table.Name == tableName &&
@@ -1586,7 +1597,7 @@ func (m *LeaseManager) AcquireByName(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	if !nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
+	if !NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
 		// We resolved name `tableName`, but the lease has a different name in it.
 		// That can mean two things. Assume the table is being renamed from A to B.
 		// a) `tableName` is A. The transaction doing the RENAME committed (so the
@@ -1619,7 +1630,7 @@ func (m *LeaseManager) AcquireByName(
 		// resolve the current or the old name.
 		//
 		// TODO(vivek): check if the entire above comment is indeed true. Review the
-		// use of nameMatchesTable() throughout this function.
+		// use of NameMatchesTable() throughout this function.
 		if err := m.Release(table); err != nil {
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
@@ -1630,7 +1641,7 @@ func (m *LeaseManager) AcquireByName(
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		if !nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
+		if !NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			if err := m.Release(table); err != nil {
@@ -2294,4 +2305,77 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 			}
 		}
 	})
+}
+
+// VisitLeases introspects the state of leases managed by the LeaseManager.
+//
+// TODO(ajwerner): consider refactoring the function to take a struct, maybe
+// called LeaseInfo.
+func (m *LeaseManager) VisitLeases(
+	f func(desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp) (wantMore bool),
+) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, ts := range m.mu.tables {
+		tableVisitor := func() (wantMore bool) {
+			ts.mu.Lock()
+			defer ts.mu.Unlock()
+
+			dropped := ts.mu.dropped
+
+			for _, state := range ts.mu.active.data {
+				state.mu.Lock()
+				lease := state.mu.lease
+				refCount := state.mu.refcount
+				state.mu.Unlock()
+
+				if lease == nil {
+					continue
+				}
+
+				if !f(state.TableDescriptor, dropped, refCount, lease.expiration) {
+					return false
+				}
+			}
+			return true
+		}
+		if !tableVisitor() {
+			return
+		}
+	}
+}
+
+var testDisableTableLeases bool
+
+// TestingDisableTableLeases disables table leases and returns
+// a function that can be used to enable it.
+func TestingDisableTableLeases() func() {
+	testDisableTableLeases = true
+	return func() {
+		testDisableTableLeases = false
+	}
+}
+
+func TestingTableLeasesAreDisabled() bool {
+	return testDisableTableLeases
+}
+
+// TestingAcquireAndAssertMinVersion acquires a read lease for the specified table ID.
+// The lease is grabbed on the latest version if >= specified version.
+// It returns a table descriptor and an expiration time valid for the timestamp.
+func (m *LeaseManager) TestingAcquireAndAssertMinVersion(
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	tableID sqlbase.ID,
+	minVersion sqlbase.DescriptorVersion,
+) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
+	t := m.findTableState(tableID, true)
+	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	table, _, err := t.findForTimestamp(ctx, timestamp)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	return &table.ImmutableTableDescriptor, table.expiration, nil
 }

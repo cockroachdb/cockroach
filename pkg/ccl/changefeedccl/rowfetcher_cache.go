@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -28,10 +28,9 @@ import (
 // column families of one row) into a row.
 type rowFetcherCache struct {
 	codec    keys.SQLCodec
-	leaseMgr *sql.LeaseManager
+	leaseMgr *lease.LeaseManager
 	fetchers map[idVersion]*row.Fetcher
-
-	a sqlbase.DatumAlloc
+	a        sqlbase.DatumAlloc
 }
 
 type idVersion struct {
@@ -39,7 +38,7 @@ type idVersion struct {
 	version sqlbase.DescriptorVersion
 }
 
-func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *sql.LeaseManager) *rowFetcherCache {
+func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *lease.LeaseManager) *rowFetcherCache {
 	return &rowFetcherCache{
 		codec:    codec,
 		leaseMgr: leaseMgr,

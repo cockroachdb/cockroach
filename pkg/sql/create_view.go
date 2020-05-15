@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -60,7 +61,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	// If so, promote this view to temporary.
 	backRefMutables := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor, len(n.planDeps))
 	for id, updated := range n.planDeps {
-		backRefMutable := params.p.Tables().getUncommittedTableByID(id).MutableTableDescriptor
+		backRefMutable := params.p.Tables().GetUncommittedTableByID(id).MutableTableDescriptor
 		if backRefMutable == nil {
 			backRefMutable = sqlbase.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
 		}
@@ -87,11 +88,11 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := getDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, tKey)
+			id, err := catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, tKey)
 			if err != nil {
 				return err
 			}
-			desc, err := params.p.Tables().getMutableTableVersionByID(params.ctx, id, params.p.txn)
+			desc, err := params.p.Tables().GetMutableTableVersionByID(params.ctx, id, params.p.txn)
 			if err != nil {
 				return err
 			}
@@ -294,7 +295,7 @@ func (p *planner) replaceViewDesc(
 		desc, ok := backRefMutables[id]
 		if !ok {
 			var err error
-			desc, err = p.Tables().getMutableTableVersionByID(ctx, id, p.txn)
+			desc, err = p.Tables().GetMutableTableVersionByID(ctx, id, p.txn)
 			if err != nil {
 				return nil, err
 			}

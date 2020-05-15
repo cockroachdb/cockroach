@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -68,7 +69,7 @@ type InternalExecutor struct {
 	// internal executor should see the modified schema. This interface allows
 	// the internal executor to modify its TableCollection to match the
 	// TableCollection of the parent executor.
-	tcModifier tableCollectionModifier
+	tcModifier accessors.TableCollectionModifier
 }
 
 // MakeInternalExecutor creates an InternalExecutor.

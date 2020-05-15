@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,7 +38,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, readOnlyError("nextval()")
 	}
 
-	descriptor, err := ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
+	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -92,7 +94,7 @@ func boundsExceededError(descriptor *sqlbase.ImmutableTableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	descriptor, err := ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
+	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -115,7 +117,7 @@ func (p *planner) SetSequenceValue(
 		return readOnlyError("setval()")
 	}
 
-	descriptor, err := ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
+	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireSequenceDesc)
 	if err != nil {
 		return err
 	}
@@ -330,7 +332,7 @@ func removeSequenceOwnerIfExists(
 	if opts.SequenceOwner.Equal(sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}) {
 		return nil
 	}
-	tableDesc, err := p.Tables().getMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
+	tableDesc, err := p.Tables().GetMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
 	if err != nil {
 		return err
 	}
@@ -368,7 +370,7 @@ func resolveColumnItemToDescriptors(
 		tableName = columnItem.TableName.ToTableName()
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, resolver.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -403,7 +405,7 @@ func addSequenceOwner(
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
 func maybeAddSequenceDependencies(
 	ctx context.Context,
-	sc SchemaResolver,
+	sc catalog.SchemaResolver,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
@@ -424,13 +426,13 @@ func maybeAddSequenceDependencies(
 		var seqDesc *MutableTableDescriptor
 		p, ok := sc.(*planner)
 		if ok {
-			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, ResolveRequireSequenceDesc)
+			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, resolver.ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			// This is only executed via IMPORT which uses its own resolver.
-			seqDesc, err = ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, ResolveRequireSequenceDesc)
+			seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, resolver.ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
@@ -468,7 +470,7 @@ func (p *planner) dropSequencesOwnedByCol(
 	ctx context.Context, col *sqlbase.ColumnDescriptor,
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
-		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
+		seqDesc, err := p.Tables().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}
@@ -493,7 +495,7 @@ func (p *planner) removeSequenceDependencies(
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
+		seqDesc, err := p.Tables().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}

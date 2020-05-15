@@ -40,6 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -594,7 +599,7 @@ type ExecutorConfig struct {
 	Gossip            gossip.DeprecatedGossip
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
-	LeaseManager      *LeaseManager
+	LeaseManager      *lease.LeaseManager
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
 	// StatusServer gives access to the Status service.
@@ -773,26 +778,26 @@ func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 type databaseCacheHolder struct {
 	mu struct {
 		syncutil.Mutex
-		c  *databaseCache
+		c  *database.DatabaseCache
 		cv *sync.Cond
 	}
 }
 
-func newDatabaseCacheHolder(c *databaseCache) *databaseCacheHolder {
+func newDatabaseCacheHolder(c *database.DatabaseCache) *databaseCacheHolder {
 	dc := &databaseCacheHolder{}
 	dc.mu.c = c
 	dc.mu.cv = sync.NewCond(&dc.mu.Mutex)
 	return dc
 }
 
-func (dc *databaseCacheHolder) getDatabaseCache() *databaseCache {
+func (dc *databaseCacheHolder) getDatabaseCache() *database.DatabaseCache {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	return dc.mu.c
 }
 
-// waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) bool) {
+// WaitForCacheState implements the dbCacheSubscriber interface.
+func (dc *databaseCacheHolder) WaitForCacheState(cond func(*database.DatabaseCache) bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for done := cond(dc.mu.c); !done; done = cond(dc.mu.c) {
@@ -801,13 +806,13 @@ func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) bool)
 }
 
 // databaseCacheHolder implements the dbCacheSubscriber interface.
-var _ dbCacheSubscriber = &databaseCacheHolder{}
+var _ database.DatabaseCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.
 func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
-	dc.mu.c = newDatabaseCache(dc.mu.c.codec, cfg)
+	dc.mu.c = database.NewDatabaseCache(dc.mu.c.Codec(), cfg, catalogkv.UncachedPhysicalAccessor{})
 	dc.mu.cv.Broadcast()
 	dc.mu.Unlock()
 }
@@ -1237,17 +1242,16 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
+// TODO(ajwerner): Move this definition to the accessors package and then
+// unexport the accessor implementations.
+
+func newSchemaInterface(
+	tables *accessors.TableCollection, vt catalog.VirtualSchemas,
+) *schemaInterface {
 	sc := &schemaInterface{
-		physical: &CachedPhysicalAccessor{
-			SchemaAccessor: UncachedPhysicalAccessor{},
-			tc:             tables,
-		},
+		physical: accessors.NewCachedPhysicalAccessor(tables),
 	}
-	sc.logical = &LogicalSchemaAccessor{
-		SchemaAccessor: sc.physical,
-		vt:             vt,
-	}
+	sc.logical = accessors.NewLogicalAccessor(sc.physical, vt)
 	return sc
 }
 

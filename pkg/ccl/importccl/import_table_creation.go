@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -243,7 +243,7 @@ func (so *importSequenceOperators) SetSequenceValue(
 
 type fkResolver map[string]*sqlbase.MutableTableDescriptor
 
-var _ sql.SchemaResolver = fkResolver{}
+var _ catalog.SchemaResolver = fkResolver{}
 
 // Implements the sql.SchemaResolver interface.
 func (r fkResolver) Txn() *kv.Txn {
@@ -251,7 +251,7 @@ func (r fkResolver) Txn() *kv.Txn {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LogicalSchemaAccessor() sql.SchemaAccessor {
+func (r fkResolver) LogicalSchemaAccessor() catalog.SchemaAccessor {
 	return nil
 }
 
@@ -305,6 +305,8 @@ func (r fkResolver) LookupSchema(
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error) {
-	return row.TableEntry{}, errSchemaResolver
+func (r fkResolver) LookupTableByID(
+	ctx context.Context, id sqlbase.ID,
+) (catalog.TableEntry, error) {
+	return catalog.TableEntry{}, errSchemaResolver
 }

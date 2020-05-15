@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -55,7 +56,7 @@ func TestQueryCounts(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+		SQLLeaseManager: &lease.LeaseManagerTestingKnobs{
 			// Disable SELECT called for delete orphaned leases to keep
 			// query stats stable.
 			DisableDeleteOrphanedLeases: true,

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -169,7 +170,7 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 		signalMigrationDone,
 	)
 	defer tc.Stopper().Stop(context.TODO())
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	log.Info(ctx, "waiting for all schema changes to block")
 	<-revMigrationDoneCh
@@ -285,7 +286,7 @@ func setupServerAndStartSchemaChange(
 		return nil
 	})
 	// TODO(pbardea): Remove this magic 53.
-	if _, err := addImmediateGCZoneConfig(sqlDB, sqlbase.ID(53)); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, sqlbase.ID(53)); err != nil {
 		t.Fatal(err)
 	}
 	return runner, sqlDB, tc

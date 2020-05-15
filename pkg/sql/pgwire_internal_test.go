@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -64,30 +66,35 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	}
 	// Verify that there are no leases held.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	lm := s.LeaseManager().(*LeaseManager)
+	lm := s.LeaseManager().(*lease.LeaseManager)
 	// Looking for a table state validates that there used to be a lease on the
 	// table.
-	ts := lm.findTableState(tableDesc.ID, false /* create */)
-	if ts == nil {
-		t.Fatal("table state not found")
-	}
-	ts.mu.Lock()
-	leases := ts.mu.active.data
-	ts.mu.Unlock()
-	if len(leases) != 1 {
-		t.Fatalf("expected one lease, found: %d", len(leases))
+	var leases int
+	lm.VisitLeases(func(
+		desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp,
+	) (wantMore bool) {
+		if desc.ID == tableDesc.ID {
+			leases++
+		}
+		return true
+	})
+	if leases != 1 {
+		t.Fatalf("expected one lease, found: %d", leases)
 	}
 	// Wait for the lease to be released.
 	testutils.SucceedsSoon(t, func() error {
-		ts.mu.Lock()
-		defer ts.mu.Unlock()
-		tv := ts.mu.active.data[0]
-		tv.mu.Lock()
-		defer tv.mu.Unlock()
-		refcount := tv.mu.refcount
-		if refcount != 0 {
+		var totalRefCount int
+		lm.VisitLeases(func(
+			desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp,
+		) (wantMore bool) {
+			if desc.ID == tableDesc.ID {
+				totalRefCount += refCount
+			}
+			return true
+		})
+		if totalRefCount != 0 {
 			return errors.Errorf(
-				"expected lease to be unused, found refcount: %d", refcount)
+				"expected lease to be unused, found refcount: %d", totalRefCount)
 		}
 		return nil
 	})

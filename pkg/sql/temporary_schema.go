@@ -25,7 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -140,11 +141,12 @@ func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
 func getTemporaryObjectNames(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, tempSchemaName string,
 ) (TableNames, error) {
-	dbDesc, err := MustGetDatabaseDescByID(ctx, txn, codec, dbID)
+	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
 	if err != nil {
 		return nil, err
 	}
-	a := UncachedPhysicalAccessor{}
+	// TODO(ajwerner): Fix this up.
+	a := catalogkv.UncachedPhysicalAccessor{}
 	return a.GetObjectNames(
 		ctx,
 		txn,
@@ -169,7 +171,7 @@ func cleanupSessionTempObjects(
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
-		dbIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn, codec)
+		dbIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, codec)
 		if err != nil {
 			return err
 		}
@@ -211,7 +213,7 @@ func cleanupSchemaObjects(
 	if err != nil {
 		return err
 	}
-	a := UncachedPhysicalAccessor{}
+	a := catalogkv.UncachedPhysicalAccessor{}
 
 	searchPath := sqlbase.DefaultSearchPath.WithTemporarySchemaName(schemaName)
 	override := sqlbase.InternalExecutorSessionDataOverride{
@@ -289,7 +291,7 @@ func cleanupSchemaObjects(
 					if err != nil {
 						return err
 					}
-					schema, err := schema.ResolveNameByID(
+					schema, err := resolver.ResolveSchemaNameByID(
 						ctx,
 						txn,
 						codec,
@@ -476,7 +478,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	var dbIDs []sqlbase.ID
 	if err := retryFunc(ctx, func() error {
 		var err error
-		dbIDs, err = GetAllDatabaseDescriptorIDs(ctx, txn, c.codec)
+		dbIDs, err = catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, c.codec)
 		return err
 	}); err != nil {
 		return err
@@ -487,7 +489,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		var schemaNames map[sqlbase.ID]string
 		if err := retryFunc(ctx, func() error {
 			var err error
-			schemaNames, err = schema.GetForDatabase(ctx, txn, c.codec, dbID)
+			schemaNames, err = catalogkv.GetSchemasForDatabase(ctx, txn, c.codec, dbID)
 			return err
 		}); err != nil {
 			return err

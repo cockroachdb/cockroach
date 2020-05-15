@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -270,6 +271,43 @@ type VirtualSchemaHolder struct {
 	entries      map[string]virtualSchemaEntry
 	defsByID     map[sqlbase.ID]*virtualDefEntry
 	orderedNames []string
+}
+
+// GetVirtualSchema makes VirtualSchemaHolder implement schema.VirtualSchemas.
+func (vs *VirtualSchemaHolder) GetVirtualSchema(schemaName string) (catalog.VirtualSchema, bool) {
+	virtualSchema, ok := vs.entries[schemaName]
+	return virtualSchema, ok
+}
+
+var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
+
+func (v virtualSchemaEntry) Desc() catalog.ObjectDescriptor {
+	return v.desc
+}
+
+func (v virtualSchemaEntry) NumTables() int {
+	return len(v.defs)
+}
+
+func (v virtualSchemaEntry) VisitTables(f func(object catalog.VirtualObject)) {
+	for _, name := range v.orderedDefNames {
+		f(v.defs[name])
+	}
+}
+
+func (v virtualSchemaEntry) GetObjectByName(name string) (catalog.VirtualObject, error) {
+	if def, ok := v.defs[name]; ok {
+		return &def, nil
+	}
+	if _, ok := v.allTableNames[name]; ok {
+		return nil, unimplemented.Newf(v.desc.Name+"."+name,
+			"virtual schema table not implemented: %s.%s", v.desc.Name, name)
+	}
+	return nil, nil
+}
+
+func (e virtualDefEntry) Desc() catalog.ObjectDescriptor {
+	return sqlbase.NewImmutableTableDescriptor(*e.desc)
 }
 
 type virtualSchemaEntry struct {

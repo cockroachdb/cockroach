@@ -4102,8 +4102,18 @@ func (desc *MutableTableDescriptor) TypeDesc() *TypeDescriptor {
 }
 
 // TableDesc implements the ObjectDescriptor interface.
+func (desc *MutableTableDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return nil
+}
+
+// TableDesc implements the ObjectDescriptor interface.
 func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
+}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *ImmutableTableDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return nil
 }
 
 // TypeDesc implements the ObjectDescriptor interface.
@@ -4119,6 +4129,11 @@ func (desc *TypeDescriptor) TableDesc() *TableDescriptor {
 // TypeDesc implements the ObjectDescriptor interface.
 func (desc *TypeDescriptor) TypeDesc() *TypeDescriptor {
 	return desc
+}
+
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *TypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return nil
 }
 
 // GetAuditMode implements the DescriptorProto interface.
@@ -4176,6 +4191,23 @@ func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
 
 // NameResolutionResult implements the NameResolutionResult interface.
 func (desc *TypeDescriptor) NameResolutionResult() {}
+
+func (desc *DatabaseDescriptor) NameResolutionResult() {}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) TableDesc() *TableDescriptor {
+	return nil
+}
+
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
+	return nil
+}
+
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return desc
+}
 
 // GetAuditMode implements the DescriptorProto interface.
 func (desc *SchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -152,12 +153,12 @@ func TestMakeFkMetadata(t *testing.T) {
 		t.Fatalf("Could not find table:%d", xID)
 	}
 
-	lookup := func(ctx context.Context, tableID TableID) (TableEntry, error) {
+	lookup := func(ctx context.Context, tableID TableID) (catalog.TableEntry, error) {
 		table, exists := tables.tablesByID[tableID]
 		if !exists {
-			return TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
+			return catalog.TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
 		}
-		return TableEntry{Desc: table}, nil
+		return catalog.TableEntry{Desc: table}, nil
 	}
 
 	test := func(t *testing.T, usage FKCheckType, expectedIDs []TableID) {
