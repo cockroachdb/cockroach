@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,9 +27,9 @@ Format for the datadriven test:
 
 new-span-leaf name=<name> tight=<true|false> span=<start>[,<end>]
 ----
-<spanExpression as string>
+<SpanExpression as string>
 
-  Creates a new leaf spanExpression with the given name
+  Creates a new leaf SpanExpression with the given name
 
 new-unknown-leaf name=<name> tight=<true|false>
 ----
@@ -42,15 +43,21 @@ new-non-inverted-leaf name=<name>
 
 and result=<name> left=<name> right=<name>
 ----
-<spanExpression as string>
+<SpanExpression as string>
 
   Ands the left and right expressions and stores the result
 
 or result=<name> left=<name> right=<name>
 ----
-<spanExpression as string>
+<SpanExpression as string>
 
   Ors the left and right expressions and stores the result
+
+to-proto name=<name>
+----
+<SpanExpressionProto as string>
+
+  Converts the SpanExpression to SpanExpressionProto
 */
 
 func getSpan(t *testing.T, d *datadriven.TestData) InvertedSpan {
@@ -164,6 +171,14 @@ func TestExpression(t *testing.T) {
 			expr := Or(left, right)
 			exprsByName[name] = expr
 			return toString(expr)
+		case "to-proto":
+			var name string
+			d.ScanArgs(t, "name", &name)
+			expr := exprsByName[name]
+			if expr == nil {
+				expr = (*SpanExpression)(nil)
+			}
+			return proto.MarshalTextString(expr.(*SpanExpression).ToProto())
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}

@@ -97,7 +97,7 @@ type EncInvertedVal []byte
 // inverted indexes, where some columns of the primary key will appear before
 // the inverted column.
 
-// InvertedSpan is a span of the inverted index. Represents [start, end)
+// InvertedSpan is a span of the inverted index. Represents [start, end).
 type InvertedSpan struct {
 	start, end EncInvertedVal
 }
@@ -113,18 +113,6 @@ func (s InvertedSpan) IsSingleVal() bool {
 	return len(s.start)+1 == len(s.end) && s.end[len(s.end)-1] == '\x00' &&
 		bytes.Equal(s.start, s.end[:len(s.end)-1])
 }
-
-// SetOperator is an operator on sets.
-type SetOperator int
-
-const (
-	// None is used in a SpanExpression with no children.
-	None SetOperator = iota
-	// SetUnion unions the children.
-	SetUnion
-	// SetIntersection intersects the children.
-	SetIntersection
-)
 
 // InvertedExpression is the interface representing an expression or sub-expression
 // to be evaluated on the inverted index. Any implementation can be used in the
@@ -220,9 +208,12 @@ type InvertedExpression interface {
 	SetNotTight()
 }
 
-// TODO(sumeer): functions to serialize/deserialize SpanExpressions.
-
 // SpanExpression is an implementation of InvertedExpression.
+//
+// TODO(sumeer): after integration and experimentation with optimizer costing,
+// decide if we can eliminate the generality of the InvertedExpression
+// interface. If we don't need that generality, we can merge SpanExpression
+// and SpanExpressionProto.
 type SpanExpression struct {
 	// Tight mirrors the definition of IsTight().
 	Tight bool
@@ -338,6 +329,42 @@ func formatSpan(b *strings.Builder, span InvertedSpan) {
 	}
 	fmt.Fprintf(b, "[%s, %s%c", strconv.Quote(string(span.start)),
 		strconv.Quote(string(end)), spanEndOpenOrClosed)
+}
+
+// ToProto constructs a SpanExpressionProto for execution. It should
+// be called on an expression tree that contains only *SpanExpressions.
+func (s *SpanExpression) ToProto() *SpanExpressionProto {
+	if s == nil {
+		return nil
+	}
+	proto := &SpanExpressionProto{
+		SpansToRead: getProtoSpans(s.SpansToRead),
+		Node:        *s.getProtoNode(),
+	}
+	return proto
+}
+
+func getProtoSpans(spans []InvertedSpan) []SpanExpressionProto_Span {
+	out := make([]SpanExpressionProto_Span, 0, len(spans))
+	for i := range spans {
+		out = append(out, SpanExpressionProto_Span{
+			Start: spans[i].start,
+			End:   spans[i].end,
+		})
+	}
+	return out
+}
+
+func (s *SpanExpression) getProtoNode() *SpanExpressionProto_Node {
+	node := &SpanExpressionProto_Node{
+		FactoredUnionSpans: getProtoSpans(s.FactoredUnionSpans),
+		Operator:           s.Operator,
+	}
+	if node.Operator != None {
+		node.Left = s.Left.(*SpanExpression).getProtoNode()
+		node.Right = s.Right.(*SpanExpression).getProtoNode()
+	}
+	return node
 }
 
 // NonInvertedColExpression is an expression to use for parts of the
