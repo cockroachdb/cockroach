@@ -2683,7 +2683,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		inputStat, _ := sb.colStatFromInput(colSet, e)
 		inputHist := inputStat.Histogram
 		if inputHist != nil {
-			if _, ok := inputHist.CanFilter(c); ok {
+			if _, _, ok := inputHist.CanFilter(c); ok {
 				s := &relProps.Stats
 				if colStat, ok := s.ColStats.Lookup(colSet); ok {
 					colStat.Histogram = inputHist.Filter(c)
@@ -2746,7 +2746,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 		inputStat, _ := sb.colStatFromInput(cols, e)
 		inputHist := inputStat.Histogram
 		if inputHist != nil {
-			if _, ok := inputHist.CanFilter(c); ok {
+			if _, _, ok := inputHist.CanFilter(c); ok {
 				if colStat, ok := s.ColStats.Lookup(cols); ok {
 					colStat.Histogram = inputHist.Filter(c)
 					histCols.UnionWith(cols)
