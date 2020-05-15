@@ -78,6 +78,8 @@ type DistanceUpdater interface {
 	OnIntersects() bool
 	// Distance returns the distance to return so far.
 	Distance() float64
+	// IsMaxDistance returns whether the updater is looking for maximum distance.
+	IsMaxDistance() bool
 }
 
 // Crosser is a provided hook that has a series of functions that can help
@@ -153,11 +155,13 @@ func onPointToEdgeEnds(c DistanceCalculator, a Point, b shapeWithEdges) bool {
 		if c.DistanceUpdater().Update(a, edge.V1) {
 			return true
 		}
-		// Also project the point to the infinite line of the edge, and compare if the closestPoint
-		// lies on the edge.
-		if closestPoint, ok := c.ClosestPointToEdge(edge, a); ok {
-			if c.DistanceUpdater().Update(a, closestPoint) {
-				return true
+		if !c.DistanceUpdater().IsMaxDistance() {
+			// Also project the point to the infinite line of the edge, and compare if the closestPoint
+			// lies on the edge.
+			if closestPoint, ok := c.ClosestPointToEdge(edge, a); ok {
+				if c.DistanceUpdater().Update(a, closestPoint) {
+					return true
+				}
 			}
 		}
 	}
@@ -179,7 +183,8 @@ func onPointToLineString(c DistanceCalculator, a Point, b LineString) bool {
 func onPointToPolygon(c DistanceCalculator, a Point, b Polygon) bool {
 	// If the exterior ring does not cover the outer ring, we just need to calculate the distance
 	// to the outer ring.
-	if !c.PointInLinearRing(a, b.LinearRing(0)) {
+	// If we are calculating max distance, we only want the distance to the exterior.
+	if c.DistanceUpdater().IsMaxDistance() || !c.PointInLinearRing(a, b.LinearRing(0)) {
 		return onPointToEdgeEnds(c, a, b.LinearRing(0))
 	}
 	// At this point it may be inside a hole.
@@ -204,9 +209,11 @@ func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWit
 		crosser := c.NewCrosser(aEdge, b.Edge(0).V0)
 		for bEdgeIdx := 0; bEdgeIdx < b.NumEdges(); bEdgeIdx++ {
 			bEdge := b.Edge(bEdgeIdx)
-			// If the edges cross, the distance is 0.
-			if crosser.ChainCrossing(bEdge.V1) {
-				return c.DistanceUpdater().OnIntersects()
+			if !c.DistanceUpdater().IsMaxDistance() {
+				// If the edges cross, the distance is 0.
+				if crosser.ChainCrossing(bEdge.V1) {
+					return c.DistanceUpdater().OnIntersects()
+				}
 			}
 
 			// Compare each vertex against the edge of the other.
@@ -224,10 +231,12 @@ func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWit
 					c.DistanceUpdater().Update(toCheck.vertex, toCheck.edge.V1) {
 					return true
 				}
-				// Also check the projection of the vertex onto the edge.
-				if closestPoint, ok := c.ClosestPointToEdge(toCheck.edge, toCheck.vertex); ok {
-					if c.DistanceUpdater().Update(toCheck.vertex, closestPoint) {
-						return true
+				if !c.DistanceUpdater().IsMaxDistance() {
+					// Also check the projection of the vertex onto the edge.
+					if closestPoint, ok := c.ClosestPointToEdge(toCheck.edge, toCheck.vertex); ok {
+						if c.DistanceUpdater().Update(toCheck.vertex, closestPoint) {
+							return true
+						}
 					}
 				}
 			}
@@ -246,7 +255,8 @@ func onLineStringToPolygon(c DistanceCalculator, a LineString, b Polygon) bool {
 	// In both these cases, we can defer to the edge to edge comparison between the line
 	// and the exterior ring.
 	// We use the first point of the linestring for this check.
-	if !c.PointInLinearRing(a.Vertex(0), b.LinearRing(0)) {
+	// If we are looking for max distance, we only need to check against the outer ring anyway.
+	if c.DistanceUpdater().IsMaxDistance() || !c.PointInLinearRing(a.Vertex(0), b.LinearRing(0)) {
 		return onShapeEdgesToShapeEdges(c, a, b.LinearRing(0))
 	}
 
@@ -299,7 +309,10 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	// that is outside the exterior ring of B.
 	//
 	// As such, we only need to compare the exterior rings if we detect this.
-	if !c.PointInLinearRing(bFirstPoint, a.LinearRing(0)) && !c.PointInLinearRing(aFirstPoint, b.LinearRing(0)) {
+	//
+	// If we are only looking at the max distance, we only want to compare exteriors.
+	if c.DistanceUpdater().IsMaxDistance() ||
+		(!c.PointInLinearRing(bFirstPoint, a.LinearRing(0)) && !c.PointInLinearRing(aFirstPoint, b.LinearRing(0))) {
 		return onShapeEdgesToShapeEdges(c, a.LinearRing(0), b.LinearRing(0))
 	}
 
