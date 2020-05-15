@@ -194,6 +194,9 @@ func _CHECK_COL_WITH_NULLS(
 	// {{/*
 } // */}}
 
+// {{if not .HashTableMode.IsDistinct}}
+// {{with .Overloads}}
+
 // checkCol determines if the current key column in the groupID buckets matches
 // the specified equality column key. If there is a match, then the key is added
 // to differs. If the bucket has reached the end, the key is rejected. If the
@@ -243,6 +246,9 @@ func (ht *hashTable) checkCol(
 	}
 }
 
+// {{end}}
+// {{end}}
+
 // {{/*
 func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(
 	ht *hashTable,
@@ -270,6 +276,9 @@ func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(
 	// {{end}}
 	// {{/*
 } // */}}
+
+// {{if .HashTableMode.IsDistinct}}
+// {{with .Overloads}}
 
 func (ht *hashTable) checkColForDistinctTuples(
 	probeVec, buildVec coldata.Vec, nToCheck uint64, probeSel []int,
@@ -318,6 +327,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 	}
 }
 
+// {{end}}
+// {{end}}
+
 // {{/*
 func _CHECK_BODY(ht *hashTable, nDiffers uint64, _SELECT_SAME_TUPLES bool) { // */}}
 	// {{define "checkBody" -}}
@@ -365,6 +377,8 @@ func _CHECK_BODY(ht *hashTable, nDiffers uint64, _SELECT_SAME_TUPLES bool) { // 
 	// {{/*
 } // */}}
 
+// {{if .HashTableMode.IsDistinct}}
+
 // checkBuildForDistinct finds all tuples in probeVecs that are not present in
 // buffered tuples stored in ht.vals. It stores the probeVecs's distinct tuples'
 // keyIDs in headID buffer.
@@ -398,6 +412,10 @@ func (ht *hashTable) checkBuildForDistinct(
 	return nDiffers
 }
 
+// {{end}}
+
+// {{if not .HashTableMode.IsDistinct}}
+
 // check performs an equality check between the current key in the groupID bucket
 // and the probe key at that index. If there is a match, the hashTable's same
 // array is updated to lazily populate the linked list of identical build
@@ -416,6 +434,10 @@ func (ht *hashTable) check(
 	return nDiffers
 }
 
+// {{end}}
+
+// {{if .HashTableMode.IsDistinct}}
+
 // checkProbeForDistinct performs a column by column check for duplicated tuples
 // in the probe table.
 func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
@@ -428,6 +450,8 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 
 	return nDiffers
 }
+
+// {{end}}
 
 // {{/*
 func _UPDATE_SEL_BODY(ht *hashTable, b coldata.Batch, sel []int, _USE_SEL bool) { // */}}
@@ -459,6 +483,8 @@ func _UPDATE_SEL_BODY(ht *hashTable, b coldata.Batch, sel []int, _USE_SEL bool) 
 	// {{end}}
 	// {{/*
 } // */}}
+
+// {{if .HashTableMode.IsDistinct}}
 
 // updateSel updates the selection vector in the given batch using the headID
 // buffer. For each nonzero keyID in headID, it will be translated to the actual
@@ -505,3 +531,5 @@ func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
 
 	return nDiffers
 }
+
+// {{end}}

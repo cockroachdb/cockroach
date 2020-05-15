@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -21,9 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+type hashTableMode struct {
+	IsDistinct bool
+
+	String string
+}
+
 const hashTableTmpl = "pkg/sql/colexec/hashtable_tmpl.go"
 
-func genHashTable(wr io.Writer) error {
+func genHashTable(wr io.Writer, htm hashTableMode) error {
 	t, err := ioutil.ReadFile(hashTableTmpl)
 	if err != nil {
 		return err
@@ -82,9 +89,34 @@ func genHashTable(wr io.Writer) error {
 	if data == nil {
 		colexecerror.InternalError("unexpectedly didn't find overload for tree.NE")
 	}
-	return tmpl.Execute(wr, data)
+	return tmpl.Execute(wr, struct {
+		Overloads     interface{}
+		HashTableMode interface{}
+	}{
+		Overloads:     data,
+		HashTableMode: htm,
+	})
 }
 
 func init() {
-	registerGenerator(genHashTable, "hashtable.eg.go", hashTableTmpl)
+	hashTableModes := []hashTableMode{
+		{
+			IsDistinct: false,
+			String:     "full",
+		},
+		{
+			IsDistinct: true,
+			String:     "distinct",
+		},
+	}
+
+	hashTableGenerator := func(htm hashTableMode) generator {
+		return func(wr io.Writer) error {
+			return genHashTable(wr, htm)
+		}
+	}
+
+	for _, mode := range hashTableModes {
+		registerGenerator(hashTableGenerator(mode), fmt.Sprintf("hashtable_%s.eg.go", mode.String), hashTableTmpl)
+	}
 }
