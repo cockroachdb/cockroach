@@ -543,8 +543,8 @@ func (r *Replica) leaseStatus(
 	if lease.Type() == roachpb.LeaseExpiration {
 		expiration = lease.GetExpiration()
 	} else {
-		var err error
-		status.Liveness, err = r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
+		l, err := r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
+		status.Liveness = l.Liveness
 		if err != nil || status.Liveness.Epoch < lease.Epoch {
 			// If lease validity can't be determined (e.g. gossip is down
 			// and liveness info isn't available for owner), we can neither

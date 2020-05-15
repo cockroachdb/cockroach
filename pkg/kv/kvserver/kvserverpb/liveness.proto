@@ -17,10 +17,12 @@ import "gogoproto/gogo.proto";
 
 // Liveness holds information about a node's latest heartbeat and epoch.
 //
-// NOTE: Care must be taken when changing the encoding of this proto
-// because it is used as part of conditional put operations. 
+// NOTE: 20.1 encodes this proto and uses it for CPut operations, so its
+// encoding can't change until 21.1. 20.2 has moved away from the bad practice.
+// In 21.1 we should replace the LegacyTimestamp field with a regular Timestamp.
 message Liveness {
   option (gogoproto.populate) = true;
+  option (gogoproto.goproto_stringer) = false;
 
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
@@ -38,6 +40,8 @@ message Liveness {
   // is large in comparison to the max offset, and that nodes heartbeat their
   // liveness records well in advance of this expiration, so the optimism or
   // pessimism of a checker does not matter very much.
+  //
+  // TODO(andrei): Change this to a regular Timestamp field in 21.1.
   util.hlc.LegacyTimestamp expiration = 3 [(gogoproto.nullable) = false];
   bool draining = 4;
 
