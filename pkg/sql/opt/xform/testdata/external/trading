@@ -827,30 +827,35 @@ project
  │    │         │    │    ├── stats: [rows=1000000, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(18)=1000000, null(18)=0, distinct(19)=56999.9987, null(19)=0]
  │    │         │    │    ├── key: (18-20)
  │    │         │    │    └── fd: ()-->(16,17)
- │    │         │    ├── inner-join (hash)
+ │    │         │    ├── inner-join (merge)
  │    │         │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null
+ │    │         │    │    ├── left ordering: +1
+ │    │         │    │    ├── right ordering: +8
  │    │         │    │    ├── stats: [rows=29618.4611, distinct(1)=19000, null(1)=0, distinct(2)=11668.1409, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5572.85686, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=19000, null(8)=0, distinct(9)=21037.9959, null(9)=0, distinct(10)=21037.9959, null(10)=0, distinct(11)=21037.9959, null(11)=0, distinct(12)=21037.9959, null(12)=0, distinct(13)=21037.9959, null(13)=0, distinct(14)=21037.9959, null(14)=0, distinct(15)=23225.5851, null(15)=0]
  │    │         │    │    ├── key: (8)
  │    │         │    │    ├── fd: ()-->(7), (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(9-15), (15)-->(8-14), (1)==(8), (8)==(1)
+ │    │         │    │    ├── select
+ │    │         │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0]
+ │    │         │    │    │    ├── key: (1)
+ │    │         │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │    │         │    │    │    ├── ordering: +1
+ │    │         │    │    │    ├── scan cards
+ │    │         │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │    │         │    │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0, distinct(2)=39000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5700, null(6)=0]
+ │    │         │    │    │    │    ├── key: (1)
+ │    │         │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │    │         │    │    │    │    └── ordering: +1
+ │    │         │    │    │    └── filters
+ │    │         │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
  │    │         │    │    ├── scan cardsinfo
  │    │         │    │    │    ├── columns: cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null
  │    │         │    │    │    ├── constraint: /7/8: [/1 - /1]
  │    │         │    │    │    ├── stats: [rows=58333.3333, distinct(7)=1, null(7)=0, distinct(8)=37420.3552, null(8)=0, distinct(9)=40676.7278, null(9)=0, distinct(10)=40676.7278, null(10)=0, distinct(11)=40676.7278, null(11)=0, distinct(12)=40676.7278, null(12)=0, distinct(13)=40676.7278, null(13)=0, distinct(14)=40676.7278, null(14)=0, distinct(15)=58333.3333, null(15)=0]
  │    │         │    │    │    ├── key: (8)
- │    │         │    │    │    └── fd: ()-->(7), (8)-->(9-15), (15)-->(8-14)
- │    │         │    │    ├── index-join cards
- │    │         │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
- │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0]
- │    │         │    │    │    ├── key: (1)
- │    │         │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │    │         │    │    │    └── scan cards@cardsnamesetnumber
- │    │         │    │    │         ├── columns: id:1!null name:2!null setname:4 number:5!null
- │    │         │    │    │         ├── constraint: /2/4/5: [/'Shock'/'7E'/249 - ]
- │    │         │    │    │         ├── stats: [rows=2111.11111, distinct(2)=2111.11111, null(2)=0, distinct(4)=54, null(4)=0, distinct(5)=276.333333, null(5)=0]
- │    │         │    │    │         ├── key: (1)
- │    │         │    │    │         └── fd: (1)-->(2,4,5), (2,4,5)~~>(1)
- │    │         │    │    └── filters
- │    │         │    │         └── id:1 = cardsinfo.cardid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │         │    │    │    ├── fd: ()-->(7), (8)-->(9-15), (15)-->(8-14)
+ │    │         │    │    │    └── ordering: +8 opt(7) [actual: +8]
+ │    │         │    │    └── filters (true)
  │    │         │    └── filters
  │    │         │         └── transactiondetails.cardid:19 = id:1 [outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
  │    │         └── aggregations

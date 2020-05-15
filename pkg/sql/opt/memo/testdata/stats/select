@@ -185,7 +185,7 @@ project
       ├── scan idx@yz
       │    ├── columns: y:2(int!null) z:3(int)
       │    ├── constraint: /-2/3/1: (/4/NULL - /NULL)
-      │    └── stats: [rows=333.333333, distinct(2)=33.3333333, null(2)=0, distinct(3)=100, null(3)=10]
+      │    └── stats: [rows=333.333333, distinct(2)=33.3333333, null(2)=0]
       └── filters
            └── z:3 < 10 [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
 
