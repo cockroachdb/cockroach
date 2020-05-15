@@ -15,13 +15,16 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -220,6 +223,332 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 }
 
-// TODO(sumeer): Benchmarks:
-// - de-duping with and without spilling.
-// - read throughput with and without cache under various read access patterns.
+// Adapter interface that can be implemented using both DiskBackedNumberedRowContainer
+// and DiskBackedIndexedRowContainer.
+type numberedContainer interface {
+	addRow(context.Context, sqlbase.EncDatumRow) error
+	setupForRead(ctx context.Context, accesses [][]int)
+	getRow(ctx context.Context, idx int) (sqlbase.EncDatumRow, error)
+	close(context.Context)
+}
+
+type numberedContainerUsingNRC struct {
+	rc            *DiskBackedNumberedRowContainer
+	memoryMonitor *mon.BytesMonitor
+}
+
+func (d numberedContainerUsingNRC) addRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	_, err := d.rc.AddRow(ctx, row)
+	return err
+}
+func (d numberedContainerUsingNRC) setupForRead(ctx context.Context, accesses [][]int) {
+	d.rc.SetupForRead(ctx, accesses)
+}
+func (d numberedContainerUsingNRC) getRow(
+	ctx context.Context, idx int,
+) (sqlbase.EncDatumRow, error) {
+	return d.rc.GetRow(ctx, idx, false)
+}
+func (d numberedContainerUsingNRC) close(ctx context.Context) {
+	d.rc.Close(ctx)
+	d.memoryMonitor.Stop(ctx)
+}
+func makeNumberedContainerUsingNRC(
+	ctx context.Context,
+	b *testing.B,
+	types []*types.T,
+	evalCtx *tree.EvalContext,
+	engine diskmap.Factory,
+	st *cluster.Settings,
+	memoryBudget int64,
+	diskMonitor *mon.BytesMonitor,
+) numberedContainerUsingNRC {
+	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
+	rc := NewDiskBackedNumberedRowContainer(
+		false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor, 0 /* rowCapacity */)
+	require.NoError(b, rc.testingSpillToDisk(ctx))
+	return numberedContainerUsingNRC{rc: rc, memoryMonitor: memoryMonitor}
+}
+
+type numberedContainerUsingIRC struct {
+	rc            *DiskBackedIndexedRowContainer
+	memoryMonitor *mon.BytesMonitor
+}
+
+func (d numberedContainerUsingIRC) addRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	return d.rc.AddRow(ctx, row)
+}
+func (d numberedContainerUsingIRC) setupForRead(context.Context, [][]int) {}
+func (d numberedContainerUsingIRC) getRow(
+	ctx context.Context, idx int,
+) (sqlbase.EncDatumRow, error) {
+	row, err := d.rc.GetRow(ctx, idx)
+	if err != nil {
+		return nil, err
+	}
+	return row.(IndexedRow).Row, nil
+}
+func (d numberedContainerUsingIRC) close(ctx context.Context) {
+	d.rc.Close(ctx)
+	d.memoryMonitor.Stop(ctx)
+}
+func makeNumberedContainerUsingIRC(
+	ctx context.Context,
+	b *testing.B,
+	types []*types.T,
+	evalCtx *tree.EvalContext,
+	engine diskmap.Factory,
+	st *cluster.Settings,
+	memoryBudget int64,
+	diskMonitor *mon.BytesMonitor,
+) numberedContainerUsingIRC {
+	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
+	rc := NewDiskBackedIndexedRowContainer(
+		nil /* ordering */, types, evalCtx, engine, memoryMonitor, diskMonitor, 0 /* rowCapacity */)
+	require.NoError(b, rc.SpillToDisk(ctx))
+	return numberedContainerUsingIRC{rc: rc, memoryMonitor: memoryMonitor}
+}
+
+func makeMemMonitorAndStart(
+	ctx context.Context, st *cluster.Settings, budget int64,
+) *mon.BytesMonitor {
+	memoryMonitor := mon.MakeMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(budget))
+	return &memoryMonitor
+}
+
+// Assume that join is using a batch of 100 left rows.
+const leftRowsBatch = 100
+
+// repeatAccesses is the number of times on average that each right row is accessed.
+func generateLookupJoinAccessPattern(
+	rng *rand.Rand, rightRowsReadPerLeftRow int, repeatAccesses int,
+) [][]int {
+	// Unique rows accessed.
+	numRowsAccessed := (leftRowsBatch * rightRowsReadPerLeftRow) / repeatAccesses
+	out := make([][]int, leftRowsBatch)
+	for i := 0; i < len(out); i++ {
+		// Each left row sees a contiguous sequence of rows on the right since the
+		// rows are being retrieved and stored in the container in index order.
+		start := rng.Intn(numRowsAccessed - rightRowsReadPerLeftRow)
+		out[i] = make([]int, rightRowsReadPerLeftRow)
+		for j := start; j < start+rightRowsReadPerLeftRow; j++ {
+			out[i][j-start] = j
+		}
+	}
+	return out
+}
+
+// numRightRows is the number of rows in the container, of which a certain
+// fraction of rows are accessed randomly (when using an inverted index for
+// intersection the result set can be sparse).
+// repeatAccesses is the number of times on average that each right row is accessed.
+func generateInvertedJoinAccessPattern(
+	b *testing.B, rng *rand.Rand, numRightRows int, rightRowsReadPerLeftRow int, repeatAccesses int,
+) [][]int {
+	// Unique rows accessed.
+	numRowsAccessed := (leftRowsBatch * rightRowsReadPerLeftRow) / repeatAccesses
+	// Don't want each left row to access most of the right rows.
+	require.True(b, rightRowsReadPerLeftRow < numRowsAccessed/2)
+	accessedIndexes := make(map[int]struct{})
+	for len(accessedIndexes) < numRowsAccessed {
+		accessedIndexes[rng.Intn(numRightRows)] = struct{}{}
+	}
+	accessedRightRows := make([]int, 0, numRowsAccessed)
+	for k := range accessedIndexes {
+		accessedRightRows = append(accessedRightRows, k)
+	}
+	out := make([][]int, leftRowsBatch)
+	for i := 0; i < len(out); i++ {
+		out[i] = make([]int, 0, rightRowsReadPerLeftRow)
+		uniqueRows := make(map[int]struct{})
+		for len(uniqueRows) < rightRowsReadPerLeftRow {
+			idx := rng.Intn(len(accessedRightRows))
+			if _, notUnique := uniqueRows[idx]; notUnique {
+				continue
+			}
+			uniqueRows[idx] = struct{}{}
+			out[i] = append(out[i], accessedRightRows[idx])
+		}
+		// Sort since accesses by a left row are in ascending order.
+		sort.Slice(out[i], func(a, b int) bool {
+			return out[i][a] < out[i][b]
+		})
+	}
+	return out
+}
+
+func accessPatternForBenchmarkIterations(totalAccesses int, accessPattern [][]int) [][]int {
+	var out [][]int
+	var i, j int
+	for count := 0; count < totalAccesses; {
+		if i >= len(accessPattern) {
+			i = 0
+			continue
+		}
+		if j >= len(accessPattern[i]) {
+			j = 0
+			i++
+			continue
+		}
+		if j == 0 {
+			out = append(out, []int(nil))
+		}
+		last := len(out) - 1
+		out[last] = append(out[last], accessPattern[i][j])
+		count++
+		j++
+	}
+	return out
+}
+
+func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
+	const numRows = 10000
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
+
+	// Each row is 10 string columns. Each string has a mean length of 5, and the
+	// row encoded into bytes is ~64 bytes. So we approximate ~512 rows per ssblock.
+	// The in-memory decoded footprint in the cache is ~780 bytes.
+	var typs []*types.T
+	for i := 0; i < 10; i++ {
+		typs = append(typs, types.String)
+	}
+	rng, _ := randutil.NewPseudoRand()
+	rows := make([]sqlbase.EncDatumRow, numRows)
+	for i := 0; i < numRows; i++ {
+		rows[i] = make([]sqlbase.EncDatum, len(typs))
+		for j := range typs {
+			rows[i][j] = sqlbase.DatumToEncDatum(typs[j], sqlbase.RandDatum(rng, typs[j], false))
+		}
+	}
+
+	type accessPattern struct {
+		joinType string
+		paramStr string
+		accesses [][]int
+	}
+	var accessPatterns []accessPattern
+	// Lookup join access patterns. The highest number of unique rows accessed is
+	// when rightRowsReadPerLeftRow = 64 and repeatAccesses = 1, which with a left
+	// batch of 100 is 100 * 64 / 1 = 6400 rows accessed. The container has
+	// 10000 rows. If N unique rows are accessed these form a prefix of the rows
+	// in the container.
+	for _, rightRowsReadPerLeftRow := range []int{1, 2, 4, 8, 16, 32, 64} {
+		for _, repeatAccesses := range []int{1, 2} {
+			accessPatterns = append(accessPatterns, accessPattern{
+				joinType: "lookup-join",
+				paramStr: fmt.Sprintf("matchRatio=%d/repeatAccesses=%d",
+					rightRowsReadPerLeftRow, repeatAccesses),
+				accesses: generateLookupJoinAccessPattern(rng, rightRowsReadPerLeftRow, repeatAccesses),
+			})
+		}
+	}
+	// Inverted join access patterns.
+	// With a left batch of 100 rows, and rightRowsReadPerLeftRow = (25, 50, 100), the
+	// total accesses are (2500, 5000, 10000). Consider repeatAccesses = 2: the unique
+	// rows accessed are (1250, 2500, 5000), which will be randomly distributed over the
+	// 10000 rows.
+	for _, rightRowsReadPerLeftRow := range []int{1, 25, 50, 100} {
+		for _, repeatAccesses := range []int{1, 2, 4, 8} {
+			accessPatterns = append(accessPatterns, accessPattern{
+				joinType: "inverted-join",
+				paramStr: fmt.Sprintf("matchRatio=%d/repeatAccesses=%d",
+					rightRowsReadPerLeftRow, repeatAccesses),
+				accesses: generateInvertedJoinAccessPattern(
+					b, rng, numRows, rightRowsReadPerLeftRow, repeatAccesses),
+			})
+		}
+	}
+
+	// Observed cache behavior for a particular access pattern for each kind of
+	// join, to give some insight into performance.
+	// - The inverted join pattern has poor locality and the IndexedRowContainer
+	//   does poorly. The NumberedRowContainer is able to use the knowledge that
+	//   many rows will never be accessed.
+	//                         11000   100KB   500KB   2.5MB
+	//   IndexedRowContainer   0.00    0.00    0.00    0.00
+	//   NumberedRowContainer  0.22    0.68    0.88    1.00
+	// - The lookup join access pattern and observed hit rates. The better
+	//   locality improves the behavior of the IndexedRowContainer, but it
+	//   is still significantly worse than the NumberedRowContainer.
+	//                         11000   100KB   500KB   2.5MB
+	//   IndexedRowContainer   0.00    0.00    0.10    0.35
+	//   NumberedRowContainer  0.01    0.09    0.28    0.63
+
+	for _, pattern := range accessPatterns {
+		// Approx cache capacity in rows with these settings: 13, 132, 666, 3300.
+		for _, memoryBudget := range []int64{11000, 100 << 10, 500 << 10, 2500 << 10} {
+			for _, containerKind := range []string{"indexed", "numbered"} {
+				b.Run(fmt.Sprintf("%s/%s/mem=%d/%s", pattern.joinType, pattern.paramStr, memoryBudget,
+					containerKind), func(b *testing.B) {
+					var nc numberedContainer
+					switch containerKind {
+					case "indexed":
+						nc = makeNumberedContainerUsingIRC(
+							ctx, b, typs, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+					case "numbered":
+						nc = makeNumberedContainerUsingNRC(
+							ctx, b, typs, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+					}
+					defer nc.close(ctx)
+					for i := 0; i < len(rows); i++ {
+						require.NoError(b, nc.addRow(ctx, rows[i]))
+					}
+					accesses := accessPatternForBenchmarkIterations(b.N, pattern.accesses)
+					b.ResetTimer()
+					nc.setupForRead(ctx, accesses)
+					for i := 0; i < len(accesses); i++ {
+						for j := 0; j < len(accesses[i]); j++ {
+							if _, err := nc.getRow(ctx, accesses[i][j]); err != nil {
+								b.Fatal(err)
+							}
+						}
+					}
+					b.StopTimer()
+					// Disabled code block. Change to true to look at hit ratio and cache sizes
+					// for these benchmarks.
+					if false {
+						// Print statements for understanding the performance differences.
+						fmt.Printf("\n**%s/%s/%d/%s: iters: %d\n", pattern.joinType, pattern.paramStr, memoryBudget, containerKind, b.N)
+						switch rc := nc.(type) {
+						case numberedContainerUsingNRC:
+							fmt.Printf("hit rate: %.2f, maxCacheSize: %d\n",
+								float64(rc.rc.rowIter.hitCount)/float64(rc.rc.rowIter.missCount+rc.rc.rowIter.hitCount),
+								rc.rc.rowIter.maxCacheSize)
+						case numberedContainerUsingIRC:
+							fmt.Printf("hit rate: %.2f, maxCacheSize: %d\n",
+								float64(rc.rc.hitCount)/float64(rc.rc.missCount+rc.rc.hitCount),
+								rc.rc.maxCacheSize)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+// TODO(sumeer):
+// - Randomized correctness test comparing the rows returned by
+//   DiskBacked{Numbered,Indexed}RowContainer.
+// - Benchmarks:
+//   - de-duping with and without spilling.
+//   - different batch sizes for the left side.
