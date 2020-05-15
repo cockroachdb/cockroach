@@ -20,7 +20,7 @@ export enum DateTypes {
   DATE_TO,
 }
 
-type RangeOption = {
+export type RangeOption = {
   value: string;
   label: string;
   timeLabel: string;
@@ -126,7 +126,28 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   toggleCustomPicker = (custom: boolean) => () => this.setState({ custom }, this.clearPanelValues);
 
-  toggleDropDown = () => this.setState({ opened: !this.state.opened }, this.toggleCustomPicker(this.state.opened ));
+  toggleDropDown = () => {
+    this.setState(
+      (prevState) => {
+        return {
+          opened: !prevState.opened,
+          /*
+          Always close the custom date picker pane when toggling the dropdown.
+
+          The user must always manually choose to open it because right now we have
+          no button to "go back" to the list of presets from the custom timepicker.
+           */
+          custom: false,
+        };
+      },
+      () => {
+      if (this.state.opened) {
+        this.props.onOpened();
+      } else {
+        this.props.onClosed();
+      }
+    });
+  }
 
   handleOptionButtonOnClick = (option: RangeOption) => () => {
     trackTimeScaleSelected(option.label);
