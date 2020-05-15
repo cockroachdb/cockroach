@@ -2772,7 +2772,7 @@ scalar-group-by
 # ConvertCountToCountRows
 # --------------------------------------------------
 
-# ScalarGroupBy case.
+# ScalarGroupBy cases.
 norm expect=ConvertCountToCountRows
 SELECT count(z) FROM xyzbs
 ----
@@ -2785,7 +2785,31 @@ scalar-group-by
  └── aggregations
       └── count-rows [as=count:6]
 
-# GroupBy case.
+norm expect=ConvertCountToCountRows
+SELECT count(1) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:7!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan xyzbs
+ └── aggregations
+      └── count-rows [as=count:7]
+
+norm expect=ConvertCountToCountRows
+SELECT count(1 + z) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:7!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan xyzbs
+ └── aggregations
+      └── count-rows [as=count:7]
+
+# GroupBy cases.
 norm expect=ConvertCountToCountRows
 SELECT count(z) FROM xyzbs GROUP BY s
 ----
@@ -2800,6 +2824,36 @@ project
       │    └── columns: s:5
       └── aggregations
            └── count-rows [as=count:6]
+
+norm expect=ConvertCountToCountRows
+SELECT count(1) FROM xyzbs GROUP BY s
+----
+project
+ ├── columns: count:7!null
+ └── group-by
+      ├── columns: s:5 count:7!null
+      ├── grouping columns: s:5
+      ├── key: (5)
+      ├── fd: (5)-->(7)
+      ├── scan xyzbs
+      │    └── columns: s:5
+      └── aggregations
+           └── count-rows [as=count:7]
+
+norm expect=ConvertCountToCountRows
+SELECT count(1+z) FROM xyzbs GROUP BY s
+----
+project
+ ├── columns: count:7!null
+ └── group-by
+      ├── columns: s:5 count:7!null
+      ├── grouping columns: s:5
+      ├── key: (5)
+      ├── fd: (5)-->(7)
+      ├── scan xyzbs
+      │    └── columns: s:5
+      └── aggregations
+           └── count-rows [as=count:7]
 
 # Case with multiple aggregate functions.
 # Expecting to activate on z and b but not y, because y can be null.
