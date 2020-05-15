@@ -92,7 +92,7 @@ func TestCanFilter(t *testing.T) {
 	h.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{})
 	for _, tc := range testData {
 		c := constraint.ParseConstraint(&evalCtx, tc.constraint)
-		colIdx, ok := h.CanFilter(&c)
+		colIdx, _, ok := h.CanFilter(&c)
 		if ok != tc.canFilter {
 			t.Fatalf(
 				"for constraint %s, expected canFilter=%v but found %v", tc.constraint, tc.canFilter, ok,
@@ -288,6 +288,17 @@ func TestHistogram(t *testing.T) {
 			maxDistinct: 1,
 			distinct:    1,
 		},
+		{
+			constraint: "/2/1/3: [/1/40/2 - /1/40/2] [/1/40/4 - /1/40/4] [/1/40/6 - /1/40/6]",
+			//   0 5.7143
+			// <---- 40 -
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+			},
+			count:       5.71,
+			maxDistinct: 1,
+			distinct:    1,
+		},
 	}
 
 	for i := range testData {
@@ -296,7 +307,7 @@ func TestHistogram(t *testing.T) {
 
 		// Make sure all test cases work with both ascending and descending columns.
 		for _, c := range ascAndDesc {
-			if _, ok := h.CanFilter(&c); !ok {
+			if _, _, ok := h.CanFilter(&c); !ok {
 				t.Fatalf("constraint %s cannot filter histogram %v", c.String(), *h)
 			}
 			filtered := h.Filter(&c)
