@@ -155,10 +155,10 @@ func allocateTableRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
-	maxDescIDInBackup := uint32(0)
+	maxDescIDInBackup := int64(0)
 	for _, table := range tablesByID {
-		if uint32(table.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = uint32(table.ID)
+		if int64(table.ID) > maxDescIDInBackup {
+			maxDescIDInBackup = int64(table.ID)
 		}
 		// Check that foreign key targets exist.
 		for i := range table.OutboundFKs {
@@ -196,21 +196,21 @@ func allocateTableRewrites(
 	var tempSysDBID sqlbase.ID
 	if descriptorCoverage == tree.AllDescriptors {
 		var err error
-		numberOfIncrements := maxDescIDInBackup - uint32(sql.MaxDefaultDescriptorID)
-		// We need to increment this key this many times rather than settings
-		// it since the interface does not expect it to be set. See client.Inc()
-		// for more information.
-		// TODO(pbardea): Follow up too see if there is a way to just set this
-		//   since for clusters with many descrirptors we'd want to avoid
-		//   incrementing it 10,000+ times.
-		for i := uint32(0); i <= numberOfIncrements; i++ {
-			_, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-			if err != nil {
-				return nil, err
-			}
+		// Restore the key which generates descriptor IDs.
+		if err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			b := txn.NewBatch()
+			// N.B. This key is usually mutated using the Inc command. That
+			// command warns that if the key was every Put directly, Inc will
+			// return an error. This is only to ensure that the type of the key
+			// doesn't change. Here we just need to be very careful that we only
+			// write int64 values.
+			// The generator's value should be set to the value of the next ID
+			// to generate.
+			b.Put(p.ExecCfg().Codec.DescIDSequenceKey(), maxDescIDInBackup+1)
+			return txn.Run(ctx, b)
+		}); err != nil {
+			return nil, err
 		}
-
-		// Generate one more desc ID for the ID of the temporary system db.
 		tempSysDBID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
@@ -221,17 +221,14 @@ func allocateTableRewrites(
 	// Fail fast if the necessary databases don't exist or are otherwise
 	// incompatible with this restore.
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		maxExpectedDB := keys.MinUserDescID + sql.MaxDefaultDescriptorID
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			found, foundID, err := sqlbase.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, name)
+			found, _, err := sqlbase.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, name)
 			if err != nil {
 				return err
 			}
-			if found && descriptorCoverage == tree.AllDescriptors {
-				if foundID > maxExpectedDB {
-					return errors.Errorf("database %q already exists", name)
-				}
+			if found {
+				return errors.Errorf("database %q already exists", name)
 			}
 		}
 

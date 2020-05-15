@@ -11,6 +11,7 @@ package backupccl_test
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -70,6 +71,21 @@ func TestFullClusterBackup(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE STATISTICS my_stats FROM data.bank`)
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+
+	// Create a bunch of user tables on the restoring cluster that we're going
+	// to delete.
+	for i := 0; i < 50; i++ {
+		sqlDBRestore.Exec(t, `CREATE DATABASE db_to_drop`)
+		sqlDBRestore.Exec(t, `CREATE TABLE db_to_drop.table_to_drop (a int)`)
+		sqlDBRestore.Exec(t, `ALTER TABLE db_to_drop.table_to_drop CONFIGURE ZONE USING gc.ttlseconds=1`)
+		sqlDBRestore.Exec(t, `DROP DATABASE db_to_drop`)
+	}
+	// Wait for the GC job to finish to ensure the descriptors no longer exist.
+	sqlDBRestore.CheckQueryResultsRetry(
+		t, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND status = 'running'",
+		[][]string{{"0"}},
+	)
+
 	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
 
 	t.Run("ensure all databases restored", func(t *testing.T) {
@@ -162,6 +178,29 @@ func TestFullClusterBackup(t *testing.T) {
 				t.Errorf("Expected to find job %+v in RESTORE cluster, but not found", oldJob)
 			}
 		}
+	})
+
+	t.Run("ensure that tables can be created at the execpted ID", func(t *testing.T) {
+		maxID, err := strconv.Atoi(sqlDBRestore.QueryStr(t, "SELECT max(id) FROM system.namespace")[0][0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		dbName, tableName := "new_db", "new_table"
+		// N.B. We skip the database ID that was allocated too the temporary
+		// system table and all of the temporary system tables (1 + 8).
+		numIDsToSkip := 9
+		expectedDBID := maxID + numIDsToSkip + 1
+		expectedTableID := maxID + numIDsToSkip + 2
+		sqlDBRestore.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+		sqlDBRestore.Exec(t, fmt.Sprintf("CREATE TABLE %s.%s (a int)", dbName, tableName))
+		sqlDBRestore.CheckQueryResults(
+			t, fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", dbName),
+			[][]string{{strconv.Itoa(expectedDBID)}},
+		)
+		sqlDBRestore.CheckQueryResults(
+			t, fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", tableName),
+			[][]string{{strconv.Itoa(expectedTableID)}},
+		)
 	})
 }
 
