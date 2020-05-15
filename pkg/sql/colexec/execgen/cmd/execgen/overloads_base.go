@@ -336,39 +336,54 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 	*twoArgsResolvedOverload
 }
 
-type assignFunc func(op *lastArgWidthOverload, target, l, r string) string
-type compareFunc func(target, l, r string) string
+type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
+type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
 type castFunc func(to, from string) string
 
-// Assign produces a Go source string that assigns the "target" variable to the
-// result of applying the overload to the two inputs, l and r.
+// Assign produces a Go source string that assigns the "targetElem" variable to
+// the result of applying the overload to the two inputs, "leftElem" and
+// "rightElem". Some overload implementations might need access to the column
+// variable names, and those are provided via the corresponding parameters.
+// Note that these are not generic vectors (i.e. not coldata.Vec) but rather
+// concrete columns (e.g. []int64).
 //
-// For example, an overload that implemented the float64 plus operation, when fed
-// the inputs "x", "a", "b", would produce the string "x = a + b".
-func (o *lastArgWidthOverload) Assign(target, l, r string) string {
+// For example, an overload that implemented the float64 plus operation, when
+// fed the inputs "x", "a", "b", "xCol", "aCol", "bCol", would produce the
+// string "x = a + b".
+func (o *lastArgWidthOverload) Assign(
+	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
+) string {
 	if o.AssignFunc != nil {
-		if ret := o.AssignFunc(o, target, l, r); ret != "" {
+		if ret := o.AssignFunc(
+			o, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol,
+		); ret != "" {
 			return ret
 		}
 	}
 	// Default assign form assumes an infix operator.
-	return fmt.Sprintf("%s = %s %s %s", target, l, o.overloadBase.OpStr, r)
+	return fmt.Sprintf("%s = %s %s %s", targetElem, leftElem, o.overloadBase.OpStr, rightElem)
 }
 
-// Compare produces a Go source string that assigns the "target" variable to the
-// result of comparing the two inputs, l and r. The target will be negative,
-// zero, or positive depending on whether l is less-than, equal-to, or
-// greater-than r.
-func (o *lastArgWidthOverload) Compare(target, l, r string) string {
+// Compare produces a Go source string that assigns the "targetElem" variable to
+// the result of comparing the two inputs, "leftElem" and "rightElem". Some
+// overload implementations might need access to the vector variable names, and
+// those are provided via the corresponding parameters. Note that there is no
+// "targetCol" variable because we know that the target column is []bool.
+//
+// The targetElem will be negative, zero, or positive depending on whether
+// leftElem is less-than, equal-to, or greater-than rightElem.
+func (o *lastArgWidthOverload) Compare(
+	targetElem, leftElem, rightElem, leftCol, rightCol string,
+) string {
 	if o.CompareFunc != nil {
-		if ret := o.CompareFunc(target, l, r); ret != "" {
+		if ret := o.CompareFunc(targetElem, leftElem, rightElem, leftCol, rightCol); ret != "" {
 			return ret
 		}
 	}
 	// Default compare form assumes an infix operator.
 	return fmt.Sprintf(
 		"if %s < %s { %s = -1 } else if %s > %s { %s = 1 } else { %s = 0 }",
-		l, r, target, l, r, target, target)
+		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
 }
 
 func (o *lastArgWidthOverload) Cast(to, from string) string {
@@ -381,14 +396,14 @@ func (o *lastArgWidthOverload) Cast(to, from string) string {
 	return fmt.Sprintf("%s = %s", to, from)
 }
 
-func (o *lastArgWidthOverload) UnaryAssign(target, v string) string {
+func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec string) string {
 	if o.AssignFunc != nil {
-		if ret := o.AssignFunc(o, target, v, ""); ret != "" {
+		if ret := o.AssignFunc(o, targetElem, vElem, "", targetCol, vVec, ""); ret != "" {
 			return ret
 		}
 	}
 	// Default assign form assumes a function operator.
-	return fmt.Sprintf("%s = %s(%s)", target, o.overloadBase.OpStr, v)
+	return fmt.Sprintf("%s = %s(%s)", targetElem, o.overloadBase.OpStr, vElem)
 }
 
 func (b *argWidthOverloadBase) GoTypeSliceName() string {

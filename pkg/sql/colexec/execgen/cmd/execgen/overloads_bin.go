@@ -143,7 +143,7 @@ type binOpTypeCustomizer interface {
 }
 
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		if op.overloadBase.BinOp == tree.Div {
 			return fmt.Sprintf(`
 			{
@@ -155,28 +155,28 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(err)
 				}
 			}
-			`, binaryOpDecCtx[op.overloadBase.BinOp], binaryOpDecMethod[op.overloadBase.BinOp], target, l, r)
+			`, binaryOpDecCtx[op.overloadBase.BinOp], binaryOpDecMethod[op.overloadBase.BinOp], targetElem, leftElem, rightElem)
 		}
 		return fmt.Sprintf("if _, err := tree.%s.%s(&%s, &%s, &%s); err != nil { colexecerror.ExpectedError(err) }",
-			binaryOpDecCtx[op.overloadBase.BinOp], binaryOpDecMethod[op.overloadBase.BinOp], target, l, r)
+			binaryOpDecCtx[op.overloadBase.BinOp], binaryOpDecMethod[op.overloadBase.BinOp], targetElem, leftElem, rightElem)
 	}
 }
 
 func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
-		return fmt.Sprintf("%s = float64(%s) %s float64(%s)", target, l, op.overloadBase.OpStr, r)
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		return fmt.Sprintf("%s = float64(%s) %s float64(%s)", targetElem, leftElem, op.overloadBase.OpStr, rightElem)
 	}
 }
 
 func (c intCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
-		args := map[string]string{"Target": target, "Left": l, "Right": r}
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		args := map[string]string{"Target": targetElem, "Left": leftElem, "Right": rightElem}
 		// The int64 customizer handles binOps with integers of different widths (in
 		// addition to handling int64-only arithmetic), so we must cast to int64 in
 		// this case.
 		if c.width == anyWidth {
-			args["Left"] = fmt.Sprintf("int64(%s)", l)
-			args["Right"] = fmt.Sprintf("int64(%s)", r)
+			args["Left"] = fmt.Sprintf("int64(%s)", leftElem)
+			args["Right"] = fmt.Sprintf("int64(%s)", rightElem)
 		}
 		buf := strings.Builder{}
 		var t *template.Template
@@ -276,13 +276,13 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		isDivision := op.overloadBase.BinOp == tree.Div
 		args := map[string]interface{}{
 			"Ctx":        binaryOpDecCtx[op.overloadBase.BinOp],
 			"Op":         binaryOpDecMethod[op.overloadBase.BinOp],
 			"IsDivision": isDivision,
-			"Target":     target, "Left": l, "Right": r,
+			"Target":     targetElem, "Left": leftElem, "Right": rightElem,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -307,13 +307,13 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		isDivision := op.overloadBase.BinOp == tree.Div
 		args := map[string]interface{}{
 			"Ctx":        binaryOpDecCtx[op.overloadBase.BinOp],
 			"Op":         binaryOpDecMethod[op.overloadBase.BinOp],
 			"IsDivision": isDivision,
-			"Target":     target, "Left": l, "Right": r,
+			"Target":     targetElem, "Left": leftElem, "Right": rightElem,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -341,14 +341,14 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c timestampCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Minus:
 			return fmt.Sprintf(`
 		  nanos := %[2]s.Sub(%[3]s).Nanoseconds()
 		  %[1]s = duration.MakeDuration(nanos, 0, 0)
 		  `,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -358,14 +358,14 @@ func (c timestampCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c intervalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Plus:
 			return fmt.Sprintf(`%[1]s = %[2]s.Add(%[3]s)`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		case tree.Minus:
 			return fmt.Sprintf(`%[1]s = %[2]s.Sub(%[3]s)`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -375,14 +375,14 @@ func (c intervalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Plus:
 			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s)`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		case tree.Minus:
 			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s.Mul(-1))`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -392,11 +392,11 @@ func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Plus:
 			return fmt.Sprintf(`%[1]s = duration.Add(%[3]s, %[2]s)`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -405,18 +405,18 @@ func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c intervalIntCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Mult:
 			return fmt.Sprintf(`%[1]s = %[2]s.Mul(int64(%[3]s))`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		case tree.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				%[1]s = %[2]s.Div(int64(%[3]s))`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -425,11 +425,11 @@ func (c intervalIntCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c intIntervalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Mult:
 			return fmt.Sprintf(`%[1]s = %[3]s.Mul(int64(%[2]s))`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -438,18 +438,18 @@ func (c intIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c intervalFloatCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Mult:
 			return fmt.Sprintf(`%[1]s = %[2]s.MulFloat(float64(%[3]s))`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		case tree.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0.0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				%[1]s = %[2]s.DivFloat(float64(%[3]s))`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -458,11 +458,11 @@ func (c intervalFloatCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c floatIntervalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Mult:
 			return fmt.Sprintf(`%[1]s = %[3]s.MulFloat(float64(%[2]s))`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -471,7 +471,7 @@ func (c floatIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Mult:
 			return fmt.Sprintf(`
@@ -480,7 +480,7 @@ func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 		    colexecerror.InternalError(err)
 		  }
 		  %[1]s = %[2]s.MulFloat(f)`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -489,7 +489,7 @@ func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, l, r string) string {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Mult:
 			return fmt.Sprintf(`
@@ -498,7 +498,7 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 		    colexecerror.InternalError(err)
 		  }
 		  %[1]s = %[3]s.MulFloat(f)`,
-				target, l, r)
+				targetElem, leftElem, rightElem)
 
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))

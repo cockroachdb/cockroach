@@ -36,8 +36,8 @@ func genSumAgg(wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
 	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
-	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 3)
-	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
+	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
+	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 6))
 
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 4)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4}}`)

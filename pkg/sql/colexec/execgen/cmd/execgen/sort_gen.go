@@ -54,8 +54,8 @@ func genSortOps(wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_ISNULL", "{{$nulls}}")
 	s = strings.ReplaceAll(s, "_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}")
 
-	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 3)
-	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 6)
+	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
 	s = replaceManipulationFuncs(s)
 

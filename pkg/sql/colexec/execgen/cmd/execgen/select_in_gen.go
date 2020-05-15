@@ -35,8 +35,8 @@ func genSelectIn(wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
 	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
-	assignEq := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	assignEq := makeFunctionRegex("_ASSIGN_EQ", 6)
+	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
 	s = replaceManipulationFuncs(s)
 

@@ -58,7 +58,7 @@ const _RIGHT_TYPE_WIDTH = 0
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
-func _ASSIGN_NE(_, _, _ interface{}) int {
+func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError("")
 }
 
@@ -145,7 +145,7 @@ func _CHECK_COL_BODY(
 				probeVal := _L_UNSAFEGET(probeKeys, probeIdx)
 				buildVal := _R_UNSAFEGET(buildKeys, buildIdx)
 				var unique bool
-				_ASSIGN_NE(unique, probeVal, buildVal)
+				_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
 
 				ht.probeScratch.differs[toCheck] = ht.probeScratch.differs[toCheck] || unique
 			}

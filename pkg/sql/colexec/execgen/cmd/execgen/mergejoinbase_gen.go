@@ -35,8 +35,8 @@ func genMergeJoinBase(wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
 	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
-	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 6)
+	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
 	s = replaceManipulationFuncs(s)
 

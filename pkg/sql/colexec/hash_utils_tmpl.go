@@ -57,7 +57,7 @@ const _TYPE_WIDTH = 0
 
 // _ASSIGN_HASH is the template equality function for assigning the first input
 // to the result of the hash value of the second input.
-func _ASSIGN_HASH(_, _ interface{}) uint64 {
+func _ASSIGN_HASH(_, _, _, _ interface{}) uint64 {
 	colexecerror.InternalError("")
 }
 
@@ -97,7 +97,7 @@ func _REHASH_BODY(
 		// {{end}}
 		v := execgen.UNSAFEGET(keys, selIdx)
 		p := uintptr(buckets[i])
-		_ASSIGN_HASH(p, v)
+		_ASSIGN_HASH(p, v, _, keys)
 		buckets[i] = uint64(p)
 	}
 	// {{end}}

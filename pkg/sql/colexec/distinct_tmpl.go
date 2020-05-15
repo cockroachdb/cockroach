@@ -123,7 +123,7 @@ type _GOTYPESLICE interface{}
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
-func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
+func _ASSIGN_NE(_ bool, _, _, _, _, _ _GOTYPE) bool {
 	colexecerror.InternalError("")
 }
 
@@ -373,7 +373,7 @@ func _CHECK_DISTINCT(
 	// {{with .Global}}
 	v := execgen.UNSAFEGET(col, checkIdx)
 	var unique bool
-	_ASSIGN_NE(unique, v, lastVal)
+	_ASSIGN_NE(unique, v, lastVal, _, col, _)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
 	execgen.COPYVAL(lastVal, v)
 	// {{end}}
@@ -412,7 +412,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 		} else {
 			// Neither value is null, so we must compare.
 			var unique bool
-			_ASSIGN_NE(unique, v, lastVal)
+			_ASSIGN_NE(unique, v, lastVal, _, col, _)
 			outputCol[outputIdx] = outputCol[outputIdx] || unique
 		}
 		execgen.COPYVAL(lastVal, v)

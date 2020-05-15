@@ -39,8 +39,8 @@ func getSelectionOpsTmpl() (*template.Template, error) {
 	s = strings.ReplaceAll(s, "_L_TYP", "{{.Left.VecMethod}}")
 	s = strings.ReplaceAll(s, "_R_TYP", "{{.Right.VecMethod}}")
 
-	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 3)
-	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 3))
+	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
+	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 6))
 
 	s = replaceManipulationFuncsAmbiguous(".Left", s)
 	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")

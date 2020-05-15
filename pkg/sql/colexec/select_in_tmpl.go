@@ -70,7 +70,7 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
 
-func _ASSIGN_EQ(_, _, _ interface{}) int {
+func _ASSIGN_EQ(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError("")
 }
 
@@ -195,7 +195,7 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, er
 func cmpIn_TYPE(target _GOTYPE, filterRow []_GOTYPE, hasNulls bool) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
-		_ASSIGN_EQ(cmp, target, filterRow[i])
+		_ASSIGN_EQ(cmp, target, filterRow[i], _, _, _)
 		if cmp {
 			return siTrue
 		}

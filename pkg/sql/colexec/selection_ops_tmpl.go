@@ -75,7 +75,7 @@ const _RIGHT_TYPE_WIDTH = 0
 
 // _ASSIGN_CMP is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
-func _ASSIGN_CMP(_, _, _ interface{}) int {
+func _ASSIGN_CMP(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError("")
 }
 
@@ -91,7 +91,7 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		for _, i := range sel {
 			var cmp bool
 			arg := execgen.UNSAFEGET(col, i)
-			_ASSIGN_CMP(cmp, arg, p.constArg)
+			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
 			// {{else}}
@@ -109,7 +109,7 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		for execgen.RANGE(i, col, 0, n) {
 			var cmp bool
 			arg := execgen.UNSAFEGET(col, i)
-			_ASSIGN_CMP(cmp, arg, p.constArg)
+			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
 			// {{else}}
@@ -137,7 +137,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			var cmp bool
 			arg1 := execgen.UNSAFEGET(col1, i)
 			arg2 := _R_UNSAFEGET(col2, i)
-			_ASSIGN_CMP(cmp, arg1, arg2)
+			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
 			// {{else}}
@@ -163,7 +163,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			var cmp bool
 			arg1 := execgen.UNSAFEGET(col1, i)
 			arg2 := _R_UNSAFEGET(col2, i)
-			_ASSIGN_CMP(cmp, arg1, arg2)
+			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
 			// {{else}}
