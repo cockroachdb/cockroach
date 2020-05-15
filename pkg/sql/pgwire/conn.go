@@ -1288,16 +1288,7 @@ func (c *conn) writeRowDescription(
 		c.msgBuilder.putInt16(int16(column.PGAttributeNum)) // Column attribute ID (optional).
 		c.msgBuilder.putInt32(int32(mapResultOid(typ.oid)))
 		c.msgBuilder.putInt16(int16(typ.size))
-		// The type modifier (atttypmod) is used to include various extra information
-		// about the type being sent. -1 is used for values which don't make use of
-		// atttypmod and is generally an acceptable catch-all for those that do.
-		// See https://www.postgresql.org/docs/9.6/static/catalog-pg-attribute.html
-		// for information on atttypmod. In theory we differ from Postgres by never
-		// giving the scale/precision, and by not including the length of a VARCHAR,
-		// but it's not clear if any drivers/ORMs depend on this.
-		//
-		// TODO(justin): It would be good to include this information when possible.
-		c.msgBuilder.putInt32(-1)
+		c.msgBuilder.putInt32(column.GetTypeModifier()) // Type modifier
 		if formatCodes == nil {
 			c.msgBuilder.putInt16(int16(pgwirebase.FormatText))
 		} else {

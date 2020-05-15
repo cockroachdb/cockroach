@@ -935,6 +935,31 @@ func (t *T) Precision() int32 {
 	return t.InternalType.Precision
 }
 
+// TypeModifier returns the type modifier of the type. This corresponds to the
+// pg_attribute.atttypmod column. atttypmod records type-specific data supplied
+// at table creation time (for example, the maximum length of a varchar column).
+// The value will be -1 for types that do not need atttypmod.
+func (t *T) TypeModifier() int32 {
+	typeModifier := int32(-1)
+	if width := t.Width(); width != 0 {
+		switch t.Family() {
+		case StringFamily:
+			// Postgres adds 4 to the attypmod for bounded string types, the
+			// var header size.
+			typeModifier = width + 4
+		case BitFamily:
+			typeModifier = width
+		case DecimalFamily:
+			// attTypMod is calculated by putting the precision in the upper
+			// bits and the scale in the lower bits of a 32-bit int, and adding
+			// 4 (the var header size). We mock this for clients' sake. See
+			// numeric.c.
+			typeModifier = ((t.Precision() << 16) | width) + 4
+		}
+	}
+	return typeModifier
+}
+
 // Scale is an alias method for Width, used for clarity for types in
 // DecimalFamily.
 func (t *T) Scale() int32 {
