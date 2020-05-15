@@ -57,6 +57,7 @@ func registerTests(r *testRegistry) {
 	registerLargeRange(r)
 	registerLedger(r)
 	registerLibPQ(r)
+	registerNamespaceUpgrade(r)
 	registerNetwork(r)
 	registerPgjdbc(r)
 	registerPgx(r)
