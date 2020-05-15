@@ -243,6 +243,20 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 			c.Child(partPrefixes[i].String())
 		}
 	}
+	if n := idx.InterleaveAncestorCount(); n > 0 {
+		c := child.Child("interleave ancestors")
+		for i := 0; i < n; i++ {
+			table, index, numKeyCols := idx.InterleaveAncestor(i)
+			c.Childf("table=%d index=%d (%d key columns)", table, index, numKeyCols)
+		}
+	}
+	if n := idx.InterleavedByCount(); n > 0 {
+		c := child.Child("interleaved by")
+		for i := 0; i < n; i++ {
+			table, index := idx.InterleavedBy(i)
+			c.Childf("table=%d index=%d", table, index)
+		}
+	}
 }
 
 // formatColPrefix returns a string representation of a list of columns. The

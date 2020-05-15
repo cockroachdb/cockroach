@@ -165,6 +165,44 @@ type Index interface {
 	//   [ /us/seattle\x00 -               ]
 	//
 	PartitionByListPrefixes() []tree.Datums
+
+	// InterleaveAncestorCount returns the number of interleave ancestors for this
+	// index (or zero if this is not an interleaved index). Each ancestor is an
+	// index (usually from another table) with a key that shares a prefix with
+	// the key of this index.
+	//
+	// Each ancestor contributes one or more key columns; together these pieces
+	// form a prefix of an index key.
+	//
+	// The ancestors appear in the order they appear in an encoded key. This means
+	// they are always in the far-to-near ancestor order (e.g.
+	// grand-grand-parent, grand-parent, parent).
+	//
+	//
+	// Example:
+	//   Index 1 -> /a/b
+	//   Index 2 -> /a/b/c
+	//   Index 3 -> /a/b/c/d
+	//
+	// Index 3 has two ancestors; the first is index 1 (contributing 2 key
+	// columns) and the second is index 2 (contributing 1 key column).
+	InterleaveAncestorCount() int
+
+	// InterleaveAncestor returns information about an ancestor index. See
+	// InterleaveAncestorCount.
+	InterleaveAncestor(i int) (table, index StableID, numKeyCols int)
+
+	// InterleavedByCount returns the number of indexes (usually from other
+	// tables) that are interleaved into this index.
+	//
+	// Note that these indexes can themselves be interleaved by other indexes, but
+	// this list contains only those for which this index is a direct interleave
+	// parent.
+	InterleavedByCount() int
+
+	// InterleavedBy returns information about an index that is interleaved into
+	// this index; see InterleavedByCount.
+	InterleavedBy(i int) (table, index StableID)
 }
 
 // IndexColumn describes a single column that is part of an index definition.
