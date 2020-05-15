@@ -60,7 +60,7 @@ function ProblemRangeList(props: {
         {
           _.map(ids, id => {
             return (
-              <Link key={id} className="problems-link" to={`reports/range/${id}`}>
+              <Link key={id} className="problems-link" to={`/reports/range/${id}`}>
                 {id}
               </Link>
             );
