@@ -84,7 +84,7 @@ func _CHECK_COL_BODY(
 	_ALLOW_NULL_EQUALITY bool,
 	_SELECT_DISTINCT bool,
 	_USE_PROBE_SEL bool,
-	_USE_BUILD_SEL bool,
+	_PROBING_AGAINST_ITSELF bool,
 ) { // */}}
 	// {{define "checkColBody" -}}
 	var (
@@ -95,34 +95,29 @@ func _CHECK_COL_BODY(
 	_ = ht.probeScratch.toCheck[nToCheck-1]
 	for i := uint64(0); i < nToCheck; i++ {
 		// keyID of 0 is reserved to represent the end of the next chain.
-
 		toCheck := ht.probeScratch.toCheck[i]
 		keyID := ht.probeScratch.groupID[toCheck]
 		if keyID != 0 {
 			// the build table key (calculated using keys[keyID - 1] = key) is
 			// compared to the corresponding probe table to determine if a match is
 			// found.
-
 			// {{if .UseProbeSel}}
 			probeIdx = probeSel[toCheck]
 			// {{else}}
 			probeIdx = int(toCheck)
 			// {{end}}
-			/* {{if .ProbeHasNulls}} */
+			// {{if .ProbeHasNulls}}
 			probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-			/* {{end}} */
-
-			// {{if .UseBuildSel}}
-			buildIdx = buildSel[keyID-1]
+			// {{end}}
+			// {{if and (.UseProbeSel) (.ProbingAgainstItself)}}
+			buildIdx = probeSel[keyID-1]
 			// {{else}}
 			buildIdx = int(keyID - 1)
 			// {{end}}
-
-			/* {{if .BuildHasNulls}} */
+			// {{if .BuildHasNulls}}
 			buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-			/* {{end}} */
-
-			/* {{if .AllowNullEquality}} */
+			// {{end}}
+			// {{if .AllowNullEquality}}
 			if probeIsNull && buildIsNull {
 				// Both values are NULLs, and since we're allowing null equality, we
 				// proceed to the next value to check.
@@ -136,7 +131,7 @@ func _CHECK_COL_BODY(
 				ht.probeScratch.differs[toCheck] = true
 				continue
 			}
-			/* {{end}} */
+			// {{end}}
 			if probeIsNull {
 				ht.probeScratch.groupID[toCheck] = 0
 			} else if buildIsNull {
@@ -146,17 +141,14 @@ func _CHECK_COL_BODY(
 				buildVal := _R_UNSAFEGET(buildKeys, buildIdx)
 				var unique bool
 				_ASSIGN_NE(unique, probeVal, buildVal)
-
 				ht.probeScratch.differs[toCheck] = ht.probeScratch.differs[toCheck] || unique
 			}
 		}
-
 		// {{if .SelectDistinct}}
 		if keyID == 0 {
 			ht.probeScratch.distinct[toCheck] = true
 		}
 		// {{end}}
-
 	}
 	// {{end}}
 	// {{/*
@@ -168,26 +160,28 @@ func _CHECK_COL_WITH_NULLS(
 	probeKeys, buildKeys []interface{},
 	nToCheck uint64,
 	_USE_PROBE_SEL bool,
-	_USE_BUILD_SEL bool,
+	_PROBING_AGAINST_ITSELF bool,
 ) { // */}}
 	// {{define "checkColWithNulls" -}}
 	if probeVec.MaybeHasNulls() {
 		if buildVec.MaybeHasNulls() {
 			if ht.allowNullEquality {
+				// {{/*
 				// The allowNullEquality flag only matters if both vectors have nulls.
 				// This lets us avoid writing all 2^3 conditional branches.
-				_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, true, false, _USE_PROBE_SEL, _USE_BUILD_SEL)
+				// */}}
+				_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, true, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF)
 			} else {
-				_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, false, false, _USE_PROBE_SEL, _USE_BUILD_SEL)
+				_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, false, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF)
 			}
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, false, false, false, _USE_PROBE_SEL, _USE_BUILD_SEL)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, false, false, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF)
 		}
 	} else {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, true, false, false, _USE_PROBE_SEL, _USE_BUILD_SEL)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, true, false, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF)
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, false, false, false, _USE_PROBE_SEL, _USE_BUILD_SEL)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, false, false, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF)
 		}
 	}
 	// {{end}}
@@ -203,7 +197,7 @@ func _CHECK_COL_WITH_NULLS(
 // hashTable disallows null equality, then if any element in the key is null,
 // there is no match.
 func (ht *hashTable) checkCol(
-	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int, buildSel []int,
+	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// `decimalScratch` local variable of type `decimalOverloadScratch`.
@@ -222,19 +216,56 @@ func (ht *hashTable) checkCol(
 				case _RIGHT_TYPE_WIDTH:
 					probeKeys := probeVec._ProbeType()
 					buildKeys := buildVec._BuildType()
-
 					if probeSel != nil {
-						if buildSel != nil {
-							_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true)
-						} else {
-							_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, false)
-						}
+						_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, false)
 					} else {
-						if buildSel != nil {
-							_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, true)
-						} else {
-							_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, false)
-						}
+						_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, false)
+					}
+					// {{end}}
+				}
+				// {{end}}
+			}
+			// {{end}}
+		}
+		// {{end}}
+	}
+}
+
+// {{end}}
+// {{end}}
+
+// {{if .HashTableMode.IsDistinct}}
+// {{with .Overloads}}
+
+// checkColAgainstItself is similar to checkCol, but it probes the vector
+// against itself.
+func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel []int) {
+	// In order to inline the templated code of overloads, we need to have a
+	// `decimalScratch` local variable of type `decimalOverloadScratch`.
+	decimalScratch := ht.decimalScratch
+	// {{/*
+	// In order to reuse the same function body as checkCol uses, we use the
+	// same variable names.
+	// */}}
+	probeVec, buildVec, probeSel := vec, vec, sel
+	switch vec.CanonicalTypeFamily() {
+	// {{range .LeftFamilies}}
+	case _LEFT_CANONICAL_TYPE_FAMILY:
+		switch vec.Type().Width() {
+		// {{range .LeftWidths}}
+		case _LEFT_TYPE_WIDTH:
+			switch vec.CanonicalTypeFamily() {
+			// {{range .RightFamilies}}
+			case _RIGHT_CANONICAL_TYPE_FAMILY:
+				switch vec.Type().Width() {
+				// {{range .RightWidths}}
+				case _RIGHT_TYPE_WIDTH:
+					probeKeys := vec._ProbeType()
+					buildKeys := vec._BuildType()
+					if probeSel != nil {
+						_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true)
+					} else {
+						_CHECK_COL_WITH_NULLS(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, true)
 					}
 					// {{end}}
 				}
@@ -256,20 +287,19 @@ func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(
 	nToCheck uint16,
 	probeSel []uint16,
 	_USE_PROBE_SEL bool,
-	_USE_BUILD_SEL bool,
 ) { // */}}
 	// {{define "checkColForDistinctWithNulls" -}}
 	if probeVec.MaybeHasNulls() {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, true, true, _USE_PROBE_SEL, _USE_BUILD_SEL)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, true, true, _USE_PROBE_SEL, false)
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, false, true, true, _USE_PROBE_SEL, _USE_BUILD_SEL)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, false, true, true, _USE_PROBE_SEL, false)
 		}
 	} else {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, true, true, true, _USE_PROBE_SEL, _USE_BUILD_SEL)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, true, true, true, _USE_PROBE_SEL, false)
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, false, true, true, _USE_PROBE_SEL, _USE_BUILD_SEL)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, false, true, true, _USE_PROBE_SEL, false)
 		}
 	}
 
@@ -310,11 +340,10 @@ func (ht *hashTable) checkColForDistinctTuples(
 				case _RIGHT_TYPE_WIDTH:
 					probeKeys := probeVec._ProbeType()
 					buildKeys := buildVec._ProbeType()
-
 					if probeSel != nil {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, nToCheck, probeSel, true, false)
+						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, nToCheck, probeSel, true)
 					} else {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, nToCheck, probeSel, false, false)
+						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(ht, probeVec, buildVec, nToCheck, probeSel, false)
 					}
 					// {{end}}
 					// {{end}}
@@ -333,19 +362,16 @@ func (ht *hashTable) checkColForDistinctTuples(
 // {{/*
 func _CHECK_BODY(ht *hashTable, nDiffers uint64, _SELECT_SAME_TUPLES bool) { // */}}
 	// {{define "checkBody" -}}
-	for i := uint64(0); i < nToCheck; i++ {
-		if !ht.probeScratch.differs[ht.probeScratch.toCheck[i]] {
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+		if !ht.probeScratch.differs[toCheck] {
 			// If the current key matches with the probe key, we want to update headID
 			// with the current key if it has not been set yet.
-			keyID := ht.probeScratch.groupID[ht.probeScratch.toCheck[i]]
-			if ht.probeScratch.headID[ht.probeScratch.toCheck[i]] == 0 {
-				ht.probeScratch.headID[ht.probeScratch.toCheck[i]] = keyID
+			keyID := ht.probeScratch.groupID[toCheck]
+			if ht.probeScratch.headID[toCheck] == 0 {
+				ht.probeScratch.headID[toCheck] = keyID
 			}
-
 			// {{if .SelectSameTuples}}
-
-			firstID := ht.probeScratch.headID[ht.probeScratch.toCheck[i]]
-
+			firstID := ht.probeScratch.headID[toCheck]
 			if !ht.visited[keyID] {
 				// We can then add this keyID into the same array at the end of the
 				// corresponding linked list and mark this ID as visited. Since there
@@ -353,26 +379,22 @@ func _CHECK_BODY(ht *hashTable, nDiffers uint64, _SELECT_SAME_TUPLES bool) { // 
 				// differs at this position to be true. This way, the prober will
 				// continue probing for this key until it reaches the end of the next
 				// chain.
-				ht.probeScratch.differs[ht.probeScratch.toCheck[i]] = true
+				ht.probeScratch.differs[toCheck] = true
 				ht.visited[keyID] = true
-
 				if firstID != keyID {
 					ht.same[keyID] = ht.same[firstID]
 					ht.same[firstID] = keyID
 				}
 			}
-
 			// {{end}}
 		}
-
-		if ht.probeScratch.differs[ht.probeScratch.toCheck[i]] {
+		if ht.probeScratch.differs[toCheck] {
 			// Continue probing in this next chain for the probe key.
-			ht.probeScratch.differs[ht.probeScratch.toCheck[i]] = false
-			ht.probeScratch.toCheck[nDiffers] = ht.probeScratch.toCheck[i]
+			ht.probeScratch.differs[toCheck] = false
+			ht.probeScratch.toCheck[nDiffers] = toCheck
 			nDiffers++
 		}
 	}
-
 	// {{end}}
 	// {{/*
 } // */}}
@@ -383,8 +405,7 @@ func _CHECK_BODY(ht *hashTable, nDiffers uint64, _SELECT_SAME_TUPLES bool) { // 
 // buffered tuples stored in ht.vals. It stores the probeVecs's distinct tuples'
 // keyIDs in headID buffer.
 // NOTE: It assumes that probeVecs does not contain any duplicates itself.
-// NOTE: It assumes that probSel has already being populated and it is not
-//       nil.
+// NOTE: It assumes that probeSel has already been populated and it is not nil.
 func (ht *hashTable) checkBuildForDistinct(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) uint64 {
@@ -394,7 +415,6 @@ func (ht *hashTable) checkBuildForDistinct(
 	copy(ht.probeScratch.distinct, zeroBoolColumn)
 
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
-
 	nDiffers := uint64(0)
 	for i := uint64(0); i < nToCheck; i++ {
 		if ht.probeScratch.distinct[ht.probeScratch.toCheck[i]] {
@@ -408,7 +428,6 @@ func (ht *hashTable) checkBuildForDistinct(
 			nDiffers++
 		}
 	}
-
 	return nDiffers
 }
 
@@ -426,11 +445,9 @@ func (ht *hashTable) checkBuildForDistinct(
 func (ht *hashTable) check(
 	probeVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
 ) uint64 {
-	ht.checkCols(probeVecs, ht.vals.ColVecs(), buildKeyCols, nToCheck, probeSel, nil /* buildSel */)
-
+	ht.checkCols(probeVecs, ht.vals.ColVecs(), buildKeyCols, nToCheck, probeSel)
 	nDiffers := uint64(0)
 	_CHECK_BODY(ht, nDiffers, true)
-
 	return nDiffers
 }
 
@@ -442,12 +459,10 @@ func (ht *hashTable) check(
 // in the probe table.
 func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
 	for i := range ht.keyCols {
-		ht.checkCol(vecs[i], vecs[i], i, nToCheck, sel, sel)
+		ht.checkColAgainstItself(vecs[i], nToCheck, sel)
 	}
-
 	nDiffers := uint64(0)
 	_CHECK_BODY(ht, nDiffers, false)
-
 	return nDiffers
 }
 
@@ -456,11 +471,9 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 // {{/*
 func _UPDATE_SEL_BODY(ht *hashTable, b coldata.Batch, sel []int, _USE_SEL bool) { // */}}
 	// {{define "updateSelBody" -}}
-
 	// Reuse the buffer allocated for distinct.
 	visited := ht.probeScratch.distinct
 	copy(visited, zeroBoolColumn)
-
 	for i := 0; i < b.Length(); i++ {
 		if ht.probeScratch.headID[i] != 0 {
 			if hasVisited := visited[ht.probeScratch.headID[i]-1]; !hasVisited {
@@ -470,7 +483,6 @@ func _UPDATE_SEL_BODY(ht *hashTable, b coldata.Batch, sel []int, _USE_SEL bool) 
 				sel[distinctCount] = int(ht.probeScratch.headID[i] - 1)
 				// {{end}}
 				visited[ht.probeScratch.headID[i]-1] = true
-
 				// Compacting and deduplicating hash buffer.
 				ht.probeScratch.hashBuffer[distinctCount] = ht.probeScratch.hashBuffer[i]
 				distinctCount++
@@ -479,7 +491,6 @@ func _UPDATE_SEL_BODY(ht *hashTable, b coldata.Batch, sel []int, _USE_SEL bool) 
 		ht.probeScratch.headID[i] = 0
 		ht.probeScratch.differs[i] = false
 	}
-
 	// {{end}}
 	// {{/*
 } // */}}
@@ -495,7 +506,6 @@ func _UPDATE_SEL_BODY(ht *hashTable, b coldata.Batch, sel []int, _USE_SEL bool) 
 // hashBuffer will also compact and discard hash values of duplicated keys.
 func (ht *hashTable) updateSel(b coldata.Batch) {
 	distinctCount := 0
-
 	if sel := b.Selection(); sel != nil {
 		_UPDATE_SEL_BODY(ht, b, sel, true)
 	} else {
@@ -503,7 +513,6 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 		sel = b.Selection()
 		_UPDATE_SEL_BODY(ht, b, sel, false)
 	}
-
 	b.SetLength(distinctCount)
 }
 
@@ -516,9 +525,7 @@ func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	probeVecs := ht.probeScratch.keys
 	buildVecs := ht.vals.ColVecs()
 	buildKeyCols := ht.keyCols
-	var buildSel []int
-	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel, buildSel)
-
+	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel)
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)
 	for i := uint64(0); i < nToCheck; i++ {
@@ -528,7 +535,6 @@ func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
 			nDiffers++
 		}
 	}
-
 	return nDiffers
 }
 

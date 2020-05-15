@@ -306,14 +306,10 @@ func (ht *hashTable) removeDuplicates(
 
 // checkCols performs a column by column checkCol on the key columns.
 func (ht *hashTable) checkCols(
-	probeVecs, buildVecs []coldata.Vec,
-	buildKeyCols []uint32,
-	nToCheck uint64,
-	probeSel []int,
-	buildSel []int,
+	probeVecs, buildVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
 ) {
 	for i := range ht.keyCols {
-		ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel, buildSel)
+		ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel)
 	}
 }
 
