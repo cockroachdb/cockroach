@@ -561,6 +561,7 @@ func TestLint(t *testing.T) {
 			"sql/opt",
 			":!sql/opt/optgen",
 			":!sql/opt/testutils",
+			":!*.pb.go",
 		)
 		if err != nil {
 			t.Fatal(err)
