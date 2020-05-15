@@ -17,7 +17,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -98,13 +97,6 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		},
 		emptySum:     5524024218313206949,
 		populatedSum: 16763861375349929891,
-	},
-	reflect.TypeOf(&storagepb.Liveness{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
-			return storagepb.NewPopulatedLiveness(r, false)
-		},
-		emptySum:     892800390935990883,
-		populatedSum: 16231745342114354146,
 	},
 	// This is used downstream of Raft only to write it into unreplicated keyspace
 	// as part of VersionUnreplicatedRaftTruncatedState.

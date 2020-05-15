@@ -224,7 +224,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		*reqLease.Expiration = status.Timestamp.Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
-		liveness, err := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
+		liveness, err := p.repl.store.cfg.NodeLiveness.GetLivenessEx(nextLeaseHolder.NodeID)
 		if err != nil {
 			llHandle.resolve(roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  status.Lease,
