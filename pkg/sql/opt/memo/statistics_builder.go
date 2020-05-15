@@ -2652,7 +2652,20 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 
 	// Calculate distinct counts.
 	applied, lastColMinDistinct := sb.updateDistinctCountsFromConstraint(c, e, relProps)
-	for i, n := 0, c.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+
+	// Collect the set of constrained columns for which we were able to estimate
+	// a distinct count, including the first column after the constraint prefix
+	// (if applicable, add a distinct count estimate for that column using the
+	// function updateDistinctCountFromUnappliedConjuncts).
+	//
+	// Note that the resulting set might not include *all* constrained columns.
+	// For example, we cannot make any assumptions about the distinct count of
+	// column b based on the constraints /a/b: [/1 - /5/6] or /a/b: [ - /5/6].
+	// TODO(rytaft): Consider treating remaining constrained columns as
+	//  "unapplied conjuncts" and account for their selectivity in
+	//  selectivityFromUnappliedConjuncts.
+	prefix := c.Prefix(sb.evalCtx)
+	for i, n := 0, c.ConstrainedColumns(sb.evalCtx); i < n && i <= prefix; i++ {
 		col := c.Columns.Get(i).ID()
 		constrainedCols.Add(col)
 		if i < applied {
