@@ -180,6 +180,22 @@ is-not [type=bool]
  └── variable: "@2":2 [type=int]
 
 build-scalar vars=(int, int)
+(@1, @2) IS NULL
+----
+is-tuple-null [type=bool]
+ └── tuple [type=tuple{int, int}]
+      ├── variable: "@1":1 [type=int]
+      └── variable: "@2":2 [type=int]
+
+build-scalar vars=(int, int)
+(@1, @2) IS NOT NULL
+----
+is-tuple-not-null [type=bool]
+ └── tuple [type=tuple{int, int}]
+      ├── variable: "@1":1 [type=int]
+      └── variable: "@2":2 [type=int]
+
+build-scalar vars=(int, int)
 + @1 + (- @2)
 ----
 plus [type=int]

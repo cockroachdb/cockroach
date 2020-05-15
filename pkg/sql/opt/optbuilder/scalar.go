@@ -308,6 +308,22 @@ func (b *Builder) buildScalar(
 		input := b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructNot(input)
 
+	case *tree.IsNullExpr:
+		input := b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs)
+		if t.TypedInnerExpr().ResolvedType().Family() == types.TupleFamily {
+			out = b.factory.ConstructIsTupleNull(input)
+		} else {
+			out = b.factory.ConstructIs(input, memo.NullSingleton)
+		}
+
+	case *tree.IsNotNullExpr:
+		input := b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs)
+		if t.TypedInnerExpr().ResolvedType().Family() == types.TupleFamily {
+			out = b.factory.ConstructIsTupleNotNull(input)
+		} else {
+			out = b.factory.ConstructIsNot(input, memo.NullSingleton)
+		}
+
 	case *tree.NullIfExpr:
 		// Ensure that the type of the first expression matches the resolved type
 		// of the NULLIF expression so that type inference will be correct in the
