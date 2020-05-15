@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[123];
+  static const ::google::protobuf::internal::ParseTable schema[124];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -144,6 +144,9 @@ extern ClearRangeRequestDefaultTypeInternal _ClearRangeRequest_default_instance_
 class ClearRangeResponse;
 class ClearRangeResponseDefaultTypeInternal;
 extern ClearRangeResponseDefaultTypeInternal _ClearRangeResponse_default_instance_;
+class ClientRangeInfo;
+class ClientRangeInfoDefaultTypeInternal;
+extern ClientRangeInfoDefaultTypeInternal _ClientRangeInfo_default_instance_;
 class ComputeChecksumRequest;
 class ComputeChecksumRequestDefaultTypeInternal;
 extern ComputeChecksumRequestDefaultTypeInternal _ComputeChecksumRequest_default_instance_;
@@ -459,6 +462,7 @@ template<> ::cockroach::roachpb::CheckConsistencyResponse* Arena::CreateMaybeMes
 template<> ::cockroach::roachpb::CheckConsistencyResponse_Result* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckConsistencyResponse_Result>(Arena*);
 template<> ::cockroach::roachpb::ClearRangeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ClearRangeRequest>(Arena*);
 template<> ::cockroach::roachpb::ClearRangeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ClearRangeResponse>(Arena*);
+template<> ::cockroach::roachpb::ClientRangeInfo* Arena::CreateMaybeMessage<::cockroach::roachpb::ClientRangeInfo>(Arena*);
 template<> ::cockroach::roachpb::ComputeChecksumRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ComputeChecksumRequest>(Arena*);
 template<> ::cockroach::roachpb::ComputeChecksumResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ComputeChecksumResponse>(Arena*);
 template<> ::cockroach::roachpb::ConditionalPutRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ConditionalPutRequest>(Arena*);
@@ -15800,6 +15804,18 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::cockroach::roachpb::Transaction* mutable_txn();
   void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
 
+  // .cockroach.roachpb.ClientRangeInfo client_range_info = 17;
+  bool has_client_range_info() const;
+  void clear_client_range_info();
+  static const int kClientRangeInfoFieldNumber = 17;
+  private:
+  const ::cockroach::roachpb::ClientRangeInfo& _internal_client_range_info() const;
+  public:
+  const ::cockroach::roachpb::ClientRangeInfo& client_range_info() const;
+  ::cockroach::roachpb::ClientRangeInfo* release_client_range_info();
+  ::cockroach::roachpb::ClientRangeInfo* mutable_client_range_info();
+  void set_allocated_client_range_info(::cockroach::roachpb::ClientRangeInfo* client_range_info);
+
   void clear_range_id();
   static const int kRangeIdFieldNumber = 3;
   ::google::protobuf::int64 range_id() const;
@@ -15827,6 +15843,12 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::google::protobuf::int32 gateway_node_id() const;
   void set_gateway_node_id(::google::protobuf::int32 value);
 
+  // int64 target_bytes = 15;
+  void clear_target_bytes();
+  static const int kTargetBytesFieldNumber = 15;
+  ::google::protobuf::int64 target_bytes() const;
+  void set_target_bytes(::google::protobuf::int64 value);
+
   // bool distinct_spans = 9;
   void clear_distinct_spans();
   static const int kDistinctSpansFieldNumber = 9;
@@ -15851,12 +15873,6 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   bool can_forward_read_timestamp() const;
   void set_can_forward_read_timestamp(bool value);
 
-  // int64 target_bytes = 15;
-  void clear_target_bytes();
-  static const int kTargetBytesFieldNumber = 15;
-  ::google::protobuf::int64 target_bytes() const;
-  void set_target_bytes(::google::protobuf::int64 value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Header)
  private:
 
@@ -15864,16 +15880,124 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::cockroach::util::hlc::Timestamp* timestamp_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
   ::cockroach::roachpb::Transaction* txn_;
+  ::cockroach::roachpb::ClientRangeInfo* client_range_info_;
   ::google::protobuf::int64 range_id_;
   double user_priority_;
   ::google::protobuf::int64 max_span_request_keys_;
   int read_consistency_;
   ::google::protobuf::int32 gateway_node_id_;
+  ::google::protobuf::int64 target_bytes_;
   bool distinct_spans_;
   bool return_range_info_;
   bool async_consensus_;
   bool can_forward_read_timestamp_;
-  ::google::protobuf::int64 target_bytes_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class ClientRangeInfo : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ClientRangeInfo) */ {
+ public:
+  ClientRangeInfo();
+  virtual ~ClientRangeInfo();
+
+  ClientRangeInfo(const ClientRangeInfo& from);
+
+  inline ClientRangeInfo& operator=(const ClientRangeInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ClientRangeInfo(ClientRangeInfo&& from) noexcept
+    : ClientRangeInfo() {
+    *this = ::std::move(from);
+  }
+
+  inline ClientRangeInfo& operator=(ClientRangeInfo&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ClientRangeInfo& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ClientRangeInfo* internal_default_instance() {
+    return reinterpret_cast<const ClientRangeInfo*>(
+               &_ClientRangeInfo_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    111;
+
+  void Swap(ClientRangeInfo* other);
+  friend void swap(ClientRangeInfo& a, ClientRangeInfo& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ClientRangeInfo* New() const final {
+    return CreateMaybeMessage<ClientRangeInfo>(NULL);
+  }
+
+  ClientRangeInfo* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ClientRangeInfo>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const ClientRangeInfo& from);
+  void MergeFrom(const ClientRangeInfo& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ClientRangeInfo* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // int64 descriptor_generation = 1;
+  void clear_descriptor_generation();
+  static const int kDescriptorGenerationFieldNumber = 1;
+  ::google::protobuf::int64 descriptor_generation() const;
+  void set_descriptor_generation(::google::protobuf::int64 value);
+
+  void clear_lease_sequence();
+  static const int kLeaseSequenceFieldNumber = 2;
+  ::google::protobuf::int64 lease_sequence() const;
+  void set_lease_sequence(::google::protobuf::int64 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ClientRangeInfo)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::int64 descriptor_generation_;
+  ::google::protobuf::int64 lease_sequence_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -15913,7 +16037,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    112;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -16031,7 +16155,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    113;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16199,7 +16323,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    114;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16319,7 +16443,7 @@ class RangeLookupRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeLookupRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    115;
 
   void Swap(RangeLookupRequest* other);
   friend void swap(RangeLookupRequest& a, RangeLookupRequest& b) {
@@ -16448,7 +16572,7 @@ class RangeLookupResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeLookupResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    116;
 
   void Swap(RangeLookupResponse* other);
   friend void swap(RangeLookupResponse& a, RangeLookupResponse& b) {
@@ -16579,7 +16703,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    117;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16704,7 +16828,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    118;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16836,7 +16960,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    118;
+    119;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16954,7 +17078,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    119;
+    120;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -17060,7 +17184,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    120;
+    121;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -17193,7 +17317,7 @@ class GossipSubscriptionRequest : public ::google::protobuf::MessageLite /* @@pr
                &_GossipSubscriptionRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    121;
+    122;
 
   void Swap(GossipSubscriptionRequest* other);
   friend void swap(GossipSubscriptionRequest& a, GossipSubscriptionRequest& b) {
@@ -17310,7 +17434,7 @@ class GossipSubscriptionEvent : public ::google::protobuf::MessageLite /* @@prot
                &_GossipSubscriptionEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    122;
+    123;
 
   void Swap(GossipSubscriptionEvent* other);
   friend void swap(GossipSubscriptionEvent& a, GossipSubscriptionEvent& b) {
@@ -34266,6 +34390,60 @@ inline void Header::set_return_range_info(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.return_range_info)
 }
 
+// .cockroach.roachpb.ClientRangeInfo client_range_info = 17;
+inline bool Header::has_client_range_info() const {
+  return this != internal_default_instance() && client_range_info_ != NULL;
+}
+inline void Header::clear_client_range_info() {
+  if (GetArenaNoVirtual() == NULL && client_range_info_ != NULL) {
+    delete client_range_info_;
+  }
+  client_range_info_ = NULL;
+}
+inline const ::cockroach::roachpb::ClientRangeInfo& Header::_internal_client_range_info() const {
+  return *client_range_info_;
+}
+inline const ::cockroach::roachpb::ClientRangeInfo& Header::client_range_info() const {
+  const ::cockroach::roachpb::ClientRangeInfo* p = client_range_info_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.client_range_info)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ClientRangeInfo*>(
+      &::cockroach::roachpb::_ClientRangeInfo_default_instance_);
+}
+inline ::cockroach::roachpb::ClientRangeInfo* Header::release_client_range_info() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Header.client_range_info)
+  
+  ::cockroach::roachpb::ClientRangeInfo* temp = client_range_info_;
+  client_range_info_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::ClientRangeInfo* Header::mutable_client_range_info() {
+  
+  if (client_range_info_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ClientRangeInfo>(GetArenaNoVirtual());
+    client_range_info_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Header.client_range_info)
+  return client_range_info_;
+}
+inline void Header::set_allocated_client_range_info(::cockroach::roachpb::ClientRangeInfo* client_range_info) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete client_range_info_;
+  }
+  if (client_range_info) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      client_range_info = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, client_range_info, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  client_range_info_ = client_range_info;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Header.client_range_info)
+}
+
 inline void Header::clear_gateway_node_id() {
   gateway_node_id_ = 0;
 }
@@ -34305,6 +34483,37 @@ inline void Header::set_can_forward_read_timestamp(bool value) {
   
   can_forward_read_timestamp_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.can_forward_read_timestamp)
+}
+
+// -------------------------------------------------------------------
+
+// ClientRangeInfo
+
+// int64 descriptor_generation = 1;
+inline void ClientRangeInfo::clear_descriptor_generation() {
+  descriptor_generation_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 ClientRangeInfo::descriptor_generation() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ClientRangeInfo.descriptor_generation)
+  return descriptor_generation_;
+}
+inline void ClientRangeInfo::set_descriptor_generation(::google::protobuf::int64 value) {
+  
+  descriptor_generation_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ClientRangeInfo.descriptor_generation)
+}
+
+inline void ClientRangeInfo::clear_lease_sequence() {
+  lease_sequence_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 ClientRangeInfo::lease_sequence() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ClientRangeInfo.lease_sequence)
+  return lease_sequence_;
+}
+inline void ClientRangeInfo::set_lease_sequence(::google::protobuf::int64 value) {
+  
+  lease_sequence_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ClientRangeInfo.lease_sequence)
 }
 
 // -------------------------------------------------------------------
@@ -35791,6 +36000,8 @@ inline void GossipSubscriptionEvent::set_allocated_error(::cockroach::roachpb::E
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

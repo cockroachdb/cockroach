@@ -1964,7 +1964,14 @@ message Header {
   bool distinct_spans = 9;
   // If set, return_range_info causes RangeInfo details to be returned with
   // each ResponseHeader.
+  // TODO(andrei): Remove straggler users of this field, then delete the field
+  // in 21.1 now that we have client_range_info.
   bool return_range_info = 10;
+  // client_range_info represents the kvclient's knowledge about the state of
+  // the range (i.e. of the range descriptor and lease). The kvserver checks
+  // whether the client's info is up to date and, if it isn't, it will return a
+  // RangeInfo with up-to-date information. This field supersedes return_range_info.
+  ClientRangeInfo client_range_info = 17;
   // gateway_node_id is the ID of the gateway node where the request originated.
   int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
   // If set, the request will return to the client before proposing the
@@ -1989,6 +1996,11 @@ message Header {
   // TODO(nvanbenschoten): perform this migration.
   bool can_forward_read_timestamp = 16;
   reserved 7, 12, 14;
+}
+
+message ClientRangeInfo {
+  int64 descriptor_generation = 1;
+  int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
 }
 
 
@@ -2037,13 +2049,21 @@ message BatchResponse {
     // collected_spans stores trace spans recorded during the execution of this
     // request.
     repeated util.tracing.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
-    // Range or list of ranges used to execute the request, if the request set
-    // return_range_info. For one batch, the kvserver returns at most one
-    // element. The DistSender will combine multiple responses though when it
-    // reassembles a split batch; in this case the RangeInfos are maintained in
-    // sorted order by range id.
+    // Range or list of ranges used to execute the request. The server only
+    // populates this if return_range_info is set on the request, or if the
+    // server detects the client's client_range_info to be stale.
+    //
+    // For one batch, the kvserver returns at most one element. The DistSender
+    // will combine multiple responses though when it reassembles a split batch;
+    // in this case the RangeInfos are maintained in sorted order by range id.
     //
     // Not set when Error is set.
+    //
+    // TODO(andrei): In 21.1 there should be no users of this field left above
+    // the DistSender. At that point, the DistSender will no longer need to
+    // combine these - in fact it should clear the field. And then the field
+    // doesn't need to be `repeated` any more - I think the proto encoding
+    // allows us to change it to non-repeated.
     repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
     // NB: if you add a field here, don't forget to update combine().
   }

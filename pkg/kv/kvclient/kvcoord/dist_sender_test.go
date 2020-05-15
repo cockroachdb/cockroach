@@ -766,6 +766,24 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 
 	var contacted1, contacted2 bool
 
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		},
+	}
+	lease1 := roachpb.Lease{
+		Replica:  desc.InternalReplicas[0],
+		Sequence: 1,
+	}
+	lease2 := roachpb.Lease{
+		Replica:  desc.InternalReplicas[1],
+		Sequence: 2,
+	}
+
 	transport := func(
 		ctx context.Context,
 		opts SendOptions,
@@ -774,31 +792,26 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	) (*roachpb.BatchResponse, error) {
 		switch ba.Replica.StoreID {
 		case 1:
+			assert.Equal(t, lease1.Sequence, ba.ClientRangeInfo.LeaseSequence)
 			contacted1 = true
 			return nil, errors.New("mock RPC error")
 		case 2:
+			// The client has cleared the lease in the cache after the failure of the
+			// first RPC.
+			assert.Equal(t, roachpb.LeaseSequence(0), ba.ClientRangeInfo.LeaseSequence)
 			contacted2 = true
-			return ba.CreateReply(), nil
+			br := ba.CreateReply()
+			// Simulate the leaseholder returning updated lease info to the client.
+			br.RangeInfos = append(br.RangeInfos, roachpb.RangeInfo{
+				Desc:  desc,
+				Lease: lease2,
+			})
+			return br, nil
 		default:
 			panic("unexpected replica: " + ba.Replica.String())
 		}
 	}
 
-	desc := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
-		EndKey:   roachpb.RKeyMax,
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{
-				NodeID:  1,
-				StoreID: 1,
-			},
-			{
-				NodeID:  2,
-				StoreID: 2,
-			},
-		},
-	}
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
@@ -813,11 +826,9 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	}
 
 	ds := NewDistSender(cfg)
-	var lease roachpb.Lease
-	lease.Replica = roachpb.ReplicaDescriptor{StoreID: 1}
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc:  desc,
-		Lease: lease,
+		Lease: lease1,
 	})
 
 	var ba roachpb.BatchRequest
@@ -1517,6 +1528,97 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 }
 
+// Test that the DistSender uses descriptor updates received from successful
+// RPCs to update the range cache.
+func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill RangeDescriptor with 2 replicas.
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+	for i := 1; i <= 2; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
+		desc.InternalReplicas = append(desc.InternalReplicas, roachpb.ReplicaDescriptor{
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+			ReplicaID: roachpb.ReplicaID(i),
+		})
+	}
+
+	descUpdated := desc
+	descUpdated.Generation++
+	descUpdated.InternalReplicas = []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3},
+	}
+
+	descDB := mockRangeDescriptorDBForDescs(testMetaRangeDescriptor, desc)
+
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		args roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		batchReply := &roachpb.BatchResponse{}
+		reply := &roachpb.GetResponse{}
+		batchReply.Add(reply)
+		// Return an updated descriptor.
+		batchReply.RangeInfos = []roachpb.RangeInfo{{Desc: descUpdated}}
+		return batchReply, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		NodeDescs:  g,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: descDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+
+	// Send a request that's going to receive a response with a RangeInfo.
+	k := roachpb.Key("a")
+	get := roachpb.NewGet(k)
+	var ba roachpb.BatchRequest
+	ba.Add(get)
+	_, pErr := ds.Send(ctx, ba)
+	require.Nil(t, pErr)
+
+	// Check that the cache has the updated descriptor returned by the RPC.
+	rk := keys.MustAddr(k)
+	entry, err := ds.rangeCache.Lookup(ctx, rk)
+	require.NoError(t, err)
+	require.NotNil(t, entry)
+	require.Equal(t, entry.Desc, descUpdated)
+}
+
 // This test reproduces the main problem in:
 // https://github.com/cockroachdb/cockroach/issues/30613.
 // by verifying that if a RangeNotFoundError is returned from a Replica,
@@ -1586,6 +1688,13 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 			return br, nil
 		}
 		leaseholderStoreID = ba.Replica.StoreID
+		br.RangeInfos = append(br.RangeInfos, roachpb.RangeInfo{
+			Desc: descriptor,
+			Lease: roachpb.Lease{
+				Replica:  ba.Replica,
+				Sequence: 100,
+			},
+		})
 		return br, nil
 	}
 	cfg := DistSenderConfig{
