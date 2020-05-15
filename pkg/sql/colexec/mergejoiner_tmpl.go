@@ -71,7 +71,7 @@ const _TYPE_WIDTH = 0
 
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the second input == the third input.
-func _ASSIGN_EQ(_, _, _ interface{}) int {
+func _ASSIGN_EQ(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError("")
 }
 
@@ -81,7 +81,7 @@ func _ASSIGN_EQ(_, _, _ interface{}) int {
 // - negative if left < right
 // - zero if left == right
 // - positive if left > right.
-func _ASSIGN_CMP(_, _, _ interface{}) int {
+func _ASSIGN_CMP(_, _, _, _, _ interface{}) int {
 	colexecerror.VectorizedInternalPanic("")
 }
 
@@ -161,7 +161,7 @@ func _PROBE_SWITCH(
 						cmp   int
 						match bool
 					)
-					_ASSIGN_CMP(cmp, lVal, rVal)
+					_ASSIGN_CMP(cmp, lVal, rVal, lKeys, rKeys)
 					if cmp == 0 {
 						// Find the length of the groups on each side.
 						lGroupLength, rGroupLength := 1, 1
@@ -182,7 +182,7 @@ func _PROBE_SWITCH(
 								// {{end}}
 								lSelIdx := _L_SEL_IND
 								newLVal := execgen.UNSAFEGET(lKeys, lSelIdx)
-								_ASSIGN_EQ(match, newLVal, lVal)
+								_ASSIGN_EQ(match, newLVal, lVal, _, lKeys, lKeys)
 								if !match {
 									lComplete = true
 									break
@@ -206,7 +206,7 @@ func _PROBE_SWITCH(
 								// {{end}}
 								rSelIdx := _R_SEL_IND
 								newRVal := execgen.UNSAFEGET(rKeys, rSelIdx)
-								_ASSIGN_EQ(match, newRVal, rVal)
+								_ASSIGN_EQ(match, newRVal, rVal, _, rKeys, rKeys)
 								if !match {
 									rComplete = true
 									break
@@ -430,7 +430,7 @@ func _INCREMENT_LEFT_SWITCH(
 		lSelIdx = _L_SEL_IND
 		// {{with .Global}}
 		newLVal := execgen.UNSAFEGET(lKeys, lSelIdx)
-		_ASSIGN_EQ(match, newLVal, lVal)
+		_ASSIGN_EQ(match, newLVal, lVal, _, lKeys, lKeys)
 		// {{end}}
 		if !match {
 			break
@@ -484,7 +484,7 @@ func _INCREMENT_RIGHT_SWITCH(
 		rSelIdx = _R_SEL_IND
 		// {{with .Global}}
 		newRVal := execgen.UNSAFEGET(rKeys, rSelIdx)
-		_ASSIGN_EQ(match, newRVal, rVal)
+		_ASSIGN_EQ(match, newRVal, rVal, _, rKeys, rKeys)
 		// {{end}}
 		if !match {
 			break

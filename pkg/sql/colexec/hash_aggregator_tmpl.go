@@ -55,7 +55,7 @@ const _TYPE_WIDTH = 0
 
 // _ASSIGN_NE is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
-func _ASSIGN_NE(_, _, _ interface{}) int {
+func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError("")
 }
 
@@ -142,7 +142,7 @@ func _MATCH_LOOP(
 		rhsVal := execgen.UNSAFEGET(rhsCol, rowIdx)
 
 		var cmp bool
-		_ASSIGN_NE(cmp, lhsVal, rhsVal)
+		_ASSIGN_NE(cmp, lhsVal, rhsVal, _, lhsCol, rhsCol)
 		diff[selIdx] = diff[selIdx] || cmp
 	}
 

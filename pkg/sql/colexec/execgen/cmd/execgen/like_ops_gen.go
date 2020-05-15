@@ -57,7 +57,7 @@ func genLikeOps(wr io.Writer) error {
 		return err
 	}
 	bytesRepresentation := toPhysicalRepresentation(types.BytesFamily, anyWidth)
-	makeOverload := func(name string, rightGoType string, assignFunc func(target, l, r string) string) *twoArgsResolvedOverload {
+	makeOverload := func(name string, rightGoType string, assignFunc func(targetElem, leftElem, rightElem string) string) *twoArgsResolvedOverload {
 		base := &overloadBase{
 			Name: name,
 		}
@@ -90,8 +90,8 @@ func genLikeOps(wr io.Writer) error {
 			RetType:      types.Bool,
 			RetVecMethod: toVecMethod(types.BoolFamily, anyWidth),
 			RetGoType:    toPhysicalRepresentation(types.BoolFamily, anyWidth),
-			AssignFunc: func(_ *lastArgWidthOverload, target, l, r string) string {
-				return assignFunc(target, l, r)
+			AssignFunc: func(_ *lastArgWidthOverload, targetElem, leftElem, rightElem, _, _, _ string) string {
+				return assignFunc(targetElem, leftElem, rightElem)
 			},
 		}
 		rightTypeOverload.WidthOverloads[0] = rightWidthOverload
@@ -102,23 +102,23 @@ func genLikeOps(wr io.Writer) error {
 		}
 	}
 	overloads := []*twoArgsResolvedOverload{
-		makeOverload("Prefix", bytesRepresentation, func(target, l, r string) string {
-			return fmt.Sprintf("%s = bytes.HasPrefix(%s, %s)", target, l, r)
+		makeOverload("Prefix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = bytes.HasPrefix(%s, %s)", targetElem, leftElem, rightElem)
 		}),
-		makeOverload("Suffix", bytesRepresentation, func(target, l, r string) string {
-			return fmt.Sprintf("%s = bytes.HasSuffix(%s, %s)", target, l, r)
+		makeOverload("Suffix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = bytes.HasSuffix(%s, %s)", targetElem, leftElem, rightElem)
 		}),
-		makeOverload("Regexp", "*regexp.Regexp", func(target, l, r string) string {
-			return fmt.Sprintf("%s = %s.Match(%s)", target, r, l)
+		makeOverload("Regexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = %s.Match(%s)", targetElem, rightElem, leftElem)
 		}),
-		makeOverload("NotPrefix", bytesRepresentation, func(target, l, r string) string {
-			return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", target, l, r)
+		makeOverload("NotPrefix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", targetElem, leftElem, rightElem)
 		}),
-		makeOverload("NotSuffix", bytesRepresentation, func(target, l, r string) string {
-			return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", target, l, r)
+		makeOverload("NotSuffix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", targetElem, leftElem, rightElem)
 		}),
-		makeOverload("NotRegexp", "*regexp.Regexp", func(target, l, r string) string {
-			return fmt.Sprintf("%s = !%s.Match(%s)", target, r, l)
+		makeOverload("NotRegexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = !%s.Match(%s)", targetElem, rightElem, leftElem)
 		}),
 	}
 	return tmpl.Execute(wr, overloads)
