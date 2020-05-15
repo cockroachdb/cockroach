@@ -165,14 +165,14 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
  ├── cardinality: [0 - 6000]
  ├── stats: [rows=6000]
- ├── cost: 55460.05
+ ├── cost: 47140.05
  ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
  │    ├── key columns: [6] = [1]
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(6)=1000, null(6)=0]
- │    ├── cost: 55400.04
+ │    ├── cost: 47080.04
  │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
  │    ├── limit hint: 6000.00
  │    ├── select
@@ -200,14 +200,14 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
  ├── cardinality: [0 - 5950]
  ├── stats: [rows=5950]
- ├── cost: 55459.55
+ ├── cost: 47139.55
  ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
  │    ├── key columns: [6] = [1]
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(6)=1000, null(6)=0]
- │    ├── cost: 55400.04
+ │    ├── cost: 47080.04
  │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
  │    ├── limit hint: 5950.00
  │    ├── select
@@ -224,6 +224,90 @@ limit
  │    │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5), constraints=(/5: [/1 - /5000]; tight)]
  │    └── filters (true)
  └── 5950
+
+# Test case where the best plan is a lookup join only if the rows processed are
+# also scaled correctly according to the limit hint (#48791).
+exec-ddl
+CREATE TABLE wallet (
+    id bigserial primary key,
+    name text not null,
+    gender int,
+    email text,
+    first_name text,
+    last_name text,
+    creation_date timestamp not null,
+    situation int,
+    balance decimal not null,
+    is_blocked bool,
+    INDEX (name),
+    INDEX (situation),
+    INDEX (is_blocked),
+    INDEX (balance)
+);
+----
+
+exec-ddl
+CREATE TABLE transaction (
+    id bigserial primary key,
+    sender_id bigint,
+    receiver_id bigint,
+    amount decimal not null,
+    creation_date timestamp not null,
+    last_update timestamp,
+    schedule_date timestamp,
+    status int,
+    comment text,
+    linked_trans_id bigint,
+    c1 text,
+    c2 text,
+    c3 text,
+    INDEX (sender_id),
+    INDEX (receiver_id),
+    INDEX (linked_trans_id)
+);
+----
+
+opt
+SELECT * FROM transaction t
+JOIN wallet AS s on t.sender_id = s.id
+JOIN wallet AS r on t.receiver_id = r.id
+limit 10;
+----
+limit
+ ├── columns: id:1!null sender_id:2!null receiver_id:3!null amount:4!null creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 id:14!null name:15!null gender:16 email:17 first_name:18 last_name:19 creation_date:20!null situation:21 balance:22!null is_blocked:23 id:24!null name:25!null gender:26 email:27 first_name:28 last_name:29 creation_date:30!null situation:31 balance:32!null is_blocked:33
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 2357.55
+ ├── key: (1)
+ ├── fd: (1)-->(2-13), (14)-->(15-23), (2)==(14), (14)==(2), (24)-->(25-33), (3)==(24), (24)==(3)
+ ├── inner-join (lookup wallet)
+ │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3!null amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 s.id:14!null s.name:15!null s.gender:16 s.email:17 s.first_name:18 s.last_name:19 s.creation_date:20!null s.situation:21 s.balance:22!null s.is_blocked:23 r.id:24!null r.name:25!null r.gender:26 r.email:27 r.first_name:28 r.last_name:29 r.creation_date:30!null r.situation:31 r.balance:32!null r.is_blocked:33
+ │    ├── key columns: [3] = [24]
+ │    ├── lookup columns are key
+ │    ├── stats: [rows=980.1, distinct(3)=98.9950071, null(3)=0, distinct(24)=98.9950071, null(24)=0]
+ │    ├── cost: 2357.44
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-13), (14)-->(15-23), (2)==(14), (14)==(2), (24)-->(25-33), (3)==(24), (24)==(3)
+ │    ├── limit hint: 10.00
+ │    ├── inner-join (lookup wallet)
+ │    │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 s.id:14!null s.name:15!null s.gender:16 s.email:17 s.first_name:18 s.last_name:19 s.creation_date:20!null s.situation:21 s.balance:22!null s.is_blocked:23
+ │    │    ├── key columns: [2] = [14]
+ │    │    ├── lookup columns are key
+ │    │    ├── stats: [rows=990, distinct(1)=628.605476, null(1)=0, distinct(2)=99, null(2)=0, distinct(3)=99.9950071, null(3)=9.9, distinct(4)=99.9950071, null(4)=0, distinct(5)=99.9950071, null(5)=0, distinct(14)=99, null(14)=0, distinct(15)=99.9950071, null(15)=0, distinct(20)=99.9950071, null(20)=0, distinct(22)=99.9950071, null(22)=0]
+ │    │    ├── cost: 1739.63
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-13), (14)-->(15-23), (2)==(14), (14)==(2)
+ │    │    ├── limit hint: 100.00
+ │    │    ├── scan t
+ │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
+ │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0]
+ │    │    │    ├── cost: 504.02
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2-13)
+ │    │    │    └── limit hint: 200.00
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── 10
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX c_idx (c))
@@ -571,7 +655,7 @@ project
  ├── columns: w:1!null x:2!null y:3!null z:4!null  [hidden: d:8!null]
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 104717.922
+ ├── cost: 699.541329
  ├── key: (8)
  ├── fd: ()-->(1,2), (3)-->(4,8), (8)-->(3,4)
  ├── ordering: +8 opt(1,2) [actual: +8]
@@ -580,7 +664,7 @@ project
       ├── internal-ordering: +8 opt(1,2,5,6)
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
-      ├── cost: 104717.812
+      ├── cost: 699.431329
       ├── key: (7)
       ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       ├── ordering: +8 opt(1,2,5,6) [actual: +8]
@@ -589,7 +673,7 @@ project
       │    ├── key columns: [5 6 7] = [1 2 3]
       │    ├── lookup columns are key
       │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0]
-      │    ├── cost: 104717.702
+      │    ├── cost: 699.321329
       │    ├── key: (7)
       │    ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       │    ├── ordering: +8 opt(1,2,5,6) [actual: +8]
