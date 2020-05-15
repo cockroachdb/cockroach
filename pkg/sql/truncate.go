@@ -189,13 +189,6 @@ func (p *planner) truncateTable(
 	//
 	// TODO(vivek): Fix properly along with #12123.
 	zoneKey := config.MakeZoneKey(uint32(tableDesc.ID))
-	nameKey := sqlbase.MakeObjectNameKey(
-		ctx,
-		p.ExecCfg().Settings,
-		tableDesc.ParentID,
-		tableDesc.GetParentSchemaID(),
-		tableDesc.GetName(),
-	).Key()
 	key := sqlbase.MakeObjectNameKey(
 		ctx, p.ExecCfg().Settings,
 		newTableDesc.ParentID,
@@ -203,15 +196,11 @@ func (p *planner) truncateTable(
 		newTableDesc.Name,
 	).Key()
 
-	b := &kv.Batch{}
-	// Use CPut because we want to remove a specific name -> id map.
-	if traceKV {
-		log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
-	}
-	var existingIDVal roachpb.Value
-	existingIDVal.SetInt(int64(tableDesc.ID))
-	b.CPut(nameKey, nil, &existingIDVal)
-	if err := p.txn.Run(ctx, b); err != nil {
+	// Remove the old namespace entry.
+	if err := sqlbase.RemoveObjectNamespaceEntry(
+		ctx, p.txn,
+		tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableDesc.GetName(),
+		traceKV); err != nil {
 		return err
 	}
 
@@ -281,7 +270,7 @@ func (p *planner) truncateTable(
 	}
 
 	// Copy the zone config.
-	b = &kv.Batch{}
+	b := &kv.Batch{}
 	b.Get(zoneKey)
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err

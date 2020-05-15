@@ -1790,6 +1790,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Start the async migration to upgrade namespace entries from the old
+	// namespace table (id 2) to the new one (id 30).
+	if err := migMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {
+		return err
+	}
+
 	// Record node start in telemetry. Get the right counter for this storage
 	// engine type as well as type of start (initial boot vs restart).
 	nodeStartCounter := "storage.engine."
