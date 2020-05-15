@@ -300,7 +300,7 @@ func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, numAccounts)
 }
 
 func TestBackupRestoreMultiNodeLocal(t *testing.T) {
@@ -310,7 +310,7 @@ func TestBackupRestoreMultiNodeLocal(t *testing.T) {
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, numAccounts)
 }
 
 func TestBackupRestoreMultiNodeRemote(t *testing.T) {
@@ -322,7 +322,7 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	// Backing up to node2's local file system
 	remoteFoo := "nodelocal://2/foo"
 
-	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts, numAccounts)
 }
 
 func TestBackupRestorePartitioned(t *testing.T) {
@@ -359,7 +359,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		localFoo2,
 		localFoo3,
 	}
-	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts)
+	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts, numAccounts)
 
 	// Verify that at least one SST exists in each backup destination.
 	sstMatcher := regexp.MustCompile(`\d+\.sst`)
@@ -456,7 +456,7 @@ func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
 	restoreURIs := []string{
 		localFoo1,
 	}
-	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts)
+	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts, numAccounts)
 }
 
 func TestBackupRestoreEmpty(t *testing.T) {
@@ -466,7 +466,7 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, numAccounts)
 }
 
 // Regression test for #16008. In short, the way RESTORE constructed split keys
@@ -488,7 +488,7 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 		-numAccounts/2, numAccounts/backupRestoreDefaultRanges/2,
 	)
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, numAccounts)
 
 	sqlDB.Exec(t, `CREATE UNIQUE INDEX id2 ON data.bank (id)`)
 	sqlDB.Exec(t, `ALTER TABLE data.bank ALTER PRIMARY KEY USING COLUMNS(id)`)
@@ -515,6 +515,7 @@ func backupAndRestore(
 	backupURIs []string,
 	restoreURIs []string,
 	numAccounts int,
+	numIdxs int64,
 ) {
 	// uriFmtStringAndArgs returns format strings like "$1" or "($1, $2, $3)" and
 	// an []interface{} of URIs for the BACKUP/RESTORE queries.
@@ -539,15 +540,19 @@ func backupAndRestore(
 
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	var expectedCreateTable string
+	var expectedDatabaseComment gosql.NullString
+	const selectDatabaseCommentQuery = "SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = 'data'"
 	{
 		sqlDB.Exec(t, `CREATE INDEX balance_idx ON data.bank (balance)`)
 		testutils.SucceedsSoon(t, func() error {
 			var unused string
-			var createTable string
-			sqlDB.QueryRow(t, `SHOW CREATE TABLE data.bank`).Scan(&unused, &createTable)
-			if !strings.Contains(createTable, "balance_idx") {
+			sqlDB.QueryRow(t, `SHOW CREATE TABLE data.bank`).Scan(&unused, &expectedCreateTable)
+			if !strings.Contains(expectedCreateTable, "balance_idx") {
 				return errors.New("expected a balance_idx index")
 			}
+
+			sqlDB.QueryRow(t, selectDatabaseCommentQuery).Scan(&expectedDatabaseComment)
 			return nil
 		})
 
@@ -638,6 +643,8 @@ func backupAndRestore(
 		var unused string
 		var restored struct {
 			rows, idx, bytes int64
+			createTable      string
+			databaseComment  gosql.NullString
 		}
 
 		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
@@ -652,8 +659,18 @@ func backupAndRestore(
 		if expected := int64(numAccounts); restored.rows != expected {
 			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, restored.rows)
 		}
-		if expected := int64(numAccounts); restored.idx != expected {
+		if expected := numIdxs; restored.idx != expected {
 			t.Fatalf("expected %d idx rows for %d accounts, got %d", expected, numAccounts, restored.idx)
+		}
+
+		sqlDBRestore.QueryRow(t, `SHOW CREATE TABLE data.bank`).Scan(&unused, &restored.createTable)
+		if expectedCreateTable != restored.createTable {
+			t.Fatalf("expected %s for SHOW CREATE TABLE, got %s", expectedCreateTable, restored.createTable)
+		}
+
+		sqlDBRestore.QueryRow(t, selectDatabaseCommentQuery).Scan(&restored.databaseComment)
+		if expectedDatabaseComment != restored.databaseComment {
+			t.Fatalf("expected %v for database comment, got %v", expectedDatabaseComment, restored.databaseComment)
 		}
 
 		var rowCount int64
@@ -3690,6 +3707,29 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestBackupComment(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1000
+	ctx, tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	for _, stmt := range []string{
+		`COMMENT ON DATABASE data IS 'Database'`,
+		`COMMENT ON TABLE data.bank IS 'Bank'`,
+		`COMMENT ON COLUMN data.bank.id IS 'ID'`,
+		`CREATE INDEX bank_id_idx ON data.bank (id);`,
+		`COMMENT ON INDEX data.bank_id_idx IS 'ID index'`,
+	} {
+		testutils.SucceedsSoon(t, func() error {
+			_, err := sqlDB.DB.ExecContext(ctx, stmt)
+			return err
+		})
+	}
+
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, numAccounts*2)
 }
 
 func getFirstStoreReplica(

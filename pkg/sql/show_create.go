@@ -156,7 +156,7 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showComments(desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
+	if err := showComments(desc, SelectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
 		return "", err
 	}
 

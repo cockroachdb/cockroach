@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sort"
 
@@ -63,7 +64,6 @@ var fullClusterSystemTables = []string{
 	sqlbase.LocationsTable.Name,
 	sqlbase.RoleMembersTable.Name,
 	sqlbase.UITable.Name,
-	sqlbase.CommentsTable.Name,
 	sqlbase.JobsTable.Name,
 	// Table statistics are backed up in the backup descriptor for now.
 }
@@ -344,11 +344,14 @@ func backupPlanHook(
 		statsCache := p.ExecCfg().TableStatsCache
 		tableStatistics := make([]*stats.TableStatisticProto, 0)
 		var tables []*sqlbase.TableDescriptor
+		databases := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
 				if err := p.CheckPrivilege(ctx, dbDesc, privilege.SELECT); err != nil {
 					return err
 				}
+
+				databases[dbDesc.ID] = dbDesc
 			}
 			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
 				if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
@@ -575,6 +578,11 @@ func backupPlanHook(
 			return err
 		}
 
+		stmts, err := generateCommentStmts(ctx, p, databases, tables)
+		if err != nil {
+			return err
+		}
+
 		// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
 		// means that a 2.0 node will disallow `RESTORE DATABASE foo`, but `RESTORE
 		// foo.table1, foo.table2...` will still work. MVCCFilter would be
@@ -597,6 +605,7 @@ func backupPlanHook(
 			ClusterID:          p.ExecCfg().ClusterID(),
 			Statistics:         tableStatistics,
 			DescriptorCoverage: backupStmt.DescriptorCoverage,
+			Stmts:              stmts,
 		}
 
 		// Sanity check: re-run the validation that RESTORE will do, but this time
@@ -781,6 +790,66 @@ func checkForNewTables(
 		}
 	}
 	return nil
+}
+
+// generateCommentStmts generates comment statements.
+func generateCommentStmts(
+	ctx context.Context,
+	p sql.PlanHookState,
+	databases map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
+	tables []*sqlbase.TableDescriptor,
+) (stmts []string, err error) {
+	query := fmt.Sprintf(
+		"SELECT object_id, comment FROM system.comments WHERE type = %d", keys.DatabaseCommentType)
+
+	databaseComments, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		ctx,
+		"select-database-comment",
+		nil,
+		query)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, comment := range databaseComments {
+		objID := sqlbase.ID(tree.MustBeDInt(comment[0]))
+		if database, ok := databases[objID]; ok {
+			stmts = append(stmts, fmt.Sprintf("COMMENT ON DATABASE %s IS %s", database.Name, comment[1]))
+		}
+	}
+
+	for _, table := range tables {
+		tc := sql.SelectComment(ctx, p, table.ID)
+		if tc == nil {
+			continue
+		}
+
+		databaseName := databases[table.ParentID].Name
+
+		if tc.Comment != nil {
+			stmts = append(stmts, fmt.Sprintf("COMMENT ON TABLE %s.%s IS '%s'", databaseName, table.Name, *tc.Comment))
+		}
+
+		for _, columnComment := range tc.Columns {
+			col, err := table.FindColumnByID(sqlbase.ColumnID(columnComment.SubID))
+			if err != nil {
+				return nil, err
+			}
+
+			stmts = append(stmts, fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS '%s'", databaseName, table.Name, col.Name, columnComment.Comment))
+		}
+
+		for _, indexComment := range tc.Indexes {
+			idx, err := table.FindIndexByID(sqlbase.IndexID(indexComment.SubID))
+			if err != nil {
+				return nil, err
+			}
+
+			stmts = append(stmts, fmt.Sprintf("COMMENT ON INDEX %s.%s IS '%s'", databaseName, idx.Name, indexComment.Comment))
+		}
+	}
+
+	return stmts, nil
 }
 
 func init() {

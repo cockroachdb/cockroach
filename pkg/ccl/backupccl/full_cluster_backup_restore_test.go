@@ -88,7 +88,6 @@ func TestFullClusterBackup(t *testing.T) {
 		// Note the absence of the jobs table. Jobs are tested by another test as
 		// jobs are created during the RESTORE process.
 		systemTablesToVerify := []string{
-			sqlbase.CommentsTable.Name,
 			sqlbase.LocationsTable.Name,
 			sqlbase.RoleMembersTable.Name,
 			sqlbase.SettingsTable.Name,

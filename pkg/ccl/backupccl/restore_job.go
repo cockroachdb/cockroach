@@ -1012,6 +1012,10 @@ func (r *restoreResumer) Resume(
 		}
 	}
 
+	if err := r.restoreStmts(ctx, backupManifests); err != nil {
+		return err
+	}
+
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(*r.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
@@ -1240,6 +1244,19 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "dropping tables created at the start of restore caused by fail/cancel")
+	}
+
+	return nil
+}
+
+func (r *restoreResumer) restoreStmts(ctx context.Context, backupManifests []BackupManifest) error {
+	for _, backupManifest := range backupManifests {
+		for _, stmt := range backupManifest.Stmts {
+			_, err := r.execCfg.InternalExecutor.Exec(ctx, "stmt", nil, stmt)
+			if err != nil {
+				return errors.Wrapf(err, "stmt: %s", stmt)
+			}
+		}
 	}
 
 	return nil
