@@ -254,9 +254,6 @@ func (cb *cascadeBuilder) planCascade(
 
 	// 4. Execbuild the optimized expression.
 	eb := New(execFactory, factory.Memo(), cb.b.catalog, optimizedExpr, evalCtx)
-	// TODO(radu): we could allow autocommit for the last cascade (if there are no
-	// checks to run).
-	eb.DisallowAutoCommit()
 	// Set up the With binding.
 	eb.addBuiltWithExpr(cascadeInputWithID, bufferColMap, bufferRef)
 	plan, err := eb.Build()

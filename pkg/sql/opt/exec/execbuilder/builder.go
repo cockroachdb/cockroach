@@ -100,11 +100,6 @@ func New(
 	return b
 }
 
-// DisallowAutoCommit disables auto commit.
-func (b *Builder) DisallowAutoCommit() {
-	b.allowAutoCommit = false
-}
-
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
 func (b *Builder) Build() (_ exec.Plan, err error) {
