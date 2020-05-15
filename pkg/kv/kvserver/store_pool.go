@@ -107,7 +107,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 		if err != nil {
 			return storagepb.NodeLivenessStatus_UNAVAILABLE
 		}
-		return LivenessStatus(liveness, now, timeUntilStoreDead)
+		return LivenessStatus(liveness.Liveness, now, timeUntilStoreDead)
 	}
 }
 

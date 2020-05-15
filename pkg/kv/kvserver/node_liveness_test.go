@@ -268,6 +268,7 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 // live.
 func TestNodeLivenessEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -282,13 +283,14 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(
-		context.Background(), oldLiveness); !testutils.IsError(err, "cannot increment epoch on live node") {
+		ctx, oldLiveness.Liveness,
+	); !testutils.IsError(err, "cannot increment epoch on live node") {
 		t.Fatalf("expected error incrementing a live node: %+v", err)
 	}
 
 	// Advance clock past liveness threshold & increment epoch.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != nil {
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(ctx, oldLiveness.Liveness); err != nil {
 		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
 
@@ -316,14 +318,17 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	}
 
 	// Verify error on incrementing an already-incremented epoch.
-	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); !errors.Is(err, kvserver.ErrEpochAlreadyIncremented) {
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(
+		ctx, oldLiveness.Liveness,
+	); !errors.Is(err, kvserver.ErrEpochAlreadyIncremented) {
 		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
 
 	// Verify error incrementing with a too-high expectation for liveness epoch.
 	oldLiveness.Epoch = 3
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(
-		context.Background(), oldLiveness); !testutils.IsError(err, "unexpected liveness epoch 2; expected >= 3") {
+		ctx, oldLiveness.Liveness,
+	); !testutils.IsError(err, "unexpected liveness epoch 2; expected >= 3") {
 		t.Fatalf("expected error incrementing with a too-high expected epoch: %+v", err)
 	}
 }
@@ -403,13 +408,13 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// Verify liveness is properly initialized. This needs to be wrapped in a
 	// SucceedsSoon because node liveness gets initialized via an async gossip
 	// callback.
-	var liveness storagepb.Liveness
+	var liveness kvserver.LivenessRecord
 	testutils.SucceedsSoon(t, func() error {
 		var err error
 		liveness, err = mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
 		return err
 	})
-	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
+	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
 		t.Fatal(err)
 	}
 
@@ -435,10 +440,9 @@ func TestNodeLivenessSelf(t *testing.T) {
 
 	// Self should not see the fake liveness, but have kept the real one.
 	l := mtc.nodeLivenesses[0]
-	lGet, err := l.GetLiveness(g.NodeID.Get())
-	if err != nil {
-		t.Fatal(err)
-	}
+	lGetRec, err := l.GetLiveness(g.NodeID.Get())
+	require.NoError(t, err)
+	lGet := lGetRec.Liveness
 	lSelf, err := l.Self()
 	if err != nil {
 		t.Fatal(err)
@@ -474,7 +478,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
+		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
 			if errors.Is(err, kvserver.ErrEpochIncremented) {
 				return err
 			}
@@ -524,7 +528,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
 	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
-	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
+	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
 		t.Fatal(err)
 	}
 
@@ -605,7 +609,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 	errCh := make(chan error, concurrency)
 	for i := 0; i < concurrency; i++ {
 		go func() {
-			errCh <- nl.IncrementEpoch(context.Background(), l)
+			errCh <- nl.IncrementEpoch(context.Background(), l.Liveness)
 		}()
 	}
 	for i := 0; i < concurrency; i++ {
@@ -642,7 +646,9 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given draining setting.
-	if err := mtc.nodeLivenesses[drainingNodeIdx].SetDrainingInternal(ctx, storagepb.Liveness{}, false); err != nil {
+	if err := mtc.nodeLivenesses[drainingNodeIdx].SetDrainingInternal(
+		ctx, kvserver.LivenessRecord{}, false,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -924,7 +930,9 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
-	if _, err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, storagepb.Liveness{}, false); err != nil {
+	if _, err := callerNodeLiveness.SetDecommissioningInternal(
+		ctx, nodeID, kvserver.LivenessRecord{}, false,
+	); err != nil {
 		t.Fatal(err)
 	}
 
