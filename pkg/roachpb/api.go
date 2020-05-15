@@ -454,6 +454,9 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	h.Now.Forward(o.Now)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
 	// Deduplicate the RangeInfos and maintain them in sorted order.
+	//
+	// TODO(andrei): stop merging RangeInfos once everybody but the DistSender
+	// stops using them.
 	for _, ri := range o.RangeInfos {
 		id := ri.Desc.RangeID
 		i := sort.Search(len(h.RangeInfos), func(i int) bool {
