@@ -350,7 +350,7 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
+bin/.bootstrap: $(GITHOOKS) go.sum | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
 		github.com/client9/misspell/cmd/misspell \
 		github.com/cockroachdb/crlfmt \

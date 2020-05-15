@@ -34,11 +34,14 @@ require (
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go v0.0.0-20181001143604-e0a95dfd547c
+	github.com/cockroachdb/crlfmt v0.0.0-20200309141329-97b747f03b21 // indirect
 	github.com/cockroachdb/datadriven v0.0.0-20200212141702-aca09668cb24
 	github.com/cockroachdb/errors v1.2.5-0.20200411123255-5f3a6d1e1cf5
+	github.com/cockroachdb/gostdlib v1.13.0 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
 	github.com/cockroachdb/pebble v0.0.0-20200422134739-43f8d507aa62
 	github.com/cockroachdb/returncheck v0.0.0-20170227172625-e91bb28baf9d
+	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a // indirect
 	github.com/cockroachdb/ttycolor v0.0.0-20180709150743-a1d5aaeb377d
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
@@ -53,7 +56,7 @@ require (
 	github.com/getsentry/raven-go v0.2.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-ole/go-ole v1.2.2 // indirect
-	github.com/go-sql-driver/mysql v1.4.1-0.20181218123637-c45f530f8e7f
+	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gofrs/uuid v3.2.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang-commonmark/html v0.0.0-20180910111043-7d7c804e1d46 // indirect
@@ -79,6 +82,7 @@ require (
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jaegertracing/jaeger v1.17.1
+	github.com/kevinburke/go-bindata v3.19.0+incompatible // indirect
 	github.com/kisielk/gotool v1.0.0
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
@@ -94,7 +98,10 @@ require (
 	github.com/maruel/panicparse v1.1.2-0.20180806203336-f20d4c4d746f
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
 	github.com/mattn/go-isatty v0.0.4
+	github.com/mattn/goveralls v0.0.5 // indirect
+	github.com/mibk/dupl v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.0
+	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab // indirect
 	github.com/montanaflynn/stats v0.4.1-0.20190115100425-713f2944833c
 	github.com/nlopes/slack v0.4.0
 	github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5
@@ -125,6 +132,7 @@ require (
 	golang.org/x/exp v0.0.0-20190426190305-956cc1757749
 	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
+	golang.org/x/perf v0.0.0-20200318175901-9c9101da8316 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20200217220822-9197077df867
 	golang.org/x/text v0.3.2

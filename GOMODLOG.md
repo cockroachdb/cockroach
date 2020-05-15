@@ -111,5 +111,4 @@ by the linker flags somehow. Not sure why.
 with adding `go build ... -mod=vendor`, but since the `knz/go-libedit/unix/src`
 and `knz/go-libedit/unix/shim` folders are not imported with vendor, we don't
 get anything.
-13. NOW IT WORKS!!!
-
+13. delete Gopkg.toml and Gopkg.lock
