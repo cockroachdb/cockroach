@@ -237,7 +237,11 @@ func backupShowerDefault(
 							tree.MakeDBool(manifest.DescriptorCoverage == tree.AllDescriptors),
 						}
 						if showSchemas {
-							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors, table, sql.OmitMissingFKClausesFromCreate)
+							displayOptions := sql.ShowCreateDisplayOptions{
+								FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
+								IgnoreComments: true,
+							}
+							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors, table, displayOptions)
 							if err != nil {
 								continue
 							}
