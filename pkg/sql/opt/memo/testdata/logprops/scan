@@ -114,7 +114,7 @@ values
  └── prune: (5)
 
 opt
-SELECT * FROM t WHERE b IN ('a', 'b') AND c IN (1, 2) AND a IN (2, 3)
+SELECT * FROM t@bc WHERE b IN ('a', 'b') AND c IN (1, 2) AND a IN (2, 3)
 ----
 index-join t
  ├── columns: a:1(int!null) b:2(char!null) c:3(int!null) d:4(char)
@@ -129,6 +129,7 @@ index-join t
       │    ├── [/'a'/2/2 - /'a'/2/3]
       │    ├── [/'b'/1/2 - /'b'/1/3]
       │    └── [/'b'/2/2 - /'b'/2/3]
+      ├── flags: force-index=bc
       ├── cardinality: [0 - 8]
       ├── key: (1,2)
       ├── fd: (1,2)-->(3)
