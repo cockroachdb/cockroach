@@ -202,14 +202,9 @@ func (r *commandResult) AppendParamStatusUpdate(param string, val string) {
 	)
 }
 
-// AppendNotice is part of the CommandResult interface.
-func (r *commandResult) AppendNotice(noticeErr error) {
-	r.flushBeforeCloseFuncs = append(
-		r.flushBeforeCloseFuncs,
-		func(ctx context.Context) error {
-			return r.conn.bufferNotice(ctx, noticeErr)
-		},
-	)
+// SendNotice is part of the CommandResult interface.
+func (r *commandResult) SendNotice(ctx context.Context, noticeErr error) error {
+	return r.conn.sendNotice(ctx, noticeErr)
 }
 
 // SetColumns is part of the CommandResult interface.

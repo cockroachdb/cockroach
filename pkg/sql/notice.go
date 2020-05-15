@@ -30,14 +30,15 @@ var NoticesEnabled = settings.RegisterPublicBoolSetting(
 // noticeSender is a subset of RestrictedCommandResult which allows
 // sending notices.
 type noticeSender interface {
-	AppendNotice(error)
+	SendNotice(ctx context.Context, noticeErr error) error
 }
 
 // SendClientNotice implements the tree.ClientNoticeSender interface.
-func (p *planner) SendClientNotice(ctx context.Context, err error) {
+func (p *planner) SendClientNotice(ctx context.Context, err error) error {
 	if log.V(2) {
 		log.Infof(ctx, "out-of-band notice: %+v", err)
 	}
+
 	noticeSeverity, ok := pgnotice.ParseDisplaySeverity(pgerror.GetSeverity(err))
 	if !ok {
 		noticeSeverity = pgnotice.DisplaySeverityNotice
@@ -49,7 +50,8 @@ func (p *planner) SendClientNotice(ctx context.Context, err error) {
 		// * there is no client
 		// * the session's NoticeDisplaySeverity is higher than the severity of the notice.
 		// * the notice protocol was disabled
-		return
+		return nil
 	}
-	p.noticeSender.AppendNotice(err)
+
+	return p.noticeSender.SendNotice(ctx, err)
 }

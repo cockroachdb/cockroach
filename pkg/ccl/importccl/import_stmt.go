@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 )
 
 const (
@@ -692,6 +694,32 @@ func importPlanHook(
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
 
+		const warnSize = 512 << 20
+		haveLargeFiles, err := checkImportLargeFiles(ctx, files, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, warnSize)
+		if err != nil {
+			return err
+		}
+
+		if haveLargeFiles {
+			warning := fmt.Sprintf(`
+It appears you are trying to import a large (>%s) file.
+Importing very large files often results in sub-optimal performance.
+The import can be made to run faster by splitting up large file into smaller chunks.
+`, humanize.Bytes(warnSize))
+
+			if importStmt.Bundle {
+				warning += fmt.Sprintf(`
+Importing large %s files can also be made faster by creating target SQL table(s)
+by hand, and executing "IMPORT INTO ..." statement instead.
+`, importStmt.FileFormat)
+			}
+
+			if err := p.ExtendedEvalContext().ClientNoticeSender.SendClientNotice(
+				ctx, pgnotice.NewWithSeverityf("NOTICE", warning)); err != nil {
+				return err
+			}
+		}
+
 		// Here we create the job and protected timestamp records in a side
 		// transaction and then kick off the job. This is awful. Rather we should be
 		// disallowing this statement in an explicit transaction and then we should
@@ -755,6 +783,34 @@ func importPlanHook(
 		return sj.Run(ctx)
 	}
 	return fn, backupccl.RestoreHeader, nil, false, nil
+}
+
+func checkImportLargeFiles(
+	ctx context.Context,
+	files []string,
+	fileFactory cloud.ExternalStorageFromURIFactory,
+	maxSize int64,
+) (bool, error) {
+	for i := range files {
+		file, err := fileFactory(ctx, files[i])
+		if err != nil {
+			return false, err
+		}
+
+		defer func(f cloud.ExternalStorage) {
+			_ = f.Close()
+		}(file)
+
+		sz, err := file.Size(ctx, "")
+		if err != nil {
+			return false, err
+		}
+
+		if sz > maxSize {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func parseAvroOptions(

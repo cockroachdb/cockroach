@@ -2712,7 +2712,7 @@ type EvalSessionAccessor interface {
 // distributed processors).
 type ClientNoticeSender interface {
 	// SendClientNotice sends a notice out-of-band to the client.
-	SendClientNotice(ctx context.Context, notice error)
+	SendClientNotice(ctx context.Context, notice error) error
 }
 
 // InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is

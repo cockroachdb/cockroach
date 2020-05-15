@@ -607,9 +607,9 @@ func (c *conn) bufferParamStatus(param, value string) error {
 	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }
 
-func (c *conn) bufferNotice(ctx context.Context, noticeErr error) error {
+func (c *conn) sendNotice(ctx context.Context, noticeErr error) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
-	return writeErrFields(ctx, c.sv, noticeErr, &c.msgBuilder, &c.writerState.buf)
+	return writeErrFields(ctx, c.sv, noticeErr, &c.msgBuilder, c.conn)
 }
 
 func (c *conn) sendInitialConnData(
