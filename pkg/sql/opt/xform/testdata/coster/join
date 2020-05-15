@@ -531,23 +531,23 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2' AND (i,j,k,l,m,n)
 ----
 project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
- ├── stats: [rows=1.25e-15]
- ├── cost: 12200.07
+ ├── stats: [rows=4.50439883]
+ ├── cost: 12227.475
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:12!null b:13!null c:14!null
       ├── key columns: [1 2 3] = [12 13 14]
-      ├── stats: [rows=1.25e-15, distinct(1)=1e-20, null(1)=0, distinct(2)=1e-20, null(2)=0, distinct(3)=1e-20, null(3)=0, distinct(12)=1e-20, null(12)=0, distinct(13)=1e-20, null(13)=0, distinct(14)=1e-20, null(14)=0]
-      ├── cost: 12200.06
+      ├── stats: [rows=4.50439883, distinct(1)=0.9, null(1)=0, distinct(2)=0.9, null(2)=0, distinct(3)=0.884031733, null(3)=0, distinct(12)=0.9, null(12)=0, distinct(13)=0.9, null(13)=0, distinct(14)=0.884031733, null(14)=0]
+      ├── cost: 12227.42
       ├── fd: ()-->(1,2,5-10,12,13), (1)==(12), (12)==(1), (2)==(13), (13)==(2), (3)==(14), (14)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
-      │    ├── stats: [rows=1e-20, distinct(1)=1e-20, null(1)=0, distinct(2)=1e-20, null(2)=0, distinct(3)=1e-20, null(3)=0, distinct(4)=1e-20, null(4)=0, distinct(5)=1e-20, null(5)=0, distinct(6)=1e-20, null(6)=0, distinct(7)=1e-20, null(7)=0, distinct(8)=1e-20, null(8)=0, distinct(9)=1e-20, null(9)=0, distinct(10)=1e-20, null(10)=0]
+      │    ├── stats: [rows=0.9, distinct(1)=0.9, null(1)=0, distinct(2)=0.9, null(2)=0, distinct(3)=0.884031733, null(3)=0, distinct(4)=0.899635587, null(4)=0, distinct(5)=0.9, null(5)=0, distinct(6)=0.9, null(6)=0, distinct(7)=0.9, null(7)=0, distinct(8)=0.9, null(8)=0, distinct(9)=0.9, null(9)=0, distinct(10)=0.9, null(10)=0, distinct(5-10)=0.9, null(5-10)=0]
       │    ├── cost: 12200.03
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn
       │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5 j:6 k:7 l:8 m:9 n:10
-      │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=10000, null(5)=0, distinct(6)=10000, null(6)=0, distinct(7)=10000, null(7)=0, distinct(8)=10000, null(8)=0, distinct(9)=10000, null(9)=0, distinct(10)=10000, null(10)=0]
+      │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=10000, null(5)=0, distinct(6)=10000, null(6)=0, distinct(7)=10000, null(7)=0, distinct(8)=10000, null(8)=0, distinct(9)=10000, null(9)=0, distinct(10)=10000, null(10)=0, distinct(5-10)=10000, null(5-10)=0]
       │    │    └── cost: 12100.02
       │    └── filters
       │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]

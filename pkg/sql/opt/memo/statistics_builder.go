@@ -609,9 +609,12 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 		// Calculate row count and selectivity
 		// -----------------------------------
 		s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
-		s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), scan, s))
+		s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
 		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 		s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps, constrainedCols))
+
+		// Adjust the selectivity so we don't double-count the histogram columns.
+		s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -680,13 +683,16 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	inputStats := &sel.Input.Relational().Stats
 	s.RowCount = inputStats.RowCount
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, sel, s))
-	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), sel, s))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, sel, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, sel, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(sel, relProps, constrainedCols))
 
+	// Adjust the selectivity so we don't double-count the histogram columns.
+	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, sel, s))
+
 	// Update distinct counts based on equivalencies; this should happen after
-	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
+	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
 	sb.applyEquivalencies(equivReps, &relProps.FuncDeps, sel, relProps)
 
 	sb.finalizeFromCardinality(relProps)
@@ -937,12 +943,20 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromGeoRelationship(join, s))
 	}
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s))
-	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), join, s))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
+		constrainedCols.Intersection(leftCols), join, s,
+	))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
+		constrainedCols.Intersection(rightCols), join, s,
+	))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps, constrainedCols))
 
+	// Adjust the selectivity so we don't double-count the histogram columns.
+	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
+
 	// Update distinct counts based on equivalencies; this should happen after
-	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
+	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
 	sb.applyEquivalencies(equivReps, &h.filtersFD, join, relProps)
 
 	switch h.joinType {
@@ -1441,13 +1455,13 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, zigzag, s))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps, constrainedCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
-	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
+	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
 	sb.applyEquivalencies(equivReps, &relProps.FuncDeps, zigzag, relProps)
 
 	sb.finalizeFromCardinality(relProps)
@@ -2549,6 +2563,12 @@ const (
 	// until we can get better statistics on inverted indexes and geospatial
 	// columns.
 	unknownGeoRelationshipSelectivity = 1.0 / 100.0
+
+	// multiColWeight is the weight to assign the selectivity calculation using
+	// multi-column statistics versus the calculation using single-column
+	// statistics. See the comment above selectivityFromMultiColDistinctCounts for
+	// details.
+	multiColWeight = 9.0 / 10.0
 )
 
 // countJSONPaths returns the number of JSON paths in the specified
@@ -2636,8 +2656,8 @@ func (sb *statisticsBuilder) applyFilter(
 
 		// Update constrainedCols after the above check for isEqualityWithTwoVars.
 		// We will use constrainedCols later to determine which columns to use for
-		// selectivity calculation in selectivityFromDistinctCounts, and we want to
-		// make sure that we don't include columns that were only present in
+		// selectivity calculation in selectivityFromMultiColDistinctCounts, and we
+		// want to make sure that we don't include columns that were only present in
 		// equality conjuncts such as var1=var2. The selectivity of these conjuncts
 		// will be accounted for in selectivityFromEquivalencies.
 		scalarProps := conjunct.ScalarProps()
@@ -3054,23 +3074,219 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 	})
 }
 
-// selectivityFromDistinctCounts calculates the selectivity of a filter by
-// taking the product of selectivities of each constrained column. In the
-// general case, this can be represented by the formula:
+// selectivityFromMultiColDistinctCounts calculates the selectivity of a filter
+// by using estimated distinct counts of each constrained column before
+// and after the filter was applied. We can perform this calculation in
+// two different ways: (1) by treating the columns as completely independent,
+// or (2) by assuming they are correlated.
 //
-//                  ┬-┬ ⎛ new distinct(i) ⎞
-//   selectivity =  │ │ ⎜ --------------- ⎟
-//                  ┴ ┴ ⎝ old distinct(i) ⎠
-//                 i in
-//              {constrained
-//                columns}
+// (1) Assuming independence between columns, we can calculate the selectivity
+//     by taking the product of selectivities of each constrained column. In
+//     the general case, this can be represented by the formula:
+//
+//                      ┬-┬ ⎛ new_distinct(i) ⎞
+//       selectivity =  │ │ ⎜ --------------- ⎟
+//                      ┴ ┴ ⎝ old_distinct(i) ⎠
+//                     i in
+//                  {constrained
+//                    columns}
+//
+// (2) If we instead assume there is some correlation between columns, we
+//     calculate the selectivity using multi-column statistics.
+//
+//                     ⎛ new_distinct({constrained columns}) ⎞
+//       selectivity = ⎜ ----------------------------------- ⎟
+//                     ⎝ old_distinct({constrained columns}) ⎠
+//
+//     This formula looks simple, but the challenge is that it is difficult
+//     to determine the correct value for new_distinct({constrained columns})
+//     if each column is not constrained to a single value. For example, if
+//     new_distinct(x)=2 and new_distinct(y)=2, new_distinct({x,y}) could be 2,
+//     3 or 4. We estimate the new distinct count as follows, using the concept
+//     of "soft functional dependency (FD) strength" as defined in [1]:
+//
+//       new_distinct({x,y}) = min_value + range * (1 - FD_strength_scaled)
+//
+//     where
+//
+//       min_value = max(new_distinct(x), new_distinct(y))
+//       max_value = new_distinct(x) * new_distinct(y)
+//       range     = max_value - min_value
+//
+//                     ⎛ max(old_distinct(x),old_distinct(y)) ⎞
+//       FD_strength = ⎜ ------------------------------------ ⎟
+//                     ⎝         old_distinct({x,y})          ⎠
+//
+//                         ⎛ max(old_distinct(x), old_distinct(y)) ⎞
+//       min_FD_strength = ⎜ ------------------------------------- ⎟
+//                         ⎝   old_distinct(x) * old_distinct(y)   ⎠
+//
+//                            ⎛ FD_strength - min_FD_strength ⎞  // scales FD_strength
+//       FD_strength_scaled = ⎜ ----------------------------- ⎟  // to be between
+//                            ⎝      1 - min_FD_strength      ⎠  // 0 and 1
+//
+//     Suppose that old_distinct(x)=100 and old_distinct(y)=10. If x and y are
+//     perfectly correlated, old_distinct({x,y})=100. Using the example from
+//     above, new_distinct(x)=2 and new_distinct(y)=2. Plugging in the values
+//     into the equation, we get:
+//
+//       FD_strength_scaled  = 1
+//       new_distinct({x,y}) = 2 + (4 - 2) * (1 - 1) = 2
+//
+//     If x and y are completely independent, however, old_distinct({x,y})=1000.
+//     In this case, we get:
+//
+//       FD_strength_scaled  = 0
+//       new_distinct({x,y}) = 2 + (4 - 2) * (1 - 0) = 4
+//
+// Note that even if we calculate the selectivity based on equation (2) above,
+// we still want to take equation (1) into account. This is because it is
+// possible that there are two predicates that each have selectivity s, but the
+// multi-column selectivity is also s. In order to ensure that the cost model
+// considers the two predicates combined to be more selective than either one
+// individually, we must give some weight to equation (1). Therefore, instead
+// of equation (2) we actually return the following selectivity:
+//
+//   selectivity = (1 - w) * (equation 1) + w * (equation 2)
+//
+// where w is the constant multiColWeight.
 //
 // This selectivity will be used later to update the row count and the
 // distinct count for the unconstrained columns.
 //
-// This algorithm assumes the columns are completely independent.
+// [1] Ilyas, Ihab F., et al. "CORDS: automatic discovery of correlations and
+//     soft functional dependencies." SIGMOD 2004.
 //
-func (sb *statisticsBuilder) selectivityFromDistinctCounts(
+func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
+	cols opt.ColSet, e RelExpr, s *props.Statistics,
+) (selectivity float64) {
+	// Respect the session setting OptimizerUseMultiColStats.
+	if !sb.evalCtx.SessionData.OptimizerUseMultiColStats {
+		return sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	}
+
+	// Make a copy of cols so we can remove columns that are not constrained.
+	multiColSet := cols.Copy()
+
+	// First calculate the selectivity from equation (1) (see function comment),
+	// and collect the inputs to equation (2).
+	singleColSelectivity := 1.0
+	newDistinctProduct, oldDistinctProduct := 1.0, 1.0
+	maxNewDistinct, maxOldDistinct := float64(0), float64(0)
+	multiColNullCount := -1.0
+	minLocalSel := math.MaxFloat64
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
+		if !ok {
+			multiColSet.Remove(col)
+			continue
+		}
+
+		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
+		localSel := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
+		singleColSelectivity *= localSel
+
+		// Don't bother including columns in the multi-column calculation that
+		// don't contribute to the selectivity.
+		if localSel == 1 {
+			multiColSet.Remove(col)
+			continue
+		}
+
+		// Calculate values needed for the multi-column stats calculation below.
+		newDistinctProduct *= colStat.DistinctCount
+		oldDistinctProduct *= inputColStat.DistinctCount
+		if colStat.DistinctCount > maxNewDistinct {
+			maxNewDistinct = colStat.DistinctCount
+		}
+		if inputColStat.DistinctCount > maxOldDistinct {
+			maxOldDistinct = inputColStat.DistinctCount
+		}
+		if localSel < minLocalSel {
+			minLocalSel = localSel
+		}
+		if multiColNullCount < 0 {
+			multiColNullCount = inputStats.RowCount
+		}
+		// Multiply by the expected chance of collisions with nulls already
+		// collected.
+		multiColNullCount *= colStat.NullCount / inputStats.RowCount
+	}
+
+	// If we don't need to use a multi-column statistic, we're done.
+	if multiColSet.Len() <= 1 {
+		return singleColSelectivity
+	}
+
+	// Otherwise, calculate the selectivity using multi-column stats from
+	// equation (2). See the comment above the function definition for details
+	// about the formula.
+	inputColStat, inputStats := sb.colStatFromInput(multiColSet, e)
+	fdStrength := min(maxOldDistinct/inputColStat.DistinctCount, 1.0)
+	maxMutiColOldDistinct := min(oldDistinctProduct, inputStats.RowCount)
+	minFdStrength := min(maxOldDistinct/maxMutiColOldDistinct, fdStrength)
+	if minFdStrength < 1 {
+		// Scale the fdStrength so it ranges between 0 and 1.
+		fdStrength = (fdStrength - minFdStrength) / (1 - minFdStrength)
+	}
+	distinctCountRange := max(newDistinctProduct-maxNewDistinct, 0)
+
+	colStat, _ := s.ColStats.Add(multiColSet)
+	colStat.DistinctCount = maxNewDistinct + distinctCountRange*(1-fdStrength)
+	colStat.NullCount = multiColNullCount
+	multiColSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
+
+	// Now, we must adjust multiColSelectivity so that it is not greater than
+	// the selectivity of any subset of the columns in multiColSet. This would
+	// be internally inconsistent and could lead to bad plans. For example,
+	// x=1 AND y=1 should always be considered more selective (i.e., with lower
+	// selectivity) than x=1 alone.
+	//
+	// We have already found the minimum selectivity of all the individual
+	// columns (subsets of size 1) above and stored it in minLocalSel. It's not
+	// practical, however, to calculate the minimum selectivity for all subsets
+	// larger than size 1.
+	//
+	// Instead, we focus on a specific case known to occasionally have this
+	// problem: when multiColSet contains 3 or more columns and at least one has
+	// distinct count greater than 1, the subset of columns that have distinct
+	// count less than or equal to 1 may have a smaller selectivity according to
+	// equation (2).
+	//
+	// In this case, update minLocalSel and adjust multiColSelectivity as needed.
+	//
+	if maxNewDistinct > 1 && multiColSet.Len() > 2 {
+		var lowDistinctCountCols opt.ColSet
+		multiColSet.ForEach(func(col opt.ColumnID) {
+			// We already know the column stat exists if it's in multiColSet.
+			colStat, _ := s.ColStats.Lookup(opt.MakeColSet(col))
+			if colStat.DistinctCount <= 1 {
+				lowDistinctCountCols.Add(col)
+			}
+		})
+
+		if lowDistinctCountCols.Len() > 1 {
+			selLowDistinctCountCols := sb.selectivityFromMultiColDistinctCounts(
+				lowDistinctCountCols, e, s,
+			)
+			if selLowDistinctCountCols < minLocalSel {
+				minLocalSel = selLowDistinctCountCols
+			}
+		}
+	}
+	multiColSelectivity = min(multiColSelectivity, minLocalSel)
+
+	// As described in the function comment, we actually return a weighted sum
+	// of multi-column and single-column selectivity estimates.
+	return (1-multiColWeight)*singleColSelectivity + multiColWeight*multiColSelectivity
+}
+
+// selectivityFromSingleColDistinctCounts calculates the selectivity of a
+// filter by using estimated distinct counts of each constrained column before
+// and after the filter was applied. It assumes independence between columns,
+// so it uses equation (1) from selectivityFromMultiColDistinctCounts. See the
+// comment above that function for details.
+func (sb *statisticsBuilder) selectivityFromSingleColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity float64) {
 	selectivity = 1.0
@@ -3081,31 +3297,40 @@ func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 		}
 
 		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
-		newDistinct := colStat.DistinctCount
-		oldDistinct := inputColStat.DistinctCount
-
-		// Nulls are included in the distinct count, so remove 1 from the
-		// distinct counts if needed.
-		if inputColStat.NullCount > 0 {
-			oldDistinct = max(oldDistinct-1, 0)
-		}
-		if colStat.NullCount > 0 {
-			newDistinct = max(newDistinct-1, 0)
-		}
-
-		// Calculate the selectivity of the predicate.
-		nonNullSelectivity := fraction(newDistinct, oldDistinct)
-		nullSelectivity := fraction(colStat.NullCount, inputColStat.NullCount)
-		selectivity *= sb.predicateSelectivity(
-			nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputStats.RowCount,
-		)
+		selectivity *= sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
 	}
 
 	return selectivity
 }
 
-// selectivityFromHistograms is similar to selectivityFromDistinctCounts, in
-// that it calculates the selectivity of a filter by taking the product of
+// selectivityFromDistinctCount calculates the selectivity of a filter by using
+// the estimated distinct count of a single constrained column or set of
+// columns before and after the filter was applied.
+func (sb *statisticsBuilder) selectivityFromDistinctCount(
+	colStat, inputColStat *props.ColumnStatistic, inputRowCount float64,
+) float64 {
+	newDistinct := colStat.DistinctCount
+	oldDistinct := inputColStat.DistinctCount
+
+	// Nulls are included in the distinct count, so remove 1 from the
+	// distinct counts if needed.
+	if inputColStat.NullCount > 0 {
+		oldDistinct = max(oldDistinct-1, 0)
+	}
+	if colStat.NullCount > 0 {
+		newDistinct = max(newDistinct-1, 0)
+	}
+
+	// Calculate the selectivity of the predicate.
+	nonNullSelectivity := fraction(newDistinct, oldDistinct)
+	nullSelectivity := fraction(colStat.NullCount, inputColStat.NullCount)
+	return sb.predicateSelectivity(
+		nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputRowCount,
+	)
+}
+
+// selectivityFromHistograms is similar to selectivityFromSingleColDistinctCounts,
+// in that it calculates the selectivity of a filter by taking the product of
 // selectivities of each constrained column.
 //
 // For histograms, the selectivity of a constrained column is calculated as
@@ -3141,7 +3366,7 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 }
 
 // selectivityFromNullsRemoved calculates the selectivity from null-rejecting
-// filters that were not already accounted for in selectivityFromDistinctCounts
+// filters that were not already accounted for in selectivityFromMultiColDistinctCounts
 // or selectivityFromHistograms. The columns for filters already accounted for
 // should be designated by ignoreCols.
 func (sb *statisticsBuilder) selectivityFromNullsRemoved(
@@ -3362,7 +3587,7 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 			// Cases of NULL in a constraint should be ignored. For example,
 			// without knowledge of the data distribution, /a: (/NULL - /10] should
 			// have the same estimated selectivity as /a: [/10 - ]. Selectivity
-			// of NULL constraints is handled in selectivityFromDistinctCounts,
+			// of NULL constraints is handled in selectivityFromMultiColDistinctCounts,
 			// selectivityFromHistograms, and selectivityFromNullsRemoved.
 			if c.Columns.Get(nth).Descending() ||
 				span.StartKey().Value(nth) != tree.DNull {

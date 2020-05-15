@@ -266,7 +266,7 @@ memo (optimized, ~6KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 1.10
+ │         └── cost: 1.11
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G9)
  │    └── []
  │         ├── best: (select G8 G9)
