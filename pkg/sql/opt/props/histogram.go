@@ -165,23 +165,24 @@ func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (_ float64, ok 
 // CanFilter returns true if the given constraint can filter the histogram.
 // This is the case if the histogram column matches one of the columns in
 // the exact prefix of c or the next column immediately after the exact prefix.
-// Returns the offset of the matching column in the constraint if found.
-func (h *Histogram) CanFilter(c *constraint.Constraint) (colOffset int, ok bool) {
-	exactPrefix := c.ExactPrefix(h.evalCtx)
+// Returns the offset of the matching column in the constraint if found, as
+// well as the exact prefix.
+func (h *Histogram) CanFilter(c *constraint.Constraint) (colOffset, exactPrefix int, ok bool) {
+	exactPrefix = c.ExactPrefix(h.evalCtx)
 	constrainedCols := c.ConstrainedColumns(h.evalCtx)
 	for i := 0; i < constrainedCols && i <= exactPrefix; i++ {
 		if c.Columns.Get(i).ID() == h.col {
-			return i, true
+			return i, exactPrefix, true
 		}
 	}
-	return 0, false
+	return 0, exactPrefix, false
 }
 
 // Filter filters the histogram according to the given constraint, and returns
 // a new histogram with the results. CanFilter should be called first to
 // validate that c can filter the histogram.
 func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
-	colOffset, ok := h.CanFilter(c)
+	colOffset, exactPrefix, ok := h.CanFilter(c)
 	if !ok {
 		panic(errors.AssertionFailedf("column mismatch"))
 	}
@@ -253,6 +254,12 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 
 	// For the remaining buckets and spans, use a variation on merge sort.
 	for spanIndex < spanCount {
+		if spanIndex > 0 && colOffset < exactPrefix {
+			// If this column is part of the exact prefix, we don't need to look at
+			// the rest of the spans.
+			break
+		}
+
 		// Convert the bucket to a span in order to take advantage of the
 		// constraint library.
 		left := makeSpanFromBucket(&iter, prefix)
