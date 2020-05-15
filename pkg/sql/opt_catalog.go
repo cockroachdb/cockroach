@@ -725,11 +725,6 @@ func (ot *optTable) IsVirtualTable() bool {
 	return false
 }
 
-// IsInterleaved is part of the cat.Table interface.
-func (ot *optTable) IsInterleaved() bool {
-	return ot.desc.IsInterleaved()
-}
-
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
 	return len(ot.desc.Columns)
@@ -1033,6 +1028,28 @@ func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
 		}
 	}
 	return res
+}
+
+// InterleaveAncestorCount is part of the cat.Index interface.
+func (oi *optIndex) InterleaveAncestorCount() int {
+	return len(oi.desc.Interleave.Ancestors)
+}
+
+// InterleaveAncestor is part of the cat.Index interface.
+func (oi *optIndex) InterleaveAncestor(i int) (table, index cat.StableID, numKeyCols int) {
+	a := &oi.desc.Interleave.Ancestors[i]
+	return cat.StableID(a.TableID), cat.StableID(a.IndexID), int(a.SharedPrefixLen)
+}
+
+// InterleavedByCount is part of the cat.Index interface.
+func (oi *optIndex) InterleavedByCount() int {
+	return len(oi.desc.InterleavedBy)
+}
+
+// InterleavedBy is part of the cat.Index interface.
+func (oi *optIndex) InterleavedBy(i int) (table, index cat.StableID) {
+	ref := &oi.desc.InterleavedBy[i]
+	return cat.StableID(ref.Table), cat.StableID(ref.Index)
 }
 
 type optTableStat struct {
@@ -1392,11 +1409,6 @@ func (ot *optVirtualTable) IsVirtualTable() bool {
 	return true
 }
 
-// IsInterleaved is part of the cat.Table interface.
-func (ot *optVirtualTable) IsInterleaved() bool {
-	return ot.desc.IsInterleaved()
-}
-
 // ColumnCount is part of the cat.Table interface.
 func (ot *optVirtualTable) ColumnCount() int {
 	// Virtual tables expose an extra (bogus) PK column.
@@ -1671,6 +1683,26 @@ func (oi *optVirtualIndex) Ordinal() int {
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
 	panic("no partition")
+}
+
+// InterleaveAncestorCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) InterleaveAncestorCount() int {
+	return 0
+}
+
+// InterleaveAncestor is part of the cat.Index interface.
+func (oi *optVirtualIndex) InterleaveAncestor(i int) (table, index cat.StableID, numKeyCols int) {
+	panic("no interleavings")
+}
+
+// InterleavedByCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) InterleavedByCount() int {
+	return 0
+}
+
+// InterleavedBy is part of the cat.Index interface.
+func (oi *optVirtualIndex) InterleavedBy(i int) (table, index cat.StableID) {
+	panic("no interleavings")
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family
