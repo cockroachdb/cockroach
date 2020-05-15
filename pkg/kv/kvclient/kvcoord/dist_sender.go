@@ -1731,15 +1731,17 @@ func (ds *DistSender) sendToReplicas(
 	// request latency. Leaseholder considerations come below.
 	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.rpcContext.RemoteClocks.Latency)
 
-	canFollowerRead := (ds.clusterID != nil) && CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
-	sendToLeaseholder := (routing.Lease() != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
-	routeToFollower := canFollowerRead || !ba.RequiresLeaseHolder()
-	if sendToLeaseholder {
-		idx := replicas.Find(routing.Lease().Replica.ReplicaID)
-		if idx != -1 {
-			replicas.MoveToFront(idx)
-		} else {
-			log.Eventf(ctx, "leaseholder missing from replicas; lease: %s", routing.Lease())
+	// Try the leaseholder first, if the request wants it.
+	{
+		canFollowerRead := (ds.clusterID != nil) && CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
+		sendToLeaseholder := (routing.Lease() != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
+		if sendToLeaseholder {
+			idx := replicas.Find(routing.Lease().Replica.ReplicaID)
+			if idx != -1 {
+				replicas.MoveToFront(idx)
+			} else {
+				log.Eventf(ctx, "leaseholder missing from replicas; lease: %s", routing.Lease())
+			}
 		}
 	}
 
@@ -1791,6 +1793,10 @@ func (ds *DistSender) sendToReplicas(
 			}
 		} else {
 			log.VEventf(ctx, 2, "trying next peer %s", curReplica.String())
+		}
+		ba.ClientRangeInfo = &roachpb.ClientRangeInfo{
+			DescriptorGeneration: routing.entry.Desc.Generation,
+			LeaseSequence:        routing.entry.Lease.Sequence,
 		}
 		br, err = transport.SendNext(ctx, ba)
 
@@ -1878,21 +1884,9 @@ func (ds *DistSender) sendToReplicas(
 			// requests will attempt the same useless replicas.
 			switch tErr := br.Error.GetDetail().(type) {
 			case nil:
-				// When a request that we've attempted to route to the leaseholder comes
-				// back as successful, we assume that it must have been served by the
-				// leaseholder and so we update the leaseholder in the cache. In steady
-				// state, this is almost always the case, and so we gate the update on
-				// whether the response comes from a node that we didn't know held the
-				// lease.
-				updateLeaseholder := !routeToFollower &&
-					(routing.Lease() == nil || routing.Lease().Replica != curReplica)
-				if updateLeaseholder {
-					// Synthesize a lease. We'll leave the Sequence at 0 such that this
-					// lease will be overwritten in the cache by any future lease info.
-					l := &roachpb.Lease{
-						Replica: curReplica,
-					}
-					routing, _ /* ok */ = routing.UpdateLease(ctx, l)
+				// If the server gave us updated range info, lets update our cache with it.
+				if len(br.RangeInfos) > 0 {
+					routing.EvictAndReplace(ctx, br.RangeInfos...)
 				}
 				return br, nil
 			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
