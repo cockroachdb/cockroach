@@ -366,10 +366,8 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 				}
 			}
 		} else {
-			// No aggregate functions exist for this hashCode, create one. Since we
-			// don't expect a lot of hash collisions we only allocate small amount of
-			// memory here.
-			op.aggFuncMap[hashCode] = make([]*hashAggFuncs, 0, 1)
+			// No aggregate functions exist for this hashCode, create one.
+			op.aggFuncMap[hashCode] = op.hashAlloc.newHashAggFuncsSlice()
 		}
 
 		// Stage 2: Build aggregate function that doesn't exist, then perform
@@ -453,7 +451,10 @@ type hashAggFuncs struct {
 	fns []aggregateFunc
 }
 
-const sizeOfHashAggFuncs = unsafe.Sizeof(hashAggFuncs{})
+const (
+	sizeOfHashAggFuncs    = unsafe.Sizeof(hashAggFuncs{})
+	sizeOfHashAggFuncsPtr = unsafe.Sizeof(&hashAggFuncs{})
+)
 
 // TODO(yuzefovich): we need to account for memory used by this map. It is
 // likely that we will replace Golang's map with our vectorized hash table, so
@@ -473,10 +474,11 @@ func (v *hashAggFuncs) compute(b coldata.Batch, aggCols [][]uint32) {
 }
 
 // hashAggFuncsAlloc is a utility struct that batches allocations of
-// hashAggFuncs.
+// hashAggFuncs and slices of pointers to hashAggFuncs.
 type hashAggFuncsAlloc struct {
 	allocator *colmem.Allocator
 	buf       []hashAggFuncs
+	ptrBuf    []*hashAggFuncs
 }
 
 func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
@@ -486,5 +488,17 @@ func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
 	}
 	ret := &a.buf[0]
 	a.buf = a.buf[1:]
+	return ret
+}
+
+func (a *hashAggFuncsAlloc) newHashAggFuncsSlice() []*hashAggFuncs {
+	if len(a.ptrBuf) == 0 {
+		a.allocator.AdjustMemoryUsage(int64(hashAggregatorAllocSize * sizeOfHashAggFuncsPtr))
+		a.ptrBuf = make([]*hashAggFuncs, hashAggregatorAllocSize)
+	}
+	// Since we don't expect a lot of hash collisions we only give out small
+	// amount of memory here.
+	ret := a.ptrBuf[0:0:1]
+	a.ptrBuf = a.ptrBuf[1:]
 	return ret
 }
