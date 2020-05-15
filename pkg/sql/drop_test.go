@@ -230,10 +230,15 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	// There are no more namespace entries referencing this database as its
+	// parent.
+	namespaceQuery := fmt.Sprintf(`SELECT * FROM system.namespace WHERE "parentID"  = %d`, dbDesc.ID)
+	sqlRun.CheckQueryResults(t, namespaceQuery, [][]string{})
+
 	// Job still running, waiting for GC.
 	// TODO (lucy): Maybe this test API should use an offset starting
 	// from the most recent job instead.
-	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",

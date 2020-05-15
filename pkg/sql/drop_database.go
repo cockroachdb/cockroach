@@ -73,8 +73,9 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	var tbNames TableNames
-	tempSchemasToDelete := make(map[ClusterWideID]struct{})
+	schemasToDelete := make([]string, 0, len(schemas))
 	for _, schema := range schemas {
+		schemasToDelete = append(schemasToDelete, schema)
 		toAppend, err := GetObjectNames(
 			ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true, /*explicitPrefix*/
 		)
@@ -82,14 +83,6 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 			return nil, err
 		}
 		tbNames = append(tbNames, toAppend...)
-
-		isTempSchema, clusterWideID, err := temporarySchemaSessionID(schema)
-		if err != nil {
-			return nil, err
-		}
-		if isTempSchema {
-			tempSchemasToDelete[clusterWideID] = struct{}{}
-		}
 	}
 
 	if len(tbNames) > 0 {
@@ -156,11 +149,6 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	td, err = p.filterCascadedTables(ctx, td)
 	if err != nil {
 		return nil, err
-	}
-
-	schemasToDelete := make([]string, 0, len(tempSchemasToDelete))
-	for clusterWideID := range tempSchemasToDelete {
-		schemasToDelete = append(schemasToDelete, temporarySchemaName(clusterWideID))
 	}
 
 	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td, schemasToDelete: schemasToDelete}, nil
