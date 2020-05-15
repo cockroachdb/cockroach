@@ -69,7 +69,6 @@ func (*AlterTableDropStored) alterTableCmd()         {}
 func (*AlterTableSetNotNull) alterTableCmd()         {}
 func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
-func (*AlterTableRenameTable) alterTableCmd()        {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
@@ -86,7 +85,6 @@ var _ AlterTableCmd = &AlterTableDropStored{}
 var _ AlterTableCmd = &AlterTableSetNotNull{}
 var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
-var _ AlterTableCmd = &AlterTableRenameTable{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
@@ -336,22 +334,6 @@ func (node *AlterTableValidateConstraint) TelemetryCounter() telemetry.Counter {
 func (node *AlterTableValidateConstraint) Format(ctx *FmtCtx) {
 	ctx.WriteString(" VALIDATE CONSTRAINT ")
 	ctx.FormatNode(&node.Constraint)
-}
-
-// AlterTableRenameTable represents an ALTE RTABLE RENAME TO command.
-type AlterTableRenameTable struct {
-	NewName TableName
-}
-
-// TelemetryCounter implements the AlterTableCmd interface.
-func (node *AlterTableRenameTable) TelemetryCounter() telemetry.Counter {
-	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "rename_table")
-}
-
-// Format implements the NodeFormatter interface.
-func (node *AlterTableRenameTable) Format(ctx *FmtCtx) {
-	ctx.WriteString(" RENAME TO ")
-	ctx.FormatNode(&node.NewName)
 }
 
 // AlterTableRenameColumn represents an ALTER TABLE RENAME [COLUMN] command.
