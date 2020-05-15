@@ -595,11 +595,6 @@ func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
-// IsInterleaved is part of the cat.Table interface.
-func (tt *Table) IsInterleaved() bool {
-	return false
-}
-
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
 	return len(tt.Columns) - tt.writeOnlyColCount - tt.deleteOnlyColCount
@@ -858,6 +853,26 @@ func (ti *Index) PartitionByListPrefixes() []tree.Datums {
 		}
 	}
 	return res
+}
+
+// InterleaveAncestorCount is part of the cat.Index interface.
+func (ti *Index) InterleaveAncestorCount() int {
+	return 0
+}
+
+// InterleaveAncestor is part of the cat.Index interface.
+func (ti *Index) InterleaveAncestor(i int) (table, index cat.StableID, numKeyCols int) {
+	panic("no interleavings")
+}
+
+// InterleavedByCount is part of the cat.Index interface.
+func (ti *Index) InterleavedByCount() int {
+	return 0
+}
+
+// InterleavedBy is part of the cat.Index interface.
+func (ti *Index) InterleavedBy(i int) (table, index cat.StableID) {
+	panic("no interleavings")
 }
 
 // Column implements the cat.Column interface for testing purposes.

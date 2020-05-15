@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -485,10 +486,15 @@ func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 		// must be formulated to delete rows from them.
 		return false
 	}
-	if tab.IsInterleaved() {
-		// There is a separate fast path for interleaved tables in sql/delete.go.
+
+	// Any interleaving prevents the fast path; note that there is a separate fast
+	// path for interleaved tables in sql/delete.go.
+	// TODO(radu): move that fast path here.
+	primaryIdx := tab.Index(cat.PrimaryIndex)
+	if primaryIdx.InterleaveAncestorCount() > 0 || primaryIdx.InterleavedByCount() > 0 {
 		return false
 	}
+
 	if tab.InboundForeignKeyCount() > 0 {
 		// If the table is referenced by other tables' foreign keys, no fast path
 		// is possible, because the integrity of those references must be checked.
