@@ -248,17 +248,17 @@ func newMergeJoinOp(
 		left, right, leftTypes, rightTypes, leftOrdering, rightOrdering, diskAcc,
 	)
 	switch joinType {
-	case sqlbase.JoinType_INNER:
+	case sqlbase.InnerJoin:
 		return &mergeJoinInnerOp{base}, err
-	case sqlbase.JoinType_LEFT_OUTER:
+	case sqlbase.LeftOuterJoin:
 		return &mergeJoinLeftOuterOp{base}, err
-	case sqlbase.JoinType_RIGHT_OUTER:
+	case sqlbase.RightOuterJoin:
 		return &mergeJoinRightOuterOp{base}, err
-	case sqlbase.JoinType_FULL_OUTER:
+	case sqlbase.FullOuterJoin:
 		return &mergeJoinFullOuterOp{base}, err
-	case sqlbase.JoinType_LEFT_SEMI:
+	case sqlbase.LeftSemiJoin:
 		return &mergeJoinLeftSemiOp{base}, err
-	case sqlbase.JoinType_LEFT_ANTI:
+	case sqlbase.LeftAntiJoin:
 		return &mergeJoinLeftAntiOp{base}, err
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
@@ -443,7 +443,7 @@ func (o *mergeJoinBase) Init() {
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 	outputTypes := append([]*types.T{}, o.left.sourceTypes...)
-	if o.joinType != sqlbase.LeftSemiJoin && o.joinType != sqlbase.LeftAntiJoin {
+	if o.joinType.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
 	o.output = o.unlimitedAllocator.NewMemBatchWithSize(outputTypes, outBatchSize)

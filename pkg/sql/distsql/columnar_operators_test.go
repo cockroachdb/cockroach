@@ -416,23 +416,23 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 	}
 	testSpecs := []hjTestSpec{
 		{
-			joinType:        sqlbase.JoinType_INNER,
+			joinType:        sqlbase.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_OUTER,
+			joinType: sqlbase.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_RIGHT_OUTER,
+			joinType: sqlbase.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_FULL_OUTER,
+			joinType: sqlbase.FullOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: sqlbase.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: sqlbase.LeftAntiJoin,
 		},
 	}
 
@@ -487,9 +487,10 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								}
 
-								outputTypes := append(lInputTypes, rInputTypes...)
-								if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+								var outputTypes []*types.T
+								if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+									outputTypes = append(lInputTypes, rInputTypes...)
+								} else {
 									outputTypes = lInputTypes
 								}
 								outputColumns := make([]uint32, len(outputTypes))
@@ -500,10 +501,9 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								var filter, onExpr execinfrapb.Expression
 								if addFilter {
 									colTypes := append(lInputTypes, rInputTypes...)
-									forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-										testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 									filter = generateFilterExpr(
-										rng, nCols, nEqCols, colTypes, usingRandomTypes, forceLeftSide,
+										rng, nCols, nEqCols, colTypes, usingRandomTypes,
+										!testSpec.joinType.ShouldIncludeRightColsInOutput(),
 									)
 								}
 								if triedWithoutOnExpr {
@@ -595,26 +595,26 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	}
 	testSpecs := []mjTestSpec{
 		{
-			joinType:        sqlbase.JoinType_INNER,
+			joinType:        sqlbase.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_OUTER,
+			joinType: sqlbase.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_RIGHT_OUTER,
+			joinType: sqlbase.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_FULL_OUTER,
+			joinType: sqlbase.FullOuterJoin,
 			// FULL OUTER JOIN doesn't guarantee any ordering on its output (since it
 			// is ambiguous), so we're comparing the outputs as sets.
 			anyOrder: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: sqlbase.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: sqlbase.LeftAntiJoin,
 		},
 	}
 
@@ -688,9 +688,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								}
 								return cmp < 0
 							})
-							outputTypes := append(lInputTypes, rInputTypes...)
-							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-								testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+							var outputTypes []*types.T
+							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+								outputTypes = append(lInputTypes, rInputTypes...)
+							} else {
 								outputTypes = lInputTypes
 							}
 							outputColumns := make([]uint32, len(outputTypes))
@@ -701,10 +702,9 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							var filter, onExpr execinfrapb.Expression
 							if addFilter {
 								colTypes := append(lInputTypes, rInputTypes...)
-								forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 								filter = generateFilterExpr(
-									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, forceLeftSide,
+									rng, nCols, nOrderingCols, colTypes, usingRandomTypes,
+									!testSpec.joinType.ShouldIncludeRightColsInOutput(),
 								)
 							}
 							if triedWithoutOnExpr {

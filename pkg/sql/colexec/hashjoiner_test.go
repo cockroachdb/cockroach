@@ -71,7 +71,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_FULL_OUTER,
+			joinType:          sqlbase.FullOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -102,7 +102,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:         sqlbase.JoinType_FULL_OUTER,
+			joinType:         sqlbase.FullOuterJoin,
 			leftEqColsAreKey: true,
 
 			expected: tuples{
@@ -134,7 +134,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_LEFT_OUTER,
+			joinType:          sqlbase.LeftOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -166,7 +166,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			joinType:          sqlbase.RightOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -199,7 +199,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			joinType:          sqlbase.RightOuterJoin,
 			rightEqColsAreKey: true,
 
 			expected: tuples{
@@ -771,7 +771,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: sqlbase.LeftSemiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -804,7 +804,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: sqlbase.LeftAntiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -1047,9 +1047,9 @@ func BenchmarkHashJoiner(b *testing.B) {
 									for i := 0; i < b.N; i++ {
 										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
 										rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
-										joinType := sqlbase.JoinType_INNER
+										joinType := sqlbase.InnerJoin
 										if fullOuter {
-											joinType = sqlbase.JoinType_FULL_OUTER
+											joinType = sqlbase.FullOuterJoin
 										}
 										hjSpec, err := makeHashJoinerSpec(
 											joinType,

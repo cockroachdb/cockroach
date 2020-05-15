@@ -81,9 +81,9 @@ func newApplyJoinNode(
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (planNode, error) {
 	switch joinType {
-	case sqlbase.JoinType_RIGHT_OUTER, sqlbase.JoinType_FULL_OUTER:
+	case sqlbase.RightOuterJoin, sqlbase.FullOuterJoin:
 		return nil, errors.AssertionFailedf("unsupported right outer apply join: %d", log.Safe(joinType))
-	case sqlbase.JoinType_EXCEPT_ALL, sqlbase.JoinType_INTERSECT_ALL:
+	case sqlbase.ExceptAllJoin, sqlbase.IntersectAllJoin:
 		return nil, errors.AssertionFailedf("unsupported apply set op: %d", log.Safe(joinType))
 	}
 
@@ -137,8 +137,8 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			}
 
 			a.run.leftRowFoundAMatch = true
-			if a.joinType == sqlbase.JoinType_LEFT_ANTI ||
-				a.joinType == sqlbase.JoinType_LEFT_SEMI {
+			if a.joinType == sqlbase.LeftAntiJoin ||
+				a.joinType == sqlbase.LeftSemiJoin {
 				// We found a match, but we're doing an anti or semi join, so we're
 				// done with this left row.
 				break
@@ -157,7 +157,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			// If we have a left row already, we have to check to see if we need to
 			// emit rows for semi, outer, or anti joins.
 			if foundAMatch {
-				if a.joinType == sqlbase.JoinType_LEFT_SEMI {
+				if a.joinType == sqlbase.LeftSemiJoin {
 					// We found a match, and we're doing an semi-join, so we're done
 					// with this left row after we output it.
 					a.pred.prepareRow(a.run.out, a.run.leftRow, nil)
@@ -167,11 +167,11 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			} else {
 				// We found no match. Output LEFT OUTER or ANTI match if necessary.
 				switch a.joinType {
-				case sqlbase.JoinType_LEFT_OUTER:
+				case sqlbase.LeftOuterJoin:
 					a.pred.prepareRow(a.run.out, a.run.leftRow, a.run.emptyRight)
 					a.run.leftRow = nil
 					return true, nil
-				case sqlbase.JoinType_LEFT_ANTI:
+				case sqlbase.LeftAntiJoin:
 					a.pred.prepareRow(a.run.out, a.run.leftRow, nil)
 					a.run.leftRow = nil
 					return true, nil

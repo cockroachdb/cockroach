@@ -99,7 +99,7 @@ func (jb *joinerBase) init(
 	condTypes = append(condTypes, rightTypes...)
 
 	outputSize := len(leftTypes) + jb.numMergedEqualityColumns
-	if shouldIncludeRightColsInOutput(jb.joinType) {
+	if jb.joinType.ShouldIncludeRightColsInOutput() {
 		outputSize += len(rightTypes)
 	}
 	outputTypes := condTypes[:outputSize]
@@ -155,15 +155,6 @@ func (jb *joinerBase) renderUnmatchedRow(
 	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
 	return jb.combinedRow
-}
-
-func shouldIncludeRightColsInOutput(joinType sqlbase.JoinType) bool {
-	switch joinType {
-	case sqlbase.LeftSemiJoin, sqlbase.LeftAntiJoin, sqlbase.IntersectAllJoin, sqlbase.ExceptAllJoin:
-		return false
-	default:
-		return true
-	}
 }
 
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
