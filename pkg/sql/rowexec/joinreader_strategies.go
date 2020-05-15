@@ -208,7 +208,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		}
 		inputRow := s.inputRows[s.emitState.unmatchedInputRowIndices[s.emitState.unmatchedInputRowIndicesCursor]]
 		s.emitState.unmatchedInputRowIndicesCursor++
-		if !shouldIncludeRightColsInOutput(s.joinType) {
+		if !s.joinType.ShouldIncludeRightColsInOutput() {
 			return inputRow, jrEmittingRows, nil
 		}
 		return s.renderUnmatchedRow(inputRow, leftSide), jrEmittingRows, nil
@@ -230,7 +230,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		}
 
 		s.matched[inputRowIdx] = true
-		if !shouldIncludeRightColsInOutput(s.joinType) {
+		if !s.joinType.ShouldIncludeRightColsInOutput() {
 			if s.joinType == sqlbase.LeftAntiJoin {
 				// Skip emitting row.
 				continue

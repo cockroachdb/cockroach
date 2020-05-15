@@ -208,14 +208,14 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.JoinType_LEFT_ANTI:
+			case sqlbase.LeftAntiJoin:
 				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, true)
 			default:
 				_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, batch, true)
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.JoinType_LEFT_ANTI:
+			case sqlbase.LeftAntiJoin:
 				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, false)
 			default:
 				_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, batch, false)
@@ -243,7 +243,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.JoinType_LEFT_ANTI:
+			case sqlbase.LeftAntiJoin:
 				// {{/* For LEFT ANTI join we don't care whether the build (right) side
 				// was distinct, so we only have single variation of COLLECT method. */}}
 				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, true)
@@ -252,7 +252,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.JoinType_LEFT_ANTI:
+			case sqlbase.LeftAntiJoin:
 				// {{/* For LEFT ANTI join we don't care whether the build (right) side
 				// was distinct, so we only have single variation of COLLECT method. */}}
 				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, false)
