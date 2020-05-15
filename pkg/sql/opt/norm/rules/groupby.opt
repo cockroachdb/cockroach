@@ -285,17 +285,15 @@
 )
 
 # ConvertCountToCountRows replaces a Count operator performed on a non-null
-# column with a CountRows operator. CountRows is significantly faster to execute
-# than Count.
+# expression with a CountRows operator. CountRows is significantly faster to
+# execute than Count.
 [ConvertCountToCountRows, Normalize]
 (GroupBy | ScalarGroupBy
     $input:*
     $aggregations:[
         ...
-        $item:(AggregationsItem
-                (Count (Variable $inputColID:*))
-            ) &
-            (IsColNotNull $inputColID $input)
+        $item:(AggregationsItem (Count $arg:*)) &
+            (ExprIsNeverNull $arg (NotNullCols $input))
         ...
     ]
     $groupingPrivate:*
