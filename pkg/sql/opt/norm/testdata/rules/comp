@@ -321,7 +321,7 @@ values
  └── (false,)
 
 norm expect=FoldNonNullIsNull
-SELECT (1, 2, 3) IS NULL AS r
+SELECT (1, 2, 3) IS NOT DISTINCT FROM NULL AS r
 ----
 values
  ├── columns: r:1!null
@@ -329,6 +329,114 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (false,)
+
+norm expect=FoldNonNullIsNull
+SELECT (1, NULL) IS NOT DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNonNullIsNull
+SELECT (NULL, NULL) IS NOT DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+# --------------------------------------------------
+# FoldNullTupleIsTupleNull
+# --------------------------------------------------
+norm expect=FoldNullTupleIsTupleNull
+SELECT (NULL, NULL) IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect-not=FoldNullTupleIsTupleNull
+SELECT (k, NULL) IS NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1, NULL) IS NULL [as="?column?":7, outer=(1)]
+
+# --------------------------------------------------
+# FoldNonNullTupleIsTupleNull
+# --------------------------------------------------
+norm expect=FoldNonNullTupleIsTupleNull
+SELECT (1, 2) IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNonNullTupleIsTupleNull
+SELECT (1, NULL) IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNonNullTupleIsTupleNull
+SELECT (1, k) IS NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── false [as="?column?":7]
+
+norm expect=FoldNonNullTupleIsTupleNull
+SELECT ((NULL, NULL), NULL) IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNonNullTupleIsTupleNull
+SELECT (ARRAY[NULL, NULL], NULL) IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect-not=FoldNonNullTupleIsTupleNull
+SELECT (k, NULL) IS NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1, NULL) IS NULL [as="?column?":7, outer=(1)]
 
 # --------------------------------------------------
 # FoldIsNotNull
@@ -365,7 +473,7 @@ project
       └── i:2 IS NOT NULL [as=t:9, outer=(2)]
 
 norm expect=FoldNonNullIsNotNull
-SELECT (1, 2, 3) IS NOT NULL AS r
+SELECT (1, 2, 3) IS DISTINCT FROM NULL AS r
 ----
 values
  ├── columns: r:1!null
@@ -373,6 +481,104 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (true,)
+
+norm expect=FoldNonNullIsNotNull
+SELECT (1, NULL) IS DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldNonNullIsNotNull
+SELECT (1, NULL) IS DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+# --------------------------------------------------
+# FoldNonNullTupleIsTupleNotNull
+# --------------------------------------------------
+norm expect=FoldNonNullTupleIsTupleNotNull
+SELECT (1, 1) IS NOT NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldNonNullTupleIsTupleNotNull
+SELECT (1, (NULL, NULL)) IS NOT NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldNonNullTupleIsTupleNotNull
+SELECT (1, ARRAY[NULL, NULL]) IS NOT NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect-not=FoldNonNullTupleIsTupleNotNull
+SELECT (1, k) IS NOT NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (1, k:1) IS NOT NULL [as="?column?":7, outer=(1)]
+
+# --------------------------------------------------
+# FoldNullTupleIsTupleNotNull
+# --------------------------------------------------
+norm expect=FoldNullTupleIsTupleNotNull
+SELECT (1, NULL) IS NOT NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNullTupleIsTupleNotNull
+SELECT (k, NULL) IS NOT NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── false [as="?column?":7]
+
+norm expect-not=FoldNonNullTupleIsTupleNotNull
+SELECT (1, k) IS NOT NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (1, k:1) IS NOT NULL [as="?column?":7, outer=(1)]
 
 # --------------------------------------------------
 # CommuteNullIs

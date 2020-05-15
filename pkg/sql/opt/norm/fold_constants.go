@@ -66,6 +66,73 @@ func (c *CustomFuncs) IsConstValueOrTuple(input opt.ScalarExpr) bool {
 	return memo.CanExtractConstDatum(input)
 }
 
+// HasNullElement returns true if the input tuple has at least one constant,
+// null element. Note that it only returns true if one element is known to be
+// null. For example, given the tuple (1, x), it will return false because x is
+// not guaranteed to be null.
+func (c *CustomFuncs) HasNullElement(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if e.Op() == opt.NullOp {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAllNullElements returns true if the input tuple has only constant, null
+// elements. Note that it only returns true if all elements are known to be
+// null. For example, given the tuple (NULL, x), it will return false because x
+// is not guaranteed to be null.
+func (c *CustomFuncs) HasAllNullElements(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if e.Op() != opt.NullOp {
+			return false
+		}
+	}
+	return true
+}
+
+// HasNonNullElement returns true if the input tuple has at least one constant,
+// non-null element. Note that it only returns true if one element is known to
+// be non-null. For example, given the tuple (NULL, x), it will return false
+// because x is not guaranteed to be non-null.
+func (c *CustomFuncs) HasNonNullElement(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		// It is guaranteed that the input has at least one non-null element if
+		// e is not null and it is either a constant value, array, or tuple.
+		// Note that it doesn't matter whether a nested tuple has non-null
+		// elements or not. For example, (NULL, (NULL, NULL)) IS NULL evaluates
+		// to false because one first-level element is not null - the second is
+		// a tuple.
+		if e.Op() != opt.NullOp && (opt.IsConstValueOp(e) || e.Op() == opt.TupleOp || e.Op() == opt.ArrayOp) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAllNonNullElements returns true if the input tuple has all constant,
+// non-null elements. Note that it only returns true if all elements are known
+// to be non-null. For example, given the tuple (1, x), it will return false
+// because x is not guaranteed to be non-null.
+func (c *CustomFuncs) HasAllNonNullElements(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		// It is not guaranteed that the input has all non-null elements if e
+		// is null or it is neither a constant value, array, nor tuple. Note
+		// that it doesn't matter whether a nested tuple has non-null elements
+		// or not. For example, (1, (NULL, NULL)) IS NOT NULL evaluates to true
+		// because all first-level elements are not null.
+		if e.Op() == opt.NullOp || !(opt.IsConstValueOp(e) || e.Op() == opt.TupleOp || e.Op() == opt.ArrayOp) {
+			return false
+		}
+	}
+	return true
+}
+
 // FoldBinary evaluates a binary expression with constant inputs. It returns
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input types, and the evaluation causes no error.

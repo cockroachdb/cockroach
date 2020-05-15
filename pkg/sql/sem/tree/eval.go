@@ -4309,6 +4309,48 @@ func (expr *NotExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (expr *IsNullExpr) Eval(ctx *EvalContext) (Datum, error) {
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if d == DNull {
+		return MakeDBool(true), nil
+	}
+	if t, ok := d.(*DTuple); ok {
+		// A tuple IS NULL if all elements are NULL.
+		for _, tupleDatum := range t.D {
+			if tupleDatum != DNull {
+				return MakeDBool(false), nil
+			}
+		}
+		return MakeDBool(true), nil
+	}
+	return MakeDBool(false), nil
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *IsNotNullExpr) Eval(ctx *EvalContext) (Datum, error) {
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if d == DNull {
+		return MakeDBool(false), nil
+	}
+	if t, ok := d.(*DTuple); ok {
+		// A tuple IS NOT NULL if all elements are not NULL.
+		for _, tupleDatum := range t.D {
+			if tupleDatum == DNull {
+				return MakeDBool(false), nil
+			}
+		}
+		return MakeDBool(true), nil
+	}
+	return MakeDBool(true), nil
+}
+
+// Eval implements the TypedExpr interface.
 func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	expr1, err := expr.Expr1.(TypedExpr).Eval(ctx)
 	if err != nil {
