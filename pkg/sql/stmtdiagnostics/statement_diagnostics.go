@@ -468,7 +468,7 @@ func (r *Registry) insertStatementDiagnostics(
 // pollRequests reads the pending rows from system.statement_diagnostics_requests and
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
-	var rows []tree.Datums
+	var rows sqlutil.InternalRows
 	// Loop until we run the query without straddling an epoch increment.
 	for {
 		r.mu.Lock()
@@ -476,7 +476,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		r.mu.Unlock()
 
 		var err error
-		rows, err = r.ie.QueryEx(ctx, "stmt-diag-poll", nil, /* txn */
+		rows, err = r.ie.QueryIterator(ctx, "stmt-diag-poll", nil, /* txn */
 			sqlbase.InternalExecutorSessionDataOverride{
 				User: security.RootUser,
 			},
@@ -499,12 +499,19 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 	defer r.mu.Unlock()
 
 	var ids util.FastIntSet
-	for _, row := range rows {
+	//for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+	var ok bool
+	var err error
+	for ok, err = rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		id := requestID(*row[0].(*tree.DInt))
 		fprint := string(*row[1].(*tree.DString))
 
 		ids.Add(int(id))
 		r.addRequestInternalLocked(ctx, id, fprint)
+	}
+	if err != nil {
+		return err
 	}
 
 	// Remove all other requests.

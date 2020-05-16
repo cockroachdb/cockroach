@@ -303,14 +303,17 @@ func (p *planner) resolveMemberOfWithAdminOption(
 		}
 		visited[m] = struct{}{}
 
-		rows, err := p.ExecCfg().InternalExecutor.Query(
-			ctx, "expand-roles", nil /* txn */, lookupRolesStmt, m,
+		rows, err := p.ExecCfg().InternalExecutor.QueryIterator(
+			ctx, "expand-roles", nil /* txn */, sqlbase.RootUserDataOverride,
+			lookupRolesStmt, m,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, row := range rows {
+		var ok bool
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			roleName := tree.MustBeDString(row[0])
 			isAdmin := row[1].(*tree.DBool)
 
@@ -318,6 +321,9 @@ func (p *planner) resolveMemberOfWithAdminOption(
 
 			// We need to expand this role. Let the "pop" worry about already-visited elements.
 			toVisit = append(toVisit, string(roleName))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -365,7 +371,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		}
 	}
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryEx(
+	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		fmt.Sprintf(

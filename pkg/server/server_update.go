@@ -140,7 +140,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	// Check if auto upgrade is enabled at current version. This is read from
 	// the KV store so that it's in effect on all nodes immediately following a
 	// SET CLUSTER SETTING.
-	datums, err := s.sqlServer.internalExecutor.QueryEx(
+	datums, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "read-downgrade", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
@@ -150,8 +150,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	}
 
 	if len(datums) != 0 {
-		row := datums[0]
-		downgradeVersion := string(tree.MustBeDString(row[0]))
+		downgradeVersion := string(tree.MustBeDString(datums[0]))
 
 		if clusterVersion == downgradeVersion {
 			return false, errors.Errorf("auto upgrade is disabled for current version: %s", clusterVersion)
@@ -165,7 +164,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 // (which returns the version from the KV store as opposed to the possibly
 // lagging settings subsystem).
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
-	datums, err := s.sqlServer.internalExecutor.QueryEx(
+	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "show-version", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SHOW CLUSTER SETTING version;",
@@ -173,10 +172,9 @@ func (s *Server) clusterVersion(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(datums) == 0 {
+	if len(row) == 0 {
 		return "", errors.New("cluster version is not set")
 	}
-	row := datums[0]
 	clusterVersion := string(tree.MustBeDString(row[0]))
 
 	return clusterVersion, nil

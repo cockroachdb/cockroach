@@ -70,13 +70,20 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
-		ctx, "scrub-fk", params.p.txn, checkQuery,
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryIterator(
+		ctx, "scrub-fk", params.p.txn, sqlbase.NoSessionDataOverride, checkQuery,
 	)
 	if err != nil {
 		return err
 	}
-	o.run.rows = rows
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
+		o.run.rows = append(o.run.rows, row)
+	}
+	if err != nil {
+		return err
+	}
 
 	if len(o.constraint.FK.OriginColumnIDs) > 1 && o.constraint.FK.Match == sqlbase.ForeignKeyReference_FULL {
 		// Check if there are any disallowed references where some columns are NULL
@@ -89,13 +96,19 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
-			ctx, "scrub-fk", params.p.txn, checkNullsQuery,
+		rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryIterator(
+			ctx, "scrub-fk", params.p.txn, sqlbase.NoSessionDataOverride, checkNullsQuery,
 		)
 		if err != nil {
 			return err
 		}
-		o.run.rows = append(o.run.rows, rows...)
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
+			o.run.rows = append(o.run.rows, row)
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	// Collect the expected types for the query results. This is all

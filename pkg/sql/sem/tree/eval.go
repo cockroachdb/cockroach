@@ -2727,12 +2727,6 @@ type ClientNoticeSender interface {
 // this to sqlutil.InternalExecutor or sql.InternalExecutor, and use the
 // alternatives.
 type InternalExecutor interface {
-	// Query is part of the sqlutil.InternalExecutor interface.
-	Query(
-		ctx context.Context, opName string, txn *kv.Txn,
-		stmt string, qargs ...interface{},
-	) ([]Datums, error)
-
 	// QueryRow is part of the sqlutil.InternalExecutor interface.
 	QueryRow(
 		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},

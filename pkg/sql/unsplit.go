@@ -104,8 +104,8 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 	if n.index.ID != n.tableDesc.PrimaryIndex.ID {
 		indexName = n.index.Name
 	}
-	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryEx(
-		params.ctx, "split points query", params.p.txn, sqlbase.InternalExecutorSessionDataOverride{},
+	rows, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryIterator(
+		params.ctx, "split points query", params.p.txn, sqlbase.NoSessionDataOverride,
 		statement,
 		dbDesc.Name,
 		n.tableDesc.Name,
@@ -114,9 +114,11 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	n.run.keys = make([][]byte, len(ranges))
-	for i, d := range ranges {
-		n.run.keys[i] = []byte(*(d[0].(*tree.DBytes)))
+	n.run.keys = make([][]byte, 0)
+	var ok bool
+	for ok, err = rows.Next(params.ctx); ok && err == nil; ok, err = rows.Next(params.ctx) {
+		d := rows.Cur()
+		n.run.keys = append(n.run.keys, []byte(*(d[0].(*tree.DBytes))))
 	}
 
 	return nil

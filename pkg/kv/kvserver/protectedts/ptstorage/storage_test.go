@@ -589,6 +589,33 @@ type wrappedInternalExecutor struct {
 	}
 }
 
+func (ie *wrappedInternalExecutor) QueryRowWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, sqlbase.ResultColumns, error) {
+	return ie.wrapped.QueryRowWithCols(ctx, opName, txn, session, stmt, qargs...)
+}
+
+func (ie *wrappedInternalExecutor) QueryIterator(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	if f := ie.getErrFunc(); f != nil {
+		if err := f(stmt); err != nil {
+			return nil, err
+		}
+	}
+	return ie.wrapped.QueryIterator(ctx, opName, txn, session, stmt, qargs...)
+}
+
 var _ sqlutil.InternalExecutor = &wrappedInternalExecutor{}
 
 func (ie *wrappedInternalExecutor) Exec(
@@ -608,33 +635,6 @@ func (ie *wrappedInternalExecutor) ExecEx(
 	panic("unimplemented")
 }
 
-func (ie *wrappedInternalExecutor) QueryEx(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	session sqlbase.InternalExecutorSessionDataOverride,
-	stmt string,
-	qargs ...interface{},
-) ([]tree.Datums, error) {
-	if f := ie.getErrFunc(); f != nil {
-		if err := f(stmt); err != nil {
-			return nil, err
-		}
-	}
-	return ie.wrapped.QueryEx(ctx, opName, txn, session, stmt, qargs...)
-}
-
-func (ie *wrappedInternalExecutor) QueryWithCols(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	o sqlbase.InternalExecutorSessionDataOverride,
-	statement string,
-	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	panic("unimplemented")
-}
-
 func (ie *wrappedInternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
@@ -649,12 +649,6 @@ func (ie *wrappedInternalExecutor) QueryRowEx(
 		}
 	}
 	return ie.wrapped.QueryRowEx(ctx, opName, txn, session, stmt, qargs...)
-}
-
-func (ie *wrappedInternalExecutor) Query(
-	ctx context.Context, opName string, txn *kv.Txn, statement string, params ...interface{},
-) ([]tree.Datums, error) {
-	panic("not implemented")
 }
 
 func (ie *wrappedInternalExecutor) QueryRow(

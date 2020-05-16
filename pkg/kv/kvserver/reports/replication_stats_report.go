@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -110,15 +111,17 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 	const prevViolations = "select zone_id, subzone_id, total_ranges, " +
 		"unavailable_ranges, under_replicated_ranges, over_replicated_ranges " +
 		"from system.replication_stats"
-	rows, err := ex.Query(
-		ctx, "get-previous-replication-stats", txn, prevViolations,
+	rows, err := ex.QueryIterator(
+		ctx, "get-previous-replication-stats", txn, sqlbase.RootUserDataOverride, prevViolations,
 	)
 	if err != nil {
 		return err
 	}
 
-	r.previousVersion = make(RangeReport, len(rows))
-	for _, row := range rows {
+	r.previousVersion = make(RangeReport, 16)
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		key := ZoneKey{}
 		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
@@ -130,7 +133,7 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (r *replicationStatsReportSaver) updateTimestamp(

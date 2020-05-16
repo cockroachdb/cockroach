@@ -424,7 +424,7 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sqlbase.NoSessionDataOverride,
+		sqlbase.RootUserDataOverride,
 		query,
 	)
 	if err != nil {

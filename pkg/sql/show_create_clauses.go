@@ -37,15 +37,19 @@ type comment struct {
 
 // selectComment retrieves all the comments pertaining to a table (comments on the table
 // itself but also column and index comments.)
-func selectComment(ctx context.Context, p PlanHookState, tableID sqlbase.ID) (tc *tableComments) {
+func selectComment(
+	ctx context.Context, p PlanHookState, tableID sqlbase.ID,
+) (tc *tableComments, err error) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 
-	commentRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-		ctx, "show-tables-with-comment", p.Txn(), query)
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
+		ctx, "show-tables-with-comment", p.Txn(), sqlbase.NoSessionDataOverride, query)
 	if err != nil {
 		log.VEventf(ctx, 1, "%q", err)
 	} else {
-		for _, row := range commentRows {
+		var ok bool
+		for ok, err = rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			commentType := int(tree.MustBeDInt(row[0]))
 			switch commentType {
 			case keys.TableCommentType, keys.ColumnCommentType, keys.IndexCommentType:
@@ -66,9 +70,12 @@ func selectComment(ctx context.Context, p PlanHookState, tableID sqlbase.ID) (tc
 				}
 			}
 		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return tc
+	return tc, nil
 }
 
 // ShowCreateView returns a valid SQL representation of the CREATE VIEW

@@ -170,7 +170,11 @@ func ShowCreateTable(
 	}
 
 	if !displayOptions.IgnoreComments {
-		if err := showComments(desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
+		comments, err := selectComment(ctx, p, desc.ID)
+		if err != nil {
+			return "", err
+		}
+		if err := showComments(desc, comments, &f.Buffer); err != nil {
 			return "", err
 		}
 	}

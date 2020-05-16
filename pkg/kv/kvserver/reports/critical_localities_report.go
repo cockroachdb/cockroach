@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
@@ -103,15 +104,17 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 	}
 	const prevViolations = "select zone_id, subzone_id, locality, at_risk_ranges " +
 		"from system.replication_critical_localities"
-	rows, err := ex.Query(
-		ctx, "get-previous-replication-critical-localities", txn, prevViolations,
+	rows, err := ex.QueryIterator(
+		ctx, "get-previous-replication-critical-localities", txn, sqlbase.RootUserDataOverride, prevViolations,
 	)
 	if err != nil {
 		return err
 	}
 
-	r.previousVersion = make(LocalityReport, len(rows))
-	for _, row := range rows {
+	r.previousVersion = make(LocalityReport, 16)
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		key := localityKey{}
 		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
@@ -119,7 +122,7 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 		r.previousVersion[key] = localityStatus{(int32)(*row[3].(*tree.DInt))}
 	}
 
-	return nil
+	return err
 }
 
 func (r *replicationCriticalLocalitiesReportSaver) updateTimestamp(

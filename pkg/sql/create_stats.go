@@ -481,10 +481,11 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 	}
 	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) ORDER BY created`
 
-	rows, err := p.ExecCfg().InternalExecutor.Query(
+	rows, err := p.ExecCfg().InternalExecutor.QueryIterator(
 		ctx,
 		"get-jobs",
 		nil, /* txn */
+		sqlbase.RootUserDataOverride,
 		stmt,
 		jobs.StatusPending,
 		jobs.StatusRunning,
@@ -494,7 +495,9 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 		return err
 	}
 
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		payload, err := jobs.UnmarshalPayload(row[1])
 		if err != nil {
 			return err
@@ -511,7 +514,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 			return stats.ConcurrentCreateStatsError
 		}
 	}
-	return nil
+	return err
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

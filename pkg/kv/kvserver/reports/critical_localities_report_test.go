@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -144,10 +145,14 @@ func TestLocalityReport(t *testing.T) {
 func TableData(
 	ctx context.Context, tableName string, executor sqlutil.InternalExecutor,
 ) [][]string {
-	if rows, err := executor.Query(
-		ctx, "test-select-"+tableName, nil /* txn */, "select * from "+tableName); err == nil {
-		result := make([][]string, 0, len(rows))
-		for _, row := range rows {
+	if rows, err := executor.QueryIterator(
+		ctx, "test-select-"+tableName, nil, /* txn */
+		sqlbase.NoSessionDataOverride,
+		"select * from "+tableName); err == nil {
+		result := make([][]string, 0)
+		var ok bool
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			stringRow := make([]string, 0, row.Len())
 			for _, item := range row {
 				stringRow = append(stringRow, item.String())

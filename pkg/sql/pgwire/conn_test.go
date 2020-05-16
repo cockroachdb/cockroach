@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -226,7 +225,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 func execQuery(
 	ctx context.Context, query string, s serverutils.TestServerInterface, c *conn,
 ) error {
-	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryWithCols(
+	rows, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryIterator(
 		ctx, "test", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser, Database: "system"},
 		query,
@@ -234,7 +233,7 @@ func execQuery(
 	if err != nil {
 		return err
 	}
-	return sendResult(ctx, c, cols, rows)
+	return sendResult(ctx, c, rows)
 }
 
 func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error {
@@ -353,15 +352,16 @@ func makeTestingConvCfg() sessiondata.DataConversionConfig {
 //
 // TODO(andrei): Tests using this should probably switch to using the similar
 // routines in the connection once conn learns how to write rows.
-func sendResult(
-	ctx context.Context, c *conn, cols sqlbase.ResultColumns, rows []tree.Datums,
-) error {
-	if err := c.writeRowDescription(ctx, cols, nil /* formatCodes */, c.conn); err != nil {
+func sendResult(ctx context.Context, c *conn, rows sqlutil.InternalRows) error {
+	if err := c.writeRowDescription(ctx, rows.Types(), nil /* formatCodes */, c.conn); err != nil {
 		return err
 	}
 
 	defaultConv := makeTestingConvCfg()
-	for _, row := range rows {
+	var ok bool
+	var err error
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 		c.msgBuilder.putInt16(int16(len(row)))
 		for _, col := range row {
@@ -371,6 +371,9 @@ func sendResult(
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 			return err
 		}
+	}
+	if err != nil {
+		return err
 	}
 
 	return finishQuery(execute, c)

@@ -779,7 +779,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 	// Get all jobs that aren't Succeeded and evaluate whether they need a
 	// migration. (Jobs that are canceled in 19.2 could still have in-progress
 	// schema changes.)
-	rows, err := r.sqlExecutor.QueryEx(
+	rows, err := r.sqlExecutor.QueryIterator(
 		ctx, "jobs-for-migration", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SELECT id, payload FROM system.jobs WHERE status != $1", jobs.StatusSucceeded,
@@ -787,7 +787,9 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		jobID := int64(tree.MustBeDInt(row[0]))
 		log.VEventf(ctx, 2, "job %d: evaluating for schema change job migration", jobID)
 
@@ -844,6 +846,9 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		}
 		log.Infof(ctx, "job %d: completed schema change job migration", jobID)
 	}
+	if err != nil {
+		return err
+	}
 
 	// Finally, we iterate through all table descriptors and jobs, and create jobs
 	// for any tables in the ADD state or that have draining names that don't
@@ -877,7 +882,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		allDescs = descs
 
 		// Get all running schema change jobs.
-		rows, err := r.sqlExecutor.QueryEx(
+		rows, err := r.sqlExecutor.QueryIterator(
 			ctx, "preexisting-jobs", txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"SELECT id, payload FROM system.jobs WHERE status = $1", jobs.StatusRunning,
@@ -885,7 +890,8 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		if err != nil {
 			return err
 		}
-		for _, row := range rows {
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			jobID := int64(tree.MustBeDInt(row[0]))
 			payload, err := jobs.UnmarshalPayload(row[1])
 			if err != nil {
@@ -908,7 +914,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 				}
 			}
 		}
-		return nil
+		return err
 	}); err != nil {
 		return err
 	}
@@ -1415,7 +1421,7 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 	q := fmt.Sprintf(
 		`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]`,
 		sqlbase.DeprecatedNamespaceTable.ID)
-	rows, err := r.sqlExecutor.QueryEx(
+	rows, err := r.sqlExecutor.QueryIterator(
 		ctx, "read-deprecated-namespace-table", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{
 			User: security.RootUser,
@@ -1424,7 +1430,9 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		parentID := sqlbase.ID(tree.MustBeDInt(row[0]))
 		name := string(tree.MustBeDString(row[1]))
 		id := sqlbase.ID(tree.MustBeDInt(row[2]))
@@ -1454,7 +1462,7 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 			}
 		}
 	}
-	return nil
+	return err
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {

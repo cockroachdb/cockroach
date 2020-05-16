@@ -479,9 +479,9 @@ CREATE TABLE crdb_internal.jobs (
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
 			ctx, "crdb-internal-jobs-table", p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sqlbase.RootUserDataOverride,
 			query)
 		if err != nil {
 			return nil, nil, err
@@ -498,10 +498,15 @@ CREATE TABLE crdb_internal.jobs (
 		ba := p.ExtendedEvalContext().Mon.MakeBoundAccount()
 		defer ba.Close(ctx)
 		var totalMem int64
-		for _, r := range rows {
+		var ok bool
+		for ok, err = rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+			r := rows.Cur()
 			for _, d := range r {
 				totalMem += int64(d.Size())
 			}
+		}
+		if err != nil {
+			return nil, nil, err
 		}
 		if err := ba.Grow(ctx, totalMem); err != nil {
 			return nil, nil, err
@@ -512,11 +517,10 @@ CREATE TABLE crdb_internal.jobs (
 		return func() (datums tree.Datums, e error) {
 			// Loop while we need to skip a row.
 			for {
-				if len(rows) == 0 {
-					return nil, nil
+				if ok, err := rows.Next(ctx); !ok || err != nil {
+					return nil, err
 				}
-				r := rows[0]
-				rows = rows[1:]
+				r := rows.Cur()
 				id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
@@ -2281,14 +2285,17 @@ func getAllNames(
 ) (map[sqlbase.ID]NamespaceKey, error) {
 	namespace := map[sqlbase.ID]NamespaceKey{}
 	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
-		rows, err := executor.Query(
+		rows, err := executor.QueryIterator(
 			ctx, "get-all-names", txn,
+			sqlbase.RootUserDataOverride,
 			`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
 		)
 		if err != nil {
 			return nil, err
 		}
-		for _, r := range rows {
+		var ok bool
+		for ok, err = rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+			r := rows.Cur()
 			id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
 			namespace[sqlbase.ID(id)] = NamespaceKey{
 				ParentID:       sqlbase.ID(parentID),
@@ -2296,20 +2303,26 @@ func getAllNames(
 				Name:           string(name),
 			}
 		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Also get all rows from namespace_deprecated, and add to the namespace map
 	// if it is not already there yet.
 	// If a row exists in both here and namespace, only use the one from namespace.
 	// TODO(sqlexec): In 20.2, this can be removed.
-	deprecatedRows, err := executor.Query(
+	rows, err := executor.QueryIterator(
 		ctx, "get-all-names-deprecated-namespace", txn,
+		sqlbase.RootUserDataOverride,
 		fmt.Sprintf(`SELECT id, "parentID", name FROM [%d as namespace]`, keys.DeprecatedNamespaceTableID),
 	)
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range deprecatedRows {
+	var ok bool
+	for ok, err = rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+		r := rows.Cur()
 		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
 		if _, ok := namespace[sqlbase.ID(id)]; !ok {
 			namespace[sqlbase.ID(id)] = NamespaceKey{
@@ -2319,7 +2332,7 @@ func getAllNames(
 		}
 	}
 
-	return namespace, nil
+	return namespace, err
 }
 
 // crdbInternalZonesTable decodes and exposes the zone configs in the
@@ -2367,13 +2380,17 @@ CREATE TABLE crdb_internal.zones (
 			return kv.Value, nil
 		}
 
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-			ctx, "crdb-internal-zones-table", p.txn, `SELECT id, config FROM system.zones`)
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
+			ctx, "crdb-internal-zones-table", p.txn,
+			sqlbase.RootUserDataOverride,
+			`SELECT id, config FROM system.zones`)
 		if err != nil {
 			return err
 		}
 		values := make(tree.Datums, len(showZoneConfigColumns))
-		for _, r := range rows {
+		var ok bool
+		for ok, err = rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+			r := rows.Cur()
 			id := uint32(tree.MustBeDInt(r[0]))
 
 			var zoneSpecifier *tree.ZoneSpecifier
@@ -2504,7 +2521,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 			}
 		}
-		return nil
+		return err
 	},
 }
 

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -320,31 +319,39 @@ func (s *Server) getReportingInfo(
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
-	if datums, err := s.sqlServer.internalExecutor.QueryEx(
+	if rows, err := s.sqlServer.internalExecutor.QueryIterator(
 		ctx, "read-setting", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sqlbase.RootUserDataOverride,
 		"SELECT name FROM system.settings",
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
 	} else {
-		info.AlteredSettings = make(map[string]string, len(datums))
-		for _, row := range datums {
+		info.AlteredSettings = make(map[string]string)
+
+		var ok bool
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			name := string(tree.MustBeDString(row[0]))
 			info.AlteredSettings[name] = settings.RedactedValue(name, &s.st.SV)
 		}
+		if err != nil {
+			log.Warningf(ctx, "failed to read settings: %s", err)
+		}
 	}
 
-	if datums, err := s.sqlServer.internalExecutor.QueryEx(
+	if rows, err := s.sqlServer.internalExecutor.QueryIterator(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sqlbase.RootUserDataOverride,
 		"SELECT id, config FROM system.zones",
 	); err != nil {
 		log.Warningf(ctx, "%v", err)
 	} else {
 		info.ZoneConfigs = make(map[int64]zonepb.ZoneConfig)
-		for _, row := range datums {
+		var ok bool
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			id := int64(tree.MustBeDInt(row[0]))
 			var zone zonepb.ZoneConfig
 			if bytes, ok := row[1].(*tree.DBytes); !ok {

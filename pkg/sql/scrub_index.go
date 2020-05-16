@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -49,9 +50,8 @@ type indexCheckOperation struct {
 // indexCheckRun contains the run-time state for indexCheckOperation
 // during local execution.
 type indexCheckRun struct {
-	started  bool
-	rows     []tree.Datums
-	rowIndex int
+	started bool
+	rows    sqlutil.InternalRows
 }
 
 func newIndexCheckOperation(
@@ -122,8 +122,8 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		colNames(pkColumns), colNames(otherColumns), o.tableDesc.ID, o.indexDesc.ID,
 	)
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
-		ctx, "scrub-index", params.p.txn, checkQuery,
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryIterator(
+		ctx, "scrub-index", params.p.txn, sqlbase.RootUserDataOverride, checkQuery,
 	)
 	if err != nil {
 		return err
@@ -141,8 +141,10 @@ func (o *indexCheckOperation) Start(params runParams) error {
 
 // Next implements the checkOperation interface.
 func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows[o.run.rowIndex]
-	o.run.rowIndex++
+	if ok, err := o.run.rows.Next(params.ctx); !ok || err != nil {
+		return nil, err
+	}
+	row := o.run.rows.Cur()
 
 	// Check if this row has results from the left. See the comment above
 	// createIndexCheckQuery indicating why this is true.
@@ -223,7 +225,7 @@ func (o *indexCheckOperation) Started() bool {
 
 // Done implements the checkOperation interface.
 func (o *indexCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= len(o.run.rows)
+	return o.run.rows == nil
 }
 
 // Close4 implements the checkOperation interface.

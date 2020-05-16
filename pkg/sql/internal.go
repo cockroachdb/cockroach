@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"math"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -26,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -110,14 +111,18 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 func (ie *InternalExecutor) initConnEx(
 	ctx context.Context,
 	txn *kv.Txn,
+	ch chan rowOrErr,
 	sd *sessiondata.SessionData,
 	syncCallback func([]resWithPos),
+	setColsCallback func(sqlbase.ResultColumns),
 	errCallback func(error),
 ) (*StmtBuf, *sync.WaitGroup, error) {
 	clientComm := &internalClientComm{
 		sync: syncCallback,
 		// init lastDelivered below the position of the first result (0).
-		lastDelivered: -1,
+		lastDelivered:   -1,
+		ch:              ch,
+		setColsCallback: setColsCallback,
 	}
 
 	// When the connEx is serving an internal executor, it can inherit the
@@ -184,48 +189,66 @@ func (ie *InternalExecutor) initConnEx(
 	return stmtBuf, &wg, nil
 }
 
-// Query executes the supplied SQL statement and returns the resulting rows.
-// If no user has been previously set through SetSessionData, the statement is
-// executed as the root user.
-//
-// If txn is not nil, the statement will be executed in the respective txn.
-//
-// Query is deprecated because it may transparently execute a query as root. Use
-// QueryEx instead.
-func (ie *InternalExecutor) Query(
-	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
-) ([]tree.Datums, error) {
-	return ie.QueryEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
-}
-
-// QueryEx is like Query, but allows the caller to override some session data
-// fields (e.g. the user).
-//
-// The fields set in session that are set override the respective fields if they
-// have previously been set through SetSessionData().
-func (ie *InternalExecutor) QueryEx(
+func (ie *InternalExecutor) QueryIterator(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
-) ([]tree.Datums, error) {
-	datums, _, err := ie.queryInternal(ctx, opName, txn, session, stmt, qargs...)
-	return datums, err
-}
-
-// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
-// of the input query.
-func (ie *InternalExecutor) QueryWithCols(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	session sqlbase.InternalExecutorSessionDataOverride,
-	stmt string,
-	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
+) (sqlutil.InternalRows, error) {
 	return ie.queryInternal(ctx, opName, txn, session, stmt, qargs...)
+}
+
+type rowOrErr struct {
+	row tree.Datums
+	err error
+}
+
+type rowsIterator struct {
+	ch chan rowOrErr
+
+	lastRow tree.Datums
+
+	resultCols sqlbase.ResultColumns
+}
+
+func (r *rowsIterator) Scan(datums tree.Datums) {
+	copy(datums, r.lastRow)
+}
+
+func (r *rowsIterator) Cur() tree.Datums {
+	return r.lastRow
+}
+
+func (r *rowsIterator) Next(ctx context.Context) (bool, error) {
+	select {
+	case rowOrErr, ok := <-r.ch:
+		if !ok {
+			return false, nil
+		}
+		if rowOrErr.err != nil {
+			return false, rowOrErr.err
+		}
+		if rowOrErr.row == nil {
+			return false, errors.AssertionFailedf("invalid state: empty rowOrErr")
+		}
+		r.lastRow = rowOrErr.row
+		return true, nil
+
+	case <-ctx.Done():
+		return false, ctx.Err()
+
+	}
+}
+
+func (r *rowsIterator) Close() error {
+	// Currently no op
+	return nil
+}
+
+func (r *rowsIterator) Types() sqlbase.ResultColumns {
+	return r.resultCols
 }
 
 func (ie *InternalExecutor) queryInternal(
@@ -235,12 +258,8 @@ func (ie *InternalExecutor) queryInternal(
 	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	res, err := ie.execInternal(ctx, opName, txn, sessionDataOverride, stmt, qargs...)
-	if err != nil {
-		return nil, nil, err
-	}
-	return res.rows, res.cols, res.err
+) (*rowsIterator, error) {
+	return ie.execInternal(ctx, opName, txn, sessionDataOverride, stmt, qargs...)
 }
 
 // QueryRow is like Query, except it returns a single row, or nil if not row is
@@ -266,18 +285,35 @@ func (ie *InternalExecutor) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	rows, err := ie.QueryEx(ctx, opName, txn, session, stmt, qargs...)
+	cols, _, err := ie.QueryRowWithCols(ctx, opName, txn, session, stmt, qargs...)
+	return cols, err
+}
+
+func (ie *InternalExecutor) QueryRowWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, sqlbase.ResultColumns, error) {
+	it, err := ie.QueryIterator(ctx, opName, txn, session, stmt, qargs...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	switch len(rows) {
-	case 0:
-		return nil, nil
-	case 1:
-		return rows[0], nil
-	default:
-		return nil, &tree.MultipleResultsError{SQL: stmt}
+	defer it.Close()
+	var ok bool
+	var row tree.Datums
+	for ok, err = it.Next(ctx); ok && err == nil; ok, err = it.Next(ctx) {
+		if row != nil {
+			return nil, nil, &tree.MultipleResultsError{SQL: stmt}
+		}
+		row = it.Cur()
 	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return row, it.Types(), nil
 }
 
 // Exec executes the supplied SQL statement and returns the number of rows
@@ -307,18 +343,31 @@ func (ie *InternalExecutor) ExecEx(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
-	res, err := ie.execInternal(ctx, opName, txn, session, stmt, qargs...)
+	it, err := ie.execInternal(ctx, opName, txn, session, stmt, qargs...)
 	if err != nil {
 		return 0, err
 	}
-	return res.rowsAffected, res.err
+	var rowsAffected int
+	var foundARow bool
+	for ok, err := it.Next(ctx); ok && err == nil; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		foundARow = true
+		rowsAffected = int(tree.MustBeDInt(row[0]))
+	}
+	if err != nil {
+		return 0, err
+	}
+	if !foundARow {
+		return 0, errors.NewAssertionErrorWithWrappedErrf(err, "unexpectedly found no rows affected row")
+	}
+	return rowsAffected, nil
 }
 
 type result struct {
-	rows         []tree.Datums
+	rowChan      chan tree.Datums
+	errChan      chan error
 	rowsAffected int
 	cols         sqlbase.ResultColumns
-	err          error
 }
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
@@ -368,7 +417,7 @@ func (ie *InternalExecutor) execInternal(
 	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
-) (retRes result, retErr error) {
+) (r *rowsIterator, retErr error) {
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
@@ -381,7 +430,8 @@ func (ie *InternalExecutor) execInternal(
 	}
 	applyOverrides(sessionDataOverride, sd)
 	if sd.User == "" {
-		return result{}, errors.AssertionFailedf("no user specified for internal query")
+		debug.PrintStack()
+		return nil, errors.AssertionFailedf("no user specified for internal query")
 	}
 	if sd.ApplicationName == "" {
 		sd.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
@@ -394,60 +444,78 @@ func (ie *InternalExecutor) execInternal(
 		if retErr != nil && !errIsRetriable(retErr) {
 			retErr = errors.Wrapf(retErr, opName)
 		}
-		if retRes.err != nil && !errIsRetriable(retRes.err) {
-			retRes.err = errors.Wrapf(retRes.err, opName)
-		}
 	}()
 
-	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
-	defer sp.Finish()
+	/*
+		ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
+		defer sp.Finish()
+	*/
 
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
 	if err != nil {
-		return result{}, err
+		return nil, err
 	}
+	returnRows := parsed.AST.StatementType() == tree.Rows
 	parseEnd := timeutil.Now()
 
 	// resPos will be set to the position of the command that represents the
 	// statement we care about before that command is sent for execution.
 	var resPos CmdPos
 
-	resCh := make(chan result)
+	ch := make(chan rowOrErr, 32)
+	var rowsAffected int
 	var resultsReceived bool
+	var stmtBuf *StmtBuf
 	syncCallback := func(results []resWithPos) {
+		defer stmtBuf.Close()
 		resultsReceived = true
 		for _, res := range results {
-			if res.pos == resPos {
-				resCh <- result{rows: res.rows, rowsAffected: res.RowsAffected(), cols: res.cols, err: res.Err()}
-				return
+			if res.err != nil && !errIsRetriable(res.err) {
+				res.err = errors.Wrapf(res.err, opName)
 			}
 			if res.err != nil {
-				// If we encounter an error, there's no point in looking further; the
-				// rest of the commands in the batch have been skipped.
-				resCh <- result{err: res.Err()}
+				ch <- rowOrErr{err: res.err}
+			}
+			if res.pos == resPos {
+				rowsAffected = res.RowsAffected()
+				if returnRows {
+					close(ch)
+				}
 				return
 			}
 		}
-		resCh <- result{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
+		ch <- rowOrErr{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
 	}
 	errCallback := func(err error) {
 		if resultsReceived {
 			return
 		}
-		resCh <- result{err: err}
+		if err != nil && !errIsRetriable(err) {
+			err = errors.Wrapf(err, opName)
+		}
+		ch <- rowOrErr{err: err}
+		if returnRows {
+			close(ch)
+		}
 	}
-	stmtBuf, wg, err := ie.initConnEx(ctx, txn, sd, syncCallback, errCallback)
+
+	colsCh := make(chan sqlbase.ResultColumns)
+	setColsCallback := func(columns sqlbase.ResultColumns) {
+		colsCh <- columns
+		close(colsCh)
+	}
+	stmtBuf, wg, err := ie.initConnEx(ctx, txn, ch, sd, syncCallback, setColsCallback, errCallback)
 	if err != nil {
-		return result{}, err
+		return nil, err
 	}
 
 	// Transforms the args to datums. The datum types will be passed as type hints
 	// to the PrepareStmt command.
 	datums, err := golangFillQueryArguments(qargs...)
 	if err != nil {
-		return result{}, err
+		return nil, err
 	}
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
@@ -464,7 +532,7 @@ func (ie *InternalExecutor) execInternal(
 				ParseStart:   parseStart,
 				ParseEnd:     parseEnd,
 			}); err != nil {
-			return result{}, err
+			return nil, err
 		}
 	} else {
 		resPos = 2
@@ -477,25 +545,51 @@ func (ie *InternalExecutor) execInternal(
 				TypeHints:  typeHints,
 			},
 		); err != nil {
-			return result{}, err
+			return nil, err
 		}
 
 		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
-			return result{}, err
+			return nil, err
 		}
 
 		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: timeReceived}); err != nil {
-			return result{}, err
+			return nil, err
 		}
 	}
 	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
-		return result{}, err
+		return nil, err
 	}
 
-	res := <-resCh
-	stmtBuf.Close()
+	if returnRows {
+		// Return a channel.
+		var cols sqlbase.ResultColumns
+		select {
+		case cols = <-colsCh:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		return &rowsIterator{
+			ch:         ch,
+			resultCols: cols,
+		}, nil
+	}
+
+	// Wait til completion.
 	wg.Wait()
-	return res, nil
+	resultCols := sqlbase.ResultColumns{
+		sqlbase.ResultColumn{
+			Name: "rows_affected",
+			Typ:  types.Int,
+		},
+	}
+	ch <- rowOrErr{row: tree.Datums{
+		tree.NewDInt(tree.DInt(rowsAffected)),
+	}}
+	close(ch)
+	return &rowsIterator{
+		ch:         ch,
+		resultCols: resultCols,
+	}, nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the
@@ -509,7 +603,9 @@ type internalClientComm struct {
 
 	// sync, if set, is called whenever a Sync is executed. It returns all the
 	// results since the previous Sync.
-	sync func([]resWithPos)
+	sync            func([]resWithPos)
+	ch              chan rowOrErr
+	setColsCallback func(sqlbase.ResultColumns)
 }
 
 type resWithPos struct {
@@ -535,6 +631,8 @@ func (icc *internalClientComm) CreateStatementResult(
 // closed.
 func (icc *internalClientComm) createRes(pos CmdPos, onClose func(error)) *bufferedCommandResult {
 	res := &bufferedCommandResult{
+		ch:              icc.ch,
+		setColsCallback: icc.setColsCallback,
 		closeCallback: func(res *bufferedCommandResult, typ resCloseType, err error) {
 			if typ == discarded {
 				return

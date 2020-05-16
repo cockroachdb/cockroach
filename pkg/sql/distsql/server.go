@@ -625,3 +625,19 @@ func (ie *lazyInternalExecutor) QueryRow(
 	})
 	return ie.InternalExecutor.QueryRow(ctx, opName, txn, stmt, qargs...)
 }
+
+func (ie *lazyInternalExecutor) QueryRowWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	opts sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, sqlbase.ResultColumns, error) {
+	ie.once.Do(func() {
+		ie.InternalExecutor = ie.newInternalExecutor()
+	})
+	return ie.InternalExecutor.QueryRowWithCols(ctx, opName, txn, opts, stmt, qargs...)
+}
+
+var _ sqlutil.InternalExecutor = &lazyInternalExecutor{}

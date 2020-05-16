@@ -35,3 +35,7 @@ var NoSessionDataOverride = InternalExecutorSessionDataOverride{}
 // NodeUserSessionDataOverride is an InternalExecutorSessionDataOverride which
 // overrides the users to the NodeUser.
 var NodeUserSessionDataOverride = InternalExecutorSessionDataOverride{User: security.NodeUser}
+
+// NoSessionDataOverride is the empty InternalExecutorSessionDataOverride which
+// does not override any session data.
+var RootUserDataOverride = InternalExecutorSessionDataOverride{User: security.RootUser}

@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -592,15 +591,17 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
 	const stmt = `SELECT id, payload, status, created FROM system.jobs WHERE created < $1
 		      ORDER BY created LIMIT 1000`
-	rows, err := r.ex.Query(ctx, "gc-jobs", nil /* txn */, stmt, olderThan)
+	rows, err := r.ex.QueryIterator(ctx, "gc-jobs", nil /* txn */, sqlbase.NodeUserSessionDataOverride, stmt, olderThan)
 	if err != nil {
 		return err
 	}
 
 	toDelete := tree.NewDArray(types.Int)
-	toDelete.Array = make(tree.Datums, 0, len(rows))
+	toDelete.Array = make(tree.Datums, 0, 1000)
 	oldMicros := timeutil.ToUnixMicros(olderThan)
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		payload, err := UnmarshalPayload(row[1])
 		if err != nil {
 			return err
@@ -619,6 +620,9 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 		if remove {
 			toDelete.Array = append(toDelete.Array, row[0])
 		}
+	}
+	if err != nil {
+		return err
 	}
 	if len(toDelete.Array) > 0 {
 		log.Infof(ctx, "cleaning up %d expired job records", len(toDelete.Array))
@@ -990,23 +994,22 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 func (r *Registry) maybeAdoptJob(
 	ctx context.Context, nl NodeLiveness, randomizeJobOrder bool,
 ) error {
-	const stmt = `
-SELECT id, payload, progress IS NULL, status
+	ordering := "created DESC"
+	if randomizeJobOrder {
+		ordering = "random()"
+	}
+	stmt := fmt.Sprintf(`SELECT id, payload, progress IS NULL, status
 FROM system.jobs
-WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
-	rows, err := r.ex.Query(
-		ctx, "adopt-job", nil /* txn */, stmt,
+WHERE status IN ($1, $2, $3, $4, $5) ORDER BY %s`, ordering)
+	rows, err := r.ex.QueryIterator(
+		ctx, "adopt-job", nil, /* txn */
+		sqlbase.RootUserDataOverride,
+		stmt,
 		StatusPending, StatusRunning, StatusCancelRequested, StatusPauseRequested, StatusReverting,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed querying for jobs")
 	}
-
-	if randomizeJobOrder {
-		rand.Seed(timeutil.Now().UnixNano())
-		rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
-	}
-
 	type nodeStatus struct {
 		isLive bool
 	}
@@ -1039,12 +1042,10 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		}
 	}
 
-	if log.V(3) {
-		log.Infof(ctx, "evaluating %d jobs for adoption", len(rows))
-	}
-
 	var adopted int
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		if adopted >= maxAdoptionsPerLoop {
 			// Leave excess jobs for other nodes to get their fair share.
 			break
@@ -1211,7 +1212,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		adopted++
 	}
 
-	return nil
+	return err
 }
 
 func (r *Registry) newLease() *jobspb.Lease {

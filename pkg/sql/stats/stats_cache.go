@@ -342,15 +342,19 @@ FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC
 `
-	rows, err := sc.SQLExecutor.Query(
-		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
+	rows, err := sc.SQLExecutor.QueryIterator(
+		ctx, "get-table-statistics", nil, /* txn */
+		sqlbase.RootUserDataOverride,
+		getTableStatisticsStmt, tableID,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	var statsList []*TableStatistic
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		stats, err := parseStats(row)
 		if err != nil {
 			return nil, err

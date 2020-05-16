@@ -131,7 +131,7 @@ func retrieveUserAndPassword(
 		getLoginDependencies := `SELECT option, value FROM system.role_options ` +
 			`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL')`
 
-		loginDependencies, err := ie.QueryEx(
+		rows, err := ie.QueryIterator(
 			ctx, "get-login-dependencies", nil, /* txn */
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			getLoginDependencies,
@@ -144,7 +144,9 @@ func retrieveUserAndPassword(
 		// To support users created before 20.1, allow all USERS/ROLES to login
 		// if NOLOGIN is not found.
 		canLogin = true
-		for _, row := range loginDependencies {
+		var ok bool
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			option := string(tree.MustBeDString(row[0]))
 
 			if option == "NOLOGIN" {
@@ -167,7 +169,7 @@ func retrieveUserAndPassword(
 			}
 		}
 
-		return nil
+		return err
 	})
 
 	if err != nil {
@@ -187,7 +189,7 @@ var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 // GetAllRoles returns a "set" (map) of Roles -> true.
 func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username FROM system.users`
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
 		ctx, "read-users", p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		query)
@@ -196,9 +198,14 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
 	}
 
 	users := make(map[string]bool)
-	for _, row := range rows {
+	row := make(tree.Datums, 1)
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
 		username := tree.MustBeDString(row[0])
 		users[string(username)] = true
+	}
+	if err != nil {
+		return nil, err
 	}
 	return users, nil
 }

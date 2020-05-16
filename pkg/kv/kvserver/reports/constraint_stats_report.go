@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -172,15 +173,18 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 	}
 	const prevViolations = "select zone_id, subzone_id, type, config, " +
 		"violating_ranges from system.replication_constraint_stats"
-	rows, err := ex.Query(
-		ctx, "get-previous-replication-constraint-stats", txn, prevViolations,
+	rows, err := ex.QueryIterator(
+		ctx, "get-previous-replication-constraint-stats", txn,
+		sqlbase.RootUserDataOverride, prevViolations,
 	)
 	if err != nil {
 		return err
 	}
 
-	r.previousVersion = make(ConstraintReport, len(rows))
-	for _, row := range rows {
+	r.previousVersion = make(ConstraintReport, 16)
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		key := ConstraintStatusKey{}
 		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID((*row[1].(*tree.DInt)))
@@ -189,7 +193,7 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 		r.previousVersion[key] = ConstraintStatus{(int)(*row[4].(*tree.DInt))}
 	}
 
-	return nil
+	return err
 }
 
 func (r *replicationConstraintStatsReportSaver) updateTimestamp(
