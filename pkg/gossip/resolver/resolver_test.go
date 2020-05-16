@@ -135,16 +135,17 @@ func TestSRV(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		lookupSRV = tc.lookuper
+		func() {
+			defer TestingOverrideSRVLookupFn(tc.lookuper)()
 
-		resolvers, err := SRV(context.TODO(), tc.address)
+			resolvers, err := SRV(context.TODO(), tc.address)
 
-		if err != nil {
-			t.Errorf("#%d: expected success, got err=%v", tcNum, err)
-		}
+			if err != nil {
+				t.Errorf("#%d: expected success, got err=%v", tcNum, err)
+			}
 
-		require.Equal(t, tc.want, resolvers, "Test #%d failed", tcNum)
+			require.Equal(t, tc.want, resolvers, "Test #%d failed", tcNum)
 
-		lookupSRV = net.LookupSRV
+		}()
 	}
 }
