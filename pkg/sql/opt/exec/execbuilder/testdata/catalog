@@ -179,3 +179,91 @@ TABLE parent
  ├── REFERENCED BY CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
  └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan parent
+
+# Tests with interleaved tables.
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, other INT, FAMILY (a,other))
+
+statement ok
+CREATE TABLE ab (
+  a INT, b INT, PRIMARY KEY (a,b), FAMILY (a,b)
+) INTERLEAVE IN PARENT a(a)
+
+statement ok
+CREATE TABLE abc (k INT PRIMARY KEY, a INT, b INT, c INT, FAMILY (a,b,c));
+CREATE INDEX abc_idx ON abc(a,b,c) INTERLEAVE IN PARENT ab(a,b)
+
+statement ok
+CREATE TABLE abx (
+  a INT, b INT, x INT,
+  PRIMARY KEY (a,b,x),
+  FAMILY (a,b,x)
+) INTERLEAVE IN PARENT ab(a,b)
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM a
+----
+TABLE a
+ ├── a int not null
+ ├── other int
+ ├── FAMILY fam_0_a_other (a, other)
+ └── INDEX primary
+      ├── a int not null
+      └── interleaved by
+           └── table=60 index=1
+scan a
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM ab
+----
+TABLE ab
+ ├── a int not null
+ ├── b int not null
+ ├── FAMILY fam_0_a_b (a, b)
+ └── INDEX primary
+      ├── a int not null
+      ├── b int not null
+      ├── interleave ancestors
+      │    └── table=59 index=1 (1 key column)
+      └── interleaved by
+           ├── table=61 index=2
+           └── table=62 index=1
+scan ab
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM abc
+----
+TABLE abc
+ ├── k int not null
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── FAMILY fam_0_a_b_c_k (a, b, c, k)
+ ├── INDEX primary
+ │    └── k int not null
+ └── INDEX abc_idx
+      ├── a int
+      ├── b int
+      ├── c int
+      ├── k int not null
+      └── interleave ancestors
+           ├── table=59 index=1 (1 key column)
+           └── table=60 index=1 (1 key column)
+scan abc
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM abx
+----
+TABLE abx
+ ├── a int not null
+ ├── b int not null
+ ├── x int not null
+ ├── FAMILY fam_0_a_b_x (a, b, x)
+ └── INDEX primary
+      ├── a int not null
+      ├── b int not null
+      ├── x int not null
+      └── interleave ancestors
+           ├── table=59 index=1 (1 key column)
+           └── table=60 index=1 (1 key column)
+scan abx
