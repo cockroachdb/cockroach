@@ -1024,8 +1024,8 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 				MutationID: mutationID, JobID: *newJob.ID()})
 		}
-		log.Infof(ctx, "queued new schema change job for table %d, mutation %d",
-			tableDesc.ID, mutationID)
+		log.Infof(ctx, "queued new schema change job %d for table %d, mutation %d",
+			*newJob.ID(), tableDesc.ID, mutationID)
 	} else {
 		// Update the existing job.
 		oldDetails := job.Details().(jobspb.SchemaChangeDetails)
