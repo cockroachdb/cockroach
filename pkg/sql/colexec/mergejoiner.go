@@ -96,6 +96,12 @@ type mjBuilderCrossProductState struct {
 	groupsIdx      int
 	curSrcStartIdx int
 	numRepeatsIdx  int
+	// setOpLeftSrcIdx tracks the next tuple's index from the left buffered
+	// group for set operation joins. INTERSECT ALL and EXCEPT ALL joins are
+	// special because they need to emit the buffered group partially (namely,
+	// exactly group.rowEndIdx number of rows which could span multiple batches
+	// from the buffered group).
+	setOpLeftSrcIdx int
 }
 
 // mjBufferedGroup is a helper struct that stores information about the tuples
@@ -260,6 +266,10 @@ func newMergeJoinOp(
 		return &mergeJoinLeftSemiOp{base}, err
 	case sqlbase.LeftAntiJoin:
 		return &mergeJoinLeftAntiOp{base}, err
+	case sqlbase.IntersectAllJoin:
+		return &mergeJoinIntersectAllOp{base}, err
+	case sqlbase.ExceptAllJoin:
+		return &mergeJoinExceptAllOp{base}, err
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
 	}
@@ -290,6 +300,7 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 	s.groupsIdx = target.groupsIdx
 	s.curSrcStartIdx = target.curSrcStartIdx
 	s.numRepeatsIdx = target.numRepeatsIdx
+	s.setOpLeftSrcIdx = target.setOpLeftSrcIdx
 }
 
 func newMergeJoinBase(
