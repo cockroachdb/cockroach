@@ -78,7 +78,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	// relation. Build a projection that produces those values to go underneath
 	// the window functions.
 	// TODO(justin): this is unfortunate in common cases where the arguments are
-	// constant, since we'll be projecting an extra column in every row.  It
+	// constant, since we'll be projecting an extra column in every row. It
 	// would be good if the windower supported being specified with constant
 	// values.
 	for i := range inScope.windows {

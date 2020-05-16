@@ -35,6 +35,10 @@ func TestTypes(t *testing.T) {
 		{MakeArray(Any), &T{InternalType: InternalType{
 			Family: ArrayFamily, ArrayContents: Any, Oid: oid.T_anyarray, Locale: &emptyLocale}}},
 
+		{MakeArray(Float), FloatArray},
+		{MakeArray(Float), &T{InternalType: InternalType{
+			Family: ArrayFamily, ArrayContents: Float, Oid: oid.T__float8, Locale: &emptyLocale}}},
+
 		{MakeArray(Decimal), DecimalArray},
 		{MakeArray(Decimal), &T{InternalType: InternalType{
 			Family: ArrayFamily, ArrayContents: Decimal, Oid: oid.T__numeric, Locale: &emptyLocale}}},
