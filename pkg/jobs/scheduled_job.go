@@ -273,7 +273,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 		return err
 	}
 
-	rows, retCols, err := ex.QueryWithCols(ctx, "sched-create", txn,
+	row, retCols, err := ex.QueryRowWithCols(ctx, "sched-create", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
@@ -284,11 +284,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 		return err
 	}
 
-	if len(rows) != 1 {
-		return errors.New("failed to create new schedule")
-	}
-
-	return j.InitFromDatums(rows[0], retCols)
+	return j.InitFromDatums(row, retCols)
 }
 
 // Update saves changes made to this schedule.

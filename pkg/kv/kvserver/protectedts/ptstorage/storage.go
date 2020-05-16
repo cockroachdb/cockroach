@@ -77,7 +77,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 		meta = []byte{}
 	}
 	s := makeSettings(p.settings)
-	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-protect", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
@@ -87,7 +87,6 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
-	row := rows[0]
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
 		if curNumSpans+int64(len(r.Spans)) > s.maxSpans {
@@ -129,13 +128,13 @@ func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) e
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, err := p.ex.QueryEx(ctx, "protectedts-MarkVerified", txn,
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-MarkVerified", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
 	}
-	if len(rows) == 0 {
+	if row == nil {
 		return protectedts.ErrNotExists
 	}
 	return nil
@@ -145,13 +144,13 @@ func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error 
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, err := p.ex.QueryEx(ctx, "protectedts-Release", txn,
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-Release", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		releaseQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
 	}
-	if len(rows) == 0 {
+	if row == nil {
 		return protectedts.ErrNotExists
 	}
 	return nil
@@ -194,22 +193,22 @@ func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error)
 }
 
 func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
-	rows, err := p.ex.QueryEx(ctx, "protectedts-GetRecords", txn,
+	rows, err := p.ex.QueryIterator(ctx, "protectedts-GetRecords", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")
 	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	records := make([]ptpb.Record, len(rows))
-	for i, row := range rows {
-		if err := rowToRecord(ctx, row, &records[i]); err != nil {
+	records := make([]ptpb.Record, 0)
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
+		records = append(records, ptpb.Record{})
+		if err := rowToRecord(ctx, row, &records[len(records)-1]); err != nil {
 			log.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 	}
-	return records, nil
+	return records, err
 }
 
 // rowToRecord parses a row as returned from the variants of getRecords and

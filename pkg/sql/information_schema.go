@@ -1869,15 +1869,17 @@ FROM
 			ro.username = u.username
 			AND option = 'VALID UNTIL';
 `
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-		ctx, "read-roles", p.txn, query,
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
+		ctx, "read-roles", p.txn, sqlbase.NoSessionDataOverride, query,
 	)
 
 	if err != nil {
 		return err
 	}
 
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		username := tree.MustBeDString(row[0])
 		isRole, ok := row[1].(*tree.DBool)
 		if !ok {
@@ -1898,22 +1900,23 @@ FROM
 			return err
 		}
 	}
-
-	return nil
+	return err
 }
 
 func forEachRoleMembership(
 	ctx context.Context, p *planner, fn func(role, member string, isAdmin bool) error,
 ) error {
 	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-		ctx, "read-members", p.txn, query,
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
+		ctx, "read-members", p.txn, sqlbase.NoSessionDataOverride, query,
 	)
 	if err != nil {
 		return err
 	}
 
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		roleName := tree.MustBeDString(row[0])
 		memberName := tree.MustBeDString(row[1])
 		isAdmin := row[2].(*tree.DBool)
@@ -1922,7 +1925,7 @@ func forEachRoleMembership(
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
 func userCanSeeDatabase(

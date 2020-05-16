@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1373,11 +1374,12 @@ CREATE TABLE pg_catalog.pg_depend (
 // getComments returns all comments in the database. A comment is represented
 // as a datum row, containing object id, sub id (column id in the case of
 // columns), comment text, and comment type (keys.FooCommentType).
-func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
-	return p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+func getComments(ctx context.Context, p *planner) (sqlutil.InternalRows, error) {
+	return p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryIterator(
 		ctx,
 		"select-comments",
 		p.EvalContext().Txn,
+		sqlbase.NoSessionDataOverride,
 		`SELECT COALESCE(pc.object_id, sc.object_id) AS object_id,
               COALESCE(pc.sub_id, sc.sub_id) AS sub_id,
               COALESCE(pc.comment, sc.comment) AS comment,
@@ -1410,7 +1412,9 @@ CREATE TABLE pg_catalog.pg_description (
 		if err != nil {
 			return err
 		}
-		for _, comment := range comments {
+		var ok bool
+		for ok, err = comments.Next(ctx); ok && err == nil; ok, err = comments.Next(ctx) {
+			comment := comments.Cur()
 			objID := comment[0]
 			objSubID := comment[1]
 			description := comment[2]
@@ -1440,7 +1444,7 @@ CREATE TABLE pg_catalog.pg_description (
 				return err
 			}
 		}
-		return nil
+		return err
 	},
 }
 
@@ -1459,7 +1463,9 @@ CREATE TABLE pg_catalog.pg_shdescription (
 		if err != nil {
 			return err
 		}
-		for _, comment := range comments {
+		var ok bool
+		for ok, err = comments.Next(ctx); ok && err == nil; ok, err = comments.Next(ctx) {
+			comment := comments.Cur()
 			commentType := tree.MustBeDInt(comment[3])
 			if commentType != keys.DatabaseCommentType {
 				// Only database comments are exported in this table.
@@ -1474,7 +1480,7 @@ CREATE TABLE pg_catalog.pg_shdescription (
 				return err
 			}
 		}
-		return nil
+		return err
 	},
 }
 

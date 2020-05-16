@@ -133,7 +133,7 @@ func lookupScheduleAndExecutor(
 	scheduleID int64,
 	txn *kv.Txn,
 ) (*ScheduledJob, ScheduledJobExecutor, error) {
-	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
+	row, cols, err := ex.QueryRowWithCols(ctx, "lookup-schedule", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		fmt.Sprintf(
 			"SELECT schedule_id, schedule_details, executor_type FROM %s WHERE schedule_id = %d",
@@ -143,14 +143,8 @@ func lookupScheduleAndExecutor(
 		return nil, nil, err
 	}
 
-	if len(rows) != 1 {
-		return nil, nil, errors.Newf(
-			"expected to find 1 schedule, found %d with schedule_id=%d",
-			len(rows), scheduleID)
-	}
-
 	j := NewScheduledJob(env)
-	if err := j.InitFromDatums(rows[0], cols); err != nil {
+	if err := j.InitFromDatums(row, cols); err != nil {
 		return nil, nil, err
 	}
 	executor, err := NewScheduledJobExecutor(j.ExecutorType())

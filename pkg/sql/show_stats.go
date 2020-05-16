@@ -62,10 +62,11 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//  - convert column IDs to column names
 			//  - if the statistic has a histogram, we return the statistic ID as a
 			//    "handle" which can be used with SHOW HISTOGRAM.
-			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
 				ctx,
 				"read-table-stats",
 				p.txn,
+				sqlbase.RootUserDataOverride,
 				`SELECT "statisticID",
 					      name,
 					      "columnIDs",
@@ -97,8 +98,12 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 			v := p.newContainerValuesNode(columns, 0)
 			if n.UsingJSON {
-				result := make([]stats.JSONStatistic, len(rows))
-				for i, r := range rows {
+				result := make([]stats.JSONStatistic, 0)
+				var ok bool
+				for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+					r := rows.Cur()
+					result = append(result, stats.JSONStatistic{})
+					i := len(result) - 1
 					result[i].CreatedAt = tree.AsStringWithFlags(r[createdAtIdx], tree.FmtBareStrings)
 					result[i].RowCount = (uint64)(*r[rowCountIdx].(*tree.DInt))
 					result[i].DistinctCount = (uint64)(*r[distinctCountIdx].(*tree.DInt))
@@ -116,6 +121,11 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						return nil, err
 					}
 				}
+				if err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+
 				encoded, err := encjson.Marshal(result)
 				if err != nil {
 					v.Close(ctx)
@@ -133,7 +143,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				return v, nil
 			}
 
-			for _, r := range rows {
+			var ok bool
+			for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+				r := rows.Cur()
 				if len(r) != numCols {
 					v.Close(ctx)
 					return nil, errors.Errorf("incorrect columns from internal query")
@@ -165,7 +177,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					return nil, err
 				}
 			}
-			return v, nil
+			return v, err
 		},
 	}, nil
 }

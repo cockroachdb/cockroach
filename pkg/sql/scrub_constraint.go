@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -44,9 +45,8 @@ type sqlCheckConstraintCheckOperation struct {
 // sqlCheckConstraintCheckRun contains the run-time state for
 // sqlCheckConstraintCheckOperation during local execution.
 type sqlCheckConstraintCheckRun struct {
-	started  bool
-	rows     []tree.Datums
-	rowIndex int
+	started bool
+	rows    sqlutil.InternalRows
 }
 
 func newSQLCheckConstraintCheckOperation(
@@ -97,8 +97,10 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		}
 	}
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
-		ctx, "check-constraint", params.p.txn, tree.AsStringWithFlags(sel, tree.FmtParsable),
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryIterator(
+		ctx, "check-constraint", params.p.txn,
+		sqlbase.RootUserDataOverride,
+		tree.AsStringWithFlags(sel, tree.FmtParsable),
 	)
 	if err != nil {
 		return err
@@ -118,8 +120,10 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 
 // Next implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows[o.run.rowIndex]
-	o.run.rowIndex++
+	if ok, err := o.run.rows.Next(params.ctx); !ok || err != nil {
+		return nil, err
+	}
+	row := o.run.rows.Cur()
 	timestamp, err := tree.MakeDTimestamp(
 		params.extendedEvalCtx.GetStmtTimestamp(),
 		time.Nanosecond,
@@ -166,7 +170,7 @@ func (o *sqlCheckConstraintCheckOperation) Started() bool {
 
 // Done implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= len(o.run.rows)
+	return o.run.rows == nil
 }
 
 // Close implements the checkOperation interface.

@@ -1371,6 +1371,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		cmd.command())
 	defer sp.Finish()
 
+	log.Infof(ctx, "[%s pos:%d] executing %s",
+		ex.machine.CurState(), pos, cmd)
 	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
 			ex.machine.CurState(), pos, cmd)

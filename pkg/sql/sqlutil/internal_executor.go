@@ -50,39 +50,6 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) (int, error)
 
-	// Query executes the supplied SQL statement and returns the resulting rows.
-	// If no user has been previously set through SetSessionData, the statement is
-	// executed as the root user.
-	//
-	// If txn is not nil, the statement will be executed in the respective txn.
-	//
-	// Query is deprecated because it may transparently execute a query as root. Use
-	// QueryEx instead.
-	Query(
-		ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
-	) ([]tree.Datums, error)
-
-	// QueryEx is like Query, but allows the caller to override some session data
-	// fields.
-	//
-	// The fields set in session that are set override the respective fields if
-	// they have previously been set through SetSessionData().
-	QueryEx(
-		ctx context.Context,
-		opName string,
-		txn *kv.Txn,
-		session sqlbase.InternalExecutorSessionDataOverride,
-		stmt string,
-		qargs ...interface{},
-	) ([]tree.Datums, error)
-
-	// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
-	// of the input query.
-	QueryWithCols(
-		ctx context.Context, opName string, txn *kv.Txn,
-		o sqlbase.InternalExecutorSessionDataOverride, statement string, qargs ...interface{},
-	) ([]tree.Datums, sqlbase.ResultColumns, error)
-
 	// QueryRow is like Query, except it returns a single row, or nil if not row is
 	// found, or an error if more that one row is returned.
 	//
@@ -104,6 +71,49 @@ type InternalExecutor interface {
 		stmt string,
 		qargs ...interface{},
 	) (tree.Datums, error)
+
+	// QueryRowWithCols is like QueryRowEx except it also returns the
+	// ResultColumns of the query.
+	QueryRowWithCols(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sqlbase.InternalExecutorSessionDataOverride,
+		stmt string,
+		qargs ...interface{},
+	) (tree.Datums, sqlbase.ResultColumns, error)
+
+	// QueryIterator executes the query, returning an iterator that
+	// can be used to get the results.
+	QueryIterator(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sqlbase.InternalExecutorSessionDataOverride,
+		stmt string,
+		qargs ...interface{},
+	) (InternalRows, error)
+}
+
+// InternalRows is an iterator interface that's exposed by the
+// internal executor. It provides access to the rows from a query.
+type InternalRows interface {
+	// Cur returns the row at the current position of the iterator.
+	Cur() tree.Datums
+
+	// Next advances the iterator by one row, returning false if
+	// there are no more rows in this iterator, and an error if
+	// an error was encountered.
+	Next(context.Context) (bool, error)
+
+	// Close closes this iterator, releasing any resources it held
+	// open. The error returned must be checked.
+	Close() error
+
+	// Types returns the types of the columns returned by this iterator.
+	// The returned array is guaranteed to correspond 1:1 with the
+	// tree.Datums rows returned by Cur().
+	Types() sqlbase.ResultColumns
 }
 
 // SessionBoundInternalExecutorFactory is a function that produces a "session

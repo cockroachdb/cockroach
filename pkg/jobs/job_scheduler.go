@@ -153,7 +153,8 @@ func (s *jobScheduler) executeSchedules(
 	ctx context.Context, maxSchedules int64, txn *kv.Txn,
 ) error {
 	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
-	rows, cols, err := s.InternalExecutor.QueryWithCols(ctx, "find-scheduled-jobs", nil,
+	rows, err := s.InternalExecutor.QueryIterator(
+		ctx, "find-scheduled-jobs", nil,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		findSchedulesStmt)
 
@@ -161,7 +162,9 @@ func (s *jobScheduler) executeSchedules(
 		return err
 	}
 
-	for _, row := range rows {
+	cols := rows.Types()
+	for ok, err := rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		// TODO(yevgeniy): Stopping entire loop because of one bad schedule is probably
 		// not a great idea.  Improve handling of parsing/job execution errors.
 		schedule, numRunning, err := s.unmarshalScheduledJob(row, cols)
