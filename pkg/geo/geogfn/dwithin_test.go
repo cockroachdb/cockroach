@@ -101,4 +101,9 @@ func TestDWithin(t *testing.T) {
 		_, err := DWithin(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, 0, UseSpheroid)
 		requireMismatchingSRIDError(t, err)
 	})
+
+	t.Run("errors if distance < 0", func(t *testing.T) {
+		_, err := DWithin(geo.MustParseGeography("POINT(1.0 2.0)"), geo.MustParseGeography("POINT(3.0 4.0)"), -0.01, UseSpheroid)
+		require.Error(t, err)
+	})
 }
