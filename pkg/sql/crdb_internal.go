@@ -1407,14 +1407,18 @@ CREATE TABLE crdb_internal.create_statements (
 				} else {
 					descType = typeTable
 					tn := (*tree.Name)(&table.Name)
-					createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, OmitFKClausesFromCreate)
+					displayOptions := ShowCreateDisplayOptions{
+						FKDisplayMode: OmitFKClausesFromCreate,
+					}
+					createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, displayOptions)
 					if err != nil {
 						return err
 					}
 					if err := showAlterStatementWithInterleave(ctx, tn, contextName, lCtx, table.Indexes, table, alterStmts, validateStmts); err != nil {
 						return err
 					}
-					stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, IncludeFkClausesInCreate)
+					displayOptions.FKDisplayMode = IncludeFkClausesInCreate
+					stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, displayOptions)
 				}
 				if err != nil {
 					return err
