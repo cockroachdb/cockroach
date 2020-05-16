@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -146,6 +147,26 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				return nil, err
 			}
 			return tree.NewDInterval(in.Duration, itm), nil
+		}
+	case types.GeometryFamily:
+		if in, ok := inVal.(*tree.DGeometry); ok {
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				in.Geometry,
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
+		}
+	case types.GeographyFamily:
+		if in, ok := inVal.(*tree.DGeography); ok {
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				in.Geography,
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return inVal, nil
