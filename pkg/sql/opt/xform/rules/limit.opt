@@ -11,7 +11,7 @@
 [GenerateLimitedScans, Explore]
 (Limit
     (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
-    (Const $limit:* & (IsPositiveLimit $limit))
+    (Const $limit:* & (IsPositiveInt $limit))
     $ordering:*
 )
 =>
@@ -24,7 +24,7 @@
 [PushLimitIntoConstrainedScan, Explore]
 (Limit
     (Scan $scanPrivate:*)
-    (Const $limit:* & (IsPositiveLimit $limit))
+    (Const $limit:* & (IsPositiveInt $limit))
     $ordering:* &
         (CanLimitConstrainedScan $scanPrivate $ordering)
 )
@@ -39,7 +39,7 @@
 [PushLimitIntoIndexJoin, Explore]
 (Limit
     (IndexJoin (Scan $scanPrivate:*) $indexJoinPrivate:*)
-    (Const $limit:* & (IsPositiveLimit $limit))
+    (Const $limit:* & (IsPositiveInt $limit))
     $ordering:* &
         (CanLimitConstrainedScan $scanPrivate $ordering)
 )
