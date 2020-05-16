@@ -2250,14 +2250,14 @@ func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
 		sqlQuery := fmt.Sprintf(`
 SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `, timeThreshold, nodeID)
-		var rows []tree.Datums
+		var rows sqlutil.InternalRows
 		retryOptions := base.DefaultRetryOptions()
 		retryOptions.Closer = m.stopper.ShouldQuiesce()
 		// The retry is required because of errors caused by node restarts. Retry 30 times.
 		if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
 			var err error
-			rows, err = m.storage.internalExecutor.Query(
-				ctx, "read orphaned leases", nil /*txn*/, sqlQuery)
+			rows, err = m.storage.internalExecutor.QueryIterator(
+				ctx, "read orphaned table leases", nil /*txn*/, sqlbase.RootUserDataOverride, sqlQuery)
 			return err
 		}); err != nil {
 			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
@@ -2266,9 +2266,11 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 
 		var wg sync.WaitGroup
 		defer wg.Wait()
-		for i := range rows {
+		var ok bool
+		var err error
+		for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
 			// Early exit?
-			row := rows[i]
 			wg.Add(1)
 			lease := storedLease{
 				id:         descpb.ID(tree.MustBeDInt(row[0])),
@@ -2284,6 +2286,9 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 				log.Warningf(ctx, "did not release orphaned lease: %+v, err = %s", lease, err)
 				wg.Done()
 			}
+		}
+		if err != nil {
+			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
 		}
 	})
 }

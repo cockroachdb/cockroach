@@ -868,8 +868,11 @@ type bufferedCommandResult struct {
 	// of the query is not expected to produce any results.
 	errOnly bool
 
+	setColsCallback func(sqlbase.ResultColumns)
+
 	// closeCallback, if set, is called when Close()/Discard() is called.
 	closeCallback func(*bufferedCommandResult, resCloseType, error)
+	ch            chan rowOrErr
 }
 
 var _ RestrictedCommandResult = &bufferedCommandResult{}
@@ -881,6 +884,9 @@ func (r *bufferedCommandResult) SetColumns(_ context.Context, cols sqlbase.Resul
 		panic("SetColumns() called when errOnly is set")
 	}
 	r.cols = cols
+	if r.setColsCallback != nil {
+		r.setColsCallback(cols)
+	}
 }
 
 // AppendParamStatusUpdate is part of the RestrictedCommandResult interface.
@@ -905,7 +911,11 @@ func (r *bufferedCommandResult) AddRow(ctx context.Context, row tree.Datums) err
 	}
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
-	r.rows = append(r.rows, rowCopy)
+	select {
+	case r.ch <- rowOrErr{row: rowCopy}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	return nil
 }
 

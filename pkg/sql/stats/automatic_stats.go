@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -331,17 +332,20 @@ AND drop_time IS NULL
 `,
 		initialTableCollectionDelay)
 
-	rows, err := r.ex.Query(
+	rows, err := r.ex.QueryIterator(
 		ctx,
 		"get-tables",
 		nil, /* txn */
+		sqlbase.RootUserDataOverride,
 		getAllTablesQuery,
 	)
 	if err != nil {
 		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
 		return
 	}
-	for _, row := range rows {
+	var ok bool
+	for ok, err = rows.Next(ctx); err == nil && ok; ok, err = rows.Next(ctx) {
+		row := rows.Cur()
 		tableID := descpb.ID(*row[0].(*tree.DInt))
 		// Don't create statistics for system tables or virtual tables.
 		// TODO(rytaft): Don't add views here either. Unfortunately views are not
@@ -349,6 +353,9 @@ AND drop_time IS NULL
 		if !descpb.IsReservedID(tableID) && !descpb.IsVirtualTable(tableID) {
 			r.mutationCounts[tableID] += 0
 		}
+	}
+	if err != nil {
+		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
 	}
 }
 

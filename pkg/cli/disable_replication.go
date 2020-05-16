@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // cliDisableReplication changes the replication factor on
@@ -29,13 +30,15 @@ import (
 func cliDisableReplication(ctx context.Context, s *server.Server) error {
 	return s.RunLocalSQL(ctx,
 		func(ctx context.Context, ie *sql.InternalExecutor) error {
-			rows, err := ie.Query(ctx, "get-zones", nil,
-				"SELECT target FROM crdb_internal.zones")
+			rows, err := ie.QueryIterator(ctx, "get-zones", nil,
+				sqlbase.RootUserDataOverride, "SELECT target FROM crdb_internal.zones")
 			if err != nil {
 				return err
 			}
 
-			for _, row := range rows {
+			var ok bool
+			for ok, err = rows.Next(ctx); ok && err == nil; ok, err = rows.Next(ctx) {
+				row := rows.Cur()
 				zone := string(*row[0].(*tree.DString))
 				if _, err := ie.Exec(ctx, "set-zone", nil,
 					fmt.Sprintf("ALTER %s CONFIGURE ZONE USING num_replicas = 1", zone)); err != nil {
@@ -43,6 +46,6 @@ func cliDisableReplication(ctx context.Context, s *server.Server) error {
 				}
 			}
 
-			return nil
+			return err
 		})
 }
