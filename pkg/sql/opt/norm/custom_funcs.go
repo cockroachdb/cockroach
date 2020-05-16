@@ -2523,7 +2523,8 @@ func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) opt.ColumnID {
 }
 
 // MakeGrouping constructs a new GroupingPrivate using the given grouping
-// columns and OrderingChoice. ErrorOnDup will be empty.
+// columns and OrderingChoice. ErrorOnDup will be empty and NullsAreDistinct
+// will be false.
 func (c *CustomFuncs) MakeGrouping(
 	groupingCols opt.ColSet, ordering physical.OrderingChoice,
 ) *memo.GroupingPrivate {
@@ -2531,7 +2532,8 @@ func (c *CustomFuncs) MakeGrouping(
 }
 
 // MakeErrorOnDupGrouping constructs a new GroupingPrivate using the given
-// grouping columns, OrderingChoice, and ErrorOnDup text.
+// grouping columns, OrderingChoice, and ErrorOnDup text. NullsAreDistinct will
+// be false.
 func (c *CustomFuncs) MakeErrorOnDupGrouping(
 	groupingCols opt.ColSet, ordering physical.OrderingChoice, errorText string,
 ) *memo.GroupingPrivate {
@@ -2540,16 +2542,17 @@ func (c *CustomFuncs) MakeErrorOnDupGrouping(
 	}
 }
 
+// NullsAreDistinct returns true if a distinct operator with the given
+// GroupingPrivate treats NULL values as not equal to one another
+// (i.e. distinct). UpsertDistinctOp and EnsureUpsertDistinctOp treat NULL
+// values as distinct, whereas DistinctOp does not.
+func (c *CustomFuncs) NullsAreDistinct(private *memo.GroupingPrivate) bool {
+	return private.NullsAreDistinct
+}
+
 // ErrorOnDup returns the error text contained by the given GroupingPrivate.
 func (c *CustomFuncs) ErrorOnDup(private *memo.GroupingPrivate) string {
 	return private.ErrorOnDup
-}
-
-// RaisesErrorOnDup returns true if an EnsureDistinctOn or UpsertDistinctOn
-// operator with the given GroupingPrivate raises an error upon detection
-// of duplicate values.
-func (c *CustomFuncs) RaisesErrorOnDup(private *memo.GroupingPrivate) bool {
-	return private.ErrorOnDup != ""
 }
 
 // ExtractGroupingOrdering returns the ordering associated with the input

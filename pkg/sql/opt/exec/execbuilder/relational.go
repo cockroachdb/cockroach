@@ -199,7 +199,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.GroupByExpr, *memo.ScalarGroupByExpr:
 		ep, err = b.buildGroupBy(e)
 
-	case *memo.DistinctOnExpr, *memo.EnsureDistinctOnExpr, *memo.UpsertDistinctOnExpr:
+	case *memo.DistinctOnExpr, *memo.EnsureDistinctOnExpr, *memo.UpsertDistinctOnExpr,
+		*memo.EnsureUpsertDistinctOnExpr:
 		ep, err = b.buildDistinct(t)
 
 	case *memo.LimitExpr, *memo.OffsetExpr:
@@ -1029,15 +1030,10 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 	}
 	ep := execPlan{outputCols: input.outputCols}
 
-	// If this is UpsertDistinctOn, then treat NULL values as distinct.
-	var nullsAreDistinct bool
-	if distinct.Op() == opt.UpsertDistinctOnOp {
-		nullsAreDistinct = true
-	}
-
 	reqOrdering := ep.reqOrdering(distinct)
 	ep.root, err = b.factory.ConstructDistinct(
-		input.root, distinctCols, orderedCols, reqOrdering, nullsAreDistinct, private.ErrorOnDup)
+		input.root, distinctCols, orderedCols, reqOrdering,
+		private.NullsAreDistinct, private.ErrorOnDup)
 	if err != nil {
 		return execPlan{}, err
 	}

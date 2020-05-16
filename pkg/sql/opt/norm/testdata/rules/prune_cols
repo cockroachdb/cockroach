@@ -2677,7 +2677,7 @@ project
            │    ├── side-effects
            │    ├── key: (21)
            │    ├── fd: ()-->(9-13), (21)-->(14-17), (14)~~>(15-17,21)
-           │    ├── upsert-distinct-on
+           │    ├── ensure-upsert-distinct-on
            │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
            │    │    ├── grouping columns: column13:13
            │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
