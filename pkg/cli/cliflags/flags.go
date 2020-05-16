@@ -375,6 +375,17 @@ or both forms can be used together, for example:
 </PRE>`,
 	}
 
+	JoinPreferSRVRecords = FlagInfo{
+		Name: "experimental-dns-srv",
+		Description: `
+When enabled, the node will first attempt to fetch SRV records
+from DNS for every name specified with --join. If a valid
+SRV record is found, that information is used instead
+of regular DNS A/AAAA lookups.
+This feature is experimental and may be removed or modified
+in a later version.`,
+	}
+
 	ListenAddr = FlagInfo{
 		Name: "listen-addr",
 		Description: `
