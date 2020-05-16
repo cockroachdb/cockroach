@@ -260,12 +260,12 @@ func (o *routerOutputOp) closeLocked(ctx context.Context) {
 // all accumulated data that hasn't been read will not be returned.
 func (o *routerOutputOp) cancel(ctx context.Context) {
 	o.mu.Lock()
+	defer o.mu.Unlock()
 	o.closeLocked(ctx)
 	// Some goroutine might be waiting on the condition variable, so wake it up.
 	// Note that read goroutines check o.mu.done, so won't wait on the condition
 	// variable after we unlock the mutex.
 	o.mu.cond.Signal()
-	o.mu.Unlock()
 }
 
 // addBatch copies the columns in batch according to selection into an internal
@@ -384,15 +384,15 @@ func (o *routerOutputOp) drain() []execinfrapb.ProducerMetadata {
 	return nil
 }
 
-// reset resets the routerOutputOp for a benchmark run.
-func (o *routerOutputOp) reset(ctx context.Context) {
+// resetForBenchmarks resets the routerOutputOp for a benchmark run.
+func (o *routerOutputOp) resetForBenchmarks(ctx context.Context) {
 	o.mu.Lock()
+	defer o.mu.Unlock()
 	o.mu.state = routerOutputOpRunning
 	o.mu.data.reset(ctx)
 	o.mu.drainState.err = nil
 	o.mu.numUnread = 0
 	o.mu.blocked = false
-	o.mu.Unlock()
 }
 
 // HashRouter hashes values according to provided hash columns and computes a
@@ -596,8 +596,8 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	return false
 }
 
-// reset resets the HashRouter for a benchmark run.
-func (r *HashRouter) reset(ctx context.Context) {
+// resetForBenchmarks resets the HashRouter for a benchmark run.
+func (r *HashRouter) resetForBenchmarks(ctx context.Context) {
 	if i, ok := r.input.(resetter); ok {
 		i.reset(ctx)
 	}
@@ -610,7 +610,7 @@ func (r *HashRouter) reset(ctx context.Context) {
 		}
 	}
 	for _, o := range r.outputs {
-		o.(resetter).reset(ctx)
+		o.(*routerOutputOp).resetForBenchmarks(ctx)
 	}
 }
 
