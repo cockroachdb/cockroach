@@ -41,10 +41,6 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
-	// IsInterleaved returns true if any of this table's indexes are interleaved
-	// with index(es) from other table(s).
-	IsInterleaved() bool
-
 	// ColumnCount returns the number of public columns in the table. Public
 	// columns are not currently being added or dropped from the table. This
 	// method should be used when mutation columns can be ignored (the common
