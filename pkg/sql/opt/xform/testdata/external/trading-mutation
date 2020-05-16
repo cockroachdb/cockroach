@@ -1314,7 +1314,7 @@ upsert transactiondetails
  │    │    ├── side-effects
  │    │    ├── lax-key: (15-17,25-29)
  │    │    ├── fd: ()-->(13,14,24), (15-17)~~>(20,22,23), (25-29)-->(30-34)
- │    │    ├── upsert-distinct-on
+ │    │    ├── ensure-upsert-distinct-on
  │    │    │    ├── columns: "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 sellprice:22 buyprice:23 discount:24!null
  │    │    │    ├── grouping columns: current_timestamp:15 int8:16 int8:17
  │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"

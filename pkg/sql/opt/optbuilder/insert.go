@@ -774,10 +774,10 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// Upsert could affect the same row more than once, which can lead to index
 	// corruption. See issue #44466 for more context.
 	//
-	// Ignore any ordering requested by the input. Since the UpsertDistinctOn
-	// operator does not allow multiple rows in distinct groupings, the internal
-	// ordering is meaningless (and can trigger a misleading error in
-	// buildDistinctOn if present).
+	// Ignore any ordering requested by the input. Since the
+	// EnsureUpsertDistinctOn operator does not allow multiple rows in distinct
+	// groupings, the internal ordering is meaningless (and can trigger a
+	// misleading error in buildDistinctOn if present).
 	var conflictCols opt.ColSet
 	for ord, ok := conflictOrds.Next(0); ok; ord, ok = conflictOrds.Next(ord + 1) {
 		conflictCols.Add(mb.outScope.cols[mb.insertOrds[ord]].id)

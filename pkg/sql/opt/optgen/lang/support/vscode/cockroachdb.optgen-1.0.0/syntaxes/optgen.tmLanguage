@@ -233,6 +233,9 @@
                         GroupingPrivate |
                         ScalarGroupBy |
                         DistinctOn |
+                        EnsureDistinctOn |
+                        UpsertDistinctOn |
+                        EnsureUpsertDistinctOn |
                         Union |
                         SetPrivate |
                         Intersect |

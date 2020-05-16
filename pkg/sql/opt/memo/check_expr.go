@@ -130,7 +130,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			}
 		}
 
-	case *DistinctOnExpr, *EnsureDistinctOnExpr, *UpsertDistinctOnExpr:
+	case *DistinctOnExpr, *EnsureDistinctOnExpr, *UpsertDistinctOnExpr, *EnsureUpsertDistinctOnExpr:
 		checkErrorOnDup(e.(RelExpr))
 
 		// Check that aggregates can be only FirstAgg or ConstAgg.
@@ -294,13 +294,19 @@ func checkFilters(filters FiltersExpr) {
 }
 
 func checkErrorOnDup(e RelExpr) {
-	// Only EnsureDistinctOn or UpsertDistinctOn should set the ErrorOnDup field
-	// to a value.
+	// Only EnsureDistinctOn and EnsureUpsertDistinctOn should set the ErrorOnDup
+	// field to a value.
 	if e.Op() != opt.EnsureDistinctOnOp &&
-		e.Op() != opt.UpsertDistinctOnOp &&
+		e.Op() != opt.EnsureUpsertDistinctOnOp &&
 		e.Private().(*GroupingPrivate).ErrorOnDup != "" {
 		panic(errors.AssertionFailedf(
 			"%s should never set ErrorOnDup to a non-empty string", log.Safe(e.Op())))
+	}
+	if (e.Op() == opt.EnsureDistinctOnOp ||
+		e.Op() == opt.EnsureUpsertDistinctOnOp) &&
+		e.Private().(*GroupingPrivate).ErrorOnDup == "" {
+		panic(errors.AssertionFailedf(
+			"%s should never leave ErrorOnDup as an empty string", log.Safe(e.Op())))
 	}
 }
 

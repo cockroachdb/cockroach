@@ -108,7 +108,8 @@
 # grouping columns, we can execute aggregations in a streaming fashion which is
 # more efficient.
 [GenerateStreamingGroupBy, Explore]
-(GroupBy | DistinctOn | UpsertDistinctOn
+(GroupBy | DistinctOn | EnsureDistinctOn | UpsertDistinctOn
+        | EnsureUpsertDistinctOn
     $input:*
     $aggs:*
     $private:* & (IsCanonicalGroupBy $private)
