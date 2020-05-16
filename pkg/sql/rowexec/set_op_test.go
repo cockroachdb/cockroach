@@ -21,17 +21,25 @@ import (
 type setOpTestCase struct {
 	setOpType   sqlbase.JoinType
 	columnTypes []*types.T
+	ordering    sqlbase.ColumnOrdering
 	leftInput   sqlbase.EncDatumRows
 	rightInput  sqlbase.EncDatumRows
 	expected    sqlbase.EncDatumRows
 }
 
 func setOpTestCaseToMergeJoinerTestCase(tc setOpTestCase) mergeJoinerTestCase {
-	spec := execinfrapb.MergeJoinerSpec{Type: tc.setOpType}
-	ordering := make(sqlbase.ColumnOrdering, 0, len(tc.columnTypes))
+	spec := execinfrapb.MergeJoinerSpec{Type: tc.setOpType, NullEquality: true}
+	var ordering sqlbase.ColumnOrdering
+	if tc.ordering != nil {
+		ordering = tc.ordering
+	} else {
+		ordering = make(sqlbase.ColumnOrdering, 0, len(tc.columnTypes))
+		for i := range tc.columnTypes {
+			ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
+		}
+	}
 	outCols := make([]uint32, 0, len(tc.columnTypes))
 	for i := range tc.columnTypes {
-		ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
 		outCols = append(outCols, uint32(i))
 	}
 	spec.LeftOrdering = execinfrapb.ConvertToSpecOrdering(ordering)
@@ -69,6 +77,7 @@ func setOpTestCaseToJoinerTestCase(tc setOpTestCase) joinerTestCase {
 }
 
 func intersectAllTestCases() []setOpTestCase {
+	null := sqlbase.EncDatum{Datum: tree.DNull}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
@@ -81,24 +90,41 @@ func intersectAllTestCases() []setOpTestCase {
 			setOpType:   sqlbase.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[1]},
+				{null, v[1]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[0], v[3]},
+				{v[1], null},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[2]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[1]},
+				{null, v[1]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
@@ -109,6 +135,11 @@ func intersectAllTestCases() []setOpTestCase {
 			setOpType:   sqlbase.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -118,6 +149,8 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -125,6 +158,8 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -138,6 +173,8 @@ func intersectAllTestCases() []setOpTestCase {
 			setOpType:   sqlbase.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -146,6 +183,11 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -155,6 +197,8 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -166,6 +210,7 @@ func intersectAllTestCases() []setOpTestCase {
 }
 
 func exceptAllTestCases() []setOpTestCase {
+	null := sqlbase.EncDatum{Datum: tree.DNull}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
@@ -178,22 +223,38 @@ func exceptAllTestCases() []setOpTestCase {
 			setOpType:   sqlbase.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[1]},
+				{null, v[1]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[0], v[3]},
+				{v[1], null},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[2]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[3]},
+				{v[1], null},
 			},
 		},
 		{
@@ -202,6 +263,11 @@ func exceptAllTestCases() []setOpTestCase {
 			setOpType:   sqlbase.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -211,6 +277,8 @@ func exceptAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -218,6 +286,9 @@ func exceptAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[3]},
 			},
@@ -228,6 +299,8 @@ func exceptAllTestCases() []setOpTestCase {
 			setOpType:   sqlbase.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -236,6 +309,11 @@ func exceptAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -246,6 +324,48 @@ func exceptAllTestCases() []setOpTestCase {
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[3]},
+			},
+		},
+		{
+			// Check that EXCEPT ALL handles mixed ordering correctly.
+			setOpType:   sqlbase.ExceptAllJoin,
+			columnTypes: sqlbase.TwoIntCols,
+			ordering: sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: encoding.Descending},
+				{ColIdx: 1, Direction: encoding.Ascending},
+			},
+			leftInput: sqlbase.EncDatumRows{
+				{v[4], null},
+				{v[4], v[1]},
+				{v[1], null},
+				{v[1], v[2]},
+				{v[0], v[2]},
+				{v[0], v[3]},
+				{null, v[1]},
+				{null, v[2]},
+				{null, v[2]},
+				{null, v[3]},
+			},
+			rightInput: sqlbase.EncDatumRows{
+				{v[3], v[2]},
+				{v[2], v[1]},
+				{v[2], v[2]},
+				{v[2], v[3]},
+				{v[1], null},
+				{v[1], v[1]},
+				{v[1], v[1]},
+				{v[0], v[1]},
+				{v[0], v[2]},
+				{null, v[2]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[4], null},
+				{v[4], v[1]},
+				{v[1], v[2]},
+				{v[0], v[3]},
+				{null, v[1]},
+				{null, v[2]},
+				{null, v[3]},
 			},
 		},
 	}
