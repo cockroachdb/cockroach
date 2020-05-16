@@ -3686,7 +3686,7 @@ ORDER BY
 
 # Check that telemetry is being collected on the window functions' usage.
 query B
-SELECT count(*) = 26 FROM crdb_internal.feature_usage WHERE feature_name LIKE 'sql.plan.window_function%' AND usage_count > 0
+SELECT count(*) >= 26 FROM crdb_internal.feature_usage WHERE feature_name LIKE 'sql.plan.window_function%' AND usage_count > 0
 ----
 true
 
