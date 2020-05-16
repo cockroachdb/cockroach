@@ -157,7 +157,7 @@ $input
 (Exists
     (Limit
         $input:* & (HasOuterCols $input)
-        (Const $limit:*) & (IsPositiveLimit $limit)
+        (Const $limit:*) & (IsPositiveInt $limit)
     )
     $subqueryPrivate:*
 )
