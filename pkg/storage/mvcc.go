@@ -787,6 +787,7 @@ func mvccGet(
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
+		keyBuf:           mvccScanner.keyBuf,
 	}
 
 	mvccScanner.init(opts.Txn)
@@ -795,7 +796,7 @@ func mvccGet(
 	if mvccScanner.err != nil {
 		return nil, nil, mvccScanner.err
 	}
-	intents, err := buildScanIntents(mvccScanner.intents.Repr())
+	intents, err := buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2357,6 +2358,7 @@ func mvccScanToBytes(
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
+		keyBuf:           mvccScanner.keyBuf,
 	}
 
 	mvccScanner.init(opts.Txn)
@@ -2373,7 +2375,7 @@ func mvccScanToBytes(
 	res.NumKeys = mvccScanner.results.count
 	res.NumBytes = mvccScanner.results.bytes
 
-	res.Intents, err = buildScanIntents(mvccScanner.intents.Repr())
+	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
 		return MVCCScanResult{}, err
 	}
