@@ -965,7 +965,7 @@ func BenchmarkHashRouter(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					input.ResetBatchesToReturn(numInputBatches)
-					r.reset(ctx)
+					r.resetForBenchmarks(ctx)
 					wg.Add(len(outputs))
 					for j := range outputs {
 						go func(j int) {
