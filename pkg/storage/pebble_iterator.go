@@ -67,6 +67,7 @@ func newPebbleIterator(handle pebble.Reader, opts IterOptions) Iterator {
 // a newly-instantiated one through newPebbleIterator.
 func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 	*p = pebbleIterator{
+		keyBuf:        p.keyBuf,
 		lowerBoundBuf: p.lowerBoundBuf,
 		upperBoundBuf: p.upperBoundBuf,
 		prefix:        opts.Prefix,
@@ -187,7 +188,12 @@ func (p *pebbleIterator) SeekGE(key MVCCKey) {
 
 // Valid implements the Iterator interface.
 func (p *pebbleIterator) Valid() (bool, error) {
-	return p.iter.Valid(), p.iter.Error()
+	// NB: A Pebble Iterator always returns Valid()==false when an error is
+	// present. If Valid() is true, there is no error.
+	if ok := p.iter.Valid(); ok {
+		return ok, nil
+	}
+	return false, p.iter.Error()
 }
 
 // Next implements the Iterator interface.
@@ -440,10 +446,11 @@ func (p *pebbleIterator) destroy() {
 		}
 		p.iter = nil
 	}
-	// Reset all fields except for the lower/upper bound buffers. Holding onto
-	// their underlying memory is more efficient to prevent extra allocations
-	// down the line.
+	// Reset all fields except for the key and lower/upper bound buffers. Holding
+	// onto their underlying memory is more efficient to prevent extra
+	// allocations down the line.
 	*p = pebbleIterator{
+		keyBuf:        p.keyBuf,
 		lowerBoundBuf: p.lowerBoundBuf,
 		upperBoundBuf: p.upperBoundBuf,
 		reusable:      p.reusable,
