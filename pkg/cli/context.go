@@ -113,6 +113,7 @@ func initCLIDefaults() {
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
 	serverCfg.JoinList = nil
+	serverCfg.JoinPreferSRVRecords = false
 	serverCfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	serverCfg.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
 	// Attempt to default serverCfg.SQLMemoryPoolSize to 25% if possible.
