@@ -260,9 +260,6 @@ func isSupported(
 			core.MergeJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
-		if core.MergeJoiner.Type.IsSetOpJoin() {
-			return false, errors.Newf("vectorized merge join of type %s is not supported", core.MergeJoiner.Type)
-		}
 		return true, nil
 
 	case core.Sorter != nil:
