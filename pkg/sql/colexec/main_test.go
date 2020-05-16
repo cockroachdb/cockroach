@@ -79,9 +79,7 @@ func generateBatchSize() int {
 	randomizeBatchSize := envutil.EnvOrDefaultBool("COCKROACH_RANDOMIZE_BATCH_SIZE", true)
 	if randomizeBatchSize {
 		rng, _ := randutil.NewPseudoRand()
-		batchSize := minBatchSize +
-			rng.Intn(coldata.MaxBatchSize-minBatchSize)
-		return batchSize
+		return minBatchSize + rng.Intn(coldata.MaxBatchSize-minBatchSize)
 	}
 	return coldata.BatchSize()
 }

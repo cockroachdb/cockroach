@@ -618,6 +618,12 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: sqlbase.LeftAntiJoin,
 		},
+		{
+			joinType: sqlbase.IntersectAllJoin,
+		},
+		{
+			joinType: sqlbase.ExceptAllJoin,
+		},
 	}
 
 	seed := rand.Int()
@@ -636,6 +642,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 					for _, addFilter := range []bool{false, true} {
+						if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
+							// Output of set operation join when rows have non
+							// equality columns is not deterministic, so
+							// applying a filter on top of it can produce
+							// arbitrary results, and we skip such
+							// configuration.
+							addFilter = false
+						}
 						triedWithoutOnExpr, triedWithOnExpr := false, false
 						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
@@ -720,6 +734,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
 								RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
 								Type:          testSpec.joinType,
+								NullEquality:  testSpec.joinType.IsSetOpJoin(),
 							}
 							pspec := &execinfrapb.ProcessorSpec{
 								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
@@ -732,6 +747,17 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
 								outputTypes: outputTypes,
 								pspec:       pspec,
+							}
+							if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
+								// The output of set operation joins is not fully
+								// deterministic when there are non-equality
+								// columns, however, the rows must match on the
+								// equality columns between vectorized and row
+								// executions.
+								args.colIdxsToCheckForEquality = make([]int, nOrderingCols)
+								for i := range args.colIdxsToCheckForEquality {
+									args.colIdxsToCheckForEquality[i] = int(lOrderingCols[i].ColIdx)
+								}
 							}
 							if err := verifyColOperator(args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
