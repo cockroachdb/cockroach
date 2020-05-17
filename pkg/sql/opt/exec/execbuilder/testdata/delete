@@ -198,3 +198,231 @@ count           ·            ·           ()      ·
       └── scan  ·            ·           (a, b)  ·
 ·               table        t38799@foo  ·       ·
 ·               spans        FULL SCAN   ·       ·
+
+# Tracing tests for fast delete.
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+# Delete range operates in chunks of 600 (defined by sql.TableTruncateChunkSize).
+statement ok
+INSERT INTO a SELECT * FROM generate_series(1,1000)
+
+statement ok
+SET tracing = on,kv; DELETE FROM a; SET tracing = off
+
+# Ensure that DelRange requests are chunked for DELETE FROM...
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%DelRange%' OR message LIKE '%DelRng%'
+----
+flow              DelRange /Table/57/1 - /Table/57/2
+dist sender send  r32: sending batch 1 DelRng to (n1,s1):1
+flow              DelRange /Table/57/1/601/0 - /Table/57/2
+dist sender send  r32: sending batch 1 DelRng to (n1,s1):1
+
+# Ensure that DelRange requests are autocommitted when DELETE FROM happens on a
+# chunk of fewer than 600 keys.
+
+statement ok
+INSERT INTO a VALUES(5)
+
+statement ok
+SET tracing = on,kv; DELETE FROM a WHERE a = 5; SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%DelRange%' OR message LIKE '%sending batch%'
+----
+flow              DelRange /Table/57/1/5 - /Table/57/1/5/#
+dist sender send  r32: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+
+# Test use of fast path when there are interleaved tables.
+
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+# Delete range should be used.
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·             distributed  false
+·             vectorized   false
+delete range  ·            ·
+·             from         parent
+·             spans        /11-
+
+statement ok
+CREATE TABLE child (
+  pid INT,
+  id INT,
+  PRIMARY KEY (pid, id),
+  FOREIGN KEY (pid) REFERENCES parent(id) ON DELETE CASCADE
+) INTERLEAVE IN PARENT parent(pid)
+
+# Delete range should be used.
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·             distributed  false
+·             vectorized   false
+delete range  ·            ·
+·             from         parent
+·             spans        /11-
+
+# Delete range should not be used when deleting from the child.
+query TTT
+EXPLAIN DELETE FROM child WHERE id > 10
+----
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         child
+      │         strategy     deleter
+      │         auto commit  ·
+      └── scan  ·            ·
+·               table        child@primary
+·               spans        FULL SCAN
+·               filter       id > 10
+
+statement ok
+CREATE TABLE sibling (
+  pid INT,
+  id INT,
+  PRIMARY KEY (pid, id),
+  FOREIGN KEY (pid) REFERENCES parent(id) ON DELETE CASCADE
+) INTERLEAVE IN PARENT parent(pid)
+
+# Delete range should be used.
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·             distributed  false
+·             vectorized   false
+delete range  ·            ·
+·             from         parent
+·             spans        /11-
+
+statement ok
+CREATE TABLE grandchild (
+  gid INT,
+  pid INT,
+  id INT,
+  FOREIGN KEY (gid, pid) REFERENCES child(pid, id) ON DELETE CASCADE,
+  PRIMARY KEY(gid, pid, id)
+) INTERLEAVE IN PARENT child(gid, pid)
+
+# Delete range should be used.
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·             distributed  false
+·             vectorized   false
+delete range  ·            ·
+·             from         parent
+·             spans        /11-
+
+statement ok
+CREATE TABLE external_ref (
+  id INT,
+  parent_id INT,
+  child_id INT,
+  FOREIGN KEY (parent_id, child_id) REFERENCES child(pid, id) ON DELETE CASCADE
+)
+
+# Delete range should not be used (external ref).
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         parent
+      │         strategy     deleter
+      │         auto commit  ·
+      └── scan  ·            ·
+·               table        parent@primary
+·               spans        /11-
+
+statement ok
+DROP TABLE external_ref
+
+statement ok
+CREATE TABLE child_with_index (
+  pid INT,
+  child_id INT,
+  other_field STRING,
+  PRIMARY KEY (pid, child_id),
+  FOREIGN KEY (pid) REFERENCES parent(id),
+  UNIQUE (other_field)
+) INTERLEAVE IN PARENT parent(pid)
+
+# Delete range should not be used (child with secondary index).
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         parent
+      │         strategy     deleter
+      │         auto commit  ·
+      └── scan  ·            ·
+·               table        parent@primary
+·               spans        /11-
+
+statement ok
+DROP TABLE child_with_index
+
+statement ok
+CREATE TABLE child_without_cascade (
+  pid INT,
+  id INT,
+  PRIMARY KEY (pid, id),
+  FOREIGN KEY (pid) REFERENCES parent(id)
+) INTERLEAVE IN PARENT parent(pid)
+
+# Delete range should not be used (child without cascading FK).
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         parent
+      │         strategy     deleter
+      │         auto commit  ·
+      └── scan  ·            ·
+·               table        parent@primary
+·               spans        /11-
+
+statement ok
+DROP TABLE child_without_cascade
+
+statement ok
+CREATE TABLE child_without_fk (
+  pid INT,
+  id INT,
+  PRIMARY KEY (pid, id)
+) INTERLEAVE IN PARENT parent(pid)
+
+# Delete range should not be used (child without cascading FK).
+query TTT
+EXPLAIN DELETE FROM parent WHERE id > 10
+----
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         parent
+      │         strategy     deleter
+      │         auto commit  ·
+      └── scan  ·            ·
+·               table        parent@primary
+·               spans        /11-
+
+statement ok
+DROP TABLE child_without_fk
