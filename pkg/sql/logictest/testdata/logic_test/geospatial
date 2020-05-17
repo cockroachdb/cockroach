@@ -732,3 +732,26 @@ SELECT * FROM pg_extension.geometry_columns
 
 statement error not yet implemented
 SELECT * FROM pg_extension.spatial_ref_sys ORDER BY srid ASC
+
+
+subtest st_srid
+
+statement ok
+CREATE TABLE geo_st_srid(
+  id int primary key,
+  geom geometry(point)
+)
+
+statement ok
+INSERT INTO geo_st_srid VALUES
+  (1, ST_GeomFromText('POINT(5.0 5.0)', 0)),
+  (2, ST_GeomFromText('POINT(5.0 5.0)', 4326))
+
+query II
+SELECT
+  id,
+  st_srid(geom)
+FROM geo_st_srid
+----
+1  0
+2  4326
