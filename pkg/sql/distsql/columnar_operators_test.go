@@ -40,8 +40,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 20
 	nRows := 100
 	const (
@@ -174,8 +173,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 10
 	nRows := 10
 	maxCols := 3
@@ -263,8 +261,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
 	nRows := 8 * coldata.BatchSize()
 	maxCols := 5
@@ -338,8 +335,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
 	nRows := 5 * coldata.BatchSize() / 4
 	maxCols := 3
@@ -436,10 +432,15 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: sqlbase.LeftAntiJoin,
 		},
+		{
+			joinType: sqlbase.IntersectAllJoin,
+		},
+		{
+			joinType: sqlbase.ExceptAllJoin,
+		},
 	}
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -454,7 +455,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 			for _, testSpec := range testSpecs {
 				for nCols := 1; nCols <= maxCols; nCols++ {
 					for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
-						for _, addFilter := range []bool{false, true} {
+						for _, addFilter := range getAddFilterOptions(testSpec.joinType, nEqCols < nCols) {
 							triedWithoutOnExpr, triedWithOnExpr := false, false
 							if !testSpec.onExprSupported {
 								triedWithOnExpr = true
@@ -544,7 +545,20 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									// batch. In such case, the spilling might not occur and that's ok.
 									forcedDiskSpillMightNotOccur: !filter.Empty() || !onExpr.Empty(),
 									numForcedRepartitions:        2,
+									rng:                          rng,
 								}
+								if testSpec.joinType.IsSetOpJoin() && nEqCols < nCols {
+									// The output of set operation joins is not fully
+									// deterministic when there are non-equality
+									// columns, however, the rows must match on the
+									// equality columns between vectorized and row
+									// executions.
+									args.colIdxsToCheckForEquality = make([]int, nEqCols)
+									for i := range args.colIdxsToCheckForEquality {
+										args.colIdxsToCheckForEquality[i] = int(lEqCols[i])
+									}
+								}
+
 								if err := verifyColOperator(args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
 										" filter = %q seed = %d run = %d ---\n",
@@ -626,8 +640,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		},
 	}
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -641,15 +654,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-					for _, addFilter := range []bool{false, true} {
-						if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
-							// Output of set operation join when rows have non
-							// equality columns is not deterministic, so
-							// applying a filter on top of it can produce
-							// arbitrary results, and we skip such
-							// configuration.
-							addFilter = false
-						}
+					for _, addFilter := range getAddFilterOptions(testSpec.joinType, nOrderingCols < nCols) {
 						triedWithoutOnExpr, triedWithOnExpr := false, false
 						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
@@ -747,6 +752,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
 								outputTypes: outputTypes,
 								pspec:       pspec,
+								rng:         rng,
 							}
 							if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
 								// The output of set operation joins is not fully
@@ -800,6 +806,16 @@ func generateColumnOrdering(
 		}
 	}
 	return orderingCols
+}
+
+func getAddFilterOptions(joinType sqlbase.JoinType, nonEqualityColsPresent bool) []bool {
+	if joinType.IsSetOpJoin() && nonEqualityColsPresent {
+		// Output of set operation join when rows have non equality columns is
+		// not deterministic, so applying a filter on top of it can produce
+		// arbitrary results, and we skip such configuration.
+		return []bool{false}
+	}
+	return []bool{false, true}
 }
 
 // generateFilterExpr populates an execinfrapb.Expression that contains a
@@ -859,8 +875,8 @@ func generateFilterExpr(
 
 func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
 
+	rng, seed := randutil.NewPseudoRand()
 	nRows := 2 * coldata.BatchSize()
 	maxCols := 4
 	maxNum := 10
@@ -922,6 +938,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						pspec:       pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
+						fmt.Printf("seed = %d\n", seed)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 						t.Fatal(err)

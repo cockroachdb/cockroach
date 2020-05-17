@@ -22,11 +22,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type hashTableMode struct {
-	IsDistinct bool
+type hashTableMode int
 
-	String string
+const (
+	hashTableFullBuildDefaultProbe hashTableMode = iota
+	hashTableDistinctBuildDefaultProbe
+	hashTableFullBuildDeletingProbe
+)
+
+func (m hashTableMode) String() string {
+	switch m {
+	case hashTableFullBuildDefaultProbe:
+		return "full_default"
+	case hashTableDistinctBuildDefaultProbe:
+		return "distinct"
+	case hashTableFullBuildDeletingProbe:
+		return "full_deleting"
+	default:
+		colexecerror.InternalError("unexpected hashTableMode")
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
 }
+
+func (m hashTableMode) IsDistinctBuild() bool {
+	return m == hashTableDistinctBuildDefaultProbe
+}
+
+func (m hashTableMode) IsDeletingProbe() bool {
+	return m == hashTableFullBuildDeletingProbe
+}
+
+// Remove unused warnings.
+var _ = hashTableMode.IsDistinctBuild
+var _ = hashTableMode.IsDeletingProbe
 
 const hashTableTmpl = "pkg/sql/colexec/hashtable_tmpl.go"
 
@@ -44,7 +73,11 @@ func genHashTable(wr io.Writer, htm hashTableMode) error {
 	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
 	s = strings.ReplaceAll(s, "_ProbeType", "{{.Left.VecMethod}}")
 	s = strings.ReplaceAll(s, "_BuildType", "{{.Right.VecMethod}}")
-	s = strings.ReplaceAll(s, "_PROBING_AGAINST_ITSELF", ".ProbingAgainstItself")
+
+	s = strings.ReplaceAll(s, "_USE_PROBE_SEL", ".UseProbeSel")
+	s = strings.ReplaceAll(s, "_PROBING_AGAINST_ITSELF", "$probingAgainstItself")
+	s = strings.ReplaceAll(s, "_DELETING_PROBE_MODE", "$deletingProbeMode")
+	s = strings.ReplaceAll(s, "_OVERLOADS", ".Overloads")
 
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Global.Left", s)
@@ -54,26 +87,35 @@ func genHashTable(wr io.Writer, htm hashTableMode) error {
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Right.Assign", 6))
 
-	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 12)
-	s = checkColBody.ReplaceAllString(
-		s,
-		`{{template "checkColBody" buildDict "Global" .Global "UseProbeSel" .UseProbeSel "ProbeHasNulls" $7 "BuildHasNulls" $8 "AllowNullEquality" $9 "SelectDistinct" $10 "ProbingAgainstItself" $12}}`)
+	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 7)
+	s = checkColBody.ReplaceAllString(s,
+		`{{template "checkColBody" buildDict "Global" .Global "ProbeHasNulls" $1 "BuildHasNulls" $2 "AllowNullEquality" $3 "SelectDistinct" $4 "UseProbeSel" $5 "ProbingAgainstItself" $6 "DeletingProbeMode" $7}}`,
+	)
 
-	checkColWithNulls := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 8)
+	checkColWithNulls := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 3)
 	s = checkColWithNulls.ReplaceAllString(s,
-		`{{template "checkColWithNulls" buildDict "Global" . "UseProbeSel" $7 "ProbingAgainstItself" $8}}`)
+		`{{template "checkColWithNulls" buildDict "Global" . "UseProbeSel" $1 "ProbingAgainstItself" $2 "DeletingProbeMode" $3}}`,
+	)
 
-	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 6)
+	checkColFunctionTemplate := makeFunctionRegex("_CHECK_COL_FUNCTION_TEMPLATE", 2)
+	s = checkColFunctionTemplate.ReplaceAllString(s,
+		`{{template "checkColFunctionTemplate" buildDict "Global" . "ProbingAgainstItself" $1 "DeletingProbeMode" $2}}`,
+	)
+
+	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 1)
 	s = checkColForDistinctWithNulls.ReplaceAllString(s,
-		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $6}}`)
+		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $1}}`,
+	)
 
-	checkBody := makeFunctionRegex("_CHECK_BODY", 3)
+	checkBody := makeFunctionRegex("_CHECK_BODY", 2)
 	s = checkBody.ReplaceAllString(s,
-		`{{template "checkBody" buildDict "Global" . "SelectSameTuples" $3}}`)
+		`{{template "checkBody" buildDict "Global" . "SelectSameTuples" $1 "DeletingProbeMode" $2}}`,
+	)
 
-	updateSelBody := makeFunctionRegex("_UPDATE_SEL_BODY", 4)
+	updateSelBody := makeFunctionRegex("_UPDATE_SEL_BODY", 1)
 	s = updateSelBody.ReplaceAllString(s,
-		`{{template "updateSelBody" buildDict "Global" . "UseSel" $4}}`)
+		`{{template "updateSelBody" buildDict "Global" . "UseSel" $1}}`,
+	)
 
 	tmpl, err := template.New("hashtable").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
@@ -92,7 +134,7 @@ func genHashTable(wr io.Writer, htm hashTableMode) error {
 	}
 	return tmpl.Execute(wr, struct {
 		Overloads     interface{}
-		HashTableMode interface{}
+		HashTableMode hashTableMode
 	}{
 		Overloads:     data,
 		HashTableMode: htm,
@@ -100,24 +142,17 @@ func genHashTable(wr io.Writer, htm hashTableMode) error {
 }
 
 func init() {
-	hashTableModes := []hashTableMode{
-		{
-			IsDistinct: false,
-			String:     "full",
-		},
-		{
-			IsDistinct: true,
-			String:     "distinct",
-		},
-	}
-
 	hashTableGenerator := func(htm hashTableMode) generator {
 		return func(wr io.Writer) error {
 			return genHashTable(wr, htm)
 		}
 	}
 
-	for _, mode := range hashTableModes {
-		registerGenerator(hashTableGenerator(mode), fmt.Sprintf("hashtable_%s.eg.go", mode.String), hashTableTmpl)
+	for _, mode := range []hashTableMode{
+		hashTableFullBuildDefaultProbe,
+		hashTableDistinctBuildDefaultProbe,
+		hashTableFullBuildDeletingProbe,
+	} {
+		registerGenerator(hashTableGenerator(mode), fmt.Sprintf("hashtable_%s.eg.go", mode), hashTableTmpl)
 	}
 }
