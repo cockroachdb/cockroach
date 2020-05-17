@@ -21,6 +21,7 @@ type Import struct {
 	Files      Exprs
 	Bundle     bool
 	Options    KVOptions
+	Detached   bool
 }
 
 var _ Statement = &Import{}

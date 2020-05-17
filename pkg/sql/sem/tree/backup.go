@@ -37,6 +37,7 @@ type Backup struct {
 	IncrementalFrom    Exprs
 	AsOf               AsOfClause
 	Options            KVOptions
+	Detached           bool
 }
 
 var _ Statement = &Backup{}
@@ -70,6 +71,7 @@ type Restore struct {
 	From               []PartitionedBackup
 	AsOf               AsOfClause
 	Options            KVOptions
+	Detached           bool
 }
 
 var _ Statement = &Restore{}

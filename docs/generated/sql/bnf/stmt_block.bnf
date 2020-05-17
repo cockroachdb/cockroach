@@ -104,8 +104,8 @@ alter_stmt ::=
 	| alter_role_stmt
 
 backup_stmt ::=
-	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
-	| 'BACKUP' targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options opt_detached
+	| 'BACKUP' targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options opt_detached
 
 cancel_stmt ::=
 	cancel_jobs_stmt
@@ -133,12 +133,12 @@ explain_stmt ::=
 	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' preparable_stmt
 
 import_stmt ::=
-	'IMPORT' import_format string_or_placeholder opt_with_options
-	| 'IMPORT' 'TABLE' table_name 'FROM' import_format string_or_placeholder opt_with_options
-	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
-	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
-	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
-	| 'IMPORT' 'INTO' table_name import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	'IMPORT' import_format string_or_placeholder opt_with_options opt_detached
+	| 'IMPORT' 'TABLE' table_name 'FROM' import_format string_or_placeholder opt_with_options opt_detached
+	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options opt_detached
+	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options opt_detached
+	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options opt_detached
+	| 'IMPORT' 'INTO' table_name import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options opt_detached
 
 insert_stmt ::=
 	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
@@ -153,8 +153,8 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
-	| 'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
+	'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options opt_detached
+	| 'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options opt_detached
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -323,6 +323,10 @@ opt_as_of_clause ::=
 
 opt_incremental ::=
 	'INCREMENTAL' 'FROM' string_or_placeholder_list
+	| 
+
+opt_detached ::=
+	'DETACHED'
 	| 
 
 cancel_jobs_stmt ::=
@@ -675,6 +679,7 @@ unreserved_keyword ::=
 	| 'DELETE'
 	| 'DEFAULTS'
 	| 'DEFERRED'
+	| 'DETACHED'
 	| 'DISCARD'
 	| 'DOMAIN'
 	| 'DOUBLE'

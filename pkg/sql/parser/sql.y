@@ -563,7 +563,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> CURRENT_USER CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
-%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
@@ -841,6 +841,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list
+%type <bool> opt_detached
 %type <str> import_format
 %type <tree.StorageParam> storage_parameter
 %type <[]tree.StorageParam> storage_parameter_list opt_table_with
@@ -2004,6 +2005,7 @@ alter_attribute_action:
 //        [ AS OF SYSTEM TIME <expr> ]
 //        [ INCREMENTAL FROM <location...> ]
 //        [ WITH <option> [= <value>] [, ...] ]
+//        [ DETACHED ]
 //
 // Targets:
 //    TABLE <pattern> [, ...]
@@ -2015,16 +2017,31 @@ alter_attribute_action:
 // Options:
 //    INTO_DB
 //    SKIP_MISSING_FOREIGN_KEYS
+//    DETACHED
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+  BACKUP TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options opt_detached
   {
-    $$.val = &tree.Backup{DescriptorCoverage: tree.AllDescriptors, To: $3.partitionedBackup(), IncrementalFrom: $5.exprs(), AsOf: $4.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &tree.Backup{
+    	DescriptorCoverage: tree.AllDescriptors,
+    	To: $3.partitionedBackup(),
+    	IncrementalFrom: $5.exprs(),
+    	AsOf: $4.asOfClause(),
+    	Options: $6.kvOptions(),
+    	Detached: $7.bool(),
+    }
   }
-| BACKUP targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+| BACKUP targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options opt_detached
   {
-    $$.val = &tree.Backup{Targets: $2.targetList(), To: $4.partitionedBackup(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
+    $$.val = &tree.Backup{
+    	Targets: $2.targetList(),
+    	To: $4.partitionedBackup(),
+    	IncrementalFrom: $6.exprs(),
+    	AsOf: $5.asOfClause(),
+    	Options: $7.kvOptions(),
+    	Detached: $8.bool(),
+    }
   }
 | BACKUP error // SHOW HELP: BACKUP
 
@@ -2034,6 +2051,7 @@ backup_stmt:
 // RESTORE <targets...> FROM <location...>
 //         [ AS OF SYSTEM TIME <expr> ]
 //         [ WITH <option> [= <value>] [, ...] ]
+//         [ DETACHED ]
 //
 // Targets:
 //    TABLE <pattern> [, ...]
@@ -2048,13 +2066,25 @@ backup_stmt:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE FROM partitioned_backup_list opt_as_of_clause opt_with_options
+  RESTORE FROM partitioned_backup_list opt_as_of_clause opt_with_options opt_detached
   {
-    $$.val = &tree.Restore{DescriptorCoverage: tree.AllDescriptors, From: $3.partitionedBackups(), AsOf: $4.asOfClause(), Options: $5.kvOptions()}
+    $$.val = &tree.Restore{
+    	DescriptorCoverage: tree.AllDescriptors,
+    	From: $3.partitionedBackups(),
+    	AsOf: $4.asOfClause(),
+    	Options: $5.kvOptions(),
+    	Detached: $6.bool(),
+    }
   }
-| RESTORE targets FROM partitioned_backup_list opt_as_of_clause opt_with_options
+| RESTORE targets FROM partitioned_backup_list opt_as_of_clause opt_with_options opt_detached
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.partitionedBackups(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &tree.Restore{
+    	Targets: $2.targetList(),
+    	From: $4.partitionedBackups(),
+    	AsOf: $5.asOfClause(),
+    	Options: $6.kvOptions(),
+    	Detached: $7.bool(),
+    }
   }
 | RESTORE error // SHOW HELP: RESTORE
 
@@ -2091,6 +2121,7 @@ import_format:
 // IMPORT [ TABLE <tablename> FROM ]
 //        <format> <datafile>
 //        [ WITH <option> [= <value>] [, ...] ]
+//        [ DETACHED ]
 //
 // -- Import using specific schema, use only table data from external file:
 // IMPORT TABLE <tablename>
@@ -2098,6 +2129,7 @@ import_format:
 //        <format>
 //        DATA ( <datafile> [, ...] )
 //        [ WITH <option> [= <value>] [, ...] ]
+//        [ DETACHED ]
 //
 // Formats:
 //    CSV
@@ -2116,45 +2148,101 @@ import_format:
 //
 // %SeeAlso: CREATE TABLE
 import_stmt:
- IMPORT import_format '(' string_or_placeholder ')' opt_with_options
+ IMPORT import_format '(' string_or_placeholder ')' opt_with_options opt_detached
   {
     /* SKIP DOC */
-    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$4.expr()}, Options: $6.kvOptions()}
+    $$.val = &tree.Import{
+    	Bundle: true,
+    	FileFormat: $2,
+    	Files: tree.Exprs{$4.expr()},
+    	Options: $6.kvOptions(),
+    	Detached: $7.bool(),
+    }
   }
-| IMPORT import_format string_or_placeholder opt_with_options
+| IMPORT import_format string_or_placeholder opt_with_options opt_detached
   {
-    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$3.expr()}, Options: $4.kvOptions()}
+    $$.val = &tree.Import{
+    	Bundle: true,
+    	FileFormat: $2,
+    	Files: tree.Exprs{$3.expr()},
+    	Options: $4.kvOptions(),
+    	Detached: $5.bool(),
+    }
   }
-| IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options
+| IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options opt_detached
   {
     /* SKIP DOC */
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
+    $$.val = &tree.Import{
+    	Bundle: true,
+    	Table: &name,
+    	FileFormat: $5,
+    	Files: tree.Exprs{$7.expr()},
+    	Options: $9.kvOptions(),
+    	Detached: $10.bool(),
+    }
   }
-| IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options
+| IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options opt_detached
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
+    $$.val = &tree.Import{
+    	Bundle: true,
+    	Table: &name,
+    	FileFormat: $5,
+    	Files: tree.Exprs{$6.expr()},
+    	Options: $7.kvOptions(),
+    	Detached: $8.bool(),
+    }
   }
-| IMPORT TABLE table_name CREATE USING string_or_placeholder import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT TABLE table_name CREATE USING string_or_placeholder import_format DATA '(' string_or_placeholder_list ')' opt_with_options opt_detached
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+    $$.val = &tree.Import{
+    	Table: &name,
+    	CreateFile: $6.expr(),
+    	FileFormat: $7,
+    	Files: $10.exprs(),
+    	Options: $12.kvOptions(),
+    	Detached: $13.bool(),
+    }
   }
-| IMPORT TABLE table_name '(' table_elem_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT TABLE table_name '(' table_elem_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options opt_detached
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+    $$.val = &tree.Import{
+    	Table: &name,
+    	CreateDefs: $5.tblDefs(),
+    	FileFormat: $7,
+    	Files: $10.exprs(),
+    	Options: $12.kvOptions(),
+    	Detached: $13.bool(),
+    }
   }
-| IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options opt_detached
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+    $$.val = &tree.Import{
+    	Table: &name,
+    	 Into: true,
+    	 IntoCols: $5.nameList(),
+    	 FileFormat: $7,
+    	 Files: $10.exprs(),
+    	 Options: $12.kvOptions(),
+    	 Detached: $13.bool(),
+    }
   }
-| IMPORT INTO table_name import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT INTO table_name import_format DATA '(' string_or_placeholder_list ')' opt_with_options opt_detached
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: nil, FileFormat: $4, Files: $7.exprs(), Options: $9.kvOptions()}
+    $$.val = &tree.Import{
+    	Table: &name,
+    	Into: true,
+    	IntoCols: nil,
+    	FileFormat: $4,
+    	Files: $7.exprs(),
+    	Options: $9.kvOptions(),
+    	Detached: $10.bool(),
+    }
   }
 | IMPORT error // SHOW HELP: IMPORT
 
@@ -2249,6 +2337,16 @@ opt_with_options:
 | /* EMPTY */
   {
     $$.val = nil
+  }
+
+opt_detached:
+  DETACHED
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
   }
 
 copy_from_stmt:
@@ -10275,6 +10373,7 @@ unreserved_keyword:
 | DELETE
 | DEFAULTS
 | DEFERRED
+| DETACHED
 | DISCARD
 | DOMAIN
 | DOUBLE
