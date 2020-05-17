@@ -96,13 +96,11 @@ type InternalExecutor interface {
 }
 
 type InternalRows interface {
-	// Next populates the input tree.Datums with the next row from this row
-	// iterator.
-	Scan(tree.Datums)
-
 	Cur() tree.Datums
 
 	Next(context.Context) (bool, error)
+
+	Err() error
 
 	Close() error
 

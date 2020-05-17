@@ -215,10 +215,6 @@ type rowsIterator struct {
 	resultCols sqlbase.ResultColumns
 }
 
-func (r *rowsIterator) Scan(datums tree.Datums) {
-	copy(datums, r.lastRow)
-}
-
 func (r *rowsIterator) Cur() tree.Datums {
 	return r.lastRow
 }
@@ -242,6 +238,10 @@ func (r *rowsIterator) Next(ctx context.Context) (bool, error) {
 		return false, ctx.Err()
 
 	}
+}
+
+func (r *rowsIterator) Err() error {
+	return nil
 }
 
 func (r *rowsIterator) Close() error {
