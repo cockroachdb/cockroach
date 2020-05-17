@@ -110,10 +110,13 @@ func _COLLECT_PROBE_NO_OUTER(
 	return 0
 }
 
-func _COLLECT_LEFT_ANTI(
+// This code snippet collects the "matches" for LEFT ANTI and EXCEPT ALL joins.
+// "Matches" are in quotes because we're actually interested in non-matches
+// from the left side.
+func _COLLECT_ANTI(
 	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, _USE_SEL bool,
 ) int { // */}}
-	// {{define "collectLeftAnti" -}}
+	// {{define "collectAnti" -}}
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	// {{if .UseSel}}
@@ -208,15 +211,15 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin:
-				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, true)
+			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+				_COLLECT_ANTI(hj, batchSize, nResults, batch, true)
 			default:
 				_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, batch, true)
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin:
-				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, false)
+			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+				_COLLECT_ANTI(hj, batchSize, nResults, batch, false)
 			default:
 				_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, batch, false)
 			}
@@ -243,19 +246,21 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin:
-				// {{/* For LEFT ANTI join we don't care whether the build (right) side
-				// was distinct, so we only have single variation of COLLECT method. */}}
-				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, true)
+			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+				// {{/* For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
+				// (right) side was distinct, so we only have single variation of COLLECT
+				// method. */}}
+				_COLLECT_ANTI(hj, batchSize, nResults, batch, true)
 			default:
 				_DISTINCT_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, true)
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin:
-				// {{/* For LEFT ANTI join we don't care whether the build (right) side
-				// was distinct, so we only have single variation of COLLECT method. */}}
-				_COLLECT_LEFT_ANTI(hj, batchSize, nResults, batch, false)
+			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+				// {{/* For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
+				// (right) side was distinct, so we only have single variation of COLLECT
+				// method. */}}
+				_COLLECT_ANTI(hj, batchSize, nResults, batch, false)
 			default:
 				_DISTINCT_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, false)
 			}
