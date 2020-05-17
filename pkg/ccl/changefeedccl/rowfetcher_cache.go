@@ -27,15 +27,20 @@ import (
 // column families of one row) into a row.
 type rowFetcherCache struct {
 	leaseMgr *sql.LeaseManager
-	fetchers map[*sqlbase.ImmutableTableDescriptor]*row.Fetcher
+	fetchers map[idVersion]*row.Fetcher
 
 	a sqlbase.DatumAlloc
+}
+
+type idVersion struct {
+	id      sqlbase.ID
+	version sqlbase.DescriptorVersion
 }
 
 func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
 	return &rowFetcherCache{
 		leaseMgr: leaseMgr,
-		fetchers: make(map[*sqlbase.ImmutableTableDescriptor]*row.Fetcher),
+		fetchers: make(map[idVersion]*row.Fetcher),
 	}
 }
 
@@ -84,10 +89,10 @@ func (c *rowFetcherCache) TableDescForKey(
 func (c *rowFetcherCache) RowFetcherForTableDesc(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 ) (*row.Fetcher, error) {
-	if rf, ok := c.fetchers[tableDesc]; ok {
+	idVer := idVersion{id: tableDesc.ID, version: tableDesc.Version}
+	if rf, ok := c.fetchers[idVer]; ok {
 		return rf, nil
 	}
-
 	// TODO(dan): Allow for decoding a subset of the columns.
 	colIdxMap := make(map[sqlbase.ColumnID]int)
 	var valNeededForCol util.FastIntSet
@@ -114,6 +119,6 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	// TODO(dan): Bound the size of the cache. Resolved notifications will let
 	// us evict anything for timestamps entirely before the notification. Then
 	// probably an LRU just in case?
-	c.fetchers[tableDesc] = &rf
+	c.fetchers[idVer] = &rf
 	return &rf, nil
 }
