@@ -24,17 +24,39 @@ import (
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
 const hashTableNumBuckets = 1 << 16
 
-// hashTableMode represents different modes in which the hashTable is built.
-type hashTableMode int
+// hashTableBuildMode represents different modes in which the hashTable can be
+// built.
+type hashTableBuildMode int
 
 const (
-	// hashTableFullMode is the mode where hashTable buffers all input tuples and
-	// only populates first and next array for each hash bucket.
-	hashTableFullMode hashTableMode = iota
+	// hashTableFullBuildMode is the mode where hashTable buffers all input
+	// tuples and populates first and next arrays for each hash bucket.
+	hashTableFullBuildMode hashTableBuildMode = iota
 
-	// hashTableDistinctMode is the mode where hashTable only buffers distinct
-	// tuples.
-	hashTableDistinctMode
+	// hashTableDistinctBuildMode is the mode where hashTable only buffers
+	// distinct tuples and discards the duplicates.
+	hashTableDistinctBuildMode
+)
+
+// hashTableProbeMode represents different modes of probing the hashTable.
+type hashTableProbeMode int
+
+const (
+	// hashTableDefaultProbeMode is the default probing mode of the hashTable.
+	hashTableDefaultProbeMode hashTableProbeMode = iota
+
+	// hashTableDeletingProbeMode is the mode of probing the hashTable in which
+	// it "deletes" the tuples from itself once they are matched against
+	// probing tuples.
+	// For example, if we have a hashTable consisting of tuples {1, 1}, {1, 2},
+	// {2, 3}, and the probing tuples are {1, 4}, {1, 5}, {1, 6}, then we get
+	// the following when probing on the first column only:
+	//   {1, 4} -> {1, 1}   | hashTable = {1, 2}, {2, 3}
+	//   {1, 5} -> {1, 2}   | hashTable = {2, 3}
+	//   {1, 6} -> no match | hashTable = {2, 3}
+	// Note that the output of such probing is not fully deterministic when
+	// tuples contain non-equality columns.
+	hashTableDeletingProbeMode
 )
 
 // hashTableBuildBuffer stores the information related to the build table.
@@ -146,8 +168,8 @@ type hashTable struct {
 	decimalScratch decimalOverloadScratch
 	cancelChecker  CancelChecker
 
-	// mode determines how hashTable is built.
-	mode hashTableMode
+	buildMode hashTableBuildMode
+	probeMode hashTableProbeMode
 }
 
 var _ resetter = &hashTable{}
@@ -158,8 +180,14 @@ func newHashTable(
 	sourceTypes []*types.T,
 	eqCols []uint32,
 	allowNullEquality bool,
-	mode hashTableMode,
+	buildMode hashTableBuildMode,
+	probeMode hashTableProbeMode,
 ) *hashTable {
+	if !allowNullEquality && probeMode == hashTableDeletingProbeMode {
+		// At the moment, we don't have a use case for such behavior, so let's
+		// assert that it is not requested.
+		colexecerror.InternalError("hashTableDeletingProbeMode is supported only when null equality is allowed")
+	}
 	ht := &hashTable{
 		allocator: allocator,
 
@@ -180,10 +208,11 @@ func newHashTable(
 		keyCols:           eqCols,
 		numBuckets:        numBuckets,
 		allowNullEquality: allowNullEquality,
-		mode:              mode,
+		buildMode:         buildMode,
+		probeMode:         probeMode,
 	}
 
-	if mode == hashTableDistinctMode {
+	if buildMode == hashTableDistinctBuildMode {
 		ht.probeScratch.first = make([]uint64, numBuckets)
 		ht.probeScratch.next = make([]uint64, coldata.BatchSize()+1)
 		ht.buildScratch.next = make([]uint64, 1, coldata.BatchSize()+1)
@@ -199,8 +228,8 @@ func newHashTable(
 func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 	nKeyCols := len(ht.keyCols)
 
-	switch ht.mode {
-	case hashTableFullMode:
+	switch ht.buildMode {
+	case hashTableFullBuildMode:
 		for {
 			batch := input.Next(ctx)
 			if batch.Length() == 0 {
@@ -221,7 +250,7 @@ func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 		ht.buildScratch.next = maybeAllocateUint64Array(ht.buildScratch.next, ht.vals.Length()+1)
 		ht.computeBuckets(ctx, ht.buildScratch.next[1:], keyCols, ht.vals.Length(), nil)
 		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, ht.vals.Length())
-	case hashTableDistinctMode:
+	case hashTableDistinctBuildMode:
 		for {
 			batch := input.Next(ctx)
 			if batch.Length() == 0 {
@@ -308,8 +337,17 @@ func (ht *hashTable) removeDuplicates(
 func (ht *hashTable) checkCols(
 	probeVecs, buildVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
 ) {
-	for i := range ht.keyCols {
-		ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel)
+	switch ht.probeMode {
+	case hashTableDefaultProbeMode:
+		for i := range ht.keyCols {
+			ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel)
+		}
+	case hashTableDeletingProbeMode:
+		for i := range ht.keyCols {
+			ht.checkColDeleting(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel)
+		}
+	default:
+		colexecerror.InternalError(fmt.Sprintf("unsupported hash table probe mode: %d", ht.probeMode))
 	}
 }
 

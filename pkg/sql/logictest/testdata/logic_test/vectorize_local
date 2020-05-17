@@ -141,15 +141,3 @@ CREATE TABLE xyz (
   y INT,
   z TEXT
 )
-
-# Check that we fallback gracefully to row-by-row engine on a join type that
-# we don't support.
-query T
-EXPLAIN (VEC) (SELECT y FROM xyz) EXCEPT ALL (SELECT x AS y FROM xyz) ORDER BY y
-----
-│
-└ Node 1
-  └ *colexec.sortOp
-    └ *rowexec.hashJoiner
-      ├ *colexec.colBatchScan
-      └ *colexec.colBatchScan

@@ -896,6 +896,30 @@ func init() {
 				{2, 4},
 			},
 		},
+		{
+			description: "25",
+			joinType:    sqlbase.IntersectAllJoin,
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
+			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
+			rightTuples: tuples{{1}, {2}, {3}, {3}, {3}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			leftOutCols: []uint32{0},
+			expected:    tuples{{1}, {2}, {3}, {3}},
+		},
+		{
+			description: "26",
+			joinType:    sqlbase.ExceptAllJoin,
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
+			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
+			rightTuples: tuples{{1}, {2}, {3}, {3}, {3}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			leftOutCols: []uint32{0},
+			expected:    tuples{{1}, {2}, {2}},
+		},
 	}
 }
 

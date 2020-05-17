@@ -241,9 +241,6 @@ func isSupported(
 		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
-		if core.HashJoiner.Type.IsSetOpJoin() {
-			return false, errors.Newf("vectorized hash join of type %s is not supported", core.HashJoiner.Type)
-		}
 		leftInput, rightInput := spec.Input[0], spec.Input[1]
 		if len(leftInput.ColumnTypes) == 0 || len(rightInput.ColumnTypes) == 0 {
 			// We have a cross join of two inputs, and at least one of them has

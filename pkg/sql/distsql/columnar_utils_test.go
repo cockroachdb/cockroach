@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -59,13 +60,18 @@ type verifyColOperatorArgs struct {
 	// it is merging already created partitions into new one before proceeding
 	// to the next partition from the input).
 	numForcedRepartitions int
+	// rng (if set) will be used to randomize batch size.
+	rng *rand.Rand
 }
 
 // verifyColOperator passes inputs through both the processor defined by pspec
 // and the corresponding columnar operator and verifies that the results match.
 func verifyColOperator(args verifyColOperatorArgs) error {
 	const floatPrecision = 0.0000001
-	rng, _ := randutil.NewPseudoRand()
+	rng := args.rng
+	if rng == nil {
+		rng, _ = randutil.NewPseudoRand()
+	}
 	if rng.Float64() < 0.5 {
 		randomBatchSize := 1 + rng.Intn(3)
 		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
