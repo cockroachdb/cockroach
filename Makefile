@@ -829,7 +829,8 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hashtable_distinct.eg.go \
-  pkg/sql/colexec/hashtable_full.eg.go \
+  pkg/sql/colexec/hashtable_full_default.eg.go \
+  pkg/sql/colexec/hashtable_full_deleting.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/hash_utils.eg.go \
   pkg/sql/colexec/like_ops.eg.go \
