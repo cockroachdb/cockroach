@@ -427,3 +427,31 @@ count           ·            ·
 
 statement ok
 DROP TABLE child_without_fk
+
+# Test case where we have a cascading FK but the columns are not in the right
+# order.
+statement ok
+CREATE TABLE ab (a INT, b INT, PRIMARY KEY (a, b))
+
+statement ok
+CREATE TABLE abc (
+  a INT, b INT, c INT,
+  FOREIGN KEY (b, a) REFERENCES ab(a, b) ON DELETE CASCADE,
+  PRIMARY KEY (a, b, c)
+) INTERLEAVE IN PARENT ab(a, b)
+
+
+# Delete range should not be used (FK columns are not in the right order).
+query TTT
+EXPLAIN DELETE FROM ab WHERE a = 1
+----
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         ab
+      │         strategy     deleter
+      │         auto commit  ·
+      └── scan  ·            ·
+·               table        ab@primary
+·               spans        /1-/2
