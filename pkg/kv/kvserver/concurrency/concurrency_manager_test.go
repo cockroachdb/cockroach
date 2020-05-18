@@ -228,21 +228,35 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
-				txn, ok := c.txnsByName[txnName]
-				if !ok {
-					d.Fatalf(t, "unknown txn %s", txnName)
-				}
+				// Each roachpb.Intent is provided on an indented line.
+				var intents []roachpb.Intent
+				singleReqLines := strings.Split(d.Input, "\n")
+				for _, line := range singleReqLines {
+					var err error
+					d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
+					if err != nil {
+						d.Fatalf(t, "error parsing single intent: %v", err)
+					}
+					if d.Cmd != "intent" {
+						d.Fatalf(t, "expected \"intent\", found %s", d.Cmd)
+					}
 
-				var key string
-				d.ScanArgs(t, "key", &key)
+					var txnName string
+					d.ScanArgs(t, "txn", &txnName)
+					txn, ok := c.txnsByName[txnName]
+					if !ok {
+						d.Fatalf(t, "unknown txn %s", txnName)
+					}
+
+					var key string
+					d.ScanArgs(t, "key", &key)
+
+					intents = append(intents, roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)))
+				}
 
 				opName := fmt.Sprintf("handle write intent error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{
-						roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)),
-					}}
+					wiErr := &roachpb.WriteIntentError{Intents: intents}
 					guard, err := m.HandleWriterIntentError(ctx, prev, wiErr)
 					if err != nil {
 						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
@@ -575,6 +589,19 @@ func (c *cluster) ResolveIntent(
 ) *roachpb.Error {
 	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID.Short(), intent.Status)
 	c.m.OnLockUpdated(ctx, &intent)
+	return nil
+}
+
+// ResolveIntents implements the concurrency.IntentResolver interface.
+func (c *cluster) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *roachpb.Error {
+	log.Eventf(ctx, "resolving a batch of %d intent(s)", len(intents))
+	for _, intent := range intents {
+		if err := c.ResolveIntent(ctx, intent, opts); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
