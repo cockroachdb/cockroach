@@ -22,7 +22,6 @@ package colexec
 import (
 	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -43,9 +42,6 @@ var _ bytes.Buffer
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _GOTYPE is the template variable.
 type _GOTYPE interface{}

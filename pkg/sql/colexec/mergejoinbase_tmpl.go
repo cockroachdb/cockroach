@@ -22,7 +22,6 @@ package colexec
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/apd"
@@ -54,9 +53,6 @@ var _ time.Time
 
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily

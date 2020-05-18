@@ -93,13 +93,13 @@ INSERT INTO t2 VALUES
 query RR
 SELECT * FROM t2 ORDER BY d
 ----
-NaN        NaN
 -Infinity  -Infinity
 0.0000     0.0
 1.00       1.0
 2.0        2.0
 3          3.0
 Infinity   Infinity
+NaN        NaN
 
 # Ensure uniqueness in PK columns with +/- NaN and 0.
 
@@ -190,8 +190,6 @@ query R
 SELECT d FROM s ORDER BY d, d::TEXT
 ----
 NULL
-NaN
-NaN
 -Infinity
 -1
 0
@@ -202,14 +200,14 @@ NaN
 0.0000
 1
 Infinity
+NaN
+NaN
 
 # Just test the NaN-ness of the values.
 query RBBB
 SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary} ORDER BY d, d::TEXT
 ----
 NULL       NULL   NULL   NULL
-NaN        true   true   true
-NaN        true   true   true
 -Infinity  false  false  false
 -1         false  false  false
 0          false  false  false
@@ -220,14 +218,14 @@ NaN        true   true   true
 0.0000     false  false  false
 1          false  false  false
 Infinity   false  false  false
+NaN        true   true   true
+NaN        true   true   true
 
 # Just test the NaN-ness of the values in secondary index
 query RBBB
 SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx} ORDER BY d, d::TEXT
 ----
 NULL       NULL   NULL   NULL
-NaN        true   true   true
-NaN        true   true   true
 -Infinity  false  false  false
 -1         false  false  false
 0          false  false  false
@@ -238,34 +236,16 @@ NaN        true   true   true
 0.0000     false  false  false
 1          false  false  false
 Infinity   false  false  false
+NaN        true   true   true
+NaN        true   true   true
 
 query RB
 select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN' ORDER BY d, d::TEXT
 ----
--Infinity  true
--1         true
-0          true
-0          true
-0.0        true
-0.00       true
-0.000      true
-0.0000     true
-1          true
-Infinity   true
 
 query RB
 select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN' ORDER BY d, d::TEXT
 ----
--Infinity  true
--1         true
-0          true
-0          true
-0.0        true
-0.00       true
-0.000      true
-0.0000     true
-1          true
-Infinity   true
 
 # Verify that decimals don't lose trailing 0s even when used for an index.
 statement ok

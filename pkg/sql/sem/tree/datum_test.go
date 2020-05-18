@@ -76,14 +76,14 @@ func TestDatumOrdering(t *testing.T) {
 		{`false`, valIsMin, `true`, `false`, `true`},
 
 		// Floats
-		{`3.14:::float`, `3.1399999999999997`, `3.1400000000000006`, `NaN`, `+Inf`},
-		{`9.223372036854776e+18:::float`, `9.223372036854775e+18`, `9.223372036854778e+18`, `NaN`, `+Inf`},
-		{`'NaN':::float`, valIsMin, `-Inf`, `NaN`, `+Inf`},
-		{`-1.7976931348623157e+308:::float`, `-Inf`, `-1.7976931348623155e+308`, `NaN`, `+Inf`},
-		{`1.7976931348623157e+308:::float`, `1.7976931348623155e+308`, `+Inf`, `NaN`, `+Inf`},
+		{`3.14:::float`, `3.1399999999999997`, `3.1400000000000006`, `-Inf`, `NaN`},
+		{`9.223372036854776e+18:::float`, `9.223372036854775e+18`, `9.223372036854778e+18`, `-Inf`, `NaN`},
+		{`'NaN':::float`, `+Inf`, valIsMax, `-Inf`, `NaN`},
+		{`-1.7976931348623157e+308:::float`, `-Inf`, `-1.7976931348623155e+308`, `-Inf`, `NaN`},
+		{`1.7976931348623157e+308:::float`, `1.7976931348623155e+308`, `+Inf`, `-Inf`, `NaN`},
 
 		// Decimal
-		{`1.0:::decimal`, noPrev, noNext, `NaN`, `Infinity`},
+		{`1.0:::decimal`, noPrev, noNext, `-Infinity`, `NaN`},
 
 		// Strings and byte arrays
 		{`'':::string`, valIsMin, `e'\x00'`, `''`, noMax},
@@ -183,11 +183,11 @@ func TestDatumOrdering(t *testing.T) {
 			`(9223372036854775807, 9223372036854775807)`},
 
 		{`(0, 0:::decimal)`, noPrev, noNext,
-			`(-9223372036854775808, NaN)`,
-			`(9223372036854775807, Infinity)`},
+			`(-9223372036854775808, -Infinity)`,
+			`(9223372036854775807, NaN)`},
 		{`(0:::decimal, 0)`, `(0, -1)`, `(0, 1)`,
-			`(NaN, -9223372036854775808)`,
-			`(Infinity, 9223372036854775807)`},
+			`(-Infinity, -9223372036854775808)`,
+			`(NaN, 9223372036854775807)`},
 
 		{`(10, '')`, noPrev, `(10, e'\x00')`,
 			`(-9223372036854775808, '')`, noMax},
@@ -307,7 +307,7 @@ func TestDatumOrdering(t *testing.T) {
 func TestDFloatCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	values := []tree.Datum{tree.DNull}
-	for _, x := range []float64{math.NaN(), math.Inf(-1), -1, 0, 1, math.Inf(1)} {
+	for _, x := range []float64{math.Inf(-1), -1, 0, 1, math.Inf(1), math.NaN()} {
 		values = append(values, tree.NewDFloat(tree.DFloat(x)))
 	}
 	for i, x := range values {

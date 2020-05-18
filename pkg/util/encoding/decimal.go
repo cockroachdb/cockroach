@@ -326,7 +326,7 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, apd.Decimal, er
 func getDecimalLen(buf []byte) (int, error) {
 	m := buf[0]
 	p := 1
-	if m < decimalNaN || m > decimalNaNDesc {
+	if m < decimalNaNDesc || m > decimalNaN {
 		panic(fmt.Errorf("invalid tag %d", m))
 	}
 	switch m {
@@ -626,7 +626,7 @@ func DecodeNonsortingDecimal(buf []byte, tmp []byte) (apd.Decimal, error) {
 func DecodeIntoNonsortingDecimal(dec *apd.Decimal, buf []byte, tmp []byte) error {
 	*dec = apd.Decimal{}
 	switch buf[0] {
-	case decimalNaN:
+	case decimalNaN, decimalNaNDesc: // Handle decimalNaNDesc as NAN to support old format.
 		dec.Form = apd.NaN
 		return nil
 	case decimalNegativeInfinity:

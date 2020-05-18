@@ -44,11 +44,12 @@ const (
 	// it's used in keys used as span boundaries for index scans.
 	encodedNotNull = 0x01
 
-	floatNaN     = encodedNotNull + 1
-	floatNeg     = floatNaN + 1
-	floatZero    = floatNeg + 1
-	floatPos     = floatZero + 1
-	floatNaNDesc = floatPos + 1 // NaN encoded descendingly
+	floatNaNDesc    = encodedNotNull + 1 // NaN encoded descendingly
+	floatNeg        = floatNaNDesc + 1
+	floatZero       = floatNeg + 1
+	floatPos        = floatZero + 1
+	floatNaN        = floatPos + 1
+	floatTerminator = floatNaN + 1
 
 	// The gap between floatNaNDesc and bytesMarker was left for
 	// compatibility reasons.
@@ -59,8 +60,8 @@ const (
 	durationMarker       byte = durationBigNegMarker + 1
 	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
 
-	decimalNaN              = durationBigPosMarker + 1 // 24
-	decimalNegativeInfinity = decimalNaN + 1
+	decimalNaNDesc          = durationBigPosMarker + 1 // 24, NaN encoded descendingly
+	decimalNegativeInfinity = decimalNaNDesc + 1
 	decimalNegLarge         = decimalNegativeInfinity + 1
 	decimalNegMedium        = decimalNegLarge + 11
 	decimalNegSmall         = decimalNegMedium + 1
@@ -69,10 +70,10 @@ const (
 	decimalPosMedium        = decimalPosSmall + 1
 	decimalPosLarge         = decimalPosMedium + 11
 	decimalInfinity         = decimalPosLarge + 1
-	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
+	decimalNaN              = decimalInfinity + 1
 	decimalTerminator       = 0x00
 
-	jsonInvertedIndex = decimalNaNDesc + 1
+	jsonInvertedIndex = decimalNaN + 1
 	jsonEmptyArray    = jsonInvertedIndex + 1
 	jsonEmptyObject   = jsonEmptyArray + 1
 
@@ -1361,9 +1362,9 @@ func slowPeekType(b []byte) Type {
 			return Duration
 		case m >= IntMin && m <= IntMax:
 			return Int
-		case m >= floatNaN && m <= floatNaNDesc:
+		case m >= floatNaNDesc && m <= floatNaN:
 			return Float
-		case m >= decimalNaN && m <= decimalNaNDesc:
+		case m >= decimalNaNDesc && m <= decimalNaN:
 			return Decimal
 		}
 	}
@@ -1480,7 +1481,7 @@ func PeekLength(b []byte) (int, error) {
 	if m >= IntMin && m <= IntMax {
 		return getVarintLen(b)
 	}
-	if m >= decimalNaN && m <= decimalNaNDesc {
+	if m >= decimalNaNDesc && m <= decimalNaN {
 		return getDecimalLen(b)
 	}
 	return 0, errors.Errorf("unknown tag %d", m)
@@ -1751,6 +1752,8 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 				return b[1:], "[]", nil
 			case jsonEmptyObject:
 				return b[1:], "{}", nil
+			case floatTerminator:
+				return nil, "", errors.Errorf("unknown prefix of the encoded byte slice: %q", b)
 			}
 		}
 		// This shouldn't ever happen, but if it does, return an empty slice.

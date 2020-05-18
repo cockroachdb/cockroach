@@ -23,12 +23,12 @@ NaN
 eval
 'NaN'::float < 1.0
 ----
-true
+false
 
 eval
 'NaN'::float <= 1.0
 ----
-true
+false
 
 eval
 'NaN'::float = 1.0
@@ -38,22 +38,22 @@ false
 eval
 'NaN'::float > 1.0
 ----
-false
+true
 
 eval
 'NaN'::float >= 1.0
 ----
-false
+true
 
 eval
 'NaN'::float < '+Inf'::float
 ----
-true
+false
 
 eval
 'NaN'::float <= '+Inf'::float
 ----
-true
+false
 
 eval
 'NaN'::float = '+Inf'::float
@@ -63,22 +63,22 @@ false
 eval
 'NaN'::float > '+Inf'::float
 ----
-false
+true
 
 eval
 'NaN'::float >= '+Inf'::float
 ----
-false
+true
 
 eval
 'NaN'::float < '-Inf'::float
 ----
-true
+false
 
 eval
 'NaN'::float <= '-Inf'::float
 ----
-true
+false
 
 eval
 'NaN'::float = '-Inf'::float
@@ -88,12 +88,12 @@ false
 eval
 'NaN'::float > '-Inf'::float
 ----
-false
+true
 
 eval
 'NaN'::float >= '-Inf'::float
 ----
-false
+true
 
 eval
 'NaN'::float < 'NaN'::float
@@ -133,12 +133,12 @@ NaN
 eval
 'NaN'::decimal < 1.0
 ----
-true
+false
 
 eval
 'NaN'::decimal <= 1.0
 ----
-true
+false
 
 eval
 'NaN'::decimal = 1.0
@@ -148,22 +148,22 @@ false
 eval
 'NaN'::decimal > 1.0
 ----
-false
+true
 
 eval
 'NaN'::decimal >= 1.0
 ----
-false
+true
 
 eval
 'NaN'::decimal < '+Inf'::decimal
 ----
-true
+false
 
 eval
 'NaN'::decimal <= '+Inf'::decimal
 ----
-true
+false
 
 eval
 'NaN'::decimal = '+Inf'::decimal
@@ -173,22 +173,22 @@ false
 eval
 'NaN'::decimal > '+Inf'::decimal
 ----
-false
+true
 
 eval
 'NaN'::decimal >= '+Inf'::decimal
 ----
-false
+true
 
 eval
 'NaN'::decimal < '-Inf'::decimal
 ----
-true
+false
 
 eval
 'NaN'::decimal <= '-Inf'::decimal
 ----
-true
+false
 
 eval
 'NaN'::decimal = '-Inf'::decimal
@@ -198,12 +198,12 @@ false
 eval
 'NaN'::decimal > '-Inf'::decimal
 ----
-false
+true
 
 eval
 'NaN'::decimal >= '-Inf'::decimal
 ----
-false
+true
 
 eval
 'NaN'::decimal < 'NaN'::decimal
