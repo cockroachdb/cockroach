@@ -632,6 +632,9 @@ type lockTableWaiter interface {
 	// and, in turn, remove this method. This will likely fall out of pulling
 	// all replicated locks into the lockTable.
 	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
+
+	// ClearCaches wipes all caches maintained by the lockTableWaiter.
+	ClearCaches()
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.
