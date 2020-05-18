@@ -3,6 +3,10 @@
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.
 
+# Disable automatic stats to prevent flakes if auto stats run.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
 statement ok
 CREATE TABLE uv (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
 INSERT INTO uv VALUES (1, 1), (1, 2), (1, 3), (1, 4), (2, 4), (2, 5), (2, 6), (2, 7)
@@ -253,3 +257,66 @@ distinct-on
       ├── ordering: +1
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
+
+# Verify basic stats for JSON are used.
+
+statement ok
+CREATE TABLE tj (j JSON)
+
+statement ok
+INSERT INTO tj VALUES (NULL), ('1'), ('true'), ('true'), ('{}')
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT DISTINCT j FROM tj WHERE j IS NULL
+----
+limit
+ ├── columns: j:1
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 222.05
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── select
+ │    ├── columns: j:1
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=10]
+ │    ├── cost: 222.03
+ │    ├── fd: ()-->(1)
+ │    ├── limit hint: 1.00
+ │    ├── scan tj
+ │    │    ├── columns: j:1
+ │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    │    ├── cost: 212.02
+ │    │    ├── limit hint: 100.00
+ │    │    └── prune: (1)
+ │    └── filters
+ │         └── j:1 IS NULL [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ └── 1
+
+statement ok
+CREATE STATISTICS tj FROM tj
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT DISTINCT j FROM tj WHERE j IS NULL
+----
+limit
+ ├── columns: j:1
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 5.4
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── select
+ │    ├── columns: j:1
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
+ │    ├── cost: 5.38
+ │    ├── fd: ()-->(1)
+ │    ├── limit hint: 1.00
+ │    ├── scan tj
+ │    │    ├── columns: j:1
+ │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
+ │    │    ├── cost: 5.32
+ │    │    ├── limit hint: 5.00
+ │    │    └── prune: (1)
+ │    └── filters
+ │         └── j:1 IS NULL [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ └── 1
