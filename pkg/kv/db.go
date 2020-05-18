@@ -143,12 +143,6 @@ type Result struct {
 	// When ResumeSpan is populated, this specifies the reason why the operation
 	// wasn't completed and needs to be resumed.
 	ResumeReason roachpb.ResponseHeader_ResumeReason
-
-	// RangeInfos contains information about the replicas that produced this
-	// result.
-	// This is only populated if Err == nil and if ReturnRangeInfo has been set on
-	// the request.
-	RangeInfos []roachpb.RangeInfo
 }
 
 // ResumeSpanAsValue returns the resume span as a value if one is set,
