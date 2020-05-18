@@ -753,6 +753,29 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			),
 		)...,
 	),
+	"st_srid": makeBuiltin(
+		defProps(),
+		geographyOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(g.SRID())), nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the Spatial Reference Identifier (SRID) for the ST_Geography as defined in spatial_ref_sys table.",
+			},
+			tree.VolatilityImmutable,
+		),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(g.SRID())), nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the Spatial Reference Identifier (SRID) for the ST_Geometry as defined in spatial_ref_sys table.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Binary functions
