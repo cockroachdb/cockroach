@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // LockTableLivenessPushDelay sets the delay before pushing in order to detect
@@ -43,7 +45,7 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 	// the cost on each of a transaction's abandoned locks and instead only pay
 	// it once per abandoned transaction per range or per node. This could come
 	// in a few different forms, including:
-	// - a per-wide cache of recently detected abandoned transaction IDs
+	// - a per-store cache of recently detected abandoned transaction IDs
 	// - a per-range reverse index from transaction ID to locked keys
 	//
 	// TODO(nvanbenschoten): increasing this default value.
@@ -83,6 +85,18 @@ type lockTableWaiterImpl struct {
 	st      *cluster.Settings
 	stopper *stop.Stopper
 	ir      IntentResolver
+	lm      LockManager
+
+	// finalizedTxnCache is a small LRU cache that tracks transactions that
+	// were pushed and found to be finalized (COMMITTED or ABORTED). It is
+	// used as an optimization to avoid repeatedly pushing the transaction
+	// record when cleaning up the intents of an abandoned transaction.
+	//
+	// NOTE: it probably makes sense to maintain a single finalizedTxnCache
+	// across all Ranges on a Store instead of an individual cache per
+	// Range. For now, we don't do this because we don't share any state
+	// between separate concurrency.Manager instances.
+	finalizedTxnCache txnCache
 
 	// When set, WriteIntentError are propagated instead of pushing
 	// conflicting transactions.
@@ -97,18 +111,22 @@ type IntentResolver interface {
 	// provided pushee transaction immediately, if possible. Otherwise, it will
 	// block until the pushee transaction is finalized or eventually can be
 	// pushed successfully.
+	// TODO(nvanbenschoten): return a *roachpb.Transaction here.
 	PushTransaction(
 		context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType,
 	) (roachpb.Transaction, *Error)
 
-	// ResolveIntent resolves the provided intent according to the options.
+	// ResolveIntent synchronously resolves the provided intent.
 	ResolveIntent(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
+
+	// ResolveIntents synchronously resolves the provided batch of intents.
+	ResolveIntents(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
 }
 
 // WaitOn implements the lockTableWaiter interface.
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
-) *Error {
+) (err *Error) {
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
@@ -116,6 +134,16 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var timer *timeutil.Timer
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
+	// Used to defer the resolution of duplicate intents. Intended to allow
+	// batching of intent resolution while cleaning up after abandoned txns. A
+	// request may begin deferring intent resolution and then be forced to wait
+	// again on other locks. This is ok, as the request that deferred intent
+	// resolution will often be the new reservation holder for those intents'
+	// keys. Even when this is not the case (e.g. the request is read-only so it
+	// can't hold reservations), any other requests that slip ahead will simply
+	// re-discover the intent(s) during evaluation and resolve them themselves.
+	var deferredResolution []roachpb.LockUpdate
+	defer w.resolveDeferredIntents(ctx, &err, &deferredResolution)
 	for {
 		select {
 		case <-newStateC:
@@ -138,10 +166,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// The purpose of the waitForDistinguished state is to avoid waiting
 				// out the longer deadlock detection delay before recognizing and
 				// recovering from the failure of a transaction coordinator for
-				// *each* of that transaction's previously written intents. If we
-				// had a cache of aborted transaction IDs that allowed us to notice
-				// and quickly resolve abandoned intents then we might be able to
-				// get rid of this state.
+				// *each* of that transaction's previously written intents.
 				livenessPush := state.stateKind == waitForDistinguished
 				deadlockPush := true
 
@@ -165,6 +190,54 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// reason, continue waiting.
 				if !livenessPush && !deadlockPush {
 					continue
+				}
+
+				// If we know that a lock holder is already finalized (COMMITTED
+				// or ABORTED), there's no reason to push it again. Instead, we
+				// can skip directly to intent resolution.
+				//
+				// As an optimization, we defer the intent resolution until the
+				// we're done waiting on all conflicting locks in this function.
+				// This allows us to accumulate a group of intents to resolve
+				// and send them together as a batch.
+				//
+				// Remember that if the lock is held, there will be at least one
+				// waiter with livenessPush = true (the distinguished waiter),
+				// so at least one request will enter this branch and perform
+				// the cleanup on behalf of all other waiters.
+				if livenessPush {
+					if pusheeTxn, ok := w.finalizedTxnCache.get(state.txn.ID); ok {
+						resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: state.key})
+						deferredResolution = append(deferredResolution, resolve)
+
+						// Inform the LockManager that the lock has been updated with a
+						// finalized status so that it gets removed from the lockTable
+						// and we are allowed to proceed.
+						//
+						// For unreplicated locks, this is all that is needed - the
+						// lockTable is the source of truth so, once removed, the
+						// unreplicated lock is gone. It is perfectly valid for us to
+						// instruct the lock to be released because we know that the
+						// lock's owner is finalized.
+						//
+						// For replicated locks, this is a bit of a lie. The lock hasn't
+						// actually been updated yet, but we will be conducting intent
+						// resolution in the future (before we observe the corresponding
+						// MVCC state). This is safe because we already handle cases
+						// where locks exist only in the MVCC keyspace and not in the
+						// lockTable.
+						//
+						// In the future, we'd like to make this more explicit.
+						// Specifically, we'd like to augment the lockTable with an
+						// understanding of finalized but not yet resolved locks. These
+						// locks will allow conflicting transactions to proceed with
+						// evaluation without the need to first remove all traces of
+						// them via a round of replication. This is discussed in more
+						// detail in #41720. Specifically, see mention of "contention
+						// footprint" and COMMITTED_BUT_NOT_REMOVABLE.
+						w.lm.OnLockUpdated(ctx, &deferredResolution[len(deferredResolution)-1])
+						continue
+					}
 				}
 
 				// The request should push to detect abandoned locks due to
@@ -266,7 +339,6 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// behind a lock. In this case, the request has a dependency on the
 			// conflicting request but not necessarily the entire conflicting
 			// transaction.
-			var err *Error
 			if timerWaitingState.held {
 				err = w.pushLockTxn(ctx, req, timerWaitingState)
 			} else {
@@ -319,6 +391,11 @@ func (w *lockTableWaiterImpl) WaitOnLock(
 	})
 }
 
+// ClearCaches implements the lockTableWaiter interface.
+func (w *lockTableWaiterImpl) ClearCaches() {
+	w.finalizedTxnCache.clear()
+}
+
 // pushLockTxn pushes the holder of the provided lock.
 //
 // The method blocks until the lock holder transaction experiences a state
@@ -354,6 +431,13 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
 		return err
+	}
+
+	// If the transaction is finalized, add it to the finalizedTxnCache. This
+	// avoids needing to push it again if we find another one of its locks and
+	// allows for batching of intent resolution.
+	if pusheeTxn.Status.IsFinalized() {
+		w.finalizedTxnCache.add(&pusheeTxn)
 	}
 
 	// If the push succeeded then the lock holder transaction must have
@@ -450,6 +534,20 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	return h
 }
 
+// resolveDeferredIntents resolves the batch of intents if the provided error is
+// nil. The batch of intents may be resolved more efficiently than if they were
+// resolved individually.
+func (w *lockTableWaiterImpl) resolveDeferredIntents(
+	ctx context.Context, err **Error, deferredResolution *[]roachpb.LockUpdate,
+) {
+	if (*err != nil) || (len(*deferredResolution) == 0) {
+		return
+	}
+	// See pushLockTxn for an explanation of these options.
+	opts := intentresolver.ResolveOptions{Poison: true}
+	*err = w.ir.ResolveIntents(ctx, *deferredResolution, opts)
+}
+
 // watchForNotifications selects on the provided channel and watches for any
 // updates. If the channel is ever notified, it calls the provided context
 // cancelation function and exits.
@@ -467,6 +565,62 @@ func (w *lockTableWaiterImpl) watchForNotifications(
 		cancel()
 	case <-ctx.Done():
 	}
+}
+
+// txnCache is a small LRU cache that holds Transaction objects.
+//
+// The zero value of this struct is ready for use.
+type txnCache struct {
+	mu   syncutil.Mutex
+	txns [8]*roachpb.Transaction // [MRU, ..., LRU]
+}
+
+func (c *txnCache) get(id uuid.UUID) (*roachpb.Transaction, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if idx := c.getIdxLocked(id); idx >= 0 {
+		txn := c.txns[idx]
+		c.moveFrontLocked(txn, idx)
+		return txn, true
+	}
+	return nil, false
+}
+
+func (c *txnCache) add(txn *roachpb.Transaction) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
+		c.moveFrontLocked(txn, idx)
+	} else {
+		c.insertFrontLocked(txn)
+	}
+}
+
+func (c *txnCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.txns {
+		c.txns[i] = nil
+	}
+}
+
+func (c *txnCache) getIdxLocked(id uuid.UUID) int {
+	for i, txn := range c.txns {
+		if txn != nil && txn.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (c *txnCache) moveFrontLocked(txn *roachpb.Transaction, cur int) {
+	copy(c.txns[1:cur+1], c.txns[:cur])
+	c.txns[0] = txn
+}
+
+func (c *txnCache) insertFrontLocked(txn *roachpb.Transaction) {
+	copy(c.txns[1:], c.txns[:])
+	c.txns[0] = txn
 }
 
 func hasMinPriority(txn *enginepb.TxnMeta) bool {
