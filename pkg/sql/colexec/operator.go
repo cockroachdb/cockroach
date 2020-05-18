@@ -344,47 +344,60 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 	return b
 }
 
-// batchSchemaPrefixEnforcer is similar to vectorTypeEnforcer in its purpose,
-// but it enforces that the prefix of the columns of the non-zero length batch
+// batchSchemaSubsetEnforcer is similar to vectorTypeEnforcer in its purpose,
+// but it enforces that the subset of the columns of the non-zero length batch
 // satisfies the desired schema. It needs to wrap the input to a "projecting"
 // operator that internally uses other "projecting" operators (for example,
 // caseOp and logical projection operators). This operator supports type
 // schemas with coltypes.Unhandled type in which case in the corresponding
 // position an "unknown" vector can be appended.
 //
-// NOTE: the type schema passed into batchSchemaPrefixEnforcer *must* include
+// The word "subset" is actually more like a "range", but we chose the former
+// since the latter is overloaded.
+//
+// NOTE: the type schema passed into batchSchemaSubsetEnforcer *must* include
 // the output type of the Operator that the enforcer will be the input to.
-type batchSchemaPrefixEnforcer struct {
+type batchSchemaSubsetEnforcer struct {
 	OneInputNode
 	NonExplainable
 
-	allocator *Allocator
-	typs      []coltypes.T
+	allocator                    *Allocator
+	typs                         []coltypes.T
+	subsetStartIdx, subsetEndIdx int
 }
 
-var _ Operator = &batchSchemaPrefixEnforcer{}
+var _ Operator = &batchSchemaSubsetEnforcer{}
 
-func newBatchSchemaPrefixEnforcer(
-	allocator *Allocator, input Operator, typs []coltypes.T,
-) *batchSchemaPrefixEnforcer {
-	return &batchSchemaPrefixEnforcer{
-		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
-		typs:         typs,
+// newBatchSchemaSubsetEnforcer creates a new batchSchemaSubsetEnforcer.
+// - subsetStartIdx and subsetEndIdx define the boundaries of the range of
+// columns that the projecting operator and its internal projecting operators
+// own.
+func newBatchSchemaSubsetEnforcer(
+	allocator *Allocator, input Operator, typs []coltypes.T, subsetStartIdx, subsetEndIdx int,
+) *batchSchemaSubsetEnforcer {
+	return &batchSchemaSubsetEnforcer{
+		OneInputNode:   NewOneInputNode(input),
+		allocator:      allocator,
+		typs:           typs,
+		subsetStartIdx: subsetStartIdx,
+		subsetEndIdx:   subsetEndIdx,
 	}
 }
 
-func (e *batchSchemaPrefixEnforcer) Init() {
+func (e *batchSchemaSubsetEnforcer) Init() {
 	e.input.Init()
+	if e.subsetStartIdx >= e.subsetEndIdx {
+		execerror.VectorizedInternalPanic("unexpectedly subsetStartIdx is not less than subsetEndIdx")
+	}
 }
 
-func (e *batchSchemaPrefixEnforcer) Next(ctx context.Context) coldata.Batch {
+func (e *batchSchemaSubsetEnforcer) Next(ctx context.Context) coldata.Batch {
 	b := e.input.Next(ctx)
 	if b.Length() == 0 {
 		return b
 	}
-	for i, typ := range e.typs {
-		e.allocator.maybeAppendColumn(b, typ, i)
+	for i := e.subsetStartIdx; i < e.subsetEndIdx; i++ {
+		e.allocator.maybeAppendColumn(b, e.typs[i], i)
 	}
 	return b
 }

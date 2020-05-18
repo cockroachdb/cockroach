@@ -1727,11 +1727,6 @@ func planProjectionOperators(
 		}
 
 		allocator := NewAllocator(ctx, acc)
-		// We don't know the schema yet and will update it below, right before
-		// instantiating caseOp.
-		schemaEnforcer := newBatchSchemaPrefixEnforcer(allocator, input, nil /* typs */)
-		buffer := NewBufferOp(schemaEnforcer)
-		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
 		switch caseOutputType {
 		case coltypes.Bytes:
@@ -1749,6 +1744,13 @@ func planProjectionOperators(
 		ct = make([]types.T, len(columnTypes)+1)
 		copy(ct, columnTypes)
 		ct[caseOutputIdx] = *t.ResolvedType()
+		// We don't know the schema yet and will update it below, right before
+		// instantiating caseOp. The same goes for subsetEndIdx.
+		schemaEnforcer := newBatchSchemaSubsetEnforcer(
+			allocator, input, nil /* typs */, caseOutputIdx, -1, /* subsetEndIdx */
+		)
+		buffer := NewBufferOp(schemaEnforcer)
+		caseOps := make([]Operator, len(t.Whens))
 		thenIdxs := make([]int, len(t.Whens)+1)
 		for i, when := range t.Whens {
 			// The case operator is assembled from n WHEN arms, n THEN arms, and an
@@ -1831,6 +1833,7 @@ func planProjectionOperators(
 		}
 
 		schemaEnforcer.typs = toPhysTypesMaybeUnhandled(ct)
+		schemaEnforcer.subsetEndIdx = len(ct)
 		op := NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 		internalMemUsed += op.(InternalMemoryOperator).InternalMemoryUsage()
 		return op, caseOutputIdx, ct, internalMemUsed, err
@@ -2075,7 +2078,7 @@ func planLogicalProjectionOp(
 		return nil, resultIdx, ct, internalMemUsed, err
 	}
 	allocator := NewAllocator(ctx, acc)
-	input = newBatchSchemaPrefixEnforcer(allocator, input, toPhysTypesMaybeUnhandled(ct))
+	input = newBatchSchemaSubsetEnforcer(allocator, input, toPhysTypesMaybeUnhandled(ct), resultIdx, len(ct))
 	switch expr.(type) {
 	case *tree.AndExpr:
 		outputOp = NewAndProjOp(
