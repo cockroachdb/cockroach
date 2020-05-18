@@ -13,7 +13,7 @@ package roachpb
 import (
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // GetVariance retrieves the variance of the values.
@@ -60,7 +60,7 @@ func AddNumericStats(a, b NumericStat, countA, countB int64) NumericStat {
 // reg cluster.
 func (si SensitiveInfo) GetScrubbedCopy() SensitiveInfo {
 	output := SensitiveInfo{}
-	output.LastErr = log.Redact(si.LastErr)
+	output.LastErr = errors.Redact(si.LastErr)
 	// Not copying over MostRecentPlanDescription until we have an algorithm to scrub plan nodes.
 	return output
 }
