@@ -300,7 +300,7 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 	if b.Length() == 0 {
 		return b
 	}
-	e.allocator.MaybeAppendColumn(b, e.typ, e.idx)
+	e.allocator.MaybeAppendColumn(b, e.typ, e.idx, true /* resetIfReused */)
 	return b
 }
 
@@ -318,19 +318,25 @@ type batchSchemaPrefixEnforcer struct {
 	OneInputNode
 	NonExplainable
 
-	allocator *colmem.Allocator
-	typs      []*types.T
+	allocator           *colmem.Allocator
+	typs                []*types.T
+	mainProjOpOutputIdx int
 }
 
 var _ colexecbase.Operator = &batchSchemaPrefixEnforcer{}
 
+// newBatchSchemaPrefixEnforcer creates a new batchSchemaPrefixEnforcer.
+// - mainProjOpOutputIdx is the index of the output vector of the operator that
+// the enforcer is the input to (i.e. main projecting operator and not the
+// internal ones).
 func newBatchSchemaPrefixEnforcer(
-	allocator *colmem.Allocator, input colexecbase.Operator, typs []*types.T,
+	allocator *colmem.Allocator, input colexecbase.Operator, typs []*types.T, mainProjOpOutputIdx int,
 ) *batchSchemaPrefixEnforcer {
 	return &batchSchemaPrefixEnforcer{
-		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
-		typs:         typs,
+		OneInputNode:        NewOneInputNode(input),
+		allocator:           allocator,
+		typs:                typs,
+		mainProjOpOutputIdx: mainProjOpOutputIdx,
 	}
 }
 
@@ -344,7 +350,15 @@ func (e *batchSchemaPrefixEnforcer) Next(ctx context.Context) coldata.Batch {
 		return b
 	}
 	for i, typ := range e.typs {
-		e.allocator.MaybeAppendColumn(b, typ, i)
+		// MaybeAppendColumn call might have not appended a new vector and
+		// reused already present one. This batchSchemaPrefixEnforcer is the
+		// input to a projecting operator that has other internal projecting
+		// operators, and we want to reset the vector when reused *only* if it
+		// the output vector of the "main" projecting operator, not the
+		// internal ones because they will do the resetting themselves when
+		// needed. This also ensures that we don't modify the vectors that
+		// neither the main nor internal projecting operators own.
+		e.allocator.MaybeAppendColumn(b, typ, i, i == e.mainProjOpOutputIdx /* resetIfReused */)
 	}
 	return b
 }

@@ -166,21 +166,31 @@ func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
 // compares to the width of b:
 // 1. if colIdx < b.Width(), then we expect that correctly-typed vector is
 // already present in position colIdx. If that's not the case, we will panic.
+// resetIfReused determines whether already present vector is reset before
+// returning.
 // 2. if colIdx == b.Width(), then we will append a newly allocated coldata.Vec
 // of the given type.
 // 3. if colIdx > b.Width(), then we will panic because such condition
 // indicates an error in setting up vector type enforcers during the planning
 // stage.
 // NOTE: b must be non-zero length batch.
-func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
+func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int, resetIfReused bool) {
 	if b.Length() == 0 {
 		colexecerror.InternalError("trying to add a column to zero length batch")
 	}
 	width := b.Width()
 	if colIdx < width {
-		presentType := b.ColVec(colIdx).Type()
+		presentVec := b.ColVec(colIdx)
+		presentType := presentVec.Type()
 		if presentType.Identical(t) {
 			// We already have the vector of the desired type in place.
+			if resetIfReused {
+				if presentVec.CanonicalTypeFamily() == types.BytesFamily {
+					// Flat bytes vector needs to be reset before the vector can be
+					// reused.
+					presentVec.Bytes().Reset()
+				}
+			}
 			return
 		}
 		if presentType.Family() == types.UnknownFamily {
