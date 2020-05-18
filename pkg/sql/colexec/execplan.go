@@ -1701,11 +1701,6 @@ func planProjectionOperators(
 		}
 
 		allocator := colmem.NewAllocator(ctx, acc)
-		// We don't know the schema yet and will update it below, right before
-		// instantiating caseOp.
-		schemaEnforcer := newBatchSchemaPrefixEnforcer(allocator, input, nil /* typs */)
-		buffer := NewBufferOp(schemaEnforcer)
-		caseOps := make([]colexecbase.Operator, len(t.Whens))
 		caseOutputType := t.ResolvedType()
 		if typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family()) == types.BytesFamily {
 			// Currently, there is a contradiction between the way CASE operator
@@ -1720,6 +1715,13 @@ func planProjectionOperators(
 				"unsupported type %s", caseOutputType)
 		}
 		caseOutputIdx := len(columnTypes)
+		// We don't know the schema yet and will update it below, right before
+		// instantiating caseOp. The same goes for subsetEndIdx.
+		schemaEnforcer := newBatchSchemaSubsetEnforcer(
+			allocator, input, nil /* typs */, caseOutputIdx, -1, /* subsetEndIdx */
+		)
+		buffer := NewBufferOp(schemaEnforcer)
+		caseOps := make([]colexecbase.Operator, len(t.Whens))
 		typs = appendOneType(columnTypes, caseOutputType)
 		thenIdxs := make([]int, len(t.Whens)+1)
 		for i, when := range t.Whens {
@@ -1802,6 +1804,7 @@ func planProjectionOperators(
 		}
 
 		schemaEnforcer.typs = typs
+		schemaEnforcer.subsetEndIdx = len(typs)
 		op := NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 		internalMemUsed += op.(InternalMemoryOperator).InternalMemoryUsage()
 		return op, caseOutputIdx, typs, internalMemUsed, err
@@ -2038,7 +2041,7 @@ func planLogicalProjectionOp(
 		return nil, resultIdx, typs, internalMemUsed, err
 	}
 	allocator := colmem.NewAllocator(ctx, acc)
-	input = newBatchSchemaPrefixEnforcer(allocator, input, typs)
+	input = newBatchSchemaSubsetEnforcer(allocator, input, typs, resultIdx, len(typs))
 	switch expr.(type) {
 	case *tree.AndExpr:
 		outputOp = NewAndProjOp(
