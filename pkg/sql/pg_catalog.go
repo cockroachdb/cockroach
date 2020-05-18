@@ -1436,8 +1436,43 @@ CREATE TABLE pg_catalog.pg_enum (
   enumsortorder FLOAT4,
   enumlabel STRING
 )`,
-	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Enum types are not currently supported.
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+		for _, desc := range descs {
+			typDesc, ok := desc.(*sqlbase.TypeDescriptor)
+			if !ok {
+				continue
+			}
+			if dbContext != nil && typDesc.ParentID != dbContext.ID {
+				continue
+			}
+			if typDesc.Kind != sqlbase.TypeDescriptor_ENUM {
+				continue
+			}
+			// Generate a row for each member of the enum. We don't represent enums
+			// internally using floats for ordering like Postgres, so just pick a
+			// float entry for the rows.
+			typ := types.MakeEnum(uint32(typDesc.ID))
+			if err := typDesc.HydrateTypeInfo(typ); err != nil {
+				return err
+			}
+			enumData := typ.TypeMeta.EnumData
+			typOID := tree.NewDOid(tree.DInt(typ.Oid()))
+			for i := range enumData.LogicalRepresentations {
+				if err := addRow(
+					h.EnumEntryOid(typOID, enumData.PhysicalRepresentations[i]),
+					typOID,
+					tree.NewDFloat(tree.DFloat(float64(i))),
+					tree.NewDString(enumData.LogicalRepresentations[i]),
+				); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	},
 }
@@ -3098,6 +3133,12 @@ func (h oidHasher) writeStr(s string) {
 	}
 }
 
+func (h oidHasher) writeBytes(b []byte) {
+	if _, err := h.h.Write(b); err != nil {
+		panic(err)
+	}
+}
+
 func (h oidHasher) writeUInt8(i uint8) {
 	if err := binary.Write(h.h, binary.BigEndian, i); err != nil {
 		panic(err)
@@ -3135,6 +3176,7 @@ const (
 	userTypeTag
 	collationTypeTag
 	operatorTypeTag
+	enumEntryTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -3284,6 +3326,13 @@ func (h oidHasher) OperatorOid(name string, leftType, rightType, returnType *tre
 	h.writeOID(leftType)
 	h.writeOID(rightType)
 	h.writeOID(returnType)
+	return h.getOid()
+}
+
+func (h oidHasher) EnumEntryOid(typOID *tree.DOid, physicalRep []byte) *tree.DOid {
+	h.writeTypeTag(enumEntryTypeTag)
+	h.writeOID(typOID)
+	h.writeBytes(physicalRep)
 	return h.getOid()
 }
 

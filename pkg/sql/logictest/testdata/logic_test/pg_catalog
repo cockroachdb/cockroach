@@ -916,12 +916,21 @@ JOIN pg_constraint ON objid=pg_constraint.oid AND refobjid=pg_constraint.conindi
 contype
 f
 
-## pg_catalog.pg_type
-
-# Create some user defined types for testing.
+## pg_catalog.pg_enum
 statement ok
 CREATE TYPE newtype1 AS ENUM ('v1', 'v2');
 CREATE TYPE newtype2 AS ENUM ('v3', 'v4')
+
+query OORT colnames
+SELECT * FROM pg_enum
+----
+oid  enumtypid  enumsortorder  enumlabel
+1043025669  100063  0  v1
+1043025861  100063  1  v2
+1865129000  100064  0  v3
+1865129192  100064  1  v4
+
+## pg_catalog.pg_type
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -1625,13 +1634,6 @@ query OOT colnames
 SELECT objoid, classoid, description FROM pg_catalog.pg_shdescription
 ----
 objoid  classoid  description
-
-## pg_catalog.pg_enum
-
-query OORT colnames
-SELECT * FROM pg_catalog.pg_enum
-----
-oid  enumtypid  enumsortorder  enumlabel
 
 ## pg_catalog.pg_event_trigger
 
