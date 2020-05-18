@@ -1025,8 +1025,9 @@ func (r *Replica) State() storagepb.RangeInfo {
 				}
 				if ri.NewestClosedTimestamp.ClosedTimestamp.Less(e.ClosedTimestamp) {
 					ri.NewestClosedTimestamp.NodeID = replDesc.NodeID
-					ri.NewestClosedTimestamp.MLAI = int64(mlai)
 					ri.NewestClosedTimestamp.ClosedTimestamp = e.ClosedTimestamp
+					ri.NewestClosedTimestamp.MLAI = int64(mlai)
+					ri.NewestClosedTimestamp.Epoch = int64(e.Epoch)
 				}
 				return true // done
 			})
