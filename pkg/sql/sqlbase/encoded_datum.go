@@ -288,22 +288,21 @@ func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([
 	// Note: we don't ed.EnsureDecoded on top of this method, because the default
 	// case uses ed.Encode, which has a fast path if the encoded bytes are already
 	// the right encoding.
-	switch typ.Family() {
-	case types.JsonFamily:
+	if MustBeValueEncoded(typ) {
 		if err := ed.EnsureDecoded(typ, a); err != nil {
 			return nil, err
 		}
 		// We must use value encodings without a column ID even if the EncDatum already
 		// is encoded with the value encoding so that the hashes are indeed unique.
 		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
-	default:
-		// For values that are key encodable, using the ascending key.
-		// TODO (rohany): However, there should be a knob for the hasher that sees
-		//  what kind of encoding already exists on the enc datums incoming to the
-		//  DistSQL operators, and should use that encoding to avoid re-encoding
-		//  datums into different encoding types as much as possible.
-		return ed.Encode(typ, a, DatumEncoding_ASCENDING_KEY, appendTo)
 	}
+
+	// For values that are key encodable, using the ascending key.
+	// TODO (rohany): However, there should be a knob for the hasher that sees
+	//  what kind of encoding already exists on the enc datums incoming to the
+	//  DistSQL operators, and should use that encoding to avoid re-encoding
+	//  datums into different encoding types as much as possible.
+	return ed.Encode(typ, a, DatumEncoding_ASCENDING_KEY, appendTo)
 }
 
 // Compare returns:
