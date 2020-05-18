@@ -116,10 +116,10 @@ func (s *initResolvedTSScan) Cancel() {
 type TxnPusher interface {
 	// PushTxns attempts to push the specified transactions to a new
 	// timestamp. It returns the resulting transaction protos.
-	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]roachpb.Transaction, error)
+	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
 	// CleanupTxnIntentsAsync asynchronously cleans up intents owned
 	// by the specified transactions.
-	CleanupTxnIntentsAsync(context.Context, []roachpb.Transaction) error
+	CleanupTxnIntentsAsync(context.Context, []*roachpb.Transaction) error
 }
 
 // txnPushAttempt pushes all old transactions that have unresolved intents on
@@ -176,7 +176,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 
 	// Inform the Processor of the results of the push for each transaction.
 	ops := make([]enginepb.MVCCLogicalOp, len(pushedTxns))
-	var toCleanup []roachpb.Transaction
+	var toCleanup []*roachpb.Transaction
 	for i, txn := range pushedTxns {
 		switch txn.Status {
 		case roachpb.PENDING, roachpb.STAGING:

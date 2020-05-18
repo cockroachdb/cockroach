@@ -529,22 +529,22 @@ func (c *cluster) makeConfig() concurrency.Config {
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
-) (roachpb.Transaction, *roachpb.Error) {
+) (*roachpb.Transaction, *roachpb.Error) {
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
-		return roachpb.Transaction{}, roachpb.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 	var pusherRecord *txnRecord
 	if h.Txn != nil {
 		pusherID := h.Txn.ID
 		pusherRecord, err = c.getTxnRecord(pusherID)
 		if err != nil {
-			return roachpb.Transaction{}, roachpb.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 
 		push, err := c.registerPush(ctx, pusherID, pushee.ID)
 		if err != nil {
-			return roachpb.Transaction{}, roachpb.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 		defer c.unregisterPush(push)
 	}
@@ -558,7 +558,7 @@ func (c *cluster) PushTransaction(
 		case roachpb.PUSH_ABORT:
 			pushed = pusheeTxn.Status.IsFinalized()
 		default:
-			return roachpb.Transaction{}, roachpb.NewErrorf("unexpected push type: %s", pushType)
+			return nil, roachpb.NewErrorf("unexpected push type: %s", pushType)
 		}
 		if pushed {
 			return pusheeTxn, nil
@@ -566,12 +566,12 @@ func (c *cluster) PushTransaction(
 		// Or the pusher aborted?
 		var pusherRecordSig chan struct{}
 		if pusherRecord != nil {
-			var pusherTxn roachpb.Transaction
+			var pusherTxn *roachpb.Transaction
 			pusherTxn, pusherRecordSig = pusherRecord.asTxn()
 			if pusherTxn.Status == roachpb.ABORTED {
 				log.Eventf(ctx, "detected pusher aborted")
 				err := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED)
-				return roachpb.Transaction{}, roachpb.NewError(err)
+				return nil, roachpb.NewError(err)
 			}
 		}
 		// Wait until either record is updated.
@@ -579,7 +579,7 @@ func (c *cluster) PushTransaction(
 		case <-pusheeRecordSig:
 		case <-pusherRecordSig:
 		case <-ctx.Done():
-			return roachpb.Transaction{}, roachpb.NewError(ctx.Err())
+			return nil, roachpb.NewError(ctx.Err())
 		}
 	}
 }
@@ -649,10 +649,10 @@ func (c *cluster) updateTxnRecord(
 	return nil
 }
 
-func (r *txnRecord) asTxn() (roachpb.Transaction, chan struct{}) {
+func (r *txnRecord) asTxn() (*roachpb.Transaction, chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	txn := *r.txn
+	txn := r.txn.Clone()
 	if r.updatedStatus > txn.Status {
 		txn.Status = r.updatedStatus
 	}
