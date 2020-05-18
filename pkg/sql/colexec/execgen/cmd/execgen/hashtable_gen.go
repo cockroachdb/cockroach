@@ -43,8 +43,8 @@ func genHashTable(wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Global.Right", s)
 
-	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Right.Assign", 3))
+	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
+	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Right.Assign", 6))
 
 	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 12)
 	s = checkColBody.ReplaceAllString(

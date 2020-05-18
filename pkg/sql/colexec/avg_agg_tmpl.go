@@ -50,13 +50,13 @@ const _TYPE_WIDTH = 0
 // _ASSIGN_DIV_INT64 is the template division function for assigning the first
 // input to the result of the second input / the third input, where the third
 // input is an int64.
-func _ASSIGN_DIV_INT64(_, _, _ string) {
+func _ASSIGN_DIV_INT64(_, _, _, _, _, _ string) {
 	colexecerror.InternalError("")
 }
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
-func _ASSIGN_ADD(_, _, _ string) {
+func _ASSIGN_ADD(_, _, _, _, _, _ string) {
 	colexecerror.InternalError("")
 }
 
@@ -170,7 +170,7 @@ func (a *avg_TYPEAgg) Flush() {
 	if !a.scratch.foundNonNullForCurrentGroup {
 		a.scratch.nulls.SetNull(a.scratch.curIdx)
 	} else {
-		_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
+		_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
 	}
 	a.scratch.curIdx++
 }
@@ -199,7 +199,7 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 				a.scratch.nulls.SetNull(a.scratch.curIdx)
 			} else {
 				// {{with .Global}}
-				_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
+				_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
 				// {{end}}
 			}
 		}
@@ -224,7 +224,7 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 	isNull = false
 	// {{end}}
 	if !isNull {
-		_ASSIGN_ADD(a.scratch.curSum, a.scratch.curSum, col[i])
+		_ASSIGN_ADD(a.scratch.curSum, a.scratch.curSum, col[i], _, _, col)
 		a.scratch.curCount++
 		a.scratch.foundNonNullForCurrentGroup = true
 	}

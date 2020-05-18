@@ -41,7 +41,7 @@ func {{template "opName" .}}(a {{.Left.GoType}}, b {{.Right.GoType}}) {{.Right.R
 	// However, the scratch is not used in all of the functions, so we add this
 	// to go around "unused" error.
 	_ = decimalScratch
-	{{(.Right.Assign "r" "a" "b")}}
+	{{(.Right.Assign "r" "a" "b" "" "" "")}}
 	return r
 }
 

@@ -826,11 +826,18 @@ func shouldDistributeGivenRecAndMode(
 	panic(fmt.Sprintf("unhandled distsql mode %v", mode))
 }
 
-// shouldDistributePlan determines whether we should distribute the
-// given logical plan, based on the session settings.
-func shouldDistributePlan(
-	ctx context.Context, distSQLMode sessiondata.DistSQLExecMode, dp *DistSQLPlanner, plan planNode,
+// willDistributePlan determines whether we will distribute the given logical
+// plan, based on the gateway's SQL ID and session settings, with physical
+// planning being handled by DistSQL physical planner.
+func willDistributePlan(
+	ctx context.Context,
+	nodeID *base.SQLIDContainer,
+	distSQLMode sessiondata.DistSQLExecMode,
+	plan planNode,
 ) bool {
+	if _, singleTenant := nodeID.OptionalNodeID(); !singleTenant {
+		return false
+	}
 	if distSQLMode == sessiondata.DistSQLOff {
 		return false
 	}
@@ -840,7 +847,7 @@ func shouldDistributePlan(
 		return false
 	}
 
-	rec, err := dp.checkSupportForNode(plan)
+	rec, err := checkSupportForNode(plan)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)

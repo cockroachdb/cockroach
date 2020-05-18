@@ -56,9 +56,12 @@ type flowWithNode struct {
 func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistributePlan, _ := willDistributePlan(distSQLPlanner, n.plan, params)
+	willDistribute := willDistributePlanForExplainPurposes(
+		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan,
+	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistributePlan)
+	planCtx := makeExplainPlanningCtx(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistribute)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
@@ -103,7 +106,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
 		fuseOpt := flowinfra.FuseNormally
-		if flow.nodeID == thisNodeID && !willDistributePlan {
+		if flow.nodeID == thisNodeID && !willDistribute {
 			fuseOpt = flowinfra.FuseAggressively
 		}
 		opChains, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors, fuseOpt, nil /* output */)
@@ -138,15 +141,15 @@ func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *exe
 	return flowCtx
 }
 
-func makeExplainVecPlanningCtx(
+func makeExplainPlanningCtx(
 	distSQLPlanner *DistSQLPlanner,
 	params runParams,
 	stmtType tree.StatementType,
 	subqueryPlans []subquery,
-	willDistributePlan bool,
+	willDistribute bool,
 ) *PlanningCtx {
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !willDistributePlan
+	planCtx.isLocal = !willDistribute
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = stmtType

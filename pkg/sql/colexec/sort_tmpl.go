@@ -80,7 +80,7 @@ const _ISNULL = false
 
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the second input < the third input.
-func _ASSIGN_LT(_, _, _ string) bool {
+func _ASSIGN_LT(_, _, _, _, _, _ string) bool {
 	colexecerror.InternalError("")
 }
 
@@ -212,7 +212,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// We always indirect via the order vector.
 	arg1 := execgen.UNSAFEGET(s.sortCol, s.order[i])
 	arg2 := execgen.UNSAFEGET(s.sortCol, s.order[j])
-	_ASSIGN_LT(lt, arg1, arg2)
+	_ASSIGN_LT(lt, arg1, arg2, _, s.sortCol, s.sortCol)
 	return lt
 }
 

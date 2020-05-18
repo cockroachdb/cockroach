@@ -57,8 +57,8 @@ func replaceProjTmplVariables(tmpl string) string {
 	tmpl = strings.ReplaceAll(tmpl, "_R_TYP", "{{.Right.VecMethod}}")
 	tmpl = strings.ReplaceAll(tmpl, "_RET_TYP", "{{.Right.RetVecMethod}}")
 
-	assignRe := makeFunctionRegex("_ASSIGN", 3)
-	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Right.Assign", 3))
+	assignRe := makeFunctionRegex("_ASSIGN", 6)
+	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Right.Assign", 6))
 
 	tmpl = strings.ReplaceAll(tmpl, "_HAS_NULLS", "$hasNulls")
 	setProjectionRe := makeFunctionRegex("_SET_PROJECTION", 1)

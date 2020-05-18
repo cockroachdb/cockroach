@@ -79,7 +79,7 @@ type _NON_CONST_GOTYPESLICE interface{}
 
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
-func _ASSIGN(_, _, _ interface{}) {
+func _ASSIGN(_, _, _, _, _, _ interface{}) {
 	colexecerror.InternalError("")
 }
 
@@ -188,9 +188,9 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 		// {{end}}
 		arg := execgen.UNSAFEGET(col, i)
 		// {{if _IS_CONST_LEFT}}
-		_ASSIGN(projCol[i], p.constArg, arg)
+		_ASSIGN(projCol[i], p.constArg, arg, projCol, _, col)
 		// {{else}}
-		_ASSIGN(projCol[i], arg, p.constArg)
+		_ASSIGN(projCol[i], arg, p.constArg, projCol, col, _)
 		// {{end}}
 		// {{if _HAS_NULLS}}
 	}

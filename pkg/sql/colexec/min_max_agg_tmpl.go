@@ -76,7 +76,7 @@ const _TYPE_WIDTH = 0
 // _ASSIGN_CMP is the template function for assigning true to the first input
 // if the second input compares successfully to the third input. The comparison
 // operator is tree.LT for MIN and is tree.GT for MAX.
-func _ASSIGN_CMP(_, _, _ string) bool {
+func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 	colexecerror.InternalError("")
 }
 
@@ -249,7 +249,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		} else {
 			var cmp bool
 			candidate := execgen.UNSAFEGET(col, i)
-			_ASSIGN_CMP(cmp, candidate, a.curAgg)
+			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
 			if cmp {
 				execgen.COPYVAL(a.curAgg, candidate)
 			}
