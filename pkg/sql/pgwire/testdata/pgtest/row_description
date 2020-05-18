@@ -119,3 +119,22 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"hello"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 80 = ASCII 'P' for Portal
+send
+Parse {"Name": "s", "Query": "SELECT b FROM tab3"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Describe {"ObjectType": 80, "Name": "p"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"hello"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
