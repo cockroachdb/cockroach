@@ -5,6 +5,9 @@
 statement ok
 SET optimizer_foreign_keys = true
 
+statement ok
+SET experimental_optimizer_foreign_key_cascades = true
+
 # Randomize the use of insert fast path.
 # The let statement will also log the value.
 let $enable_insert_fast_path
@@ -3292,12 +3295,14 @@ ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE CASCADE'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT;
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
 
 statement ok
-insert into t1 values (123); insert into t2 values (123)
+INSERT INTO t1 VALUES (123);
+INSERT INTO t2 VALUES (123)
 
-statement error value \[1\] not found in t1@primary \[a\]
+statement error pq: update on table "t2" violates foreign key constraint "fk1"\nDETAIL: Key \(a\)=\(1\) is not present in table "t1"\.
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -3310,12 +3315,14 @@ ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE SET NULL'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT;
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
 
 statement ok
-insert into t1 values (123); insert into t2 values (123)
+INSERT INTO t1 VALUES (123);
+INSERT INTO t2 VALUES (123)
 
-statement error value \[1\] not found in t1@primary \[a\]
+statement error pq: update on table "t2" violates foreign key constraint "fk1"\nDETAIL: Key \(a\)=\(1\) is not present in table "t1"\.
 DELETE FROM t1 WHERE a = 123
 
 query I

@@ -87,15 +87,16 @@ func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
+func new_AGG_TITLEAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .Overloads}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			allocator.AdjustMemoryUsage(int64(sizeOf_AGG_TYPEAgg))
-			return &_AGG_TYPEAgg{allocator: allocator}, nil
+			return &_AGG_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -127,7 +128,7 @@ type _AGG_TYPEAgg struct {
 
 var _ aggregateFunc = &_AGG_TYPEAgg{}
 
-const sizeOf_AGG_TYPEAgg = unsafe.Sizeof(&_AGG_TYPEAgg{})
+const sizeOf_AGG_TYPEAgg = int64(unsafe.Sizeof(_AGG_TYPEAgg{}))
 
 func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
@@ -204,6 +205,25 @@ func (a *_AGG_TYPEAgg) Flush() {
 
 func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
 	a.nulls.SetNull(0)
+}
+
+type _AGG_TYPEAggAlloc struct {
+	allocator *colmem.Allocator
+	allocSize int64
+	aggFuncs  []_AGG_TYPEAgg
+}
+
+var _ aggregateFuncAlloc = &_AGG_TYPEAggAlloc{}
+
+func (a *_AGG_TYPEAggAlloc) newAggFunc() aggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(sizeOf_AGG_TYPEAgg * a.allocSize)
+		a.aggFuncs = make([]_AGG_TYPEAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
 }
 
 // {{end}}

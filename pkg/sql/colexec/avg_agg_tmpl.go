@@ -62,15 +62,16 @@ func _ASSIGN_ADD(_, _, _, _, _, _ string) {
 
 // */}}
 
-func newAvgAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
+func newAvgAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			allocator.AdjustMemoryUsage(int64(sizeOfAvg_TYPEAgg))
-			return &avg_TYPEAgg{}, nil
+			return &avg_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -104,7 +105,7 @@ type avg_TYPEAgg struct {
 
 var _ aggregateFunc = &avg_TYPEAgg{}
 
-const sizeOfAvg_TYPEAgg = unsafe.Sizeof(&avg_TYPEAgg{})
+const sizeOfAvg_TYPEAgg = int64(unsafe.Sizeof(avg_TYPEAgg{}))
 
 func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
@@ -177,6 +178,24 @@ func (a *avg_TYPEAgg) Flush() {
 
 func (a *avg_TYPEAgg) HandleEmptyInputScalar() {
 	a.scratch.nulls.SetNull(0)
+}
+
+type avg_TYPEAggAlloc struct {
+	allocator *colmem.Allocator
+	allocSize int64
+	aggFuncs  []avg_TYPEAgg
+}
+
+var _ aggregateFuncAlloc = &avg_TYPEAggAlloc{}
+
+func (a *avg_TYPEAggAlloc) newAggFunc() aggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(sizeOfAvg_TYPEAgg * a.allocSize)
+		a.aggFuncs = make([]avg_TYPEAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
 }
 
 // {{end}}
