@@ -120,7 +120,8 @@ sequence req=req3
 [4] sequence req3: acquiring latches
 [4] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
 
-handle-write-intent-error req=req2 txn=txn1 key=k
+handle-write-intent-error req=req2
+  intent txn=txn1 key=k
 ----
 [3] sequence reqRes1: sequencing complete, returned guard
 [5] handle write intent error req2: handled conflicting intents on "k", released latches

@@ -12,6 +12,8 @@ package concurrency
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -23,14 +25,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 type mockIntentResolver struct {
-	pushTxn       func(context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (roachpb.Transaction, *Error)
-	resolveIntent func(context.Context, roachpb.LockUpdate) *Error
+	pushTxn        func(context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (roachpb.Transaction, *Error)
+	resolveIntent  func(context.Context, roachpb.LockUpdate) *Error
+	resolveIntents func(context.Context, []roachpb.LockUpdate) *Error
 }
 
+// mockIntentResolver implements the IntentResolver interface.
 func (m *mockIntentResolver) PushTransaction(
 	ctx context.Context, txn *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
 ) (roachpb.Transaction, *Error) {
@@ -43,12 +48,19 @@ func (m *mockIntentResolver) ResolveIntent(
 	return m.resolveIntent(ctx, intent)
 }
 
+func (m *mockIntentResolver) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *Error {
+	return m.resolveIntents(ctx, intents)
+}
+
 type mockLockTableGuard struct {
 	state         waitingState
 	signal        chan struct{}
 	stateObserved chan struct{}
 }
 
+// mockLockTableGuard implements the lockTableGuard interface.
 func (g *mockLockTableGuard) ShouldWait() bool            { return true }
 func (g *mockLockTableGuard) NewStateChan() chan struct{} { return g.signal }
 func (g *mockLockTableGuard) CurState() waitingState {
@@ -60,18 +72,30 @@ func (g *mockLockTableGuard) CurState() waitingState {
 }
 func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
 
+// mockLockTableGuard implements the LockManager interface.
+func (g *mockLockTableGuard) OnLockAcquired(_ context.Context, _ *roachpb.LockAcquisition) {
+	panic("unimplemented")
+}
+func (g *mockLockTableGuard) OnLockUpdated(_ context.Context, up *roachpb.LockUpdate) {
+	if g.state.held && g.state.txn.ID == up.Txn.ID && g.state.key.Equal(up.Key) {
+		g.state = waitingState{kind: doneWaiting}
+		g.notify()
+	}
+}
+
 func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *mockLockTableGuard) {
 	ir := &mockIntentResolver{}
 	st := cluster.MakeTestingClusterSettings()
 	LockTableLivenessPushDelay.Override(&st.SV, 0)
 	LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0)
+	guard := &mockLockTableGuard{
+		signal: make(chan struct{}, 1),
+	}
 	w := &lockTableWaiterImpl{
 		st:      st,
 		stopper: stop.NewStopper(),
 		ir:      ir,
-	}
-	guard := &mockLockTableGuard{
-		signal: make(chan struct{}, 1),
+		lm:      guard,
 	}
 	return w, ir, guard
 }
@@ -389,4 +413,111 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			require.Equal(t, err2, err)
 		}
 	})
+}
+
+// TestLockTableWaiterDeferredIntentResolverError tests that the lockTableWaiter
+// propagates errors from its intent resolver when it resolves intent batches.
+func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	w, ir, g := setupLockTableWaiterTest()
+	defer w.stopper.Stop(ctx)
+
+	txn := makeTxnProto("request")
+	req := Request{
+		Txn:       &txn,
+		Timestamp: txn.ReadTimestamp,
+	}
+	keyA := roachpb.Key("keyA")
+	pusheeTxn := makeTxnProto("pushee")
+
+	// Add the conflicting txn to the finalizedTxnCache so that the request
+	// avoids the transaction record push and defers the intent resolution.
+	pusheeTxn.Status = roachpb.ABORTED
+	w.finalizedTxnCache.add(&pusheeTxn)
+
+	g.state = waitingState{
+		kind:        waitForDistinguished,
+		txn:         &pusheeTxn.TxnMeta,
+		key:         keyA,
+		held:        true,
+		guardAccess: spanset.SpanReadWrite,
+	}
+	g.notify()
+
+	// Errors are propagated when observed while resolving batches of intents.
+	err1 := roachpb.NewErrorf("error1")
+	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate) *Error {
+		require.Len(t, intents, 1)
+		require.Equal(t, keyA, intents[0].Key)
+		require.Equal(t, pusheeTxn.ID, intents[0].Txn.ID)
+		require.Equal(t, roachpb.ABORTED, intents[0].Status)
+		return err1
+	}
+	err := w.WaitOn(ctx, req, g)
+	require.Equal(t, err1, err)
+}
+
+func TestTxnCache(t *testing.T) {
+	var c txnCache
+	const overflow = 4
+	var txns [len(c.txns) + overflow]roachpb.Transaction
+	for i := range txns {
+		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
+	}
+
+	// Add each txn to the cache. Observe LRU eviction policy.
+	for i := range txns {
+		txn := &txns[i]
+		c.add(txn)
+		for j, txnInCache := range c.txns {
+			if j <= i {
+				require.Equal(t, &txns[i-j], txnInCache)
+			} else {
+				require.Nil(t, txnInCache)
+			}
+		}
+	}
+
+	// Access each txn in the cache in reverse order.
+	// Should reverse the order of the cache because of LRU policy.
+	for i := len(txns) - 1; i >= 0; i-- {
+		txn := &txns[i]
+		txnInCache, ok := c.get(txn.ID)
+		if i < overflow {
+			// Expect overflow.
+			require.Nil(t, txnInCache)
+			require.False(t, ok)
+		} else {
+			// Should be in cache.
+			require.Equal(t, txn, txnInCache)
+			require.True(t, ok)
+		}
+	}
+
+	// Cache should be in order again.
+	for i, txnInCache := range c.txns {
+		require.Equal(t, &txns[i+overflow], txnInCache)
+	}
+}
+
+func BenchmarkTxnCache(b *testing.B) {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	var c txnCache
+	var txns [len(c.txns) + 4]roachpb.Transaction
+	for i := range txns {
+		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
+	}
+	txnOps := make([]*roachpb.Transaction, b.N)
+	for i := range txnOps {
+		txnOps[i] = &txns[rng.Intn(len(txns))]
+	}
+	b.ResetTimer()
+	for i, txnOp := range txnOps {
+		if i%2 == 0 {
+			c.add(txnOp)
+		} else {
+			_, _ = c.get(txnOp.ID)
+		}
+	}
 }
