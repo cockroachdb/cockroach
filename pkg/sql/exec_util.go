@@ -213,6 +213,13 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
+// TODO(mgartner): Remove this setting once partial indexes are fully supported.
+var partialIndexClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_partial_indexes.enabled",
+	"default value for experimental_partial_indexes session setting; disables creation of partial indexes by default",
+	false,
+)
+
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.implicit_select_for_update.enabled",
 	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
@@ -1979,6 +1986,11 @@ func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseMultiColStats(val bool) {
 	m.data.OptimizerUseMultiColStats = val
+}
+
+// TODO(mgartner): remove this once partial indexes are fully supported.
+func (m *sessionDataMutator) SetPartialIndexes(val bool) {
+	m.data.PartialIndexes = val
 }
 
 func (m *sessionDataMutator) SetImplicitSelectForUpdate(val bool) {
