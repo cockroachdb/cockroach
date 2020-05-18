@@ -128,7 +128,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
                         </Col>
                         <Col span={12}>
                           <div className="summary--card__counting">
-                            <h3 className="summary--card__counting--value">{tableInfo.numIndices}</h3>
+                            <h3 className="summary--card__counting--value">{tableInfo.numReplicas}</h3>
                             <p className="summary--card__counting--label">Replicas</p>
                           </div>
                         </Col>
