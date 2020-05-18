@@ -604,6 +604,26 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	// TODO(mgartner): remove this once partial indexes are fully supported.
+	`partial_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`partial_indexes`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar("partial_indexes", s)
+			if err != nil {
+				return err
+			}
+			m.SetPartialIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.PartialIndexes)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(partialIndexClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_implicit_select_for_update`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_implicit_select_for_update`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
