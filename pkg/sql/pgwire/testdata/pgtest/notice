@@ -29,7 +29,7 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Severity":"NOTICE","Code":"00000","Message":"the data for dropped indexes is reclaimed asynchronously","Detail":"","Hint":"The reclamation delay can be customized in the zone configuration for the table.","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"drop_index.go","Line":496,"Routine":"dropIndexByName","UnknownFields":null}
+{"Severity":"NOTICE","Code":"00000","Message":"the data for dropped indexes is reclaimed asynchronously","Detail":"","Hint":"The reclamation delay can be customized in the zone configuration for the table.","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"drop_index.go","Line":499,"Routine":"dropIndexByName","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"DROP INDEX"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
