@@ -49,6 +49,15 @@ func NewGeometry(spatialObject geopb.SpatialObject) *Geometry {
 	return &Geometry{SpatialObject: spatialObject}
 }
 
+// NewGeometryFromPointCoords makes a point from x, y coordinates.
+func NewGeometryFromPointCoords(x, y float64) (*Geometry, error) {
+	s, err := spatialObjectFromGeom(geom.NewPointFlat(geom.XY, []float64{x, y}))
+	if err != nil {
+		return nil, err
+	}
+	return &Geometry{SpatialObject: s}, nil
+}
+
 // ParseGeometry parses a Geometry from a given text.
 func ParseGeometry(str string) (*Geometry, error) {
 	spatialObject, err := parseAmbiguousText(str, geopb.DefaultGeometrySRID)

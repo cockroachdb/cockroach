@@ -81,6 +81,15 @@ SELECT NULL::geometry, NULL::geography
 ----
 NULL  NULL
 
+query T
+SELECT ST_AsText(p) FROM (VALUES
+  (ST_Point(1, 2)),
+  (ST_Point(3, 4))
+) tbl(p)
+----
+POINT (1 2)
+POINT (3 4)
+
 subtest parse_and_unparse
 
 statement ok
