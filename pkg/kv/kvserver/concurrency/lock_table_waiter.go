@@ -108,10 +108,9 @@ type IntentResolver interface {
 	// provided pushee transaction immediately, if possible. Otherwise, it will
 	// block until the pushee transaction is finalized or eventually can be
 	// pushed successfully.
-	// TODO(nvanbenschoten): return a *roachpb.Transaction here.
 	PushTransaction(
 		context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType,
-	) (roachpb.Transaction, *Error)
+	) (*roachpb.Transaction, *Error)
 
 	// ResolveIntent synchronously resolves the provided intent.
 	ResolveIntent(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
@@ -414,7 +413,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// avoids needing to push it again if we find another one of its locks and
 	// allows for batching of intent resolution.
 	if pusheeTxn.Status.IsFinalized() {
-		w.knownTxns.add(&pusheeTxn)
+		w.knownTxns.add(pusheeTxn)
 	}
 
 	// If the push succeeded then the lock holder transaction must have
@@ -444,7 +443,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// with the responsibility to abort the intents (for example if we find the
 	// transaction aborted). To do better here, we need per-intent information
 	// on whether we need to poison.
-	resolve := roachpb.MakeLockUpdate(&pusheeTxn, roachpb.Span{Key: ws.key})
+	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
 	opts := intentresolver.ResolveOptions{Poison: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
