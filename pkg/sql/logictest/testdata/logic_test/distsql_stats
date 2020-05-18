@@ -533,54 +533,6 @@ CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x
 statement ok
 CREATE STATISTICS s FROM t
 
-# Regression test for #35150.
-statement ok
-CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain": "github.com"}}')
-
-# Ensure that trying to create statistics on a JSON column gives an appropriate error.
-statement error CREATE STATISTICS is not supported for JSON columns
-CREATE STATISTICS s ON data FROM groups
-
-# The json column is not included in the default columns.
-statement ok
-CREATE STATISTICS s FROM groups
-
-query TT colnames
-SELECT statistics_name, column_names
-FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
-----
-statistics_name  column_names
-s                {rowid}
-
-# Regression test for #35764.
-statement ok
-CREATE TABLE users (
-  profile_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  last_updated TIMESTAMP DEFAULT now(),
-  user_profile JSONB,
-  INVERTED INDEX user_details (user_profile)
-)
-
-statement ok
-INSERT INTO users (user_profile) VALUES
-  ('{"first_name": "Lola", "last_name": "Dog", "location": "NYC", "online" : true, "friends" : 547}'),
-  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
-  ('{"first_name": "Carl", "last_name": "Kimball", "location": "NYC", "breed": "Boston Terrier"}'
-)
-
-# Ensure that trying to create statistics with default columns does not fail
-# when there is an inverted index.
-statement ok
-CREATE STATISTICS s FROM users
-
-query TTI colnames
-SELECT statistics_name, column_names, row_count
-FROM [SHOW STATISTICS FOR TABLE users] ORDER BY statistics_name, column_names::STRING
-----
-statistics_name  column_names    row_count
-s                {last_updated}  3
-s                {profile_id}    3
-
 # Arrays are supported.
 statement ok
 CREATE TABLE arr (x INT[])
@@ -641,3 +593,62 @@ ORDER BY
 statistics_name  column_names  row_count  null_count  has_histogram
 s                {x}           3          0           true
 s                {y}           3          0           true
+
+# JSON and other inverted-index columns. See also #35150.
+statement ok
+CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain": "github.com"}}')
+
+# JSON can be specified.
+statement ok
+CREATE STATISTICS s ON data FROM groups
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+s                {data}
+
+# JSON is auto-included.
+statement ok
+CREATE STATISTICS s FROM groups
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+s                {data}
+s                {rowid}
+
+# See #35764
+statement ok
+CREATE TABLE users (
+  profile_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  last_updated TIMESTAMP DEFAULT now(),
+  user_profile JSONB,
+  INVERTED INDEX user_details (user_profile)
+)
+
+statement ok
+INSERT INTO users (user_profile) VALUES
+  ('{"first_name": "Lola", "last_name": "Dog", "location": "NYC", "online" : true, "friends" : 547}'),
+  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
+  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
+  (NULL),
+  ('{"first_name": "Carl", "last_name": "Kimball", "location": "NYC", "breed": "Boston Terrier"}'
+)
+
+# Ensure that trying to create statistics with default columns does not fail
+# when there is an inverted index.
+statement ok
+CREATE STATISTICS s FROM users
+
+query TTIIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
+FROM [SHOW STATISTICS FOR TABLE users] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names    row_count  distinct_count  null_count  histogram_id
+s                {last_updated}  5          1               0           NULL
+s                {profile_id}    5          5               0           560276141889519621
+s                {user_profile}  5          4               1           NULL
