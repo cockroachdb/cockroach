@@ -304,7 +304,7 @@ SELECT * FROM b;
 1 2 3 4 5 6 7 8 9 10
 
 # 1. ON DELETE NO ACTION
-statement error pq: foreign key violation: values \[1\] in columns \[id\] referenced in table "b"
+statement error pq: delete on table "a" violates foreign key constraint "fk_delete_no_action_ref_a" on table "b"\nDETAIL: Key \(id\)=\(1\) is still referenced from table "b"\.
 DELETE FROM a WHERE id = 1;
 
 # 2. ON UPDATE NO ACTION
@@ -312,7 +312,7 @@ statement error pq: foreign key violation: values \[2\] in columns \[id\] refere
 UPDATE a SET id = 1000 WHERE id = 2;
 
 # 3. ON DELETE RESTRICT
-statement error pq: foreign key violation: values \[3\] in columns \[id\] referenced in table "b"
+statement error pq: delete on table "a" violates foreign key constraint "fk_delete_restrict_ref_a" on table "b"\nDETAIL: Key \(id\)=\(3\) is still referenced from table "b"\.
 DELETE FROM a WHERE id = 3;
 
 # 4. ON UPDATE RESTRICT
@@ -2961,7 +2961,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
 INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
 
 # ON DELETE CASCADE, which should fail since the value 'missing' is not in a.
-statement error pq: foreign key violation: value \['missing'\] not found in a@primary \[id\]
+statement error pq: update on table "b3" violates foreign key constraint "fk_delete_set_default_ref_a"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "a"\.
 DELETE FROM a WHERE id = 'delete_me';
 
 # Clean up after the test.
@@ -3126,7 +3126,7 @@ INSERT INTO c3 VALUES
 # This query expects to cascade the deletion in a into b1 and b2, but not into
 # the c tables which have ON DELETE SET DEFAULT instead. And ultimately fail
 # since the default value 'missing' is not present in b1.
-statement error pq: foreign key violation: value \['missing'\] not found in b1@primary \[id\]
+statement error pq: update on table "c2" violates foreign key constraint "fk_delete_set_default_ref_b1"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "b1"\.
 DELETE FROM a WHERE id = 'a-pk1';
 
 # Clean up after the test.
