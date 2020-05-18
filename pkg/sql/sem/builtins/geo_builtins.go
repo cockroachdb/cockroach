@@ -236,6 +236,22 @@ var geographyFromText = makeBuiltin(
 	},
 )
 
+var pointCoordsToGeomOverload = tree.Overload{
+	Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
+	ReturnType: tree.FixedReturnType(types.Geometry),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		x := float64(*args[0].(*tree.DFloat))
+		y := float64(*args[1].(*tree.DFloat))
+		g, err := geo.NewGeometryFromPointCoords(x, y)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDGeometry(g), nil
+	},
+	Info:       infoBuilder{info: `Returns a new Point with the given X and Y coordinates.`}.String(),
+	Volatility: tree.VolatilityImmutable,
+}
+
 // geoBuiltins must be kept in sync with sql/opt/norm/fold_constants_funcs.go.
 var geoBuiltins = map[string]builtinDefinition{
 	//
@@ -474,6 +490,8 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_point":     makeBuiltin(defProps(), pointCoordsToGeomOverload),
+	"st_makepoint": makeBuiltin(defProps(), pointCoordsToGeomOverload),
 
 	//
 	// Output
