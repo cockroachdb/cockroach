@@ -13,6 +13,7 @@ package geogfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
+	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 )
@@ -23,6 +24,9 @@ func DWithin(
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if distance < 0 {
+		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
 
 	aRegions, err := a.AsS2()

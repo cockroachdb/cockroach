@@ -745,7 +745,6 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function will automatically use any available index.</p>
 </span></td></tr>
 <tr><td><a name="st_distance"></a><code>st_distance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between the given geometries.</p>
-<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points using S2. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
@@ -757,6 +756,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_dwithin"></a><code>st_dwithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geometry_a is within distance units of geometry_b.</p>
 </span></td></tr>
 <tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
 <p>This function utilizes the GEOS module.</p>
