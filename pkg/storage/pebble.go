@@ -360,12 +360,12 @@ type pebbleLogger struct {
 func (l pebbleLogger) Infof(format string, args ...interface{}) {
 	if pebbleLog != nil {
 		pebbleLog.LogfDepth(l.ctx, l.depth, format, args...)
-		// Only log INFO logs to the normal CockroachDB log at --v=3 and above.
-		if !log.V(3) {
-			return
-		}
+		return
 	}
-	log.InfofDepth(l.ctx, l.depth, format, args...)
+	// Only log INFO logs to the normal CockroachDB log at --v=3 and above.
+	if log.V(3) {
+		log.InfofDepth(l.ctx, l.depth, format, args...)
+	}
 }
 
 func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
