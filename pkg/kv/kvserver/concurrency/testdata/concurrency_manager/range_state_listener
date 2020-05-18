@@ -119,7 +119,8 @@ debug-lock-table
 global: num=0
 local: num=0
 
-handle-write-intent-error req=req2 txn=txn1 key=k
+handle-write-intent-error req=req2
+  intent txn=txn1 key=k
 ----
 [3] handle write intent error req2: pushing txn 00000001 to abort
 [3] handle write intent error req2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -142,7 +143,8 @@ sequence req=req2
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
-handle-write-intent-error req=req2 txn=txn1 key=k2
+handle-write-intent-error req=req2
+  intent txn=txn1 key=k2
 ----
 [5] handle write intent error req2: pushing timestamp of txn 00000001 above 0.000000010,1
 [5] handle write intent error req2: resolving intent "k2" for txn 00000001 with COMMITTED status
@@ -190,7 +192,8 @@ sequence req=req3
 [7] sequence req3: scanning lock table for conflicting locks
 [7] sequence req3: sequencing complete, returned guard
 
-handle-write-intent-error req=req3 txn=txn2 key=k
+handle-write-intent-error req=req3
+  intent txn=txn2 key=k
 ----
 [8] handle write intent error req3: handled conflicting intents on "k", released latches
 
@@ -357,7 +360,8 @@ debug-lock-table
 global: num=0
 local: num=0
 
-handle-write-intent-error req=req2 txn=txn1 key=k
+handle-write-intent-error req=req2
+  intent txn=txn1 key=k
 ----
 [3] handle write intent error req2: handled conflicting intents on "k", released latches
 
@@ -526,7 +530,8 @@ debug-lock-table
 global: num=0
 local: num=0
 
-handle-write-intent-error req=req2 txn=txn1 key=k
+handle-write-intent-error req=req2
+  intent txn=txn1 key=k
 ----
 [3] handle write intent error req2: pushing txn 00000001 to abort
 [3] handle write intent error req2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -549,7 +554,8 @@ sequence req=req2
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
-handle-write-intent-error req=req2 txn=txn1 key=k2
+handle-write-intent-error req=req2
+  intent txn=txn1 key=k2
 ----
 [5] handle write intent error req2: pushing timestamp of txn 00000001 above 0.000000010,1
 [5] handle write intent error req2: resolving intent "k2" for txn 00000001 with COMMITTED status
@@ -672,7 +678,8 @@ debug-lock-table
 global: num=0
 local: num=0
 
-handle-write-intent-error req=req2 txn=txn1 key=k
+handle-write-intent-error req=req2
+  intent txn=txn1 key=k
 ----
 [3] handle write intent error req2: handled conflicting intents on "k", released latches
 

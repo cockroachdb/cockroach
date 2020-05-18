@@ -632,6 +632,11 @@ type lockTableWaiter interface {
 	// and, in turn, remove this method. This will likely fall out of pulling
 	// all replicated locks into the lockTable.
 	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
+
+	// ClearCaches wipes all caches maintained by the lockTableWaiter. This is
+	// primarily used to recover memory when a replica loses a lease. However,
+	// it is also used in tests to reset the state of the lockTableWaiter.
+	ClearCaches()
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.
