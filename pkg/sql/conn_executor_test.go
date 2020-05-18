@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,37 +57,101 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see');
 select * from crdb_internal.node_runtime_info;
 `
 
-	rUnsafe := "i'm not safe"
-	rSafe := log.Safe("something safe")
+	t.Run("unsafe", func(t *testing.T) {
+		rUnsafe := "i'm not safe"
+		safeErr := sql.AnonymizeStatementsForReporting("testing", stmt, rUnsafe)
 
-	safeErr := sql.AnonymizeStatementsForReporting("testing", stmt, rUnsafe)
+		const expMessage = "panic object: i'm not safe"
+		actMessage := safeErr.Error()
+		if actMessage != expMessage {
+			t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
+		}
 
-	const (
-		expMessage = "panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, __more2__); SELECT * FROM _._; caused by i'm not safe"
-		expSafeRedactedMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, __more2__); SELECT * FROM _._: caused by <redacted>"
-		expSafeSafeMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, __more2__); SELECT * FROM _._: caused by something safe"
-	)
+		const expSafeRedactedMessage = `...exec_util.go:NN: <*errors.errorString>
+wrapper: <*safedetails.withSafeDetails>
+(more details:)
+panic object: %v
+-- arg 1: <string>
+wrapper: <*withstack.withStack>
+(more details:)
+github.com/cockroachdb/cockroach/pkg/sql.AnonymizeStatementsForReporting
+	...exec_util.go:NN
+github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting.func1
+	...conn_executor_test.go:NN
+testing.tRunner
+	...testing.go:NN
+runtime.goexit
+	...asm_amd64.s:NN
+wrapper: <*safedetails.withSafeDetails>
+(more details:)
+panic while %s %d statements: %s
+-- arg 1: testing
+-- arg 2: 2
+-- arg 3: INSERT INTO _(_, _) VALUES (_, _, __more2__); SELECT * FROM _._`
+		actSafeRedactedMessage := fileref.ReplaceAllString(errors.Redact(safeErr), "...$2:NN")
+		if actSafeRedactedMessage != expSafeRedactedMessage {
+			diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+				A:        difflib.SplitLines(expSafeRedactedMessage),
+				B:        difflib.SplitLines(actSafeRedactedMessage),
+				FromFile: "Expected",
+				FromDate: "",
+				ToFile:   "Actual",
+				ToDate:   "",
+				Context:  1,
+			})
+			t.Errorf("Diff:\n%s", diff)
+		}
 
-	actMessage := safeErr.Error()
-	if actMessage != expMessage {
-		t.Fatalf("wanted: %s\ngot: %s", expMessage, actMessage)
-	}
+	})
 
-	actSafeRedactedMessage := log.ReportablesToSafeError(0, "", []interface{}{safeErr}).Error()
-	if actSafeRedactedMessage != expSafeRedactedMessage {
-		t.Fatalf("wanted: %s\ngot: %s", expSafeRedactedMessage, actSafeRedactedMessage)
-	}
+	t.Run("safe", func(t *testing.T) {
+		rSafe := log.Safe("something safe")
+		safeErr := sql.AnonymizeStatementsForReporting("testing", stmt, rSafe)
 
-	safeErr = sql.AnonymizeStatementsForReporting("testing", stmt, rSafe)
+		const expMessage = "panic object: something safe"
+		actMessage := safeErr.Error()
+		if actMessage != expMessage {
+			t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
+		}
 
-	actSafeSafeMessage := log.ReportablesToSafeError(0, "", []interface{}{safeErr}).Error()
-	if actSafeSafeMessage != expSafeSafeMessage {
-		t.Fatalf("wanted: %s\ngot: %s", expSafeSafeMessage, actSafeSafeMessage)
-	}
+		const expSafeSafeMessage = `...exec_util.go:NN: <*errors.errorString>
+wrapper: <*safedetails.withSafeDetails>
+(more details:)
+panic object: %v
+-- arg 1: something safe
+wrapper: <*withstack.withStack>
+(more details:)
+github.com/cockroachdb/cockroach/pkg/sql.AnonymizeStatementsForReporting
+	...exec_util.go:NN
+github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting.func2
+	...conn_executor_test.go:NN
+testing.tRunner
+	...testing.go:NN
+runtime.goexit
+	...asm_amd64.s:NN
+wrapper: <*safedetails.withSafeDetails>
+(more details:)
+panic while %s %d statements: %s
+-- arg 1: testing
+-- arg 2: 2
+-- arg 3: INSERT INTO _(_, _) VALUES (_, _, __more2__); SELECT * FROM _._`
+		actSafeSafeMessage := fileref.ReplaceAllString(errors.Redact(safeErr), "...$2:NN")
+		if actSafeSafeMessage != expSafeSafeMessage {
+			diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+				A:        difflib.SplitLines(expSafeSafeMessage),
+				B:        difflib.SplitLines(actSafeSafeMessage),
+				FromFile: "Expected",
+				FromDate: "",
+				ToFile:   "Actual",
+				ToDate:   "",
+				Context:  1,
+			})
+			t.Errorf("Diff:\n%s", diff)
+		}
+	})
 }
+
+var fileref = regexp.MustCompile(`((?:[a-zA-Z0-9\._@-]*/)*)([a-zA-Z0-9._@-]*\.(?:go|s)):\d+`)
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
 // in that txn being rolled back.

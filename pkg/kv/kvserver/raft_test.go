@@ -11,13 +11,11 @@
 package kvserver
 
 import (
-	"fmt"
 	"math"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TestWrapNumbersAsSafe tests the wrapNumbersAsSafe through ReportablesToSafeError.
@@ -46,32 +44,33 @@ func TestWrapNumbersAsSafe(t *testing.T) {
 
 	wrapNumbersAsSafe(reportables...)
 	format := "some reportables"
-	err := log.ReportablesToSafeError(0, format, reportables)
+	err := errors.WithSafeDetails(leafErr{}, format, reportables...)
 
-	expectedReportables := []string{
-		fmt.Sprint(uint(math.MaxUint32)),
-		fmt.Sprint(uint8(math.MaxUint8)),
-		fmt.Sprint(uint16(math.MaxUint16)),
-		fmt.Sprint(uint32(math.MaxUint32)),
-		fmt.Sprint(uint64(math.MaxUint64)),
+	const expected = `<kvserver.leafErr>
+wrapper: <*safedetails.withSafeDetails>
+(more details:)
+some reportables
+-- arg 1: 4294967295
+-- arg 2: 255
+-- arg 3: 65535
+-- arg 4: 4294967295
+-- arg 5: 18446744073709551615
+-- arg 6: 2147483647
+-- arg 7: 127
+-- arg 8: 32767
+-- arg 9: 2147483647
+-- arg 10: 9223372036854775807
+-- arg 11: 3.4028235e+38
+-- arg 12: 1.7976931348623157e+308
+-- arg 13: <string>
+-- arg 14: <string>`
 
-		fmt.Sprint(int(math.MaxInt32)),
-		fmt.Sprint(int8(math.MaxInt8)),
-		fmt.Sprint(int16(math.MaxInt16)),
-		fmt.Sprint(int32(math.MaxInt32)),
-		fmt.Sprint(int64(math.MaxInt64)),
-
-		fmt.Sprint(float32(math.MaxFloat32)),
-		fmt.Sprint(float64(math.MaxFloat64)),
-
-		"string",
-		"string",
-	}
-
-	expectedErrorStr := fmt.Sprintf("%s:%d: %s%s%s", "?", 0, format, " | ", strings.Join(expectedReportables, "; "))
-
-	if expectedErrorStr != err.Error() {
-		t.Fatalf("expected error to be %s but was %s", expectedErrorStr, err.Error())
+	if redacted := errors.Redact(err); expected != redacted {
+		t.Fatalf("expected error to be:\n%s\n\nbut was:\n%s", expected, redacted)
 	}
 
 }
+
+type leafErr struct{}
+
+func (leafErr) Error() string { return "error" }
