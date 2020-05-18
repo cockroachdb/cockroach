@@ -1054,6 +1054,8 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			continue
 		}
 
+		log.VEventf(ctx, 1, "executing cascade for constraint %s", plan.cascades[i].FKName)
+
 		// We place a sequence point before every cascade, so
 		// that each subsequent cascade can observe the writes
 		// by the previous step.
@@ -1136,6 +1138,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	}
 
 	for i := range plan.checkPlans {
+		log.VEventf(ctx, 1, "executing check query %d out of %d", i+1, len(plan.checkPlans))
 		if err := dsp.planAndRunPostquery(
 			ctx,
 			plan.checkPlans[i].plan,
