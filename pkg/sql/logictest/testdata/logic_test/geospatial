@@ -820,8 +820,9 @@ CREATE TABLE geo_st_srid(
 
 statement ok
 INSERT INTO geo_st_srid VALUES
-  (1, ST_GeogFromText('SRID=3857;POINT(1.0 2.0)'), ST_GeomFromText('POINT(5.0 5.0)', 0)),
-  (2, ST_GeogFromText('SRID=4326;POINT(1.0 2.0)'), ST_GeomFromText('POINT(5.0 5.0)', 4326))
+  (1, ST_GeogFromText('SRID=4004;POINT(1.0 2.0)'), ST_GeomFromText('POINT(5.0 5.0)', 0)),
+  (2, ST_GeogFromText('SRID=4326;POINT(1.0 2.0)'), ST_GeomFromText('POINT(5.0 5.0)', 4326)),
+  (3, ST_SetSRID(ST_GeogFromText('SRID=4326;POINT(1.0 2.0)'), 4004), ST_SetSRID(ST_GeomFromText('POINT(5.0 5.0)', 4326), 3857))
 
 query III
 SELECT
@@ -831,5 +832,6 @@ SELECT
 FROM geo_st_srid
 ORDER BY id
 ----
-1  3857  0
+1  4004  0
 2  4326  4326
+3  4004  3857
