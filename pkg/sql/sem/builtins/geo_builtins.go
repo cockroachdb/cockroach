@@ -768,8 +768,7 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			},
 			types.Float,
 			infoBuilder{
-				info:         `Returns the distance between the given geometries.`,
-				libraryUsage: usesGEOS,
+				info: `Returns the distance between the given geometries.`,
 			},
 			tree.VolatilityImmutable,
 		),
@@ -895,6 +894,28 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 	),
 	"st_dwithin": makeBuiltin(
 		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeometry)
+				b := args[1].(*tree.DGeometry)
+				dist := args[2].(*tree.DFloat)
+				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geometry_a is within distance units of geometry_b.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"geography_a", types.Geography},
