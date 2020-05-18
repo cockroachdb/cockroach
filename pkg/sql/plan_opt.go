@@ -128,6 +128,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		if err := checkResultType(resultCols[i].Typ); err != nil {
 			return 0, err
 		}
+		resultCols[i].TypeModifier = resultCols[i].Typ.TypeModifier()
 	}
 
 	// Verify that all placeholder types have been set.

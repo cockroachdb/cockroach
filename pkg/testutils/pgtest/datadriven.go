@@ -175,6 +175,10 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.CommandComplete{}
 	case "DataRow":
 		return &pgproto3.DataRow{}
+	case "DescribePortal":
+		return &pgproto3.Describe{ObjectType: 'P'}
+	case "DescribeStatement":
+		return &pgproto3.Describe{ObjectType: 'S'}
 	case "ErrorResponse":
 		return &pgproto3.ErrorResponse{}
 	case "Execute":
