@@ -1,5 +1,9 @@
 # LogicTest: local
 
+# The tests in this file target the legacy FK paths.
+statement ok
+SET optimizer_foreign_keys = false
+
 subtest DeleteCascade_Basic
 ### Basic Delete Cascade
 #     a
