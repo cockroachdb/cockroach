@@ -364,6 +364,22 @@ func IdentityReturnType(idx int) ReturnTyper {
 	}
 }
 
+// ArrayOfFirstNonNullReturnType returns an array type from the first non-null
+// type in the argument list.
+func ArrayOfFirstNonNullReturnType() ReturnTyper {
+	return func(args []TypedExpr) *types.T {
+		if len(args) == 0 {
+			return UnknownReturnType
+		}
+		for _, arg := range args {
+			if t := arg.ResolvedType(); t.Family() != types.UnknownFamily {
+				return types.MakeArray(t)
+			}
+		}
+		return types.Unknown
+	}
+}
+
 // FirstNonNullReturnType returns the type of the first non-null argument, or
 // types.Unknown if all arguments are null. There must be at least one argument,
 // or else FirstNonNullReturnType returns UnknownReturnType. This method is used

@@ -28,6 +28,7 @@ export class TableInfo {
   public rangeCount: number;
   public createStatement: string;
   public grants: protos.cockroach.server.serverpb.TableDetailsResponse.IGrant[];
+  public numReplicas: number;
   constructor(name: string, details: TableDetailsResponse, stats: TableStatsResponse) {
       this.name = name;
       this.id = details && details.descriptor_id.toNumber();
@@ -36,6 +37,7 @@ export class TableInfo {
       this.rangeCount = stats && stats.range_count && stats.range_count.toNumber();
       this.createStatement = details && details.create_table_statement;
       this.grants = details && details.grants;
+      this.numReplicas = details && details.zone_config && details.zone_config.num_replicas;
       if (stats) {
           this.mvccSize = stats.stats;
           this.physicalSize = FixLong(stats.approximate_disk_bytes).toNumber();
