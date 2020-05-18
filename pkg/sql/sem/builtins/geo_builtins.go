@@ -1111,6 +1111,53 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+
+	//
+	// Transformations
+	//
+	"st_setsrid": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"srid", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				srid := args[1].(*tree.DInt)
+				newGeom, err := g.Geometry.CloneWithSRID(geopb.SRID(*srid))
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: newGeom}, nil
+			},
+			Info: infoBuilder{
+				info: `Sets a Geometry to a new SRID without transforming the coordinates.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"srid", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				srid := args[1].(*tree.DInt)
+				newGeom, err := g.Geography.CloneWithSRID(geopb.SRID(*srid))
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeography{Geography: newGeom}, nil
+			},
+			Info: infoBuilder{
+				info: `Sets a Geography to a new SRID without transforming the coordinates.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 }
 
 // geometryOverload1 hides the boilerplate for builtins operating on one geometry.
