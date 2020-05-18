@@ -1281,9 +1281,10 @@ func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) err
 		anonStmtsStr = anonStmtsStr[:panicLogOutputCutoffChars] + " [...]"
 	}
 
-	return log.Safe(
-		fmt.Sprintf("panic while %s %d statements: %s", action, len(anonymized), anonStmtsStr),
-	).WithCause(r)
+	panicErr := log.PanicAsError(1, r)
+	return errors.WithSafeDetails(panicErr,
+		"panic while %s %d statements: %s",
+		errors.Safe(action), errors.Safe(len(anonymized)), errors.Safe(anonStmtsStr))
 }
 
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in

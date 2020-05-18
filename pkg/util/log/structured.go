@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -57,7 +58,8 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
 		if sv := settings.TODO(); sv != nil {
-			SendCrashReport(ctx, sv, depth+2, format, args, ReportTypePanic)
+			err := errors.NewWithDepthf(depth+1, "fatal error: "+format, args...)
+			sendCrashReport(ctx, sv, err, ReportTypePanic)
 		}
 	}
 	// MakeMessage already added the tags when forming msg, we don't want
