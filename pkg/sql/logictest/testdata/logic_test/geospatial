@@ -392,6 +392,81 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            true   false  true   false  false  false  true   false  false  false
 Square overlapping left and right square  Square overlapping left and right square  true   true   true   false  false  true   true   false  false  true
 
+# DWithin
+query TTB
+SELECT
+  a.dsc,
+  b.dsc,
+  ST_DWithin(a.geom, b.geom, 1)
+FROM geom_operators_test a
+JOIN geom_operators_test b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+Faraway point                             Faraway point                             true
+Faraway point                             Line going through left and right square  false
+Faraway point                             NULL                                      NULL
+Faraway point                             Point middle of Left Square               false
+Faraway point                             Point middle of Right Square              false
+Faraway point                             Square (left)                             false
+Faraway point                             Square (right)                            false
+Faraway point                             Square overlapping left and right square  false
+Line going through left and right square  Faraway point                             false
+Line going through left and right square  Line going through left and right square  true
+Line going through left and right square  NULL                                      NULL
+Line going through left and right square  Point middle of Left Square               true
+Line going through left and right square  Point middle of Right Square              true
+Line going through left and right square  Square (left)                             true
+Line going through left and right square  Square (right)                            true
+Line going through left and right square  Square overlapping left and right square  true
+NULL                                      Faraway point                             NULL
+NULL                                      Line going through left and right square  NULL
+NULL                                      NULL                                      NULL
+NULL                                      Point middle of Left Square               NULL
+NULL                                      Point middle of Right Square              NULL
+NULL                                      Square (left)                             NULL
+NULL                                      Square (right)                            NULL
+NULL                                      Square overlapping left and right square  NULL
+Point middle of Left Square               Faraway point                             false
+Point middle of Left Square               Line going through left and right square  true
+Point middle of Left Square               NULL                                      NULL
+Point middle of Left Square               Point middle of Left Square               true
+Point middle of Left Square               Point middle of Right Square              true
+Point middle of Left Square               Square (left)                             true
+Point middle of Left Square               Square (right)                            true
+Point middle of Left Square               Square overlapping left and right square  true
+Point middle of Right Square              Faraway point                             false
+Point middle of Right Square              Line going through left and right square  true
+Point middle of Right Square              NULL                                      NULL
+Point middle of Right Square              Point middle of Left Square               true
+Point middle of Right Square              Point middle of Right Square              true
+Point middle of Right Square              Square (left)                             true
+Point middle of Right Square              Square (right)                            true
+Point middle of Right Square              Square overlapping left and right square  true
+Square (left)                             Faraway point                             false
+Square (left)                             Line going through left and right square  true
+Square (left)                             NULL                                      NULL
+Square (left)                             Point middle of Left Square               true
+Square (left)                             Point middle of Right Square              true
+Square (left)                             Square (left)                             true
+Square (left)                             Square (right)                            true
+Square (left)                             Square overlapping left and right square  true
+Square (right)                            Faraway point                             false
+Square (right)                            Line going through left and right square  true
+Square (right)                            NULL                                      NULL
+Square (right)                            Point middle of Left Square               true
+Square (right)                            Point middle of Right Square              true
+Square (right)                            Square (left)                             true
+Square (right)                            Square (right)                            true
+Square (right)                            Square overlapping left and right square  true
+Square overlapping left and right square  Faraway point                             false
+Square overlapping left and right square  Line going through left and right square  true
+Square overlapping left and right square  NULL                                      NULL
+Square overlapping left and right square  Point middle of Left Square               true
+Square overlapping left and right square  Point middle of Right Square              true
+Square overlapping left and right square  Square (left)                             true
+Square overlapping left and right square  Square (right)                            true
+Square overlapping left and right square  Square overlapping left and right square  true
+
 # DE-9IM relations
 query TTTB
 SELECT
