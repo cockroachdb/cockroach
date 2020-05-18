@@ -403,11 +403,11 @@ func (s *externalSorter) internalCloseLocked(ctx context.Context) error {
 }
 
 func (s *externalSorter) IdempotentClose(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.close() {
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	return s.internalCloseLocked(ctx)
 }
 
