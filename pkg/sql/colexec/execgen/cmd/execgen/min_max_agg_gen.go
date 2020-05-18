@@ -57,8 +57,8 @@ func genMinMaxAgg(wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
 	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
-	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 3)
-	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
+	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
 	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
 	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)

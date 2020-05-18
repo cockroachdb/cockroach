@@ -59,14 +59,14 @@ type hashTypeCustomizer interface {
 }
 
 func (boolCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, v, _ string) string {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		return fmt.Sprintf(`
 			x := 0
 			if %[2]s {
     		x = 1
 			}
 			%[1]s = %[1]s*31 + uintptr(x)
-		`, target, v)
+		`, targetElem, vElem)
 	}
 }
 
@@ -80,25 +80,25 @@ const hashByteSliceString = `
 `
 
 func (bytesCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, v, _ string) string {
-		return fmt.Sprintf(hashByteSliceString, target, v)
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+		return fmt.Sprintf(hashByteSliceString, targetElem, vElem)
 	}
 }
 
 func (decimalCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, v, _ string) string {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		return fmt.Sprintf(`
 			// In order for equal decimals to hash to the same value we need to
 			// remove the trailing zeroes if there are any.
 			tmpDec := &decimalScratch.tmpDec1
 			tmpDec.Reduce(&%[1]s)
-			b := []byte(tmpDec.String())`, v) +
-			fmt.Sprintf(hashByteSliceString, target, "b")
+			b := []byte(tmpDec.String())`, vElem) +
+			fmt.Sprintf(hashByteSliceString, targetElem, "b")
 	}
 }
 
 func (c floatCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, v, _ string) string {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		// TODO(yuzefovich): think through whether this is appropriate way to hash
 		// NaNs.
 		return fmt.Sprintf(
@@ -108,37 +108,37 @@ func (c floatCustomizer) getHashAssignFunc() assignFunc {
 				f = 0
 			}
 			%[1]s = f64hash(noescape(unsafe.Pointer(&f)), %[1]s)
-`, target, v)
+`, targetElem, vElem)
 	}
 }
 
 func (c intCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, v, _ string) string {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		return fmt.Sprintf(`
 				// In order for integers with different widths but of the same value to
 				// to hash to the same value, we upcast all of them to int64.
 				asInt64 := int64(%[2]s)
 				%[1]s = memhash64(noescape(unsafe.Pointer(&asInt64)), %[1]s)`,
-			target, v)
+			targetElem, vElem)
 	}
 }
 
 func (c timestampCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, v, _ string) string {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		return fmt.Sprintf(`
 		  s := %[2]s.UnixNano()
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&s)), %[1]s)
-		`, target, v)
+		`, targetElem, vElem)
 	}
 }
 
 func (c intervalCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, target, v, _ string) string {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		return fmt.Sprintf(`
 		  months, days, nanos := %[2]s.Months, %[2]s.Days, %[2]s.Nanos()
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&months)), %[1]s)
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&days)), %[1]s)
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&nanos)), %[1]s)
-		`, target, v)
+		`, targetElem, vElem)
 	}
 }

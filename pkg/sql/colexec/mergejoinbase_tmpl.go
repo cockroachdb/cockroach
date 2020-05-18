@@ -69,7 +69,7 @@ type _GOTYPE interface{}
 
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the the second input == the third input.
-func _ASSIGN_EQ(_, _, _ interface{}) int {
+func _ASSIGN_EQ(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError("")
 }
 
@@ -119,7 +119,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 				col := batch.ColVec(int(colIdx)).TemplateType()
 				curVal = execgen.UNSAFEGET(col, tupleToLookAtIdx)
 				var match bool
-				_ASSIGN_EQ(match, prevVal, curVal)
+				_ASSIGN_EQ(match, prevVal, curVal, _, bufferedCol, col)
 				if !match {
 					return true
 				}

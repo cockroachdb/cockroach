@@ -102,11 +102,11 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 3)
 	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2  "HasNulls" $3}}`)
 
-	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 6)
+	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
-	assignLtRe := makeFunctionRegex("_ASSIGN_CMP", 3)
-	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 3))
+	assignLtRe := makeFunctionRegex("_ASSIGN_CMP", 5)
+	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 5))
 
 	s = replaceManipulationFuncs(s)
 

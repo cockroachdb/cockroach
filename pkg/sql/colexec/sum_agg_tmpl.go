@@ -53,7 +53,7 @@ const _TYPE_WIDTH = 0
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
-func _ASSIGN_ADD(_, _, _ string) {
+func _ASSIGN_ADD(_, _, _, _, _, _ string) {
 	colexecerror.InternalError("")
 }
 
@@ -212,7 +212,7 @@ func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS boo
 	isNull = false
 	// {{end}}
 	if !isNull {
-		_ASSIGN_ADD(a.scratch.curAgg, a.scratch.curAgg, col[i])
+		_ASSIGN_ADD(a.scratch.curAgg, a.scratch.curAgg, col[i], _, _, col)
 		a.scratch.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}

@@ -35,8 +35,8 @@ func genValuesDiffer(wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
 	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
-	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
+	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
 	s = replaceManipulationFuncs(s)
 

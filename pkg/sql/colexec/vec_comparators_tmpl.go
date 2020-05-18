@@ -71,7 +71,7 @@ const _TYPE_WIDTH = 0
 
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
-func _COMPARE(_, _, _ string) bool {
+func _COMPARE(_, _, _, _, _ string) bool {
 	colexecerror.InternalError("")
 }
 
@@ -116,7 +116,7 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	left := execgen.UNSAFEGET(c.vecs[vecIdx1], valIdx1)
 	right := execgen.UNSAFEGET(c.vecs[vecIdx2], valIdx2)
 	var cmp int
-	_COMPARE(cmp, left, right)
+	_COMPARE(cmp, left, right, c.vecs[vecIdx1], c.vecs[vecIdx2])
 	return cmp
 }
 
