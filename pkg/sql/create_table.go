@@ -1465,6 +1465,10 @@ func MakeTableDesc(
 				}
 				idx.Partitioning = partitioning
 			}
+			// TODO(mgartner): remove this once partial indexes are fully supported.
+			if d.Predicate != nil && !sessionData.PartialIndexes {
+				return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
+			}
 
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
@@ -1496,6 +1500,10 @@ func MakeTableDesc(
 					return desc, err
 				}
 				idx.Partitioning = partitioning
+			}
+			// TODO(mgartner): remove this once partial indexes are fully supported.
+			if d.Predicate != nil && !sessionData.PartialIndexes {
+				return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err

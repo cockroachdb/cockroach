@@ -1,9 +1,9 @@
 create_index_stmt ::=
-	'CREATE' 'UNIQUE' 'INDEX' opt_concurrently '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE' 'UNIQUE' 'INDEX' opt_concurrently '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE'  'INDEX' opt_concurrently '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE'  'INDEX' opt_concurrently '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' opt_concurrently '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' opt_concurrently '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE'  'INVERTED' 'INDEX' opt_concurrently '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE'  'INVERTED' 'INDEX' opt_concurrently '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
+	'CREATE' 'UNIQUE' 'INDEX' opt_concurrently '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INDEX' opt_concurrently '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause
+	| 'CREATE'  'INDEX' opt_concurrently '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause
+	| 'CREATE'  'INDEX' opt_concurrently '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' opt_concurrently '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' opt_concurrently '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause
+	| 'CREATE'  'INVERTED' 'INDEX' opt_concurrently '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause
+	| 'CREATE'  'INVERTED' 'INDEX' opt_concurrently '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_where_clause

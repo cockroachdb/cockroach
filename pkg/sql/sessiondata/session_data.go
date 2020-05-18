@@ -56,6 +56,9 @@ type SessionData struct {
 	// OptimizerUseMultiColStats indicates whether we should use multi-column
 	// statistics for cardinality estimation in the optimizer.
 	OptimizerUseMultiColStats bool
+	// PartialIndexes indicates whether creation of partial indexes are allowed.
+	// TODO(mgartner): remove this once partial indexes are fully supported.
+	PartialIndexes bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.
