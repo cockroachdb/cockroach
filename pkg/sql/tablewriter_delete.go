@@ -65,30 +65,6 @@ func (td *tableDeleter) row(ctx context.Context, values tree.Datums, traceKV boo
 	return td.rd.DeleteRow(ctx, td.b, values, row.CheckFKs, traceKV)
 }
 
-// fastPathDeleteAvailable returns true if the fastDelete optimization can be used.
-func fastPathDeleteAvailable(ctx context.Context, desc *ImmutableTableDescriptor) bool {
-	indexes := desc.DeletableIndexes()
-	if len(indexes) != 0 {
-		if log.V(2) {
-			log.Infof(ctx, "delete forced to scan: values required to update %d secondary indexes", len(indexes))
-		}
-		return false
-	}
-	if desc.IsInterleaved() {
-		if log.V(2) {
-			log.Info(ctx, "delete forced to scan: table is interleaved")
-		}
-		return false
-	}
-	if len(desc.InboundFKs) > 0 {
-		if log.V(2) {
-			log.Info(ctx, "delete forced to scan: table is referenced by foreign keys")
-		}
-		return false
-	}
-	return true
-}
-
 // deleteAllRows runs the kv operations necessary to delete all sql rows in the
 // table passed at construction. This may require a scan.
 //
