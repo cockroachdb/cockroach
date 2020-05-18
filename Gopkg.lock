@@ -1605,10 +1605,11 @@
   version = "v1.4.0"
 
 [[projects]]
-  digest = "1:48c4d87d7cb5dac26d1654c6584019713c9e68da7b0f695dddf21a80a08e39eb"
+  digest = "1:a3b5100e5cf52c2036356bffa283ce8618d4a1c21221ba05fd6eebb95962fedb"
   name = "github.com/twpayne/go-geom"
   packages = [
     ".",
+    "bigxy",
     "encoding/ewkb",
     "encoding/ewkbhex",
     "encoding/geojson",
@@ -1617,6 +1618,12 @@
     "encoding/wkbcommon",
     "encoding/wkbhex",
     "encoding/wkt",
+    "xy/internal",
+    "xy/internal/centralendpoint",
+    "xy/internal/hcoords",
+    "xy/lineintersection",
+    "xy/lineintersector",
+    "xy/orientation",
   ]
   pruneopts = "UT"
   revision = "3402552da1eb9d7a1c8a9ecb05395b076d8e7bf6"
@@ -2201,6 +2208,7 @@
     "github.com/twpayne/go-geom/encoding/wkb",
     "github.com/twpayne/go-geom/encoding/wkbhex",
     "github.com/twpayne/go-geom/encoding/wkt",
+    "github.com/twpayne/go-geom/xy/lineintersector",
     "github.com/wadey/gocovmerge",
     "go.etcd.io/etcd/raft",
     "go.etcd.io/etcd/raft/confchange",
