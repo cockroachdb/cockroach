@@ -71,7 +71,7 @@ type rangefeedTxnPusher struct {
 // transactions.
 func (tp *rangefeedTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, error) {
 	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
 	for i := range txns {
 		txn := &txns[i]
@@ -94,7 +94,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		return nil, pErr.GoError()
 	}
 
-	pushedTxns := make([]roachpb.Transaction, 0, len(pushedTxnMap))
+	pushedTxns := make([]*roachpb.Transaction, 0, len(pushedTxnMap))
 	for _, txn := range pushedTxnMap {
 		pushedTxns = append(pushedTxns, txn)
 	}
@@ -103,11 +103,11 @@ func (tp *rangefeedTxnPusher) PushTxns(
 
 // CleanupTxnIntentsAsync is part of the rangefeed.TxnPusher interface.
 func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
-	ctx context.Context, txns []roachpb.Transaction,
+	ctx context.Context, txns []*roachpb.Transaction,
 ) error {
 	endTxns := make([]result.EndTxnIntents, len(txns))
-	for i := range txns {
-		endTxns[i].Txn = &txns[i]
+	for i, txn := range txns {
+		endTxns[i].Txn = txn
 		endTxns[i].Poison = true
 	}
 	return tp.ir.CleanupTxnIntentsAsync(ctx, tp.r.RangeID, endTxns, true /* allowSyncProcessing */)
