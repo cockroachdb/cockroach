@@ -7,7 +7,8 @@ const.eg.go
 count_agg.eg.go
 distinct.eg.go
 hashjoiner.eg.go
-hashtable.eg.go
+hashtable_distinct.eg.go
+hashtable_full.eg.go
 hash_utils.eg.go
 hash_aggregator.eg.go
 like_ops.eg.go
