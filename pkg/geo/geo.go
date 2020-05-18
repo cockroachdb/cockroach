@@ -435,3 +435,12 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 		Shape: shape,
 	}, nil
 }
+
+// NewGeographyFromGeom Geography Object from geom.T.
+func NewGeographyFromGeom(g geom.T) (*Geography, error) {
+	spatialObject, err := spatialObjectFromGeom(g)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(spatialObject), nil
+}
