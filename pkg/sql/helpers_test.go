@@ -25,6 +25,9 @@ type tableVersionID struct {
 	version sqlbase.DescriptorVersion
 }
 
+// SQLTxnName is the transaction name used by sql transactions.
+const SQLTxnName = sqlTxnName
+
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager
 // operations).

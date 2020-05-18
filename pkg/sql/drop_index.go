@@ -86,12 +86,15 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// drop need to be visible to the second drop.
 		tableDesc, err := params.p.ResolveMutableTableDescriptor(
 			ctx, index.tn, true /*required*/, ResolveRequireTableDesc)
-		if err != nil {
+		if sqlbase.IsUndefinedRelationError(err) {
 			// Somehow the descriptor we had during planning is not there
 			// any more.
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"table descriptor for %q became unavailable within same txn",
 				tree.ErrString(index.tn))
+		}
+		if err != nil {
+			return err
 		}
 
 		// If we couldn't find the index by name, this is either a legitimate error or
