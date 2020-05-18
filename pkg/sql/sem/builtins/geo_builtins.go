@@ -837,6 +837,24 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_maxdistance": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MaxDistance(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: `Returns the maximum distance between the given geometries. ` +
+					`Note if the geometries are the same, it will return the maximum distance between the geometry's vertexes.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Binary Predicates
@@ -914,6 +932,32 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 				canUseIndex:  true,
 			},
 		),
+	),
+	"st_dfullywithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeometry)
+				b := args[1].(*tree.DGeometry)
+				dist := args[2].(*tree.DFloat)
+				ret, err := geomfn.DFullyWithin(a.Geometry, b.Geometry, float64(*dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if all of geometry_a is in distance units of geometry_b. " +
+					"In other words, the max distance between geometry_a and geometry_b is less than distance units.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_dwithin": makeBuiltin(
 		defProps(),

@@ -750,6 +750,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
 </span></td></tr>
+<tr><td><a name="st_dfullywithin"></a><code>st_dfullywithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if all of geometry_a is in distance units of geometry_b. In other words, the max distance between geometry_a and geometry_b is less than distance units.</p>
+</span></td></tr>
 <tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.  Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points using S2. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function will automatically use any available index.</p>
@@ -862,6 +864,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_linestringfromwkb"></a><code>st_linestringfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_linestringfromwkb"></a><code>st_linestringfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not LineString, NULL is returned.</p>
+</span></td></tr>
+<tr><td><a name="st_maxdistance"></a><code>st_maxdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum distance between the given geometries. Note if the geometries are the same, it will return the maximum distance between the geometry’s vertexes.</p>
 </span></td></tr>
 <tr><td><a name="st_mlinefromtext"></a><code>st_mlinefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>

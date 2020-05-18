@@ -28,6 +28,15 @@ func MinDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
 	return minDistanceInternal(a, b, 0)
 }
 
+// MaxDistance returns the maximum distance between geometries A and B.
+// This is determined by the maximum minimum-distance between the two geometries.
+func MaxDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
+	if a.SRID() != b.SRID() {
+		return 0, geo.NewMismatchingSRIDsError(a, b)
+	}
+	return maxDistanceInternal(a, b, math.MaxFloat64)
+}
+
 // DWithin determines if any part of geometry A is within D units of geometry B.
 func DWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 	if a.SRID() != b.SRID() {
@@ -41,6 +50,31 @@ func DWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 		return false, err
 	}
 	return dist <= d, nil
+}
+
+// DFullyWithin determines if any part of geometry A is fully within D units of geometry B.
+// This is determined by the maximum minimum-distance between the two geometries.
+func DFullyWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if d < 0 {
+		return false, errors.Newf("dwithin distance cannot be less than zero")
+	}
+	dist, err := maxDistanceInternal(a, b, d)
+	if err != nil {
+		return false, err
+	}
+	return dist <= d, nil
+}
+
+// maxDistanceInternal finds the maximum distance between two geometries.
+// We can re-use the same algorithm as min-distance, allowing skips of checks that involve
+// the interiors or intersections as those will always be less then the maximum min-distance.
+func maxDistanceInternal(a *geo.Geometry, b *geo.Geometry, stopAfterGT float64) (float64, error) {
+	u := newGeomMaxDistanceUpdater(stopAfterGT)
+	c := &geomDistanceCalculator{updater: u}
+	return distanceInternal(a, b, c)
 }
 
 // minDistanceInternal finds the minimum distance between two geometries.
@@ -273,9 +307,60 @@ func (u *geomMinDistanceUpdater) OnIntersects() bool {
 	return true
 }
 
+// IsMaxDistance implements the geodist.DistanceUpdater interface.
+func (u *geomMinDistanceUpdater) IsMaxDistance() bool {
+	return false
+}
+
+// geomMaxDistanceUpdater finds the maximum distance using geom calculations.
+// Methods will return early if it finds a distance > stopAfterGT.
+type geomMaxDistanceUpdater struct {
+	currentValue float64
+	stopAfterGT  float64
+}
+
+var _ geodist.DistanceUpdater = (*geomMaxDistanceUpdater)(nil)
+
+// newGeomMaxDistanceUpdater returns a new geomMaxDistanceUpdater with the
+// correct arguments set up.
+func newGeomMaxDistanceUpdater(stopAfterGT float64) *geomMaxDistanceUpdater {
+	return &geomMaxDistanceUpdater{
+		currentValue: 0,
+		stopAfterGT:  stopAfterGT,
+	}
+}
+
+// Distance implements the DistanceUpdater interface.
+func (u *geomMaxDistanceUpdater) Distance() float64 {
+	return u.currentValue
+}
+
+// Update implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistanceUpdater) Update(aInterface geodist.Point, bInterface geodist.Point) bool {
+	a := aInterface.(*geomGeodistPoint).Coord
+	b := bInterface.(*geomGeodistPoint).Coord
+
+	dist := coordNorm(coordSub(a, b))
+	if dist > u.currentValue {
+		u.currentValue = dist
+		return dist > u.stopAfterGT
+	}
+	return false
+}
+
+// OnIntersects implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistanceUpdater) OnIntersects() bool {
+	return false
+}
+
+// IsMaxDistance implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistanceUpdater) IsMaxDistance() bool {
+	return true
+}
+
 // geomDistanceCalculator implements geodist.DistanceCalculator
 type geomDistanceCalculator struct {
-	updater *geomMinDistanceUpdater
+	updater geodist.DistanceUpdater
 }
 
 var _ geodist.DistanceCalculator = (*geomDistanceCalculator)(nil)
