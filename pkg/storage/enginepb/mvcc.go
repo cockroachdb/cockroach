@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TxnEpoch is a zero-indexed epoch for a transaction. When a transaction
@@ -387,7 +387,7 @@ func (t TxnMeta) SafeMessage() string {
 	return buf.String()
 }
 
-var _ log.SafeMessager = (*TxnMeta)(nil)
+var _ errors.SafeMessager = (*TxnMeta)(nil)
 
 // FormatBytesAsKey is injected by module roachpb as dependency upon initialization.
 var FormatBytesAsKey = func(k []byte) string {
