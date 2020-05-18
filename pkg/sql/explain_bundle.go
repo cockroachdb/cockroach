@@ -486,6 +486,8 @@ func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
 		{sessionSetting: "experimental_optimizer_foreign_key_cascades", clusterSetting: optDrivenFKCascadesClusterMode},
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode},
+		// TODO(mgartner): remove this once partial indexes are fully supported.
+		{sessionSetting: "partial_indexes", clusterSetting: partialIndexClusterMode},
 	}
 
 	for _, s := range relevantSettings {
