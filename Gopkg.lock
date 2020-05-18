@@ -188,11 +188,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:caed868e37c6cda382a217d8ad4f55da579e1a1d046836de57f11a569e383443"
+  digest = "1:9270dd50e9aafb05285e767cf2ecc395f74c1682582d3b2e8dbaf0f472d978fc"
   name = "github.com/andy-kimball/arenaskl"
   packages = ["."]
   pruneopts = "UT"
-  revision = "6bf06cf57626e536063e9398a57dfe1417ed0799"
+  revision = "7f79c0f6e4fa77a7f8a296b4d937ea4708e8ccc7"
 
 [[projects]]
   digest = "1:66b3310cf22cdc96c35ef84ede4f7b9b370971c4025f394c89a2638729653b11"
