@@ -52,6 +52,13 @@ func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physi
 	return *result
 }
 
+// ExprIsNeverNull returns true if we can prove that the given scalar expression
+// is always non-NULL. Any variables that refer to columns in the notNullCols
+// set are assumed to be non-NULL. See memo.ExprIsNeverNull.
+func (c *CustomFuncs) ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
+	return memo.ExprIsNeverNull(e, notNullCols)
+}
+
 // ----------------------------------------------------------------------
 //
 // Typing functions

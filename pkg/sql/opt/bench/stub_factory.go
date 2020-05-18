@@ -308,6 +308,7 @@ func (f *stubFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	interleavedTables []cat.Table,
 	maxReturnedKeys int,
 	allowAutoCommit bool,
 ) (exec.Node, error) {

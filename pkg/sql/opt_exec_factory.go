@@ -1753,23 +1753,16 @@ func (ef *execFactory) ConstructDelete(
 		return nil, err
 	}
 
-	// Determine the foreign key tables involved in the delete.
-	// This will include all the interleaved child tables as we need them
-	// to see if we can execute the fast path delete.
-	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckDeletes)
-	if err != nil {
-		return nil, err
-	}
-
-	fastPathInterleaved := canDeleteFastInterleaved(tabDesc, fkTables)
-	if fastPathNode, ok := maybeCreateDeleteFastNode(
-		ctx, input.(planNode), tabDesc, fkTables, fastPathInterleaved, rowsNeeded); ok {
-		return fastPathNode, nil
-	}
-
-	checkFKs := row.CheckFKs
-	if skipFKChecks {
-		checkFKs = row.SkipFKs
+	var fkTables row.FkTableMetadata
+	checkFKs := row.SkipFKs
+	if !skipFKChecks {
+		checkFKs = row.CheckFKs
+		// Determine the foreign key tables involved in the update.
+		var err error
+		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckDeletes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Create the table deleter, which does the bulk of the work. In the HP,
 	// the deleter derives the columns that need to be fetched. By contrast, the
@@ -1834,6 +1827,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	interleavedTables []cat.Table,
 	maxReturnedKeys int,
 	allowAutoCommit bool,
 ) (exec.Node, error) {
@@ -1870,12 +1864,21 @@ func (ef *execFactory) ConstructDeleteRange(
 		autoCommitEnabled = false
 	}
 
-	return &deleteRangeNode{
+	dr := &deleteRangeNode{
 		interleavedFastPath: false,
 		spans:               spans,
 		desc:                tabDesc,
 		autoCommitEnabled:   autoCommitEnabled,
-	}, nil
+	}
+
+	if len(interleavedTables) > 0 {
+		dr.interleavedFastPath = true
+		dr.interleavedDesc = make([]*sqlbase.ImmutableTableDescriptor, len(interleavedTables))
+		for i := range dr.interleavedDesc {
+			dr.interleavedDesc[i] = interleavedTables[i].(*optTable).desc
+		}
+	}
+	return dr, nil
 }
 
 // ConstructCreateTable is part of the exec.Factory interface.
