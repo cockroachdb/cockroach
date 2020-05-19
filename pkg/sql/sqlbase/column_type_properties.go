@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,15 +23,25 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// LimitValueWidth checks that the width (for strings, byte arrays, and bit
-// strings), precision (time) and scale (for decimals) of the value fits the
-// specified column type.
+// AdjustValueToColumnType checks that the width (for strings, byte arrays, and bit
+// strings), precision (time), shape/srid (for geospatial types) and scale (for decimals)
+// of the value fits the specified column type.
+//
 // In case of decimals, it can truncate fractional digits in the input
 // value in order to fit the target column. If the input value fits the target
 // column, it is returned unchanged. If the input value can be truncated to fit,
 // then a truncated copy is returned. Otherwise, an error is returned.
+//
+// In the case of time, it can truncate fractional digits of time datums
+// to its relevant rounding for the given type definition.
+//
+// In the case of geospatial types, it will check whether the SRID and Shape in the
+// datum matches the type definition.
+//
 // This method is used by INSERT and UPDATE.
-func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.Datum, err error) {
+func AdjustValueToColumnType(
+	typ *types.T, inVal tree.Datum, name *string,
+) (outVal tree.Datum, err error) {
 	switch typ.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
 		var sv string
@@ -103,7 +114,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 			var outArr *tree.DArray
 			elementType := typ.ArrayContents()
 			for i, inElem := range inArr.Array {
-				outElem, err := LimitValueWidth(elementType, inElem, name)
+				outElem, err := AdjustValueToColumnType(elementType, inElem, name)
 				if err != nil {
 					return nil, err
 				}
@@ -146,6 +157,26 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				return nil, err
 			}
 			return tree.NewDInterval(in.Duration, itm), nil
+		}
+	case types.GeometryFamily:
+		if in, ok := inVal.(*tree.DGeometry); ok {
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				in.Geometry,
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
+		}
+	case types.GeographyFamily:
+		if in, ok := inVal.(*tree.DGeography); ok {
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				in.Geography,
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return inVal, nil

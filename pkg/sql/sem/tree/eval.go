@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -3697,15 +3698,28 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDGeography(d.Contents)
 		case *DGeography:
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				d.Geography,
+				t.InternalType.GeoMetadata.SRID,
+				t.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
 			return d, nil
 		case *DGeometry:
 			g, err := d.AsGeography()
 			if err != nil {
 				return nil, err
 			}
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				g,
+				t.InternalType.GeoMetadata.SRID,
+				t.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
 			return &DGeography{g}, nil
 		}
-
 	case types.GeometryFamily:
 		switch d := d.(type) {
 		case *DString:
@@ -3713,8 +3727,22 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDGeometry(d.Contents)
 		case *DGeometry:
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				d.Geometry,
+				t.InternalType.GeoMetadata.SRID,
+				t.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
 			return d, nil
 		case *DGeography:
+			if err := geo.GeospatialTypeFitsColumnMetadata(
+				d.Geography,
+				t.InternalType.GeoMetadata.SRID,
+				t.InternalType.GeoMetadata.Shape,
+			); err != nil {
+				return nil, err
+			}
 			return &DGeometry{d.AsGeometry()}, nil
 		}
 

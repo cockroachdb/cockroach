@@ -24,6 +24,10 @@ import (
 // EWKBEncodingFormat is the encoding format for EWKB.
 var EWKBEncodingFormat = binary.LittleEndian
 
+//
+// Geospatial Type
+//
+
 // GeospatialType are functions that are common between all Geospatial types.
 type GeospatialType interface {
 	// SRID returns the SRID of the given type.
@@ -34,6 +38,22 @@ type GeospatialType interface {
 
 var _ GeospatialType = (*Geometry)(nil)
 var _ GeospatialType = (*Geography)(nil)
+
+// GeospatialTypeFitsColumnMetadata determines whether a GeospatialType is compatible with the
+// given SRID and Shape.
+// Returns an error if the types does not fit.
+func GeospatialTypeFitsColumnMetadata(t GeospatialType, srid geopb.SRID, shape geopb.Shape) error {
+	// SRID 0 can take in any SRID. Otherwise SRIDs must match.
+	if srid != 0 && t.SRID() != srid {
+		return errors.Newf("object SRID %d does not match column SRID %d", t.SRID(), srid)
+	}
+	// Shape_Geometry/Shape_Unset can take in any kind of shape.
+	// Otherwise, shapes must match.
+	if shape != geopb.Shape_Unset && shape != geopb.Shape_Geometry && shape != t.Shape() {
+		return errors.Newf("object type %s does not match column type %s", t.Shape(), shape)
+	}
+	return nil
+}
 
 //
 // Geometry
@@ -134,7 +154,7 @@ func MustParseGeometryFromEWKBRaw(ewkb geopb.EWKB) *Geometry {
 	return ret
 }
 
-// AsGeography converts a given Geometry to it's Geography form.
+// AsGeography converts a given Geometry to its Geography form.
 func (g *Geometry) AsGeography() (*Geography, error) {
 	if g.SRID() != 0 {
 		// TODO(otan): check SRID is latlng
