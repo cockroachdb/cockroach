@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/gogo/protobuf/proto"
 )
 
 // TestRangeLookupRace tests that a RangeLookup will retry its scanning process
@@ -30,25 +29,22 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	desc1BeforeSplit := roachpb.RangeDescriptor{
-		RangeID:              1,
-		StartKey:             roachpb.RKey("j"),
-		EndKey:               roachpb.RKey("p"),
-		Generation:           proto.Int64(0),
-		GenerationComparable: proto.Bool(true),
+		RangeID:    1,
+		StartKey:   roachpb.RKey("j"),
+		EndKey:     roachpb.RKey("p"),
+		Generation: 0,
 	}
 	desc1AfterSplit := roachpb.RangeDescriptor{
-		RangeID:              1,
-		StartKey:             roachpb.RKey("j"),
-		EndKey:               roachpb.RKey("m"),
-		Generation:           proto.Int64(1),
-		GenerationComparable: proto.Bool(true),
+		RangeID:    1,
+		StartKey:   roachpb.RKey("j"),
+		EndKey:     roachpb.RKey("m"),
+		Generation: 1,
 	}
 	desc2AfterSplit := roachpb.RangeDescriptor{
-		RangeID:              2,
-		StartKey:             roachpb.RKey("m"),
-		EndKey:               roachpb.RKey("p"),
-		Generation:           proto.Int64(1),
-		GenerationComparable: proto.Bool(true),
+		RangeID:    2,
+		StartKey:   roachpb.RKey("m"),
+		EndKey:     roachpb.RKey("p"),
+		Generation: 1,
 	}
 
 	lookupKey := roachpb.Key("k")

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/compactor"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -63,9 +62,8 @@ func TrackRaftProtos() func() []reflect.Type {
 
 	// Hard-coded protos for which we don't want to change the encoding. These
 	// are not "below raft" in the normal sense, but instead are used as part of
-	// conditional put operations.
+	// conditional put operations. This is a bad practice - see #38308.
 	belowRaftProtos.Lock()
-	belowRaftProtos.inner[reflect.TypeOf(&roachpb.RangeDescriptor{})] = struct{}{}
 	belowRaftProtos.inner[reflect.TypeOf(&storagepb.Liveness{})] = struct{}{}
 	belowRaftProtos.Unlock()
 

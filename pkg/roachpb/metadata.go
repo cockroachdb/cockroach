@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
@@ -238,28 +237,10 @@ func (r *RangeDescriptor) IsInitialized() bool {
 	return len(r.EndKey) != 0
 }
 
-// GetGeneration returns the generation of this RangeDescriptor.
-func (r *RangeDescriptor) GetGeneration() int64 {
-	if r.Generation != nil {
-		return *r.Generation
-	}
-	return 0
-}
-
 // IncrementGeneration increments the generation of this RangeDescriptor.
+// This method mutates the receiver; do not call it with shared RangeDescriptors.
 func (r *RangeDescriptor) IncrementGeneration() {
-	// Create a new *int64 for the new generation. We permit shallow copies of
-	// RangeDescriptors, so we need to be careful not to mutate the
-	// potentially-shared generation counter.
-	r.Generation = proto.Int64(r.GetGeneration() + 1)
-}
-
-// GetGenerationComparable returns if the generation of this RangeDescriptor is comparable.
-func (r *RangeDescriptor) GetGenerationComparable() bool {
-	if r.GenerationComparable == nil {
-		return false
-	}
-	return *r.GenerationComparable
+	r.Generation++
 }
 
 // GetStickyBit returns the sticky bit of this RangeDescriptor.
@@ -320,10 +301,7 @@ func (r RangeDescriptor) String() string {
 	} else {
 		buf.WriteString("<no replicas>")
 	}
-	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.GetGeneration())
-	if !r.GetGenerationComparable() {
-		buf.WriteString("?")
-	}
+	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.Generation)
 	if s := r.GetStickyBit(); !s.IsEmpty() {
 		fmt.Fprintf(&buf, ", sticky=%s", s)
 	}
