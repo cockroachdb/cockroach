@@ -1052,7 +1052,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 	// work, because the encoding does not uniquely represent some values which
 	// should not be considered equivalent by the interner (e.g. decimal values
 	// 1.0 and 1.00).
-	if !sqlbase.DatumTypeHasCompositeKeyEncoding(val.ResolvedType()) {
+	if !sqlbase.HasCompositeKeyEncoding(val.ResolvedType()) {
 		var err error
 		b, err = sqlbase.EncodeTableKey(b, val, encoding.Ascending)
 		if err == nil {

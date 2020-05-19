@@ -527,7 +527,7 @@ func (c *CustomFuncs) findConstantFilterCols(
 			// different forms of the same value.
 			colID := cons.Columns.Get(0).ID()
 			colTyp := tab.Column(tabID.ColumnOrdinal(colID)).DatumType()
-			if sqlbase.DatumTypeHasCompositeKeyEncoding(colTyp) {
+			if sqlbase.HasCompositeKeyEncoding(colTyp) {
 				continue
 			}
 

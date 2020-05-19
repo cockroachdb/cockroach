@@ -1309,22 +1309,16 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 // key, so that different strings that collate equal cannot both be used as
 // keys. The value part is the usual UTF-8 encoding of the string, stored so
 // that it can be recovered later for inspection/display.
-func HasCompositeKeyEncoding(semanticType *types.T) bool {
-	switch semanticType.Family() {
+func HasCompositeKeyEncoding(typ *types.T) bool {
+	switch typ.Family() {
 	case types.CollatedStringFamily,
 		types.FloatFamily,
 		types.DecimalFamily:
 		return true
 	case types.ArrayFamily:
-		return HasCompositeKeyEncoding(semanticType.ArrayContents())
+		return HasCompositeKeyEncoding(typ.ArrayContents())
 	}
 	return false
-}
-
-// DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
-// which works on datum types.
-func DatumTypeHasCompositeKeyEncoding(typ *types.T) bool {
-	return HasCompositeKeyEncoding(typ)
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
