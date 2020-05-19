@@ -588,7 +588,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
 				typ := mem.Metadata().ColumnMeta(i).Type
-				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
+				if sqlbase.HasCompositeKeyEncoding(typ) {
 					composite = true
 					break
 				}

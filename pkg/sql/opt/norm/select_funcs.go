@@ -24,7 +24,7 @@ func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
 	filterProps := src.ScalarProps()
 	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
 		colType := c.f.Metadata().ColumnMeta(i).Type
-		if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+		if sqlbase.HasCompositeKeyEncoding(colType) {
 			return false
 		}
 	}
