@@ -134,24 +134,40 @@ func MustParseGeometryFromEWKBRaw(ewkb geopb.EWKB) *Geometry {
 	return ret
 }
 
-// AsGeography converts a given Geometry to it's Geography form.
+// AsGeography converts a given Geometry to its Geography form.
 func (g *Geometry) AsGeography() (*Geography, error) {
 	if g.SRID() != 0 {
 		// TODO(otan): check SRID is latlng
 		return NewGeography(g.SpatialObject), nil
 	}
 
-	// Set a default SRID if one is not already set.
-	t, err := ewkb.Unmarshal(g.EWKB())
-	if err != nil {
-		return nil, err
-	}
-	adjustGeomSRID(t, geopb.DefaultGeographySRID)
-	spatialObject, err := spatialObjectFromGeom(t)
+	spatialObject, err := adjustEWKBSRID(g.EWKB(), geopb.DefaultGeographySRID)
 	if err != nil {
 		return nil, err
 	}
 	return NewGeography(spatialObject), nil
+}
+
+// CloneWithSRID sets a given Geometry's SRID to another, without any transformations.
+// Returns a new Geometry object.
+func (g *Geometry) CloneWithSRID(srid geopb.SRID) (*Geometry, error) {
+	spatialObject, err := adjustEWKBSRID(g.EWKB(), srid)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeometry(spatialObject), nil
+}
+
+// adjustEWKBSRID returns the SpatialObject of an EWKB that has been overwritten
+// with the new given SRID.
+func adjustEWKBSRID(b geopb.EWKB, srid geopb.SRID) (geopb.SpatialObject, error) {
+	// Set a default SRID if one is not already set.
+	t, err := ewkb.Unmarshal(b)
+	if err != nil {
+		return geopb.SpatialObject{}, err
+	}
+	adjustGeomSRID(t, srid)
+	return spatialObjectFromGeom(t)
 }
 
 // AsGeomT returns the geometry as a geom.T object.
@@ -264,7 +280,17 @@ func MustParseGeographyFromEWKBRaw(ewkb geopb.EWKB) *Geography {
 	return ret
 }
 
-// AsGeometry converts a given Geography to it's Geometry form.
+// CloneWithSRID sets a given Geography's SRID to another, without any transformations.
+// Returns a new Geography object.
+func (g *Geography) CloneWithSRID(srid geopb.SRID) (*Geography, error) {
+	spatialObject, err := adjustEWKBSRID(g.EWKB(), srid)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(spatialObject), nil
+}
+
+// AsGeometry converts a given Geography to its Geometry form.
 func (g *Geography) AsGeometry() *Geometry {
 	return NewGeometry(g.SpatialObject)
 }
@@ -289,7 +315,7 @@ func (g *Geography) Shape() geopb.Shape {
 	return g.SpatialObject.Shape
 }
 
-// AsS2 converts a given Geography into it's S2 form.
+// AsS2 converts a given Geography into its S2 form.
 func (g *Geography) AsS2() ([]s2.Region, error) {
 	geomRepr, err := g.AsGeomT()
 	if err != nil {
@@ -401,7 +427,7 @@ func S2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 }
 
 //
-// common
+// Common
 //
 
 // spatialObjectFromGeom creates a geopb.SpatialObject from a geom.T.
