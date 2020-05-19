@@ -962,6 +962,11 @@ func NewPutInline(key Key, value Value) Request {
 
 // NewConditionalPut returns a Request initialized to put value as a byte
 // slice at key if the existing value at key equals expValueBytes.
+//
+// expValue can have the checksum filled in, or not. If it is filled in, the
+// checksum is asserted to be correct for this key (the checksum includes the
+// key) - which practically means that expValue is expected to have come from a
+// previous read of key. If it's not filled in, CPut will fill it in.
 func NewConditionalPut(key Key, value, expValue Value, allowNotExist bool) Request {
 	value.InitChecksum(key)
 	var expValuePtr *Value
@@ -969,7 +974,13 @@ func NewConditionalPut(key Key, value, expValue Value, allowNotExist bool) Reque
 		// Make a copy to avoid forcing expValue itself on to the heap.
 		expValueTmp := expValue
 		expValuePtr = &expValueTmp
-		expValue.InitChecksum(key)
+		if expValue.checksum() != checksumUninitialized {
+			if err := expValue.Verify(key); err != nil {
+				panic(err)
+			}
+		} else {
+			expValue.InitChecksum(key)
+		}
 	}
 	return &ConditionalPutRequest{
 		RequestHeader: RequestHeader{

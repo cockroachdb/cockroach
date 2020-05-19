@@ -410,6 +410,11 @@ func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 //
+// expValue can have the checksum filled in, or not. If it is filled in, the
+// checksum is asserted to be correct for this key (the checksum includes the
+// key) - which practically means that expValue is expected to have come from a
+// previous read of key. If it's not filled in, CPut will fill it in.
+//
 // Note that, as an exception to the general rule, it's ok to send more requests
 // after getting a ConditionFailedError. See comments on ConditionalPutRequest
 // for more info.

@@ -411,6 +411,11 @@ func (b *Batch) PutInline(key, value interface{}) {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
+//
+// expValue can have the checksum filled in, or not. If it is filled in, the
+// checksum is asserted to be correct for this key (the checksum includes the
+// key) - which practically means that expValue is expected to have come from a
+// previous read of key. If it's not filled in, CPut will fill it in.
 func (b *Batch) CPut(key, value interface{}, expValue *roachpb.Value) {
 	b.cputInternal(key, value, expValue, false)
 }
@@ -436,6 +441,10 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue *roachp
 	b.cputInternal(key, value, expValue, true)
 }
 
+// expValue can have the checksum filled in, or not. If it is filled in, the
+// checksum is asserted to be correct for this key (the checksum includes the
+// key) - which practically means that expValue is expected to have come from a
+// previous read of key. If it's not filled in, CPut will fill it in.
 func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, allowNotExist bool) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -450,10 +459,6 @@ func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, al
 	var ev roachpb.Value
 	if expValue != nil {
 		ev = *expValue
-		// This expected value is assumed to come from a kv read or from writing a
-		// roachpb.Value. In both cases it will have a checksum set. Instead of
-		// requiring callers to clear it, do it for them.
-		ev.ClearChecksum()
 	}
 	b.appendReqs(roachpb.NewConditionalPut(k, v, ev, allowNotExist))
 	b.initResult(1, 1, notRaw, nil)

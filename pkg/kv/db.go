@@ -382,6 +382,11 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
+//
+// expValue can have the checksum filled in, or not. If it is filled in, the
+// checksum is asserted to be correct for this key (the checksum includes the
+// key) - which practically means that expValue is expected to have come from a
+// previous read of key. If it's not filled in, CPut will fill it in.
 func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
