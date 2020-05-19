@@ -424,7 +424,7 @@ func enforceLocalColumnConstraints(row tree.Datums, cols []sqlbase.ColumnDescrip
 		if !col.Nullable && row[i] == tree.DNull {
 			return sqlbase.NewNonNullViolationError(col.Name)
 		}
-		outVal, err := sqlbase.LimitValueWidth(col.Type, row[i], &col.Name)
+		outVal, err := sqlbase.AdjustValueToColumnType(col.Type, row[i], &col.Name)
 		if err != nil {
 			return err
 		}

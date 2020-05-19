@@ -30,6 +30,34 @@ func mustDecodeEWKBFromString(t *testing.T, h string) geopb.EWKB {
 	return geopb.EWKB(decoded)
 }
 
+func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
+	testCases := []struct {
+		t             GeospatialType
+		srid          geopb.SRID
+		shape         geopb.Shape
+		errorContains string
+	}{
+		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.Shape_Geometry, ""},
+		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.Shape_Unset, ""},
+		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.Shape_Geometry, ""},
+		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.Shape_Unset, ""},
+		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.Shape_LineString, "type Point does not match column type LineString"},
+		{MustParseGeometry("POINT(1.0 1.0)"), 4326, geopb.Shape_Geometry, "SRID 0 does not match column SRID 4326"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%#v_fits_%d_%s", tc.t, tc.srid, tc.shape), func(t *testing.T) {
+			err := GeospatialTypeFitsColumnMetadata(tc.t, tc.srid, tc.shape)
+			if tc.errorContains != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errorContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestSpatialObjectFromGeom(t *testing.T) {
 	point := geom.NewPointFlat(geom.XY, []float64{1.0, 2.0})
 	linestring := geom.NewLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0})

@@ -157,7 +157,7 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geography,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  4326,
+						SRID:  0,
 						Shape: geopb.Shape_Unset,
 					},
 				},
