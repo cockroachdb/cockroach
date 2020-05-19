@@ -697,12 +697,14 @@ func init() {
 		f := debugKeysCmd.Flags()
 		VarFlag(f, (*mvccKey)(&debugCtx.startKey), cliflags.From)
 		VarFlag(f, (*mvccKey)(&debugCtx.endKey), cliflags.To)
+		IntFlag(f, &debugCtx.maxResults, cliflags.Limit, 0)
 		BoolFlag(f, &debugCtx.values, cliflags.Values, debugCtx.values)
 		BoolFlag(f, &debugCtx.sizes, cliflags.Sizes, debugCtx.sizes)
 	}
 	{
 		f := debugRangeDataCmd.Flags()
 		BoolFlag(f, &debugCtx.replicated, cliflags.Replicated, debugCtx.replicated)
+		IntFlag(f, &debugCtx.maxResults, cliflags.Limit, 0)
 	}
 	{
 		f := debugGossipValuesCmd.Flags()

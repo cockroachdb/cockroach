@@ -307,7 +307,7 @@ var debugCtx struct {
 	inputFile         string
 	ballastSize       base.SizeSpec
 	printSystemConfig bool
-	maxResults        int64
+	maxResults        int
 }
 
 // startCtx captures the command-line arguments for the `start` command.

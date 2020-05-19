@@ -885,6 +885,11 @@ Exclusive end key and format as [<format>:]<key>. Supported formats: raw, hex,
 human, rangeID. The raw format supports escaped text. For example, "raw:\x01k"
 is the prefix for range local keys. The hex format takes an encoded MVCCKey.`}
 
+	Limit = FlagInfo{
+		Name:        "limit",
+		Description: `Maximum number of keys to return.`,
+	}
+
 	Values = FlagInfo{
 		Name:        "values",
 		Description: `Print values along with their associated key.`,
