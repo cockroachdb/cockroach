@@ -3806,3 +3806,22 @@ SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dis
 0  2  2  2  1  1
 1  1  1  1  0  0.5
 1  2  2  2  1  1
+
+# Regression test for windower not using EncDatum.Fingerprint.
+statement ok
+SELECT
+	array_agg(t_pk.table_name ORDER BY t_pk.table_name)
+FROM
+	information_schema.statistics AS i
+	LEFT JOIN (
+			SELECT
+				array_agg(c.column_name) AS table_primary_key_columns,
+				c.table_name
+			FROM
+				information_schema.columns AS c
+			GROUP BY
+				c.table_name
+		)
+			AS t_pk ON i.table_name = t_pk.table_name
+GROUP BY
+	t_pk.table_primary_key_columns
