@@ -44,13 +44,6 @@ type renderNode struct {
 	ivarHelper tree.IndexedVarHelper
 
 	// Rendering expressions for rows and corresponding output columns.
-	// populated by addOrReuseRenders()
-	// as invoked initially by initTargets() and initWhere().
-	// sortNode peeks into the render array defined by initTargets() as an optimization.
-	// sortNode adds extra renderNode renders for sort columns not requested as select targets.
-	// groupNode copies/extends the render array defined by initTargets() and
-	// will add extra renderNode renders for the aggregation sources.
-	// windowNode also adds additional renders for the window functions.
 	render []tree.TypedExpr
 
 	// columns is the set of result columns.
