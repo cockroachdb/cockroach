@@ -103,6 +103,7 @@ message RangeInfo {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
     util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
     int64 mlai = 3 [(gogoproto.customname) = "MLAI"];
+    int64 epoch = 4;
   }
   // The highest closed timestamp known to have data for this replica, taken
   // across the data received from all nodes. This does not reflect whether
