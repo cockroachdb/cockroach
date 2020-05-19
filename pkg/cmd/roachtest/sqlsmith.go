@@ -193,7 +193,7 @@ func registerSQLSmith(r *testRegistry) {
 			// NB: sqlsmith failures should never block a release.
 			Owner:      OwnerSQLExec,
 			Cluster:    makeClusterSpec(4),
-			MinVersion: "v20.1.0",
+			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
