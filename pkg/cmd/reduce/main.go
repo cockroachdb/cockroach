@@ -114,8 +114,12 @@ func reduceSQL(path, contains string, workers int, verbose bool) (string, error)
 	}
 
 	interesting := func(ctx context.Context, f reduce.File) bool {
-		cmd := exec.CommandContext(ctx, path, "demo", "--empty")
 		// Disable telemetry and license generation.
+		cmd := exec.CommandContext(ctx, path,
+			"demo",
+			"--empty",
+			"--disable-demo-license",
+		)
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
 		sql := string(f)
 		if !strings.HasSuffix(sql, ";") {
@@ -124,11 +128,11 @@ func reduceSQL(path, contains string, workers int, verbose bool) (string, error)
 		cmd.Stdin = strings.NewReader(sql)
 		out, err := cmd.CombinedOutput()
 		switch {
-		case errors.Is(err, (*exec.Error)(nil)):
+		case errors.HasType(err, (*exec.Error)(nil)):
 			if errors.Is(err, exec.ErrNotFound) {
 				log.Fatal(err)
 			}
-		case errors.Is(err, (*os.PathError)(nil)):
+		case errors.HasType(err, (*os.PathError)(nil)):
 			log.Fatal(err)
 		}
 		return containsRE.Match(out)
