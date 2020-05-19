@@ -1062,6 +1062,13 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	fCopy := *f
 	// Override ordered-set aggregates to use their impl counterparts.
 	if orderedSetDef, found := isOrderedSetAggregate(def); found {
+		// Ensure that the aggregation is well formed.
+		if f.AggType != tree.OrderedSetAgg || len(f.OrderBy) != 1 {
+			panic(pgerror.Newf(
+				pgcode.InvalidFunctionDefinition,
+				"ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column"))
+		}
+
 		// Override function definition.
 		def = orderedSetDef
 		fCopy.Func.FunctionReference = orderedSetDef
