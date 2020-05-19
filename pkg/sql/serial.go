@@ -88,7 +88,7 @@ func (p *planner) processSerialInColumnDef(
 	// Clear the IsSerial bit now that it's been remapped.
 	newSpec.IsSerial = false
 
-	defType, err := tree.ResolveType(d.Type, p.semaCtx.GetTypeResolver())
+	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

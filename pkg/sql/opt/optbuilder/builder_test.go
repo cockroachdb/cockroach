@@ -98,7 +98,7 @@ func TestBuilder(t *testing.T) {
 				}
 
 				ctx := context.Background()
-				semaCtx := tree.MakeSemaContext()
+				semaCtx := tree.MakeSemaContext(ctx)
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				evalCtx.SessionData.OptimizerFKChecks = true
 				evalCtx.SessionData.OptimizerFKCascades = true

@@ -141,14 +141,16 @@ func ResolveMutableExistingTableObject(
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
-func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error) {
+func (p *planner) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: true},
 		DesiredObjectKind: tree.TypeObject,
 	}
 	// TODO (rohany): The ResolveAnyDescType argument doesn't do anything here
 	//  if we are looking for a type. This should be cleaned up.
-	desc, prefix, err := resolveExistingObjectImpl(p.EvalContext().Context, p, name, lookupFlags, ResolveAnyDescType)
+	desc, prefix, err := resolveExistingObjectImpl(ctx, p, name, lookupFlags, ResolveAnyDescType)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +192,7 @@ func (p *planner) getTypeDescByID(ctx context.Context, id sqlbase.ID) (*TypeDesc
 // accessing types directly by their ID in standard SQL contexts, so error
 // out nicely here.
 // TODO (rohany): Is there a need to disable this in the general case?
-func (p *planner) ResolveTypeByID(id uint32) (*types.T, error) {
+func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
 	return nil, errors.Newf("type id reference @%d not allowed in this context", id)
 }
 

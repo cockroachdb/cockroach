@@ -57,7 +57,8 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 }
 
 func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
-	semaCtx := &tree.SemaContext{}
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(ctx)
 	evalCtx := &tree.EvalContext{}
 
 	valuesStmt, err := parser.ParseOne(values)
@@ -79,7 +80,7 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 		for colIdx, expr := range rowTuple {
 			col := &tableDesc.Columns[colIdx]
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-				expr, col.Type, "avro", semaCtx, false /* allowImpure */)
+				expr, col.Type, "avro", &semaCtx, false /* allowImpure */)
 			if err != nil {
 				return nil, err
 			}
@@ -125,7 +126,9 @@ func avroFieldMetadataToColDesc(metadata string) (*sqlbase.ColumnDescriptor, err
 		return nil, err
 	}
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
-	col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, &tree.EvalContext{})
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(ctx)
+	col, _, _, err := sqlbase.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
 	return col, err
 }
 

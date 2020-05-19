@@ -33,7 +33,7 @@ func BenchmarkTypeCheck(b *testing.B) {
 	if err != nil {
 		b.Fatalf("%s: %v", expr, err)
 	}
-	ctx := tree.MakeSemaContext()
+	ctx := tree.MakeSemaContext(context.Background())
 	if err := ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
 		b.Fatal(err)
 	}
@@ -56,14 +56,15 @@ func TestTypeCheckNormalize(t *testing.T) {
 		{`'Inf'::decimal`, `'Infinity':::DECIMAL`},
 		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL`},
 	}
+	ctx := context.Background()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
 			expr, err := parser.ParseExpr(d.expr)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx := tree.MakeSemaContext()
-			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			semaCtx := tree.MakeSemaContext(ctx)
+			typeChecked, err := tree.TypeCheck(expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -177,16 +178,17 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	if test.expectedPTypes == nil {
 		test.expectedPTypes = tree.PlaceholderTypes{}
 	}
+	ctx := context.Background()
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
-		ctx := tree.MakeSemaContext()
-		if err := ctx.Placeholders.Init(len(test.ptypes), clonePlaceholderTypes(test.ptypes)); err != nil {
+		semaCtx := tree.MakeSemaContext(ctx)
+		if err := semaCtx.Placeholders.Init(len(test.ptypes), clonePlaceholderTypes(test.ptypes)); err != nil {
 			t.Fatal(err)
 		}
 		desired := types.Any
 		if test.desired != nil {
 			desired = test.desired
 		}
-		_, typ, err := tree.TypeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...)
+		_, typ, err := tree.TypeCheckSameTypedExprs(&semaCtx, desired, buildExprs(exprs)...)
 		if err != nil {
 			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
 		} else {
@@ -194,8 +196,8 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 				t.Errorf("%d: expected type %s when type checking %s, found %s",
 					idx, test.expectedType, buildExprs(exprs), typ)
 			}
-			if !reflect.DeepEqual(ctx.Placeholders.Types, test.expectedPTypes) {
-				t.Errorf("%d: expected placeholder types %v after TypeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), ctx.Placeholders.Types)
+			if !reflect.DeepEqual(semaCtx.Placeholders.Types, test.expectedPTypes) {
+				t.Errorf("%d: expected placeholder types %v after TypeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), semaCtx.Placeholders.Types)
 			}
 		}
 	})
@@ -324,9 +326,10 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		// Placeholder ambiguity.
 		{ptypesNone, nil, exprs(placeholder(1), placeholder(0)), placeholderErr},
 	}
+	ctx := context.Background()
 	for i, d := range testData {
-		ctx := tree.MakeSemaContext()
-		if err := ctx.Placeholders.Init(len(d.ptypes), d.ptypes); err != nil {
+		semaCtx := tree.MakeSemaContext(ctx)
+		if err := semaCtx.Placeholders.Init(len(d.ptypes), d.ptypes); err != nil {
 			t.Error(err)
 			continue
 		}
@@ -335,7 +338,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 			desired = d.desired
 		}
 		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
-			if _, _, err := tree.TypeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
+			if _, _, err := tree.TypeCheckSameTypedExprs(&semaCtx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 			}
 		})
@@ -353,7 +356,8 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	intType := types.Int
 	boolType := types.Bool
-	semaCtx := tree.MakeSemaContext()
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(ctx)
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -532,7 +536,8 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	intType := types.Int
 	floatType := types.Float
-	semaCtx := tree.MakeSemaContext()
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(ctx)
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes

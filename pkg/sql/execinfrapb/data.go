@@ -81,16 +81,18 @@ type DistSQLTypeResolver struct {
 }
 
 // ResolveType implements tree.ResolvableTypeReference.
-func (tr *DistSQLTypeResolver) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error) {
+func (tr *DistSQLTypeResolver) ResolveType(
+	context.Context, *tree.UnresolvedObjectName,
+) (*types.T, error) {
 	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
 }
 
 // ResolveTypeByID implements tree.ResolvableTypeReference.
-func (tr *DistSQLTypeResolver) ResolveTypeByID(id uint32) (*types.T, error) {
+func (tr *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
 	// TODO (rohany): This should eventually look into the set of cached type
 	//  descriptors before attempting to access it here.
 	typDesc, err := sqlbase.GetTypeDescFromID(
-		tr.EvalContext.Context,
+		ctx,
 		tr.EvalContext.Txn,
 		tr.EvalContext.Codec,
 		sqlbase.ID(id),

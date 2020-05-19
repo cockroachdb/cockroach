@@ -11,6 +11,8 @@
 package sqlbase
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -87,6 +89,7 @@ func CannotWriteToComputedColError(colName string) error {
 // and allows type checking of the compute expressions to reference
 // input columns earlier in the slice.
 func MakeComputedExprs(
+	ctx context.Context,
 	cols []ColumnDescriptor,
 	tableDesc *ImmutableTableDescriptor,
 	tn *tree.TableName,
@@ -130,7 +133,7 @@ func MakeComputedExprs(
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
 	source := NewSourceInfoForSingleTable(*tn, ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(ctx)
 	semaCtx.IVarContainer = iv
 
 	addColumnInfo := func(col *ColumnDescriptor) {

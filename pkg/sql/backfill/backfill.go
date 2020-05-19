@@ -62,7 +62,7 @@ type ColumnBackfiller struct {
 
 // Init initializes a column backfiller.
 func (cb *ColumnBackfiller) Init(
-	evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
 ) error {
 	cb.evalCtx = evalCtx
 	var dropped []sqlbase.ColumnDescriptor
@@ -86,8 +86,15 @@ func (cb *ColumnBackfiller) Init(
 		return err
 	}
 	var txCtx transform.ExprTransformContext
-	computedExprs, err := sqlbase.MakeComputedExprs(cb.added, desc,
-		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.evalCtx, true /* addingCols */)
+	computedExprs, err := sqlbase.MakeComputedExprs(
+		ctx,
+		cb.added,
+		desc,
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)),
+		&txCtx,
+		cb.evalCtx,
+		true, /* addingCols */
+	)
 	if err != nil {
 		return err
 	}

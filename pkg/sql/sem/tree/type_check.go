@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -30,8 +31,12 @@ import (
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
-// expression syntax tree.
+// expression syntax tree. It should not be constructed directly, and instead
+// should be constructed using MakeSemaContext.
 type SemaContext struct {
+	// Context is the context under which to perform semantic analysis.
+	Context context.Context
+
 	// Annotations augments the AST with extra information.
 	Annotations Annotations
 
@@ -189,8 +194,10 @@ func (sp *ScalarProperties) Clear() {
 // expressions.
 // Note: if queries with placeholders are going to be used,
 // SemaContext.Placeholders.Init must be called separately.
-func MakeSemaContext() SemaContext {
-	return SemaContext{}
+func MakeSemaContext(ctx context.Context) SemaContext {
+	return SemaContext{
+		Context: ctx,
+	}
 }
 
 // isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an
@@ -450,7 +457,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 	// types.Any is passed to the child of the cast. There are two
 	// exceptions, described below.
 	desired := types.Any
-	exprType, err := ResolveType(expr.Type, ctx.GetTypeResolver())
+	exprType, err := ResolveType(ctx.Context, expr.Type, ctx.GetTypeResolver())
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +544,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Type
 
 // TypeCheck implements the Expr interface.
 func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
-	annotateType, err := ResolveType(expr.Type, ctx.GetTypeResolver())
+	annotateType, err := ResolveType(ctx.Context, expr.Type, ctx.GetTypeResolver())
 	if err != nil {
 		return nil, err
 	}
@@ -1073,7 +1080,7 @@ func (expr *IsOfTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedEx
 	}
 	expr.resolvedTypes = make([]*types.T, len(expr.Types))
 	for i := range expr.Types {
-		typ, err := ResolveType(expr.Types[i], ctx.GetTypeResolver())
+		typ, err := ResolveType(ctx.Context, expr.Types[i], ctx.GetTypeResolver())
 		if err != nil {
 			return nil, err
 		}
@@ -2285,7 +2292,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 	switch t := expr.(type) {
 	case *AnnotateTypeExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
-			tType, err := ResolveType(t.Type, v.ctx.GetTypeResolver())
+			tType, err := ResolveType(v.ctx.Context, t.Type, v.ctx.GetTypeResolver())
 			if err != nil {
 				v.setErr(arg.Idx, err)
 				return false, expr
@@ -2324,7 +2331,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 
 	case *CastExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
-			tType, err := ResolveType(t.Type, v.ctx.GetTypeResolver())
+			tType, err := ResolveType(v.ctx.Context, t.Type, v.ctx.GetTypeResolver())
 			if err != nil {
 				v.setErr(arg.Idx, err)
 				return false, expr

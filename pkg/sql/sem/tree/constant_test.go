@@ -56,6 +56,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		{"876543234567898765436787654321", wantDec},
 	}
 
+	ctx := context.Background()
 	for i, test := range testCases {
 		tok := token.INT
 		if strings.ContainsAny(test.str, ".eE") {
@@ -84,7 +85,8 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 
 		// Make sure it can be resolved as each of those types.
 		for _, availType := range avail {
-			if res, err := c.ResolveAsType(&tree.SemaContext{}, availType); err != nil {
+			semaCtx := tree.MakeSemaContext(ctx)
+			if res, err := c.ResolveAsType(&semaCtx, availType); err != nil {
 				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
 					i, c.ExactString(), availType, err)
 			} else {
@@ -174,6 +176,7 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 				i, test.avail, test.c, avail)
 		}
 
+		ctx := context.Background()
 		// Make sure it can be resolved as each of those types or throws a parsing error.
 		for _, availType := range avail {
 
@@ -184,7 +187,8 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 				continue
 			}
 
-			if _, err := test.c.ResolveAsType(&tree.SemaContext{}, availType); err != nil {
+			semaCtx := tree.MakeSemaContext(ctx)
+			if _, err := test.c.ResolveAsType(&semaCtx, availType); err != nil {
 				if !strings.Contains(err.Error(), "could not parse") {
 					// Parsing errors are permitted for this test, as proper tree.StrVal parsing
 					// is tested in TestStringConstantTypeResolution. Any other error should
@@ -380,6 +384,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	for i, test := range testCases {
 		parseableCount := 0
 
@@ -393,7 +398,8 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				continue
 			}
 
-			res, err := test.c.ResolveAsType(&tree.SemaContext{}, availType)
+			semaCtx := tree.MakeSemaContext(ctx)
+			res, err := test.c.ResolveAsType(&semaCtx, availType)
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") && !strings.Contains(err.Error(), "parsing") {
 					// Parsing errors are permitted for this test, but the number of correctly

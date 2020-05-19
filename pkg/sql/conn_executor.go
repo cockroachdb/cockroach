@@ -2033,7 +2033,7 @@ func (ex *connExecutor) resetPlanner(
 
 	p.cancelChecker.Reset(ctx)
 
-	p.semaCtx = tree.MakeSemaContext()
+	p.semaCtx = tree.MakeSemaContext(ctx)
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil

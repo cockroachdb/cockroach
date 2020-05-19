@@ -797,6 +797,7 @@ func (ti *Index) Span() roachpb.Span {
 
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (ti *Index) PartitionByListPrefixes() []tree.Datums {
+	ctx := context.Background()
 	p := ti.partitionBy
 	if p == nil {
 		return nil
@@ -805,7 +806,7 @@ func (ti *Index) PartitionByListPrefixes() []tree.Datums {
 		return nil
 	}
 	var res []tree.Datums
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(ctx)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for i := range p.Fields {
 		if i >= len(ti.Columns) || p.Fields[i] != ti.Columns[i].ColName() {

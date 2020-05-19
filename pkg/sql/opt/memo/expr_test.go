@@ -95,7 +95,7 @@ func TestExprIsNeverNull(t *testing.T) {
 				}
 
 				ctx := context.Background()
-				semaCtx := tree.MakeSemaContext()
+				semaCtx := tree.MakeSemaContext(ctx)
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 				var o xform.Optimizer

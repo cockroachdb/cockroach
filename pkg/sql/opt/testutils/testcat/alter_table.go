@@ -11,6 +11,7 @@
 package testcat
 
 import (
+	"context"
 	gojson "encoding/json"
 	"fmt"
 	"sort"
@@ -55,7 +56,8 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 
 // injectTableStats sets the table statistics as specified by a JSON object.
 func injectTableStats(tt *Table, statsExpr tree.Expr) {
-	semaCtx := tree.MakeSemaContext()
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(ctx)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	typedExpr, err := tree.TypeCheckAndRequire(
 		statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS",

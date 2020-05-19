@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -96,8 +97,8 @@ func MakeTypeNameFromPrefix(prefix ObjectNamePrefix, object Name) TypeName {
 // to actually look up type metadata and transform references into
 // *types.T's.
 type TypeReferenceResolver interface {
-	ResolveType(name *UnresolvedObjectName) (*types.T, error)
-	ResolveTypeByID(id uint32) (*types.T, error)
+	ResolveType(ctx context.Context, name *UnresolvedObjectName) (*types.T, error)
+	ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error)
 }
 
 // ResolvableTypeReference represents a type that is possibly unknown
@@ -114,12 +115,14 @@ var _ ResolvableTypeReference = &types.T{}
 var _ ResolvableTypeReference = &IDTypeReference{}
 
 // ResolveType converts a ResolvableTypeReference into a *types.T.
-func ResolveType(ref ResolvableTypeReference, resolver TypeReferenceResolver) (*types.T, error) {
+func ResolveType(
+	ctx context.Context, ref ResolvableTypeReference, resolver TypeReferenceResolver,
+) (*types.T, error) {
 	switch t := ref.(type) {
 	case *types.T:
 		return t, nil
 	case *ArrayTypeReference:
-		typ, err := ResolveType(t.ElementType, resolver)
+		typ, err := ResolveType(ctx, t.ElementType, resolver)
 		if err != nil {
 			return nil, err
 		}
@@ -130,12 +133,12 @@ func ResolveType(ref ResolvableTypeReference, resolver TypeReferenceResolver) (*
 			// name into a type.
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", t)
 		}
-		return resolver.ResolveType(t)
+		return resolver.ResolveType(ctx, t)
 	case *IDTypeReference:
 		if resolver == nil {
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type id %d does not exist", t.ID)
 		}
-		return resolver.ResolveTypeByID(t.ID)
+		return resolver.ResolveTypeByID(ctx, t.ID)
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable type reference type %s", t)
 	}
@@ -222,7 +225,9 @@ type TestingMapTypeResolver struct {
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
-func (dtr *TestingMapTypeResolver) ResolveType(name *UnresolvedObjectName) (*types.T, error) {
+func (dtr *TestingMapTypeResolver) ResolveType(
+	_ context.Context, name *UnresolvedObjectName,
+) (*types.T, error) {
 	typ, ok := dtr.typeMap[name.String()]
 	if !ok {
 		return nil, errors.Newf("type %q does not exist", name)
@@ -231,7 +236,7 @@ func (dtr *TestingMapTypeResolver) ResolveType(name *UnresolvedObjectName) (*typ
 }
 
 // ResolveTypeByID implements the TypeReferenceResolver interface.
-func (dtr *TestingMapTypeResolver) ResolveTypeByID(uint32) (*types.T, error) {
+func (dtr *TestingMapTypeResolver) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
 	return nil, errors.AssertionFailedf("unimplemented")
 }
 

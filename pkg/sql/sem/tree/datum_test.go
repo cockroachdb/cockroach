@@ -36,7 +36,8 @@ func prepareExpr(t *testing.T, datumExpr string) tree.TypedExpr {
 	}
 	// Type checking ensures constant folding is performed and type
 	// annotations have come into effect.
-	typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
+	sema := tree.MakeSemaContext(context.Background())
+	typedExpr, err := tree.TypeCheck(expr, &sema, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}

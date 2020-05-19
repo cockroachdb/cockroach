@@ -11,6 +11,7 @@
 package tree_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -260,14 +261,15 @@ func TestFormatExpr(t *testing.T) {
 			`(_, COALESCE(_, _), ARRAY[_])`},
 	}
 
+	ctx := context.Background()
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
 			expr, err := parser.ParseExpr(test.expr)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx := tree.MakeSemaContext()
-			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			semaContext := tree.MakeSemaContext(ctx)
+			typeChecked, err := tree.TypeCheck(expr, &semaContext, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -323,10 +325,11 @@ func TestFormatExpr2(t *testing.T) {
 		// Ensure that nulls get properly type annotated when printed in an
 	}
 
+	ctx := context.Background()
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
-			ctx := tree.MakeSemaContext()
-			typeChecked, err := tree.TypeCheck(test.expr, &ctx, types.Any)
+			semaCtx := tree.MakeSemaContext(ctx)
+			typeChecked, err := tree.TypeCheck(test.expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -375,6 +378,7 @@ func TestFormatPgwireText(t *testing.T) {
 
 		{`ARRAY[e'\U00002001☃']`, `{ ☃}`},
 	}
+	ctx := context.Background()
 	var evalCtx tree.EvalContext
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
@@ -382,8 +386,8 @@ func TestFormatPgwireText(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx := tree.MakeSemaContext()
-			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			semaCtx := tree.MakeSemaContext(ctx)
+			typeChecked, err := tree.TypeCheck(expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
