@@ -50,7 +50,7 @@
     "@types/assert": "^1.4.0",
     "@types/bytebuffer": "^5.0.33",
     "@types/chai": "^4.1.0",
-    "@types/classnames": "^0.0.32",
+    "@types/classnames": "^2.2.10",
     "@types/combokeys": "^2.4.5",
     "@types/d3": "<4.0.0",
     "@types/d3-dispatch": "^1.0.4",
