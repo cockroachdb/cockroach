@@ -185,9 +185,16 @@ func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 		if p.reverse {
 			// curKey was not added to results, so it needs to be included in the
 			// resume span.
+			//
+			// NB: this is equivalent to:
+			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
+			// but with half the allocations.
+			curKey := p.curKey.Key
+			curKeyCopy := make(roachpb.Key, len(curKey), len(curKey)+1)
+			copy(curKeyCopy, curKey)
 			resume = &roachpb.Span{
 				Key:    p.start,
-				EndKey: p.curKey.Key.Next(),
+				EndKey: curKeyCopy.Next(),
 			}
 		} else {
 			resume = &roachpb.Span{
