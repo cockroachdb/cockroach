@@ -477,7 +477,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		jb.showCols[leftCol] = struct{}{}
 		jb.hideCols[rightCol] = struct{}{}
 	} else if jb.joinType == sqlbase.RightOuterJoin &&
-		!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
+		!sqlbase.HasCompositeKeyEncoding(leftCol.typ) {
 		// The merged column is the same as the corresponding column from the
 		// right side.
 		jb.outScope.cols = append(jb.outScope.cols, *rightCol)

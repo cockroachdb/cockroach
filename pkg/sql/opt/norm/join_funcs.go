@@ -411,7 +411,7 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
-	if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+	if sqlbase.HasCompositeKeyEncoding(colType) {
 		res.Add(col)
 		return res
 	}
