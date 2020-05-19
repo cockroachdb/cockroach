@@ -204,18 +204,20 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1a148d5a83dc8e077ad6e201f723a97bc652c72ffb40294947036be0080b005c"
+  digest = "1:194f2a8fb361c7b17260b2d2df53cbad06e4f64bb1ad4d5b4fc8b3168a5bf3c7"
   name = "github.com/apache/arrow"
   packages = [
     "go/arrow",
     "go/arrow/array",
-    "go/arrow/internal/bitutil",
+    "go/arrow/bitutil",
+    "go/arrow/decimal128",
+    "go/arrow/float16",
     "go/arrow/internal/cpu",
     "go/arrow/internal/debug",
     "go/arrow/memory",
   ]
   pruneopts = "UT"
-  revision = "338c62a2a20574072fde5c478fcd42bf27a2d4b6"
+  revision = "bfb07ad1ed6447d74cfcd00682fed70ec01fbdaf"
 
 [[projects]]
   digest = "1:b39cf81d5f440b9c0757a25058432d33af867e5201109bf53621356d9dab4b73"
@@ -1891,6 +1893,17 @@
   revision = "63859f3815cb436d25749575cb14aef1153e5634"
 
 [[projects]]
+  branch = "master"
+  digest = "1:918a46e4a2fb83df33f668f5a6bd51b2996775d073fce1800d3ec01b0a5ddd2b"
+  name = "golang.org/x/xerrors"
+  packages = [
+    ".",
+    "internal",
+  ]
+  pruneopts = "UT"
+  revision = "9bdfabe68543c54f90421aeb9a60ef8061b5b544"
+
+[[projects]]
   digest = "1:768c35ec83dd17029060ea581d6ca9fdcaef473ec87e93e4bb750949035f6070"
   name = "google.golang.org/api"
   packages = [
@@ -2180,7 +2193,6 @@
     "github.com/openzipkin-contrib/zipkin-go-opentracing",
     "github.com/petermattis/goid",
     "github.com/pkg/browser",
-    "github.com/pkg/errors",
     "github.com/pmezard/go-difflib/difflib",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/graphite",
