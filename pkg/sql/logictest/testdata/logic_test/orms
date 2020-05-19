@@ -264,3 +264,23 @@ public  b          rowid  20  true   -1  8   3  unique_rowid()  NULL  0  b
 public  c          a      20  true   -1  8   1  NULL            NULL  0  b
 public  c          b      20  true   -1  8   2  NULL            NULL  0  b
 public  metatest   a      20  true   -1  8   1  NULL            NULL  0  b
+
+
+# Regression test for windower not using EncDatum.Fingerprint.
+statement ok
+SELECT
+	array_agg(t_pk.table_name ORDER BY t_pk.table_name)
+FROM
+	information_schema.statistics AS i
+	LEFT JOIN (
+			SELECT
+				array_agg(c.column_name) AS table_primary_key_columns,
+				c.table_name
+			FROM
+				information_schema.columns AS c
+			GROUP BY
+				c.table_name
+		)
+			AS t_pk ON i.table_name = t_pk.table_name
+GROUP BY
+	t_pk.table_primary_key_columns
