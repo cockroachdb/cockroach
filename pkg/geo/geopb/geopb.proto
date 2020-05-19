@@ -16,7 +16,7 @@ import "gogoproto/gogo.proto";
 
 // Shape is the type of a spatial shape. Each of these corresponds to a
 // different representation and serialization format. For example, a Point is a
-// pair of float64s (or more than that for geometries with Z or N), a LineString
+// pair of doubles (or more than that for geometries with Z or N), a LineString
 // is an ordered series of Points, etc.
 enum Shape {
   Unset = 0;
@@ -41,4 +41,14 @@ message SpatialObject {
   int32 srid = 2 [(gogoproto.customname)="SRID",(gogoproto.casttype)="SRID"];
   // Shape is denormalized Shape derived from the EWKB.
   Shape shape = 3;
+  // BoundingBox is the bounding box of the SpatialObject.
+  BoundingBox bounding_box = 4;
+}
+
+// BoundingBox represents the bounding box of a Geospatial type.
+message BoundingBox {
+  double min_x = 1;
+  double min_y = 2;
+  double max_x = 3;
+  double max_y = 4;
 }

@@ -139,12 +139,6 @@ ignored = [
   name = "github.com/cockroachdb/pebble"
   branch = "master"
 
-# github.com/twpayne/go-geom has a few patches which are not released yet, including
-# empty GEOMETRYCOLLECTION handling.
-[[override]]
-  name = "github.com/twpayne/go-geom"
-  revision = "3402552da1eb9d7a1c8a9ecb05395b076d8e7bf6"
-
 # github.com/lib/pq has a newer revision that has notices, which we want
 [[override]]
   name = "github.com/lib/pq"

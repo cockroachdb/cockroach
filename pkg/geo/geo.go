@@ -438,9 +438,14 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 	default:
 		return geopb.SpatialObject{}, errors.Newf("only 2D objects are currently supported")
 	}
+	bbox, err := BoundingBoxFromGeom(t)
+	if err != nil {
+		return geopb.SpatialObject{}, err
+	}
 	return geopb.SpatialObject{
-		EWKB:  geopb.EWKB(ret),
-		SRID:  geopb.SRID(t.SRID()),
-		Shape: shape,
+		EWKB:        geopb.EWKB(ret),
+		SRID:        geopb.SRID(t.SRID()),
+		Shape:       shape,
+		BoundingBox: bbox,
 	}, nil
 }
