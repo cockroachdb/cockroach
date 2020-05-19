@@ -11,6 +11,8 @@
 package sqlbase
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -87,6 +89,7 @@ func CannotWriteToComputedColError(colName string) error {
 // and allows type checking of the compute expressions to reference
 // input columns earlier in the slice.
 func MakeComputedExprs(
+	ctx context.Context,
 	cols []ColumnDescriptor,
 	tableDesc *ImmutableTableDescriptor,
 	tn *tree.TableName,
@@ -156,7 +159,7 @@ func MakeComputedExprs(
 			return nil, err
 		}
 
-		typedExpr, err := tree.TypeCheck(expr, &semaCtx, col.Type)
+		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, col.Type)
 		if err != nil {
 			return nil, err
 		}

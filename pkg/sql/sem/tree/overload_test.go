@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 	"go/constant"
 	"go/token"
@@ -246,10 +247,11 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryArrayIntFn}, unsupported, false},
 		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryArrayIntFn}, unsupported, true},
 	}
+	ctx := context.Background()
 	for i, d := range testData {
 		t.Run(fmt.Sprintf("%v/%v", d.exprs, d.overloads), func(t *testing.T) {
-			ctx := MakeSemaContext()
-			if err := ctx.Placeholders.Init(2 /* numPlaceholders */, nil /* typeHints */); err != nil {
+			semaCtx := MakeSemaContext()
+			if err := semaCtx.Placeholders.Init(2 /* numPlaceholders */, nil /* typeHints */); err != nil {
 				t.Fatal(err)
 			}
 			desired := types.Any
@@ -257,7 +259,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 				desired = d.desired
 			}
 			typedExprs, fns, err := typeCheckOverloadedExprs(
-				&ctx, desired, d.overloads, d.inBinOp, d.exprs...,
+				ctx, &semaCtx, desired, d.overloads, d.inBinOp, d.exprs...,
 			)
 			assertNoErr := func() {
 				if err != nil {

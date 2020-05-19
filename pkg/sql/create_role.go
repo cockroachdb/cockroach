@@ -62,7 +62,10 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsStringOrNull, opName)
+	asStringOrNull := func(e tree.Expr, op string) (func() (bool, string, error), error) {
+		return p.TypeAsStringOrNull(ctx, e, op)
+	}
+	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
 
 	// Using CREATE ROLE syntax enables NOLOGIN by default.
 	if isRole && !roleOptions.Contains(roleoption.LOGIN) &&
@@ -79,7 +82,7 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(nameE, opName)
+	ua, err := p.getUserAuthInfo(ctx, nameE, opName)
 	if err != nil {
 		return nil, err
 	}
@@ -269,8 +272,10 @@ type userNameInfo struct {
 	name func() (string, error)
 }
 
-func (p *planner) getUserAuthInfo(nameE tree.Expr, ctx string) (userNameInfo, error) {
-	name, err := p.TypeAsString(nameE, ctx)
+func (p *planner) getUserAuthInfo(
+	ctx context.Context, nameE tree.Expr, context string,
+) (userNameInfo, error) {
+	name, err := p.TypeAsString(ctx, nameE, context)
 	if err != nil {
 		return userNameInfo{}, err
 	}

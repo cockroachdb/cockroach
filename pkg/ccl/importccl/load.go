@@ -230,7 +230,7 @@ func Load(
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
-				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, evalCtx)
+				sqlbase.ProcessDefaultColumns(ctx, tableDesc.Columns, tableDesc, &txCtx, evalCtx)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "process default columns")
 			}

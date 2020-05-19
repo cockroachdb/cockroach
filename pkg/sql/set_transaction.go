@@ -11,17 +11,19 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // SetTransaction sets a transaction's isolation level, priority, ro/rw state,
 // and as of timestamp.
-func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
+func (p *planner) SetTransaction(ctx context.Context, n *tree.SetTransaction) (planNode, error) {
 	var asOfTs hlc.Timestamp
 	if n.Modes.AsOf.Expr != nil {
 		var err error
-		asOfTs, err = p.EvalAsOfTimestamp(n.Modes.AsOf)
+		asOfTs, err = p.EvalAsOfTimestamp(ctx, n.Modes.AsOf)
 		if err != nil {
 			return nil, err
 		}

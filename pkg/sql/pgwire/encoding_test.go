@@ -53,6 +53,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 	}
 	f.Close()
 
+	ctx := context.Background()
 	sema := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(nil)
 
@@ -74,7 +75,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 			t.Fatal("expected 1 expr")
 		}
 		expr := selectClause.Exprs[0].Expr
-		te, err := expr.TypeCheck(&sema, types.Any)
+		te, err := expr.TypeCheck(ctx, &sema, types.Any)
 		if err != nil {
 			t.Fatal(err)
 		}

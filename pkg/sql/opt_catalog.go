@@ -38,7 +38,6 @@ import (
 // only include what the optimizer needs, and certain common lookups are cached
 // for faster performance.
 type optCatalog struct {
-	tree.TypeReferenceResolver
 	// planner needs to be set via a call to init before calling other methods.
 	planner *planner
 

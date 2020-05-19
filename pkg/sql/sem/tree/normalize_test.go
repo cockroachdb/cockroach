@@ -276,6 +276,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`(ROW (a) AS a)`, `((a,) AS a)`}, // Tuple
 	}
 
+	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
@@ -283,7 +284,7 @@ func TestNormalizeExpr(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			typedExpr, err := expr.TypeCheck(&semaCtx, types.Any)
+			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}

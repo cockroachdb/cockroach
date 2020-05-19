@@ -32,6 +32,7 @@ import (
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
 func SanitizeVarFreeExpr(
+	ctx context.Context,
 	expr tree.Expr,
 	expectedType *types.T,
 	context string,
@@ -55,7 +56,7 @@ func SanitizeVarFreeExpr(
 	}
 	semaCtx.Properties.Require(context, flags)
 
-	typedExpr, err := tree.TypeCheck(expr, semaCtx, expectedType)
+	typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, expectedType)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +131,7 @@ func ValidateColumnDefType(t *types.T) error {
 // The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
 // sequence dependencies).
 func MakeColumnDefDescs(
-	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
@@ -157,7 +158,7 @@ func MakeColumnDefDescs(
 	}
 
 	// Validate and assign column type.
-	resType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+	resType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -172,7 +173,7 @@ func MakeColumnDefDescs(
 		// and does not contain invalid functions.
 		var err error
 		if typedExpr, err = SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, true, /* allowImpure */
+			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, true, /* allowImpure */
 		); err != nil {
 			return nil, nil, nil, err
 		}
@@ -201,7 +202,7 @@ func MakeColumnDefDescs(
 				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 			}
 		} else {
-			buckets, err := EvalShardBucketCount(semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
+			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -229,11 +230,11 @@ func MakeColumnDefDescs(
 // EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
 // BUCKET_COUNT` index creation query.
 func EvalShardBucketCount(
-	semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
 ) (int32, error) {
 	const invalidBucketCountMsg = `BUCKET_COUNT must be an integer greater than 1`
 	typedExpr, err := SanitizeVarFreeExpr(
-		shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, true, /* allowImpure */
+		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, true, /* allowImpure */
 	)
 	if err != nil {
 		return 0, err

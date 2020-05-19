@@ -12,6 +12,7 @@ package tree
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 
@@ -36,13 +37,13 @@ type Expr interface {
 	// sub-expressions will be guaranteed to be well-typed, meaning that the method effectively
 	// maps the Expr tree into a TypedExpr tree.
 	//
-	// The ctx parameter defines the context in which to perform type checking.
+	// The semaCtx parameter defines the context in which to perform type checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr. It is not valid to call TypeCheck with a nil desired
 	// type. Instead, call it with wildcard type types.Any if no specific type is
 	// desired. This restriction is also true of most methods and functions related
 	// to type checking.
-	TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error)
+	TypeCheck(ctx context.Context, semaCtx *SemaContext, desired *types.T) (TypedExpr, error)
 }
 
 // TypedExpr represents a well-typed expression.
@@ -1085,7 +1086,9 @@ func (node *TypedDummy) ResolvedType() *types.T {
 }
 
 // TypeCheck implements the Expr interface.
-func (node *TypedDummy) TypeCheck(*SemaContext, *types.T) (TypedExpr, error) { return node, nil }
+func (node *TypedDummy) TypeCheck(context.Context, *SemaContext, *types.T) (TypedExpr, error) {
+	return node, nil
+}
 
 // Walk implements the Expr interface.
 func (node *TypedDummy) Walk(Visitor) Expr { return node }

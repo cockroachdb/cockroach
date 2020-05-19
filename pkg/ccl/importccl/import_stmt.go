@@ -208,20 +208,20 @@ func importPlanHook(
 		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
 	}
 
-	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
+	filesFn, err := p.TypeAsStringArray(ctx, importStmt.Files, "IMPORT")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
 	var createFileFn func() (string, error)
 	if !importStmt.Bundle && !importStmt.Into && importStmt.CreateDefs == nil {
-		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
+		createFileFn, err = p.TypeAsString(ctx, importStmt.CreateFile, "IMPORT")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	optsFn, err := p.TypeAsStringOpts(importStmt.Options, importOptionExpectValues)
+	optsFn, err := p.TypeAsStringOpts(ctx, importStmt.Options, importOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}

@@ -424,7 +424,7 @@ func (s *scope) resolveCTE(name *tree.TableName) *cteSource {
 // order to produce the desired type.
 func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
-	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
+	texpr, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, desired)
 	if err != nil {
 		panic(err)
 	}
@@ -443,7 +443,7 @@ func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 // desired type.
 func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
-	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, s.context.String())
+	texpr, err := tree.TypeCheckAndRequire(s.builder.ctx, expr, s.builder.semaCtx, desired, s.context.String())
 	if err != nil {
 		panic(err)
 	}
@@ -982,7 +982,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
 
 	expr := f.Walk(s)
-	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1082,14 +1082,14 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 			defer func() { s.builder.semaCtx.Properties.Restore(oldProps) }()
 
 			s.builder.semaCtx.Properties.Require("FILTER", tree.RejectSpecial)
-			_, err := tree.TypeCheck(expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.Any)
+			_, err := tree.TypeCheck(s.builder.ctx, expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.Any)
 			if err != nil {
 				panic(err)
 			}
 		}()
 	}
 
-	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1161,7 +1161,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 	expr := fCopy.Walk(s)
 
-	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1245,7 +1245,7 @@ func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tre
 	s.builder.semaCtx.Properties.Require("SQL function", tree.RejectSpecial)
 
 	expr := f.Walk(s)
-	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1384,7 +1384,8 @@ func (s *scope) replaceCount(
 			}
 			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 			// expression; we should not hit an error here.
-			if _, err := e.TypeCheck(&tree.SemaContext{}, types.Any); err != nil {
+			semaCtx := tree.MakeSemaContext()
+			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
 				panic(err)
 			}
 			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)

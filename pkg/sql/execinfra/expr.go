@@ -72,7 +72,7 @@ func processExpression(
 
 	semaCtx.IVarContainer = h.Container()
 	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(expr, semaCtx, types.Any)
+	typedExpr, err := tree.TypeCheck(evalCtx.Context, expr, semaCtx, types.Any)
 	if err != nil {
 		// Type checking must succeed by now.
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)

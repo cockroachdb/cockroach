@@ -113,7 +113,7 @@ func (w *windowFuncHolder) String() string { return tree.AsString(w) }
 func (w *windowFuncHolder) Walk(v tree.Visitor) tree.Expr { return w }
 
 func (w *windowFuncHolder) TypeCheck(
-	_ *tree.SemaContext, desired *types.T,
+	_ context.Context, _ *tree.SemaContext, desired *types.T,
 ) (tree.TypedExpr, error) {
 	return w, nil
 }

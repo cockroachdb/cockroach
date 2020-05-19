@@ -1197,7 +1197,7 @@ func (b *Builder) buildFromWithLateral(
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
 func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
-	ts, err := tree.EvalAsOfTimestamp(asOf, b.semaCtx, b.evalCtx)
+	ts, err := tree.EvalAsOfTimestamp(b.ctx, asOf, b.semaCtx, b.evalCtx)
 	if err != nil {
 		panic(err)
 	}

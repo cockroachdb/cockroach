@@ -48,7 +48,7 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	toFn, err := p.TypeAsString(backup.Path, "SHOW BACKUP")
+	toFn, err := p.TypeAsString(ctx, backup.Path, "SHOW BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -57,7 +57,7 @@ func showBackupPlanHook(
 		backupOptEncPassphrase:  sql.KVStringOptRequireValue,
 		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
 	}
-	optsFn, err := p.TypeAsStringOpts(backup.Options, expected)
+	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
