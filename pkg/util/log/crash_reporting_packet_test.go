@@ -97,10 +97,15 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	const prefix = "crash_reporting_packet_test.go:"
 
+	type extraPair struct {
+		key   string
+		reVal string
+	}
 	expectations := []struct {
 		serverID *regexp.Regexp
 		tagCount int
 		message  string
+		extra    []extraPair
 	}{
 		{regexp.MustCompile(`^$`), 7, func() string {
 			message := prefix
@@ -110,9 +115,12 @@ func TestCrashReportingPacket(t *testing.T) {
 			} else {
 				message += "1053"
 			}
-			message += ": " + panicPre
+			message += ": TestCrashReportingPacket: panic: %v"
 			return message
-		}()},
+		}(), []extraPair{
+			{"1: details", "panic: %v\n-- arg 1: " + panicPre},
+			{"2: stacktrace", `.*crash_reporting_packet_test.go:.*TestCrashReportingPacket`},
+		}},
 		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 11, func() string {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
@@ -121,14 +129,21 @@ func TestCrashReportingPacket(t *testing.T) {
 			} else {
 				message += "1061"
 			}
-			message += ": " + panicPost
+			message += ": TestCrashReportingPacket: panic: %v"
 			return message
-		}()},
+		}(), []extraPair{
+			{"1: details", "panic: %v\n-- arg 1: " + panicPost},
+			{"2: stacktrace", `.*crash_reporting_packet_test.go:.*TestCrashReportingPacket`},
+		}},
 	}
 
 	if e, a := len(expectations), len(packets); e != a {
 		t.Fatalf("expected %d packets, but got %d", e, a)
 	}
+
+	// Work around the linter.
+	// We don't care about "slow matchstring" below because there are only few iterations.
+	m := func(a, b string) (bool, error) { return regexp.MatchString(a, b) }
 
 	for _, exp := range expectations {
 		p := packets[0]
@@ -157,6 +172,23 @@ func TestCrashReportingPacket(t *testing.T) {
 			if msg := p.Message; msg != exp.message {
 				t.Errorf("expected %s, got %s", exp.message, msg)
 			}
+
+			for _, ex := range exp.extra {
+				data, ok := p.Extra[ex.key]
+				if !ok {
+					t.Errorf("expected detail %q in extras, was not found", ex.key)
+					continue
+				}
+				sdata, ok := data.(string)
+				if !ok {
+					t.Errorf("expected detail %q of type string, found %T (%q)", ex.key, data, data)
+					continue
+				}
+				if ok, _ := m(ex.reVal, sdata); !ok {
+					t.Errorf("expected detail %q to match:\n%s\ngot:\n%s", ex.key, ex.reVal, sdata)
+				}
+			}
+
 		})
 	}
 }

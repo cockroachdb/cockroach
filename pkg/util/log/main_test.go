@@ -30,6 +30,7 @@ func TestMain(m *testing.M) {
 
 	// MakeTestingClusterSettings initializes log.ReportingSettings to this
 	// instance of setting values.
+	// TODO(knz): This comment appears to be untrue.
 	st := cluster.MakeTestingClusterSettings()
 	log.DiagnosticsReportingEnabled.Override(&st.SV, false)
 	log.CrashReports.Override(&st.SV, false)
