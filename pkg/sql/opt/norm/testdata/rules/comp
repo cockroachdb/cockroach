@@ -363,6 +363,16 @@ values
  ├── fd: ()-->(1)
  └── (true,)
 
+norm expect=FoldNullTupleIsTupleNull
+SELECT () IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
 norm expect-not=FoldNullTupleIsTupleNull
 SELECT (k, NULL) IS NULL FROM a
 ----
@@ -527,6 +537,16 @@ values
 
 norm expect=FoldNonNullTupleIsTupleNotNull
 SELECT (1, ARRAY[NULL, NULL]) IS NOT NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldNonNullTupleIsTupleNotNull
+SELECT () IS NOT NULL AS r
 ----
 values
  ├── columns: r:1!null
