@@ -189,3 +189,20 @@ __auto__         {d}           550        0
 __auto__         {d}           0          0
 __auto__         {rowid}       550        0
 __auto__         {rowid}       0          0
+
+# Test that enum columns always have histograms collected for them.
+statement ok
+CREATE TYPE e AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE et (x e, y e, PRIMARY KEY (x));
+INSERT INTO et VALUES ('hello', 'hello'), ('howdy', 'howdy'), ('hi', 'hi');
+CREATE STATISTICS s FROM et
+
+query TTII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, null_count
+FROM [SHOW STATISTICS FOR TABLE et] WHERE histogram_id IS NOT NULL
+ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count
+__auto__         {x}           3          0
+__auto__         {y}           3          0
+
