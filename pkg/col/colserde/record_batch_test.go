@@ -102,7 +102,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	case types.BytesFamily:
 		// Bytes can be represented 3 different ways. As variable-length bytes,
 		// variable-length strings, or fixed-width bytes.
-		representation := rng.Intn(3)
+		representation := rng.Intn(2)
 		switch representation {
 		case 0:
 			builder = array.NewStringBuilder(memory.DefaultAllocator)
@@ -131,17 +131,22 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			}
 			builder.(*array.BinaryBuilder).AppendValues(data, valid)
 		case 2:
-			width := rng.Intn(maxVarLen) + 1
-			builder = array.NewFixedSizeBinaryBuilder(memory.DefaultAllocator, &arrow.FixedSizeBinaryType{ByteWidth: width})
-			data := make([][]byte, n)
-			for i := range data {
-				slice := make([]byte, width)
-				if valid[i] {
-					_, _ = rng.Read(slice)
-				}
-				data[i] = slice
-			}
-			builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
+			// NOTE: We currently do not generate fixed-width bytes in this test due to
+			// the different buffer layout (no offsets). The serialization code assumes
+			// 3 buffers for all types.BytesFamily types.
+			/*
+				width := rng.Intn(maxVarLen) + 1
+				  builder = array.NewFixedSizeBinaryBuilder(memory.DefaultAllocator, &arrow.FixedSizeBinaryType{ByteWidth: width})
+				  data := make([][]byte, n)
+				  for i := range data {
+				  	slice := make([]byte, width)
+				  	if valid[i] {
+				  		_, _ = rng.Read(slice)
+				  	}
+				  	data[i] = slice
+				  }
+				  builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
+			*/
 		}
 	case types.DecimalFamily:
 		var err error
