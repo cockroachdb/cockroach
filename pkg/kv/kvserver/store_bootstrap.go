@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 )
 
 // InitEngine writes a new store ident to the underlying engine. To
@@ -139,11 +138,10 @@ func WriteInitialClusterData(
 		}
 
 		desc := &roachpb.RangeDescriptor{
-			RangeID:              rangeID,
-			StartKey:             startKey,
-			EndKey:               endKey,
-			NextReplicaID:        2,
-			GenerationComparable: proto.Bool(true),
+			RangeID:       rangeID,
+			StartKey:      startKey,
+			EndKey:        endKey,
+			NextReplicaID: 2,
 		}
 		replicas := []roachpb.ReplicaDescriptor{
 			{

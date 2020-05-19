@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -1673,9 +1672,8 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 				learner,
 				repl3,
 			},
-			NextReplicaID:        10,
-			Generation:           proto.Int64(5),
-			GenerationComparable: proto.Bool(true),
+			NextReplicaID: 10,
+			Generation:    5,
 		},
 	}
 	act := crt.String()

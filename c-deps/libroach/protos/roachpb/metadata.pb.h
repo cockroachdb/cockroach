@@ -784,7 +784,6 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::int64 range_id() const;
   void set_range_id(::google::protobuf::int64 value);
 
-  // optional int64 generation = 6;
   bool has_generation() const;
   void clear_generation();
   static const int kGenerationFieldNumber = 6;
@@ -796,13 +795,6 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   static const int kNextReplicaIdFieldNumber = 5;
   ::google::protobuf::int32 next_replica_id() const;
   void set_next_replica_id(::google::protobuf::int32 value);
-
-  // optional bool generation_comparable = 8;
-  bool has_generation_comparable() const;
-  void clear_generation_comparable();
-  static const int kGenerationComparableFieldNumber = 8;
-  bool generation_comparable() const;
-  void set_generation_comparable(bool value);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeDescriptor)
  private:
@@ -816,8 +808,6 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   void clear_has_next_replica_id();
   void set_has_generation();
   void clear_has_generation();
-  void set_has_generation_comparable();
-  void clear_has_generation_comparable();
   void set_has_sticky_bit();
   void clear_has_sticky_bit();
 
@@ -831,7 +821,6 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::int64 range_id_;
   ::google::protobuf::int64 generation_;
   ::google::protobuf::int32 next_replica_id_;
-  bool generation_comparable_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -2742,7 +2731,6 @@ inline void RangeDescriptor::set_next_replica_id(::google::protobuf::int32 value
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.next_replica_id)
 }
 
-// optional int64 generation = 6;
 inline bool RangeDescriptor::has_generation() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
@@ -2764,30 +2752,6 @@ inline void RangeDescriptor::set_generation(::google::protobuf::int64 value) {
   set_has_generation();
   generation_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation)
-}
-
-// optional bool generation_comparable = 8;
-inline bool RangeDescriptor::has_generation_comparable() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void RangeDescriptor::set_has_generation_comparable() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void RangeDescriptor::clear_has_generation_comparable() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void RangeDescriptor::clear_generation_comparable() {
-  generation_comparable_ = false;
-  clear_has_generation_comparable();
-}
-inline bool RangeDescriptor::generation_comparable() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeDescriptor.generation_comparable)
-  return generation_comparable_;
-}
-inline void RangeDescriptor::set_generation_comparable(bool value) {
-  set_has_generation_comparable();
-  generation_comparable_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation_comparable)
 }
 
 // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
