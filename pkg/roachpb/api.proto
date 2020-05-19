@@ -60,7 +60,8 @@ message RequestHeader {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
 
-// ResponseHeader is returned with every storage node response.
+// ResponseHeader is returned with every storage node response. Note that this is
+// different from a BatchResponse's header.
 message ResponseHeader {
   enum ResumeReason {
     option (gogoproto.goproto_enum_prefix) = false;
@@ -105,7 +106,10 @@ message ResponseHeader {
   int64 num_bytes = 8;
   // Range or list of ranges used to execute the request. Multiple
   // ranges may be returned for Scan, ReverseScan or DeleteRange.
-  repeated RangeInfo range_infos = 6 [(gogoproto.nullable) = false];
+  //
+  // This field is deprecated in 20.2 in favor of
+  // BatchResponse.Header.range_infos.
+  repeated RangeInfo deprecated_range_infos = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetRequest is the argument for the Get() method.
@@ -2029,6 +2033,14 @@ message BatchResponse {
     // collected_spans stores trace spans recorded during the execution of this
     // request.
     repeated util.tracing.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
+    // Range or list of ranges used to execute the request, if the request set
+    // return_range_info. For one batch, the kvserver returns at most one
+    // element. The DistSender will combine multiple responses though when it
+    // reassembles a split batch; in this case the RangeInfos are maintained in
+    // sorted order by range id.
+    //
+    // Not set when Error is set.
+    repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
     // NB: if you add a field here, don't forget to update combine().
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];

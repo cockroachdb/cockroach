@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -114,7 +115,34 @@ func (r *Replica) sendWithRangeID(
 			pErr = filter(ctx, *ba, br)
 		}
 	}
+
+	r.maybeAddRangeInfoToResponse(ctx, ba, pErr, br)
+
 	return br, pErr
+}
+
+func (r *Replica) maybeAddRangeInfoToResponse(
+	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error, br *roachpb.BatchResponse,
+) {
+	// Return range information if it was requested. Note that we don't return it
+	// on errors because the code doesn't currently support returning both a br
+	// and a pErr here. Also, some errors (e.g. NotLeaseholderError) have custom
+	// ways of returning range info.
+	if ba.ReturnRangeInfo && pErr == nil {
+		desc, lease := r.GetDescAndLease(ctx)
+		br.RangeInfos = []roachpb.RangeInfo{{Desc: desc, Lease: lease}}
+
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
+			// Also set the RangeInfo on the individual responses, for compatibility
+			// with 20.1.
+			for _, r := range br.Responses {
+				reply := r.GetInner()
+				header := reply.Header()
+				header.DeprecatedRangeInfos = br.RangeInfos
+				reply.SetHeader(header)
+			}
+		}
+	}
 }
 
 // batchExecutionFn is a method on Replica that is able to execute a
@@ -518,10 +546,6 @@ func (r *Replica) executeAdminBatch(
 
 	if pErr != nil {
 		return nil, pErr
-	}
-
-	if ba.Header.ReturnRangeInfo {
-		returnRangeInfo(resp, r)
 	}
 
 	br := &roachpb.BatchResponse{}
