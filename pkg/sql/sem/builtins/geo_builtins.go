@@ -1129,6 +1129,36 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+
+	//
+	// Geography modification
+	//
+
+	"st_segmentize": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"max_segment_length", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				segmentMaxLength := float64(*args[1].(*tree.DFloat))
+				segGeometry, err := geogfn.Segmentize(g.Geography, segmentMaxLength)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(segGeometry), nil
+			},
+			Info: infoBuilder{
+				info: `turns a modified Geography having no segment longer than the given max_segment_length meters. 
+							The calculations are done on a sphere.`,
+				libraryUsage: usesS2,
+				canUseIndex:  true,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		}),
 }
 
 // geometryOverload1 hides the boilerplate for builtins operating on one geometry.
