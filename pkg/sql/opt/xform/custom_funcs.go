@@ -1651,6 +1651,12 @@ var geoRelationshipMap = map[string]geoindex.RelationshipType{
 // IsGeoIndexFunction returns true if the given function is a geospatial
 // function that can be index-accelerated.
 func (c *CustomFuncs) IsGeoIndexFunction(fn opt.ScalarExpr) bool {
+	return IsGeoIndexFunction(fn)
+}
+
+// IsGeoIndexFunction returns true if the given function is a geospatial
+// function that can be index-accelerated.
+func IsGeoIndexFunction(fn opt.ScalarExpr) bool {
 	function := fn.(*memo.FunctionExpr)
 	_, ok := geoRelationshipMap[function.Name]
 	return ok
