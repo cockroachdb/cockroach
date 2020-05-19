@@ -32,7 +32,7 @@ func TestConstantEvalArrayComparison(t *testing.T) {
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	typedExpr, err := expr.TypeCheck(&semaCtx, types.Any)
+	typedExpr, err := expr.TypeCheck(context.Background(), &semaCtx, types.Any)
 	if err != nil {
 		t.Fatal(err)
 	}

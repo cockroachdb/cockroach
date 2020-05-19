@@ -11,6 +11,8 @@
 package sqlbase
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,7 +25,10 @@ import (
 // For every column that has no default expression, a NULL expression is reported
 // as default.
 func MakeDefaultExprs(
-	cols []ColumnDescriptor, txCtx *transform.ExprTransformContext, evalCtx *tree.EvalContext,
+	ctx context.Context,
+	cols []ColumnDescriptor,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
 ) ([]tree.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
@@ -54,6 +59,7 @@ func MakeDefaultExprs(
 	}
 
 	defExprIdx := 0
+	semaCtx := tree.MakeSemaContext()
 	for i := range cols {
 		col := &cols[i]
 		if col.DefaultExpr == nil {
@@ -61,7 +67,7 @@ func MakeDefaultExprs(
 			continue
 		}
 		expr := exprs[defExprIdx]
-		typedExpr, err := tree.TypeCheck(expr, nil, col.Type)
+		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, col.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -77,6 +83,7 @@ func MakeDefaultExprs(
 // ProcessDefaultColumns adds columns with DEFAULT to cols if not present
 // and returns the defaultExprs for cols.
 func ProcessDefaultColumns(
+	ctx context.Context,
 	cols []ColumnDescriptor,
 	tableDesc *ImmutableTableDescriptor,
 	txCtx *transform.ExprTransformContext,
@@ -85,7 +92,7 @@ func ProcessDefaultColumns(
 	cols = processColumnSet(cols, tableDesc, func(col *ColumnDescriptor) bool {
 		return col.DefaultExpr != nil
 	})
-	defaultExprs, err := MakeDefaultExprs(cols, txCtx, evalCtx)
+	defaultExprs, err := MakeDefaultExprs(ctx, cols, txCtx, evalCtx)
 	return cols, defaultExprs, err
 }
 

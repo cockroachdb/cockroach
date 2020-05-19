@@ -432,7 +432,7 @@ func (p *planner) ParseType(sql string) (*types.T, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tree.ResolveType(ref, p.semaCtx.GetTypeResolver())
+	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
 }
 
 // ParseQualifiedTableName implements the tree.EvalDatabase interface.
@@ -484,8 +484,10 @@ func (p *planner) LookupTableByID(
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
 // To also allow NULLs to be returned, use TypeAsStringOrNull() instead.
-func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
-	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
+func (p *planner) TypeAsString(
+	ctx context.Context, e tree.Expr, op string,
+) (func() (string, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
 	}
@@ -503,8 +505,10 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 }
 
 // TypeAsStringOrNull is like TypeAsString but allows NULLs.
-func (p *planner) TypeAsStringOrNull(e tree.Expr, op string) (func() (bool, string, error), error) {
-	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
+func (p *planner) TypeAsStringOrNull(
+	ctx context.Context, e tree.Expr, op string,
+) (func() (bool, string, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +582,7 @@ func evalStringOptions(
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
 func (p *planner) TypeAsStringOpts(
-	opts tree.KVOptions, optValidate map[string]KVStringOptValidate,
+	ctx context.Context, opts tree.KVOptions, optValidate map[string]KVStringOptValidate,
 ) (func() (map[string]string, error), error) {
 	typed := make(map[string]tree.TypedExpr, len(opts))
 	for _, opt := range opts {
@@ -598,7 +602,7 @@ func (p *planner) TypeAsStringOpts(
 		if validate == KVStringOptRequireNoValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
-		r, err := tree.TypeCheckAndRequire(opt.Value, &p.semaCtx, types.String, k)
+		r, err := tree.TypeCheckAndRequire(ctx, opt.Value, &p.semaCtx, types.String, k)
 		if err != nil {
 			return nil, err
 		}
@@ -629,10 +633,12 @@ func (p *planner) TypeAsStringOpts(
 // TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
 // strings and returns a function that can be called to get the string values
 // during (planNode).Start.
-func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]string, error), error) {
+func (p *planner) TypeAsStringArray(
+	ctx context.Context, exprs tree.Exprs, op string,
+) (func() ([]string, error), error) {
 	typedExprs := make([]tree.TypedExpr, len(exprs))
 	for i := range exprs {
-		typedE, err := tree.TypeCheckAndRequire(exprs[i], &p.semaCtx, types.String, op)
+		typedE, err := tree.TypeCheckAndRequire(ctx, exprs[i], &p.semaCtx, types.String, op)
 		if err != nil {
 			return nil, err
 		}

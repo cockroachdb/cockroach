@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -36,8 +38,10 @@ func (s *sqlFnInfo) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (s *sqlFnInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
-	if _, err := s.FuncExpr.TypeCheck(ctx, desired); err != nil {
+func (s *sqlFnInfo) TypeCheck(
+	ctx context.Context, semaCtx *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
+	if _, err := s.FuncExpr.TypeCheck(ctx, semaCtx, desired); err != nil {
 		return nil, err
 	}
 	return s, nil

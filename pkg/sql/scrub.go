@@ -207,7 +207,7 @@ func (n *scrubNode) startScrubTable(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 ) error {
-	ts, hasTS, err := p.getTimestamp(n.n.AsOf)
+	ts, hasTS, err := p.getTimestamp(ctx, n.n.AsOf)
 	if err != nil {
 		return err
 	}

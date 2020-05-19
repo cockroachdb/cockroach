@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -125,7 +127,9 @@ func (c *scopeColumn) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (c *scopeColumn) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
+func (c *scopeColumn) TypeCheck(
+	_ context.Context, _ *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
 	return c, nil
 }
 

@@ -76,10 +76,10 @@ type PlanHookState interface {
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
-	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
-	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
+	TypeAsString(ctx context.Context, e tree.Expr, op string) (func() (string, error), error)
+	TypeAsStringArray(ctx context.Context, e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(
-		opts tree.KVOptions, optsValidate map[string]KVStringOptValidate,
+		ctx context.Context, opts tree.KVOptions, optsValidate map[string]KVStringOptValidate,
 	) (func() (map[string]string, error), error)
 	User() string
 	AuthorizationAccessor
@@ -87,7 +87,7 @@ type PlanHookState interface {
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
 	GetAllRoles(ctx context.Context) (map[string]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
-	EvalAsOfTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, error)
+	EvalAsOfTimestamp(ctx context.Context, asOf tree.AsOfClause) (hlc.Timestamp, error)
 	ResolveUncachedDatabaseByName(
 		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
 	ResolveMutableTableDescriptor(

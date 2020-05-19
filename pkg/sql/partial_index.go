@@ -47,7 +47,7 @@ func validateIndexPredicate(
 	// Check that the type of the expression is a types.Bool and that there are
 	// no variable expressions (besides dummyColumnItems) and no impure
 	// functions.
-	if _, err := sqlbase.SanitizeVarFreeExpr(expr, types.Bool, "index predicate", semaCtx, false /* allowImpure */); err != nil {
+	if _, err := sqlbase.SanitizeVarFreeExpr(ctx, expr, types.Bool, "index predicate", semaCtx, false /* allowImpure */); err != nil {
 		return nil, err
 	}
 

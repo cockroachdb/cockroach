@@ -36,6 +36,7 @@ var _ execinfra.Processor = &columnBackfiller{}
 var _ chunkBackfiller = &columnBackfiller{}
 
 func newColumnBackfiller(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
@@ -60,7 +61,7 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunks = cb
 
-	if err := cb.ColumnBackfiller.Init(cb.flowCtx.NewEvalCtx(), cb.desc); err != nil {
+	if err := cb.ColumnBackfiller.Init(ctx, cb.flowCtx.NewEvalCtx(), cb.desc); err != nil {
 		return nil, err
 	}
 

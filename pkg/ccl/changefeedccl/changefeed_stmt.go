@@ -54,7 +54,7 @@ func init() {
 
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
-	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
 	if !ok {
@@ -82,7 +82,7 @@ func changefeedPlanHook(
 		avoidBuffering = true
 	} else {
 		var err error
-		sinkURIFn, err = p.TypeAsString(changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
+		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -91,7 +91,7 @@ func changefeedPlanHook(
 		}
 	}
 
-	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
+	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -131,7 +131,7 @@ func changefeedPlanHook(
 		if cursor, ok := opts[changefeedbase.OptCursor]; ok {
 			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if initialHighWater, err = p.EvalAsOfTimestamp(asOf); err != nil {
+			if initialHighWater, err = p.EvalAsOfTimestamp(ctx, asOf); err != nil {
 				return err
 			}
 			statementTime = initialHighWater

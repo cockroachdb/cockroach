@@ -168,9 +168,10 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	// so disable leases on tables.
 	defer lease.TestingDisableTableLeases()()
 
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -203,7 +204,7 @@ CREATE TABLE t.test (k INT);
 		t.Fatal(err)
 	}
 	colDef := alterCmd.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
-	col, _, _, err := sqlbase.MakeColumnDefDescs(colDef, nil, nil)
+	col, _, _, err := sqlbase.MakeColumnDefDescs(ctx, colDef, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

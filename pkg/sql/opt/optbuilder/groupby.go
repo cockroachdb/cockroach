@@ -36,6 +36,8 @@ package optbuilder
 //   post-projection: 1 + col3
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -222,8 +224,10 @@ func (a *aggregateInfo) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
-	if _, err := a.FuncExpr.TypeCheck(ctx, desired); err != nil {
+func (a *aggregateInfo) TypeCheck(
+	ctx context.Context, semaCtx *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
+	if _, err := a.FuncExpr.TypeCheck(ctx, semaCtx, desired); err != nil {
 		return nil, err
 	}
 	return a, nil

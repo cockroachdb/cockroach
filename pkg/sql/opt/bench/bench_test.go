@@ -507,6 +507,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		id := tree.PlaceholderIdx(i)
 		typ, _ := h.semaCtx.Placeholders.ValueType(id)
 		texpr, err := sqlbase.SanitizeVarFreeExpr(
+			context.Background(),
 			parg,
 			typ,
 			"", /* context */
