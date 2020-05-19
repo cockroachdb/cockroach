@@ -188,6 +188,15 @@ func NewGeography(spatialObject geopb.SpatialObject) *Geography {
 	return &Geography{SpatialObject: spatialObject}
 }
 
+// NewGeographyFromGeom Geography Object from geom.T.
+func NewGeographyFromGeom(g geom.T) (*Geography, error) {
+	spatialObject, err := spatialObjectFromGeom(g)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(spatialObject), nil
+}
+
 // ParseGeography parses a Geography from a given text.
 func ParseGeography(str string) (*Geography, error) {
 	spatialObject, err := parseAmbiguousText(str, geopb.DefaultGeographySRID)
