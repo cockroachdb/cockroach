@@ -346,7 +346,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 
 		// Fill up the RangeInfos, in case we got any.
 		if f.returnRangeInfo {
-			for _, ri := range header.RangeInfos {
+			for _, ri := range br.RangeInfos {
 				f.rangeInfos = roachpb.InsertRangeInfo(f.rangeInfos, ri)
 			}
 		}
