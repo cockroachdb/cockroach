@@ -3,3 +3,11 @@
 # Check that we get through parsing and license check.
 statement error pq: failed to open backup storage location: unsupported storage scheme: ""
 RESTORE foo FROM "bar"
+
+# Check that user defined types are disallowed in backups.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+CREATE TABLE tt (x t)
+
+statement error pq: unimplemented: user defined types in backup
+BACKUP TABLE tt TO ""

@@ -133,7 +133,7 @@ func newSampleAggregator(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
 
 	if err := s.Init(
-		nil, post, []*types.T{}, flowCtx, processorID, output, memMonitor,
+		nil, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				s.close()

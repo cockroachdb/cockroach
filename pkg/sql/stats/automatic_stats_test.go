@@ -60,6 +60,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -135,6 +136,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -365,6 +367,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -401,6 +404,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	r := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 

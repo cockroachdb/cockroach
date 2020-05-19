@@ -145,9 +145,6 @@ true true
 statement error pq: invalid input value for enum greeting: "notagreeting"
 SELECT 'hello'::greeting = 'notagreeting'
 
-statement error pq: value type greeting cannot be used for table columns
-CREATE TABLE bad (x greeting)
-
 statement error pq: unimplemented: ALTER TYPE ADD VALUE unsupported
 ALTER TYPE greeting ADD VALUE 'hola' AFTER 'hello'
 
@@ -199,3 +196,166 @@ SELECT enum_range(NULL::dbs, NULL::dbs)
 
 query error pq: enum_range\(\): mismatched types
 SELECT enum_range('cockroach'::dbs, 'hello'::greeting)
+
+# Test inserting and reading enum data from tables.
+statement ok
+CREATE TABLE greeting_table (x1 greeting, x2 greeting)
+
+statement error pq: invalid input value for enum greeting: "bye"
+INSERT INTO greeting_table VALUES ('bye', 'hi')
+
+statement ok
+INSERT INTO greeting_table VALUES ('hi', 'hello')
+
+query TT
+SELECT * FROM greeting_table
+----
+hi hello
+
+query TT
+SELECT 'hello'::greeting, x1 FROM greeting_table
+----
+hello hi
+
+query TB
+SELECT x1, x1 < 'hello' FROM greeting_table
+----
+hi false
+
+query TT
+SELECT x1, enum_first(x1) FROM greeting_table
+----
+hi hello
+
+statement ok
+CREATE TABLE t1 (x greeting, INDEX i (x));
+CREATE TABLE t2 (x greeting, INDEX i (x));
+INSERT INTO t1 VALUES ('hello');
+INSERT INTO t2 VALUES ('hello')
+
+query TT
+SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
+----
+hello hello
+
+query TT
+SELECT * FROM t1 INNER HASH JOIN t2 ON t1.x = t2.x
+----
+hello hello
+
+query TT
+SELECT * FROM t1 INNER MERGE JOIN t2 ON t1.x = t2.x
+----
+hello hello
+
+statement ok
+INSERT INTO t2 VALUES ('hello'), ('hello'), ('howdy'), ('hi')
+
+query T rowsort
+SELECT DISTINCT x FROM t2
+----
+hello
+howdy
+hi
+
+query T
+SELECT DISTINCT x FROM t2 ORDER BY x DESC
+----
+hi
+howdy
+hello
+
+# Test out some subqueries.
+query T rowsort
+SELECT x FROM t2 WHERE x > (SELECT x FROM t1 ORDER BY x LIMIT 1)
+----
+hi
+howdy
+
+# Test ordinality.
+query TI
+SELECT * FROM t2 WITH ORDINALITY ORDER BY x
+----
+hello  1
+hello  2
+hello  3
+howdy  4
+hi     5
+
+# Test ordering with and without limits.
+statement ok
+INSERT INTO t1 VALUES ('hi'), ('hello'), ('howdy'), ('howdy'), ('howdy'), ('hello')
+
+query T
+SELECT x FROM t1 ORDER BY x DESC
+----
+hi
+howdy
+howdy
+howdy
+hello
+hello
+hello
+
+query T
+SELECT x FROM t1 ORDER BY x ASC
+----
+hello
+hello
+hello
+howdy
+howdy
+howdy
+hi
+
+query T
+SELECT x FROM t1 ORDER BY x ASC LIMIT 3
+----
+hello
+hello
+hello
+
+query T
+SELECT x FROM t1 ORDER BY x DESC LIMIT 3
+----
+hi
+howdy
+howdy
+
+# Test we can group on enums.
+query T rowsort
+(SELECT * FROM t1) UNION (SELECT * FROM t2)
+----
+hello
+howdy
+hi
+
+statement ok
+CREATE TABLE enum_agg (x greeting, y INT);
+INSERT INTO enum_agg VALUES
+  ('hello', 1),
+  ('hello', 3),
+  ('howdy', 5),
+  ('howdy', 0),
+  ('howdy', 1),
+  ('hi', 10)
+
+query TIRI rowsort
+SELECT x, max(y), sum(y), min(y) FROM enum_agg GROUP BY x
+----
+hello 3 4 1
+howdy 5 6 0
+hi 10 10 10
+
+
+# Regression to ensure that statistics jobs can be run on tables
+# with user defined types.
+statement ok
+CREATE TABLE greeting_stats (x greeting PRIMARY KEY);
+INSERT INTO greeting_stats VALUES ('hi');
+CREATE STATISTICS s FROM greeting_stats
+
+query T
+SELECT x FROM greeting_stats
+----
+hi
