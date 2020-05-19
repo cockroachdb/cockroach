@@ -92,33 +92,6 @@ func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgrade
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Check for any jobs that have not succeeded.
-	rows, err := db.Query(`
-SELECT job_id, job_type, statement, status, error, coordinator_id
-FROM [SHOW JOBS] WHERE status != $1`,
-		jobs.StatusSucceeded,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var jobType, stmt, status, jobError string
-	var jobID, coordinatorID int64
-	var count int
-	for rows.Next() {
-		count++
-		err := rows.Scan(&jobID, &jobType, &stmt, &status, &jobError, &coordinatorID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.l.Printf(
-			"Unsuccessful job %d of type %s, statement %s, status %s, error %s, coordinator %d",
-			jobID, jobType, stmt, status, jobError, coordinatorID,
-		)
-	}
-	if count > 0 {
-		t.Fatalf("Found %d unsuccessful jobs", count)
-	}
 }
 
 func backgroundTPCCWorkload(warehouses int, tpccDB string) backgroundStepper {
@@ -190,6 +163,42 @@ func makeResumeAllJobsAndWaitStep(d time.Duration) versionStep {
 	}
 }
 
+func checkForFailedJobsStep(ctx context.Context, t *test, u *versionUpgradeTest) {
+	t.l.Printf("Checking for failed jobs.")
+
+	db := u.conn(ctx, t, 1)
+	rows, err := db.Query(`
+SELECT job_id, job_type, description, status, error, coordinator_id
+FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
+		jobs.StatusFailed, jobs.StatusReverting,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jobType, desc, status, jobError string
+	var jobID, coordinatorID int64
+	var errMsg string
+	for rows.Next() {
+		err := rows.Scan(&jobID, &jobType, &desc, &status, &jobError, &coordinatorID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Concatenate all unsuccessful jobs info.
+		errMsg = fmt.Sprintf(
+			"%sUnsuccessful job %d of type %s, description %s, status %s, error %s, coordinator %d\n",
+			errMsg, jobID, jobType, desc, status, jobError, coordinatorID,
+		)
+	}
+	if errMsg != "" {
+		nodeInfo := "Cluster info\n"
+		for i := range u.c.All() {
+			nodeInfo = fmt.Sprintf(
+				"%sNode %d: %s\n", nodeInfo, i+1, u.binaryVersion(ctx, t, i+1))
+		}
+		t.Fatalf("%s\n%s", nodeInfo, errMsg)
+	}
+}
+
 func runJobsMixedVersions(
 	ctx context.Context, t *test, c *cluster, warehouses int, predecessorVersion string,
 ) {
@@ -210,65 +219,79 @@ func runJobsMixedVersions(
 		func(ctx context.Context, _ *test, u *versionUpgradeTest) {
 			time.Sleep(10 * time.Second)
 		},
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		// Roll the nodes into the new version one by one, while repeatedly pausing
 		// and resuming all jobs.
 		binaryUpgradeStep(c.Node(3), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(2), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(1), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(4), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		// Roll back again, which ought to be fine because the cluster upgrade was
 		// not finalized.
 		binaryUpgradeStep(c.Node(2), predecessorVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(4), predecessorVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(3), predecessorVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(1), predecessorVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		// Roll nodes forward and finalize upgrade.
 		binaryUpgradeStep(c.Node(4), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(3), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(1), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		binaryUpgradeStep(c.Node(2), mainVersion),
 		resumeAllJobsAndWaitStep,
+		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
 		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(roachNodes),
 		resumeAllJobsAndWaitStep,
 		backgroundTPCC.stop,
+		checkForFailedJobsStep,
 	)
 	u.run(ctx, t)
 }
