@@ -872,16 +872,16 @@ class ResponseHeader : public ::google::protobuf::MessageLite /* @@protoc_insert
 
   // accessors -------------------------------------------------------
 
-  int range_infos_size() const;
-  void clear_range_infos();
-  static const int kRangeInfosFieldNumber = 6;
-  ::cockroach::roachpb::RangeInfo* mutable_range_infos(int index);
+  int deprecated_range_infos_size() const;
+  void clear_deprecated_range_infos();
+  static const int kDeprecatedRangeInfosFieldNumber = 6;
+  ::cockroach::roachpb::RangeInfo* mutable_deprecated_range_infos(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
-      mutable_range_infos();
-  const ::cockroach::roachpb::RangeInfo& range_infos(int index) const;
-  ::cockroach::roachpb::RangeInfo* add_range_infos();
+      mutable_deprecated_range_infos();
+  const ::cockroach::roachpb::RangeInfo& deprecated_range_infos(int index) const;
+  ::cockroach::roachpb::RangeInfo* add_deprecated_range_infos();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
-      range_infos() const;
+      deprecated_range_infos() const;
 
   // .cockroach.roachpb.Transaction txn = 3;
   bool has_txn() const;
@@ -929,7 +929,7 @@ class ResponseHeader : public ::google::protobuf::MessageLite /* @@protoc_insert
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo > range_infos_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo > deprecated_range_infos_;
   ::cockroach::roachpb::Transaction* txn_;
   ::cockroach::roachpb::Span* resume_span_;
   ::google::protobuf::int64 num_keys_;
@@ -16064,6 +16064,17 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
   const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan >&
       collected_spans() const;
 
+  int range_infos_size() const;
+  void clear_range_infos();
+  static const int kRangeInfosFieldNumber = 7;
+  ::cockroach::roachpb::RangeInfo* mutable_range_infos(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+      mutable_range_infos();
+  const ::cockroach::roachpb::RangeInfo& range_infos(int index) const;
+  ::cockroach::roachpb::RangeInfo* add_range_infos();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+      range_infos() const;
+
   // .cockroach.roachpb.Error error = 1;
   bool has_error() const;
   void clear_error();
@@ -16115,6 +16126,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan > collected_spans_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo > range_infos_;
   ::cockroach::roachpb::Error* error_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
   ::cockroach::roachpb::Transaction* txn_;
@@ -17126,30 +17138,30 @@ inline void ResponseHeader::set_num_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ResponseHeader.num_bytes)
 }
 
-inline int ResponseHeader::range_infos_size() const {
-  return range_infos_.size();
+inline int ResponseHeader::deprecated_range_infos_size() const {
+  return deprecated_range_infos_.size();
 }
-inline ::cockroach::roachpb::RangeInfo* ResponseHeader::mutable_range_infos(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseHeader.range_infos)
-  return range_infos_.Mutable(index);
+inline ::cockroach::roachpb::RangeInfo* ResponseHeader::mutable_deprecated_range_infos(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseHeader.deprecated_range_infos)
+  return deprecated_range_infos_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
-ResponseHeader::mutable_range_infos() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ResponseHeader.range_infos)
-  return &range_infos_;
+ResponseHeader::mutable_deprecated_range_infos() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ResponseHeader.deprecated_range_infos)
+  return &deprecated_range_infos_;
 }
-inline const ::cockroach::roachpb::RangeInfo& ResponseHeader::range_infos(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseHeader.range_infos)
-  return range_infos_.Get(index);
+inline const ::cockroach::roachpb::RangeInfo& ResponseHeader::deprecated_range_infos(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseHeader.deprecated_range_infos)
+  return deprecated_range_infos_.Get(index);
 }
-inline ::cockroach::roachpb::RangeInfo* ResponseHeader::add_range_infos() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.ResponseHeader.range_infos)
-  return range_infos_.Add();
+inline ::cockroach::roachpb::RangeInfo* ResponseHeader::add_deprecated_range_infos() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ResponseHeader.deprecated_range_infos)
+  return deprecated_range_infos_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
-ResponseHeader::range_infos() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ResponseHeader.range_infos)
-  return range_infos_;
+ResponseHeader::deprecated_range_infos() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ResponseHeader.deprecated_range_infos)
+  return deprecated_range_infos_;
 }
 
 // -------------------------------------------------------------------
@@ -33996,6 +34008,32 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::R
 BatchResponse_Header::collected_spans() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.Header.collected_spans)
   return collected_spans_;
+}
+
+inline int BatchResponse_Header::range_infos_size() const {
+  return range_infos_.size();
+}
+inline ::cockroach::roachpb::RangeInfo* BatchResponse_Header::mutable_range_infos(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.range_infos)
+  return range_infos_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+BatchResponse_Header::mutable_range_infos() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.BatchResponse.Header.range_infos)
+  return &range_infos_;
+}
+inline const ::cockroach::roachpb::RangeInfo& BatchResponse_Header::range_infos(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.range_infos)
+  return range_infos_.Get(index);
+}
+inline ::cockroach::roachpb::RangeInfo* BatchResponse_Header::add_range_infos() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.BatchResponse.Header.range_infos)
+  return range_infos_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+BatchResponse_Header::range_infos() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.Header.range_infos)
+  return range_infos_;
 }
 
 // -------------------------------------------------------------------

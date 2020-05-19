@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1479,6 +1480,19 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if reply.Error == nil {
+			// 20.1 nodes return RangeInfos in individual responses. Let's move it to
+			// the br.
+			if ba.ReturnRangeInfo &&
+				len(reply.RangeInfos) == 0 &&
+				!ds.st.Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
+				if ba.ReturnRangeInfo && len(reply.RangeInfos) == 0 {
+					// All the responses have the same RangeInfos in them, so just look at the
+					// first one.
+					firstRes := reply.Responses[0].GetInner()
+					reply.RangeInfos = append(reply.RangeInfos, firstRes.Header().DeprecatedRangeInfos...)
+				}
+			}
+
 			return response{reply: reply, positions: positions}
 		}
 

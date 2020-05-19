@@ -125,9 +125,9 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<43> scc_info_ResponseUnion;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<44> scc_info_RequestUnion;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_AdminChangeReplicasRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_BatchResponse_Header;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_PushTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_ResolveIntentRangeRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_BatchResponse_Header;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_EndTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_ExportRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_ImportRequest;
@@ -2693,12 +2693,13 @@ static void InitDefaultsBatchResponse_Header() {
   ::cockroach::roachpb::BatchResponse_Header::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<4> scc_info_BatchResponse_Header =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsBatchResponse_Header}, {
+::google::protobuf::internal::SCCInfo<5> scc_info_BatchResponse_Header =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsBatchResponse_Header}, {
       &protobuf_roachpb_2ferrors_2eproto::scc_info_AmbiguousResultError.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,
-      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_RecordedSpan.base,}};
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_RecordedSpan.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_RangeInfo.base,}};
 
 static void InitDefaultsBatchResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -3300,8 +3301,8 @@ void ResponseHeader::clear_resume_span() {
   }
   resume_span_ = NULL;
 }
-void ResponseHeader::clear_range_infos() {
-  range_infos_.Clear();
+void ResponseHeader::clear_deprecated_range_infos() {
+  deprecated_range_infos_.Clear();
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResponseHeader::kTxnFieldNumber;
@@ -3309,7 +3310,7 @@ const int ResponseHeader::kResumeSpanFieldNumber;
 const int ResponseHeader::kResumeReasonFieldNumber;
 const int ResponseHeader::kNumKeysFieldNumber;
 const int ResponseHeader::kNumBytesFieldNumber;
-const int ResponseHeader::kRangeInfosFieldNumber;
+const int ResponseHeader::kDeprecatedRangeInfosFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResponseHeader::ResponseHeader()
@@ -3322,7 +3323,7 @@ ResponseHeader::ResponseHeader()
 ResponseHeader::ResponseHeader(const ResponseHeader& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      range_infos_(from.range_infos_) {
+      deprecated_range_infos_(from.deprecated_range_infos_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_txn()) {
     txn_ = new ::cockroach::roachpb::Transaction(*from.txn_);
@@ -3371,7 +3372,7 @@ void ResponseHeader::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  range_infos_.Clear();
+  deprecated_range_infos_.Clear();
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
     delete txn_;
   }
@@ -3444,7 +3445,7 @@ bool ResponseHeader::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_range_infos()));
+                input, add_deprecated_range_infos()));
         } else {
           goto handle_unusual;
         }
@@ -3524,10 +3525,10 @@ void ResponseHeader::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->range_infos_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->deprecated_range_infos_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       6,
-      this->range_infos(static_cast<int>(i)),
+      this->deprecated_range_infos(static_cast<int>(i)),
       output);
   }
 
@@ -3554,12 +3555,12 @@ size_t ResponseHeader::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->range_infos_size());
+    unsigned int count = static_cast<unsigned int>(this->deprecated_range_infos_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->range_infos(static_cast<int>(i)));
+          this->deprecated_range_infos(static_cast<int>(i)));
     }
   }
 
@@ -3614,7 +3615,7 @@ void ResponseHeader::MergeFrom(const ResponseHeader& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  range_infos_.MergeFrom(from.range_infos_);
+  deprecated_range_infos_.MergeFrom(from.deprecated_range_infos_);
   if (from.has_txn()) {
     mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
   }
@@ -3649,7 +3650,7 @@ void ResponseHeader::Swap(ResponseHeader* other) {
 }
 void ResponseHeader::InternalSwap(ResponseHeader* other) {
   using std::swap;
-  CastToBase(&range_infos_)->InternalSwap(CastToBase(&other->range_infos_));
+  CastToBase(&deprecated_range_infos_)->InternalSwap(CastToBase(&other->deprecated_range_infos_));
   swap(txn_, other->txn_);
   swap(resume_span_, other->resume_span_);
   swap(num_keys_, other->num_keys_);
@@ -36264,12 +36265,16 @@ void BatchResponse_Header::clear_now() {
 void BatchResponse_Header::clear_collected_spans() {
   collected_spans_.Clear();
 }
+void BatchResponse_Header::clear_range_infos() {
+  range_infos_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BatchResponse_Header::kErrorFieldNumber;
 const int BatchResponse_Header::kTimestampFieldNumber;
 const int BatchResponse_Header::kTxnFieldNumber;
 const int BatchResponse_Header::kNowFieldNumber;
 const int BatchResponse_Header::kCollectedSpansFieldNumber;
+const int BatchResponse_Header::kRangeInfosFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 BatchResponse_Header::BatchResponse_Header()
@@ -36282,7 +36287,8 @@ BatchResponse_Header::BatchResponse_Header()
 BatchResponse_Header::BatchResponse_Header(const BatchResponse_Header& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      collected_spans_(from.collected_spans_) {
+      collected_spans_(from.collected_spans_),
+      range_infos_(from.range_infos_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_error()) {
     error_ = new ::cockroach::roachpb::Error(*from.error_);
@@ -36341,6 +36347,7 @@ void BatchResponse_Header::Clear() {
   (void) cached_has_bits;
 
   collected_spans_.Clear();
+  range_infos_.Clear();
   if (GetArenaNoVirtual() == NULL && error_ != NULL) {
     delete error_;
   }
@@ -36433,6 +36440,17 @@ bool BatchResponse_Header::MergePartialFromCodedStream(
         break;
       }
 
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(58u /* 58 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_range_infos()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -36489,6 +36507,14 @@ void BatchResponse_Header::SerializeWithCachedSizes(
       output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->range_infos_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      7,
+      this->range_infos(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.BatchResponse.Header)
@@ -36507,6 +36533,16 @@ size_t BatchResponse_Header::ByteSizeLong() const {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           this->collected_spans(static_cast<int>(i)));
+    }
+  }
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->range_infos_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->range_infos(static_cast<int>(i)));
     }
   }
 
@@ -36554,6 +36590,7 @@ void BatchResponse_Header::MergeFrom(const BatchResponse_Header& from) {
   (void) cached_has_bits;
 
   collected_spans_.MergeFrom(from.collected_spans_);
+  range_infos_.MergeFrom(from.range_infos_);
   if (from.has_error()) {
     mutable_error()->::cockroach::roachpb::Error::MergeFrom(from.error());
   }
@@ -36586,6 +36623,7 @@ void BatchResponse_Header::Swap(BatchResponse_Header* other) {
 void BatchResponse_Header::InternalSwap(BatchResponse_Header* other) {
   using std::swap;
   CastToBase(&collected_spans_)->InternalSwap(CastToBase(&other->collected_spans_));
+  CastToBase(&range_infos_)->InternalSwap(CastToBase(&other->range_infos_));
   swap(error_, other->error_);
   swap(timestamp_, other->timestamp_);
   swap(txn_, other->txn_);

@@ -102,10 +102,6 @@ func DeclareKeysForBatch(
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
-	if header.ReturnRangeInfo {
-		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
-	}
 }
 
 // CommandArgs contains all the arguments to a command.

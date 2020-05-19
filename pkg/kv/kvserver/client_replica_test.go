@@ -1459,6 +1459,7 @@ func TestRangeInfo(t *testing.T) {
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.Clock = nil // manual clock
+	ctx := context.Background()
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 		// This test was written before the multiTestContext started creating many
@@ -1498,42 +1499,45 @@ func TestRangeInfo(t *testing.T) {
 	lhsLease, _ := lhsReplica0.GetLease()
 	rhsLease, _ := rhsReplica0.GetLease()
 
+	send := func(args roachpb.Request, returnRangeInfo bool, txn *roachpb.Transaction) *roachpb.BatchResponse {
+		ba := roachpb.BatchRequest{
+			Header: roachpb.Header{
+				ReturnRangeInfo: returnRangeInfo,
+				Txn:             txn,
+			},
+		}
+		ba.Add(args)
+
+		br, pErr := mtc.distSenders[0].Send(ctx, ba)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		return br
+	}
+
 	// Verify range info is not set if unrequested.
 	getArgs := getArgs(splitKey.AsRawKey())
-	reply, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], getArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	if len(reply.Header().RangeInfos) > 0 {
-		t.Errorf("expected empty range infos if unrequested; got %v", reply.Header().RangeInfos)
+	br := send(getArgs, false /* returnRangeInfo */, nil /* txn */)
+	if len(br.RangeInfos) > 0 {
+		t.Errorf("expected empty range infos if unrequested; got %v", br.RangeInfos)
 	}
 
 	// Verify range info on a get request.
-	h := roachpb.Header{
-		ReturnRangeInfo: true,
-	}
-	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, getArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	br = send(getArgs, true /* returnRangeInfo */, nil /* txn */)
 	expRangeInfos := []roachpb.RangeInfo{
 		{
 			Desc:  *rhsReplica0.Desc(),
 			Lease: rhsLease,
 		},
 	}
-	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
-		t.Errorf("on get reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
+		t.Errorf("on get reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
 	}
 
 	// Verify range info on a put request.
-	putArgs := putArgs(splitKey.AsRawKey(), []byte("foo"))
-	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, putArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
-		t.Errorf("on put reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	br = send(putArgs(splitKey.AsRawKey(), []byte("foo")), true /* returnRangeInfo */, nil /* txn */)
+	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
+		t.Errorf("on put reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
 	}
 
 	// Verify range info on an admin request.
@@ -1543,27 +1547,20 @@ func TestRangeInfo(t *testing.T) {
 		},
 		Target: rhsLease.Replica.StoreID,
 	}
-	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, adminArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
-		t.Errorf("on admin reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	br = send(adminArgs, true /* returnRangeInfo */, nil /* txn */)
+	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
+		t.Errorf("on admin reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
 	}
 
 	// Verify multiple range infos on a scan request.
-	scanArgs := roachpb.ScanRequest{
+	scanArgs := &roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    keys.SystemMax,
 			EndKey: roachpb.KeyMax,
 		},
 	}
 	txn := roachpb.MakeTransaction("test", roachpb.KeyMin, 1, mtc.clock().Now(), 0)
-	h.Txn = &txn
-	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	br = send(scanArgs, true /* returnRangeInfo */, &txn)
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica0.Desc(),
@@ -1574,33 +1571,30 @@ func TestRangeInfo(t *testing.T) {
 			Lease: rhsLease,
 		},
 	}
-	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
-		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
+		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
 	}
 
 	// Verify multiple range infos and order on a reverse scan request.
-	revScanArgs := roachpb.ReverseScanRequest{
+	revScanArgs := &roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    keys.SystemMax,
 			EndKey: roachpb.KeyMax,
 		},
 	}
-	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &revScanArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	br = send(revScanArgs, true /* returnRangeInfo */, &txn)
 	expRangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  *rhsReplica0.Desc(),
-			Lease: rhsLease,
-		},
 		{
 			Desc:  *lhsReplica0.Desc(),
 			Lease: lhsLease,
 		},
+		{
+			Desc:  *rhsReplica0.Desc(),
+			Lease: rhsLease,
+		},
 	}
-	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
-		t.Errorf("on reverse scan reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
+		t.Errorf("on reverse scan reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
 	}
 
 	// Change lease holders for both ranges and re-scan.
@@ -1614,10 +1608,7 @@ func TestRangeInfo(t *testing.T) {
 			t.Fatalf("unable to transfer lease to replica %s: %+v", r, err)
 		}
 	}
-	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	br = send(scanArgs, true /* returnRangeInfo */, &txn)
 	// Read the expected lease from replica0 rather than replica1 as it may serve
 	// a follower read which will contain the new lease information before
 	// replica1 has applied the lease transfer.
@@ -1633,8 +1624,8 @@ func TestRangeInfo(t *testing.T) {
 			Lease: rhsLease,
 		},
 	}
-	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
-		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
+		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
 	}
 }
 
@@ -3217,7 +3208,7 @@ func getRangeInfo(
 			return err
 		}
 		resp := b.RawResponse()
-		ri = &resp.Responses[0].GetInner().Header().RangeInfos[0]
+		ri = &resp.RangeInfos[0]
 		return nil
 	})
 	return ri, err

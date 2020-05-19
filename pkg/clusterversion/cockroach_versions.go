@@ -69,6 +69,7 @@ const (
 	VersionAddScheduledJobsTable
 	VersionUserDefinedSchemas
 	VersionNoOriginFKIndexes
+	VersionClientRangeInfosOnBatchResponse
 
 	// Add new versions here (step one of two).
 )
@@ -523,6 +524,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// indexes on the origin side of the relationship.
 		Key:     VersionNoOriginFKIndexes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
+	},
+	{
+		// VersionClientRangeInfosOnBatchResponse moves the response RangeInfos from
+		// individual response headers to the batch header.
+		Key:     VersionClientRangeInfosOnBatchResponse,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).

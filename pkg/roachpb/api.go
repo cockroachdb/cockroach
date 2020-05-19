@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -277,7 +278,7 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	rh.ResumeReason = otherRH.ResumeReason
 	rh.NumKeys += otherRH.NumKeys
 	rh.NumBytes += otherRH.NumBytes
-	rh.RangeInfos = append(rh.RangeInfos, otherRH.RangeInfos...)
+	rh.DeprecatedRangeInfos = append(rh.DeprecatedRangeInfos, otherRH.DeprecatedRangeInfos...)
 	return nil
 }
 
@@ -452,6 +453,17 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	}
 	h.Now.Forward(o.Now)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
+	// Deduplicate the RangeInfos and maintain them in sorted order.
+	for _, ri := range o.RangeInfos {
+		id := ri.Desc.RangeID
+		i := sort.Search(len(h.RangeInfos), func(i int) bool {
+			return h.RangeInfos[i].Desc.RangeID >= id
+		})
+		if i < len(h.RangeInfos) && h.RangeInfos[i].Desc.RangeID == id {
+			continue
+		}
+		h.RangeInfos = append(h.RangeInfos[:i], append([]RangeInfo{ri}, h.RangeInfos[i:]...)...)
+	}
 	return nil
 }
 
