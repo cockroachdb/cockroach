@@ -102,7 +102,10 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	case types.BytesFamily:
 		// Bytes can be represented 3 different ways. As variable-length bytes,
 		// variable-length strings, or fixed-width bytes.
-		representation := rng.Intn(3)
+		// NOTE: We currently do not generate fixed-width bytes in this test due to
+		// the different buffer layout (no offsets). The serialization code assumes
+		// 3 buffers for all types.BytesFamily types.
+		representation := rng.Intn(2)
 		switch representation {
 		case 0:
 			builder = array.NewStringBuilder(memory.DefaultAllocator)
