@@ -21,15 +21,12 @@ package coldata
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // {{/*
@@ -45,15 +42,6 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
-
-// Dummy import to pull in "time" package.
-var _ time.Time
-
-// Dummy import to pull in "duration" package.
-var _ duration.Duration
 
 // */}}
 
