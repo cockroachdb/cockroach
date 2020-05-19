@@ -328,7 +328,7 @@ func createStatsDefaultColumns(
 		if _, ok := requestedStats[key]; !ok && col.Type.Family() != types.JsonFamily {
 			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 				ColumnIDs:    colList,
-				HasHistogram: col.Type.Family() == types.BoolFamily,
+				HasHistogram: col.Type.Family() == types.BoolFamily || col.Type.Family() == types.EnumFamily,
 			})
 			nonIdxCols++
 		}
