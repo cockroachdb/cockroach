@@ -202,7 +202,15 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, printer)
+	results := 0
+	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) (bool, error) {
+		done, err := printer(kv)
+		if done || err != nil {
+			return done, err
+		}
+		results++
+		return results == debugCtx.maxResults, nil
+	})
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
@@ -292,7 +300,8 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 
 	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated, false /* seekEnd */)
 	defer iter.Close()
-	for ; ; iter.Next() {
+	for i := 0; ; iter.Next() {
+		i++
 		if ok, err := iter.Valid(); err != nil {
 			return err
 		} else if !ok {
@@ -302,6 +311,9 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 			Key:   iter.Key(),
 			Value: iter.Value(),
 		})
+		if i == debugCtx.maxResults {
+			break
+		}
 	}
 	return nil
 }
