@@ -249,6 +249,10 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 				if hj.spec.joinType == sqlbase.JoinType_INNER ||
 					hj.spec.joinType == sqlbase.JoinType_RIGHT_OUTER ||
 					hj.spec.joinType == sqlbase.JoinType_LEFT_SEMI {
+					// Next the left side once.
+					// TODO(asubiotto): Figure out why the left side needs to be Nexted.
+					//  Without this, TestLogic/fakedist/inner-join flakes.
+					_ = hj.inputOne.Next(ctx)
 					hj.state = hjDone
 				}
 			}
