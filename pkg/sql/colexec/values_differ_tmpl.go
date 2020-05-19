@@ -20,16 +20,12 @@
 package colexec
 
 import (
-	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -39,18 +35,6 @@ var _ = execgen.UNSAFEGET
 // {{/*
 
 // Declarations to make the template compile properly.
-
-// Dummy import to pull in "bytes" package.
-var _ bytes.Buffer
-
-// Dummy import to pull in "tree" package.
-var _ tree.Datum
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
-
-// Dummy import to pull in "coldataext" package.
-var _ coldataext.Datum
 
 // _GOTYPE is the template variable.
 type _GOTYPE interface{}

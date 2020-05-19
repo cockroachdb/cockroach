@@ -22,12 +22,8 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"math"
-	"reflect"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -39,18 +35,6 @@ import (
 var _ = execgen.UNSAFEGET
 
 // {{/*
-
-// Dummy import to pull in "unsafe" package
-var _ unsafe.Pointer
-
-// Dummy import to pull in "reflect" package
-var _ reflect.SliceHeader
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
-
-// Dummy import to pull in "coldataext" package.
-var _ coldataext.Datum
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
