@@ -2,7 +2,7 @@ statement ok
 CREATE TABLE geo_table(
   id int primary key,
   geog geography(geometry, 4326),
-  geom geometry(point, 4326),
+  geom geometry(point),
   orphan geography,
   FAMILY f (orphan)
 )
@@ -11,6 +11,14 @@ statement ok
 INSERT INTO geo_table VALUES
   (1, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)', 'POINT(3.0 3.0)'),
   (2, 'LINESTRING(1.0 1.0, 2.0 2.0)', 'POINT(1.0 1.0)', 'POINT(3.0 3.0)')
+
+statement error SRID 4004 does not match column SRID 4326
+INSERT INTO geo_table (id, geog) VALUES
+  (3, 'SRID=4004;POINT(1.0 2.0)')
+
+statement error type LineString does not match column type Point
+INSERT INTO geo_table (id, geom) VALUES
+  (3, 'SRID=4004;LINESTRING(0.0 0.0, 1.0 2.0)')
 
 query ITTT rowsort
 SELECT * FROM geo_table
@@ -29,8 +37,8 @@ SHOW COLUMNS FROM geo_table
 ----
 id      INT8                      false  NULL  ·  {primary}  false
 geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {}         false
-geom    GEOMETRY(POINT,4326)      true   NULL  ·  {}         false
-orphan  GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {}         false
+geom    GEOMETRY(POINT)           true   NULL  ·  {}         false
+orphan  GEOGRAPHY                 true   NULL  ·  {}         false
 
 statement error column bad_pk is of type geography and thus is not indexable
 CREATE TABLE bad_geog_table(bad_pk geography primary key)
@@ -90,6 +98,70 @@ SELECT ST_AsText(p) FROM (VALUES
 POINT (1 2)
 POINT (3 4)
 
+subtest cast_test
+
+query T
+SELECT ST_AsEWKT(geom) FROM (VALUES
+  ('SRID=4326;POINT(1.0 2.0)'::geometry::geometry(point, 4326)),
+  ('SRID=4326;POINT(1.0 2.0)'::geometry::geometry(geometry, 4326)),
+  ('SRID=4326;POINT(1.0 2.0)'::geography::geometry)
+) t(geom)
+----
+SRID=4326;POINT (1 2)
+SRID=4326;POINT (1 2)
+SRID=4326;POINT (1 2)
+
+query T
+SELECT ST_AsEWKT(geog) FROM (VALUES
+  ('POINT(1.0 2.0)'::geography::geography(point, 4326)),
+  ('POINT(1.0 2.0)'::geometry::geography(point, 4326)),
+  ('SRID=4004;POINT(1.0 2.0)'::geometry::geography(point, 4004)),
+  ('SRID=4004;POINT(1.0 2.0)'::geometry::geography),
+  ('SRID=4004;POINT(1.0 2.0)'::geography::geography(point, 4004)),
+  ('SRID=4004;POINT(1.0 2.0)'::geography::geography(geometry, 4004)),
+  ('POINT(1.0 2.0)'::geometry::geography),
+  ('POINT(1.0 2.0)'::geometry::geography(geometry, 4326))
+) t(geog)
+----
+SRID=4326;POINT (1 2)
+SRID=4326;POINT (1 2)
+SRID=4004;POINT (1 2)
+SRID=4004;POINT (1 2)
+SRID=4004;POINT (1 2)
+SRID=4004;POINT (1 2)
+SRID=4326;POINT (1 2)
+SRID=4326;POINT (1 2)
+
+statement error SRID 4004 does not match column SRID 4326
+SELECT 'SRID=4004;POINT(2.0 3.0)'::geometry::geography(point, 4326)
+
+statement error SRID 4326 does not match column SRID 4004
+SELECT 'SRID=4326;POINT(2.0 3.0)'::geometry::geography(point, 4004)
+
+statement error SRID 4326 does not match column SRID 4004
+SELECT 'SRID=4326;POINT(2.0 3.0)'::geography::geography(point, 4004)
+
+statement error SRID 4004 does not match column SRID 4326
+SELECT 'SRID=4004;POINT(2.0 3.0)'::geometry::geometry(point, 4326)
+
+statement error SRID 4004 does not match column SRID 4326
+SELECT 'SRID=4004;POINT(2.0 3.0)'::geography::geometry(point, 4326)
+
+statement error SRID 4326 does not match column SRID 4004
+SELECT 'POINT(1.0 2.0)'::geometry::geography(geometry, 4004)
+
+statement error type Point does not match column type LineString
+SELECT 'SRID=4004;POINT(2.0 3.0)'::geometry::geometry(linestring)
+
+statement error type Point does not match column type LineString
+SELECT 'SRID=4004;POINT(2.0 3.0)'::geometry::geography(linestring)
+
+statement error type Point does not match column type LineString
+SELECT 'SRID=4004;POINT(2.0 3.0)'::geography::geography(linestring)
+
+statement error type Point does not match column type LineString
+SELECT 'SRID=4004;POINT(2.0 3.0)'::geography::geometry(linestring)
+
 subtest parse_and_unparse
 
 statement ok
@@ -99,19 +171,34 @@ CREATE TABLE parse_test (
   geog GEOGRAPHY
 )
 
+# These values cannot be inserted into the database due to mismatching SRIDs.
+query TT
+SELECT
+  ST_AsEWKT(geom),
+  ST_AsEWKT(geog)
+FROM ( VALUES
+  (ST_GeometryFromText('SRID=4326;POINT(1.0 2.0)', 4004), ST_GeographyFromText('SRID=4326;POINT(1.0 2.0)', 4004)),
+  (ST_GeomFromText('SRID=4326;POINT(1.0 2.0)', 4004), ST_GeogFromText('SRID=4326;POINT(1.0 2.0)', 4004)),
+  (ST_GeometryFromText('SRID=4326;POINT(1.0 2.0)'), ST_GeographyFromText('POINT(1.0 2.0)', 4004)),
+  (ST_GeomFromEWKT('SRID=4004;POINT(1.0 2.0)'), ST_GeogFromEWKT('SRID=4004;POINT(1.0 2.0)')),
+  (ST_GeomFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'), 4004), ST_GeogFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'), 4004))
+) t(geom, geog)
+----
+SRID=4004;POINT (1 2)  SRID=4004;POINT (1 2)
+SRID=4004;POINT (1 2)  SRID=4004;POINT (1 2)
+SRID=4326;POINT (1 2)  SRID=4004;POINT (1 2)
+SRID=4004;POINT (1 2)  SRID=4004;POINT (1 2)
+SRID=4004;POINT (1 1)  SRID=4004;POINT (1 1)
+
+
 statement ok
 INSERT INTO parse_test (geom, geog) VALUES
   (ST_GeomFromText('POINT(1.0 2.0)'), ST_GeogFromText('POINT(1.0 2.0)')),
   (ST_GeomFromText('SRID=4326;POINT(1.0 2.0)'), ST_GeogFromText('SRID=4326;POINT(1.0 2.0)')),
-  (ST_GeomFromText('SRID=4326;POINT(1.0 2.0)', 3857), ST_GeogFromText('SRID=4326;POINT(1.0 2.0)', 3857)),
-  (ST_GeometryFromText('POINT(1.0 2.0)'), ST_GeographyFromText('POINT(1.0 2.0)')),
-  (ST_GeometryFromText('SRID=4326;POINT(1.0 2.0)'), ST_GeographyFromText('POINT(1.0 2.0)', 3857)),
-  (ST_GeometryFromText('SRID=4326;POINT(1.0 2.0)', 3857), ST_GeographyFromText('SRID=4326;POINT(1.0 2.0)', 3857)),
-  (ST_GeomFromEWKT('SRID=3857;POINT(1.0 2.0)'), ST_GeogFromEWKT('SRID=3857;POINT(1.0 2.0)')),
+  (ST_GeometryFromText('SRID=4004;POINT(1.0 2.0)'), ST_GeographyFromText('POINT(1.0 2.0)')),
   (ST_GeomFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'), ST_GeogFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}')),
   (ST_GeomFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'::jsonb), ST_GeogFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'::jsonb)),
   (ST_GeomFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
-  (ST_GeomFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'), 3857), ST_GeogFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'), 3857)),
   (ST_GeomFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
   (st_geomfromgeojson('null':::jsonb), st_geogfromgeojson('null':::jsonb))
 
@@ -131,23 +218,13 @@ POINT (1 2)                                    POINT (1 2)                      
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=3857;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020110F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    POINT (1 2)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=3857;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020110F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=3857;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020110F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 2)                                    SRID=4004;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 164 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020A40F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 2)                                    POINT (1 2)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 2)                                    POINT (1 2)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 1)                                    POINT (1 1)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
-POINT (1 1)                                    SRID=3857;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000020110F0000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
 POINT (1 1)                                    POINT (1 1)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
@@ -169,23 +246,13 @@ POINT (1 2)                                    SRID=4326;POINT (1 2)            
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=3857;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020110F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=3857;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020110F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=3857;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020110F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=3857;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020110F0000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
 POINT (1 1)                                    SRID=4326;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
-POINT (1 1)                                    SRID=3857;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 32 17 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000020110F0000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
 POINT (1 1)                                    SRID=4326;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}

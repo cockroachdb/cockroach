@@ -7659,11 +7659,11 @@ const_geo:
 | GEOMETRY  { $$.val = types.Geometry }
 | GEOMETRY '(' geo_shape ')'
   {
-    $$.val = types.MakeGeometry($3.geoFigure(), geopb.DefaultGeometrySRID)
+    $$.val = types.MakeGeometry($3.geoFigure(), 0)
   }
 | GEOGRAPHY '(' geo_shape ')'
   {
-    $$.val = types.MakeGeography($3.geoFigure(), geopb.DefaultGeographySRID)
+    $$.val = types.MakeGeography($3.geoFigure(), 0)
   }
 | GEOMETRY '(' geo_shape ',' iconst32 ')'
   {
