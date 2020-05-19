@@ -8857,6 +8857,11 @@ func_expr:
   {
     f := $1.expr().(*tree.FuncExpr)
     w := $2.expr().(*tree.FuncExpr)
+    if f.IsOrderedSetAggregate() && w.AggType != tree.OrderedSetAgg {
+      sqllex.Error(fmt.Sprint(
+        "ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column"))
+      return 1
+    }
     if w.AggType != 0 {
       f.AggType = w.AggType
       f.OrderBy = w.OrderBy

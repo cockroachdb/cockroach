@@ -2945,6 +2945,20 @@ DETAIL: source SQL:
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x
                                                         ^`,
 		},
+		{
+			`SELECT percentile_disc(0.50) FROM x;`,
+			`at or near "from": syntax error: ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column
+DETAIL: source SQL:
+SELECT percentile_disc(0.50) FROM x
+                             ^`,
+		},
+		{
+			`SELECT percentile_cont(0.50) FROM x;`,
+			`at or near "from": syntax error: ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column
+DETAIL: source SQL:
+SELECT percentile_cont(0.50) FROM x
+                             ^`,
+		},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

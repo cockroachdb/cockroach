@@ -1376,6 +1376,16 @@ func (node *FuncExpr) CanHandleNulls() bool {
 	return node.fnProps != nil && node.fnProps.NullableArgs
 }
 
+// IsOrderedSetAggregate returns whether the function is an ordered-set
+// aggregate. This is used to ensure that the aggregate is not malformed.
+func (node *FuncExpr) IsOrderedSetAggregate() bool {
+	switch node.Func.String() {
+	case "percentile_disc", "percentile_cont":
+		return true
+	}
+	return false
+}
+
 type funcType int
 
 // FuncExpr.Type
