@@ -275,7 +275,7 @@ func newInternalPlanner(
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
-	p.semaCtx = tree.MakeSemaContext()
+	p.semaCtx = tree.MakeSemaContext(ctx)
 	p.semaCtx.Location = &sd.DataConversion.Location
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.TypeResolver = p
@@ -429,7 +429,7 @@ func (p *planner) ParseType(sql string) (*types.T, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tree.ResolveType(ref, p.semaCtx.GetTypeResolver())
+	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
 }
 
 // ParseQualifiedTableName implements the tree.EvalDatabase interface.

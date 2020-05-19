@@ -130,7 +130,7 @@ func ValidateColumnDefType(t *types.T) error {
 // The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
 // sequence dependencies).
 func MakeColumnDefDescs(
-	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
@@ -157,7 +157,7 @@ func MakeColumnDefDescs(
 	}
 
 	// Validate and assign column type.
-	resType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+	resType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, nil, nil, err
 	}

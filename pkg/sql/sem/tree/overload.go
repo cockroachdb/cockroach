@@ -653,7 +653,8 @@ func typeCheckOverloadedExprs(
 			constExpr := exprs[i].(Constant)
 			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 				func(o overloadImpl) bool {
-					_, err := constExpr.ResolveAsType(&SemaContext{}, o.params().GetAt(i))
+					semaCtx := MakeSemaContext(ctx.Context)
+					_, err := constExpr.ResolveAsType(&semaCtx, o.params().GetAt(i))
 					return err == nil
 				})
 		}

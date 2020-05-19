@@ -329,7 +329,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			typeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
 			for i, t := range s.Types {
-				resolved, err := tree.ResolveType(t, ex.planner.semaCtx.GetTypeResolver())
+				resolved, err := tree.ResolveType(ctx, t, ex.planner.semaCtx.GetTypeResolver())
 				if err != nil {
 					return makeErrEvent(err)
 				}

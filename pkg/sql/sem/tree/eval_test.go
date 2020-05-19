@@ -86,7 +86,8 @@ func TestEval(t *testing.T) {
 	t.Run("no-opt", func(t *testing.T) {
 		walkExpr(t, func(e tree.Expr) (tree.TypedExpr, error) {
 			// expr.TypeCheck to avoid constant folding.
-			typedExpr, err := e.TypeCheck(nil, types.Any)
+			semaCtx := tree.MakeSemaContext(ctx)
+			typedExpr, err := e.TypeCheck(&semaCtx, types.Any)
 			if err != nil {
 				return nil, err
 			}
@@ -124,7 +125,8 @@ func TestEval(t *testing.T) {
 				t.Fatal(err)
 			}
 			// expr.TypeCheck to avoid constant folding.
-			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			semaCtx := tree.MakeSemaContext(ctx)
+			typedExpr, err := expr.TypeCheck(&semaCtx, types.Any)
 			if err != nil {
 				// An error here should have been found above by QueryRow.
 				t.Fatal(err)
@@ -141,7 +143,7 @@ func TestEval(t *testing.T) {
 						continue
 					}
 					// Figure out the type of the tuple value.
-					expr, err := tuple.Exprs[i].TypeCheck(nil, types.Any)
+					expr, err := tuple.Exprs[i].TypeCheck(&semaCtx, types.Any)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -184,7 +186,8 @@ func TestEval(t *testing.T) {
 				// method returns an error, so skip it for execution.
 				return strings.TrimSpace(d.Expected)
 			}
-			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			semaCtx := tree.MakeSemaContext(ctx)
+			typedExpr, err := expr.TypeCheck(&semaCtx, types.Any)
 			if err != nil {
 				// Skip this test as it's testing an expected error which would be
 				// caught before execution.
@@ -279,7 +282,9 @@ func TestEval(t *testing.T) {
 func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, error) {
 	var o xform.Optimizer
 	o.Init(evalCtx, nil /* catalog */)
-	b := optbuilder.NewScalar(context.TODO(), &tree.SemaContext{}, evalCtx, o.Factory())
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(ctx)
+	b := optbuilder.NewScalar(ctx, &semaCtx, evalCtx, o.Factory())
 	b.AllowUnsupportedExpr = true
 	if err := b.Build(e); err != nil {
 		return nil, err
@@ -380,7 +385,8 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		typedExpr, err := expr.TypeCheck(nil, types.Timestamp)
+		semaCtx := tree.MakeSemaContext(context.Background())
+		typedExpr, err := expr.TypeCheck(&semaCtx, types.Timestamp)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -419,7 +425,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		typedExpr, err = expr.TypeCheck(nil, types.Timestamp)
+		typedExpr, err = expr.TypeCheck(&semaCtx, types.Timestamp)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -533,12 +539,14 @@ func TestEvalError(t *testing.T) {
 		{`B'1001' | B'101'`, `cannot OR bit strings of different sizes`},
 		{`B'1001' # B'101'`, `cannot XOR bit strings of different sizes`},
 	}
+	ctx := context.Background()
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
+		semaCtx := tree.MakeSemaContext(ctx)
+		typedExpr, err := tree.TypeCheck(expr, &semaCtx, types.Any)
 		if err == nil {
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())

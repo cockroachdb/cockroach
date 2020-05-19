@@ -1270,7 +1270,7 @@ func MakeTableDesc(
 			// MakeTableDesc is called sometimes with a nil SemaCtx (for example
 			// during bootstrapping). In order to not panic, pass a nil TypeResolver
 			// when attempting to resolve the columns type.
-			defType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+			defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 			if err != nil {
 				return sqlbase.MutableTableDescriptor{}, err
 			}
@@ -1334,7 +1334,7 @@ func MakeTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1686,7 +1686,7 @@ func MakeTableDesc(
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
-				if err := validateComputedColumn(&desc, d, semaCtx); err != nil {
+				if err := validateComputedColumn(ctx, &desc, d, semaCtx); err != nil {
 					return desc, err
 				}
 			}
@@ -2216,7 +2216,10 @@ func iterColDescriptorsInExpr(
 // validateComputedColumn checks that a computed column satisfies a number of
 // validity constraints, for instance, that it typechecks.
 func validateComputedColumn(
-	desc *sqlbase.MutableTableDescriptor, d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
+	ctx context.Context,
+	desc *sqlbase.MutableTableDescriptor,
+	d *tree.ColumnTableDef,
+	semaCtx *tree.SemaContext,
 ) error {
 	if d.HasDefaultExpr() {
 		return pgerror.New(
@@ -2270,7 +2273,7 @@ func validateComputedColumn(
 		return err
 	}
 
-	defType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
 	}

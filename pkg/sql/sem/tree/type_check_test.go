@@ -11,6 +11,7 @@
 package tree_test
 
 import (
+	"context"
 	"regexp"
 	"testing"
 
@@ -191,18 +192,19 @@ func TestTypeCheck(t *testing.T) {
 		{`1 IS OF (d.t1, t2)`, `1:::INT8 IS OF (d.t1, t2)`},
 		{`1::d.t1`, `1:::INT8::d.t1`},
 	}
+	ctx := context.Background()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
 			expr, err := parser.ParseExpr(d.expr)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			ctx := tree.MakeSemaContext()
-			if err := ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
+			semaCtx := tree.MakeSemaContext(ctx)
+			if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
 				t.Fatal(err)
 			}
-			ctx.TypeResolver = mapResolver
-			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			semaCtx.TypeResolver = mapResolver
+			typeChecked, err := tree.TypeCheck(expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: unexpected error %s", d.expr, err)
 			}
@@ -310,17 +312,18 @@ func TestTypeCheckError(t *testing.T) {
 			`type "d.s.typ" does not exist`,
 		},
 	}
+	ctx := context.Background()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
 			// Test with a nil and non-nil semaCtx.
 			t.Run("semaCtx not nil", func(t *testing.T) {
-				ctx := tree.MakeSemaContext()
-				ctx.TypeResolver = mapResolver
+				semaCtx := tree.MakeSemaContext(ctx)
+				semaCtx.TypeResolver = mapResolver
 				expr, err := parser.ParseExpr(d.expr)
 				if err != nil {
 					t.Fatalf("%s: %v", d.expr, err)
 				}
-				if _, err := tree.TypeCheck(expr, &ctx, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+				if _, err := tree.TypeCheck(expr, &semaCtx, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 					t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 				}
 			})

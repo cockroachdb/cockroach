@@ -454,7 +454,7 @@ func (m *pgDumpReader) readFile(
 ) error {
 	var inserts, count int64
 	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
-	semaCtx := &tree.SemaContext{}
+	semaCtx := tree.MakeSemaContext(ctx)
 	for _, conv := range m.tables {
 		conv.KvBatch.Source = inputIdx
 		conv.FractionFn = input.ReadFraction
@@ -504,7 +504,7 @@ func (m *pgDumpReader) readFile(
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, tuple)
 				}
 				for i, expr := range tuple {
-					typed, err := expr.TypeCheck(semaCtx, conv.VisibleColTypes[i])
+					typed, err := expr.TypeCheck(&semaCtx, conv.VisibleColTypes[i])
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)

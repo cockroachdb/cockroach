@@ -31,7 +31,7 @@ func BuildQuery(
 	}
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := tree.MakeSemaContext(ctx)
 	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
 		t.Fatal(err)
 	}

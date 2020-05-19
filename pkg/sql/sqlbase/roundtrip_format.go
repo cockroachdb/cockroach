@@ -50,7 +50,8 @@ func parseAsTyp(evalCtx *tree.EvalContext, typ *types.T, s string) (tree.Datum, 
 	if err != nil {
 		return nil, err
 	}
-	typedExpr, err := tree.TypeCheck(expr, nil, typ)
+	semaCtx := tree.MakeSemaContext(evalCtx.Context)
+	typedExpr, err := tree.TypeCheck(expr, &semaCtx, typ)
 	if err != nil {
 		return nil, err
 	}

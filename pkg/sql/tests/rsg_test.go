@@ -561,7 +561,6 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 func TestRandomDatumRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sema := tree.MakeSemaContext()
 	eval := tree.MakeTestingEvalContext(nil)
 
 	var smither *sqlsmith.Smither
@@ -599,6 +598,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		}
 		serializedGen := tree.Serialize(generated)
 
+		sema := tree.MakeSemaContext(ctx)
 		// We don't care about errors below because they are often
 		// caused by sqlsmith generating bogus queries. We're just
 		// looking for datums that don't match.

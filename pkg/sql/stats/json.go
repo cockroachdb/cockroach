@@ -106,7 +106,7 @@ func (js *JSONStatistic) GetHistogram(
 	if err != nil {
 		return nil, err
 	}
-	colType, err := tree.ResolveType(colTypeRef, semaCtx.GetTypeResolver())
+	colType, err := tree.ResolveType(semaCtx.Context, colTypeRef, semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, err
 	}

@@ -276,7 +276,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`(ROW (a) AS a)`, `((a,) AS a)`}, // Tuple
 	}
 
-	semaCtx := tree.MakeSemaContext()
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(ctx)
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
 			expr, err := parser.ParseExpr(d.expr)

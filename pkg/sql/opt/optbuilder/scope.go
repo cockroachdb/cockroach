@@ -1353,7 +1353,8 @@ func (s *scope) replaceCount(
 			}
 			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 			// expression; we should not hit an error here.
-			if _, err := e.TypeCheck(&tree.SemaContext{}, types.Any); err != nil {
+			semaCtx := tree.MakeSemaContext(s.builder.ctx)
+			if _, err := e.TypeCheck(&semaCtx, types.Any); err != nil {
 				panic(err)
 			}
 			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
