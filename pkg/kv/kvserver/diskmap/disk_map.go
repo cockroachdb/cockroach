@@ -70,7 +70,8 @@ type SortedDiskMapBatchWriter interface {
 	// Flush flushes all writes to the underlying store. The batch can be reused
 	// after a call to Flush().
 	Flush() error
-
+	// The number of put calls since the last time the writer was flushed.
+	NumPutsSinceFlush() int
 	// Close flushes all writes to the underlying store and frees up resources
 	// held by the batch writer.
 	Close(context.Context) error

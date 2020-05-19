@@ -796,6 +796,12 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.MemMonitor = memMonitor
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	pb.inputsToDrain = opts.InputsToDrain
+
+	// Hydrate all types used in the processor.
+	if err := execinfrapb.HydrateTypeSlice(evalCtx, types); err != nil {
+		return err
+	}
+
 	return pb.Out.Init(post, types, pb.EvalCtx, output)
 }
 

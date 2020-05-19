@@ -41,6 +41,7 @@ func TestGossipInvalidation(t *testing.T) {
 		gossip.MakeExposedGossip(tc.Server(0).GossipI().(*gossip.Gossip)),
 		tc.Server(0).DB(),
 		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		keys.SystemSQLCodec,
 	)
 
 	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
