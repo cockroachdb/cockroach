@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"math"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -80,10 +81,11 @@ func new_AGG_TITLEAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error)
 	switch t {
 	// {{range .Overloads}}
 	case _TYPES_T:
+		allocator.AdjustMemoryUsage(int64(sizeOf_AGG_TYPEAgg))
 		return &_AGG_TYPEAgg{allocator: allocator}, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unsupported min agg type %s", t)
+		return nil, errors.Errorf("unsupported min/max agg type %s", t)
 	}
 }
 
@@ -110,6 +112,8 @@ type _AGG_TYPEAgg struct {
 }
 
 var _ aggregateFunc = &_AGG_TYPEAgg{}
+
+const sizeOf_AGG_TYPEAgg = unsafe.Sizeof(_AGG_TYPEAgg{})
 
 func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups

@@ -185,7 +185,7 @@ const noFilterIdx = -1
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
 func isSupported(
-	mode sessiondata.VectorizeExecMode, spec *execinfrapb.ProcessorSpec,
+	allocator *Allocator, mode sessiondata.VectorizeExecMode, spec *execinfrapb.ProcessorSpec,
 ) (bool, error) {
 	core := spec.Core
 	isFullVectorization := mode == sessiondata.VectorizeOn ||
@@ -217,7 +217,7 @@ func isSupported(
 			for pos, colIdx := range agg.ColIdx {
 				inputTypes[pos] = spec.Input[0].ColumnTypes[colIdx]
 			}
-			if supported, err := isAggregateSupported(agg.Func, inputTypes); !supported {
+			if supported, err := isAggregateSupported(allocator, agg.Func, inputTypes); !supported {
 				return false, err
 			}
 		}
@@ -562,6 +562,7 @@ func NewColOperator(
 	spec := args.Spec
 	inputs := args.Inputs
 	streamingMemAccount := args.StreamingMemAccount
+	streamingAllocator := NewAllocator(ctx, streamingMemAccount)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	processorConstructor := args.ProcessorConstructor
 
@@ -581,7 +582,7 @@ func NewColOperator(
 	// before any specs are planned. Used if there is a need to backtrack.
 	resultPreSpecPlanningStateShallowCopy := result
 
-	supported, err := isSupported(flowCtx.EvalCtx.SessionData.VectorizeMode, spec)
+	supported, err := isSupported(streamingAllocator, flowCtx.EvalCtx.SessionData.VectorizeMode, spec)
 	if !supported {
 		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
 		// around a planNode) because it creates complications, and a flow with
@@ -628,7 +629,7 @@ func NewColOperator(
 				return result, err
 			}
 			var scanOp *colBatchScan
-			scanOp, err = newColBatchScan(NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
+			scanOp, err = newColBatchScan(streamingAllocator, flowCtx, core.TableReader, post)
 			if err != nil {
 				return result, err
 			}
@@ -662,13 +663,13 @@ func NewColOperator(
 				// TODO(solon): The distsql plan for this case includes a TableReader, so
 				// we end up creating an orphaned colBatchScan. We should avoid that.
 				// Ideally the optimizer would not plan a scan in this unusual case.
-				result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator(ctx, streamingMemAccount)), true, nil
+				result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(streamingAllocator), true, nil
 				// We make ColumnTypes non-nil so that sanity check doesn't panic.
 				result.ColumnTypes = []types.T{}
 				break
 			}
 			if aggSpec.IsRowCount() {
-				result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true, nil
+				result.Op, result.IsStreaming, err = NewCountOp(streamingAllocator, inputs[0]), true, nil
 				result.ColumnTypes = []types.T{*types.Int}
 				break
 			}
@@ -718,7 +719,7 @@ func NewColOperator(
 					// Create an unlimited mem account explicitly even though there is no
 					// disk spilling because the memory usage of an aggregator is
 					// proportional to the number of groups, not the number of inputs.
-					// The row execution engine also gives an unlimited amount (that still
+					// The row execution engine also gives an unlimited (that still
 					// needs to be approved by the upstream monitor, so not really
 					// "unlimited") amount of memory to the aggregator.
 					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
@@ -729,7 +730,7 @@ func NewColOperator(
 				)
 			} else {
 				result.Op, err = NewOrderedAggregator(
-					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
+					streamingAllocator, inputs[0], typs, aggFns,
 					aggSpec.GroupCols, aggCols, aggSpec.IsScalar(),
 				)
 				result.IsStreaming = true
@@ -777,7 +778,7 @@ func NewColOperator(
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
 			result.Op = NewOrdinalityOp(
-				NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx,
+				streamingAllocator, inputs[0], outputIdx,
 			)
 			result.IsStreaming = true
 			result.ColumnTypes = make([]types.T, outputIdx+1)
@@ -1009,7 +1010,7 @@ func NewColOperator(
 					// which kind of partitioner to use should come from the optimizer.
 					partitionColIdx = int(wf.OutputColIdx)
 					input, err = NewWindowSortingPartitioner(
-						NewAllocator(ctx, streamingMemAccount), input, typs,
+						streamingAllocator, input, typs,
 						core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
 						func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
 							return result.createDiskBackedSort(
@@ -1040,7 +1041,7 @@ func NewColOperator(
 				if windowFnNeedsPeersInfo(*wf.Func.WindowFunc) {
 					peersColIdx = int(wf.OutputColIdx + tempColOffset)
 					input, err = NewWindowPeerGrouper(
-						NewAllocator(ctx, streamingMemAccount),
+						streamingAllocator,
 						input, typs, wf.Ordering.Columns,
 						partitionColIdx, peersColIdx,
 					)
@@ -1056,11 +1057,11 @@ func NewColOperator(
 				switch windowFn {
 				case execinfrapb.WindowerSpec_ROW_NUMBER:
 					result.Op = NewRowNumberOperator(
-						NewAllocator(ctx, streamingMemAccount), input, outputIdx, partitionColIdx,
+						streamingAllocator, input, outputIdx, partitionColIdx,
 					)
 				case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
 					result.Op, err = NewRankOperator(
-						NewAllocator(ctx, streamingMemAccount), input, windowFn,
+						streamingAllocator, input, windowFn,
 						wf.Ordering.Columns, outputIdx, partitionColIdx, peersColIdx,
 					)
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:

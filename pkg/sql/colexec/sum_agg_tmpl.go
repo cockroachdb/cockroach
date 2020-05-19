@@ -20,6 +20,8 @@
 package colexec
 
 import (
+	"unsafe"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -49,10 +51,11 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newSumAgg(t coltypes.T) (aggregateFunc, error) {
+func newSumAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
+		allocator.AdjustMemoryUsage(int64(sizeOfSum_TYPEAgg))
 		return &sum_TYPEAgg{}, nil
 	// {{end}}
 	default:
@@ -82,6 +85,8 @@ type sum_TYPEAgg struct {
 }
 
 var _ aggregateFunc = &sum_TYPEAgg{}
+
+const sizeOfSum_TYPEAgg = unsafe.Sizeof(sum_TYPEAgg{})
 
 func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
