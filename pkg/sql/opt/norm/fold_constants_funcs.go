@@ -88,9 +88,10 @@ func (c *CustomFuncs) HasNullElement(input opt.ScalarExpr) bool {
 }
 
 // HasAllNullElements returns true if the input tuple has only constant, null
-// elements. Note that it only returns true if all elements are known to be
-// null. For example, given the tuple (NULL, x), it will return false because x
-// is not guaranteed to be null.
+// elements, or if the tuple is empty (has 0 elements). Note that it only
+// returns true if all elements are known to be null. For example, given the
+// tuple (NULL, x), it will return false because x is not guaranteed to be
+// null.
 func (c *CustomFuncs) HasAllNullElements(input opt.ScalarExpr) bool {
 	tup := input.(*memo.TupleExpr)
 	for _, e := range tup.Elems {
@@ -122,9 +123,10 @@ func (c *CustomFuncs) HasNonNullElement(input opt.ScalarExpr) bool {
 }
 
 // HasAllNonNullElements returns true if the input tuple has all constant,
-// non-null elements. Note that it only returns true if all elements are known
-// to be non-null. For example, given the tuple (1, x), it will return false
-// because x is not guaranteed to be non-null.
+// non-null elements, or if the tuple is empty (has 0 elements). Note that it
+// only returns true if all elements are known to be non-null. For example,
+// given the tuple (1, x), it will return false because x is not guaranteed to
+// be non-null.
 func (c *CustomFuncs) HasAllNonNullElements(input opt.ScalarExpr) bool {
 	tup := input.(*memo.TupleExpr)
 	for _, e := range tup.Elems {

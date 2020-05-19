@@ -524,3 +524,15 @@ eval
 NOT ((NULL, NULL) IS DISTINCT FROM NULL)
 ----
 false
+
+# Empty tuples.
+
+eval
+() IS NULL
+----
+true
+
+eval
+() IS NOT NULL
+----
+true
