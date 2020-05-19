@@ -90,8 +90,8 @@ eexpect "CockroachDB node starting"
 
 system "($argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true)&"
 # Check the panic is reported on the server's stderr
+eexpect "a SQL panic has occurred"
 eexpect "panic: helloworld"
-eexpect "panic while executing"
 eexpect "goroutine"
 eexpect ":/# "
 # Check the panic is reported on the server log file
@@ -99,7 +99,6 @@ send "cat logs/db/logs/cockroach.log\r"
 eexpect "a SQL panic has occurred"
 eexpect "helloworld"
 eexpect "a panic has occurred"
-eexpect "panic while executing"
 eexpect "goroutine"
 eexpect ":/# "
 
