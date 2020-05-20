@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -24,9 +23,6 @@ type tableVersionID struct {
 	id      sqlbase.ID
 	version sqlbase.DescriptorVersion
 }
-
-// SQLTxnName is the transaction name used by sql transactions.
-const SQLTxnName = sqlTxnName
 
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager
@@ -111,24 +107,4 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.tableNames.mu.Unlock()
-}
-
-// AcquireAndAssertMinVersion acquires a read lease for the specified table ID.
-// The lease is grabbed on the latest version if >= specified version.
-// It returns a table descriptor and an expiration time valid for the timestamp.
-func (m *LeaseManager) AcquireAndAssertMinVersion(
-	ctx context.Context,
-	timestamp hlc.Timestamp,
-	tableID sqlbase.ID,
-	minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
-	t := m.findTableState(tableID, true)
-	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-	table, _, err := t.findForTimestamp(ctx, timestamp)
-	if err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-	return &table.ImmutableTableDescriptor, table.expiration, nil
 }

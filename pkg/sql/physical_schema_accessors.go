@@ -75,7 +75,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 		// The database was not known in the uncommitted list. Have the db
 		// cache look it up by name for us.
-		return a.tc.databaseCache.GetDatabaseDesc(ctx, a.tc.leaseMgr.db.Txn, name, flags.Required)
+		return a.tc.databaseCache.GetDatabaseDesc(ctx, a.tc.leaseMgr.DB().Txn, name, flags.Required)
 	}
 
 	// We avoided the cache. Go lower.

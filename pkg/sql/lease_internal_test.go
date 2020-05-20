@@ -173,9 +173,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 
-	// Verifies that errDidntUpdateDescriptor doesn't leak from Publish().
+	// Verifies that ErrDidntUpdateDescriptor doesn't leak from Publish().
 	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
-		return errDidntUpdateDescriptor
+		return ErrDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
