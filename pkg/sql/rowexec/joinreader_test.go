@@ -742,33 +742,40 @@ func BenchmarkJoinReader(b *testing.B) {
 		b.Skip()
 	}
 
+	// Create an *on-disk* store spec for the primary store and temp engine to
+	// reflect the real costs of lookups and spilling.
+	primaryStoragePath, cleanupPrimaryDir := testutils.TempDir(b)
+	defer cleanupPrimaryDir()
+	storeSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", primaryStoragePath))
+	require.NoError(b, err)
+
 	var (
 		logScope       = log.Scope(b)
 		ctx            = context.Background()
-		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{})
-		st             = s.ClusterSettings()
-		evalCtx        = tree.MakeTestingEvalContext(st)
-		diskMonitor    = execinfra.NewTestDiskMonitor(ctx, st)
-		flowCtx        = execinfra.FlowCtx{
+		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{storeSpec},
+		})
+		st          = s.ClusterSettings()
+		evalCtx     = tree.MakeTestingEvalContext(st)
+		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
+		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg: &execinfra.ServerConfig{
 				DiskMonitor: diskMonitor,
 				Settings:    st,
 			},
 		}
-		path, cleanupTempDir = testutils.TempDir(b)
 	)
 	defer logScope.Close(b)
 	defer s.Stopper().Stop(ctx)
 	defer evalCtx.Stop(ctx)
 	defer diskMonitor.Stop(ctx)
-	defer cleanupTempDir()
 
-	// Create an *on-disk* temp engine for benchmark iterations that spill to
-	// disk.
-	storeSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", path))
+	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
+	defer cleanupTempDir()
+	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
 	require.NoError(b, err)
-	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.TempStorageConfig{Path: path, Mon: diskMonitor}, storeSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.TempStorageConfig{Path: tempStoragePath, Mon: diskMonitor}, tempStoreSpec)
 	require.NoError(b, err)
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
