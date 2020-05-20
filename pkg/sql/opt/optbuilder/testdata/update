@@ -65,13 +65,13 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
+ │    ├── a_new:13 => a:1
  │    ├── column14:14 => d:4
- │    └── column13:13 => e:5
+ │    └── a_new:13 => e:5
  └── project
-      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13!null
       ├── project
-      │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: a_new:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── select
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    ├── scan abcde
@@ -84,7 +84,7 @@ update abcde
       │    │    └── filters
       │    │         └── a:7 = 1
       │    └── projections
-      │         └── 2 [as=column13:13]
+      │         └── 2 [as=a_new:13]
       └── projections
            └── (b:8 + c:9) + 1 [as=column14:14]
 
@@ -96,16 +96,16 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
- │    ├── column14:14 => b:2
- │    ├── column15:15 => c:3
+ │    ├── a_new:13 => a:1
+ │    ├── b_new:14 => b:2
+ │    ├── c_new:15 => c:3
  │    ├── column17:17 => d:4
- │    ├── column13:13 => e:5
- │    └── column16:16 => rowid:6
+ │    ├── a_new:13 => e:5
+ │    └── rowid_new:16 => rowid:6
  └── project
-      ├── columns: column17:17!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null column14:14!null column15:15!null column16:16!null
+      ├── columns: column17:17!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13!null b_new:14!null c_new:15!null rowid_new:16!null
       ├── project
-      │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: a_new:13!null b_new:14!null c_new:15!null rowid_new:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -114,12 +114,12 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         ├── 1 [as=column13:13]
-      │         ├── 2 [as=column14:14]
-      │         ├── 3 [as=column15:15]
-      │         └── 4 [as=column16:16]
+      │         ├── 1 [as=a_new:13]
+      │         ├── 2 [as=b_new:14]
+      │         ├── 3 [as=c_new:15]
+      │         └── 4 [as=rowid_new:16]
       └── projections
-           └── (column14:14 + column15:15) + 1 [as=column17:17]
+           └── (b_new:14 + c_new:15) + 1 [as=column17:17]
 
 # Set all non-computed columns in reverse order.
 build
@@ -129,16 +129,16 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column16:16 => a:1
- │    ├── column15:15 => b:2
- │    ├── column14:14 => c:3
+ │    ├── a_new:16 => a:1
+ │    ├── b_new:15 => b:2
+ │    ├── c_new:14 => c:3
  │    ├── column17:17 => d:4
- │    ├── column16:16 => e:5
- │    └── column13:13 => rowid:6
+ │    ├── a_new:16 => e:5
+ │    └── rowid_new:13 => rowid:6
  └── project
-      ├── columns: column17:17!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null column14:14!null column15:15!null column16:16!null
+      ├── columns: column17:17!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null rowid_new:13!null c_new:14!null b_new:15!null a_new:16!null
       ├── project
-      │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: rowid_new:13!null c_new:14!null b_new:15!null a_new:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -147,12 +147,12 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         ├── 1 [as=column13:13]
-      │         ├── 2 [as=column14:14]
-      │         ├── 3 [as=column15:15]
-      │         └── 4 [as=column16:16]
+      │         ├── 1 [as=rowid_new:13]
+      │         ├── 2 [as=c_new:14]
+      │         ├── 3 [as=b_new:15]
+      │         └── 4 [as=a_new:16]
       └── projections
-           └── (column15:15 + column14:14) + 1 [as=column17:17]
+           └── (b_new:15 + c_new:14) + 1 [as=column17:17]
 
 # Set all non-computed columns to NULL.
 build
@@ -162,16 +162,16 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
- │    ├── column13:13 => b:2
- │    ├── column13:13 => c:3
+ │    ├── a_new:13 => a:1
+ │    ├── a_new:13 => b:2
+ │    ├── a_new:13 => c:3
  │    ├── column14:14 => d:4
- │    ├── column13:13 => e:5
- │    └── column13:13 => rowid:6
+ │    ├── a_new:13 => e:5
+ │    └── a_new:13 => rowid:6
  └── project
-      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13
       ├── project
-      │    ├── columns: column13:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: a_new:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -180,9 +180,9 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         └── NULL::INT8 [as=column13:13]
+      │         └── NULL::INT8 [as=a_new:13]
       └── projections
-           └── (column13:13 + column13:13) + 1 [as=column14:14]
+           └── (a_new:13 + a_new:13) + 1 [as=column14:14]
 
 # Set columns using variable expressions.
 build
@@ -192,14 +192,14 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
- │    ├── column14:14 => b:2
+ │    ├── a_new:13 => a:1
+ │    ├── b_new:14 => b:2
  │    ├── column15:15 => d:4
- │    └── column13:13 => e:5
+ │    └── a_new:13 => e:5
  └── project
-      ├── columns: column15:15 a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null column13:13!null column14:14
+      ├── columns: column15:15 a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null a_new:13!null b_new:14
       ├── project
-      │    ├── columns: column13:13!null column14:14 a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null
+      │    ├── columns: a_new:13!null b_new:14 a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null
       │    ├── select
       │    │    ├── columns: a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null
       │    │    ├── scan abcde
@@ -212,10 +212,10 @@ update abcde
       │    │    └── filters
       │    │         └── b:8 > e:11
       │    └── projections
-      │         ├── a:7 + 1 [as=column13:13]
-      │         └── b:8 * c:9 [as=column14:14]
+      │         ├── a:7 + 1 [as=a_new:13]
+      │         └── b:8 * c:9 [as=b_new:14]
       └── projections
-           └── (column14:14 + c:9) + 1 [as=column15:15]
+           └── (b_new:14 + c:9) + 1 [as=column15:15]
 
 # Set columns using aliased expressions.
 build
@@ -249,13 +249,13 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => b:2
+ │    ├── b_new:13 => b:2
  │    ├── column14:14 => d:4
  │    └── a:7 => e:5
  └── project
-      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null b_new:13!null
       ├── project
-      │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: b_new:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── limit
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    ├── internal-ordering: +7
@@ -276,9 +276,9 @@ update abcde
       │    │    │              └── a:7 > 0
       │    │    └── 10
       │    └── projections
-      │         └── 1 [as=column13:13]
+      │         └── 1 [as=b_new:13]
       └── projections
-           └── (column13:13 + c:9) + 1 [as=column14:14]
+           └── (b_new:13 + c:9) + 1 [as=column14:14]
 
 # UPDATE with index hints.
 exec-ddl
@@ -298,9 +298,9 @@ update xyzw
  ├── columns: <none>
  ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └── column9:9 => x:1
+ │    └── x_new:9 => x:1
  └── project
-      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
+      ├── columns: x_new:9!null x:5!null y:6 z:7!null w:8
       ├── select
       │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
@@ -309,7 +309,7 @@ update xyzw
       │    └── filters
       │         └── z:7 = 1
       └── projections
-           └── 2 [as=column9:9]
+           └── 2 [as=x_new:9]
 
 build
 UPDATE xyzw@foo SET x=2 WHERE z=1
@@ -318,9 +318,9 @@ update xyzw
  ├── columns: <none>
  ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └── column9:9 => x:1
+ │    └── x_new:9 => x:1
  └── project
-      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
+      ├── columns: x_new:9!null x:5!null y:6 z:7!null w:8
       ├── select
       │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
@@ -329,7 +329,7 @@ update xyzw
       │    └── filters
       │         └── z:7 = 1
       └── projections
-           └── 2 [as=column9:9]
+           └── 2 [as=x_new:9]
 
 build
 UPDATE xyzw@{FORCE_INDEX=foo,ASC} SET x=2 WHERE z=1
@@ -338,9 +338,9 @@ update xyzw
  ├── columns: <none>
  ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └── column9:9 => x:1
+ │    └── x_new:9 => x:1
  └── project
-      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
+      ├── columns: x_new:9!null x:5!null y:6 z:7!null w:8
       ├── select
       │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
@@ -349,7 +349,7 @@ update xyzw
       │    └── filters
       │         └── z:7 = 1
       └── projections
-           └── 2 [as=column9:9]
+           └── 2 [as=x_new:9]
 
 build
 UPDATE xyzw@{FORCE_INDEX=foo,DESC} SET x=2 WHERE z=1
@@ -358,9 +358,9 @@ update xyzw
  ├── columns: <none>
  ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └── column9:9 => x:1
+ │    └── x_new:9 => x:1
  └── project
-      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
+      ├── columns: x_new:9!null x:5!null y:6 z:7!null w:8
       ├── select
       │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw,rev
@@ -369,7 +369,7 @@ update xyzw
       │    └── filters
       │         └── z:7 = 1
       └── projections
-           └── 2 [as=column9:9]
+           └── 2 [as=x_new:9]
 
 build
 UPDATE xyzw@{NO_INDEX_JOIN} SET x=2 WHERE z=1
@@ -378,9 +378,9 @@ update xyzw
  ├── columns: <none>
  ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └── column9:9 => x:1
+ │    └── x_new:9 => x:1
  └── project
-      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
+      ├── columns: x_new:9!null x:5!null y:6 z:7!null w:8
       ├── select
       │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
@@ -389,7 +389,7 @@ update xyzw
       │    └── filters
       │         └── z:7 = 1
       └── projections
-           └── 2 [as=column9:9]
+           └── 2 [as=x_new:9]
 
 build
 UPDATE xyzw@bad_idx SET x=2 WHERE z=1
@@ -405,15 +405,15 @@ update xyz
  ├── columns: <none>
  ├── fetch columns: x:4 y:5 z:6
  ├── update-mapping:
- │    ├── column7:7 => y:2
- │    └── column8:8 => z:3
+ │    ├── y_new:7 => y:2
+ │    └── z_new:8 => z:3
  └── project
-      ├── columns: column7:7!null column8:8!null x:4!null y:5 z:6
+      ├── columns: y_new:7!null z_new:8!null x:4!null y:5 z:6
       ├── scan xyz
       │    └── columns: x:4!null y:5 z:6
       └── projections
-           ├── 1 [as=column7:7]
-           └── 1.0 [as=column8:8]
+           ├── 1 [as=y_new:7]
+           └── 1.0 [as=z_new:8]
 
 # Use placeholders.
 build
@@ -423,17 +423,17 @@ update xyz
  ├── columns: <none>
  ├── fetch columns: x:4 y:5 z:6
  ├── update-mapping:
- │    ├── column7:7 => x:1
- │    ├── column8:8 => y:2
- │    └── column9:9 => z:3
+ │    ├── x_new:7 => x:1
+ │    ├── y_new:8 => y:2
+ │    └── z_new:9 => z:3
  └── project
-      ├── columns: column7:7 column8:8 column9:9 x:4!null y:5 z:6
+      ├── columns: x_new:7 y_new:8 z_new:9 x:4!null y:5 z:6
       ├── scan xyz
       │    └── columns: x:4!null y:5 z:6
       └── projections
-           ├── $1 [as=column7:7]
-           ├── $2 [as=column8:8]
-           └── $3 [as=column9:9]
+           ├── $1 [as=x_new:7]
+           ├── $2 [as=y_new:8]
+           └── $3 [as=z_new:9]
 
 # Duplicate expressions with placeholders.
 build
@@ -443,14 +443,14 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
- │    ├── column13:13 => b:2
+ │    ├── a_new:13 => a:1
+ │    ├── a_new:13 => b:2
  │    ├── column14:14 => d:4
- │    └── column13:13 => e:5
+ │    └── a_new:13 => e:5
  └── project
-      ├── columns: column14:14 a:7!null b:8 c:9!null d:10 e:11 rowid:12!null column13:13
+      ├── columns: column14:14 a:7!null b:8 c:9!null d:10 e:11 rowid:12!null a_new:13
       ├── project
-      │    ├── columns: column13:13 a:7!null b:8 c:9!null d:10 e:11 rowid:12!null
+      │    ├── columns: a_new:13 a:7!null b:8 c:9!null d:10 e:11 rowid:12!null
       │    ├── select
       │    │    ├── columns: a:7!null b:8 c:9!null d:10 e:11 rowid:12!null
       │    │    ├── scan abcde
@@ -463,9 +463,9 @@ update abcde
       │    │    └── filters
       │    │         └── c:9 = 10
       │    └── projections
-      │         └── $1 + 1 [as=column13:13]
+      │         └── $1 + 1 [as=a_new:13]
       └── projections
-           └── (column13:13 + c:9) + 1 [as=column14:14]
+           └── (a_new:13 + c:9) + 1 [as=column14:14]
 
 
 # Unknown target table.
@@ -573,13 +573,13 @@ project
       ├── columns: a:1!null b:2 c:3 d:4 e:5!null rowid:6!null
       ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
       ├── update-mapping:
-      │    ├── column13:13 => a:1
+      │    ├── a_new:13 => a:1
       │    ├── column14:14 => d:4
-      │    └── column13:13 => e:5
+      │    └── a_new:13 => e:5
       └── project
-           ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
+           ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13!null
            ├── project
-           │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+           │    ├── columns: a_new:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    ├── select
            │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    │    ├── scan abcde
@@ -592,7 +592,7 @@ project
            │    │    └── filters
            │    │         └── a:7 = 1
            │    └── projections
-           │         └── 2 [as=column13:13]
+           │         └── 2 [as=a_new:13]
            └── projections
                 └── (b:8 + c:9) + 1 [as=column14:14]
 
@@ -606,13 +606,13 @@ project
  │    ├── columns: a:1!null b:2 c:3 d:4 e:5!null rowid:6!null
  │    ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  │    ├── update-mapping:
- │    │    ├── column13:13 => a:1
+ │    │    ├── a_new:13 => a:1
  │    │    ├── column14:14 => d:4
- │    │    └── column13:13 => e:5
+ │    │    └── a_new:13 => e:5
  │    └── project
- │         ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
+ │         ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13!null
  │         ├── project
- │         │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+ │         │    ├── columns: a_new:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
  │         │    ├── select
  │         │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
  │         │    │    ├── scan foo
@@ -625,7 +625,7 @@ project
  │         │    │    └── filters
  │         │    │         └── a:7 = 1
  │         │    └── projections
- │         │         └── 2 [as=column13:13]
+ │         │         └── 2 [as=a_new:13]
  │         └── projections
  │              └── (b:8 + c:9) + 1 [as=column14:14]
  └── projections
@@ -644,13 +644,13 @@ with &1
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5!null rowid:6!null
  │         ├── fetch columns: abcde.a:7 abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12
  │         ├── update-mapping:
- │         │    ├── column13:13 => abcde.a:1
+ │         │    ├── a_new:13 => abcde.a:1
  │         │    ├── column14:14 => abcde.d:4
- │         │    └── column13:13 => abcde.e:5
+ │         │    └── a_new:13 => abcde.e:5
  │         └── project
- │              ├── columns: column14:14 abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null column13:13!null
+ │              ├── columns: column14:14 abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null a_new:13!null
  │              ├── project
- │              │    ├── columns: column13:13!null abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
+ │              │    ├── columns: a_new:13!null abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    ├── limit
  │              │    │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    │    ├── internal-ordering: +8
@@ -671,7 +671,7 @@ with &1
  │              │    │    │              └── abcde.a:7 > 0
  │              │    │    └── 10
  │              │    └── projections
- │              │         └── 2 [as=column13:13]
+ │              │         └── 2 [as=a_new:13]
  │              └── projections
  │                   └── (abcde.b:8 + abcde.c:9) + 1 [as=column14:14]
  └── project
@@ -697,11 +697,11 @@ project
       ├── update-mapping:
       │    ├── column14:14 => d:4
       │    ├── a:7 => e:5
-      │    └── column13:13 => rowid:6
+      │    └── rowid_new:13 => rowid:6
       └── project
-           ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
+           ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null rowid_new:13!null
            ├── project
-           │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+           │    ├── columns: rowid_new:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    ├── scan abcde
            │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    │    └── computed column expressions
@@ -710,7 +710,7 @@ project
            │    │         └── e:11
            │    │              └── a:7
            │    └── projections
-           │         └── rowid:12 + 1 [as=column13:13]
+           │         └── rowid:12 + 1 [as=rowid_new:13]
            └── projections
                 └── (b:8 + c:9) + 1 [as=column14:14]
 
@@ -738,14 +738,14 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => b:2
- │    ├── column14:14 => c:3
+ │    ├── b_new:13 => b:2
+ │    ├── c_new:14 => c:3
  │    ├── column15:15 => d:4
  │    └── a:7 => e:5
  └── project
-      ├── columns: column15:15 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13 column14:14!null
+      ├── columns: column15:15 a:7!null b:8 c:9 d:10 e:11 rowid:12!null b_new:13 c_new:14!null
       ├── project
-      │    ├── columns: column13:13 column14:14!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: b_new:13 c_new:14!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -754,10 +754,10 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         ├── NULL::INT8 [as=column13:13]
-      │         └── 10 [as=column14:14]
+      │         ├── NULL::INT8 [as=b_new:13]
+      │         └── 10 [as=c_new:14]
       └── projections
-           └── (column13:13 + column14:14) + 1 [as=column15:15]
+           └── (b_new:13 + c_new:14) + 1 [as=column15:15]
 
 # Allow not-null column to be updated with NULL DEFAULT value (would fail at
 # runtime if there are any rows to update).
@@ -768,13 +768,13 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
+ │    ├── a_new:13 => a:1
  │    ├── column14:14 => d:4
- │    └── column13:13 => e:5
+ │    └── a_new:13 => e:5
  └── project
-      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13
       ├── project
-      │    ├── columns: column13:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: a_new:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -783,7 +783,7 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         └── NULL::INT8 [as=column13:13]
+      │         └── NULL::INT8 [as=a_new:13]
       └── projections
            └── (b:8 + c:9) + 1 [as=column14:14]
 
@@ -803,15 +803,15 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
- │    ├── column14:14 => b:2
- │    ├── column15:15 => c:3
+ │    ├── a_new:13 => a:1
+ │    ├── b_new:14 => b:2
+ │    ├── c_new:15 => c:3
  │    ├── column16:16 => d:4
- │    └── column13:13 => e:5
+ │    └── a_new:13 => e:5
  └── project
-      ├── columns: column16:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null column14:14!null column15:15!null
+      ├── columns: column16:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13!null b_new:14!null c_new:15!null
       ├── project
-      │    ├── columns: column13:13!null column14:14!null column15:15!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: a_new:13!null b_new:14!null c_new:15!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -820,11 +820,11 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         ├── 1 [as=column13:13]
-      │         ├── 2 [as=column14:14]
-      │         └── 3 [as=column15:15]
+      │         ├── 1 [as=a_new:13]
+      │         ├── 2 [as=b_new:14]
+      │         └── 3 [as=c_new:15]
       └── projections
-           └── (column14:14 + column15:15) + 1 [as=column16:16]
+           └── (b_new:14 + c_new:15) + 1 [as=column16:16]
 
 build
 UPDATE abcde SET (c) = (NULL), (b, a) = (1, 2)
@@ -833,15 +833,15 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column15:15 => a:1
- │    ├── column14:14 => b:2
- │    ├── column13:13 => c:3
+ │    ├── a_new:15 => a:1
+ │    ├── b_new:14 => b:2
+ │    ├── c_new:13 => c:3
  │    ├── column16:16 => d:4
- │    └── column15:15 => e:5
+ │    └── a_new:15 => e:5
  └── project
-      ├── columns: column16:16 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13 column14:14!null column15:15!null
+      ├── columns: column16:16 a:7!null b:8 c:9 d:10 e:11 rowid:12!null c_new:13 b_new:14!null a_new:15!null
       ├── project
-      │    ├── columns: column13:13 column14:14!null column15:15!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: c_new:13 b_new:14!null a_new:15!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -850,11 +850,11 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         ├── NULL::INT8 [as=column13:13]
-      │         ├── 1 [as=column14:14]
-      │         └── 2 [as=column15:15]
+      │         ├── NULL::INT8 [as=c_new:13]
+      │         ├── 1 [as=b_new:14]
+      │         └── 2 [as=a_new:15]
       └── projections
-           └── (column14:14 + column13:13) + 1 [as=column16:16]
+           └── (b_new:14 + c_new:13) + 1 [as=column16:16]
 
 # Tuples + DEFAULT.
 build
@@ -864,14 +864,14 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => b:2
- │    ├── column14:14 => c:3
+ │    ├── b_new:13 => b:2
+ │    ├── c_new:14 => c:3
  │    ├── column15:15 => d:4
  │    └── a:7 => e:5
  └── project
-      ├── columns: column15:15 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13 column14:14!null
+      ├── columns: column15:15 a:7!null b:8 c:9 d:10 e:11 rowid:12!null b_new:13 c_new:14!null
       ├── project
-      │    ├── columns: column13:13 column14:14!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: b_new:13 c_new:14!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -880,10 +880,10 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         ├── NULL::INT8 [as=column13:13]
-      │         └── 10 [as=column14:14]
+      │         ├── NULL::INT8 [as=b_new:13]
+      │         └── 10 [as=c_new:14]
       └── projections
-           └── (column13:13 + column14:14) + 1 [as=column15:15]
+           └── (b_new:13 + c_new:14) + 1 [as=column15:15]
 
 # Tuples + non-null DEFAULT.
 build
@@ -893,14 +893,14 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column13:13 => a:1
- │    ├── column13:13 => b:2
+ │    ├── a_new:13 => a:1
+ │    ├── a_new:13 => b:2
  │    ├── column14:14 => d:4
- │    └── column13:13 => e:5
+ │    └── a_new:13 => e:5
  └── project
-      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null a_new:13
       ├── project
-      │    ├── columns: column13:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │    ├── columns: a_new:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
@@ -909,9 +909,9 @@ update abcde
       │    │         └── e:11
       │    │              └── a:7
       │    └── projections
-      │         └── NULL::INT8 [as=column13:13]
+      │         └── NULL::INT8 [as=a_new:13]
       └── projections
-           └── (column13:13 + c:9) + 1 [as=column14:14]
+           └── (a_new:13 + c:9) + 1 [as=column14:14]
 
 build
 UPDATE abcde SET (a, b)=(1, 2, 3)
@@ -1020,14 +1020,14 @@ update abcde
  ├── update-mapping:
  │    ├── y:14 => a:1
  │    ├── y1:16 => b:2
- │    ├── column17:17 => c:3
+ │    ├── c_new:17 => c:3
  │    ├── column19:19 => d:4
  │    ├── y:14 => e:5
- │    └── column18:18 => rowid:6
+ │    └── rowid_new:18 => rowid:6
  └── project
-      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 column17:17!null column18:18!null
+      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 c_new:17!null rowid_new:18!null
       ├── project
-      │    ├── columns: column17:17!null column18:18!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
+      │    ├── columns: c_new:17!null rowid_new:18!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    ├── left-join-apply
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    │    ├── scan abcde
@@ -1047,10 +1047,10 @@ update abcde
       │    │    │              └── y:14 + 1 [as=y1:16]
       │    │    └── filters (true)
       │    └── projections
-      │         ├── 1 [as=column17:17]
-      │         └── 2 [as=column18:18]
+      │         ├── 1 [as=c_new:17]
+      │         └── 2 [as=rowid_new:18]
       └── projections
-           └── (y1:16 + column17:17) + 1 [as=column19:19]
+           └── (y1:16 + c_new:17) + 1 [as=column19:19]
 
 # Use subquery SET expression after other expressions.
 build
@@ -1060,16 +1060,16 @@ update abcde
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├── column17:17 => a:1
- │    ├── column18:18 => b:2
+ │    ├── a_new:17 => a:1
+ │    ├── b_new:18 => b:2
  │    ├── y:14 => c:3
  │    ├── column19:19 => d:4
- │    ├── column17:17 => e:5
+ │    ├── a_new:17 => e:5
  │    └── y1:16 => rowid:6
  └── project
-      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 column17:17!null column18:18!null
+      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 a_new:17!null b_new:18!null
       ├── project
-      │    ├── columns: column17:17!null column18:18!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
+      │    ├── columns: a_new:17!null b_new:18!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    ├── left-join-apply
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    │    ├── scan abcde
@@ -1089,10 +1089,10 @@ update abcde
       │    │    │              └── y:14 + 1 [as=y1:16]
       │    │    └── filters (true)
       │    └── projections
-      │         ├── 1 [as=column17:17]
-      │         └── 2 [as=column18:18]
+      │         ├── 1 [as=a_new:17]
+      │         └── 2 [as=b_new:18]
       └── projections
-           └── (column18:18 + y:14) + 1 [as=column19:19]
+           └── (b_new:18 + y:14) + 1 [as=column19:19]
 
 # Multiple subqueries in SET expressions.
 build
@@ -1151,11 +1151,11 @@ update xyz
  ├── columns: <none>
  ├── fetch columns: x:4 y:5 z:6
  ├── update-mapping:
- │    ├── column9:9 => x:1
+ │    ├── x_new:9 => x:1
  │    ├── three:8 => y:2
  │    └── two:7 => z:3
  └── project
-      ├── columns: column9:9!null x:4!null y:5 z:6 two:7 three:8
+      ├── columns: x_new:9!null x:4!null y:5 z:6 two:7 three:8
       ├── left-join-apply
       │    ├── columns: x:4!null y:5 z:6 two:7 three:8
       │    ├── scan xyz
@@ -1171,7 +1171,7 @@ update xyz
       │    │              └── 3 [as=three:8]
       │    └── filters (true)
       └── projections
-           └── 'foo' [as=column9:9]
+           └── 'foo' [as=x_new:9]
 
 # SET expression contains correlated subquery + alias.
 build
@@ -1183,13 +1183,13 @@ project
       ├── columns: abcde1.a:1!null abcde1.b:2 abcde1.c:3 abcde1.d:4 abcde1.e:5!null abcde1.rowid:6!null
       ├── fetch columns: abcde1.a:7 abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12
       ├── update-mapping:
-      │    ├── column19:19 => abcde1.b:2
+      │    ├── b_new:19 => abcde1.b:2
       │    ├── column20:20 => abcde1.d:4
       │    └── abcde1.a:7 => abcde1.e:5
       └── project
-           ├── columns: column20:20 abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null column19:19
+           ├── columns: column20:20 abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null b_new:19
            ├── project
-           │    ├── columns: column19:19 abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null
+           │    ├── columns: b_new:19 abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null
            │    ├── scan abcde1
            │    │    ├── columns: abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null
            │    │    └── computed column expressions
@@ -1198,7 +1198,7 @@ project
            │    │         └── abcde1.e:11
            │    │              └── abcde1.a:7
            │    └── projections
-           │         └── subquery [as=column19:19]
+           │         └── subquery [as=b_new:19]
            │              └── max1-row
            │                   ├── columns: abcde2.b:14
            │                   └── project
@@ -1215,7 +1215,7 @@ project
            │                             └── filters
            │                                  └── abcde2.rowid:18 = abcde1.a:7
            └── projections
-                └── (column19:19 + abcde1.c:9) + 1 [as=column20:20]
+                └── (b_new:19 + abcde1.c:9) + 1 [as=column20:20]
 
 # Too many values.
 build
@@ -1334,30 +1334,30 @@ update mutation
  ├── columns: <none>
  ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
- │    ├── column11:11 => m:1
+ │    ├── m_new:11 => m:1
  │    ├── column12:12 => o:3
  │    └── column13:13 => p:4
  ├── check columns: check1:14
  └── project
-      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13
+      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 m_new:11!null column12:12!null column13:13
       ├── project
-      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
+      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 m_new:11!null column12:12!null
       │    ├── project
-      │    │    ├── columns: column12:12!null m:6!null n:7 o:8 p:9 q:10 column11:11!null
+      │    │    ├── columns: column12:12!null m:6!null n:7 o:8 p:9 q:10 m_new:11!null
       │    │    ├── project
-      │    │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
+      │    │    │    ├── columns: m_new:11!null m:6!null n:7 o:8 p:9 q:10
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    │    └── check constraint expressions
       │    │    │    │         └── m:6 > 0
       │    │    │    └── projections
-      │    │    │         └── 1 [as=column11:11]
+      │    │    │         └── 1 [as=m_new:11]
       │    │    └── projections
       │    │         └── 10 [as=column12:12]
       │    └── projections
       │         └── column12:12 + n:7 [as=column13:13]
       └── projections
-           └── column11:11 > 0 [as=check1:14]
+           └── m_new:11 > 0 [as=check1:14]
 
 # Update column that mutation column depends upon.
 build
@@ -1367,32 +1367,32 @@ update mutation
  ├── columns: <none>
  ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
- │    ├── column11:11 => m:1
- │    ├── column12:12 => n:2
+ │    ├── m_new:11 => m:1
+ │    ├── n_new:12 => n:2
  │    ├── column13:13 => o:3
  │    └── column14:14 => p:4
  ├── check columns: check1:15
  └── project
-      ├── columns: check1:15!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13!null column14:14!null
+      ├── columns: check1:15!null m:6!null n:7 o:8 p:9 q:10 m_new:11!null n_new:12!null column13:13!null column14:14!null
       ├── project
-      │    ├── columns: column14:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13!null
+      │    ├── columns: column14:14!null m:6!null n:7 o:8 p:9 q:10 m_new:11!null n_new:12!null column13:13!null
       │    ├── project
-      │    │    ├── columns: column13:13!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
+      │    │    ├── columns: column13:13!null m:6!null n:7 o:8 p:9 q:10 m_new:11!null n_new:12!null
       │    │    ├── project
-      │    │    │    ├── columns: column11:11!null column12:12!null m:6!null n:7 o:8 p:9 q:10
+      │    │    │    ├── columns: m_new:11!null n_new:12!null m:6!null n:7 o:8 p:9 q:10
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    │    └── check constraint expressions
       │    │    │    │         └── m:6 > 0
       │    │    │    └── projections
-      │    │    │         ├── 1 [as=column11:11]
-      │    │    │         └── 2 [as=column12:12]
+      │    │    │         ├── 1 [as=m_new:11]
+      │    │    │         └── 2 [as=n_new:12]
       │    │    └── projections
       │    │         └── 10 [as=column13:13]
       │    └── projections
-      │         └── column13:13 + column12:12 [as=column14:14]
+      │         └── column13:13 + n_new:12 [as=column14:14]
       └── projections
-           └── column11:11 > 0 [as=check1:15]
+           └── m_new:11 > 0 [as=check1:15]
 
 # Ensure that ORDER BY wildcard does not select mutation columns.
 build
@@ -1402,18 +1402,18 @@ update mutation
  ├── columns: <none>
  ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
- │    ├── column11:11 => m:1
+ │    ├── m_new:11 => m:1
  │    ├── column12:12 => o:3
  │    └── column13:13 => p:4
  ├── check columns: check1:14
  └── project
-      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13
+      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 m_new:11!null column12:12!null column13:13
       ├── project
-      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
+      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 m_new:11!null column12:12!null
       │    ├── project
-      │    │    ├── columns: column12:12!null m:6!null n:7 o:8 p:9 q:10 column11:11!null
+      │    │    ├── columns: column12:12!null m:6!null n:7 o:8 p:9 q:10 m_new:11!null
       │    │    ├── project
-      │    │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
+      │    │    │    ├── columns: m_new:11!null m:6!null n:7 o:8 p:9 q:10
       │    │    │    ├── limit
       │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    │    ├── internal-ordering: +6,+7
@@ -1428,13 +1428,13 @@ update mutation
       │    │    │    │    │         └── ordering: +6
       │    │    │    │    └── 10
       │    │    │    └── projections
-      │    │    │         └── 1 [as=column11:11]
+      │    │    │         └── 1 [as=m_new:11]
       │    │    └── projections
       │    │         └── 10 [as=column12:12]
       │    └── projections
       │         └── column12:12 + n:7 [as=column13:13]
       └── projections
-           └── column11:11 > 0 [as=check1:14]
+           └── m_new:11 > 0 [as=check1:14]
 
 # Try to return a mutation column.
 build
@@ -1478,17 +1478,17 @@ update checks
  ├── columns: <none>
  ├── fetch columns: a:5 b:6 c:7 d:8
  ├── update-mapping:
- │    ├── column9:9 => a:1
- │    ├── column10:10 => b:2
- │    ├── column11:11 => c:3
+ │    ├── a_new:9 => a:1
+ │    ├── b_new:10 => b:2
+ │    ├── c_new:11 => c:3
  │    └── column12:12 => d:4
  ├── check columns: check1:13 check2:14
  └── project
-      ├── columns: check1:13!null check2:14!null a:5!null b:6 c:7 d:8 column9:9!null column10:10!null column11:11!null column12:12!null
+      ├── columns: check1:13!null check2:14!null a:5!null b:6 c:7 d:8 a_new:9!null b_new:10!null c_new:11!null column12:12!null
       ├── project
-      │    ├── columns: column12:12!null a:5!null b:6 c:7 d:8 column9:9!null column10:10!null column11:11!null
+      │    ├── columns: column12:12!null a:5!null b:6 c:7 d:8 a_new:9!null b_new:10!null c_new:11!null
       │    ├── project
-      │    │    ├── columns: column9:9!null column10:10!null column11:11!null a:5!null b:6 c:7 d:8
+      │    │    ├── columns: a_new:9!null b_new:10!null c_new:11!null a:5!null b:6 c:7 d:8
       │    │    ├── scan checks
       │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
@@ -1497,14 +1497,14 @@ update checks
       │    │    │         └── d:8
       │    │    │              └── c:7 + 1
       │    │    └── projections
-      │    │         ├── 1 [as=column9:9]
-      │    │         ├── 2 [as=column10:10]
-      │    │         └── 3 [as=column11:11]
+      │    │         ├── 1 [as=a_new:9]
+      │    │         ├── 2 [as=b_new:10]
+      │    │         └── 3 [as=c_new:11]
       │    └── projections
-      │         └── column11:11 + 1 [as=column12:12]
+      │         └── c_new:11 + 1 [as=column12:12]
       └── projections
-           ├── column10:10 < column12:12 [as=check1:13]
-           └── column9:9 > 0 [as=check2:14]
+           ├── b_new:10 < column12:12 [as=check1:13]
+           └── a_new:9 > 0 [as=check2:14]
 
 # Do not update columns for one of the constraints.
 build
@@ -1514,15 +1514,15 @@ update checks
  ├── columns: <none>
  ├── fetch columns: a:5 b:6 c:7 d:8
  ├── update-mapping:
- │    ├── column9:9 => a:1
+ │    ├── a_new:9 => a:1
  │    └── column10:10 => d:4
  ├── check columns: check1:11 check2:12
  └── project
-      ├── columns: check1:11 check2:12!null a:5!null b:6 c:7 d:8 column9:9!null column10:10
+      ├── columns: check1:11 check2:12!null a:5!null b:6 c:7 d:8 a_new:9!null column10:10
       ├── project
-      │    ├── columns: column10:10 a:5!null b:6 c:7 d:8 column9:9!null
+      │    ├── columns: column10:10 a:5!null b:6 c:7 d:8 a_new:9!null
       │    ├── project
-      │    │    ├── columns: column9:9!null a:5!null b:6 c:7 d:8
+      │    │    ├── columns: a_new:9!null a:5!null b:6 c:7 d:8
       │    │    ├── scan checks
       │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
@@ -1531,12 +1531,12 @@ update checks
       │    │    │         └── d:8
       │    │    │              └── c:7 + 1
       │    │    └── projections
-      │    │         └── 1 [as=column9:9]
+      │    │         └── 1 [as=a_new:9]
       │    └── projections
       │         └── c:7 + 1 [as=column10:10]
       └── projections
            ├── b:6 < column10:10 [as=check1:11]
-           └── column9:9 > 0 [as=check2:12]
+           └── a_new:9 > 0 [as=check2:12]
 
 # Update one column in constraint, but not the other.
 build
@@ -1546,15 +1546,15 @@ update checks
  ├── columns: <none>
  ├── fetch columns: a:5 b:6 c:7 d:8
  ├── update-mapping:
- │    ├── column9:9 => b:2
+ │    ├── b_new:9 => b:2
  │    └── column10:10 => d:4
  ├── check columns: check1:11 check2:12
  └── project
-      ├── columns: check1:11 check2:12!null a:5!null b:6 c:7 d:8 column9:9!null column10:10
+      ├── columns: check1:11 check2:12!null a:5!null b:6 c:7 d:8 b_new:9!null column10:10
       ├── project
-      │    ├── columns: column10:10 a:5!null b:6 c:7 d:8 column9:9!null
+      │    ├── columns: column10:10 a:5!null b:6 c:7 d:8 b_new:9!null
       │    ├── project
-      │    │    ├── columns: column9:9!null a:5!null b:6 c:7 d:8
+      │    │    ├── columns: b_new:9!null a:5!null b:6 c:7 d:8
       │    │    ├── scan checks
       │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
@@ -1563,11 +1563,11 @@ update checks
       │    │    │         └── d:8
       │    │    │              └── c:7 + 1
       │    │    └── projections
-      │    │         └── 2 [as=column9:9]
+      │    │         └── 2 [as=b_new:9]
       │    └── projections
       │         └── c:7 + 1 [as=column10:10]
       └── projections
-           ├── column9:9 < column10:10 [as=check1:11]
+           ├── b_new:9 < column10:10 [as=check1:11]
            └── a:5 > 0 [as=check2:12]
 
 # Update using tuple and subquery.
