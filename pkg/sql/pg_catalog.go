@@ -963,7 +963,7 @@ type oneAtATimeSchemaResolver struct {
 }
 
 func (r oneAtATimeSchemaResolver) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error) {
-	return r.p.Tables().databaseCache.getDatabaseDescByID(r.ctx, r.p.txn, id)
+	return r.p.Tables().databaseCache.GetDatabaseDescByID(r.ctx, r.p.txn, id)
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id sqlbase.ID) (*TableDescriptor, error) {
