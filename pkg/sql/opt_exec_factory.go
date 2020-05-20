@@ -44,8 +44,8 @@ type execFactory struct {
 
 var _ exec.Factory = &execFactory{}
 
-func makeExecFactory(p *planner) execFactory {
-	return execFactory{
+func newExecFactory(p *planner) *execFactory {
+	return &execFactory{
 		planner:         p,
 		allowAutoCommit: p.autoCommit,
 	}

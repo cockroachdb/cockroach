@@ -1,0 +1,22 @@
+# Test that we can set the session variable and cluster setting.
+statement ok
+SET experimental_distsql_planning = off
+
+statement ok
+SET experimental_distsql_planning = on
+
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_distsql_planning = off
+
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_distsql_planning = on
+
+statement ok
+SET experimental_distsql_planning = always
+
+# Test that a SELECT query fails but others don't.
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT); INSERT INTO kv VALUES (1, 1), (2, 1)
+
+statement error pq: unimplemented: experimental opt-driven distsql planning
+SELECT * FROM kv
