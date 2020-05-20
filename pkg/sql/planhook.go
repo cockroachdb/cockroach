@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -73,7 +74,7 @@ type PlanHookState interface {
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
-	LeaseMgr() *LeaseManager
+	LeaseMgr() *lease.LeaseManager
 	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(

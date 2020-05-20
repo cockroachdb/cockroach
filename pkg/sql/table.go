@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -69,7 +70,7 @@ type uncommittedTable struct {
 // as errors, or retries that result in transaction timestamp changes.
 type TableCollection struct {
 	// leaseMgr manages acquiring and releasing per-table leases.
-	leaseMgr *LeaseManager
+	leaseMgr *lease.LeaseManager
 	// A collection of table descriptor valid for the timestamp.
 	// They are released once the transaction using them is complete.
 	// If the transaction gets pushed and the timestamp changes,
@@ -325,7 +326,7 @@ func (tc *TableCollection) getTableVersion(
 	// disabling caching of system.eventlog, system.rangelog, and
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-table.
-	avoidCache := flags.AvoidCached || TestingTableLeasesAreDisabled() ||
+	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
 		(tn.Catalog() == sqlbase.SystemDB.Name && tn.ObjectName.String() != sqlbase.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
@@ -357,7 +358,7 @@ func (tc *TableCollection) getTableVersion(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	for _, table := range tc.leasedTables {
-		if NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tn.Table()) {
+		if lease.NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tn.Table()) {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
 			return table, nil
 		}
@@ -399,7 +400,7 @@ func (tc *TableCollection) getTableVersionByID(
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
-	if flags.AvoidCached || TestingTableLeasesAreDisabled() {
+	if flags.AvoidCached || lease.TestingTableLeasesAreDisabled() {
 		table, err := sqlbase.GetTableDescFromID(ctx, txn, tc.codec(), tableID)
 		if err != nil {
 			return nil, err
@@ -474,7 +475,7 @@ func (tc *TableCollection) getMutableTableVersionByID(
 
 // releaseTableLeases releases the leases for the tables with ids in
 // the passed slice. Errors are logged but ignored.
-func (tc *TableCollection) releaseTableLeases(ctx context.Context, tables []IDVersion) {
+func (tc *TableCollection) releaseTableLeases(ctx context.Context, tables []lease.IDVersion) {
 	// Sort the tables and leases to make it easy to find the leases to release.
 	leasedTables := tc.leasedTables
 	sort.Slice(tables, func(i, j int) bool {
@@ -585,11 +586,11 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescript
 // schema change is ClusterVersion - 1, because that's the one that will be
 // used when checking for table descriptor two version invariance.
 // Also returns strings representing the new <name, version> pairs
-func (tc *TableCollection) getTablesWithNewVersion() []IDVersion {
-	var tables []IDVersion
+func (tc *TableCollection) getTablesWithNewVersion() []lease.IDVersion {
+	var tables []lease.IDVersion
 	for _, table := range tc.uncommittedTables {
 		if mut := table.MutableTableDescriptor; !mut.IsNewTable() {
-			tables = append(tables, NewIDVersionPrev(&mut.ClusterVersion))
+			tables = append(tables, lease.NewIDVersionPrev(&mut.ClusterVersion))
 		}
 	}
 	return tables
@@ -678,7 +679,7 @@ func (tc *TableCollection) getUncommittedTable(
 		}
 
 		// Do we know about a table with this name?
-		if NameMatchesTable(
+		if lease.NameMatchesTable(
 			&mutTbl.TableDescriptor,
 			dbID,
 			schemaID,
