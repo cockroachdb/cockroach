@@ -1247,13 +1247,13 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
 	sc := &schemaInterface{
 		physical: &CachedPhysicalAccessor{
-			SchemaAccessor: UncachedPhysicalAccessor{},
-			tc:             tables,
+			Accessor: UncachedPhysicalAccessor{},
+			tc:       tables,
 		},
 	}
 	sc.logical = &LogicalSchemaAccessor{
-		SchemaAccessor: sc.physical,
-		vt:             vt,
+		Accessor: sc.physical,
+		vt:       vt,
 	}
 	return sc
 }
