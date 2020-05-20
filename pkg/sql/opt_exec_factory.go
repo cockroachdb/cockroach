@@ -1059,7 +1059,7 @@ func (ef *execFactory) ConstructPlan(
 		auditEvents:     ef.planner.curPlan.auditEvents,
 		instrumentation: ef.planner.curPlan.instrumentation,
 	}
-	res.main = root.(planNode)
+	res.main.planNode = root.(planNode)
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))
 		for i := range subqueries {
@@ -1079,7 +1079,7 @@ func (ef *execFactory) ConstructPlan(
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}
 			out.expanded = true
-			out.plan = in.Root.(planNode)
+			out.plan.planNode = in.Root.(planNode)
 		}
 	}
 	if len(cascades) > 0 {
@@ -1091,7 +1091,7 @@ func (ef *execFactory) ConstructPlan(
 	if len(checks) > 0 {
 		res.checkPlans = make([]checkPlan, len(checks))
 		for i := range checks {
-			res.checkPlans[i].plan = checks[i].(planNode)
+			res.checkPlans[i].plan.planNode = checks[i].(planNode)
 		}
 	}
 

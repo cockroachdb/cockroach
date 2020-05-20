@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -198,7 +199,7 @@ func populateExplain(
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physicalPlan, err := makePhysicalPlan(planCtx, distSQLPlanner, plan.main)
+	physicalPlan, err := makePhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
 	if err == nil {
 		// There might be an issue making the physical plan, but that should not
 		// cause an error or panic, so swallow the error. See #40677 for example.
@@ -293,16 +294,21 @@ func observePlan(
 	returnError bool,
 	subqueryFmtFlags tree.FmtFlags,
 ) error {
+	if plan.main.physPlan != nil {
+		return errors.AssertionFailedf(
+			"EXPLAIN of a query with opt-driven DistSQL planning is not supported",
+		)
+	}
 	// If there are any subqueries, cascades, or checks in the plan, we
 	// enclose everything as children of a virtual "root" node.
 	if len(plan.subqueryPlans) > 0 || len(plan.cascades) > 0 || len(plan.checkPlans) > 0 {
-		if _, err := observer.enterNode(ctx, "root", plan.main); err != nil && returnError {
+		if _, err := observer.enterNode(ctx, "root", plan.main.planNode); err != nil && returnError {
 			return err
 		}
 	}
 
 	// Explain the main plan.
-	if err := walkPlan(ctx, plan.main, observer); err != nil && returnError {
+	if err := walkPlan(ctx, plan.main.planNode, observer); err != nil && returnError {
 		return err
 	}
 
@@ -321,8 +327,8 @@ func observePlan(
 			tree.AsStringWithFlags(s.subquery, subqueryFmtFlags),
 		)
 		observer.attr("subquery", "exec mode", rowexec.SubqueryExecModeNames[s.execMode])
-		if s.plan != nil {
-			if err := walkPlan(ctx, s.plan, observer); err != nil && returnError {
+		if s.plan.planNode != nil {
+			if err := walkPlan(ctx, s.plan.planNode, observer); err != nil && returnError {
 				return err
 			}
 		} else if s.started {
@@ -350,8 +356,8 @@ func observePlan(
 		if _, err := observer.enterNode(ctx, "fk-check", nil /* plan */); err != nil && returnError {
 			return err
 		}
-		if plan.checkPlans[i].plan != nil {
-			if err := walkPlan(ctx, plan.checkPlans[i].plan, observer); err != nil && returnError {
+		if plan.checkPlans[i].plan.planNode != nil {
+			if err := walkPlan(ctx, plan.checkPlans[i].plan.planNode, observer); err != nil && returnError {
 				return err
 			}
 		}
@@ -361,7 +367,7 @@ func observePlan(
 	}
 
 	if len(plan.subqueryPlans) > 0 || len(plan.cascades) > 0 || len(plan.checkPlans) > 0 {
-		if err := observer.leaveNode("root", plan.main); err != nil && returnError {
+		if err := observer.leaveNode("root", plan.main.planNode); err != nil && returnError {
 			return err
 		}
 	}
