@@ -48,6 +48,8 @@ type virtualSchema struct {
 	tableValidator func(*sqlbase.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
 	validWithNoDatabaseContext bool
+	// Some virtual schemas (like pg_catalog) contain types that we can resolve.
+	containsTypes bool
 }
 
 // virtualSchemaDef represents the interface of a table definition within a virtualSchema.
@@ -288,6 +290,7 @@ type virtualSchemaEntry struct {
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
+	containsTypes   bool
 }
 
 func (v virtualSchemaEntry) Desc() catalog.Descriptor {
@@ -304,15 +307,45 @@ func (v virtualSchemaEntry) VisitTables(f func(object catalog.VirtualObject)) {
 	}
 }
 
-func (v virtualSchemaEntry) GetObjectByName(name string) (catalog.VirtualObject, error) {
-	if def, ok := v.defs[name]; ok {
-		return &def, nil
+func (v virtualSchemaEntry) GetObjectByName(
+	name string, kind tree.DesiredObjectKind,
+) (catalog.VirtualObject, error) {
+	switch kind {
+	case tree.TableObject:
+		if def, ok := v.defs[name]; ok {
+			return &def, nil
+		}
+		if _, ok := v.allTableNames[name]; ok {
+			return nil, unimplemented.Newf(v.desc.Name+"."+name,
+				"virtual schema table not implemented: %s.%s", v.desc.Name, name)
+		}
+		return nil, nil
+	case tree.TypeObject:
+		if !v.containsTypes {
+			return nil, nil
+		}
+		// Currently, we don't allow creation of types in virtual schemas, so
+		// the only types present in the virtual schemas that have types (i.e.
+		// pg_catalog) are types that are known at parse time. So, attempt to
+		// parse the input object as a statically known type. Note that an
+		// invalid input type like "notatype" will be parsed successfully as
+		// a ResolvableTypeReference, so the error here does not need to be
+		// intercepted and inspected.
+		typRef, err := parser.ParseType(name)
+		if err != nil {
+			return nil, err
+		}
+		// If the parsed reference is actually a statically known type, then
+		// we can return it. We return a simple wrapping of this type as
+		// TypeDescriptor that represents an alias of the result type.
+		typ, ok := tree.GetStaticallyKnownType(typRef)
+		if !ok {
+			return nil, nil
+		}
+		return virtualTypeEntry{desc: sqlbase.MakeSimpleAliasTypeDescriptor(typ)}, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown desired object kind %d", kind)
 	}
-	if _, ok := v.allTableNames[name]; ok {
-		return nil, unimplemented.Newf(v.desc.Name+"."+name,
-			"virtual schema table not implemented: %s.%s", v.desc.Name, name)
-	}
-	return nil, nil
 }
 
 type virtualDefEntry struct {
@@ -324,6 +357,14 @@ type virtualDefEntry struct {
 
 func (e virtualDefEntry) Desc() catalog.Descriptor {
 	return sqlbase.NewImmutableTableDescriptor(*e.desc)
+}
+
+type virtualTypeEntry struct {
+	desc *sqlbase.TypeDescriptor
+}
+
+func (e virtualTypeEntry) Desc() catalog.Descriptor {
+	return e.desc
 }
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
@@ -579,6 +620,7 @@ func NewVirtualSchemaHolder(
 			defs:            defs,
 			orderedDefNames: orderedDefNames,
 			allTableNames:   schema.allTableNames,
+			containsTypes:   schema.containsTypes,
 		}
 		vs.orderedNames[order] = dbName
 		order++

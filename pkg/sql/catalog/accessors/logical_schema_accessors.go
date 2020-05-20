@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/errors"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -96,43 +95,20 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
-	switch flags.DesiredObjectKind {
-	case tree.TypeObject:
-		// TODO(ajwerner): Change this function if we ever expose non-table objects
-		// underneath virtual schemas. For now we assume that the only objects
-		// ever handed back from GetObjectByName are tables. Instead we fallthrough
-		// to the underlying physical accessor.
-		return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
-	case tree.TableObject:
-		l.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
-		if scEntry, ok := l.vs.GetVirtualSchema(schema); ok {
-			table, err := scEntry.GetObjectByName(object)
-			if err != nil {
-				return nil, err
-			}
-			if table == nil {
-				if flags.Required {
-					return nil, sqlbase.NewUndefinedRelationError(&l.tn)
-				}
-				return nil, nil
-			}
-			desc := table.Desc().TableDesc()
-			if desc == nil {
-				// This can only happen if we have a non-table object stored on a
-				// virtual schema. For now we'll return an assertion error.
-				return nil, errors.AssertionFailedf(
-					"non-table object of type %T returned from virtual schema for %v",
-					table.Desc(), l.tn)
-			}
-			if flags.RequireMutable {
-				return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
-			}
-			return sqlbase.NewImmutableTableDescriptor(*desc), nil
+	if scEntry, ok := l.vs.GetVirtualSchema(schema); ok {
+		desc, err := scEntry.GetObjectByName(object, flags.DesiredObjectKind)
+		if err != nil {
+			return nil, err
 		}
-
-		// Fallthrough.
-		return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
-	default:
-		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
+		if desc == nil {
+			if flags.Required {
+				l.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
+				return nil, sqlbase.NewUndefinedObjectError(&l.tn, flags.DesiredObjectKind)
+			}
+			return nil, nil
+		}
+		return desc.Desc(), nil
 	}
+	// Fallthrough.
+	return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 }

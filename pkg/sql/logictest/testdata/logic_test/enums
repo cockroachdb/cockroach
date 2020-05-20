@@ -56,11 +56,6 @@ SELECT 'Z'::public.int
 ----
 Z
 
-query T
-SELECT 'Z'::"int"
-----
-Z
-
 statement ok
 CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi')
 
