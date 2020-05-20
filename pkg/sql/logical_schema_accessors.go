@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -85,6 +86,39 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 ) (ObjectDescriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
+		// If the input schema matches a virtual schema, look into it.
+		if scEntry, ok := l.vt.getVirtualSchemaEntry(schema); ok {
+			var result ObjectDescriptor
+			// If the virtual schema actually contains types, then try to find the
+			// requested type.
+			if scEntry.containsTypes {
+				// Currently, we don't allow creation of types in virtual schemas, so
+				// the only types present in the virtual schemas that have types (i.e.
+				// pg_catalog) are types that are known at parse time. So, attempt to
+				// parse the input object as a statically known type. Note that an
+				// invalid input type like "notatype" will be parsed successfully as
+				// a ResolvableTypeReference, so the error here does not need to be
+				// intercepted and inspected.
+				typRef, err := parser.ParseType(object)
+				if err != nil {
+					return nil, err
+				}
+				// If the parsed reference is actually a statically known type, then
+				// we can return it. We return a simple wrapping of this type as
+				// TypeDescriptor that represents an alias of the result type.
+				typ, ok := tree.GetStaticallyKnownType(typRef)
+				if ok {
+					result = sqlbase.MakeSimpleAliasTypeDescriptor(typ)
+				}
+			}
+			if result == nil {
+				if flags.Required {
+					name := tree.MakeNewQualifiedTypeName(db, schema, object)
+					return nil, sqlbase.NewUndefinedTypeError(&name)
+				}
+			}
+			return result, nil
+		}
 		return (UncachedPhysicalAccessor{}).GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 	case tree.TableObject:
 		l.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))

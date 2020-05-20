@@ -47,6 +47,8 @@ type virtualSchema struct {
 	tableValidator func(*sqlbase.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
 	validWithNoDatabaseContext bool
+	// Some virtual schemas (like pg_catalog) contain types that we can resolve.
+	containsTypes bool
 }
 
 // virtualSchemaDef represents the interface of a table definition within a virtualSchema.
@@ -277,6 +279,7 @@ type virtualSchemaEntry struct {
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
+	containsTypes   bool
 }
 
 type virtualDefEntry struct {
@@ -539,6 +542,7 @@ func NewVirtualSchemaHolder(
 			defs:            defs,
 			orderedDefNames: orderedDefNames,
 			allTableNames:   schema.allTableNames,
+			containsTypes:   schema.containsTypes,
 		}
 		vs.orderedNames[order] = dbName
 		order++
