@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -109,22 +108,6 @@ var ReplicaOraclePolicy = replicaoracle.BinPackingChoice
 // If true, the plan diagram (in JSON) is logged for each plan (used for
 // debugging).
 var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
-
-// If true, for index joins we instantiate a join reader on every node that
-// has a stream (usually from a table reader). If false, there is a single join
-// reader.
-var distributeIndexJoin = settings.RegisterBoolSetting(
-	"sql.distsql.distribute_index_joins",
-	"if set, for index joins we instantiate a join reader on every node that has a "+
-		"stream; if not set, we use a single join reader",
-	true,
-)
-
-var planMergeJoins = settings.RegisterBoolSetting(
-	"sql.distsql.merge_joins.enabled",
-	"if set, we plan merge joins when possible",
-	true,
-)
 
 // livenessProvider provides just the methods of storage.NodeLiveness that the
 // DistSQLPlanner needs, to avoid importing all of storage.
@@ -1870,7 +1853,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
-	if distributeIndexJoin.Get(&dsp.st.SV) && len(plan.ResultRouters) > 1 {
+	if len(plan.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
 		plan.AddNoGroupingStage(
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
@@ -1879,14 +1862,9 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 			dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
 		)
 	} else {
-		// Use a single join reader (if there is a single stream, on that node; if
-		// not, on the gateway node).
-		node := dsp.nodeDesc.NodeID
-		if len(plan.ResultRouters) == 1 {
-			node = plan.Processors[plan.ResultRouters[0]].Node
-		}
+		// We have a single stream, so use a single join reader on that node.
 		plan.AddSingleGroupStage(
-			node,
+			plan.Processors[plan.ResultRouters[0]].Node,
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			types,
@@ -2221,7 +2199,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
 		nodes = findJoinProcessorNodes(leftRouters, rightRouters, p.Processors)
 
-		if planMergeJoins.Get(&dsp.st.SV) && len(n.mergeJoinOrdering) > 0 {
+		if len(n.mergeJoinOrdering) > 0 {
 			// TODO(radu): we currently only use merge joins when we have an ordering on
 			// all equality columns. We should relax this by either:
 			//  - implementing a hybrid hash/merge processor which implements merge
@@ -3034,7 +3012,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		//    group uses a hashmap on the remaining columns
 		//  - or: adding a sort processor to complete the order
 		var core execinfrapb.ProcessorCoreUnion
-		if !planMergeJoins.Get(&dsp.st.SV) || len(mergeOrdering.Columns) < len(streamCols) {
+		if len(mergeOrdering.Columns) < len(streamCols) {
 			core.HashJoiner = &execinfrapb.HashJoinerSpec{
 				LeftEqColumns:  eqCols,
 				RightEqColumns: eqCols,
