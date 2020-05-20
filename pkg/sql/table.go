@@ -126,11 +126,11 @@ type TableCollection struct {
 	// table is marked dropped.
 	uncommittedTables []uncommittedTable
 
-	// databaseCache is used as a cache for database names.
+	// DatabaseCache is used as a cache for database names.
 	// This field is nil when the field is initialized for an internalPlanner.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
-	databaseCache *databaseCache
+	databaseCache *DatabaseCache
 
 	// schemaCache maps {databaseID, schemaName} -> (schemaID, if exists, otherwise nil).
 	// TODO(sqlexec): replace with leasing system with custom schemas.
@@ -174,7 +174,7 @@ type dbCacheSubscriber interface {
 	// waitForCacheState takes a callback depending on the cache state and blocks
 	// until the callback declares success. The callback is repeatedly called as
 	// the cache is updated.
-	waitForCacheState(cond func(*databaseCache) bool)
+	waitForCacheState(cond func(*DatabaseCache) bool)
 }
 
 // isSupportedSchemaName returns whether this schema name is supported.
@@ -210,7 +210,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
+		dbID, err = tc.databaseCache.GetDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -341,7 +341,7 @@ func (tc *TableCollection) getTableVersion(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
+		dbID, err = tc.databaseCache.GetDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -576,9 +576,9 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 		// reflect a dropped database, so that future commands on the
 		// same gateway node observe the dropped database.
 		tc.dbCacheSubscriber.waitForCacheState(
-			func(dc *databaseCache) bool {
+			func(dc *DatabaseCache) bool {
 				// Resolve the database name from the database cache.
-				dbID, err := dc.getCachedDatabaseID(uc.name)
+				dbID, err := dc.GetCachedDatabaseID(uc.name)
 				if err != nil || dbID == sqlbase.InvalidID {
 					// dbID can still be 0 if required is false and
 					// the database is not found. Swallowing error here

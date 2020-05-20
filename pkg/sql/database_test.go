@@ -34,7 +34,7 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc := makeDatabaseDesc(stmt.AST.(*tree.CreateDatabase))
+	desc := MakeDatabaseDesc(stmt.AST.(*tree.CreateDatabase))
 	if desc.Name != "test" {
 		t.Fatalf("expected Name == test, got %s", desc.Name)
 	}
@@ -61,8 +61,8 @@ func TestDatabaseAccessors(t *testing.T) {
 			return err
 		}
 
-		databaseCache := newDatabaseCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
-		_, err := databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
+		databaseCache := NewDatabaseCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
+		_, err := databaseCache.GetDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

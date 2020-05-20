@@ -34,12 +34,12 @@ import (
 // suitable; consider instead schema_accessors.go and resolver.go.
 //
 
-// databaseCache holds a cache from database name to database ID. It is
+// DatabaseCache holds a cache from database name to database ID. It is
 // populated as database IDs are requested and a new cache is created whenever
 // the system config changes. As such, no attempt is made to limit its size
 // which is naturally limited by the number of database descriptors in the
 // system the periodic reset whenever the system config is gossiped.
-type databaseCache struct {
+type DatabaseCache struct {
 	// databases is really a map of string -> sqlbase.ID
 	databases sync.Map
 
@@ -51,14 +51,15 @@ type databaseCache struct {
 	systemConfig *config.SystemConfig
 }
 
-func newDatabaseCache(codec keys.SQLCodec, cfg *config.SystemConfig) *databaseCache {
-	return &databaseCache{
+// NewDatabaseCache constructs a new DatabaseCache.
+func NewDatabaseCache(codec keys.SQLCodec, cfg *config.SystemConfig) *DatabaseCache {
+	return &DatabaseCache{
 		codec:        codec,
 		systemConfig: cfg,
 	}
 }
 
-func (dc *databaseCache) getID(name string) sqlbase.ID {
+func (dc *DatabaseCache) getID(name string) sqlbase.ID {
 	val, ok := dc.databases.Load(name)
 	if !ok {
 		return sqlbase.InvalidID
@@ -66,11 +67,12 @@ func (dc *databaseCache) getID(name string) sqlbase.ID {
 	return val.(sqlbase.ID)
 }
 
-func (dc *databaseCache) setID(name string, id sqlbase.ID) {
+func (dc *DatabaseCache) setID(name string, id sqlbase.ID) {
 	dc.databases.Store(name, id)
 }
 
-func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
+// MakeDatabaseDesc constructs a DatabaseDescriptor from an AST node.
+func MakeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 	return sqlbase.DatabaseDescriptor{
 		Name:       string(p.Name),
 		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
@@ -80,8 +82,8 @@ func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name. Returns nil and no error if the name is not present in the
 // cache.
-func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	dbID, err := dc.getCachedDatabaseID(name)
+func (dc *DatabaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+	dbID, err := dc.GetCachedDatabaseID(name)
 	if dbID == sqlbase.InvalidID || err != nil {
 		return nil, err
 	}
@@ -91,7 +93,7 @@ func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDe
 
 // getCachedDatabaseDescByID looks up the database descriptor from the descriptor cache,
 // given its ID.
-func (dc *databaseCache) getCachedDatabaseDescByID(
+func (dc *DatabaseCache) getCachedDatabaseDescByID(
 	id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	if id == sqlbase.SystemDB.ID {
@@ -120,9 +122,9 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 	return database, database.Validate()
 }
 
-// getDatabaseDesc returns the database descriptor given its name
+// GetDatabaseDesc returns the database descriptor given its name
 // if it exists in the cache, otherwise falls back to KV operations.
-func (dc *databaseCache) getDatabaseDesc(
+func (dc *DatabaseCache) GetDatabaseDesc(
 	ctx context.Context,
 	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
 	name string,
@@ -162,7 +164,7 @@ func (dc *databaseCache) getDatabaseDesc(
 
 // GetDatabaseDescByID returns the database descriptor given its ID
 // if it exists in the cache, otherwise falls back to KV operations.
-func (dc *databaseCache) getDatabaseDescByID(
+func (dc *DatabaseCache) GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc, err := dc.getCachedDatabaseDescByID(id)
@@ -178,13 +180,13 @@ func (dc *databaseCache) getDatabaseDescByID(
 // GetDatabaseID returns the ID of a database given its name. It
 // uses the descriptor cache if possible, otherwise falls back to KV
 // operations.
-func (dc *databaseCache) getDatabaseID(
+func (dc *DatabaseCache) GetDatabaseID(
 	ctx context.Context,
 	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
 	name string,
 	required bool,
 ) (sqlbase.ID, error) {
-	dbID, err := dc.getCachedDatabaseID(name)
+	dbID, err := dc.GetCachedDatabaseID(name)
 	if err != nil {
 		return dbID, err
 	}
@@ -209,11 +211,11 @@ func (dc *databaseCache) getDatabaseID(
 	return dbID, nil
 }
 
-// getCachedDatabaseID returns the ID of a database given its name
+// GetCachedDatabaseID returns the ID of a database given its name
 // from the cache. This method never goes to the store to resolve
 // the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
-func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
+func (dc *DatabaseCache) GetCachedDatabaseID(name string) (sqlbase.ID, error) {
 	if id := dc.getID(name); id != sqlbase.InvalidID {
 		return id, nil
 	}
