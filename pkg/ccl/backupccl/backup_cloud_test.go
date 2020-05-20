@@ -45,7 +45,7 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
@@ -70,7 +70,7 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
@@ -96,7 +96,7 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)

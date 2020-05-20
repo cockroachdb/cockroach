@@ -44,17 +44,6 @@ import (
 // suitable; consider instead schema_accessors.go and resolver.go.
 //
 
-var testDisableTableLeases bool
-
-// TestDisableTableLeases disables table leases and returns
-// a function that can be used to enable it.
-func TestDisableTableLeases() func() {
-	testDisableTableLeases = true
-	return func() {
-		testDisableTableLeases = false
-	}
-}
-
 func (p *planner) getVirtualTabler() VirtualTabler {
 	return p.extendedEvalCtx.VirtualSchemas
 }
@@ -367,7 +356,7 @@ func (tc *TableCollection) getTableVersion(
 	// disabling caching of system.eventlog, system.rangelog, and
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-table.
-	avoidCache := flags.AvoidCached || testDisableTableLeases ||
+	avoidCache := flags.AvoidCached || TestingTableLeasesAreDisabled() ||
 		(tn.Catalog() == sqlbase.SystemDB.Name && tn.ObjectName.String() != sqlbase.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
@@ -442,7 +431,7 @@ func (tc *TableCollection) getTableVersionByID(
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
-	if flags.AvoidCached || testDisableTableLeases {
+	if flags.AvoidCached || TestingTableLeasesAreDisabled() {
 		table, err := sqlbase.GetTableDescFromID(ctx, txn, tc.codec(), tableID)
 		if err != nil {
 			return nil, err

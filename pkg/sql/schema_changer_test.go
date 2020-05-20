@@ -80,7 +80,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -199,7 +199,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
 	params, _ := tests.CreateTestServerParams()
