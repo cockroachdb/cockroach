@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -259,7 +260,7 @@ func resolveExistingObjectImpl(
 		return nil, prefix, nil
 	}
 
-	obj := descI.(ObjectDescriptor)
+	obj := descI.(catalog.ObjectDescriptor)
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
 		if obj.TypeDesc() == nil {
