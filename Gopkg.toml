@@ -62,10 +62,19 @@ ignored = [
   name = "github.com/maruel/panicparse"
   revision = "f20d4c4d746f810c9110e21928d4135e1f2a3efa"
 
-# https://github.com/getsentry/raven-go/pull/139
+# We use a forked copy of sentry-go because we want this patch:
+# https://github.com/cockroachdb/sentry-go/pull/1/commits/2061d6c803c44899e4d3e2d3c6ac70d329587513
+#
+# (It should really go upstream - we had a PR - see
+# https://github.com/getsentry/raven-go/pull/139 - but that somehow
+# hasn't gone anywhere yet.)
+[[override]]
+  name = "github.com/getsentry/sentry-go"
+  source = "https://github.com/cockroachdb/sentry-go"
+
 [[constraint]]
-  name = "github.com/getsentry/raven-go"
-  source = "https://github.com/cockroachdb/raven-go"
+  name = "github.com/cockroachdb/sentry-go"
+  version = "=v0.6.1-cockroachdb"
 
 # Used for benchmarks, should be recent.
 [[constraint]]
@@ -84,7 +93,7 @@ ignored = [
 
 [[constraint]]
   name = "github.com/cockroachdb/errors"
-  branch = "v1.2.4-cockroach20.1"
+  branch = "master"
 
 [[constraint]]
   name = "vitess.io/vitess"
