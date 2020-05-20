@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -555,7 +555,7 @@ func (rq *replicateQueue) addOrReplace(
 		ops,
 		desc,
 		SnapshotRequest_RECOVERY,
-		storagepb.ReasonRangeUnderReplicated,
+		kvserverpb.ReasonRangeUnderReplicated,
 		details,
 		dryRun,
 	); err != nil {
@@ -706,7 +706,7 @@ func (rq *replicateQueue) remove(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
-		storagepb.ReasonRangeOverReplicated,
+		kvserverpb.ReasonRangeOverReplicated,
 		details,
 		dryRun,
 	); err != nil {
@@ -748,7 +748,7 @@ func (rq *replicateQueue) removeDecommissioning(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
-		storagepb.ReasonStoreDecommissioning, "", dryRun,
+		kvserverpb.ReasonStoreDecommissioning, "", dryRun,
 	); err != nil {
 		return false, err
 	}
@@ -780,7 +780,7 @@ func (rq *replicateQueue) removeDead(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
-		storagepb.ReasonStoreDead,
+		kvserverpb.ReasonStoreDead,
 		"",
 		dryRun,
 	); err != nil {
@@ -815,7 +815,7 @@ func (rq *replicateQueue) removeLearner(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN,
-		storagepb.ReasonAbandonedLearner,
+		kvserverpb.ReasonAbandonedLearner,
 		"",
 		dryRun,
 	); err != nil {
@@ -894,7 +894,7 @@ func (rq *replicateQueue) considerRebalance(
 				chgs,
 				desc,
 				SnapshotRequest_REBALANCE,
-				storagepb.ReasonRebalance,
+				kvserverpb.ReasonRebalance,
 				details,
 				dryRun,
 			); err != nil {
@@ -995,7 +995,7 @@ func (rq *replicateQueue) changeReplicas(
 	chgs roachpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 	dryRun bool,
 ) error {

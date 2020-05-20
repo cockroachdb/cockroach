@@ -23,9 +23,9 @@ import "server/status/statuspb/status.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
-import "kv/kvserver/storagepb/lease_status.proto";
-import "kv/kvserver/storagepb/state.proto";
-import "kv/kvserver/storagepb/liveness.proto";
+import "kv/kvserver/kvserverpb/lease_status.proto";
+import "kv/kvserver/kvserverpb/state.proto";
+import "kv/kvserver/kvserverpb/liveness.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 

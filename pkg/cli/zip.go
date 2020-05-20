@@ -26,7 +26,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -373,7 +373,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		if cErr := z.createJSONOrError(base+"/liveness.json", nodes, err); cErr != nil {
 			return cErr
 		}
-		livenessByNodeID := map[roachpb.NodeID]storagepb.NodeLivenessStatus{}
+		livenessByNodeID := map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{}
 		if lresponse != nil {
 			livenessByNodeID = lresponse.Statuses
 		}
@@ -382,7 +382,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			nodeID := node.Desc.NodeID
 
 			liveness := livenessByNodeID[nodeID]
-			if liveness == storagepb.NodeLivenessStatus_DECOMMISSIONED {
+			if liveness == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
 				// Decommissioned + process terminated. Let's not waste time
 				// on this node.
 				//

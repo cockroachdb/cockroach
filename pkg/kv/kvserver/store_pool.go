@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -94,7 +94,7 @@ type NodeCountFunc func() int
 // expired by more than TimeUntilStoreDead.
 type NodeLivenessFunc func(
 	nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
-) storagepb.NodeLivenessStatus
+) kvserverpb.NodeLivenessStatus
 
 // MakeStorePoolNodeLivenessFunc returns a function which determines
 // the status of a node based on information provided by the specified
@@ -102,10 +102,10 @@ type NodeLivenessFunc func(
 func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc {
 	return func(
 		nodeID roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
-	) storagepb.NodeLivenessStatus {
+	) kvserverpb.NodeLivenessStatus {
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
 		if err != nil {
-			return storagepb.NodeLivenessStatus_UNAVAILABLE
+			return kvserverpb.NodeLivenessStatus_UNAVAILABLE
 		}
 		return LivenessStatus(liveness, now, timeUntilStoreDead)
 	}
@@ -132,24 +132,24 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 //    UNAVAILABLE (or stays DECOMISSIONING or UNAVAILABLE if draining).
 //  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
 func LivenessStatus(
-	l storagepb.Liveness, now time.Time, deadThreshold time.Duration,
-) storagepb.NodeLivenessStatus {
+	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
+) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
 		if l.Decommissioning {
-			return storagepb.NodeLivenessStatus_DECOMMISSIONED
+			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
 		}
-		return storagepb.NodeLivenessStatus_DEAD
+		return kvserverpb.NodeLivenessStatus_DEAD
 	}
 	if l.Decommissioning {
-		return storagepb.NodeLivenessStatus_DECOMMISSIONING
+		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
 	}
 	if l.Draining {
-		return storagepb.NodeLivenessStatus_UNAVAILABLE
+		return kvserverpb.NodeLivenessStatus_UNAVAILABLE
 	}
 	if l.IsLive(now) {
-		return storagepb.NodeLivenessStatus_LIVE
+		return kvserverpb.NodeLivenessStatus_LIVE
 	}
-	return storagepb.NodeLivenessStatus_UNAVAILABLE
+	return kvserverpb.NodeLivenessStatus_UNAVAILABLE
 }
 
 type storeDetail struct {
@@ -217,11 +217,11 @@ func (sd *storeDetail) status(
 	// Even if the store has been updated via gossip, we still rely on
 	// the node liveness to determine whether it is considered live.
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
-	case storagepb.NodeLivenessStatus_DEAD, storagepb.NodeLivenessStatus_DECOMMISSIONED:
+	case kvserverpb.NodeLivenessStatus_DEAD, kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
 		return storeStatusDead
-	case storagepb.NodeLivenessStatus_DECOMMISSIONING:
+	case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
 		return storeStatusDecommissioning
-	case storagepb.NodeLivenessStatus_UNKNOWN, storagepb.NodeLivenessStatus_UNAVAILABLE:
+	case kvserverpb.NodeLivenessStatus_UNKNOWN, kvserverpb.NodeLivenessStatus_UNAVAILABLE:
 		return storeStatusUnknown
 	}
 

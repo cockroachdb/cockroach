@@ -12,7 +12,7 @@
 // (and requisite initial data) as well as tools for working with these
 // generators.
 
-package storagebase
+package kvserverbase
 
 // BatchEvalTestingKnobs contains testing helpers that are used during batch evaluation.
 type BatchEvalTestingKnobs struct {

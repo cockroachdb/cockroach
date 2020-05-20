@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -340,8 +340,8 @@ func expectNodesDecommissioned(
 			// The user is expecting the node to not be
 			// decommissioned/decommissioning already.
 			switch liveness {
-			case storagepb.NodeLivenessStatus_DECOMMISSIONING,
-				storagepb.NodeLivenessStatus_DECOMMISSIONED:
+			case kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
+				kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is already decommissioning or decommissioned")
 			default:
 				// It's always possible to decommission a node that's either live
@@ -350,10 +350,10 @@ func expectNodesDecommissioned(
 		} else {
 			// The user is expecting the node to be recommissionable.
 			switch liveness {
-			case storagepb.NodeLivenessStatus_DECOMMISSIONING,
-				storagepb.NodeLivenessStatus_DECOMMISSIONED:
+			case kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
+				kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
 				// ok.
-			case storagepb.NodeLivenessStatus_LIVE:
+			case kvserverpb.NodeLivenessStatus_LIVE:
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is not decommissioned")
 			default: // dead, unavailable, etc
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is in unexpected state", liveness)

@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -3181,7 +3181,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 		rhsDesc        *roachpb.RangeDescriptor
 		stop, stopping bool
 	}
-	storeCfg.TestingKnobs.TestingPostApplyFilter = func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+	storeCfg.TestingKnobs.TestingPostApplyFilter = func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		state.Lock()
 		if state.stop && !state.stopping && args.RangeID == state.rhsDesc.RangeID && args.IsLeaseRequest {
 			// Shut down the store. The lease acquisition will notice that a merge is
@@ -3264,7 +3264,7 @@ func TestMergeQueue(t *testing.T) {
 	rangeMinBytes := int64(1 << 10) // 1KB
 	storeCfg.DefaultZoneConfig.RangeMinBytes = &rangeMinBytes
 	sv := &storeCfg.Settings.SV
-	storagebase.MergeQueueEnabled.Override(sv, true)
+	kvserverbase.MergeQueueEnabled.Override(sv, true)
 	kvserver.MergeQueueInterval.Override(sv, 0) // process greedily
 	var mtc multiTestContext
 	// This test was written before the multiTestContext started creating many

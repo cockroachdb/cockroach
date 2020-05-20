@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -151,9 +151,9 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 //    it must run when the command has applied (such as resolving intents).
 type Result struct {
 	Local        LocalResult
-	Replicated   storagepb.ReplicatedEvalResult
-	WriteBatch   *storagepb.WriteBatch
-	LogicalOpLog *storagepb.LogicalOpLog
+	Replicated   kvserverpb.ReplicatedEvalResult
+	WriteBatch   *kvserverpb.WriteBatch
+	LogicalOpLog *kvserverpb.LogicalOpLog
 }
 
 // IsZero reports whether p is the zero value.
@@ -161,7 +161,7 @@ func (p *Result) IsZero() bool {
 	if !p.Local.IsZero() {
 		return false
 	}
-	if !p.Replicated.Equal(storagepb.ReplicatedEvalResult{}) {
+	if !p.Replicated.Equal(kvserverpb.ReplicatedEvalResult{}) {
 		return false
 	}
 	if p.WriteBatch != nil {
@@ -193,7 +193,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			return errors.New("must not specify RaftApplyIndex")
 		}
 		if p.Replicated.State == nil {
-			p.Replicated.State = &storagepb.ReplicaState{}
+			p.Replicated.State = &kvserverpb.ReplicaState{}
 		}
 		if p.Replicated.State.Desc == nil {
 			p.Replicated.State.Desc = q.Replicated.State.Desc
@@ -228,9 +228,9 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		if q.Replicated.State.Stats != nil {
 			return errors.New("must not specify Stats")
 		}
-		if (*q.Replicated.State != storagepb.ReplicaState{}) {
+		if (*q.Replicated.State != kvserverpb.ReplicaState{}) {
 			log.Fatalf(context.TODO(), "unhandled EvalResult: %s",
-				pretty.Diff(*q.Replicated.State, storagepb.ReplicaState{}))
+				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))
 		}
 		q.Replicated.State = nil
 	}

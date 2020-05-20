@@ -40,11 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -722,7 +722,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	}
 	transferSem := make(chan struct{})
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
 				// Notify the test that the transfer has been trapped.
 				transferSem <- struct{}{}
@@ -891,11 +891,11 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
 
-	raftCmd := storagepb.RaftCommand{
+	raftCmd := kvserverpb.RaftCommand{
 		ProposerLeaseSequence: lease.Sequence,
-		ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
+		ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 			IsLeaseRequest: true,
-			State: &storagepb.ReplicaState{
+			State: &kvserverpb.ReplicaState{
 				Lease: &invalidLease,
 			},
 		},
@@ -950,7 +950,7 @@ func hasLease(repl *Replica, timestamp hlc.Timestamp) (owned bool, expired bool)
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 	status := repl.leaseStatus(*repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
-	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != storagepb.LeaseState_VALID
+	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != kvserverpb.LeaseState_VALID
 }
 
 func TestReplicaLease(t *testing.T) {
@@ -960,7 +960,7 @@ func TestReplicaLease(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	var filterErr atomic.Value
-	applyFilter := func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+	applyFilter := func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if pErr := filterErr.Load(); pErr != nil {
 			return 0, pErr.(*roachpb.Error)
 		}
@@ -1552,7 +1552,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.GetLease()
-	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != storagepb.LeaseState_EXPIRED {
+	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != kvserverpb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -2137,7 +2137,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		// with an AmbiguousResultError.
 		cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
 		cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
-		cfg.TestingKnobs.TestingProposalFilter = func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		cfg.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 			ll, ok := args.Req.Requests[0].GetInner().(*roachpb.RequestLeaseRequest)
 			if !ok || atomic.LoadInt32(&active) == 0 {
 				return nil
@@ -2316,7 +2316,7 @@ func TestReplicaLatching(t *testing.T) {
 						tc := testContext{}
 						tsc := TestStoreConfig(nil)
 						tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-							func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+							func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 								if filterArgs.Hdr.UserPriority == blockingPriority && filterArgs.Index == 0 {
 									blockingStart <- struct{}{}
 									<-blockingDone
@@ -2476,7 +2476,7 @@ func TestReplicaLatchingInconsistent(t *testing.T) {
 			tc := testContext{}
 			tsc := TestStoreConfig(nil)
 			tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 					if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
 						putBytes, err := put.Value.GetBytes()
 						if err != nil {
@@ -2586,7 +2586,7 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
 				return nil
@@ -4636,7 +4636,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if filterArgs.Req.Method() == roachpb.GC {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -4746,7 +4746,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -4855,7 +4855,7 @@ func TestEndTxnDirectGCFailure(t *testing.T) {
 	var count int64
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				atomic.AddInt64(&count, 1)
@@ -4938,7 +4938,7 @@ func TestReplicaTransactionRequires1PC(t *testing.T) {
 	injectErrorOnKey.Store(roachpb.Key(""))
 
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.Put &&
 				injectErrorOnKey.Load().(roachpb.Key).Equal(filterArgs.Req.Header().Key) {
 				return roachpb.NewErrorf("injected error")
@@ -6300,7 +6300,7 @@ func TestReplicaCorruption(t *testing.T) {
 
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
 				return roachpb.NewError(roachpb.NewReplicaCorruptionError(errors.New("boom")))
 			}
@@ -6349,7 +6349,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
 	})
-	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
 		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
 	}
 }
@@ -6599,7 +6599,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 
 	// Mock propose to return a roachpb.RaftGroupDeletedError.
 	var active int32
-	proposeFn := func(fArgs storagebase.ProposalFilterArgs) *roachpb.Error {
+	proposeFn := func(fArgs kvserverbase.ProposalFilterArgs) *roachpb.Error {
 		if atomic.LoadInt32(&active) == 1 {
 			return roachpb.NewError(&roachpb.RaftGroupDeletedError{})
 		}
@@ -6672,7 +6672,7 @@ func TestIntentIntersect(t *testing.T) {
 		{intent: iLc, from: "a", to: "z", exp: []string{kl1, kl2}},
 	} {
 		var all []string
-		in, out := storagebase.IntersectSpan(tc.intent, &roachpb.RangeDescriptor{
+		in, out := kvserverbase.IntersectSpan(tc.intent, &roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(tc.from),
 			EndKey:   roachpb.RKey(tc.to),
 		})
@@ -7236,7 +7236,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			cfg := TestStoreConfig(nil)
 			if !cancelEarly {
 				cfg.TestingKnobs.TestingProposalFilter =
-					func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+					func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 						for _, union := range args.Req.Requests {
 							if union.GetInner().Header().Key.Equal(key) {
 								cancel()
@@ -7827,7 +7827,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		lease, _ := r.GetLease()
 		ctx := context.Background()
-		cmd, pErr := r.requestToProposal(ctx, storagebase.CmdIDKey(id), &ba, &allSpans)
+		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -7897,10 +7897,10 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	ctx := context.Background()
 
 	var filterActive int32
-	var incCmdID storagebase.CmdIDKey
+	var incCmdID kvserverbase.CmdIDKey
 	var incApplyCount int64
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+	tsc.TestingKnobs.TestingApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) != 0 && filterArgs.CmdID == incCmdID {
 			atomic.AddInt64(&incApplyCount, 1)
 		}
@@ -8650,9 +8650,9 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, zoneConfig,
-				c.liveness, 0, &c.desc, c.raftStatus, storagepb.LeaseStatus{},
+				c.liveness, 0, &c.desc, c.raftStatus, kvserverpb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
-				storagepb.LatchManagerInfo{}, storagepb.LatchManagerInfo{}, c.raftLogSize, true)
+				kvserverpb.LatchManagerInfo{}, kvserverpb.LatchManagerInfo{}, c.raftLogSize, true)
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}
@@ -8907,7 +8907,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			markerTS := tc.Clock().Now()
 			repl.mu.Lock()
 			repl.store.TestingKnobs().TestingProposalFilter =
-				func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+				func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 					if args.Req.Timestamp == markerTS {
 						atomic.AddInt32(&propCount, 1)
 					}
@@ -8978,7 +8978,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storeKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+	storeKnobs.TestingApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) == 1 {
 			return 0, roachpb.NewErrorf("boom")
 		}
@@ -9051,7 +9051,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	var filterActive int32
 	blockRaftApplication := make(chan struct{})
 	tsc.TestingKnobs.TestingApplyFilter =
-		func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+		func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				<-blockRaftApplication
 			}
@@ -9110,7 +9110,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	blockRaftApplication := make(chan struct{})
 	blockingRaftApplication := make(chan struct{}, 1)
 	tsc.TestingKnobs.TestingApplyFilter =
-		func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+		func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				select {
 				case blockingRaftApplication <- struct{}{}:
@@ -10299,28 +10299,28 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	}}
 
 	tests := []struct {
-		leaseStatus storagepb.LeaseStatus
+		leaseStatus kvserverpb.LeaseStatus
 		lease       roachpb.Lease
 		raftStatus  raft.Status
 		exp         bool
 	}{
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, followerWithoutLeader, true},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, followerWithoutLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, leader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, followerWithoutLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, leader, false},
 
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, leader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, leader, false},
 	}
 
 	for i, test := range tests {
@@ -11984,7 +11984,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	var txnID uuid.UUID
 	// In the TestingProposalFilter we populater cmdID with the id of the proposal
 	// which corresponds to txnID.
-	var cmdID storagebase.CmdIDKey
+	var cmdID kvserverbase.CmdIDKey
 	// seen is used to detect the first application of our proposal.
 	var seen bool
 	cfg.TestingKnobs = StoreTestingKnobs{
@@ -11993,7 +11993,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 		EnableUnconditionalRefreshesInRaftReady: true,
 		// Set the TestingProposalFilter in order to know the CmdIDKey for our
 		// request by detecting its txnID.
-		TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 			if args.Req.Header.Txn != nil && args.Req.Header.Txn.ID == txnID {
 				cmdID = args.CmdID
 			}
@@ -12001,7 +12001,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 		},
 		// Detect the application of the proposal to repropose it and also
 		// invalidate the lease.
-		TestingApplyFilter: func(args storagebase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
+		TestingApplyFilter: func(args kvserverbase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
 			if seen || args.CmdID != cmdID {
 				return 0, nil
 			}
@@ -12309,7 +12309,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 	_ = clusterversion.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
 
 	someRequestToProposal := func(tc *testContext, ctx context.Context) *ProposalData {
-		cmdIDKey := storagebase.CmdIDKey("some-cmdid-key")
+		cmdIDKey := kvserverbase.CmdIDKey("some-cmdid-key")
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.Clock().Now()
 		req := putArgs(roachpb.Key("some-key"), []byte("some-value"))
@@ -12395,12 +12395,12 @@ func TestContainsEstimatesClampApplication(t *testing.T) {
 			},
 			decodedRaftEntry: decodedRaftEntry{
 				idKey: makeIDKey(),
-				raftCmd: storagepb.RaftCommand{
+				raftCmd: kvserverpb.RaftCommand{
 					ProposerLeaseSequence: rAppbatch.state.Lease.Sequence,
-					ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
+					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 						Timestamp:      tc.Clock().Now(),
 						IsLeaseRequest: true,
-						State: &storagepb.ReplicaState{
+						State: &kvserverpb.ReplicaState{
 							Lease: &lease,
 						},
 						Delta: enginepb.MVCCStatsDelta{

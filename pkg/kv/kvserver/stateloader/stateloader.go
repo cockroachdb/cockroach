@@ -15,7 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -28,7 +28,7 @@ import (
 )
 
 // StateLoader contains accessor methods to read or write the
-// fields of storagebase.ReplicaState. It contains an internal buffer
+// fields of kvserverbase.ReplicaState. It contains an internal buffer
 // which is reused to avoid an allocation on frequently-accessed code
 // paths.
 //
@@ -57,24 +57,24 @@ func Make(rangeID roachpb.RangeID) StateLoader {
 // under the convention that that is the latest committed version.
 func (rsl StateLoader) Load(
 	ctx context.Context, reader storage.Reader, desc *roachpb.RangeDescriptor,
-) (storagepb.ReplicaState, error) {
-	var s storagepb.ReplicaState
+) (kvserverpb.ReplicaState, error) {
+	var s kvserverpb.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the range lease.
 	lease, err := rsl.LoadLease(ctx, reader)
 	if err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	}
 	s.Lease = &lease
 
 	if s.GCThreshold, err = rsl.LoadGCThreshold(ctx, reader); err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	}
 
 	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	} else if as != nil {
 		s.UsingAppliedStateKey = true
 
@@ -85,12 +85,12 @@ func (rsl StateLoader) Load(
 		s.Stats = &ms
 	} else {
 		if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = rsl.LoadAppliedIndex(ctx, reader); err != nil {
-			return storagepb.ReplicaState{}, err
+			return kvserverpb.ReplicaState{}, err
 		}
 
 		ms, err := rsl.LoadMVCCStats(ctx, reader)
 		if err != nil {
-			return storagepb.ReplicaState{}, err
+			return kvserverpb.ReplicaState{}, err
 		}
 		s.Stats = &ms
 	}
@@ -99,7 +99,7 @@ func (rsl StateLoader) Load(
 	// pointless), but it is and the migration is not worth it.
 	truncState, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	}
 	s.TruncatedState = &truncState
 
@@ -131,7 +131,7 @@ const (
 func (rsl StateLoader) Save(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	state storagepb.ReplicaState,
+	state kvserverpb.ReplicaState,
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats

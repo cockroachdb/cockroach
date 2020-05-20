@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -856,11 +856,11 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 		db := tc.Servers[0].DB()
 		for _, s := range tc.Servers {
 			key := keys.NodeLivenessKey(s.NodeID())
-			var liveness storagepb.Liveness
+			var liveness kvserverpb.Liveness
 			if err := db.GetProto(context.Background(), key, &liveness); err != nil {
 				return err
 			}
-			if (liveness == storagepb.Liveness{}) {
+			if (liveness == kvserverpb.Liveness{}) {
 				return fmt.Errorf("no liveness record")
 			}
 			fmt.Printf("n%d: found liveness\n", s.NodeID())

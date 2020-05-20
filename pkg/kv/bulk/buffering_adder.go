@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -63,9 +63,9 @@ type BufferingAdder struct {
 	onFlush func()
 }
 
-var _ storagebase.BulkAdder = &BufferingAdder{}
+var _ kvserverbase.BulkAdder = &BufferingAdder{}
 
-// MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs
+// MakeBulkAdder makes a kvserverbase.BulkAdder that buffers and sorts K/Vs
 // passed to add into SSTs that are then ingested. rangeCache if set is
 // consulted to avoid generating an SST that will span a range boundary and thus
 // encounter an error and need to be split and retired to be applied.
@@ -75,7 +75,7 @@ func MakeBulkAdder(
 	rangeCache *kvcoord.RangeDescriptorCache,
 	settings *cluster.Settings,
 	timestamp hlc.Timestamp,
-	opts storagebase.BulkAdderOptions,
+	opts kvserverbase.BulkAdderOptions,
 	bulkMon *mon.BytesMonitor,
 ) (*BufferingAdder, error) {
 	if opts.MinBufferSize == 0 {

@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -127,7 +127,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 	// Arrange to count the number of times each checksum command applies to each
 	// store.
-	storeCfg.TestingKnobs.TestingApplyFilter = func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+	storeCfg.TestingKnobs.TestingApplyFilter = func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		state.Lock()
 		defer state.Unlock()
 		if ccr := args.ComputeChecksum; ccr != nil {

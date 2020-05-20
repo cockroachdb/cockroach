@@ -13,7 +13,7 @@ package kvserver
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,8 +26,8 @@ import (
 // particular point is reached) or to change the behavior by returning
 // an error (which aborts all further processing for the command).
 type StoreTestingKnobs struct {
-	EvalKnobs               storagebase.BatchEvalTestingKnobs
-	IntentResolverKnobs     storagebase.IntentResolverTestingKnobs
+	EvalKnobs               kvserverbase.BatchEvalTestingKnobs
+	IntentResolverKnobs     kvserverbase.IntentResolverTestingKnobs
 	TxnWaitKnobs            txnwait.TestingKnobs
 	ConsistencyTestingKnobs ConsistencyTestingKnobs
 
@@ -35,37 +35,37 @@ type StoreTestingKnobs struct {
 	// replica. The filter is run before the request acquires latches, so
 	// blocking in the filter will not block interfering requests. If it
 	// returns an error, the command will not be evaluated.
-	TestingRequestFilter storagebase.ReplicaRequestFilter
+	TestingRequestFilter kvserverbase.ReplicaRequestFilter
 
 	// TestingLatchFilter is called before evaluating each command on a replica
 	// but after acquiring latches for the command. Blocking in the filter will
 	// block interfering requests. If it returns an error, the command will not
 	// be evaluated.
-	TestingLatchFilter storagebase.ReplicaRequestFilter
+	TestingLatchFilter kvserverbase.ReplicaRequestFilter
 
 	// TestingProposalFilter is called before proposing each command.
-	TestingProposalFilter storagebase.ReplicaProposalFilter
+	TestingProposalFilter kvserverbase.ReplicaProposalFilter
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
 	// not be applied. If it returns an error on some replicas but not
 	// others, the behavior is poorly defined.
-	TestingApplyFilter storagebase.ReplicaApplyFilter
+	TestingApplyFilter kvserverbase.ReplicaApplyFilter
 
 	// TestingPostApplyFilter is called after a command is applied to
 	// rocksdb but before in-memory side effects have been processed.
 	// It is only called on the replica the proposed the command.
-	TestingPostApplyFilter storagebase.ReplicaApplyFilter
+	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
 
 	// TestingResponseFilter is called after the replica processes a
 	// command in order for unittests to modify the batch response,
 	// error returned to the client, or to simulate network failures.
-	TestingResponseFilter storagebase.ReplicaResponseFilter
+	TestingResponseFilter kvserverbase.ReplicaResponseFilter
 
 	// TestingRangefeedFilter is called before a replica processes a rangefeed
 	// in order for unit tests to modify the request, error returned to the client
 	// or data.
-	TestingRangefeedFilter storagebase.ReplicaRangefeedFilter
+	TestingRangefeedFilter kvserverbase.ReplicaRangefeedFilter
 
 	// A hack to manipulate the clock before sending a batch request to a replica.
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once

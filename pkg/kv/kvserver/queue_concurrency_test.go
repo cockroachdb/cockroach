@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -169,9 +169,9 @@ func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
 func (fr *fakeReplica) maybeInitializeRaftGroup(context.Context) {}
 func (fr *fakeReplica) redirectOnOrAcquireLease(
 	context.Context,
-) (storagepb.LeaseStatus, *roachpb.Error) {
+) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	// baseQueue only checks that the returned error is nil.
-	return storagepb.LeaseStatus{}, nil
+	return kvserverpb.LeaseStatus{}, nil
 }
 func (fr *fakeReplica) IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool { return true }
 func (fr *fakeReplica) GetLease() (roachpb.Lease, roachpb.Lease) {

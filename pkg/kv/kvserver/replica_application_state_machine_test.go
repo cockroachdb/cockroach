@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -115,12 +115,12 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 				},
 				decodedRaftEntry: decodedRaftEntry{
 					idKey: makeIDKey(),
-					raftCmd: storagepb.RaftCommand{
+					raftCmd: kvserverpb.RaftCommand{
 						ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 						MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
-						ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
-							State:          &storagepb.ReplicaState{Desc: &newDesc},
-							ChangeReplicas: &storagepb.ChangeReplicas{ChangeReplicasTrigger: trigger},
+						ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
+							State:          &kvserverpb.ReplicaState{Desc: &newDesc},
+							ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
 							Timestamp:      r.mu.state.GCThreshold.Add(1, 0),
 						},
 					},

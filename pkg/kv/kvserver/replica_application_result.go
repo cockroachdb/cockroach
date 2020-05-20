@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,7 +43,7 @@ import (
 //
 // At the time of writing it is possible that the current conditions are too
 // strict but they are certainly sufficient.
-func isTrivial(r *storagepb.ReplicatedEvalResult) bool {
+func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	// Check if there are any non-trivial State updates.
 	if r.State != nil {
 		stateWhitelist := *r.State
@@ -57,7 +57,7 @@ func isTrivial(r *storagepb.ReplicatedEvalResult) bool {
 		if stateWhitelist.Stats != nil && (*stateWhitelist.Stats == enginepb.MVCCStats{}) {
 			stateWhitelist.Stats = nil
 		}
-		if stateWhitelist != (storagepb.ReplicaState{}) {
+		if stateWhitelist != (kvserverpb.ReplicaState{}) {
 			return false
 		}
 	}
@@ -70,7 +70,7 @@ func isTrivial(r *storagepb.ReplicatedEvalResult) bool {
 	whitelist.DeprecatedDelta = nil
 	whitelist.PrevLeaseProposal = nil
 	whitelist.State = nil
-	return whitelist.Equal(storagepb.ReplicatedEvalResult{})
+	return whitelist.Equal(kvserverpb.ReplicatedEvalResult{})
 }
 
 // clearTrivialReplicatedEvalResultFields is used to zero out the fields of a
@@ -79,7 +79,7 @@ func isTrivial(r *storagepb.ReplicatedEvalResult) bool {
 // ReplicaState. This function is called after a batch has been written to the
 // storage engine. For trivial commands this function should result in a zero
 // value replicatedResult.
-func clearTrivialReplicatedEvalResultFields(r *storagepb.ReplicatedEvalResult) {
+func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the application process
 	// (which checks that all fields were handled).
@@ -90,7 +90,7 @@ func clearTrivialReplicatedEvalResultFields(r *storagepb.ReplicatedEvalResult) {
 	// replica state for this batch.
 	if haveState := r.State != nil; haveState {
 		r.State.Stats = nil
-		if *r.State == (storagepb.ReplicaState{}) {
+		if *r.State == (kvserverpb.ReplicaState{}) {
 			r.State = nil
 		}
 	}
@@ -113,7 +113,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	var pErr *roachpb.Error
 	if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; filter != nil {
 		var newPropRetry int
-		newPropRetry, pErr = filter(storagebase.ApplyFilterArgs{
+		newPropRetry, pErr = filter(kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
@@ -239,11 +239,11 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 // ReplicatedEvalResult. Most methods are simple enough that they will be
 // inlined.
 
-func (r *Replica) handleSplitResult(ctx context.Context, split *storagepb.Split) {
+func (r *Replica) handleSplitResult(ctx context.Context, split *kvserverpb.Split) {
 	splitPostApply(ctx, split.RHSDelta, &split.SplitTrigger, r)
 }
 
-func (r *Replica) handleMergeResult(ctx context.Context, merge *storagepb.Merge) {
+func (r *Replica) handleMergeResult(ctx context.Context, merge *kvserverpb.Merge) {
 	if err := r.store.MergeRange(
 		ctx, r, merge.LeftDesc, merge.RightDesc, merge.FreezeStart,
 	); err != nil {
@@ -299,12 +299,12 @@ func (r *Replica) handleUsingAppliedStateKeyResult(ctx context.Context) {
 	r.mu.Unlock()
 }
 
-func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *storagepb.ComputeChecksum) {
+func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *kvserverpb.ComputeChecksum) {
 	r.computeChecksumPostApply(ctx, *cc)
 }
 
 func (r *Replica) handleChangeReplicasResult(
-	ctx context.Context, chng *storagepb.ChangeReplicas,
+	ctx context.Context, chng *kvserverpb.ChangeReplicas,
 ) (changeRemovedReplica bool) {
 	// If this command removes us then we would have set the destroy status
 	// to destroyReasonRemoved which we detect here.
@@ -383,7 +383,7 @@ func (r *Replica) handleNoRaftLogDeltaResult(ctx context.Context) {
 }
 
 func (r *Replica) handleSuggestedCompactionsResult(
-	ctx context.Context, scs []storagepb.SuggestedCompaction,
+	ctx context.Context, scs []kvserverpb.SuggestedCompaction,
 ) {
 	// TODO(itsbilal): Remove this check once Pebble supports GetSSTables
 	if r.store.compactor == nil {

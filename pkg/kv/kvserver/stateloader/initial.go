@@ -13,7 +13,7 @@ package stateloader
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -48,7 +48,7 @@ func WriteInitialReplicaState(
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
-	var s storagepb.ReplicaState
+	var s kvserverpb.ReplicaState
 	s.TruncatedState = &roachpb.RaftTruncatedState{
 		Term:  raftInitialLogTerm,
 		Index: raftInitialLogIndex,

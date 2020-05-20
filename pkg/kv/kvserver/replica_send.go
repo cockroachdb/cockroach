@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -143,7 +143,7 @@ func (r *Replica) sendWithRangeID(
 // the function returns one of these errors, it must also pass ownership of the
 // concurrency guard back to the caller.
 type batchExecutionFn func(
-	*Replica, context.Context, *roachpb.BatchRequest, storagepb.LeaseStatus, *concurrency.Guard,
+	*Replica, context.Context, *roachpb.BatchRequest, kvserverpb.LeaseStatus, *concurrency.Guard,
 ) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
@@ -182,7 +182,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}
 
 		// Determine the lease under which to evaluate the request.
-		var status storagepb.LeaseStatus
+		var status kvserverpb.LeaseStatus
 		if !ba.ReadConsistency.RequiresReadLease() {
 			// Get a clock reading for checkExecutionCanProceed.
 			status.Timestamp = r.Clock().Now()
@@ -472,7 +472,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.AdminChangeReplicasRequest:
 		chgs := tArgs.Changes()
-		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs)
+		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, SnapshotRequest_REBALANCE, kvserverpb.ReasonAdminRequest, "", chgs)
 		pErr = roachpb.NewError(err)
 		if pErr != nil {
 			resp = &roachpb.AdminChangeReplicasResponse{}
@@ -634,7 +634,7 @@ func (r *Replica) collectSpans(
 //    guaranteed to be greater than any write which occurred under
 //    the previous leaseholder.
 func (r *Replica) limitTxnMaxTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, status storagepb.LeaseStatus,
+	ctx context.Context, ba *roachpb.BatchRequest, status kvserverpb.LeaseStatus,
 ) {
 	if ba.Txn == nil {
 		return
@@ -656,7 +656,7 @@ func (r *Replica) limitTxnMaxTimestamp(
 	// lease before this replica acquired it.
 	// TODO(nvanbenschoten): Do we ever need to call this when
 	//   status.State != VALID?
-	if status.State == storagepb.LeaseState_VALID {
+	if status.State == kvserverpb.LeaseState_VALID {
 		obsTS.Forward(status.Lease.Start)
 	}
 	if obsTS.Less(ba.Txn.MaxTimestamp) {

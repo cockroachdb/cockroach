@@ -13,7 +13,7 @@ package tests
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 )
 
 // CreateTestServerParams creates a set of params suitable for SQL tests. It
@@ -26,7 +26,7 @@ func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	cmdFilters.AppendFilter(CheckEndTxnTrigger, true)
 	params := base.TestServerArgs{}
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		EvalKnobs: storagebase.BatchEvalTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 	}

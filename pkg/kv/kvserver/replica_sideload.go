@@ -13,8 +13,8 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -92,7 +92,7 @@ func maybeSideloadEntriesImpl(
 			cmdID, data := DecodeRaftCommand(ent.Data) // cheap
 
 			// Unmarshal the command into an object that we can mutate.
-			var strippedCmd storagepb.RaftCommand
+			var strippedCmd kvserverpb.RaftCommand
 			if err := protoutil.Unmarshal(data, &strippedCmd); err != nil {
 				return nil, 0, err
 			}
@@ -172,7 +172,7 @@ func maybeInlineSideloadedRaftCommand(
 	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
 	cmdID, data := DecodeRaftCommand(ent.Data)
 
-	var command storagepb.RaftCommand
+	var command kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 		return
 	}
 
-	var command storagepb.RaftCommand
+	var command kvserverpb.RaftCommand
 	_, data := DecodeRaftCommand(ent.Data)
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		log.Fatalf(ctx, "%v", err)

@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -35,7 +35,7 @@ type indexBackfiller struct {
 
 	backfill.IndexBackfiller
 
-	adder storagebase.BulkAdder
+	adder kvserverbase.BulkAdder
 
 	desc *sqlbase.ImmutableTableDescriptor
 }
@@ -91,7 +91,7 @@ func (ib *indexBackfiller) prepare(ctx context.Context) error {
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	sstSize := func() int64 { return backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
-	opts := storagebase.BulkAdderOptions{
+	opts := kvserverbase.BulkAdderOptions{
 		SSTSize:        sstSize,
 		MinBufferSize:  minBufferSize,
 		MaxBufferSize:  maxBufferSize,
@@ -122,7 +122,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	if orig == nil {
 		return nil
 	}
-	var typed *storagebase.DuplicateKeyError
+	var typed *kvserverbase.DuplicateKeyError
 	if !errors.As(orig, &typed) {
 		return orig
 	}

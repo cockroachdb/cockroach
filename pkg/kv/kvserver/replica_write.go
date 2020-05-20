@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -63,7 +63,7 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, st storagepb.LeaseStatus, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
@@ -313,7 +313,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 // retryable error.
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
@@ -386,7 +386,7 @@ type onePCResult struct {
 // immediately deleting intents.
 func (r *Replica) evaluate1PC(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (onePCRes onePCResult) {
@@ -505,7 +505,7 @@ func (r *Replica) evaluate1PC(
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
@@ -547,7 +547,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 // with filling out result.LogicalOpLog.
 func (r *Replica) evaluateWriteBatchWrapper(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
@@ -557,7 +557,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
-			res.LogicalOpLog = &storagepb.LogicalOpLog{
+			res.LogicalOpLog = &kvserverpb.LogicalOpLog{
 				Ops: opLogger.LogicalOps(),
 			}
 		}

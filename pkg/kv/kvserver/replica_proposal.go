@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -65,7 +65,7 @@ type ProposalData struct {
 	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
 	// the-world migration. However, various test facilities depend on the
 	// command ID for e.g. replay protection.
-	idKey storagebase.CmdIDKey
+	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
 	// last (re-)proposed.
@@ -73,7 +73,7 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
-	command *storagepb.RaftCommand
+	command *kvserverpb.RaftCommand
 
 	// encodedCommand is the encoded Raft command, with an optional prefix
 	// containing the command ID.
@@ -86,7 +86,7 @@ type ProposalData struct {
 	quotaAlloc *quotapool.IntAlloc
 
 	// tmpFooter is used to avoid an allocation.
-	tmpFooter storagepb.RaftCommandFooter
+	tmpFooter kvserverpb.RaftCommandFooter
 
 	// ec.done is called after command application to update the timestamp
 	// cache and optionally release latches and exits lock wait-queues.
@@ -180,7 +180,7 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 	}
 }
 
-func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.ComputeChecksum) {
+func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.ComputeChecksum) {
 	stopper := r.store.Stopper()
 	now := timeutil.Now()
 	r.mu.Lock()
@@ -476,7 +476,7 @@ func addSSTablePreApply(
 	eng storage.Engine,
 	sideloaded SideloadStorage,
 	term, index uint64,
-	sst storagepb.ReplicatedEvalResult_AddSSTable,
+	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
 ) bool {
 	checksum := util.CRC32(sst.Data)
@@ -716,7 +716,7 @@ type proposalResult struct {
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
@@ -771,12 +771,12 @@ func (r *Replica) evaluateProposal(
 	// 3. the request has replicated side-effects.
 	needConsensus := !batch.Empty() ||
 		ms != (enginepb.MVCCStats{}) ||
-		!res.Replicated.Equal(storagepb.ReplicatedEvalResult{})
+		!res.Replicated.Equal(kvserverpb.ReplicatedEvalResult{})
 
 	if needConsensus {
 		// Set the proposal's WriteBatch, which is the serialized representation of
 		// the proposals effect on RocksDB.
-		res.WriteBatch = &storagepb.WriteBatch{
+		res.WriteBatch = &kvserverpb.WriteBatch{
 			Data: batch.Repr(),
 		}
 
@@ -827,7 +827,7 @@ func (r *Replica) evaluateProposal(
 			// operator can then run the old binary for a while to upgrade the
 			// stragglers.
 			if res.Replicated.State == nil {
-				res.Replicated.State = &storagepb.ReplicaState{}
+				res.Replicated.State = &kvserverpb.ReplicaState{}
 			}
 			res.Replicated.State.UsingAppliedStateKey = true
 		}
@@ -845,7 +845,7 @@ func (r *Replica) evaluateProposal(
 // `serializedRequest` struct.
 func (r *Replica) requestToProposal(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
@@ -861,7 +861,7 @@ func (r *Replica) requestToProposal(
 	}
 
 	if needConsensus {
-		proposal.command = &storagepb.RaftCommand{
+		proposal.command = &kvserverpb.RaftCommand{
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
 			LogicalOpLog:         res.LogicalOpLog,

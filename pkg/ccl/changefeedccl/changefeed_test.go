@@ -33,9 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -2166,7 +2166,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				}
 			}
 		}
-		requestFilter = storagebase.ReplicaRequestFilter(func(
+		requestFilter = kvserverbase.ReplicaRequestFilter(func(
 			ctx context.Context, ba roachpb.BatchRequest,
 		) *roachpb.Error {
 			if ba.Txn == nil || ba.Txn.Name != "changefeed backfill" {
@@ -2395,7 +2395,7 @@ func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
 
 	verifyRequestCh := make(chan *roachpb.AdminVerifyProtectedTimestampRequest, 1)
-	requestFilter := storagebase.ReplicaRequestFilter(func(
+	requestFilter := kvserverbase.ReplicaRequestFilter(func(
 		ctx context.Context, ba roachpb.BatchRequest,
 	) *roachpb.Error {
 		if r, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {

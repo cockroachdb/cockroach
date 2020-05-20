@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -34,7 +34,7 @@ func TestUpsertFastPath(t *testing.T) {
 	// EndTxnRequest that hits user table data.
 	var scans uint64
 	var endTxn uint64
-	filter := func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	filter := func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if bytes.Compare(filterArgs.Req.Header().Key, keys.UserTableDataMin) >= 0 {
 			switch filterArgs.Req.Method() {
 			case roachpb.Scan:
@@ -52,7 +52,7 @@ func TestUpsertFastPath(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			EvalKnobs: storagebase.BatchEvalTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 				TestingEvalFilter: filter,
 			},
 		}},

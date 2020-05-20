@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,7 +60,7 @@ func TestLogGC(t *testing.T) {
 				timestamp,
 				testRangeID,
 				1, // storeID
-				storagepb.RangeLogEventType_add.String(),
+				kvserverpb.RangeLogEventType_add.String(),
 			)
 			a.NoError(err)
 		}
@@ -195,7 +195,7 @@ func TestLogGCTrigger(t *testing.T) {
              cast(now() - interval '10s' as timestamp), -- cast from timestamptz
 						 100, 1, $1
           )`,
-		storagepb.RangeLogEventType_add.String(),
+		kvserverpb.RangeLogEventType_add.String(),
 	); err != nil {
 		t.Fatal(err)
 	}

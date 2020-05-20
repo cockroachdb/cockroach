@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -258,7 +258,7 @@ func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
 // least 1.
 func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
-		var ids []storagebase.CmdIDKey
+		var ids []kvserverbase.CmdIDKey
 		for _, m := range msgs {
 			ids = extractIDs(ids, m.Entries)
 		}
@@ -268,7 +268,7 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 
 // extractIDs decodes and appends each of the ids corresponding to the entries
 // in ents to ids and returns the result.
-func extractIDs(ids []storagebase.CmdIDKey, ents []raftpb.Entry) []storagebase.CmdIDKey {
+func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
 		if e.Type == raftpb.EntryNormal && len(e.Data) > 0 {
 			id, _ := DecodeRaftCommand(e.Data)
@@ -280,7 +280,7 @@ func extractIDs(ids []storagebase.CmdIDKey, ents []raftpb.Entry) []storagebase.C
 
 // traceLocalProposals logs a trace event with the provided string for each
 // locally proposed command which corresponds to an id in ids.
-func traceProposals(r *Replica, ids []storagebase.CmdIDKey, event string) {
+func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 	ctxs := make([]context.Context, 0, len(ids))
 	r.mu.RLock()
 	for _, id := range ids {
