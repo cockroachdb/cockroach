@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -86,7 +87,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 ) (catalog.ObjectDescriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
-		return (UncachedPhysicalAccessor{}).GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
+		return (catalogkv.UncachedPhysicalAccessor{}).GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 	case tree.TableObject:
 		l.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
 		if scEntry, ok := l.vt.getVirtualSchemaEntry(l.tn.Schema()); ok {
