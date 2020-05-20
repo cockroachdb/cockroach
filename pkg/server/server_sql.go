@@ -488,8 +488,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	execCfg.StatsRefresher = statsRefresher
 
 	// Set up internal memory metrics for use by internal SQL executors.
+	// Don't add them to the registry now because it will be added as part of pgServer metrics.
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(sqlMemMetrics)
 	pgServer := pgwire.MakeServer(
 		cfg.AmbientCtx,
 		cfg.Config.Config,
