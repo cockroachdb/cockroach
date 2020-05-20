@@ -19,6 +19,7 @@ import (
 func TestComposeGSS(t *testing.T) {
 	out, err := exec.Command(
 		"docker-compose",
+		"--no-ansi",
 		"-f", filepath.Join("compose", "gss", "docker-compose.yml"),
 		"up",
 		"--build",
