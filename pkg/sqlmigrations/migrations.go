@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -190,7 +189,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(knz): bake this migration into v19.1.
 		name:             "create default databases",
 		workFn:           createDefaultDbs,
-		newDescriptorIDs: databaseIDs(sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName),
+		newDescriptorIDs: databaseIDs(sqlbase.DefaultDatabaseName, sqlbase.PgDatabaseName),
 	},
 	{
 		// Introduced in v2.1. Baked into 20.1.
@@ -1747,7 +1746,7 @@ func createDefaultDbs(ctx context.Context, r runner) error {
 
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		for _, dbName := range []string{sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName} {
+		for _, dbName := range []string{sqlbase.DefaultDatabaseName, sqlbase.PgDatabaseName} {
 			stmt := fmt.Sprintf(createDbStmt, dbName)
 			err = r.execAsRoot(ctx, "create-default-db", stmt)
 			if err != nil {

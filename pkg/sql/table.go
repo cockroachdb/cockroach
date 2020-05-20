@@ -280,7 +280,7 @@ func (tc *TableCollection) resolveSchemaID(
 	}
 
 	// Next, try lookup the result from KV, storing and returning the value.
-	exists, schemaID, err := resolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
+	exists, schemaID, err := ResolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
 	if err != nil || !exists {
 		return exists, schemaID, err
 	}
@@ -1164,7 +1164,7 @@ func (p *planner) writeTableDescToBatch(
 		return err
 	}
 
-	return writeDescToBatch(
+	return WriteDescToBatch(
 		ctx,
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		p.ExecCfg().Settings,

@@ -77,9 +77,9 @@ func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 	}
 }
 
-// getDatabaseID resolves a database name into a database ID.
+// GetDatabaseID resolves a database name into a database ID.
 // Returns InvalidID on failure.
-func getDatabaseID(
+func GetDatabaseID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string, required bool,
 ) (sqlbase.ID, error) {
 	if name == sqlbase.SystemDB.Name {
@@ -95,13 +95,13 @@ func getDatabaseID(
 	return dbID, nil
 }
 
-// getDatabaseDescByID looks up the database descriptor given its ID,
+// GetDatabaseDescByID looks up the database descriptor given its ID,
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
-func getDatabaseDescByID(
+func GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := getDescriptorByID(ctx, txn, codec, id)
+	desc, err := GetDescriptorByID(ctx, txn, codec, id)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func getDatabaseDescByID(
 func MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := getDatabaseDescByID(ctx, txn, codec, id)
+	desc, err := GetDatabaseDescByID(ctx, txn, codec, id)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (dc *databaseCache) getDatabaseDesc(
 	return desc, err
 }
 
-// getDatabaseDescByID returns the database descriptor given its ID
+// GetDatabaseDescByID returns the database descriptor given its ID
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *databaseCache) getDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
@@ -226,7 +226,7 @@ func (dc *databaseCache) getDatabaseDescByID(
 	return desc, err
 }
 
-// getDatabaseID returns the ID of a database given its name. It
+// GetDatabaseID returns the ID of a database given its name. It
 // uses the descriptor cache if possible, otherwise falls back to KV
 // operations.
 func (dc *databaseCache) getDatabaseID(
@@ -250,7 +250,7 @@ func (dc *databaseCache) getDatabaseID(
 				return err
 			}
 			var err error
-			dbID, err = getDatabaseID(ctx, txn, dc.codec, name, required)
+			dbID, err = GetDatabaseID(ctx, txn, dc.codec, name, required)
 			return err
 		}); err != nil {
 			return sqlbase.InvalidID, err

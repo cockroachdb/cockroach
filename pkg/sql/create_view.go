@@ -87,7 +87,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := getDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, tKey)
+			id, err := GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, tKey)
 			if err != nil {
 				return err
 			}

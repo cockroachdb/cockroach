@@ -176,7 +176,7 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 // TODO (rohany): Once we lease types, this should be pushed down into the
 //  leased object collection.
 func (p *planner) getTypeDescByID(ctx context.Context, id sqlbase.ID) (*TypeDescriptor, error) {
-	rawDesc, err := getDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	rawDesc, err := GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
 	if err != nil {
 		return nil, err
 	}

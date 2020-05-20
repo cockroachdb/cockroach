@@ -142,7 +142,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
-	err = writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	err = WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc.TableDesc())
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := getDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
+		desc, err := GetDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
 			return err
 		}

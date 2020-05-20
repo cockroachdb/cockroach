@@ -437,7 +437,7 @@ func (s LeaseStore) PublishMultiple(
 
 			b := txn.NewBatch()
 			for tableID, tableDesc := range tableDescs {
-				if err := writeDescToBatch(ctx, false /* kvTrace */, s.settings, b, s.codec, tableID, tableDesc.TableDesc()); err != nil {
+				if err := WriteDescToBatch(ctx, false /* kvTrace */, s.settings, b, s.codec, tableID, tableDesc.TableDesc()); err != nil {
 					return err
 				}
 			}
