@@ -145,7 +145,7 @@ func getTemporaryObjectNames(
 	if err != nil {
 		return nil, err
 	}
-	a := UncachedPhysicalAccessor{}
+	a := catalogkv.UncachedPhysicalAccessor{}
 	return a.GetObjectNames(
 		ctx,
 		txn,
@@ -212,7 +212,7 @@ func cleanupSchemaObjects(
 	if err != nil {
 		return err
 	}
-	a := UncachedPhysicalAccessor{}
+	a := catalogkv.UncachedPhysicalAccessor{}
 
 	searchPath := sqlbase.DefaultSearchPath.WithTemporarySchemaName(schemaName)
 	override := sqlbase.InternalExecutorSessionDataOverride{
