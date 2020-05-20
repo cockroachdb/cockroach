@@ -626,20 +626,18 @@ func (s *sqlServer) start(
 		return err
 	}
 
-	{
-		// Run startup migrations (note: these depend on jobs subsystem running).
-		var bootstrapVersion roachpb.Version
-		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
-		}); err != nil {
-			return err
-		}
-		if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-			return errors.Wrap(err, "ensuring SQL migrations")
-		}
-
-		log.Infof(ctx, "done ensuring all necessary migrations have run")
+	var bootstrapVersion roachpb.Version
+	if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+	}); err != nil {
+		return err
 	}
+	// Run startup migrations (note: these depend on jobs subsystem running).
+	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
+		return errors.Wrap(err, "ensuring SQL migrations")
+	}
+
+	log.Infof(ctx, "done ensuring all necessary migrations have run")
 
 	// Start serving SQL clients.
 	if err := s.startServeSQL(ctx, stopper, connManager, pgL, socketFile); err != nil {
@@ -649,6 +647,12 @@ func (s *sqlServer) start(
 	// Start the async migration to upgrade 19.2-style jobs so they can be run by
 	// the job registry in 20.1.
 	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
+		return err
+	}
+
+	// Start the async migration to upgrade namespace entries from the old
+	// namespace table (id 2) to the new one (id 30).
+	if err := migMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {
 		return err
 	}
 
