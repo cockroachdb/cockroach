@@ -717,6 +717,15 @@ func (s *vectorizedFlowCreator) setupInput(
 ) (op colexecbase.Operator, _ []execinfrapb.MetadataSource, _ error) {
 	inputStreamOps := make([]colexecbase.Operator, 0, len(input.Streams))
 	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
+	// Before we can safely use types we received over the wire in the
+	// operators, we need to make sure they are hydrated. In row execution
+	// engine it is done during the processor initialization, but operators
+	// don't do that. However, all operators (apart from the colBatchScan) get
+	// their types from InputSyncSpec, so this is a convenient place to do the
+	// hydration so that all operators get the valid types.
+	if err := execinfrapb.HydrateTypeSlice(flowCtx.EvalCtx, input.ColumnTypes); err != nil {
+		return nil, nil, err
+	}
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
 		case execinfrapb.StreamEndpointSpec_LOCAL:
