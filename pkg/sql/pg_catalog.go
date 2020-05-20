@@ -251,6 +251,7 @@ var pgCatalog = virtualSchema{
 	// database set. Simply reject any attempts to use them in that
 	// case.
 	validWithNoDatabaseContext: false,
+	containsTypes:              true,
 }
 
 // The catalog pg_am stores information about relation access methods.

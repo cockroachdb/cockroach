@@ -1023,6 +1023,9 @@ message TypeDescriptor {
   enum Kind {
     // Represents a user defined enum type.
     ENUM = 0;
+    // Represents a user defined type that is just an alias for another type.
+    // As of now, it is used only internally.
+    ALIAS = 1;
     // Add more entries as we support more user defined types.
   }
   optional Kind kind = 5 [(gogoproto.nullable) = false];
@@ -1038,6 +1041,11 @@ message TypeDescriptor {
   }
   // enum_members is the set of values in an enum.
   repeated EnumMember enum_members = 6 [(gogoproto.nullable) = false];
+
+  // The fields below are used only when this type is an ALIAS type.
+
+  // alias is the types.T that this descriptor is an alias for.
+  optional sql.sem.types.T alias = 7;
 
   // TODO (rohany): Do we need a draining names like the table descriptor?
 }

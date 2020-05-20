@@ -102,6 +102,8 @@ func (tr *DistSQLTypeResolver) ResolveTypeByID(id uint32) (*types.T, error) {
 	switch t := typDesc.Kind; t {
 	case sqlbase.TypeDescriptor_ENUM:
 		typ = types.MakeEnum(id)
+	case sqlbase.TypeDescriptor_ALIAS:
+		return typDesc.Alias, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t)
 	}
