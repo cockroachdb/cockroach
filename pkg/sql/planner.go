@@ -454,8 +454,10 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
-// CommonLookupFlags, it could use or skip the Collection cache. See
-// Collection.GetTableVersionByID for how it's used.
+// CommonLookupFlags, it could use or skip the TableCollection cache. See
+// TableCollection.getTableVersionByID for how it's used.
+// TODO (SQLSchema): This should call into the set of SchemaAccessors instead
+//  of having its own logic for lookups.
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (catalog.TableEntry, error) {
@@ -468,6 +470,11 @@ func (p *planner) LookupTableByID(
 		if sqlbase.HasAddingTableError(err) {
 			return catalog.TableEntry{IsAdding: true}, nil
 		}
+		return catalog.TableEntry{}, err
+	}
+	// TODO (rohany): This shouldn't be needed once the descs.Collection always
+	//  returns descriptors with hydrated types.
+	if err := p.maybeHydrateTypesInDescriptor(ctx, table); err != nil {
 		return catalog.TableEntry{}, err
 	}
 	return catalog.TableEntry{Desc: table}, nil
