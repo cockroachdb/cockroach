@@ -2550,7 +2550,6 @@ var (
 	// Avoid unused warning for constants.
 	_ = typTypeComposite
 	_ = typTypeDomain
-	_ = typTypeEnum
 	_ = typTypePseudo
 	_ = typTypeRange
 
@@ -2581,6 +2580,83 @@ var (
 	typDelim = tree.NewDString(",")
 )
 
+func addPGTypeRow(
+	h oidHasher, nspOid tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+) error {
+	cat := typCategory(typ)
+	typType := typTypeBase
+	typElem := oidZero
+	typArray := oidZero
+	builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
+	switch typ.Family() {
+	case types.ArrayFamily:
+		switch typ.Oid() {
+		case oid.T_int2vector:
+			// IntVector needs a special case because it's a special snowflake
+			// type that behaves in some ways like a scalar type and in others
+			// like an array type.
+			typElem = tree.NewDOid(tree.DInt(oid.T_int2))
+			typArray = tree.NewDOid(tree.DInt(oid.T__int2vector))
+		case oid.T_oidvector:
+			// Same story as above for OidVector.
+			typElem = tree.NewDOid(tree.DInt(oid.T_oid))
+			typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
+		case oid.T_anyarray:
+			// AnyArray does not use a prefix or element type.
+		default:
+			builtinPrefix = "array_"
+			typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
+		}
+	case types.EnumFamily:
+		builtinPrefix = "enum_"
+		typType = typTypeEnum
+	default:
+		typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
+	}
+	if cat == typCategoryPseudo {
+		typType = typTypePseudo
+	}
+	typname := typ.PGName()
+
+	return addRow(
+		tree.NewDOid(tree.DInt(typ.Oid())), // oid
+		tree.NewDName(typname),             // typname
+		nspOid,                             // typnamespace
+		tree.DNull,                         // typowner
+		typLen(typ),                        // typlen
+		typByVal(typ),                      // typbyval (is it fixedlen or not)
+		typType,                            // typtype
+		cat,                                // typcategory
+		tree.DBoolFalse,                    // typispreferred
+		tree.DBoolTrue,                     // typisdefined
+		typDelim,                           // typdelim
+		oidZero,                            // typrelid
+		typElem,                            // typelem
+		typArray,                           // typarray
+
+		// regproc references
+		h.RegProc(builtinPrefix+"in"),   // typinput
+		h.RegProc(builtinPrefix+"out"),  // typoutput
+		h.RegProc(builtinPrefix+"recv"), // typreceive
+		h.RegProc(builtinPrefix+"send"), // typsend
+		oidZero,                         // typmodin
+		oidZero,                         // typmodout
+		oidZero,                         // typanalyze
+
+		tree.DNull,      // typalign
+		tree.DNull,      // typstorage
+		tree.DBoolFalse, // typnotnull
+		oidZero,         // typbasetype
+		negOneVal,       // typtypmod
+		zeroVal,         // typndims
+		typColl(typ, h), // typcollation
+		tree.DNull,      // typdefaultbin
+		tree.DNull,      // typdefault
+		tree.DNull,      // typacl
+	)
+}
+
+// TODO (rohany): We should add a virtual index on OID here. See #49208.
 var pgCatalogTypeTable = virtualSchemaTable{
 	comment: `scalar types (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
@@ -2624,74 +2700,34 @@ CREATE TABLE pg_catalog.pg_type (
 			func(db *DatabaseDescriptor) error {
 				nspOid := h.NamespaceOid(db, pgCatalogName)
 
-				for o, typ := range types.OidToType {
-					cat := typCategory(typ)
-					typType := typTypeBase
-					typElem := oidZero
-					typArray := oidZero
-					builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
-					if typ.Family() == types.ArrayFamily {
-						switch typ.Oid() {
-						case oid.T_int2vector:
-							// IntVector needs a special case because it's a special snowflake
-							// type that behaves in some ways like a scalar type and in others
-							// like an array type.
-							typElem = tree.NewDOid(tree.DInt(oid.T_int2))
-							typArray = tree.NewDOid(tree.DInt(oid.T__int2vector))
-						case oid.T_oidvector:
-							// Same story as above for OidVector.
-							typElem = tree.NewDOid(tree.DInt(oid.T_oid))
-							typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
-						case oid.T_anyarray:
-							// AnyArray does not use a prefix or element type.
-						default:
-							builtinPrefix = "array_"
-							typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
-						}
-					} else {
-						typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
+				// Generate rows for all predefined types.
+				for _, typ := range types.OidToType {
+					if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
+						return err
 					}
-					if cat == typCategoryPseudo {
-						typType = typTypePseudo
+				}
+
+				// Now generate rows for user defined types in this database.
+				descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+				if err != nil {
+					return err
+				}
+				for _, desc := range descs {
+					typDesc, ok := desc.(*sqlbase.TypeDescriptor)
+					if !ok {
+						continue
 					}
-					typname := typ.PGName()
-
-					if err := addRow(
-						tree.NewDOid(tree.DInt(o)), // oid
-						tree.NewDName(typname),     // typname
-						nspOid,                     // typnamespace
-						tree.DNull,                 // typowner
-						typLen(typ),                // typlen
-						typByVal(typ),              // typbyval (is it fixedlen or not)
-						typType,                    // typtype
-						cat,                        // typcategory
-						tree.DBoolFalse,            // typispreferred
-						tree.DBoolTrue,             // typisdefined
-						typDelim,                   // typdelim
-						oidZero,                    // typrelid
-						typElem,                    // typelem
-						typArray,                   // typarray
-
-						// regproc references
-						h.RegProc(builtinPrefix+"in"),   // typinput
-						h.RegProc(builtinPrefix+"out"),  // typoutput
-						h.RegProc(builtinPrefix+"recv"), // typreceive
-						h.RegProc(builtinPrefix+"send"), // typsend
-						oidZero,                         // typmodin
-						oidZero,                         // typmodout
-						oidZero,                         // typanalyze
-
-						tree.DNull,      // typalign
-						tree.DNull,      // typstorage
-						tree.DBoolFalse, // typnotnull
-						oidZero,         // typbasetype
-						negOneVal,       // typtypmod
-						zeroVal,         // typndims
-						typColl(typ, h), // typcollation
-						tree.DNull,      // typdefaultbin
-						tree.DNull,      // typdefault
-						tree.DNull,      // typacl
-					); err != nil {
+					// Ignore this type if it is not part of this database.
+					// TODO (rohany): This logic will need to be updated once we support
+					//  user defined schemas.
+					if typDesc.ParentID != db.ID {
+						continue
+					}
+					typ := types.MakeEnum(uint32(typDesc.ID))
+					if err := typDesc.HydrateTypeInfo(typ); err != nil {
+						return err
+					}
+					if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
 						return err
 					}
 				}
@@ -2864,6 +2900,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.BoolFamily:        typCategoryBoolean,
 	types.BytesFamily:       typCategoryUserDefined,
 	types.DateFamily:        typCategoryDateTime,
+	types.EnumFamily:        typCategoryEnum,
 	types.TimeFamily:        typCategoryDateTime,
 	types.TimeTZFamily:      typCategoryDateTime,
 	types.FloatFamily:       typCategoryNumeric,

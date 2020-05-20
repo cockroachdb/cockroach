@@ -1429,14 +1429,14 @@ update ci
  ├── columns: <none>
  ├── fetch columns: ci.dealerid:19 ci.cardid:20 buyprice:21 sellprice:22 discount:23 desiredinventory:24 actualinventory:25 maxinventory:26 ci.version:27 ci.discountbuyprice:28 notes:29 oldinventory:30 ci.extra:31
  ├── update-mapping:
- │    ├── column43:43 => actualinventory:12
+ │    ├── actualinventory_new:43 => actualinventory:12
  │    ├── discountbuyprice:47 => ci.discountbuyprice:15
  │    ├── column44:44 => notes:16
  │    └── column45:45 => oldinventory:17
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: discountbuyprice:47 column44:44 column45:45!null column43:43 ci.dealerid:19!null ci.cardid:20!null buyprice:21!null sellprice:22!null discount:23!null desiredinventory:24!null actualinventory:25!null maxinventory:26!null ci.version:27!null ci.discountbuyprice:28 notes:29 oldinventory:30 ci.extra:31 c:32!null q:33!null
+      ├── columns: discountbuyprice:47 column44:44 column45:45!null actualinventory_new:43 ci.dealerid:19!null ci.cardid:20!null buyprice:21!null sellprice:22!null discount:23!null desiredinventory:24!null actualinventory:25!null maxinventory:26!null ci.version:27!null ci.discountbuyprice:28 notes:29 oldinventory:30 ci.extra:31 c:32!null q:33!null
       ├── key: (20)
       ├── fd: ()-->(19,44,45), (20)-->(21-33,43,47), (27)-->(20-26,28-31), (20)==(32), (32)==(20)
       ├── group-by
@@ -1541,4 +1541,4 @@ update ci
            ├── crdb_internal.round_decimal_values(buyprice:21 - discount:23, 4) [as=discountbuyprice:47, outer=(21,23)]
            ├── CAST(NULL AS STRING) [as=column44:44]
            ├── 0 [as=column45:45]
-           └── COALESCE(sum_int:41, 0) [as=column43:43, outer=(41)]
+           └── COALESCE(sum_int:41, 0) [as=actualinventory_new:43, outer=(41)]

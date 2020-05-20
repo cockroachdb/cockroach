@@ -481,7 +481,9 @@ message InternalType {
     repeated string tuple_labels = 9;
 
     // Oid returns the type's Postgres Object ID. See the header for the T.Oid
-    // method for more details.
+    // method for more details. For user-defined types, the OID value is an
+    // offset (oidext.CockroachPredefinedOIDMax) away from the stable_type_id
+    // field. This makes it easy to retrieve a type descriptor by OID.
     optional uint32 oid = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "Oid", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
 
     // ArrayContents returns the type of array elements. This is nil for non-ARRAY

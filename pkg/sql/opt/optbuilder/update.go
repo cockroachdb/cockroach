@@ -210,9 +210,10 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		}
 
 		// Add new column to the projections scope.
-		desiredType := mb.md.ColumnMeta(targetColID).Type
+		targetColMeta := mb.md.ColumnMeta(targetColID)
+		desiredType := targetColMeta.Type
 		texpr := inScope.resolveType(expr, desiredType)
-		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
+		scopeCol := mb.b.addColumn(projectionsScope, targetColMeta.Alias+"_new", texpr)
 		scopeColOrd := scopeOrdinal(len(projectionsScope.cols) - 1)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 

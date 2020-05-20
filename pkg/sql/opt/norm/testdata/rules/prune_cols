@@ -1901,11 +1901,11 @@ update "family"
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8 d:9 e:10
  ├── update-mapping:
- │    └── column11:11 => a:1
+ │    └── a_new:11 => a:1
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column11:11!null a:6!null b:7 c:8 d:9 e:10
+      ├── columns: a_new:11!null a:6!null b:7 c:8 d:9 e:10
       ├── key: (6)
       ├── fd: (6)-->(7-11)
       ├── select
@@ -1919,7 +1919,7 @@ update "family"
       │    └── filters
       │         └── a:6 > 100 [outer=(6), constraints=(/6: [/101 - ]; tight)]
       └── projections
-           └── a:6 + 1 [as=column11:11, outer=(6)]
+           └── a:6 + 1 [as=a_new:11, outer=(6)]
 
 # Do not prune columns that must be returned.
 norm expect=(PruneMutationFetchCols, PruneMutationReturnCols)
@@ -1932,12 +1932,12 @@ project
       ├── columns: a:1!null b:2
       ├── fetch columns: a:6 b:7 c:8 d:9
       ├── update-mapping:
-      │    └── column11:11 => c:3
+      │    └── c_new:11 => c:3
       ├── side-effects, mutations
       ├── key: (1)
       ├── fd: (1)-->(2)
       └── project
-           ├── columns: column11:11 a:6!null b:7 c:8 d:9
+           ├── columns: c_new:11 a:6!null b:7 c:8 d:9
            ├── key: (6)
            ├── fd: (6)-->(7-9), (8)-->(11)
            ├── scan "family"
@@ -1945,7 +1945,7 @@ project
            │    ├── key: (6)
            │    └── fd: (6)-->(7-9)
            └── projections
-                └── c:8 + 1 [as=column11:11, outer=(8)]
+                └── c:8 + 1 [as=c_new:11, outer=(8)]
 
 # Prune unused upsert columns.
 norm expect=PruneMutationInputCols
@@ -2289,12 +2289,12 @@ project
       ├── columns: a:1 b:2 c:3 d:4 e:5 f:6 g:7 rowid:8!null
       ├── fetch columns: a:9 b:10 c:11 d:12 e:13 f:14 g:15 rowid:16
       ├── update-mapping:
-      │    └── column17:17 => a:1
+      │    └── a_new:17 => a:1
       ├── side-effects, mutations
       ├── key: (8)
       ├── fd: (8)-->(1-7)
       └── project
-           ├── columns: column17:17 a:9 b:10 c:11 d:12 e:13 f:14 g:15 rowid:16!null
+           ├── columns: a_new:17 a:9 b:10 c:11 d:12 e:13 f:14 g:15 rowid:16!null
            ├── key: (16)
            ├── fd: (16)-->(9-15), (9)~~>(10-16), (9)-->(17)
            ├── scan returning_test
@@ -2302,7 +2302,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9-15), (9)~~>(10-16)
            └── projections
-                └── a:9 + 1 [as=column17:17, outer=(9)]
+                └── a:9 + 1 [as=a_new:17, outer=(9)]
 
 
 # Fetch all the columns in the (d, e, f, g) family as d is being set.
@@ -2318,12 +2318,12 @@ project
       ├── columns: a:1 d:4 rowid:8!null
       ├── fetch columns: a:9 d:12 e:13 f:14 g:15 rowid:16
       ├── update-mapping:
-      │    └── column17:17 => d:4
+      │    └── d_new:17 => d:4
       ├── side-effects, mutations
       ├── key: (8)
       ├── fd: (8)-->(1,4), (1)~~>(4,8)
       └── project
-           ├── columns: column17:17 a:9 d:12 e:13 f:14 g:15 rowid:16!null
+           ├── columns: d_new:17 a:9 d:12 e:13 f:14 g:15 rowid:16!null
            ├── key: (16)
            ├── fd: (16)-->(9,12-15), (9)~~>(12-16), (9,12)-->(17)
            ├── scan returning_test
@@ -2331,7 +2331,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9,12-15), (9)~~>(12-16)
            └── projections
-                └── a:9 + d:12 [as=column17:17, outer=(9,12)]
+                └── a:9 + d:12 [as=d_new:17, outer=(9,12)]
 
 # Fetch only whats being updated (not the (d, e, f, g) family).
 norm
@@ -2344,12 +2344,12 @@ project
       ├── columns: a:1 rowid:8!null
       ├── fetch columns: a:9 rowid:16
       ├── update-mapping:
-      │    └── column17:17 => a:1
+      │    └── a_new:17 => a:1
       ├── side-effects, mutations
       ├── key: (8)
       ├── fd: (8)-->(1)
       └── project
-           ├── columns: column17:17 a:9 rowid:16!null
+           ├── columns: a_new:17 a:9 rowid:16!null
            ├── key: (16)
            ├── fd: (16)-->(9,17), (9)~~>(16,17)
            ├── scan returning_test
@@ -2357,7 +2357,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9,12), (9)~~>(12,16)
            └── projections
-                └── a:9 + d:12 [as=column17:17, outer=(9,12)]
+                └── a:9 + d:12 [as=a_new:17, outer=(9,12)]
 
 # We only fetch the minimal set of columns which is (a, b, c, rowid).
 norm
@@ -2372,13 +2372,13 @@ project
       ├── columns: a:1 b:2 c:3 rowid:8!null
       ├── fetch columns: a:9 b:10 c:11 rowid:16
       ├── update-mapping:
-      │    ├── column17:17 => a:1
+      │    ├── a_new:17 => a:1
       │    └── a:9 => b:2
       ├── side-effects, mutations
       ├── key: (8)
       ├── fd: (8)-->(1-3), (2)~~>(1,3,8)
       └── project
-           ├── columns: column17:17 a:9 b:10 c:11 rowid:16!null
+           ├── columns: a_new:17 a:9 b:10 c:11 rowid:16!null
            ├── key: (16)
            ├── fd: (16)-->(9-11), (9)~~>(10,11,16), (9,10)-->(17)
            ├── scan returning_test
@@ -2386,7 +2386,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9-11), (9)~~>(10,11,16)
            └── projections
-                └── a:9 + b:10 [as=column17:17, outer=(9,10)]
+                └── a:9 + b:10 [as=a_new:17, outer=(9,10)]
 
 
 # We apply the PruneMutationReturnCols rule multiple times, to get
@@ -2405,12 +2405,12 @@ with &1
  │         ├── columns: returning_test.a:1 returning_test.b:2 returning_test.c:3 rowid:8!null
  │         ├── fetch columns: returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16
  │         ├── update-mapping:
- │         │    └── column17:17 => returning_test.a:1
+ │         │    └── a_new:17 => returning_test.a:1
  │         ├── side-effects, mutations
  │         ├── key: (8)
  │         ├── fd: (8)-->(1-3)
  │         └── project
- │              ├── columns: column17:17 returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16!null
+ │              ├── columns: a_new:17 returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16!null
  │              ├── key: (16)
  │              ├── fd: (16)-->(9-11), (9)~~>(10,11,16), (9)-->(17)
  │              ├── scan returning_test
@@ -2418,7 +2418,7 @@ with &1
  │              │    ├── key: (16)
  │              │    └── fd: (16)-->(9-11), (9)~~>(10,11,16)
  │              └── projections
- │                   └── returning_test.a:9 + 1 [as=column17:17, outer=(9)]
+ │                   └── returning_test.a:9 + 1 [as=a_new:17, outer=(9)]
  └── project
       ├── columns: a:21
       ├── with-scan &1
@@ -2445,12 +2445,12 @@ with &1
  │         ├── columns: returning_test.a:1 returning_test.b:2 returning_test.c:3 rowid:8!null
  │         ├── fetch columns: returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16
  │         ├── update-mapping:
- │         │    └── column17:17 => returning_test.a:1
+ │         │    └── a_new:17 => returning_test.a:1
  │         ├── side-effects, mutations
  │         ├── key: (8)
  │         ├── fd: (8)-->(1-3)
  │         └── project
- │              ├── columns: column17:17 returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16!null
+ │              ├── columns: a_new:17 returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16!null
  │              ├── key: (16)
  │              ├── fd: (16)-->(9-11), (9)~~>(10,11,16), (9)-->(17)
  │              ├── scan returning_test
@@ -2458,7 +2458,7 @@ with &1
  │              │    ├── key: (16)
  │              │    └── fd: (16)-->(9-11), (9)~~>(10,11,16)
  │              └── projections
- │                   └── returning_test.a:9 + 1 [as=column17:17, outer=(9)]
+ │                   └── returning_test.a:9 + 1 [as=a_new:17, outer=(9)]
  └── project
       ├── columns: a:21!null
       ├── select
@@ -2491,12 +2491,12 @@ with &2
  │         ├── columns: returning_test.a:11 returning_test.b:12 returning_test.c:13 rowid:18!null
  │         ├── fetch columns: returning_test.a:19 returning_test.b:20 returning_test.c:21 rowid:26
  │         ├── update-mapping:
- │         │    └── column27:27 => returning_test.a:11
+ │         │    └── a_new:27 => returning_test.a:11
  │         ├── side-effects, mutations
  │         ├── key: (18)
  │         ├── fd: (18)-->(11-13)
  │         └── project
- │              ├── columns: column27:27 returning_test.a:19 returning_test.b:20 returning_test.c:21 rowid:26!null
+ │              ├── columns: a_new:27 returning_test.a:19 returning_test.b:20 returning_test.c:21 rowid:26!null
  │              ├── key: (26)
  │              ├── fd: (26)-->(19-21), (19)~~>(20,21,26), (19)-->(27)
  │              ├── scan returning_test
@@ -2504,7 +2504,7 @@ with &2
  │              │    ├── key: (26)
  │              │    └── fd: (26)-->(19-21), (19)~~>(20,21,26)
  │              └── projections
- │                   └── returning_test.a:19 + 1 [as=column27:27, outer=(19)]
+ │                   └── returning_test.a:19 + 1 [as=a_new:27, outer=(19)]
  └── inner-join (cross)
       ├── columns: a:9 b:10 a:31!null b:32
       ├── fd: (9)~~>(10)

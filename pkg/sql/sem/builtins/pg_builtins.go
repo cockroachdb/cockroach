@@ -121,6 +121,10 @@ func initPGBuiltins() {
 	for name, builtin := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
 		builtins[name] = builtin
 	}
+	// Make enum type i/o builtins.
+	for name, builtin := range makeTypeIOBuiltins("enum_", types.AnyEnum) {
+		builtins[name] = builtin
+	}
 
 	// Make crdb_internal.create_regfoo builtins.
 	for _, typ := range []*types.T{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {

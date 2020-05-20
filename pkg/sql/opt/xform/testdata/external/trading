@@ -1416,11 +1416,11 @@ update ci
  ├── columns: <none>
  ├── fetch columns: ci.dealerid:15 ci.cardid:16 buyprice:17 sellprice:18 discount:19 desiredinventory:20 actualinventory:21 maxinventory:22 ci.version:23
  ├── update-mapping:
- │    └── column33:33 => actualinventory:12
+ │    └── actualinventory_new:33 => actualinventory:12
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column33:33 ci.dealerid:15!null ci.cardid:16!null buyprice:17!null sellprice:18!null discount:19!null desiredinventory:20!null actualinventory:21!null maxinventory:22!null ci.version:23!null c:24!null q:25!null
+      ├── columns: actualinventory_new:33 ci.dealerid:15!null ci.cardid:16!null buyprice:17!null sellprice:18!null discount:19!null desiredinventory:20!null actualinventory:21!null maxinventory:22!null ci.version:23!null c:24!null q:25!null
       ├── key: (16)
       ├── fd: ()-->(15), (16)-->(17-25,33), (23)-->(16-22), (16)==(24), (24)==(16)
       ├── group-by
@@ -1506,4 +1506,4 @@ update ci
       │         └── const-agg [as=q:25, outer=(25)]
       │              └── q:25
       └── projections
-           └── COALESCE(sum_int:31, 0) [as=column33:33, outer=(31)]
+           └── COALESCE(sum_int:31, 0) [as=actualinventory_new:33, outer=(31)]
