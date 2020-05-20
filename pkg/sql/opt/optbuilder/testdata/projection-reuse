@@ -193,10 +193,10 @@ update abcd
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8 d:9 rowid:10
  ├── update-mapping:
- │    ├── column11:11 => a:1
- │    └── column12:12 => b:2
+ │    ├── a_new:11 => a:1
+ │    └── b_new:12 => b:2
  └── project
-      ├── columns: column11:11 column12:12 a:6!null b:7 c:8 d:9 rowid:10!null
+      ├── columns: a_new:11 b_new:12 a:6!null b:7 c:8 d:9 rowid:10!null
       ├── select
       │    ├── columns: a:6!null b:7 c:8 d:9 rowid:10!null
       │    ├── scan abcd
@@ -204,5 +204,5 @@ update abcd
       │    └── filters
       │         └── a:6 = 1.0
       └── projections
-           ├── random() [as=column11:11]
-           └── random() [as=column12:12]
+           ├── random() [as=a_new:11]
+           └── random() [as=b_new:12]

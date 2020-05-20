@@ -27,11 +27,11 @@ update usertable
  ├── columns: <none>
  ├── fetch columns: ycsb_key:12 field5:18
  ├── update-mapping:
- │    └── column23:23 => field5:7
+ │    └── field5_new:23 => field5:7
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column23:23!null ycsb_key:12!null field5:18
+      ├── columns: field5_new:23!null ycsb_key:12!null field5:18
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(12,18,23)
@@ -42,7 +42,7 @@ update usertable
       │    ├── key: ()
       │    └── fd: ()-->(12,18)
       └── projections
-           └── 'field5data' [as=column23:23]
+           └── 'field5data' [as=field5_new:23]
 
 # --------------------------------------------------
 # Workload B: Read mostly
@@ -171,11 +171,11 @@ update usertable
  ├── columns: <none>
  ├── fetch columns: ycsb_key:12 field5:18
  ├── update-mapping:
- │    └── column23:23 => field5:7
+ │    └── field5_new:23 => field5:7
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column23:23!null ycsb_key:12!null field5:18
+      ├── columns: field5_new:23!null ycsb_key:12!null field5:18
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(12,18,23)
@@ -186,4 +186,4 @@ update usertable
       │    ├── key: ()
       │    └── fd: ()-->(12,18)
       └── projections
-           └── 'field5data' [as=column23:23]
+           └── 'field5data' [as=field5_new:23]

@@ -50,7 +50,7 @@ project
       │    └── upsert_rowid:20 => rowid:4
       ├── side-effects, mutations
       └── project
-           ├── columns: upsert_a:17(int!null) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int) column16:16(int)
+           ├── columns: upsert_a:17(int!null) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) a_new:14(int!null) b_new:15(int) column16:16(int)
            ├── side-effects
            ├── key: (13)
            ├── fd: ()-->(5,6,8,9,14), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16), (13)-->(17), (13,15)-->(18), (13,16)-->(19), (13)-->(20)
@@ -58,7 +58,7 @@ project
            ├── reject-nulls: (10-13)
            ├── interesting orderings: (+13) (+10) (+11,+12,+13)
            ├── project
-           │    ├── columns: column16:16(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
+           │    ├── columns: column16:16(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) a_new:14(int!null) b_new:15(int)
            │    ├── side-effects
            │    ├── key: (13)
            │    ├── fd: ()-->(5,6,8,9,14), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16)
@@ -66,7 +66,7 @@ project
            │    ├── reject-nulls: (10-13)
            │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
            │    ├── project
-           │    │    ├── columns: column14:14(int!null) column15:15(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
+           │    │    ├── columns: a_new:14(int!null) b_new:15(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
            │    │    ├── side-effects
            │    │    ├── key: (13)
            │    │    ├── fd: ()-->(5,6,8,9,14), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15)
@@ -155,13 +155,13 @@ project
            │    │    │              ├── variable: column9:9 [type=int]
            │    │    │              └── variable: c:12 [type=int]
            │    │    └── projections
-           │    │         ├── const: 1 [as=column14:14, type=int]
-           │    │         └── plus [as=column15:15, type=int, outer=(6,12)]
+           │    │         ├── const: 1 [as=a_new:14, type=int]
+           │    │         └── plus [as=b_new:15, type=int, outer=(6,12)]
            │    │              ├── variable: y:6 [type=int]
            │    │              └── variable: c:12 [type=int]
            │    └── projections
            │         └── plus [as=column16:16, type=int, outer=(15)]
-           │              ├── variable: column15:15 [type=int]
+           │              ├── variable: b_new:15 [type=int]
            │              └── const: 1 [type=int]
            └── projections
                 ├── case [as=upsert_a:17, type=int, outer=(5,13,14)]
@@ -171,7 +171,7 @@ project
                 │    │    │    ├── variable: rowid:13 [type=int]
                 │    │    │    └── null [type=unknown]
                 │    │    └── variable: x:5 [type=int]
-                │    └── variable: column14:14 [type=int]
+                │    └── variable: a_new:14 [type=int]
                 ├── case [as=upsert_b:18, type=int, outer=(6,13,15)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
@@ -179,7 +179,7 @@ project
                 │    │    │    ├── variable: rowid:13 [type=int]
                 │    │    │    └── null [type=unknown]
                 │    │    └── variable: y:6 [type=int]
-                │    └── variable: column15:15 [type=int]
+                │    └── variable: b_new:15 [type=int]
                 ├── case [as=upsert_c:19, type=int, outer=(9,13,16)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
@@ -583,7 +583,7 @@ upsert abc
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_a:17(int) upsert_b:18(int!null) upsert_c:19(int!null) upsert_rowid:20(int) y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int) column15:15(int!null) column16:16(int!null)
+      ├── columns: upsert_a:17(int) upsert_b:18(int!null) upsert_c:19(int!null) upsert_rowid:20(int) y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int) b_new:15(int!null) column16:16(int!null)
       ├── side-effects
       ├── key: (6,14)
       ├── fd: ()-->(8,10,15,16), (6)-->(9), (14)-->(11-13), (11)-->(12-14), (12,13)~~>(11,14), (6,11,14)-->(17), (14)-->(18), (14)-->(19), (9,14)-->(20)
@@ -591,7 +591,7 @@ upsert abc
       ├── reject-nulls: (11-14)
       ├── interesting orderings: (+14) (+11) (+12,+13,+14)
       ├── project
-      │    ├── columns: column16:16(int!null) y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int) column15:15(int!null)
+      │    ├── columns: column16:16(int!null) y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int) b_new:15(int!null)
       │    ├── side-effects
       │    ├── key: (6,14)
       │    ├── fd: ()-->(8,10,15,16), (6)-->(9), (14)-->(11-13), (11)-->(12-14), (12,13)~~>(11,14)
@@ -599,7 +599,7 @@ upsert abc
       │    ├── reject-nulls: (11-14)
       │    ├── interesting orderings: (+14) (+11) (+12,+13,+14)
       │    ├── project
-      │    │    ├── columns: column15:15(int!null) y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int)
+      │    │    ├── columns: b_new:15(int!null) y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int)
       │    │    ├── side-effects
       │    │    ├── key: (6,14)
       │    │    ├── fd: ()-->(8,10,15), (6)-->(9), (14)-->(11-13), (11)-->(12-14), (12,13)~~>(11,14)
@@ -683,10 +683,10 @@ upsert abc
       │    │    │              ├── variable: y:6 [type=int]
       │    │    │              └── variable: a:11 [type=int]
       │    │    └── projections
-      │    │         └── const: 2 [as=column15:15, type=int]
+      │    │         └── const: 2 [as=b_new:15, type=int]
       │    └── projections
       │         └── plus [as=column16:16, type=int, outer=(15)]
-      │              ├── variable: column15:15 [type=int]
+      │              ├── variable: b_new:15 [type=int]
       │              └── const: 1 [type=int]
       └── projections
            ├── case [as=upsert_a:17, type=int, outer=(6,11,14)]
@@ -704,7 +704,7 @@ upsert abc
            │    │    │    ├── variable: rowid:14 [type=int]
            │    │    │    └── null [type=unknown]
            │    │    └── variable: column8:8 [type=int]
-           │    └── variable: column15:15 [type=int]
+           │    └── variable: b_new:15 [type=int]
            ├── case [as=upsert_c:19, type=int, outer=(10,14,16)]
            │    ├── true [type=bool]
            │    ├── when [type=int]

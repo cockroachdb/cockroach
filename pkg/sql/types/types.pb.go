@@ -420,7 +420,7 @@ func (x *Family) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Family) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_edb34981702d8405, []int{0}
+	return fileDescriptor_types_449bea9549605401, []int{0}
 }
 
 // IntervalDurationType represents a duration that can be used
@@ -484,7 +484,7 @@ func (x *IntervalDurationType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IntervalDurationType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_edb34981702d8405, []int{1}
+	return fileDescriptor_types_449bea9549605401, []int{1}
 }
 
 // IntervalDurationField represents precisions in intervals which are
@@ -506,7 +506,7 @@ func (m *IntervalDurationField) Reset()         { *m = IntervalDurationField{} }
 func (m *IntervalDurationField) String() string { return proto.CompactTextString(m) }
 func (*IntervalDurationField) ProtoMessage()    {}
 func (*IntervalDurationField) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_edb34981702d8405, []int{0}
+	return fileDescriptor_types_449bea9549605401, []int{0}
 }
 func (m *IntervalDurationField) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -541,7 +541,7 @@ func (m *GeoMetadata) Reset()         { *m = GeoMetadata{} }
 func (m *GeoMetadata) String() string { return proto.CompactTextString(m) }
 func (*GeoMetadata) ProtoMessage()    {}
 func (*GeoMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_edb34981702d8405, []int{1}
+	return fileDescriptor_types_449bea9549605401, []int{1}
 }
 func (m *GeoMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -569,7 +569,7 @@ var xxx_messageInfo_GeoMetadata proto.InternalMessageInfo
 func (m *T) Reset()      { *m = T{} }
 func (*T) ProtoMessage() {}
 func (*T) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_edb34981702d8405, []int{2}
+	return fileDescriptor_types_449bea9549605401, []int{2}
 }
 func (m *T) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_T.Unmarshal(m, b)
@@ -629,7 +629,9 @@ type InternalType struct {
 	// is nil for non-TUPLE types, or if the TUPLE type does not specify labels.
 	TupleLabels []string `protobuf:"bytes,9,rep,name=tuple_labels,json=tupleLabels" json:"tuple_labels,omitempty"`
 	// Oid returns the type's Postgres Object ID. See the header for the T.Oid
-	// method for more details.
+	// method for more details. For user-defined types, the OID value is an
+	// offset (oidext.CockroachPredefinedOIDMax) away from the stable_type_id
+	// field. This makes it easy to retrieve a type descriptor by OID.
 	Oid github_com_lib_pq_oid.Oid `protobuf:"varint,10,opt,name=oid,customtype=github.com/lib/pq/oid.Oid" json:"oid"`
 	// ArrayContents returns the type of array elements. This is nil for non-ARRAY
 	// types.
@@ -659,7 +661,7 @@ func (m *InternalType) Reset()         { *m = InternalType{} }
 func (m *InternalType) String() string { return proto.CompactTextString(m) }
 func (*InternalType) ProtoMessage()    {}
 func (*InternalType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_edb34981702d8405, []int{3}
+	return fileDescriptor_types_449bea9549605401, []int{3}
 }
 func (m *InternalType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1702,9 +1704,9 @@ var (
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_edb34981702d8405) }
+func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_449bea9549605401) }
 
-var fileDescriptor_types_edb34981702d8405 = []byte{
+var fileDescriptor_types_449bea9549605401 = []byte{
 	// 1052 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0xcd, 0x6e, 0xdb, 0x46,
 	0x10, 0x26, 0xa3, 0x1f, 0x4b, 0xa3, 0x1f, 0x33, 0x1b, 0xcb, 0x66, 0x7d, 0x10, 0x55, 0xa1, 0x45,

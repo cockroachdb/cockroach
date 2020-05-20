@@ -208,9 +208,9 @@ upsert c1
  │    └── upsert_p:12 => c1.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:11 upsert_p:12!null upsert_i:13 column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9 column10:10!null
+ │    ├── columns: upsert_c:11 upsert_p:12!null upsert_i:13 column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9 p_new:10!null
  │    ├── project
- │    │    ├── columns: column10:10!null column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9
+ │    │    ├── columns: p_new:10!null column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:4!null column2:5!null column6:6 c:7 c1.p:8 i:9
  │    │    │    ├── ensure-upsert-distinct-on
@@ -234,10 +234,10 @@ upsert c1
  │    │    │    └── filters
  │    │    │         └── column1:4 = c:7
  │    │    └── projections
- │    │         └── column2:5 + 1 [as=column10:10]
+ │    │         └── column2:5 + 1 [as=p_new:10]
  │    └── projections
  │         ├── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
- │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE column10:10 END [as=upsert_p:12]
+ │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE p_new:10 END [as=upsert_p:12]
  │         └── CASE WHEN c:7 IS NULL THEN column6:6 ELSE i:9 END [as=upsert_i:13]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
@@ -267,9 +267,9 @@ upsert c1
  │    └── upsert_i:14 => i:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:12 upsert_p:13 upsert_i:14 u:4!null v:5!null column7:7 c:8 c1.p:9 i:10 column11:11
+ │    ├── columns: upsert_c:12 upsert_p:13 upsert_i:14 u:4!null v:5!null column7:7 c:8 c1.p:9 i:10 i_new:11
  │    ├── project
- │    │    ├── columns: column11:11 u:4!null v:5!null column7:7 c:8 c1.p:9 i:10
+ │    │    ├── columns: i_new:11 u:4!null v:5!null column7:7 c:8 c1.p:9 i:10
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: u:4!null v:5!null column7:7 c:8 c1.p:9 i:10
  │    │    │    ├── ensure-upsert-distinct-on
@@ -293,11 +293,11 @@ upsert c1
  │    │    │    └── filters
  │    │    │         └── u:4 = c:8
  │    │    └── projections
- │    │         └── c:8 + 1 [as=column11:11]
+ │    │         └── c:8 + 1 [as=i_new:11]
  │    └── projections
  │         ├── CASE WHEN c:8 IS NULL THEN u:4 ELSE c:8 END [as=upsert_c:12]
  │         ├── CASE WHEN c:8 IS NULL THEN v:5 ELSE c1.p:9 END [as=upsert_p:13]
- │         └── CASE WHEN c:8 IS NULL THEN column7:7 ELSE column11:11 END [as=upsert_i:14]
+ │         └── CASE WHEN c:8 IS NULL THEN column7:7 ELSE i_new:11 END [as=upsert_i:14]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
@@ -328,9 +328,9 @@ upsert c2
  │    └── upsert_c:5 => c:1
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:5!null column1:2!null c:3 column4:4!null
+ │    ├── columns: upsert_c:5!null column1:2!null c:3 c_new:4!null
  │    ├── project
- │    │    ├── columns: column4:4!null column1:2!null c:3
+ │    │    ├── columns: c_new:4!null column1:2!null c:3
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:2!null c:3
  │    │    │    ├── ensure-upsert-distinct-on
@@ -345,9 +345,9 @@ upsert c2
  │    │    │    └── filters
  │    │    │         └── column1:2 = c:3
  │    │    └── projections
- │    │         └── 1 [as=column4:4]
+ │    │         └── 1 [as=c_new:4]
  │    └── projections
- │         └── CASE WHEN c:3 IS NULL THEN column1:2 ELSE column4:4 END [as=upsert_c:5]
+ │         └── CASE WHEN c:3 IS NULL THEN column1:2 ELSE c_new:4 END [as=upsert_c:5]
  └── f-k-checks
       └── f-k-checks-item: c2(c) -> p(p)
            └── anti-join (hash)
@@ -489,9 +489,9 @@ upsert c4
  │    └── upsert_other:15 => c4.other:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:13 upsert_a:14 upsert_other:15 x:4 y:5 z:6 c:9 a:10 c4.other:11 column12:12!null
+ │    ├── columns: upsert_c:13 upsert_a:14 upsert_other:15 x:4 y:5 z:6 c:9 a:10 c4.other:11 other_new:12!null
  │    ├── project
- │    │    ├── columns: column12:12!null x:4 y:5 z:6 c:9 a:10 c4.other:11
+ │    │    ├── columns: other_new:12!null x:4 y:5 z:6 c:9 a:10 c4.other:11
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: x:4 y:5 z:6 c:9 a:10 c4.other:11
  │    │    │    ├── ensure-upsert-distinct-on
@@ -511,11 +511,11 @@ upsert c4
  │    │    │    └── filters
  │    │    │         └── y:5 = a:10
  │    │    └── projections
- │    │         └── 1 [as=column12:12]
+ │    │         └── 1 [as=other_new:12]
  │    └── projections
  │         ├── CASE WHEN c:9 IS NULL THEN x:4 ELSE c:9 END [as=upsert_c:13]
  │         ├── CASE WHEN c:9 IS NULL THEN y:5 ELSE a:10 END [as=upsert_a:14]
- │         └── CASE WHEN c:9 IS NULL THEN z:6 ELSE column12:12 END [as=upsert_other:15]
+ │         └── CASE WHEN c:9 IS NULL THEN z:6 ELSE other_new:12 END [as=upsert_other:15]
  └── f-k-checks
       └── f-k-checks-item: c4(a) -> p(p)
            └── anti-join (hash)
@@ -548,9 +548,9 @@ upsert c4
  │    └── upsert_a:14 => a:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:13 upsert_a:14 upsert_other:15 x:4 y:5 z:6 c:9 a:10 c4.other:11 column12:12!null
+ │    ├── columns: upsert_c:13 upsert_a:14 upsert_other:15 x:4 y:5 z:6 c:9 a:10 c4.other:11 a_new:12!null
  │    ├── project
- │    │    ├── columns: column12:12!null x:4 y:5 z:6 c:9 a:10 c4.other:11
+ │    │    ├── columns: a_new:12!null x:4 y:5 z:6 c:9 a:10 c4.other:11
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: x:4 y:5 z:6 c:9 a:10 c4.other:11
  │    │    │    ├── ensure-upsert-distinct-on
@@ -570,10 +570,10 @@ upsert c4
  │    │    │    └── filters
  │    │    │         └── y:5 = a:10
  │    │    └── projections
- │    │         └── 5 [as=column12:12]
+ │    │         └── 5 [as=a_new:12]
  │    └── projections
  │         ├── CASE WHEN c:9 IS NULL THEN x:4 ELSE c:9 END [as=upsert_c:13]
- │         ├── CASE WHEN c:9 IS NULL THEN y:5 ELSE column12:12 END [as=upsert_a:14]
+ │         ├── CASE WHEN c:9 IS NULL THEN y:5 ELSE a_new:12 END [as=upsert_a:14]
  │         └── CASE WHEN c:9 IS NULL THEN z:6 ELSE c4.other:11 END [as=upsert_other:15]
  └── f-k-checks
       └── f-k-checks-item: c4(a) -> p(p)
@@ -948,9 +948,9 @@ upsert cpq
  │    └── upsert_p:15 => cpq.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:14 upsert_p:15!null upsert_q:16 upsert_other:17 column1:5!null column6:6!null column7:7!null column8:8 c:9 cpq.p:10 cpq.q:11 cpq.other:12 column13:13!null
+ │    ├── columns: upsert_c:14 upsert_p:15!null upsert_q:16 upsert_other:17 column1:5!null column6:6!null column7:7!null column8:8 c:9 cpq.p:10 cpq.q:11 cpq.other:12 p_new:13!null
  │    ├── project
- │    │    ├── columns: column13:13!null column1:5!null column6:6!null column7:7!null column8:8 c:9 cpq.p:10 cpq.q:11 cpq.other:12
+ │    │    ├── columns: p_new:13!null column1:5!null column6:6!null column7:7!null column8:8 c:9 cpq.p:10 cpq.q:11 cpq.other:12
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:5!null column6:6!null column7:7!null column8:8 c:9 cpq.p:10 cpq.q:11 cpq.other:12
  │    │    │    ├── ensure-upsert-distinct-on
@@ -978,10 +978,10 @@ upsert cpq
  │    │    │    └── filters
  │    │    │         └── column1:5 = c:9
  │    │    └── projections
- │    │         └── 10 [as=column13:13]
+ │    │         └── 10 [as=p_new:13]
  │    └── projections
  │         ├── CASE WHEN c:9 IS NULL THEN column1:5 ELSE c:9 END [as=upsert_c:14]
- │         ├── CASE WHEN c:9 IS NULL THEN column6:6 ELSE column13:13 END [as=upsert_p:15]
+ │         ├── CASE WHEN c:9 IS NULL THEN column6:6 ELSE p_new:13 END [as=upsert_p:15]
  │         ├── CASE WHEN c:9 IS NULL THEN column7:7 ELSE cpq.q:11 END [as=upsert_q:16]
  │         └── CASE WHEN c:9 IS NULL THEN column8:8 ELSE cpq.other:12 END [as=upsert_other:17]
  └── f-k-checks
@@ -1231,9 +1231,9 @@ upsert p1
  │    └── upsert_p:8 => p1.p:1
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_p:8!null upsert_other:9 column1:3!null column2:4!null p1.p:5 other:6 column7:7!null
+ │    ├── columns: upsert_p:8!null upsert_other:9 column1:3!null column2:4!null p1.p:5 other:6 p_new:7!null
  │    ├── project
- │    │    ├── columns: column7:7!null column1:3!null column2:4!null p1.p:5 other:6
+ │    │    ├── columns: p_new:7!null column1:3!null column2:4!null p1.p:5 other:6
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:3!null column2:4!null p1.p:5 other:6
  │    │    │    ├── ensure-upsert-distinct-on
@@ -1251,9 +1251,9 @@ upsert p1
  │    │    │    └── filters
  │    │    │         └── column1:3 = p1.p:5
  │    │    └── projections
- │    │         └── column1:3 + 1 [as=column7:7]
+ │    │         └── column1:3 + 1 [as=p_new:7]
  │    └── projections
- │         ├── CASE WHEN p1.p:5 IS NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
+ │         ├── CASE WHEN p1.p:5 IS NULL THEN column1:3 ELSE p_new:7 END [as=upsert_p:8]
  │         └── CASE WHEN p1.p:5 IS NULL THEN column2:4 ELSE other:6 END [as=upsert_other:9]
  └── f-k-checks
       └── f-k-checks-item: p1c(p) -> p1(p)
@@ -1290,9 +1290,9 @@ upsert p1
  ├── update-mapping:
  │    └── upsert_other:9 => other:2
  └── project
-      ├── columns: upsert_p:8 upsert_other:9 column1:3!null column2:4!null p:5 other:6 column7:7
+      ├── columns: upsert_p:8 upsert_other:9 column1:3!null column2:4!null p:5 other:6 other_new:7
       ├── project
-      │    ├── columns: column7:7 column1:3!null column2:4!null p:5 other:6
+      │    ├── columns: other_new:7 column1:3!null column2:4!null p:5 other:6
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3!null column2:4!null p:5 other:6
       │    │    ├── ensure-upsert-distinct-on
@@ -1310,10 +1310,10 @@ upsert p1
       │    │    └── filters
       │    │         └── column1:3 = p:5
       │    └── projections
-      │         └── other:6 + 1 [as=column7:7]
+      │         └── other:6 + 1 [as=other_new:7]
       └── projections
            ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
-           └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE column7:7 END [as=upsert_other:9]
+           └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE other_new:7 END [as=upsert_other:9]
 
 # Similar tests when the FK column is not the PK.
 exec-ddl
@@ -1393,9 +1393,9 @@ upsert p2
  ├── update-mapping:
  │    └── upsert_p:8 => p:1
  └── project
-      ├── columns: upsert_p:8!null upsert_fk:9 column1:3!null column2:4!null p:5 fk:6 column7:7!null
+      ├── columns: upsert_p:8!null upsert_fk:9 column1:3!null column2:4!null p:5 fk:6 p_new:7!null
       ├── project
-      │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 fk:6
+      │    ├── columns: p_new:7!null column1:3!null column2:4!null p:5 fk:6
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3!null column2:4!null p:5 fk:6
       │    │    ├── ensure-upsert-distinct-on
@@ -1413,9 +1413,9 @@ upsert p2
       │    │    └── filters
       │    │         └── column1:3 = p:5
       │    └── projections
-      │         └── column1:3 + 1 [as=column7:7]
+      │         └── column1:3 + 1 [as=p_new:7]
       └── projections
-           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
+           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p_new:7 END [as=upsert_p:8]
            └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE fk:6 END [as=upsert_fk:9]
 
 # This statement can change existing values of the fk column, so the FK check
@@ -1434,9 +1434,9 @@ upsert p2
  │    └── upsert_fk:9 => p2.fk:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_p:8 upsert_fk:9!null column1:3!null column2:4!null p:5 p2.fk:6 column7:7!null
+ │    ├── columns: upsert_p:8 upsert_fk:9!null column1:3!null column2:4!null p:5 p2.fk:6 fk_new:7!null
  │    ├── project
- │    │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 p2.fk:6
+ │    │    ├── columns: fk_new:7!null column1:3!null column2:4!null p:5 p2.fk:6
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:3!null column2:4!null p:5 p2.fk:6
  │    │    │    ├── ensure-upsert-distinct-on
@@ -1454,10 +1454,10 @@ upsert p2
  │    │    │    └── filters
  │    │    │         └── column1:3 = p:5
  │    │    └── projections
- │    │         └── column2:4 + 1 [as=column7:7]
+ │    │         └── column2:4 + 1 [as=fk_new:7]
  │    └── projections
  │         ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
- │         └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE column7:7 END [as=upsert_fk:9]
+ │         └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE fk_new:7 END [as=upsert_fk:9]
  └── f-k-checks
       └── f-k-checks-item: p2c(fk) -> p2(fk)
            └── semi-join (hash)
@@ -1494,9 +1494,9 @@ upsert p2
  ├── update-mapping:
  │    └── upsert_p:8 => p:1
  └── project
-      ├── columns: upsert_p:8!null upsert_fk:9 column1:3!null column2:4!null p:5 fk:6 column7:7!null
+      ├── columns: upsert_p:8!null upsert_fk:9 column1:3!null column2:4!null p:5 fk:6 p_new:7!null
       ├── project
-      │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 fk:6
+      │    ├── columns: p_new:7!null column1:3!null column2:4!null p:5 fk:6
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3!null column2:4!null p:5 fk:6
       │    │    ├── ensure-upsert-distinct-on
@@ -1514,9 +1514,9 @@ upsert p2
       │    │    └── filters
       │    │         └── column2:4 = fk:6
       │    └── projections
-      │         └── column1:3 + 1 [as=column7:7]
+      │         └── column1:3 + 1 [as=p_new:7]
       └── projections
-           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
+           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p_new:7 END [as=upsert_p:8]
            └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE fk:6 END [as=upsert_fk:9]
 
 build
@@ -1533,9 +1533,9 @@ upsert p2
  │    └── upsert_fk:9 => p2.fk:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_p:8 upsert_fk:9!null column1:3!null column2:4!null p:5 p2.fk:6 column7:7!null
+ │    ├── columns: upsert_p:8 upsert_fk:9!null column1:3!null column2:4!null p:5 p2.fk:6 fk_new:7!null
  │    ├── project
- │    │    ├── columns: column7:7!null column1:3!null column2:4!null p:5 p2.fk:6
+ │    │    ├── columns: fk_new:7!null column1:3!null column2:4!null p:5 p2.fk:6
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:3!null column2:4!null p:5 p2.fk:6
  │    │    │    ├── ensure-upsert-distinct-on
@@ -1553,10 +1553,10 @@ upsert p2
  │    │    │    └── filters
  │    │    │         └── column2:4 = p2.fk:6
  │    │    └── projections
- │    │         └── column2:4 + 1 [as=column7:7]
+ │    │         └── column2:4 + 1 [as=fk_new:7]
  │    └── projections
  │         ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
- │         └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE column7:7 END [as=upsert_fk:9]
+ │         └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE fk_new:7 END [as=upsert_fk:9]
  └── f-k-checks
       └── f-k-checks-item: p2c(fk) -> p2(fk)
            └── semi-join (hash)
@@ -1853,9 +1853,9 @@ upsert pq
  ├── update-mapping:
  │    └── upsert_k:14 => k:1
  └── project
-      ├── columns: upsert_k:14 upsert_p:15 upsert_q:16 upsert_other:17 column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12 column13:13
+      ├── columns: upsert_k:14 upsert_p:15 upsert_q:16 upsert_other:17 column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12 k_new:13
       ├── project
-      │    ├── columns: column13:13 column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
+      │    ├── columns: k_new:13 column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
       │    ├── left-join (hash)
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
       │    │    ├── ensure-upsert-distinct-on
@@ -1876,9 +1876,9 @@ upsert pq
       │    │         ├── column2:6 = p:10
       │    │         └── column3:7 = q:11
       │    └── projections
-      │         └── k:9 + 1 [as=column13:13]
+      │         └── k:9 + 1 [as=k_new:13]
       └── projections
-           ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_k:14]
+           ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k_new:13 END [as=upsert_k:14]
            ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE p:10 END [as=upsert_p:15]
            ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE q:11 END [as=upsert_q:16]
            └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE other:12 END [as=upsert_other:17]
@@ -1899,9 +1899,9 @@ upsert pq
  │    └── upsert_p:15 => pq.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:14 upsert_p:15 upsert_q:16 upsert_other:17 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12 column13:13
+ │    ├── columns: upsert_k:14 upsert_p:15 upsert_q:16 upsert_other:17 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12 p_new:13
  │    ├── project
- │    │    ├── columns: column13:13 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
+ │    │    ├── columns: p_new:13 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
  │    │    │    ├── ensure-upsert-distinct-on
@@ -1922,10 +1922,10 @@ upsert pq
  │    │    │         ├── column2:6 = pq.p:10
  │    │    │         └── column3:7 = pq.q:11
  │    │    └── projections
- │    │         └── pq.p:10 + 1 [as=column13:13]
+ │    │         └── pq.p:10 + 1 [as=p_new:13]
  │    └── projections
  │         ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
- │         ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE column13:13 END [as=upsert_p:15]
+ │         ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE p_new:13 END [as=upsert_p:15]
  │         ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE pq.q:11 END [as=upsert_q:16]
  │         └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE pq.other:12 END [as=upsert_other:17]
  └── f-k-checks
@@ -1990,9 +1990,9 @@ upsert pq
  ├── update-mapping:
  │    └── upsert_other:17 => other:4
  └── project
-      ├── columns: upsert_k:14 upsert_p:15 upsert_q:16 upsert_other:17!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12 column13:13!null
+      ├── columns: upsert_k:14 upsert_p:15 upsert_q:16 upsert_other:17!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12 other_new:13!null
       ├── project
-      │    ├── columns: column13:13!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
+      │    ├── columns: other_new:13!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
       │    ├── left-join (hash)
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 p:10 q:11 other:12
       │    │    ├── ensure-upsert-distinct-on
@@ -2014,12 +2014,12 @@ upsert pq
       │    │    └── filters
       │    │         └── column1:5 = k:9
       │    └── projections
-      │         └── 5 [as=column13:13]
+      │         └── 5 [as=other_new:13]
       └── projections
            ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
            ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE p:10 END [as=upsert_p:15]
            ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE q:11 END [as=upsert_q:16]
-           └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE column13:13 END [as=upsert_other:17]
+           └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE other_new:13 END [as=upsert_other:17]
 
 build
 INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (k) DO UPDATE SET q = 5
@@ -2037,9 +2037,9 @@ upsert pq
  │    └── upsert_q:16 => pq.q:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:14 upsert_p:15 upsert_q:16!null upsert_other:17 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12 column13:13!null
+ │    ├── columns: upsert_k:14 upsert_p:15 upsert_q:16!null upsert_other:17 column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12 q_new:13!null
  │    ├── project
- │    │    ├── columns: column13:13!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
+ │    │    ├── columns: q_new:13!null column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null k:9 pq.p:10 pq.q:11 pq.other:12
  │    │    │    ├── ensure-upsert-distinct-on
@@ -2061,11 +2061,11 @@ upsert pq
  │    │    │    └── filters
  │    │    │         └── column1:5 = k:9
  │    │    └── projections
- │    │         └── 5 [as=column13:13]
+ │    │         └── 5 [as=q_new:13]
  │    └── projections
  │         ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
  │         ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE pq.p:10 END [as=upsert_p:15]
- │         ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE column13:13 END [as=upsert_q:16]
+ │         ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE q_new:13 END [as=upsert_q:16]
  │         └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE pq.other:12 END [as=upsert_other:17]
  └── f-k-checks
       ├── f-k-checks-item: cpq(p,q) -> pq(p,q)
@@ -2227,9 +2227,9 @@ upsert tab2
  │    └── upsert_e:13 => tab2.e:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:11 upsert_d:12 upsert_e:13 column1:4!null column2:5!null column3:6!null c:7 d:8 tab2.e:9 column10:10
+ │    ├── columns: upsert_c:11 upsert_d:12 upsert_e:13 column1:4!null column2:5!null column3:6!null c:7 d:8 tab2.e:9 e_new:10
  │    ├── project
- │    │    ├── columns: column10:10 column1:4!null column2:5!null column3:6!null c:7 d:8 tab2.e:9
+ │    │    ├── columns: e_new:10 column1:4!null column2:5!null column3:6!null c:7 d:8 tab2.e:9
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null c:7 d:8 tab2.e:9
  │    │    │    ├── ensure-upsert-distinct-on
@@ -2248,11 +2248,11 @@ upsert tab2
  │    │    │    └── filters
  │    │    │         └── column1:4 = c:7
  │    │    └── projections
- │    │         └── tab2.e:9 + 1 [as=column10:10]
+ │    │         └── tab2.e:9 + 1 [as=e_new:10]
  │    └── projections
  │         ├── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
  │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE d:8 END [as=upsert_d:12]
- │         └── CASE WHEN c:7 IS NULL THEN column3:6 ELSE column10:10 END [as=upsert_e:13]
+ │         └── CASE WHEN c:7 IS NULL THEN column3:6 ELSE e_new:10 END [as=upsert_e:13]
  └── f-k-checks
       ├── f-k-checks-item: tab2(d) -> tab1(b)
       │    └── anti-join (hash)
@@ -2305,9 +2305,9 @@ upsert tab2
  │    └── upsert_d:12 => d:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:11 upsert_d:12 upsert_e:13 column1:4!null column2:5!null column3:6!null c:7 d:8 e:9 column10:10
+ │    ├── columns: upsert_c:11 upsert_d:12 upsert_e:13 column1:4!null column2:5!null column3:6!null c:7 d:8 e:9 d_new:10
  │    ├── project
- │    │    ├── columns: column10:10 column1:4!null column2:5!null column3:6!null c:7 d:8 e:9
+ │    │    ├── columns: d_new:10 column1:4!null column2:5!null column3:6!null c:7 d:8 e:9
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null c:7 d:8 e:9
  │    │    │    ├── ensure-upsert-distinct-on
@@ -2326,10 +2326,10 @@ upsert tab2
  │    │    │    └── filters
  │    │    │         └── column3:6 = e:9
  │    │    └── projections
- │    │         └── d:8 + 1 [as=column10:10]
+ │    │         └── d:8 + 1 [as=d_new:10]
  │    └── projections
  │         ├── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
- │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE column10:10 END [as=upsert_d:12]
+ │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE d_new:10 END [as=upsert_d:12]
  │         └── CASE WHEN c:7 IS NULL THEN column3:6 ELSE e:9 END [as=upsert_e:13]
  └── f-k-checks
       └── f-k-checks-item: tab2(d) -> tab1(b)

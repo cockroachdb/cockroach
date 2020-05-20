@@ -327,6 +327,8 @@ func GetAllDescriptors(
 			descs = append(descs, table)
 		case *sqlbase.Descriptor_Database:
 			descs = append(descs, desc.GetDatabase())
+		case *sqlbase.Descriptor_Type:
+			descs = append(descs, desc.GetType())
 		default:
 			return nil, errors.AssertionFailedf("Descriptor.Union has unexpected type %T", t)
 		}

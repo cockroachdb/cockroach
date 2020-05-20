@@ -15,7 +15,6 @@ send
 Query {"String": "SELECT 'hi'::t"}
 ----
 
-# TODO (rohany): Once ENUM's have real type OID's, this needs to be updated.
 # Note that this is slightly different than Postgres -- in Postgres the
 # DataTypeSize for an enum is 4, as floats are used to represent enums
 # internally (4 bytes). Since our encodings are variable size, we report
@@ -23,7 +22,7 @@ Query {"String": "SELECT 'hi'::t"}
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"t","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"t","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"hi"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

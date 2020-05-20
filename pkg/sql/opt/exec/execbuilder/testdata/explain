@@ -719,22 +719,22 @@ count                ·            ·                            ()             
 query TTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-·                    distributed  false                          ·                            ·
-·                    vectorized   false                          ·                            ·
-count                ·            ·                              ()                           ·
- └── update          ·            ·                              ()                           ·
-      │              table        t                              ·                            ·
-      │              set          v                              ·                            ·
-      │              strategy     updater                        ·                            ·
-      │              auto commit  ·                              ·                            ·
-      └── render     ·            ·                              (k int, v int, column5 int)  ·
-           │         render 0     (k)[int]                       ·                            ·
-           │         render 1     (v)[int]                       ·                            ·
-           │         render 2     ((k)[int] + (1)[int])[int]     ·                            ·
-           └── scan  ·            ·                              (k int, v int)               ·
-·                    table        t@primary                      ·                            ·
-·                    spans        FULL SCAN                      ·                            ·
-·                    filter       ((v)[int] > (123)[int])[bool]  ·                            ·
+·                    distributed  false                          ·                          ·
+·                    vectorized   false                          ·                          ·
+count                ·            ·                              ()                         ·
+ └── update          ·            ·                              ()                         ·
+      │              table        t                              ·                          ·
+      │              set          v                              ·                          ·
+      │              strategy     updater                        ·                          ·
+      │              auto commit  ·                              ·                          ·
+      └── render     ·            ·                              (k int, v int, v_new int)  ·
+           │         render 0     (k)[int]                       ·                          ·
+           │         render 1     (v)[int]                       ·                          ·
+           │         render 2     ((k)[int] + (1)[int])[int]     ·                          ·
+           └── scan  ·            ·                              (k int, v int)             ·
+·                    table        t@primary                      ·                          ·
+·                    spans        FULL SCAN                      ·                          ·
+·                    filter       ((v)[int] > (123)[int])[bool]  ·                          ·
 
 query TTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)

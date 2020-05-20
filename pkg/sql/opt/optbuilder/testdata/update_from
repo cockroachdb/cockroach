@@ -14,10 +14,10 @@ update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├── column10:10 => abc.b:2
- │    └── column11:11 => abc.c:3
+ │    ├── b_new:10 => abc.b:2
+ │    └── c_new:11 => abc.c:3
  └── project
-      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 other.a:7!null other.b:8 other.c:9
+      ├── columns: b_new:10 c_new:11 abc.a:4!null abc.b:5 abc.c:6 other.a:7!null other.b:8 other.c:9
       ├── inner-join (merge)
       │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 other.a:7!null other.b:8 other.c:9
       │    ├── left ordering: +4
@@ -30,8 +30,8 @@ update abc
       │    │    └── ordering: +7
       │    └── filters (true)
       └── projections
-           ├── other.b:8 + 1 [as=column10:10]
-           └── other.c:9 + 1 [as=column11:11]
+           ├── other.b:8 + 1 [as=b_new:10]
+           └── other.c:9 + 1 [as=c_new:11]
 
 # Test when Update uses multiple tables.
 opt
@@ -84,10 +84,10 @@ update abc
  ├── columns: a:1!null new_b:2 old_b:8 new_c:3 old_c:9
  ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├── column10:10 => abc.b:2
- │    └── column11:11 => abc.c:3
+ │    ├── b_new:10 => abc.b:2
+ │    └── c_new:11 => abc.c:3
  └── project
-      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 old.b:8 old.c:9
+      ├── columns: b_new:10 c_new:11 abc.a:4!null abc.b:5 abc.c:6 old.b:8 old.c:9
       ├── inner-join (merge)
       │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       │    ├── left ordering: +4
@@ -100,8 +100,8 @@ update abc
       │    │    └── ordering: +7
       │    └── filters (true)
       └── projections
-           ├── old.b:8 + 1 [as=column10:10]
-           └── old.c:9 + 2 [as=column11:11]
+           ├── old.b:8 + 1 [as=b_new:10]
+           └── old.c:9 + 2 [as=c_new:11]
 
 # Check if RETURNING * returns everything
 opt
@@ -111,10 +111,10 @@ update abc
  ├── columns: a:1!null b:2 c:3 a:7 b:8 c:9
  ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├── column10:10 => abc.b:2
- │    └── column11:11 => abc.c:3
+ │    ├── b_new:10 => abc.b:2
+ │    └── c_new:11 => abc.c:3
  └── project
-      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
+      ├── columns: b_new:10 c_new:11 abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       ├── inner-join (merge)
       │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       │    ├── left ordering: +4
@@ -127,8 +127,8 @@ update abc
       │    │    └── ordering: +7
       │    └── filters (true)
       └── projections
-           ├── old.b:8 + 1 [as=column10:10]
-           └── old.c:9 + 2 [as=column11:11]
+           ├── old.b:8 + 1 [as=b_new:10]
+           └── old.c:9 + 2 [as=c_new:11]
 
 # Check if the joins are optimized (check if the filters are pushed down).
 opt
@@ -138,10 +138,10 @@ update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├── column10:10 => abc.b:2
- │    └── column11:11 => abc.c:3
+ │    ├── b_new:10 => abc.b:2
+ │    └── c_new:11 => abc.c:3
  └── project
-      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
+      ├── columns: b_new:10 c_new:11 abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       ├── inner-join (cross)
       │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       │    ├── scan abc
@@ -152,8 +152,8 @@ update abc
       │    │    └── constraint: /7: [/2 - /2]
       │    └── filters (true)
       └── projections
-           ├── old.b:8 + 1 [as=column10:10]
-           └── old.c:9 + 2 [as=column11:11]
+           ├── old.b:8 + 1 [as=b_new:10]
+           └── old.c:9 + 2 [as=c_new:11]
 
 # Update values of table from values expression
 opt
