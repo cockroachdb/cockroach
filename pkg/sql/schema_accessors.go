@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -32,6 +33,9 @@ import (
 //
 // See physical_schema_accessors.go and logical_schema_accessors.go for
 // reference implementations of these interfaces.
+//
+// TODO(ajwerner): Do something about moving these symbols. Doing it in the
+// initial pass makes a mess for not a ton of win.
 
 type (
 	// TableName is provided for convenience and to make the interface
@@ -66,19 +70,6 @@ type (
 	TableNames = tree.TableNames
 )
 
-// ObjectDescriptor provides table information for results from a name lookup.
-type ObjectDescriptor interface {
-	tree.NameResolutionResult
-
-	// TableDesc returns the underlying table descriptor, or nil if the
-	// descriptor is not a table backed object.
-	TableDesc() *TableDescriptor
-
-	// TypeDesc returns the underlying type descriptor, or nil if the
-	// descriptor is not a type backed object.
-	TypeDesc() *TypeDescriptor
-}
-
 // SchemaAccessor provides access to database descriptors.
 type SchemaAccessor interface {
 	// GetDatabaseDesc looks up a database by name and returns its
@@ -99,5 +90,5 @@ type SchemaAccessor interface {
 	// descriptor and that of its parent database. If the object is not
 	// found and flags.required is true, an error is returned, otherwise
 	// a nil reference is returned.
-	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, codec keys.SQLCodec, db, schema, object string, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
+	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, codec keys.SQLCodec, db, schema, object string, flags tree.ObjectLookupFlags) (catalog.ObjectDescriptor, error)
 }
