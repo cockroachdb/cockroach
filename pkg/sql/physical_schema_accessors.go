@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -177,7 +178,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	codec keys.SQLCodec,
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
-) (ObjectDescriptor, error) {
+) (catalog.ObjectDescriptor, error) {
 	// Look up the database ID.
 	dbID, err := getDatabaseID(ctx, txn, codec, db, flags.Required)
 	if err != nil || dbID == sqlbase.InvalidID {
@@ -316,7 +317,7 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 	codec keys.SQLCodec,
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
-) (ObjectDescriptor, error) {
+) (catalog.ObjectDescriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
 		return nil, errors.AssertionFailedf("accesses to type descriptors aren't cached")

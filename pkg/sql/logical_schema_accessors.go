@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -82,7 +83,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	codec keys.SQLCodec,
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
-) (ObjectDescriptor, error) {
+) (catalog.ObjectDescriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
 		return (UncachedPhysicalAccessor{}).GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
