@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -99,8 +100,8 @@ func (ctx *extendedEvalContext) QueueJob(record jobs.Record) (*jobs.Job, error) 
 // schemaInterface provides access to the database and table descriptors.
 // See schema_accessors.go.
 type schemaInterface struct {
-	physical SchemaAccessor
-	logical  SchemaAccessor
+	physical catalog.Accessor
+	logical  catalog.Accessor
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -362,11 +363,11 @@ func internalExtendedEvalCtx(
 	}
 }
 
-func (p *planner) PhysicalSchemaAccessor() SchemaAccessor {
+func (p *planner) PhysicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.physical
 }
 
-func (p *planner) LogicalSchemaAccessor() SchemaAccessor {
+func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.logical
 }
 
