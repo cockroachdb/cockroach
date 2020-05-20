@@ -236,6 +236,14 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		}
 		defer localPlanner.curPlan.close(ctx)
 
+		// TODO(yuzefovich): update this once we support more than just
+		// creating table reader specs in execbuilder.
+		if localPlanner.curPlan.main.physPlan != nil {
+			return errors.AssertionFailedf(
+				"execbuilder-driven physical plan creation is not supported for CREATE TABLE AS",
+			)
+		}
+
 		res := roachpb.BulkOpSummary{}
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
@@ -292,7 +300,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 			}}
 
 			PlanAndRunCTAS(ctx, sc.distSQLPlanner, localPlanner,
-				txn, isLocal, localPlanner.curPlan.main, out, recv)
+				txn, isLocal, localPlanner.curPlan.main.planNode, out, recv)
 			if planAndRunErr = rw.Err(); planAndRunErr != nil {
 				return
 			}

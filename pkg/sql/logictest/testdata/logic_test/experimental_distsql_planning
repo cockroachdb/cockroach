@@ -12,3 +12,11 @@ SET CLUSTER SETTING sql.defaults.experimental_distsql_planning.enabled = false
 
 statement ok
 SET CLUSTER SETTING sql.defaults.experimental_distsql_planning.enabled = true
+
+# Test that a SELECT query fails but other don't (we have experimental
+# planning enabled).
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT); INSERT INTO kv VALUES (1, 1), (2, 1)
+
+statement error pq: unimplemented: execbuilder-driven distsql spec creation
+SELECT * FROM kv

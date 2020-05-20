@@ -892,9 +892,15 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
 	subqueryPlanCtx.ignoreClose = true
-	subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
-	if err != nil {
-		return err
+	var subqueryPhysPlan PhysicalPlan
+	if subqueryPlan.plan.physPlan != nil {
+		subqueryPhysPlan = *subqueryPlan.plan.physPlan
+	} else {
+		var err error
+		subqueryPhysPlan, err = dsp.createPhysPlanForPlanNode(subqueryPlanCtx, subqueryPlan.plan.planNode)
+		if err != nil {
+			return err
+		}
 	}
 	dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
 
@@ -1003,15 +1009,23 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	evalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
-	plan planNode,
+	plan planMaybePhysical,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
 	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
-	physPlan, err := dsp.createPlanForNode(planCtx, plan)
-	if err != nil {
-		recv.SetError(err)
-		return func() {}
+	var (
+		physPlan PhysicalPlan
+		err      error
+	)
+	if plan.physPlan != nil {
+		physPlan = *plan.physPlan
+	} else {
+		physPlan, err = dsp.createPhysPlanForPlanNode(planCtx, plan.planNode)
+		if err != nil {
+			recv.SetError(err)
+			return func() {}
+		}
 	}
 	dsp.FinalizePlan(planCtx, &physPlan)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
@@ -1158,7 +1172,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 // planAndRunPostquery runs a cascade or check query.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
 	ctx context.Context,
-	postqueryPlan planNode,
+	postqueryPlan planMaybePhysical,
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
@@ -1202,9 +1216,15 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		}
 	}
 
-	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan)
-	if err != nil {
-		return err
+	var postqueryPhysPlan PhysicalPlan
+	if postqueryPlan.physPlan != nil {
+		postqueryPhysPlan = *postqueryPlan.physPlan
+	} else {
+		var err error
+		postqueryPhysPlan, err = dsp.createPhysPlanForPlanNode(postqueryPlanCtx, postqueryPlan.planNode)
+		if err != nil {
+			return err
+		}
 	}
 	dsp.FinalizePlan(postqueryPlanCtx, &postqueryPhysPlan)
 

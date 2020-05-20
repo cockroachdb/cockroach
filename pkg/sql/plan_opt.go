@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -175,7 +176,13 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// Build the plan tree.
 	root := execMemo.RootExpr()
 	var execFactory exec.Factory
-	if execBuilderDrivenDistSQLSpecCreationClusterMode.Get(&p.execCfg.Settings.SV) {
+	// isSelectStmt is a simple heuristic to check whether the statement is a
+	// SELECT statement. For the time being we only support such queries with
+	// execbuilder-driven planning.
+	// TODO(yuzefovich): update this once we support more than just creating
+	// table reader specs in execbuilder.
+	isSelectStmt := strings.HasPrefix(strings.ToLower(p.stmt.SQL), "select")
+	if execBuilderDrivenDistSQLSpecCreationClusterMode.Get(&p.execCfg.Settings.SV) && isSelectStmt {
 		factory := makeExecBuilderDistSQLFactory(p.autoCommit)
 		execFactory = &factory
 	} else {
@@ -197,7 +204,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		result.flags.Set(planFlagIsDDL)
 	}
 
-	cols := planColumns(result.main)
+	cols := result.main.planColumns()
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
 			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")

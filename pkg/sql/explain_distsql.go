@@ -74,14 +74,16 @@ func willDistributePlanForExplainPurposes(
 	ctx context.Context,
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
-	plan planNode,
+	plan planMaybePhysical,
 ) bool {
-	if _, ok := plan.(distSQLExplainable); ok {
-		// This is a special case for plans that will be actually distributed
-		// but are represented using local plan nodes (for example, "create
-		// statistics" is handled by the jobs framework which is responsible
-		// for setting up the correct DistSQL infrastructure).
-		return true
+	if plan.physPlan == nil {
+		if _, ok := plan.planNode.(distSQLExplainable); ok {
+			// This is a special case for plans that will be actually distributed
+			// but are represented using local plan nodes (for example, "create
+			// statistics" is handled by the jobs framework which is responsible
+			// for setting up the correct DistSQL infrastructure).
+			return true
+		}
 	}
 	return willDistributePlan(ctx, nodeID, distSQLMode, plan)
 }
@@ -147,16 +149,22 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 	}
 
-	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan.main)
-	if err != nil {
-		if len(n.plan.subqueryPlans) > 0 {
-			return errors.New("running EXPLAIN (DISTSQL) on this query is " +
-				"unsupported because of the presence of subqueries")
+	var physPlan PhysicalPlan
+	if n.plan.main.physPlan != nil {
+		physPlan = *n.plan.main.physPlan
+	} else {
+		var err error
+		physPlan, err = makePhysicalPlan(planCtx, distSQLPlanner, n.plan.main.planNode)
+		if err != nil {
+			if len(n.plan.subqueryPlans) > 0 {
+				return errors.New("running EXPLAIN (DISTSQL) on this query is " +
+					"unsupported because of the presence of subqueries")
+			}
+			return err
 		}
-		return err
 	}
 
-	distSQLPlanner.FinalizePlan(planCtx, &plan)
+	distSQLPlanner.FinalizePlan(planCtx, &physPlan)
 
 	var diagram execinfrapb.FlowDiagram
 	if n.analyze {
@@ -214,7 +222,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		planCtx.saveDiagramShowInputTypes = n.options.Flags[tree.ExplainFlagTypes]
 
 		distSQLPlanner.Run(
-			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
+			planCtx, newParams.p.txn, &physPlan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
 		)()
 
 		n.run.executedStatement = true
@@ -231,7 +239,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		flows := plan.GenerateFlowSpecs(nodeID)
+		flows := physPlan.GenerateFlowSpecs(nodeID)
 		showInputTypes := n.options.Flags[tree.ExplainFlagTypes]
 		diagram, err = execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
 		if err != nil {
@@ -312,7 +320,7 @@ func makePhysicalPlan(
 	if planNode, ok := plan.(distSQLExplainable); ok {
 		physPlan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
 	} else {
-		physPlan, err = distSQLPlanner.createPlanForNode(planCtx, plan)
+		physPlan, err = distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan)
 	}
 	if err != nil {
 		return PhysicalPlan{}, err

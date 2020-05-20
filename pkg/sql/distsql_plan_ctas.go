@@ -36,7 +36,7 @@ func PlanAndRunCTAS(
 	planCtx.planner = planner
 	planCtx.stmtType = tree.Rows
 
-	p, err := dsp.createPlanForNode(planCtx, in)
+	p, err := dsp.createPhysPlanForPlanNode(planCtx, in)
 	if err != nil {
 		recv.SetError(errors.Wrapf(err, "constructing distSQL plan"))
 		return
