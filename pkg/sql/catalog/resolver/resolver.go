@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -267,6 +268,39 @@ func ResolveSchemaNameByID(
 		return schema, nil
 	}
 	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, dbID)
+}
+
+// ResolveTypeDescByID resolves a TypeDescriptor and fully qualified name
+// from an ID.
+// TODO (rohany): Once we start to cache type descriptors, this needs to
+//  look into the set of leased copies.
+// TODO (rohany): Once we lease types, this should be pushed down into the
+//  leased object collection.
+func ResolveTypeDescByID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
+	rawDesc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	typDesc, ok := rawDesc.(*sqlbase.TypeDescriptor)
+	if !ok {
+		return nil, nil, errors.AssertionFailedf("%s was not a type descriptor", rawDesc)
+	}
+	// Get the parent database and schema names to create a fully qualified
+	// name for the type.
+	// TODO (SQLSchema): As we add leasing for all descriptors, these calls
+	//  should look into those leased copies, rather than do raw reads.
+	db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, codec, typDesc.ParentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	schemaName, err := ResolveSchemaNameByID(ctx, txn, codec, typDesc.ParentID, typDesc.ParentSchemaID)
+	if err != nil {
+		return nil, nil, err
+	}
+	name := tree.MakeNewQualifiedTypeName(db.Name, schemaName, typDesc.Name)
+	return &name, typDesc, nil
 }
 
 // GetForDatabase looks up and returns all available
