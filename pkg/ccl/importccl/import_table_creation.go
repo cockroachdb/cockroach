@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -251,7 +252,7 @@ func (r fkResolver) Txn() *kv.Txn {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LogicalSchemaAccessor() sql.SchemaAccessor {
+func (r fkResolver) LogicalSchemaAccessor() catalog.Accessor {
 	return nil
 }
 

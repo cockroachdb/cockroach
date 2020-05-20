@@ -30,13 +30,13 @@ import (
 // LogicalSchemaAccessor extends an existing DatabaseLister with the
 // ability to list tables in a virtual schema.
 type LogicalSchemaAccessor struct {
-	SchemaAccessor
+	catalog.Accessor
 	vt VirtualTabler
 	// Used to avoid allocations.
 	tn TableName
 }
 
-var _ SchemaAccessor = &LogicalSchemaAccessor{}
+var _ catalog.Accessor = &LogicalSchemaAccessor{}
 
 // IsValidSchema implements the DatabaseLister interface.
 func (l *LogicalSchemaAccessor) IsValidSchema(
@@ -47,7 +47,7 @@ func (l *LogicalSchemaAccessor) IsValidSchema(
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.IsValidSchema(ctx, txn, codec, dbID, scName)
+	return l.Accessor.IsValidSchema(ctx, txn, codec, dbID, scName)
 }
 
 // GetObjectNames implements the DatabaseLister interface.
@@ -72,7 +72,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.GetObjectNames(ctx, txn, codec, dbDesc, scName, flags)
+	return l.Accessor.GetObjectNames(ctx, txn, codec, dbDesc, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.
@@ -109,7 +109,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		}
 
 		// Fallthrough.
-		return l.SchemaAccessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
+		return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}

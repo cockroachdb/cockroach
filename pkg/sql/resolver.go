@@ -44,7 +44,7 @@ type SchemaResolver interface {
 	tree.ObjectNameTargetResolver
 
 	Txn() *kv.Txn
-	LogicalSchemaAccessor() SchemaAccessor
+	LogicalSchemaAccessor() catalog.Accessor
 	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags

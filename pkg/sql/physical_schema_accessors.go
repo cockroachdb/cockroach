@@ -38,7 +38,7 @@ import (
 // - UncachedPhysicalAccessor, for uncached db accessors
 //
 // - CachedPhysicalAccessor, which adds an object cache
-//   - plugged on top another SchemaAccessor.
+//   - plugged on top another Accessor.
 //   - uses a `*TableCollection` (table.go) as cache.
 //
 
@@ -49,9 +49,9 @@ type UncachedPhysicalAccessor struct {
 	tn TableName
 }
 
-var _ SchemaAccessor = UncachedPhysicalAccessor{}
+var _ catalog.Accessor = UncachedPhysicalAccessor{}
 
-// GetDatabaseDesc implements the SchemaAccessor interface.
+// GetDatabaseDesc implements the Accessor interface.
 func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -79,14 +79,14 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	return catalogkv.GetDatabaseDescByID(ctx, txn, codec, descID)
 }
 
-// IsValidSchema implements the SchemaAccessor interface.
+// IsValidSchema implements the Accessor interface.
 func (a UncachedPhysicalAccessor) IsValidSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
 	return catalogkv.ResolveSchemaID(ctx, txn, codec, dbID, scName)
 }
 
-// GetObjectNames implements the SchemaAccessor interface.
+// GetObjectNames implements the Accessor interface.
 func (a UncachedPhysicalAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -171,7 +171,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	return tableNames, nil
 }
 
-// GetObjectDesc implements the SchemaAccessor interface.
+// GetObjectDesc implements the Accessor interface.
 func (a UncachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -259,17 +259,17 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 }
 
-// CachedPhysicalAccessor adds a cache on top of any SchemaAccessor.
+// CachedPhysicalAccessor adds a cache on top of any Accessor.
 type CachedPhysicalAccessor struct {
-	SchemaAccessor
+	catalog.Accessor
 	tc *TableCollection
 	// Used to avoid allocations.
 	tn TableName
 }
 
-var _ SchemaAccessor = &CachedPhysicalAccessor{}
+var _ catalog.Accessor = &CachedPhysicalAccessor{}
 
-// GetDatabaseDesc implements the SchemaAccessor interface.
+// GetDatabaseDesc implements the Accessor interface.
 func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -300,17 +300,17 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	}
 
 	// We avoided the cache. Go lower.
-	return a.SchemaAccessor.GetDatabaseDesc(ctx, txn, codec, name, flags)
+	return a.Accessor.GetDatabaseDesc(ctx, txn, codec, name, flags)
 }
 
-// IsValidSchema implements the SchemaAccessor interface.
+// IsValidSchema implements the Accessor interface.
 func (a *CachedPhysicalAccessor) IsValidSchema(
 	ctx context.Context, txn *kv.Txn, _ keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
 	return a.tc.resolveSchemaID(ctx, txn, dbID, scName)
 }
 
-// GetObjectDesc implements the SchemaAccessor interface.
+// GetObjectDesc implements the Accessor interface.
 func (a *CachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
