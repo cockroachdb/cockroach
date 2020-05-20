@@ -646,7 +646,8 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	router, outputs := colexec.NewHashRouter(
-		allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccounts,
+		allocators, input, outputTyps, output.HashColumns, limit,
+		s.diskQueueCfg, s.fdSemaphore, diskAccounts, toClose,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		logtags.AddTag(ctx, "hashRouterID", mmName)
@@ -664,8 +665,10 @@ func (s *vectorizedFlowCreator) setupRouter(
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
+			// Note that here we pass in nil 'toClose' slice because hash
+			// router is responsible for closing all of the idempotent closers.
 			if _, err := s.setupRemoteOutputStream(
-				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue, toClose, factory,
+				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue, nil /* toClose */, factory,
 			); err != nil {
 				return err
 			}
