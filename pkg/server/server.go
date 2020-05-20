@@ -78,7 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	raven "github.com/getsentry/raven-go"
+	"github.com/cockroachdb/sentry-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
@@ -1380,11 +1380,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.refreshSettings()
 
-	raven.SetTagsContext(map[string]string{
-		"cluster":     s.ClusterID().String(),
-		"node":        s.NodeID().String(),
-		"server_id":   fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
-		"engine_type": s.cfg.StorageEngine.String(),
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTags(map[string]string{
+			"cluster":     s.ClusterID().String(),
+			"node":        s.NodeID().String(),
+			"server_id":   fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
+			"engine_type": s.cfg.StorageEngine.String(),
+		})
 	})
 
 	// We can now add the node registry.

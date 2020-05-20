@@ -51,21 +51,6 @@ func Flatten(err error) *Error {
 	resErr.Hint = errors.FlattenHints(err)
 	resErr.Detail = errors.FlattenDetails(err)
 
-	// Populate Keys for backward-compatibility with 19.1.
-	// TODO(knz): Remove in 19.3.
-	if keys := errors.GetTelemetryKeys(err); len(keys) > 0 {
-		// We may lose keys. That's all right, backward compat here is just best effort.
-		resErr.TelemetryKey = keys[0]
-	}
-	// Populate safe strings for backward-compatibility with 19.1.
-	// TODO(knz): Remove in 19.3.
-	for _, dd := range errors.GetAllSafeDetails(err) {
-		for _, d := range dd.SafeDetails {
-			resErr.SafeDetail = append(resErr.SafeDetail,
-				&Error_SafeDetail{SafeMessage: d})
-		}
-	}
-
 	// Add a useful error prefix if not already there.
 	switch resErr.Code {
 	case pgcode.Internal:
