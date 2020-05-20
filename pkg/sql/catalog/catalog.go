@@ -35,3 +35,21 @@ type ObjectDescriptor interface {
 	// descriptor is not a type backed object.
 	TypeDesc() *sqlbase.TypeDescriptor
 }
+
+// VirtualSchemas is a collection of VirtualSchemas.
+type VirtualSchemas interface {
+	GetVirtualSchema(schemaName string) (VirtualSchema, bool)
+}
+
+// VirtualSchema represents a collection of VirtualObjects.
+type VirtualSchema interface {
+	Desc() ObjectDescriptor
+	NumTables() int
+	VisitTables(func(object VirtualObject))
+	GetObjectByName(name string) (VirtualObject, error)
+}
+
+// VirtualObject is a virtual schema object.
+type VirtualObject interface {
+	Desc() ObjectDescriptor
+}
