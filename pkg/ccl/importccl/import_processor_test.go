@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -194,7 +194,7 @@ type doNothingKeyAdder struct {
 	onFlush  func()
 }
 
-var _ storagebase.BulkAdder = &doNothingKeyAdder{}
+var _ kvserverbase.BulkAdder = &doNothingKeyAdder{}
 
 func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) error {
 	if a.onKeyAdd != nil {
@@ -228,7 +228,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
-				_ storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
+				_ kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
 				return &doNothingKeyAdder{}, nil
 			},
 		},
@@ -326,7 +326,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
-				opts storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
+				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
 				if opts.Name == "pkAdder" {
 					return pkBulkAdder, nil
 				}

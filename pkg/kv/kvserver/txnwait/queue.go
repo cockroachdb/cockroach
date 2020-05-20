@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -280,7 +280,7 @@ func (q *Queue) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 // RangeContainsKeyLocked returns whether the Queue's Range contains the
 // specified key.
 func (q *Queue) RangeContainsKeyLocked(key roachpb.Key) bool {
-	return storagebase.ContainsKey(q.cfg.RangeDesc, key)
+	return kvserverbase.ContainsKey(q.cfg.RangeDesc, key)
 }
 
 // EnqueueTxn creates a new pendingTxn for the target txn of a failed

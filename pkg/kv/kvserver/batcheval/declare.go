@@ -109,7 +109,7 @@ func DeclareKeysForBatch(
 }
 
 // CommandArgs contains all the arguments to a command.
-// TODO(bdarnell): consider merging with storagebase.FilterArgs (which
+// TODO(bdarnell): consider merging with kvserverbase.FilterArgs (which
 // would probably require removing the EvalCtx field due to import order
 // constraints).
 type CommandArgs struct {

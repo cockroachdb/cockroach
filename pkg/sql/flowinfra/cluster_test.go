@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -559,8 +559,8 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-					EvalKnobs: storagebase.BatchEvalTestingKnobs{
-						TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 							scanReq, ok := filterArgs.Req.(*roachpb.ScanRequest)
 							if !ok {
 								return nil

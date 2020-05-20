@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
@@ -826,7 +826,7 @@ func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T
 			// after the pushee's commit has already returned successfully. This
 			// is a result of the asynchronous nature of making transaction commits
 			// explicit after a parallel commit.
-			EvalKnobs: storagebase.BatchEvalTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 				RecoverIndeterminateCommitsOnFailedPushes: true,
 			},
 		},

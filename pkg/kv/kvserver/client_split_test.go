@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -159,7 +159,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 		return r
 	}
 
-	thresh := storagebase.TxnCleanupThreshold.Nanoseconds()
+	thresh := kvserverbase.TxnCleanupThreshold.Nanoseconds()
 	// Pick a non-gcable and gcable timestamp, respectively. Avoid the clock's
 	// exact timestamp because of unpredictable logical ticks.
 	tsFresh := hlc.Timestamp{WallTime: manualClock.UnixNano() - thresh + 1}
@@ -1616,7 +1616,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	// This filter is better understood when reading the meat of the test
 	// below first.
 	var noLeaseForDesc atomic.Value
-	filter := func(args storagebase.FilterArgs) *roachpb.Error {
+	filter := func(args kvserverbase.FilterArgs) *roachpb.Error {
 		leaseReq, argOK := args.Req.(*roachpb.RequestLeaseRequest)
 		forbiddenDesc, descOK := noLeaseForDesc.Load().(*roachpb.ReplicaDescriptor)
 		if !argOK || !descOK || !bytes.Equal(leaseReq.Key, splitKey) {
@@ -1636,7 +1636,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		EvalKnobs: storagebase.BatchEvalTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: filter,
 		},
 	}
@@ -1940,11 +1940,11 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
 	var seen struct {
 		syncutil.Mutex
-		sids map[storagebase.CmdIDKey][2]bool
+		sids map[kvserverbase.CmdIDKey][2]bool
 	}
-	seen.sids = make(map[storagebase.CmdIDKey][2]bool)
+	seen.sids = make(map[kvserverbase.CmdIDKey][2]bool)
 
-	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args kvserverbase.FilterArgs) *roachpb.Error {
 		et, ok := args.Req.(*roachpb.EndTxnRequest)
 		if !ok || et.InternalCommitTrigger == nil {
 			return nil
@@ -2488,7 +2488,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 		storeCfg.TestingKnobs.DisableSplitQueue = true
 		storeCfg.TestingKnobs.DisableMergeQueue = true
 		storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
-			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 				if _, ok := filterArgs.Req.(*roachpb.PushTxnRequest); ok {
 					if atomic.AddInt32(&pushCount, 1) == 1 {
 						close(firstPush)
@@ -2838,7 +2838,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 				DisableSplitQueue:     true,
 				DisableMergeQueue:     true,
 				TestingResponseFilter: respFilter,
-				IntentResolverKnobs: storagebase.IntentResolverTestingKnobs{
+				IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
 					ForceSyncIntentResolution: true,
 				},
 			},
@@ -2922,7 +2922,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
 	cfg.TestingKnobs.TestingProposalFilter =
-		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 			for _, union := range args.Req.Requests {
 				if union.GetInner().Method() == roachpb.PushTxn {
 					<-blockPushTxn
@@ -3201,7 +3201,7 @@ func TestSplitBlocksReadsToRHS(t *testing.T) {
 
 	keyLHS, keySplit, keyRHS := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 	splitBlocked := make(chan struct{})
-	propFilter := func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+	propFilter := func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 		if req, ok := args.Req.GetArg(roachpb.EndTxn); ok {
 			et := req.(*roachpb.EndTxnRequest)
 			if tr := et.InternalCommitTrigger.GetSplitTrigger(); tr != nil {

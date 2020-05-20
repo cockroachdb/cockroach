@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -65,7 +65,7 @@ type ProposalData struct {
 	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
 	// the-world migration. However, various test facilities depend on the
 	// command ID for e.g. replay protection.
-	idKey storagebase.CmdIDKey
+	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
 	// last (re-)proposed.
@@ -716,7 +716,7 @@ type proposalResult struct {
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
@@ -845,7 +845,7 @@ func (r *Replica) evaluateProposal(
 // `serializedRequest` struct.
 func (r *Replica) requestToProposal(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {

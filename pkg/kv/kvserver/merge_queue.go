@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -125,7 +125,7 @@ func newMergeQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *mergeQueue {
 
 func (mq *mergeQueue) enabled() bool {
 	st := mq.store.ClusterSettings()
-	return storagebase.MergeQueueEnabled.Get(&st.SV)
+	return kvserverbase.MergeQueueEnabled.Get(&st.SV)
 }
 
 func (mq *mergeQueue) shouldQueue(

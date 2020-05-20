@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -480,7 +480,7 @@ func resolveLocalLocks(
 			if len(span.EndKey) == 0 {
 				// For single-key lock updates, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
-				if !storagebase.ContainsKey(desc, span.Key) {
+				if !kvserverbase.ContainsKey(desc, span.Key) {
 					externalLocks = append(externalLocks, span)
 					return nil
 				}
@@ -498,7 +498,7 @@ func resolveLocalLocks(
 			// For update ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an update range for range-local data is correctly considered local.
-			inSpan, outSpans := storagebase.IntersectSpan(span, desc)
+			inSpan, outSpans := kvserverbase.IntersectSpan(span, desc)
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan

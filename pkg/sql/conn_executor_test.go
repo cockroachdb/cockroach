@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -356,7 +356,7 @@ func TestErrorOnRollback(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: func(fArgs storagebase.ProposalFilterArgs) *roachpb.Error {
+				TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *roachpb.Error {
 					if !fArgs.Req.IsSingleRequest() {
 						return nil
 					}
@@ -813,33 +813,33 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 }
 
 // dynamicRequestFilter exposes a filter method which is a
-// storagebase.ReplicaRequestFilter but can be set dynamically.
+// kvserverbase.ReplicaRequestFilter but can be set dynamically.
 type dynamicRequestFilter struct {
 	v atomic.Value
 }
 
 func newDynamicRequestFilter() *dynamicRequestFilter {
 	f := &dynamicRequestFilter{}
-	f.v.Store(storagebase.ReplicaRequestFilter(noopRequestFilter))
+	f.v.Store(kvserverbase.ReplicaRequestFilter(noopRequestFilter))
 	return f
 }
 
-func (f *dynamicRequestFilter) setFilter(filter storagebase.ReplicaRequestFilter) {
+func (f *dynamicRequestFilter) setFilter(filter kvserverbase.ReplicaRequestFilter) {
 	if filter == nil {
-		f.v.Store(storagebase.ReplicaRequestFilter(noopRequestFilter))
+		f.v.Store(kvserverbase.ReplicaRequestFilter(noopRequestFilter))
 	} else {
 		f.v.Store(filter)
 	}
 }
 
-// noopRequestFilter is a storagebase.ReplicaRequestFilter.
+// noopRequestFilter is a kvserverbase.ReplicaRequestFilter.
 func (f *dynamicRequestFilter) filter(
 	ctx context.Context, request roachpb.BatchRequest,
 ) *roachpb.Error {
-	return f.v.Load().(storagebase.ReplicaRequestFilter)(ctx, request)
+	return f.v.Load().(kvserverbase.ReplicaRequestFilter)(ctx, request)
 }
 
-// noopRequestFilter is a storagebase.ReplicaRequestFilter that does nothing.
+// noopRequestFilter is a kvserverbase.ReplicaRequestFilter that does nothing.
 func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 	return nil
 }

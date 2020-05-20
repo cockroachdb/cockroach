@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -155,7 +155,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	defer rw.Close()
 
 	br, result, pErr :=
-		evaluateBatch(ctx, storagebase.CmdIDKey(""), rw, rec, nil, &ba, true /* readOnly */)
+		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, true /* readOnly */)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -198,7 +198,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	defer rw.Close()
 
 	br, result, pErr := evaluateBatch(
-		ctx, storagebase.CmdIDKey(""), rw, rec, nil, &ba, true, /* readOnly */
+		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, true, /* readOnly */
 	)
 	if pErr != nil {
 		return nil, pErr.GoError()

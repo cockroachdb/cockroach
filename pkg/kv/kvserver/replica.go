@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -340,7 +340,7 @@ type Replica struct {
 		//
 		// TODO(ajwerner): move the proposal map and ProposalData entirely under
 		// the raftMu.
-		proposals         map[storagebase.CmdIDKey]*ProposalData
+		proposals         map[kvserverbase.CmdIDKey]*ProposalData
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. This value may never be 0.
 		replicaID roachpb.ReplicaID
@@ -709,7 +709,7 @@ func (r *Replica) StoreID() roachpb.StoreID {
 }
 
 // EvalKnobs returns the EvalContext's Knobs.
-func (r *Replica) EvalKnobs() storagebase.BatchEvalTestingKnobs {
+func (r *Replica) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
 	return r.store.cfg.TestingKnobs.EvalKnobs
 }
 
@@ -902,13 +902,13 @@ func (r *Replica) GetSplitQPS() float64 {
 //
 // TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
-	return storagebase.ContainsKey(r.Desc(), key)
+	return kvserverbase.ContainsKey(r.Desc(), key)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
-	return storagebase.ContainsKeyRange(r.Desc(), start, end)
+	return kvserverbase.ContainsKeyRange(r.Desc(), start, end)
 }
 
 // GetLastReplicaGCTimestamp reads the timestamp at which the replica was

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,7 +36,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	testCtx.Start(t, stopper)
 
 	mq := newMergeQueue(testCtx.store, testCtx.store.DB(), testCtx.gossip)
-	storagebase.MergeQueueEnabled.Override(&testCtx.store.ClusterSettings().SV, true)
+	kvserverbase.MergeQueueEnabled.Override(&testCtx.store.ClusterSettings().SV, true)
 
 	tableKey := func(i uint32) []byte {
 		return keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + i)

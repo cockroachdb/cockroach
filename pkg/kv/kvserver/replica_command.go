@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -326,13 +326,13 @@ func (r *Replica) adminSplitWithDescriptor(
 			// If the key that routed this request to this range is now out of this
 			// range's bounds, return an error for the client to try again on the
 			// correct range.
-			if !storagebase.ContainsKey(desc, args.Key) {
+			if !kvserverbase.ContainsKey(desc, args.Key) {
 				return reply, roachpb.NewRangeKeyMismatchError(args.Key, args.Key, desc)
 			}
 			foundSplitKey = args.SplitKey
 		}
 
-		if !storagebase.ContainsKey(desc, foundSplitKey) {
+		if !kvserverbase.ContainsKey(desc, foundSplitKey) {
 			return reply, errors.Errorf("requested split key %s out of bounds of %s", args.SplitKey, r)
 		}
 
