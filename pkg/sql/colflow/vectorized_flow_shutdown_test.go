@@ -179,7 +179,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
 					allocators, hashRouterInput, typs, []uint32{0}, 64<<20, /* 64 MiB */
-					queueCfg, &colexec.TestingSemaphore{}, diskAccounts,
+					queueCfg, &colexec.TestingSemaphore{}, diskAccounts, nil, /* toClose */
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()

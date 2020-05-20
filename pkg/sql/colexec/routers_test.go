@@ -590,7 +590,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		}
 	}
 
-	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, nil /* ch */, outputs)
+	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, nil /* ch */, outputs, nil /* toClose */)
 	for r.processNextBatch(ctx) {
 	}
 
@@ -628,7 +628,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	in := NewRepeatableBatchSource(testAllocator, batch)
 
 	unbufferedCh := make(chan struct{})
-	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, unbufferedCh, outputs)
+	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, unbufferedCh, outputs, nil /* toClose */)
 
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -735,7 +735,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 			r, routerOutputs := NewHashRouter(
 				[]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data),
 				typs, []uint32{0}, mtc.bytes, queueCfg, NewTestingSemaphore(2),
-				[]*mon.BoundAccount{&diskAcc},
+				[]*mon.BoundAccount{&diskAcc}, nil, /* toClose */
 			)
 
 			if len(routerOutputs) != 1 {
@@ -851,7 +851,7 @@ func TestHashRouterRandom(t *testing.T) {
 				}
 
 				r := newHashRouterWithOutputs(
-					inputs[0], typs, hashCols, unblockEventsChan, outputs,
+					inputs[0], typs, hashCols, unblockEventsChan, outputs, nil, /* toClose */
 				)
 
 				var (
@@ -952,7 +952,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctx)
 				}
-				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &TestingSemaphore{}, diskAccounts)
+				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &TestingSemaphore{}, diskAccounts, nil /* toClose */)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.
