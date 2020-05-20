@@ -65,14 +65,14 @@ type Config struct {
 	// change the table at ts1.Next() are emitted as an event.
 	InitialHighWater hlc.Timestamp
 
-	// LeaseManager is used to ensure that when an event is emitted that at a higher
+	// Manager is used to ensure that when an event is emitted that at a higher
 	// level it is ensured that the right table descriptor will be used for the
 	// event if this lease manager is used.
 	//
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
 	// lease manager?
-	LeaseManager *lease.LeaseManager
+	LeaseManager *lease.Manager
 }
 
 // SchemaFeed tracks changes to a set of tables and exports them as a queue of
@@ -91,7 +91,7 @@ type SchemaFeed struct {
 	clock    *hlc.Clock
 	settings *cluster.Settings
 	targets  jobspb.ChangefeedTargets
-	leaseMgr *lease.LeaseManager
+	leaseMgr *lease.Manager
 	mu       struct {
 		syncutil.Mutex
 

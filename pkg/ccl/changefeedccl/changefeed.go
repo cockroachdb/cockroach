@@ -55,7 +55,7 @@ type emitEntry struct {
 // The returned closure is not threadsafe.
 func kvsToRows(
 	codec keys.SQLCodec,
-	leaseMgr *lease.LeaseManager,
+	leaseMgr *lease.Manager,
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (kvfeed.Event, error),
 ) func(context.Context) ([]emitEntry, error) {

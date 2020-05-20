@@ -71,7 +71,7 @@ type uncommittedTable struct {
 // as errors, or retries that result in transaction timestamp changes.
 type TableCollection struct {
 	// leaseMgr manages acquiring and releasing per-table leases.
-	leaseMgr *lease.LeaseManager
+	leaseMgr *lease.Manager
 	// A collection of table descriptor valid for the timestamp.
 	// They are released once the transaction using them is complete.
 	// If the transaction gets pushed and the timestamp changes,

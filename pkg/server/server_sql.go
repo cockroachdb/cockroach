@@ -67,7 +67,7 @@ type sqlServer struct {
 	distSQLServer    *distsql.ServerImpl
 	execCfg          *sql.ExecutorConfig
 	internalExecutor *sql.InternalExecutor
-	leaseMgr         *lease.LeaseManager
+	leaseMgr         *lease.Manager
 	blobService      *blobs.Service
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
@@ -217,9 +217,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	cfg.registry.AddMetricStruct(distSQLMetrics)
 
 	// Set up Lease Manager
-	var lmKnobs lease.LeaseManagerTestingKnobs
+	var lmKnobs lease.ManagerTestingKnobs
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
-		lmKnobs = *leaseManagerTestingKnobs.(*lease.LeaseManagerTestingKnobs)
+		lmKnobs = *leaseManagerTestingKnobs.(*lease.ManagerTestingKnobs)
 	}
 	leaseMgr := lease.NewLeaseManager(
 		cfg.AmbientCtx,
