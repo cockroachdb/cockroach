@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -203,13 +204,16 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// that the node doesn't have a lease on it anymore (committing the txn
 	// should have released the lease on the version of the descriptor with the
 	// old name), even though the name mapping still exists.
-	lease := s.LeaseManager().(*LeaseManager).tableNames.get(
-		tableDesc.ID,
-		tableDesc.GetParentSchemaID(),
-		"t",
-		s.Clock().Now(),
-	)
-	if lease != nil {
+	var foundLease bool
+	s.LeaseManager().(*LeaseManager).VisitLeases(func(
+		desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp,
+	) (wantMore bool) {
+		if desc.ID == tableDesc.ID && desc.Name == "t" {
+			foundLease = true
+		}
+		return true
+	})
+	if foundLease {
 		t.Fatalf(`still have lease on "t"`)
 	}
 	if _, err := db.Exec("SELECT * FROM test.t"); !testutils.IsError(

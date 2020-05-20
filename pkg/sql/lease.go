@@ -2312,6 +2312,44 @@ func (m *LeaseManager) Codec() keys.SQLCodec {
 	return m.codec
 }
 
+// VisitLeases introspects the state of leases managed by the LeaseManager.
+//
+// TODO(ajwerner): consider refactoring the function to take a struct, maybe
+// called LeaseInfo.
+func (m *LeaseManager) VisitLeases(
+	f func(desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp) (wantMore bool),
+) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, ts := range m.mu.tables {
+		tableVisitor := func() (wantMore bool) {
+			ts.mu.Lock()
+			defer ts.mu.Unlock()
+
+			dropped := ts.mu.dropped
+
+			for _, state := range ts.mu.active.data {
+				state.mu.Lock()
+				lease := state.mu.lease
+				refCount := state.mu.refcount
+				state.mu.Unlock()
+
+				if lease == nil {
+					continue
+				}
+
+				if !f(state.TableDescriptor, dropped, refCount, lease.expiration) {
+					return false
+				}
+			}
+			return true
+		}
+		if !tableVisitor() {
+			return
+		}
+	}
+}
+
 // TestingAcquireAndAssertMinVersion acquires a read lease for the specified
 // table ID. The lease is grabbed on the latest version if >= specified version.
 // It returns a table descriptor and an expiration time valid for the timestamp.
