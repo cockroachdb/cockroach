@@ -11,6 +11,7 @@
 import getHighlightedText from "src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router-dom";
+import classNames from "classnames/bind";
 
 import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
@@ -23,7 +24,9 @@ import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
+import styles from "./statementsTable.module.styl";
 
+const cx = classNames.bind(styles);
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
 export interface AggregateStatistics {
@@ -151,10 +154,41 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
 
 function makeCommonColumns(statements: AggregateStatistics[])
     : ColumnDescriptor<AggregateStatistics>[] {
-  const countBar = countBarChart(statements);
-  const retryBar = retryBarChart(statements);
-  const rowsBar = rowsBarChart(statements);
-  const latencyBar = latencyBarChart(statements);
+  const countBar = countBarChart(
+    statements,
+    {
+      classes: {
+        root: cx("statements-table__col-count--bar-chart"),
+        label: cx("statements-table__col-count--bar-chart__label"),
+      },
+    },
+  );
+  const retryBar = retryBarChart(
+    statements,
+    {
+      classes: {
+        root: cx("statements-table__col-retries--bar-chart"),
+        label: cx("statements-table__col-retries--bar-chart__label"),
+      },
+    },
+  );
+  const rowsBar = rowsBarChart(
+    statements,
+    {
+      classes: {
+        root: cx("statements-table__col-rows--bar-chart"),
+        label: cx("statements-table__col-rows--bar-chart__label"),
+      },
+    },
+  );
+  const latencyBar = latencyBarChart(
+    statements,
+    {
+      classes: {
+        root: cx("statements-table__col-latency--bar-chart"),
+      },
+    },
+  );
 
   return [
     {
