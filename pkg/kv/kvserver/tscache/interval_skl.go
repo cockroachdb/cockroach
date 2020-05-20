@@ -310,7 +310,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 			err = fp.addNode(&it, to, val, 0, true /* mustInit */)
 		}
 
-		if errors.Is(err, arenaskl.ErrArenaFull) {
+		if err != nil && errors.Is(err, arenaskl.ErrArenaFull) {
 			return fp
 		}
 	}
@@ -328,7 +328,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 		err = fp.addNode(&it, from, val, hasGap, false /* mustInit */)
 	}
 
-	if errors.Is(err, arenaskl.ErrArenaFull) {
+	if err != nil && errors.Is(err, arenaskl.ErrArenaFull) {
 		return fp
 	}
 
@@ -611,16 +611,16 @@ func (p *sklPage) addNode(
 		}
 
 		switch {
+		case err == nil:
+			// Add was successful, so finish initialization by scanning for gap
+			// value and using it to ratchet the new nodes' values.
+			return p.ensureInitialized(it, key)
 		case errors.Is(err, arenaskl.ErrArenaFull):
 			atomic.StoreInt32(&p.isFull, 1)
 			return err
 		case errors.Is(err, arenaskl.ErrRecordExists):
 			// Another thread raced and added the node, so just ratchet its
 			// values instead (down below).
-		case err == nil:
-			// Add was successful, so finish initialization by scanning for gap
-			// value and using it to ratchet the new nodes' values.
-			return p.ensureInitialized(it, key)
 		default:
 			panic(fmt.Sprintf("unexpected error: %v", err))
 		}
@@ -1031,7 +1031,7 @@ func (p *sklPage) scanTo(
 
 		// Decode the current node's value set.
 		keyVal, gapVal := decodeValueSet(it.Value(), it.Meta())
-		if errors.Is(ratchetErr, arenaskl.ErrArenaFull) {
+		if ratchetErr != nil && errors.Is(ratchetErr, arenaskl.ErrArenaFull) {
 			// If we failed to ratchet an uninitialized node above, the desired
 			// ratcheting won't be reflected in the decoded values. Perform the
 			// ratcheting manually.
