@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -908,8 +909,8 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1083,7 +1084,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 	// Allow async schema change waiting for GC to complete (when dropping an
 	// index) and clear the index keys.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
