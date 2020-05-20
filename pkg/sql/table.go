@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -280,7 +281,7 @@ func (tc *TableCollection) resolveSchemaID(
 	}
 
 	// Next, try lookup the result from KV, storing and returning the value.
-	exists, schemaID, err := ResolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
+	exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
 	if err != nil || !exists {
 		return exists, schemaID, err
 	}
@@ -762,7 +763,7 @@ func (tc *TableCollection) getAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]sqlbase.DescriptorProto, error) {
 	if tc.allDescriptors == nil {
-		descs, err := GetAllDescriptors(ctx, txn, tc.codec())
+		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
 		}
@@ -779,7 +780,7 @@ func (tc *TableCollection) getAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]*sqlbase.DatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
-		dbDescIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
+		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
 		}
@@ -1164,7 +1165,7 @@ func (p *planner) writeTableDescToBatch(
 		return err
 	}
 
-	return WriteDescToBatch(
+	return catalogkv.WriteDescToBatch(
 		ctx,
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		p.ExecCfg().Settings,

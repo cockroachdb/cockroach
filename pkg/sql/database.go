@@ -12,13 +12,13 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,57 +75,6 @@ func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 		Name:       string(p.Name),
 		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
 	}
-}
-
-// GetDatabaseID resolves a database name into a database ID.
-// Returns InvalidID on failure.
-func GetDatabaseID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string, required bool,
-) (sqlbase.ID, error) {
-	if name == sqlbase.SystemDB.Name {
-		return sqlbase.SystemDB.ID, nil
-	}
-	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
-	if err != nil {
-		return sqlbase.InvalidID, err
-	}
-	if !found && required {
-		return dbID, sqlbase.NewUndefinedDatabaseError(name)
-	}
-	return dbID, nil
-}
-
-// GetDatabaseDescByID looks up the database descriptor given its ID,
-// returning nil if the descriptor is not found. If you want the "not
-// found" condition to return an error, use mustGetDatabaseDescByID() instead.
-func GetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
-) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := GetDescriptorByID(ctx, txn, codec, id)
-	if err != nil {
-		return nil, err
-	}
-	db, ok := desc.(*sqlbase.DatabaseDescriptor)
-	if !ok {
-		return nil, pgerror.Newf(pgcode.WrongObjectType,
-			"%q is not a database", desc.String())
-	}
-	return db, nil
-}
-
-// MustGetDatabaseDescByID looks up the database descriptor given its ID,
-// returning an error if the descriptor is not found.
-func MustGetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
-) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := GetDatabaseDescByID(ctx, txn, codec, id)
-	if err != nil {
-		return nil, err
-	}
-	if desc == nil {
-		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
-	}
-	return desc, nil
 }
 
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
@@ -221,7 +170,7 @@ func (dc *databaseCache) getDatabaseDescByID(
 		if err != nil {
 			log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
 		}
-		desc, err = MustGetDatabaseDescByID(ctx, txn, dc.codec, id)
+		desc, err = catalogkv.MustGetDatabaseDescByID(ctx, txn, dc.codec, id)
 	}
 	return desc, err
 }
@@ -250,7 +199,7 @@ func (dc *databaseCache) getDatabaseID(
 				return err
 			}
 			var err error
-			dbID, err = GetDatabaseID(ctx, txn, dc.codec, name, required)
+			dbID, err = catalogkv.GetDatabaseID(ctx, txn, dc.codec, name, required)
 			return err
 		}); err != nil {
 			return sqlbase.InvalidID, err

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -75,14 +76,14 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return nil, nil
 	}
 
-	return GetDatabaseDescByID(ctx, txn, codec, descID)
+	return catalogkv.GetDatabaseDescByID(ctx, txn, codec, descID)
 }
 
 // IsValidSchema implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) IsValidSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
-	return ResolveSchemaID(ctx, txn, codec, dbID, scName)
+	return catalogkv.ResolveSchemaID(ctx, txn, codec, dbID, scName)
 }
 
 // GetObjectNames implements the SchemaAccessor interface.
@@ -180,7 +181,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	flags tree.ObjectLookupFlags,
 ) (catalog.ObjectDescriptor, error) {
 	// Look up the database ID.
-	dbID, err := GetDatabaseID(ctx, txn, codec, db, flags.Required)
+	dbID, err := catalogkv.GetDatabaseID(ctx, txn, codec, db, flags.Required)
 	if err != nil || dbID == sqlbase.InvalidID {
 		// dbID can still be invalid if required is false and the database is not found.
 		return nil, err
@@ -220,7 +221,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	// Look up the object using the discovered database descriptor.
-	rawDesc, err := GetDescriptorByID(ctx, txn, codec, descID)
+	rawDesc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, descID)
 	if err != nil {
 		return nil, err
 	}
