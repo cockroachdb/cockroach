@@ -226,7 +226,7 @@ func descriptorsMatchingTargets(
 			tableDesc := desc.Table(hlc.Timestamp{})
 
 			// Verify that the table is in the correct state.
-			if err := sql.FilterTableState(tableDesc); err != nil {
+			if err := sqlbase.FilterTableState(tableDesc); err != nil {
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
 			}
@@ -277,7 +277,7 @@ func descriptorsMatchingTargets(
 		for _, tblID := range resolver.objsByName[dbID] {
 			desc := resolver.descByID[tblID]
 			table := desc.Table(hlc.Timestamp{})
-			if err := sql.FilterTableState(table); err != nil {
+			if err := sqlbase.FilterTableState(table); err != nil {
 				// Don't include this table in the expansion since it's not in a valid
 				// state. Silently fail since this table was not directly requested,
 				// but was just part of an expansion.

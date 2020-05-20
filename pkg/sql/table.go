@@ -48,37 +48,6 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 	return p.extendedEvalCtx.VirtualSchemas
 }
 
-var errTableAdding = errors.New("table is being added")
-
-type inactiveTableError struct {
-	cause error
-}
-
-func (i *inactiveTableError) Error() string { return i.cause.Error() }
-
-func (i *inactiveTableError) Unwrap() error { return i.cause }
-
-// FilterTableState inspects the state of a given table and returns an error if
-// the state is anything but PUBLIC. The error describes the state of the table.
-func FilterTableState(tableDesc *sqlbase.TableDescriptor) error {
-	switch tableDesc.State {
-	case sqlbase.TableDescriptor_DROP:
-		return &inactiveTableError{errors.New("table is being dropped")}
-	case sqlbase.TableDescriptor_OFFLINE:
-		err := errors.Errorf("table %q is offline", tableDesc.Name)
-		if tableDesc.OfflineReason != "" {
-			err = errors.Errorf("table %q is offline: %s", tableDesc.Name, tableDesc.OfflineReason)
-		}
-		return &inactiveTableError{err}
-	case sqlbase.TableDescriptor_ADD:
-		return errTableAdding
-	case sqlbase.TableDescriptor_PUBLIC:
-		return nil
-	default:
-		return errors.Errorf("table in unknown state: %s", tableDesc.State.String())
-	}
-}
-
 // An uncommitted database is a database that has been created/dropped
 // within the current transaction using the TableCollection. A rename
 // is a drop of the old name and creation of the new name.
@@ -369,9 +338,8 @@ func (tc *TableCollection) getTableVersion(
 	} else if immut := table.ImmutableTableDescriptor; immut != nil {
 		// If not forcing to resolve using KV, tables being added aren't visible.
 		if immut.Adding() && !avoidCache {
-			err := errTableAdding
-			if !flags.Required {
-				err = nil
+			if flags.Required {
+				err = sqlbase.FilterTableState(immut.TableDesc())
 			}
 			return nil, err
 		}
@@ -401,7 +369,7 @@ func (tc *TableCollection) getTableVersion(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if errors.HasType(err, (*inactiveTableError)(nil)) ||
+		if sqlbase.HasInactiveTableError(err) ||
 			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return readTableFromStore()
 		}
@@ -436,7 +404,7 @@ func (tc *TableCollection) getTableVersionByID(
 		if err != nil {
 			return nil, err
 		}
-		if err := FilterTableState(table); err != nil {
+		if err := sqlbase.FilterTableState(table); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*table), nil
@@ -717,7 +685,7 @@ func (tc *TableCollection) getUncommittedTable(
 			tn.Table(),
 		) {
 			// Right state?
-			if err = FilterTableState(mutTbl.TableDesc()); err != nil && !errors.Is(err, errTableAdding) {
+			if err = sqlbase.FilterTableState(mutTbl.TableDesc()); err != nil && !sqlbase.HasAddingTableError(err) {
 				if !required {
 					// If it's not required here, we simply say we don't have it.
 					err = nil
