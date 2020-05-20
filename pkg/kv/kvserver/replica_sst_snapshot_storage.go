@@ -159,7 +159,7 @@ func (f *SSTSnapshotStorageFile) openFile() error {
 			return err
 		}
 	}
-	file, err := f.scratch.storage.engine.CreateFile(f.filename)
+	file, err := f.scratch.storage.engine.Create(f.filename)
 	if err != nil {
 		return err
 	}

@@ -979,15 +979,15 @@ func (p *Pebble) WriteFile(filename string, data []byte) error {
 	return err
 }
 
-// DeleteFile implements the FS interface.
-func (p *Pebble) DeleteFile(filename string) error {
+// Remove implements the FS interface.
+func (p *Pebble) Remove(filename string) error {
 	return p.fs.Remove(filename)
 }
 
-// DeleteDirAndFiles implements the Engine interface.
-func (p *Pebble) DeleteDirAndFiles(dir string) error {
+// RemoveDirAndFiles implements the Engine interface.
+func (p *Pebble) RemoveDirAndFiles(dir string) error {
 	// NB RemoveAll does not return an error if dir does not exist, but we want
-	// DeleteDirAndFiles to return an error in that case to match the RocksDB
+	// RemoveDirAndFiles to return an error in that case to match the RocksDB
 	// behavior.
 	_, err := p.fs.Stat(dir)
 	if err != nil {
@@ -996,15 +996,15 @@ func (p *Pebble) DeleteDirAndFiles(dir string) error {
 	return p.fs.RemoveAll(dir)
 }
 
-// LinkFile implements the FS interface.
-func (p *Pebble) LinkFile(oldname, newname string) error {
+// Link implements the FS interface.
+func (p *Pebble) Link(oldname, newname string) error {
 	return p.fs.Link(oldname, newname)
 }
 
 var _ fs.FS = &Pebble{}
 
-// CreateFile implements the FS interface.
-func (p *Pebble) CreateFile(name string) (fs.File, error) {
+// Create implements the FS interface.
+func (p *Pebble) Create(name string) (fs.File, error) {
 	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
 	// directory does not exist. Various tests in the storage package depend on
 	// this because they are accidentally creating the required directory on the
@@ -1016,8 +1016,8 @@ func (p *Pebble) CreateFile(name string) (fs.File, error) {
 	return p.fs.Create(name)
 }
 
-// CreateFileWithSync implements the FS interface.
-func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (fs.File, error) {
+// CreateWithSync implements the FS interface.
+func (p *Pebble) CreateWithSync(name string, bytesPerSync int) (fs.File, error) {
 	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
 	// directory does not exist. Various tests in the storage package depend on
 	// this because they are accidentally creating the required directory on the
@@ -1033,8 +1033,8 @@ func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (fs.File, err
 	return vfs.NewSyncingFile(f, vfs.SyncingFileOptions{BytesPerSync: bytesPerSync}), nil
 }
 
-// OpenFile implements the FS interface.
-func (p *Pebble) OpenFile(name string) (fs.File, error) {
+// Open implements the FS interface.
+func (p *Pebble) Open(name string) (fs.File, error) {
 	return p.fs.Open(name)
 }
 
@@ -1043,23 +1043,23 @@ func (p *Pebble) OpenDir(name string) (fs.File, error) {
 	return p.fs.OpenDir(name)
 }
 
-// RenameFile implements the FS interface.
-func (p *Pebble) RenameFile(oldname, newname string) error {
+// Rename implements the FS interface.
+func (p *Pebble) Rename(oldname, newname string) error {
 	return p.fs.Rename(oldname, newname)
 }
 
-// CreateDir implements the FS interface.
-func (p *Pebble) CreateDir(name string) error {
+// MkdirAll implements the FS interface.
+func (p *Pebble) MkdirAll(name string) error {
 	return p.fs.MkdirAll(name, 0755)
 }
 
-// DeleteDir implements the FS interface.
-func (p *Pebble) DeleteDir(name string) error {
+// RemoveDir implements the FS interface.
+func (p *Pebble) RemoveDir(name string) error {
 	return p.fs.Remove(name)
 }
 
-// ListDir implements the FS interface.
-func (p *Pebble) ListDir(name string) ([]string, error) {
+// List implements the FS interface.
+func (p *Pebble) List(name string) ([]string, error) {
 	return p.fs.List(name)
 }
 

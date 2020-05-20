@@ -361,7 +361,7 @@ func (t *TeeEngine) IngestExternalFiles(ctx context.Context, paths []string) err
 			if err != nil {
 				return err
 			}
-			f, err := t.eng2.CreateFile(paths2[i])
+			f, err := t.eng2.Create(paths2[i])
 			if err != nil {
 				return err
 			}
@@ -404,16 +404,16 @@ func (t *TeeEngine) InMem() bool {
 	return t.eng1.InMem()
 }
 
-// CreateFile implements the FS interface.
-func (t *TeeEngine) CreateFile(filename string) (fs.File, error) {
+// Create implements the FS interface.
+func (t *TeeEngine) Create(filename string) (fs.File, error) {
 	_ = os.MkdirAll(filepath.Dir(filename), 0755)
-	file1, err := t.eng1.CreateFile(filename)
+	file1, err := t.eng1.Create(filename)
 	filename2, ok := t.remapPath(filename)
 	if !ok {
 		return file1, err
 	}
 	_ = os.MkdirAll(filepath.Dir(filename2), 0755)
-	file2, err2 := t.eng2.CreateFile(filename2)
+	file2, err2 := t.eng2.Create(filename2)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, err
 	}
@@ -424,16 +424,16 @@ func (t *TeeEngine) CreateFile(filename string) (fs.File, error) {
 	}, nil
 }
 
-// CreateFileWithSync implements the FS interface.
-func (t *TeeEngine) CreateFileWithSync(filename string, bytesPerSync int) (fs.File, error) {
+// CreateWithSync implements the FS interface.
+func (t *TeeEngine) CreateWithSync(filename string, bytesPerSync int) (fs.File, error) {
 	_ = os.MkdirAll(filepath.Dir(filename), 0755)
-	file1, err := t.eng1.CreateFileWithSync(filename, bytesPerSync)
+	file1, err := t.eng1.CreateWithSync(filename, bytesPerSync)
 	filename2, ok := t.remapPath(filename)
 	if !ok {
 		return file1, err
 	}
 	_ = os.MkdirAll(filepath.Dir(filename2), 0755)
-	file2, err2 := t.eng2.CreateFileWithSync(filename2, bytesPerSync)
+	file2, err2 := t.eng2.CreateWithSync(filename2, bytesPerSync)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, err
 	}
@@ -444,14 +444,14 @@ func (t *TeeEngine) CreateFileWithSync(filename string, bytesPerSync int) (fs.Fi
 	}, nil
 }
 
-// OpenFile implements the FS interface.
-func (t *TeeEngine) OpenFile(filename string) (fs.File, error) {
-	file1, err := t.eng1.OpenFile(filename)
+// Open implements the FS interface.
+func (t *TeeEngine) Open(filename string) (fs.File, error) {
+	file1, err := t.eng1.Open(filename)
 	filename2, ok := t.remapPath(filename)
 	if !ok {
 		return file1, err
 	}
-	file2, err2 := t.eng2.OpenFile(filename2)
+	file2, err2 := t.eng2.Open(filename2)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, err
 	}
@@ -497,82 +497,82 @@ func (t *TeeEngine) WriteFile(filename string, data []byte) error {
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// DeleteFile implements the FS interface.
-func (t *TeeEngine) DeleteFile(filename string) error {
-	err := t.eng1.DeleteFile(filename)
+// Remove implements the FS interface.
+func (t *TeeEngine) Remove(filename string) error {
+	err := t.eng1.Remove(filename)
 	filename2, ok := t.remapPath(filename)
 	if !ok {
 		return err
 	}
-	err2 := t.eng2.DeleteFile(filename2)
+	err2 := t.eng2.Remove(filename2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// DeleteDirAndFiles implements the Engine interface.
-func (t *TeeEngine) DeleteDirAndFiles(dir string) error {
-	err := t.eng1.DeleteDirAndFiles(dir)
+// RemoveDirAndFiles implements the Engine interface.
+func (t *TeeEngine) RemoveDirAndFiles(dir string) error {
+	err := t.eng1.RemoveDirAndFiles(dir)
 	dir2, ok := t.remapPath(dir)
 	if !ok {
 		return err
 	}
-	err2 := t.eng2.DeleteDirAndFiles(dir2)
+	err2 := t.eng2.RemoveDirAndFiles(dir2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// LinkFile implements the FS interface.
-func (t *TeeEngine) LinkFile(oldname, newname string) error {
-	err := t.eng1.LinkFile(oldname, newname)
+// Link implements the FS interface.
+func (t *TeeEngine) Link(oldname, newname string) error {
+	err := t.eng1.Link(oldname, newname)
 	oldname2, ok := t.remapPath(oldname)
 	if !ok {
 		return err
 	}
 	newname2, _ := t.remapPath(newname)
-	err2 := t.eng2.LinkFile(oldname2, newname2)
+	err2 := t.eng2.Link(oldname2, newname2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// RenameFile implements the FS interface.
-func (t *TeeEngine) RenameFile(oldname, newname string) error {
-	err := t.eng1.RenameFile(oldname, newname)
+// Rename implements the FS interface.
+func (t *TeeEngine) Rename(oldname, newname string) error {
+	err := t.eng1.Rename(oldname, newname)
 	oldname2, ok := t.remapPath(oldname)
 	if !ok {
 		return err
 	}
 	newname2, _ := t.remapPath(newname)
-	err2 := t.eng2.RenameFile(oldname2, newname2)
+	err2 := t.eng2.Rename(oldname2, newname2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// CreateDir implements the FS interface.
-func (t *TeeEngine) CreateDir(name string) error {
-	err := t.eng1.CreateDir(name)
+// MkdirAll implements the FS interface.
+func (t *TeeEngine) MkdirAll(name string) error {
+	err := t.eng1.MkdirAll(name)
 	name2, ok := t.remapPath(name)
 	if !ok {
 		return err
 	}
-	err2 := t.eng2.CreateDir(name2)
+	err2 := t.eng2.MkdirAll(name2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// DeleteDir implements the FS interface.
-func (t *TeeEngine) DeleteDir(name string) error {
-	err := t.eng1.DeleteDir(name)
+// RemoveDir implements the FS interface.
+func (t *TeeEngine) RemoveDir(name string) error {
+	err := t.eng1.RemoveDir(name)
 	name2, ok := t.remapPath(name)
 	if !ok {
 		return err
 	}
-	err2 := t.eng2.DeleteDir(name2)
+	err2 := t.eng2.RemoveDir(name2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// ListDir implements the FS interface.
-func (t *TeeEngine) ListDir(name string) ([]string, error) {
-	list1, err := t.eng1.ListDir(name)
+// List implements the FS interface.
+func (t *TeeEngine) List(name string) ([]string, error) {
+	list1, err := t.eng1.List(name)
 	name2, ok := t.remapPath(name)
 	if !ok {
 		return list1, err
 	}
-	_, err2 := t.eng2.ListDir(name2)
+	_, err2 := t.eng2.List(name2)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, err
 	}

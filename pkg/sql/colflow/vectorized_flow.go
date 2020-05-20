@@ -206,7 +206,7 @@ func (f *vectorizedFlow) Setup(
 				return
 			}
 			log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
-			if err := f.Cfg.TempFS.CreateDir(f.tempStorage.path); err != nil {
+			if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {
 				colexecerror.InternalError(errors.Errorf("unable to create temporary storage directory: %v", err))
 			}
 			f.tempStorage.createdStateMu.created = true
@@ -279,11 +279,11 @@ func (f *vectorizedFlow) Release() {
 func (f *vectorizedFlow) tryRemoveAll(root string) error {
 	// Unfortunately there is no way to Stat using TempFS, so simply try all
 	// alternatives.
-	if f.Cfg.TempFS.DeleteFile(root) != nil {
+	if f.Cfg.TempFS.Remove(root) != nil {
 		// If there was an error, it might be a directory.
-		if f.Cfg.TempFS.DeleteDir(root) != nil {
+		if f.Cfg.TempFS.RemoveDir(root) != nil {
 			// DeleteDir failed, this is probably due to children.
-			children, err := f.Cfg.TempFS.ListDir(root)
+			children, err := f.Cfg.TempFS.List(root)
 			if err != nil {
 				// This would be a weird error, so return it.
 				return err
@@ -292,13 +292,13 @@ func (f *vectorizedFlow) tryRemoveAll(root string) error {
 				if child == "." || child == ".." {
 					continue
 				}
-				// ListDir returns relative paths, so join with parent dir.
+				// List returns relative paths, so join with parent dir.
 				if err := f.tryRemoveAll(filepath.Join(root, child)); err != nil {
 					return err
 				}
 			}
 			// Now that children are cleaned up, delete the directory.
-			if err := f.Cfg.TempFS.DeleteDir(root); err != nil {
+			if err := f.Cfg.TempFS.RemoveDir(root); err != nil {
 				return err
 			}
 		}
