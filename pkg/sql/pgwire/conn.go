@@ -524,6 +524,7 @@ func (c *conn) processCommandsAsync(
 		var retErr error
 		var connHandler sql.ConnectionHandler
 		var authOK bool
+		var authCleanup func()
 		defer func() {
 			// Release resources, if we still own them.
 			if reservedOwned {
@@ -562,12 +563,15 @@ func (c *conn) processCommandsAsync(
 			if !authOK {
 				ac.AuthFail(retErr)
 			}
+			if authCleanup != nil {
+				authCleanup()
+			}
 			// Inform the connection goroutine of success or failure.
 			retCh <- retErr
 		}()
 
 		// Authenticate the connection.
-		if retErr = c.handleAuthentication(
+		if authCleanup, retErr = c.handleAuthentication(
 			ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
 		); retErr != nil {
 			// Auth failed or some other error.

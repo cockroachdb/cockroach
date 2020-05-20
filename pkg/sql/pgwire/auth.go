@@ -69,12 +69,12 @@ type authOptions struct {
 // if different from the one given initially.
 func (c *conn) handleAuthentication(
 	ctx context.Context, ac AuthConn, authOpt authOptions, execCfg *sql.ExecutorConfig,
-) error {
+) (authCleanup func(), _ error) {
 	if authOpt.testingSkipAuth {
-		return nil
+		return nil, nil
 	}
 	if authOpt.testingAuthHook != nil {
-		return authOpt.testingAuthHook(ctx)
+		return nil, authOpt.testingAuthHook(ctx)
 	}
 
 	sendError := func(err error) error {
@@ -89,17 +89,17 @@ func (c *conn) handleAuthentication(
 	)
 	if err != nil {
 		ac.Logf(ctx, "user retrieval failed for user=%q: %v", c.sessionArgs.User, err)
-		return sendError(err)
+		return nil, sendError(err)
 	}
 
 	if !exists {
 		ac.Logf(ctx, "user does not exist: %q", c.sessionArgs.User)
-		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
+		return nil, sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
 	}
 
 	if !canLogin {
 		ac.Logf(ctx, "%q does not have login privilege", c.sessionArgs.User)
-		return sendError(errors.Errorf(
+		return nil, sendError(errors.Errorf(
 			fmt.Sprintf("%s does not have login privilege", c.sessionArgs.User)))
 	}
 
@@ -107,7 +107,7 @@ func (c *conn) handleAuthentication(
 	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
 	if err != nil {
 		ac.Logf(ctx, "auth method lookup failed: %v", err)
-		return sendError(err)
+		return nil, sendError(err)
 	}
 	ac.Logf(ctx, "connection matches HBA rule: %s", hbaEntry.Input)
 
@@ -117,18 +117,18 @@ func (c *conn) handleAuthentication(
 
 	if err != nil {
 		ac.Logf(ctx, "authentication pre-hook failed: %v", err)
-		return sendError(err)
+		return nil, sendError(err)
 	}
-	if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
+	if authCleanup, err = authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
 		ac.Logf(ctx, "authentication failed: %v", err)
-		return sendError(err)
+		return authCleanup, sendError(err)
 	}
 
 	ac.Logf(ctx, "authentication succeeded")
 
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
-	return c.msgBuilder.finishMsg(c.conn)
+	return authCleanup, c.msgBuilder.finishMsg(c.conn)
 }
 
 func (c *conn) findAuthenticationMethod(

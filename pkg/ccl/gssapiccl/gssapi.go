@@ -41,7 +41,7 @@ const (
 )
 
 // authGSS performs GSS authentication. See:
-// https:github.com/postgres/postgres/blob/0f9cdd7dca694d487ab663d463b308919f591c02/src/backend/libpq/auth.c#L1090
+// https://github.com/postgres/postgres/blob/0f9cdd7dca694d487ab663d463b308919f591c02/src/backend/libpq/auth.c#L1090
 func authGSS(
 	ctx context.Context,
 	c pgwire.AuthConn,
@@ -51,7 +51,7 @@ func authGSS(
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
-	return func(requestedUser string, clientConnection bool) error {
+	return func(requestedUser string, clientConnection bool) (func(), error) {
 		var (
 			majStat, minStat, lminS, gflags C.OM_uint32
 			gbuf                            C.gss_buffer_desc
@@ -65,13 +65,17 @@ func authGSS(
 		)
 
 		if err = c.SendAuthRequest(authTypeGSS, nil); err != nil {
-			return err
+			return nil, err
+		}
+
+		cleanup := func() {
+			C.gss_delete_sec_context(&lminS, &contextHandle, C.GSS_C_NO_BUFFER)
 		}
 
 		for {
 			token, err = c.GetPwdData()
 			if err != nil {
-				return err
+				return cleanup, err
 			}
 
 			gbuf.length = C.ulong(len(token))
@@ -96,12 +100,11 @@ func authGSS(
 				outputBytes := C.GoBytes(outputToken.value, C.int(outputToken.length))
 				C.gss_release_buffer(&lminS, &outputToken)
 				if err = c.SendAuthRequest(authTypeGSSContinue, outputBytes); err != nil {
-					return err
+					return cleanup, err
 				}
 			}
 			if majStat != C.GSS_S_COMPLETE && majStat != C.GSS_S_CONTINUE_NEEDED {
-				C.gss_delete_sec_context(&lminS, &contextHandle, C.GSS_C_NO_BUFFER)
-				return gssError("accepting GSS security context failed", majStat, minStat)
+				return cleanup, gssError("accepting GSS security context failed", majStat, minStat)
 			}
 			if majStat != C.GSS_S_CONTINUE_NEEDED {
 				break
@@ -110,7 +113,7 @@ func authGSS(
 
 		majStat = C.gss_display_name(&minStat, srcName, &gbuf, nil)
 		if majStat != C.GSS_S_COMPLETE {
-			return gssError("retrieving GSS user name failed", majStat, minStat)
+			return cleanup, gssError("retrieving GSS user name failed", majStat, minStat)
 		}
 		gssUser := C.GoStringN((*C.char)(gbuf.value), C.int(gbuf.length))
 		C.gss_release_buffer(&lminS, &gbuf)
@@ -128,25 +131,25 @@ func authGSS(
 					}
 				}
 				if !matched {
-					return errors.Errorf("GSSAPI realm (%s) didn't match any configured realm", realm)
+					return cleanup, errors.Errorf("GSSAPI realm (%s) didn't match any configured realm", realm)
 				}
 			}
 			if entry.GetOption("include_realm") != "1" {
 				gssUser = gssUser[:idx]
 			}
 		} else if len(realms) > 0 {
-			return errors.New("GSSAPI did not return realm but realm matching was requested")
+			return cleanup, errors.New("GSSAPI did not return realm but realm matching was requested")
 		}
 
 		if !strings.EqualFold(gssUser, requestedUser) {
-			return errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
+			return cleanup, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
 		}
 
 		// Do the license check last so that administrators are able to test whether
 		// their GSS configuration is correct. That is, the presence of this error
 		// message means they have a correctly functioning GSS/Kerberos setup,
 		// but now need to enable enterprise features.
-		return utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(), "GSS authentication")
+		return cleanup, utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(), "GSS authentication")
 	}, nil
 }
 
