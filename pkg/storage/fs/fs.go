@@ -25,46 +25,46 @@ type File interface {
 
 // FS provides a filesystem interface.
 type FS interface {
-	// CreateFile creates the named file for writing, truncating it if it already
+	// Create creates the named file for writing, truncating it if it already
 	// exists.
-	CreateFile(name string) (File, error)
+	Create(name string) (File, error)
 
-	// CreateFileWithSync is similar to CreateFile, but the file is periodically
+	// CreateWithSync is similar to Create, but the file is periodically
 	// synced whenever more than bytesPerSync bytes accumulate. This syncing
 	// does not provide any persistency guarantees, but can prevent latency
 	// spikes.
-	CreateFileWithSync(name string, bytesPerSync int) (File, error)
+	CreateWithSync(name string, bytesPerSync int) (File, error)
 
-	// LinkFile creates newname as a hard link to the oldname file.
-	LinkFile(oldname, newname string) error
+	// Link creates newname as a hard link to the oldname file.
+	Link(oldname, newname string) error
 
-	// OpenFile opens the named file for reading.
-	OpenFile(name string) (File, error)
+	// Open opens the named file for reading.
+	Open(name string) (File, error)
 
 	// OpenDir opens the named directory for syncing.
 	OpenDir(name string) (File, error)
 
-	// DeleteFile removes the named file. If the file with given name doesn't exist, return an error
-	// that returns true from os.IsNotExist().
-	DeleteFile(name string) error
+	// Remove removes the named file. If the file with given name doesn't
+	// exist, return an error that returns true from os.IsNotExist().
+	Remove(name string) error
 
-	// RenameFile renames a file. It overwrites the file at newname if one exists,
+	// Rename renames a file. It overwrites the file at newname if one exists,
 	// the same as os.Rename.
-	RenameFile(oldname, newname string) error
+	Rename(oldname, newname string) error
 
-	// CreateDir creates the named dir. Does nothing if the directory already
-	// exists.
-	CreateDir(name string) error
+	// MkdirAll creates the named dir and its parents. Does nothing if the
+	// directory already exists.
+	MkdirAll(name string) error
 
-	// DeleteDir removes the named dir.
-	DeleteDir(name string) error
+	// RemoveDir removes the named dir.
+	RemoveDir(name string) error
 
-	// DeleteDirAndFiles deletes the directory and any files it contains but
-	// not subdirectories. If dir does not exist, DeleteDirAndFiles returns nil
+	// RemoveDirAndFiles deletes the directory and any files it contains but
+	// not subdirectories. If dir does not exist, RemoveDirAndFiles returns nil
 	// (no error).
-	DeleteDirAndFiles(dir string) error
+	RemoveDirAndFiles(dir string) error
 
-	// ListDir returns a listing of the given directory. The names returned are
+	// List returns a listing of the given directory. The names returned are
 	// relative to the directory.
-	ListDir(name string) ([]string, error)
+	List(name string) ([]string, error)
 }

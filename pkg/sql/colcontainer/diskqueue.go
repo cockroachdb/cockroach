@@ -366,7 +366,7 @@ func newDiskQueue(
 	if d.cfg.CacheMode != DiskQueueCacheModeDefault {
 		d.writeBufferLimit = d.cfg.BufferSizeBytes / 2
 	}
-	if err := cfg.FS.CreateDir(filepath.Join(cfg.Path, d.dirName)); err != nil {
+	if err := cfg.FS.MkdirAll(filepath.Join(cfg.Path, d.dirName)); err != nil {
 		return nil, err
 	}
 	// rotateFile will create a new file to write to.
@@ -413,7 +413,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 	if err := d.CloseRead(); err != nil {
 		return err
 	}
-	if err := d.cfg.FS.DeleteDirAndFiles(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
+	if err := d.cfg.FS.RemoveDirAndFiles(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
 		return err
 	}
 	totalSize := int64(0)
@@ -439,7 +439,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 // to write to.
 func (d *diskQueue) rotateFile(ctx context.Context) error {
 	fName := filepath.Join(d.cfg.Path, d.dirName, strconv.Itoa(d.seqNo))
-	f, err := d.cfg.FS.CreateFileWithSync(fName, bytesPerSync)
+	f, err := d.cfg.FS.CreateWithSync(fName, bytesPerSync)
 	if err != nil {
 		return err
 	}
@@ -577,7 +577,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 			}
 			if !d.rewindable {
 				// Remove current file.
-				if err := d.cfg.FS.DeleteFile(d.files[d.readFileIdx].name); err != nil {
+				if err := d.cfg.FS.Remove(d.files[d.readFileIdx].name); err != nil {
 					return false, err
 				}
 				fileSize := int64(d.files[d.readFileIdx].totalSize)
@@ -596,7 +596,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 	}
 	if d.readFile == nil {
 		// File is not open.
-		f, err := d.cfg.FS.OpenFile(fileToRead.name)
+		f, err := d.cfg.FS.Open(fileToRead.name)
 		if err != nil {
 			return false, err
 		}
