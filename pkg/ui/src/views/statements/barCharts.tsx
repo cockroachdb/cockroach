@@ -24,6 +24,13 @@ type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.I
 
 const cx = classNames.bind(styles);
 
+interface BarChartOptions {
+  classes?: {
+    root?: string;
+    label?: string;
+  };
+}
+
 export const longToInt = (d: number | Long) => Long.fromValue(FixLong(d)).toInt();
 const clamp = (i: number) => i < 0 ? 0 : i;
 
@@ -89,7 +96,7 @@ const makeBarChart = (
     legendFormatter = formatter;
   }
 
-  return (rows: StatementStatistics[] = []) => {
+  return (rows: StatementStatistics[] = [], options: BarChartOptions = {}) => {
     const getTotal = (d: StatementStatistics) => _.sum(_.map(accessors, ({ value }) => value(d)));
     const getTotalWithStdDev = (d: StatementStatistics) => getTotal(d) + stdDevAccessor.value(d);
 
@@ -142,6 +149,7 @@ const makeBarChart = (
 
       const className = cx("bar-chart", `bar-chart-${type}`, {
         "bar-chart--singleton": rows.length === 0,
+        [options?.classes?.root]: !!options?.classes?.root,
       });
       if (stdDevAccessor) {
         const sd = stdDevAccessor.value(d);
@@ -149,7 +157,7 @@ const makeBarChart = (
         return (
           <div className={ className}>
             <ToolTipWrapper text={ titleText } short>
-              <div className={cx("bar-chart__label")}>{ formatter(getTotal(d)) }</div>
+              <div className={cx("bar-chart__label", options?.classes?.label)}>{ formatter(getTotal(d)) }</div>
               <div className={cx("bar-chart__multiplebars")}>
                 <div
                   key="bar-chart__parse"
@@ -164,7 +172,7 @@ const makeBarChart = (
       } else {
         return (
           <div className={className}>
-            <div className={cx("bar-chart__label")}>{ formatter(getTotal(d)) }</div>
+            <div className={cx("bar-chart__label", options?.classes?.label)}>{ formatter(getTotal(d)) }</div>
             <div
               key="bar-chart__parse"
               className={cx("bar-chart__parse", "bar-chart__bar")}
