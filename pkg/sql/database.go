@@ -146,7 +146,7 @@ func (dc *databaseCache) getDatabaseDesc(
 			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 				return err
 			}
-			a := UncachedPhysicalAccessor{}
+			a := catalogkv.UncachedPhysicalAccessor{}
 			desc, err = a.GetDatabaseDesc(ctx, txn, dc.codec, name,
 				tree.DatabaseLookupFlags{Required: required})
 			return err

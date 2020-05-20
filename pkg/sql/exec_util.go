@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1240,7 +1241,7 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
 	sc := &schemaInterface{
 		physical: &CachedPhysicalAccessor{
-			Accessor: UncachedPhysicalAccessor{},
+			Accessor: catalogkv.UncachedPhysicalAccessor{},
 			tc:       tables,
 		},
 	}

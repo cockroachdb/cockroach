@@ -238,7 +238,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		}
 	}
 
-	phyAccessor := UncachedPhysicalAccessor{}
+	phyAccessor := catalogkv.UncachedPhysicalAccessor{}
 	obj, err := phyAccessor.GetObjectDesc(
 		ctx,
 		txn,
@@ -312,7 +312,7 @@ func (tc *TableCollection) getTableVersion(
 	}
 
 	readTableFromStore := func() (*sqlbase.ImmutableTableDescriptor, error) {
-		phyAccessor := UncachedPhysicalAccessor{}
+		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
 		obj, err := phyAccessor.GetObjectDesc(
 			ctx,
 			txn,
