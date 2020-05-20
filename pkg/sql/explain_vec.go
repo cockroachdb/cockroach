@@ -36,7 +36,7 @@ type explainVecNode struct {
 	optColumnsSlot
 
 	options *tree.ExplainOptions
-	plan    planNode
+	plan    planMaybePhysical
 
 	stmtType tree.StatementType
 
@@ -65,7 +65,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
+	physPlan, err := makePhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
 		if len(n.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (VEC) on this query is " +
@@ -74,13 +74,13 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return err
 	}
 
-	distSQLPlanner.FinalizePlan(planCtx, &plan)
+	distSQLPlanner.FinalizePlan(planCtx, &physPlan)
 	nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
 	if err != nil {
 		return err
 	}
-	flows := plan.GenerateFlowSpecs(nodeID)
-	flowCtx := makeFlowCtx(planCtx, plan, params)
+	flows := physPlan.GenerateFlowSpecs(nodeID)
+	flowCtx := makeFlowCtx(planCtx, physPlan, params)
 	flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
 	// We want to get the vectorized plan which would be executed with the

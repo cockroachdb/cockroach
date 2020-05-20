@@ -25,7 +25,7 @@ type subquery struct {
 	execMode rowexec.SubqueryExecMode
 	expanded bool
 	started  bool
-	plan     planNode
+	plan     planMaybePhysical
 	result   tree.Datum
 }
 
