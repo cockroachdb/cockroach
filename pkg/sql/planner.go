@@ -403,7 +403,7 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
-func (p *planner) LeaseMgr() *lease.LeaseManager {
+func (p *planner) LeaseMgr() *lease.Manager {
 	return p.Tables().leaseMgr
 }
 

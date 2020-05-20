@@ -56,7 +56,7 @@ func TestQueryCounts(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.LeaseManagerTestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			// Disable SELECT called for delete orphaned leases to keep
 			// query stats stable.
 			DisableDeleteOrphanedLeases: true,

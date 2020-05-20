@@ -42,7 +42,7 @@ type Config struct {
 	Spans              []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
 	Sink               EventBufferWriter
-	LeaseMgr           *lease.LeaseManager
+	LeaseMgr           *lease.Manager
 	Metrics            *Metrics
 	MM                 *mon.BytesMonitor
 	WithDiff           bool

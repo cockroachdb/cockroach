@@ -234,7 +234,7 @@ func TestReportUsage(t *testing.T) {
 			},
 		},
 		Knobs: base.TestingKnobs{
-			SQLLeaseManager: &lease.LeaseManagerTestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
 				// Disable SELECT called for delete orphaned leases to keep
 				// query stats stable.
 				DisableDeleteOrphanedLeases: true,

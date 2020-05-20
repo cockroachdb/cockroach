@@ -74,7 +74,7 @@ type PlanHookState interface {
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
-	LeaseMgr() *lease.LeaseManager
+	LeaseMgr() *lease.Manager
 	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(

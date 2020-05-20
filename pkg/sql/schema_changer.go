@@ -76,7 +76,7 @@ type SchemaChanger struct {
 	droppedDatabaseID sqlbase.ID
 	sqlInstanceID     base.SQLInstanceID
 	db                *kv.DB
-	leaseMgr          *lease.LeaseManager
+	leaseMgr          *lease.Manager
 
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
@@ -100,7 +100,7 @@ func NewSchemaChangerForTesting(
 	mutationID sqlbase.MutationID,
 	sqlInstanceID base.SQLInstanceID,
 	db kv.DB,
-	leaseMgr *lease.LeaseManager,
+	leaseMgr *lease.Manager,
 	jobRegistry *jobs.Registry,
 	execCfg *ExecutorConfig,
 	settings *cluster.Settings,

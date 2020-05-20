@@ -99,7 +99,7 @@ func TestRenameTable(t *testing.T) {
 func TestTxnCanStillResolveOldName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var lmKnobs lease.LeaseManagerTestingKnobs
+	var lmKnobs lease.ManagerTestingKnobs
 	// renameUnblocked is used to block the rename schema change until the test
 	// doesn't need the old name->id mapping to exist anymore.
 	renameUnblocked := make(chan interface{})
@@ -179,7 +179,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		}
 	}()
 
-	// Block until the LeaseManager has processed the gossip update.
+	// Block until the Manager has processed the gossip update.
 	<-renamed
 
 	// Run another command in the transaction and make sure that we can still
@@ -207,7 +207,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// old name), even though the name mapping still exists.
 
 	var foundLease bool
-	s.LeaseManager().(*lease.LeaseManager).VisitLeases(func(
+	s.LeaseManager().(*lease.Manager).VisitLeases(func(
 		desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp,
 	) (wantMore bool) {
 		if desc.ID == tableDesc.ID && desc.Name == "t" {

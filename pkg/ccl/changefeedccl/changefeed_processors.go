@@ -205,7 +205,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ca.kvFeedMemMon = &kvFeedMemMon
 
 	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.LeaseManager)
+	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
 		spans, withDiff, buf, metrics)
@@ -240,7 +240,7 @@ func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Co
 
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
-	leaseMgr *lease.LeaseManager,
+	leaseMgr *lease.Manager,
 	mm *mon.BytesMonitor,
 	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
