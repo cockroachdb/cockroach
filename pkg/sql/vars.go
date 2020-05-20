@@ -384,6 +384,26 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_distsql_planning`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_distsql_planning`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			mode, ok := sessiondata.ExperimentalDistSQLPlanningModeFromString(s)
+			if !ok {
+				return newVarValueError(`experimental_distsql_planning`, s,
+					"off", "on", "always")
+			}
+			m.SetExperimentalDistSQLPlanning(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.ExperimentalDistSQLPlanningMode.String()
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondata.ExperimentalDistSQLPlanningMode(experimentalDistSQLPlanningClusterMode.Get(sv)).String()
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_enable_enums`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_enums`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
