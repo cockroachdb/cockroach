@@ -66,7 +66,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 		if dbID != sqlbase.InvalidID {
 			// Some database ID was found in the list of uncommitted DB changes.
 			// Use that to get the descriptor.
-			desc, err := a.tc.databaseCache.getDatabaseDescByID(ctx, txn, dbID)
+			desc, err := a.tc.databaseCache.GetDatabaseDescByID(ctx, txn, dbID)
 			if desc == nil && flags.Required {
 				return nil, sqlbase.NewUndefinedDatabaseError(name)
 			}
@@ -75,7 +75,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 		// The database was not known in the uncommitted list. Have the db
 		// cache look it up by name for us.
-		return a.tc.databaseCache.getDatabaseDesc(ctx, a.tc.leaseMgr.db.Txn, name, flags.Required)
+		return a.tc.databaseCache.GetDatabaseDesc(ctx, a.tc.leaseMgr.db.Txn, name, flags.Required)
 	}
 
 	// We avoided the cache. Go lower.

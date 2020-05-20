@@ -244,7 +244,7 @@ func newInternalPlanner(
 		},
 	}
 	// The table collection used by the internal planner does not rely on the
-	// databaseCache and there are no subscribers to the databaseCache, so we can
+	// DatabaseCache and there are no subscribers to the DatabaseCache, so we can
 	// leave it uninitialized.
 	tables := &TableCollection{
 		leaseMgr: execCfg.LeaseManager,

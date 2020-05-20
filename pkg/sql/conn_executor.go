@@ -280,7 +280,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
-		dbCache:       newDatabaseCacheHolder(newDatabaseCache(cfg.Codec, systemCfg)),
+		dbCache:       newDatabaseCacheHolder(NewDatabaseCache(cfg.Codec, systemCfg)),
 		pool:          pool,
 		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
