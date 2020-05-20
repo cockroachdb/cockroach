@@ -75,14 +75,14 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return nil, nil
 	}
 
-	return getDatabaseDescByID(ctx, txn, codec, descID)
+	return GetDatabaseDescByID(ctx, txn, codec, descID)
 }
 
 // IsValidSchema implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) IsValidSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
-	return resolveSchemaID(ctx, txn, codec, dbID, scName)
+	return ResolveSchemaID(ctx, txn, codec, dbID, scName)
 }
 
 // GetObjectNames implements the SchemaAccessor interface.
@@ -180,7 +180,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	flags tree.ObjectLookupFlags,
 ) (catalog.ObjectDescriptor, error) {
 	// Look up the database ID.
-	dbID, err := getDatabaseID(ctx, txn, codec, db, flags.Required)
+	dbID, err := GetDatabaseID(ctx, txn, codec, db, flags.Required)
 	if err != nil || dbID == sqlbase.InvalidID {
 		// dbID can still be invalid if required is false and the database is not found.
 		return nil, err
@@ -220,7 +220,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	// Look up the object using the discovered database descriptor.
-	rawDesc, err := getDescriptorByID(ctx, txn, codec, descID)
+	rawDesc, err := GetDescriptorByID(ctx, txn, codec, descID)
 	if err != nil {
 		return nil, err
 	}

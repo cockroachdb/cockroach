@@ -145,7 +145,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			if err := d.Validate(); err != nil {
 				return err
 			}
-			if err := writeDescToBatch(
+			if err := WriteDescToBatch(
 				ctx,
 				p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 				p.ExecCfg().Settings,

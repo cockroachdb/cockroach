@@ -53,7 +53,7 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
-		if _, err := getDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
 			return err
 		}
 		if _, err := MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {

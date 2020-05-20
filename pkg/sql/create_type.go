@@ -82,7 +82,7 @@ func getCreateTypeParams(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.ID, schemaID, name.Type())
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := getDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided)
+		desc, err := GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided)
 		if err != nil {
 			return nil, 0, err
 		}
