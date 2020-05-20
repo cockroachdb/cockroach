@@ -19,10 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stacktrace"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	raven "github.com/getsentry/raven-go"
+	"github.com/cockroachdb/sentry-go"
 )
 
 // The call stack here is usually:
@@ -140,10 +139,25 @@ func PanicAsError(depth int, r interface{}) error {
 	return errors.NewWithDepthf(depth+1, "panic: %v", r)
 }
 
+// Crash reporting URL.
+//
+// This uses a Sentry proxy run by Cockroach Labs. The proxy
+// abstracts the actual Sentry submission project ID and
+// submission key.
+//
+// Non-release builds wishing to use Sentry reports
+// are invited to use the following URL instead:
+//
+//   https://ignored@errors.cockroachdb.com/sentrydev/v2
+//
+// This can be set via e.g. the env var COCKROACH_CRASH_REPORTS.
+//
+// TODO(knz): We could envision auto-selecting this alternate URL
+// when detecting a non-release build.
 var crashReportURL = func() string {
 	var defaultURL string
 	if build.SeemsOfficial() {
-		defaultURL = "https://ignored:ignored@errors.cockroachdb.com/sentry"
+		defaultURL = "https://ignored@errors.cockroachdb.com/sentry/v2"
 	}
 	return envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORTS", defaultURL)
 }()
@@ -156,23 +170,31 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	if crashReportURL == "" {
 		return
 	}
-	if err := raven.SetDSN(crashReportURL); err != nil {
-		panic(errors.Wrap(err, "failed to setup crash reporting"))
-	}
-	crashReportingActive = true
 
 	if cmd == "start" {
 		cmd = "server"
 	}
 	info := build.GetInfo()
-	raven.SetRelease(info.Tag)
-	raven.SetEnvironment(crashReportEnv)
-	raven.SetTagsContext(map[string]string{
-		"cmd":          cmd,
-		"platform":     info.Platform,
-		"distribution": info.Distribution,
-		"rev":          info.Revision,
-		"goversion":    info.GoVersion,
+
+	if err := sentry.Init(sentry.ClientOptions{
+		Dsn:         crashReportURL,
+		Environment: crashReportEnv,
+		Release:     info.Tag,
+		Dist:        info.Distribution,
+	}); err != nil {
+		panic(errors.Wrap(err, "failed to setup crash reporting"))
+	}
+
+	crashReportingActive = true
+
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTags(map[string]string{
+			"cmd":          cmd,
+			"platform":     info.Platform,
+			"distribution": info.Distribution,
+			"rev":          info.Revision,
+			"goversion":    info.GoVersion,
+		})
 	})
 }
 
@@ -220,8 +242,8 @@ func sendCrashReport(
 		return
 	}
 
-	errMsg, packetDetails, extraDetails := errors.BuildSentryReport(err)
-	SendReport(ctx, errMsg, crashReportType, extraDetails, packetDetails...)
+	errEvent, extraDetails := errors.BuildSentryReport(err)
+	SendReport(ctx, crashReportType, errEvent, extraDetails)
 }
 
 // ShouldSendReport returns true iff SendReport() should be called.
@@ -242,22 +264,19 @@ func ShouldSendReport(sv *settings.Values) bool {
 // cluster did indeed crash or not.
 func SendReport(
 	ctx context.Context,
-	errMsg string,
 	crashReportType ReportType,
+	event *sentry.Event,
 	extraDetails map[string]interface{},
-	details ...stacktrace.ReportableObject,
 ) {
-	packet := raven.NewPacket(errMsg, details...)
-
 	for extraKey, extraValue := range extraDetails {
-		packet.Extra[extraKey] = extraValue
+		event.Extra[extraKey] = extraValue
 	}
 
 	if !ReportSensitiveDetails {
 		// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
 		// Otherwise, raven.Client.Capture will see an empty ServerName field and
 		// automatically fill in the machine's hostname.
-		packet.ServerName = "<redacted>"
+		event.ServerName = "<redacted>"
 	}
 	tags := map[string]string{
 		"uptime": uptimeTag(timeutil.Now()),
@@ -276,13 +295,16 @@ func SendReport(
 			tags[f.key] = maybeTruncate(v)
 		}
 	}
+	for key, value := range tags {
+		event.Tags[key] = tags[value]
+	}
 
-	eventID, ch := raven.DefaultClient.Capture(packet, tags)
-	select {
-	case <-ch:
-		Shoutf(ctx, Severity_ERROR, "Reported as error %v", eventID)
-	case <-time.After(10 * time.Second):
-		Shout(ctx, Severity_ERROR, "Time out trying to submit crash report")
+	res := sentry.CaptureEvent(event)
+	if res != nil {
+		Shoutf(ctx, Severity_ERROR, "Queued as error %v", string(*res))
+	}
+	if !sentry.Flush(10 * time.Second) {
+		Shout(ctx, Severity_ERROR, "Timeout trying to submit crash report")
 	}
 }
 

@@ -39,7 +39,6 @@ func TestDepWhitelist(t *testing.T) {
 			`github.com/cockroachdb/cockroach/pkg/util/humanizeutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/protoutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/randutil`,
-			`github.com/cockroachdb/cockroach/pkg/util/stacktrace`,
 			`github.com/cockroachdb/cockroach/pkg/util/stringencoding`,
 			`github.com/cockroachdb/cockroach/pkg/util/syncutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/timeutil`,

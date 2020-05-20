@@ -63,9 +63,14 @@ ignored = [
   revision = "f20d4c4d746f810c9110e21928d4135e1f2a3efa"
 
 # https://github.com/getsentry/raven-go/pull/139
-[[constraint]]
+[[override]]
   name = "github.com/getsentry/raven-go"
   source = "https://github.com/cockroachdb/raven-go"
+
+[[override]]
+  name = "github.com/getsentry/sentry-go"
+  source = "https://github.com/cockroachdb/sentry-go"
+  branch = "master"
 
 # Used for benchmarks, should be recent.
 [[constraint]]
@@ -84,7 +89,7 @@ ignored = [
 
 [[constraint]]
   name = "github.com/cockroachdb/errors"
-  branch = "v1.2.4-cockroach20.1"
+  branch = "master"
 
 [[constraint]]
   name = "vitess.io/vitess"

@@ -66,15 +66,6 @@ func TestFlatten(t *testing.T) {
 			},
 		},
 		{
-			// This case for backward compatibility with 19.1.
-			// Remove when the .TelemetryKey is removed from Error.
-			errors.WithTelemetry(baseErr, "My Key"),
-			func(t testutils.T, e *pgerror.Error) {
-				t.CheckEqual(e.Message, "woo")
-				t.CheckEqual(e.TelemetryKey, "My Key")
-			},
-		},
-		{
 			unimplemented.New("woo", "woo"),
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckEqual(e.Code, pgcode.FeatureNotSupported)
