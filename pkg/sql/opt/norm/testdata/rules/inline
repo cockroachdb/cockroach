@@ -166,13 +166,13 @@ update computed
  ├── columns: <none>
  ├── fetch columns: a:4 b:5 c:6
  ├── update-mapping:
- │    ├── column7:7 => a:1
- │    ├── column8:8 => b:2
+ │    ├── a_new:7 => a:1
+ │    ├── b_new:8 => b:2
  │    └── column9:9 => c:3
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column9:9!null column7:7!null column8:8!null a:4!null b:5 c:6
+      ├── columns: column9:9!null a_new:7!null b_new:8!null a:4!null b:5 c:6
       ├── key: (4)
       ├── fd: ()-->(7-9), (4)-->(5,6)
       ├── scan computed
@@ -184,8 +184,8 @@ update computed
       │    └── fd: (4)-->(5,6)
       └── projections
            ├── 4 [as=column9:9]
-           ├── 1 [as=column7:7]
-           └── 2 [as=column8:8]
+           ├── 1 [as=a_new:7]
+           └── 2 [as=b_new:8]
 
 # Inline constants from Values expression.
 norm expect=InlineProjectConstants

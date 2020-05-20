@@ -358,7 +358,7 @@ root                                       ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
                 │                          type                anti
-                │                          equality            (column5) = (p)
+                │                          equality            (p_new) = (p)
                 │                          right cols are key  ·
                 ├── render                 ·                   ·
                 │    └── scan buffer node  ·                   ·
@@ -390,7 +390,7 @@ root                                       ·                      ·
            └── lookup-join                 ·                      ·
                 │                          table                  parent@primary
                 │                          type                   anti
-                │                          equality               (column5) = (p)
+                │                          equality               (p_new) = (p)
                 │                          equality cols are key  ·
                 │                          parallel               ·
                 └── render                 ·                      ·
@@ -569,7 +569,7 @@ root                                       ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
                 │                          type                anti
-                │                          equality            (column5) = (p)
+                │                          equality            (p_new) = (p)
                 │                          right cols are key  ·
                 ├── render                 ·                   ·
                 │    └── scan buffer node  ·                   ·
@@ -631,7 +631,7 @@ root                                                 ·                   ·
  │    └── error if rows                              ·                   ·
  │         └── hash-join                             ·                   ·
  │              │                                    type                anti
- │              │                                    equality            (column5) = (p)
+ │              │                                    equality            (p_new) = (p)
  │              │                                    right cols are key  ·
  │              ├── render                           ·                   ·
  │              │    └── scan buffer node            ·                   ·
@@ -687,7 +687,7 @@ root                                       ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
                 │                          type                anti
-                │                          equality            (column5) = (p)
+                │                          equality            (p_new) = (p)
                 │                          right cols are key  ·
                 ├── render                 ·                   ·
                 │    └── scan buffer node  ·                   ·
@@ -721,7 +721,7 @@ root                                       ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
                 │                          type                anti
-                │                          equality            (column5) = (x)
+                │                          equality            (y_new) = (x)
                 │                          right cols are key  ·
                 ├── render                 ·                   ·
                 │    └── scan buffer node  ·                   ·

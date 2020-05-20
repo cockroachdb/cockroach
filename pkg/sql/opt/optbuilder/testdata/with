@@ -698,13 +698,13 @@ with &1 (t)
            ├── columns: x.a:4 b:5 rowid:6!null
            ├── fetch columns: x.a:7 b:8 rowid:9
            ├── update-mapping:
-           │    └── column11:11 => x.a:4
+           │    └── a_new:11 => x.a:4
            └── project
-                ├── columns: column11:11 x.a:7 b:8 rowid:9!null
+                ├── columns: a_new:11 x.a:7 b:8 rowid:9!null
                 ├── scan x
                 │    └── columns: x.a:7 b:8 rowid:9!null
                 └── projections
-                     └── subquery [as=column11:11]
+                     └── subquery [as=a_new:11]
                           └── max1-row
                                ├── columns: a:10
                                └── with-scan &1 (t)
