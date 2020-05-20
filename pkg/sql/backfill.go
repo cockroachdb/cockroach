@@ -492,7 +492,7 @@ func (sc *SchemaChanger) addConstraints(
 func (sc *SchemaChanger) validateConstraints(
 	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
 ) error {
-	if testDisableTableLeases {
+	if TestingTableLeasesAreDisabled() {
 		return nil
 	}
 
@@ -977,7 +977,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
-	if testDisableTableLeases {
+	if TestingTableLeasesAreDisabled() {
 		return nil
 	}
 

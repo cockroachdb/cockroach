@@ -163,7 +163,7 @@ func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -220,7 +220,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -485,7 +485,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// table descriptor but don't do anything, which is what we want.
 
 	// The descriptor changes made must have an immediate effect.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -632,7 +632,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -830,7 +830,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{

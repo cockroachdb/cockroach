@@ -165,7 +165,7 @@ func TestOldBitColumnMetadata(t *testing.T) {
 
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestDisableTableLeases()()
+	defer sql.TestingDisableTableLeases()()
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
