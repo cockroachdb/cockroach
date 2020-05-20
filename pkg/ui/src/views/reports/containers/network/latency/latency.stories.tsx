@@ -11,11 +11,14 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import {Latency} from "./index";
-import { latencyFixture } from "./latency.fixtures";
+import { latencyFixture, latencyFixtureNoLocality } from "./latency.fixtures";
 import { withRouterDecorator } from "src/util/decorators";
 
 storiesOf("Latency Table", module)
   .addDecorator(withRouterDecorator)
   .add("Default state", () => (
     <Latency {...latencyFixture} />
+  ))
+  .add("No localites state", () => (
+    <Latency {...latencyFixtureNoLocality} />
   ));
