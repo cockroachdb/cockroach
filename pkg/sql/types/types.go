@@ -388,24 +388,20 @@ var (
 	// Geometry is the type of a geospatial Geometry object.
 	Geometry = &T{
 		InternalType: InternalType{
-			Family: GeometryFamily,
-			Oid:    oidext.T_geometry,
-			Locale: &emptyLocale,
-			GeoMetadata: &GeoMetadata{
-				SRID: geopb.DefaultGeometrySRID,
-			},
+			Family:      GeometryFamily,
+			Oid:         oidext.T_geometry,
+			Locale:      &emptyLocale,
+			GeoMetadata: &GeoMetadata{},
 		},
 	}
 
 	// Geography is the type of a geospatial Geography object.
 	Geography = &T{
 		InternalType: InternalType{
-			Family: GeographyFamily,
-			Oid:    oidext.T_geography,
-			Locale: &emptyLocale,
-			GeoMetadata: &GeoMetadata{
-				SRID: geopb.DefaultGeographySRID,
-			},
+			Family:      GeographyFamily,
+			Oid:         oidext.T_geography,
+			Locale:      &emptyLocale,
+			GeoMetadata: &GeoMetadata{},
 		},
 	}
 
@@ -648,9 +644,9 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 	case StringFamily, BytesFamily, CollatedStringFamily, BitFamily:
 		// These types can have any width.
 	case GeometryFamily:
-		geoMetadata = &GeoMetadata{SRID: geopb.DefaultGeometrySRID}
+		geoMetadata = &GeoMetadata{}
 	case GeographyFamily:
-		geoMetadata = &GeoMetadata{SRID: geopb.DefaultGeographySRID}
+		geoMetadata = &GeoMetadata{}
 	default:
 		if width != 0 {
 			panic(errors.AssertionFailedf("type %s cannot have width", family))
