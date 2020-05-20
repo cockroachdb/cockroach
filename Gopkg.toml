@@ -30,6 +30,7 @@ noverify = [
 ignored = [
   # Non-existent package used by a toy program in c-deps/protobuf.
   "github.com/google/protobuf/examples/tutorial",
+  "github.com/cockroachdb/cockroach/c-deps/protobuf/benchmarks/go",
 ]
 
 [[constraint]]
@@ -116,6 +117,16 @@ ignored = [
   branch = "master"
 
 [[constraint]]
+  # This package should be replaced for google.golang.org/protobuf,
+  # but we (and various deps including etcd) continue to use this
+  # one. We require v1.4+.
+  # The package is a wrapper around the suggested replacement
+  # (google.golang.org/protobuf) so there's no pressing reason
+  # to do anything.
+  name = "github.com/golang/protobuf"
+  version = "=v1.4.1"
+
+[[constraint]]
   name = "github.com/gogo/protobuf"
   source = "https://github.com/cockroachdb/gogoproto"
   branch = "v1.2.0-with-clone-fix"
@@ -163,7 +174,19 @@ ignored = [
 
 [[constraint]]
   name = "google.golang.org/grpc"
-  version = "=v1.21.2"
+  version = "=v1.27.1"
+
+[[constraint]]
+  # The grpc-gateway protoc plugin prints warnings whenever
+  # you have a gRPC service without a HttpRule. We have a number
+  # of those (and it's totally reasonable to).
+  # For the time being, we use a fork that has the warning removed.
+  # See:
+  # https://github.com/grpc-ecosystem/grpc-gateway/commit/ee513453fd80ce577c1a680b14300458072dad5e
+  # https://github.com/uber/prototool/issues/128
+  name = "github.com/grpc-ecosystem/grpc-gateway"
+  branch = "v1.14.5-nowarning"
+  source = "https://github.com/cockroachdb/grpc-gateway"
 
 [prune]
   go-tests = true
