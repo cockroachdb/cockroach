@@ -197,7 +197,7 @@ func (d Datums) Compare(evalCtx *EvalContext, other Datums) int {
 
 // IsDistinctFrom checks to see if two datums are distinct from each other. Any
 // change in value is considered distinct, however, a NULL value is NOT
-// considered disctinct from another NULL value.
+// considered distinct from another NULL value.
 func (d Datums) IsDistinctFrom(evalCtx *EvalContext, other Datums) bool {
 	if len(d) != len(other) {
 		return true
