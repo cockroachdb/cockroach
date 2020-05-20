@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -130,7 +131,7 @@ type TableCollection struct {
 	// This field is nil when the field is initialized for an internalPlanner.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
-	databaseCache *DatabaseCache
+	databaseCache *database.DatabaseCache
 
 	// schemaCache maps {databaseID, schemaName} -> (schemaID, if exists, otherwise nil).
 	// TODO(sqlexec): replace with leasing system with custom schemas.
@@ -174,7 +175,7 @@ type dbCacheSubscriber interface {
 	// waitForCacheState takes a callback depending on the cache state and blocks
 	// until the callback declares success. The callback is repeatedly called as
 	// the cache is updated.
-	waitForCacheState(cond func(*DatabaseCache) bool)
+	waitForCacheState(cond func(*database.DatabaseCache) bool)
 }
 
 // isSupportedSchemaName returns whether this schema name is supported.
@@ -576,7 +577,7 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 		// reflect a dropped database, so that future commands on the
 		// same gateway node observe the dropped database.
 		tc.dbCacheSubscriber.waitForCacheState(
-			func(dc *DatabaseCache) bool {
+			func(dc *database.DatabaseCache) bool {
 				// Resolve the database name from the database cache.
 				dbID, err := dc.GetCachedDatabaseID(uc.name)
 				if err != nil || dbID == sqlbase.InvalidID {

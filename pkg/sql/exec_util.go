@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -781,26 +782,26 @@ func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 type databaseCacheHolder struct {
 	mu struct {
 		syncutil.Mutex
-		c  *DatabaseCache
+		c  *database.DatabaseCache
 		cv *sync.Cond
 	}
 }
 
-func newDatabaseCacheHolder(c *DatabaseCache) *databaseCacheHolder {
+func newDatabaseCacheHolder(c *database.DatabaseCache) *databaseCacheHolder {
 	dc := &databaseCacheHolder{}
 	dc.mu.c = c
 	dc.mu.cv = sync.NewCond(&dc.mu.Mutex)
 	return dc
 }
 
-func (dc *databaseCacheHolder) getDatabaseCache() *DatabaseCache {
+func (dc *databaseCacheHolder) getDatabaseCache() *database.DatabaseCache {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	return dc.mu.c
 }
 
 // waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*DatabaseCache) bool) {
+func (dc *databaseCacheHolder) waitForCacheState(cond func(*database.DatabaseCache) bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for done := cond(dc.mu.c); !done; done = cond(dc.mu.c) {
@@ -815,7 +816,7 @@ var _ dbCacheSubscriber = &databaseCacheHolder{}
 // received.
 func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
-	dc.mu.c = NewDatabaseCache(dc.mu.c.codec, cfg)
+	dc.mu.c = database.NewDatabaseCache(dc.mu.c.Codec(), cfg)
 	dc.mu.cv.Broadcast()
 	dc.mu.Unlock()
 }
