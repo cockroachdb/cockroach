@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package lease
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -107,4 +108,24 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.tableNames.mu.Unlock()
+}
+
+// AcquireAndAssertMinVersion acquires a read lease for the specified table ID.
+// The lease is grabbed on the latest version if >= specified version.
+// It returns a table descriptor and an expiration time valid for the timestamp.
+func (m *LeaseManager) AcquireAndAssertMinVersion(
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	tableID sqlbase.ID,
+	minVersion sqlbase.DescriptorVersion,
+) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
+	t := m.findTableState(tableID, true)
+	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	table, _, err := t.findForTimestamp(ctx, timestamp)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	return &table.ImmutableTableDescriptor, table.expiration, nil
 }
