@@ -907,8 +907,8 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	defer server.Stopper().Stop(context.TODO())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -918,7 +918,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	// Add a zone config for the table.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1417,8 +1417,8 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer server.Stopper().Stop(context.TODO())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1459,7 +1459,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	// deal with schema change knob
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1641,8 +1641,8 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	// Create a k-v table.
 	if _, err := sqlDB.Exec(`
@@ -1824,7 +1824,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	}
 
 	// Add immediate GC TTL to allow index creation purge to complete.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2498,9 +2498,9 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		t.Fatal(err)
 	}
 	// GC the old indexes to be dropped after the PK change immediately.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2892,8 +2892,8 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -2906,7 +2906,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
 
 	// Wait for the async schema changer to run.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -2960,8 +2960,8 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -2993,7 +2993,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	// Stop any further attempts at cancellation, so the GC jobs don't fail.
 	shouldCancel = false
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 	// Ensure that the writes from the partial new indexes are cleaned up.
@@ -3939,8 +3939,8 @@ func TestTruncateCompletion(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -3970,7 +3970,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	// Add a zone config.
 	var cfg zonepb.ZoneConfig
-	cfg, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
+	cfg, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4497,8 +4497,8 @@ func TestCancelSchemaChange(t *testing.T) {
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, db)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, db)()
 
 	sqlDB.Exec(t, `
 		CREATE DATABASE t;
@@ -4624,7 +4624,7 @@ func TestCancelSchemaChange(t *testing.T) {
 	// Verify that the data from the canceled CREATE INDEX is cleaned up.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 	// TODO (lucy): when this test is no longer canceled, have it correctly handle doing GC immediately
-	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -5703,8 +5703,8 @@ func TestOrphanedGCMutationsRemoved(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
@@ -5763,7 +5763,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
 	// Add immediate GC TTL to allow index creation purge to complete.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -5842,8 +5842,8 @@ func TestMultipleRevert(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	// Create a k-v table and kick off a schema change that should get rolled
 	// back.
@@ -5878,8 +5878,8 @@ func TestRetriableErrorDuringRollback(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		// Disable strict GC TTL enforcement because we're going to shove a zero-value
-		// TTL into the system with addImmediateGCZoneConfig.
-		defer disableGCTTLStrictEnforcement(t, sqlDB)()
+		// TTL into the system with AddImmediateGCZoneConfig.
+		defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 		_, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -5889,7 +5889,7 @@ INSERT INTO t.test VALUES (1, 2), (2, 2);
 		require.NoError(t, err)
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		// Add a zone config for the table.
-		_, err = addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
+		_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID)
 		require.NoError(t, err)
 
 		// Try to create a unique index which won't be valid and will need a rollback.
