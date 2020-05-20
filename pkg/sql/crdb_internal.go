@@ -390,52 +390,27 @@ CREATE TABLE crdb_internal.leases (
   expiration  TIMESTAMP NOT NULL,
   deleted     BOOL NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(
+		ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error,
+	) (err error) {
 		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
-
-		leaseMgr := p.LeaseMgr()
-		leaseMgr.mu.Lock()
-		defer leaseMgr.mu.Unlock()
-
-		for tid, ts := range leaseMgr.mu.tables {
-			tableID := tree.NewDInt(tree.DInt(int64(tid)))
-
-			adder := func() error {
-				ts.mu.Lock()
-				defer ts.mu.Unlock()
-
-				dropped := tree.MakeDBool(tree.DBool(ts.mu.dropped))
-
-				for _, state := range ts.mu.active.data {
-					if p.CheckAnyPrivilege(ctx, &state.TableDescriptor) != nil {
-						continue
-					}
-
-					state.mu.Lock()
-					lease := state.mu.lease
-					state.mu.Unlock()
-					if lease == nil {
-						continue
-					}
-					if err := addRow(
-						nodeID,
-						tableID,
-						tree.NewDString(state.Name),
-						tree.NewDInt(tree.DInt(int64(state.GetParentID()))),
-						&lease.expiration,
-						dropped,
-					); err != nil {
-						return err
-					}
-				}
-				return nil
+		p.LeaseMgr().VisitLeases(func(desc sqlbase.TableDescriptor, dropped bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
+			if p.CheckAnyPrivilege(ctx, &desc) != nil {
+				// TODO(ajwerner): inspect what type of error got returned.
+				return true
 			}
 
-			if err := adder(); err != nil {
-				return err
-			}
-		}
-		return nil
+			err = addRow(
+				nodeID,
+				tree.NewDInt(tree.DInt(int64(desc.ID))),
+				tree.NewDString(desc.Name),
+				tree.NewDInt(tree.DInt(int64(desc.ParentID))),
+				&expiration,
+				tree.MakeDBool(tree.DBool(dropped)),
+			)
+			return err == nil
+		})
+		return err
 	},
 }
 
