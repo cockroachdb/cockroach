@@ -40,7 +40,7 @@ func TestDatabaseAccessors(t *testing.T) {
 			return err
 		}
 
-		databaseCache := database.NewDatabaseCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
+		databaseCache := database.NewCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
 		_, err := databaseCache.GetDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err
 	}); err != nil {
