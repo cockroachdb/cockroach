@@ -152,8 +152,8 @@ Initial expression
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
-   ├── key: (1,4)
-   ├── fd: (1)-->(2,3), (4)-->(5,6)
+   ├── key: (1)
+   ├── fd: (1)-->(2-6), (4)-->(5,6)
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
    │    ├── check constraint expressions
@@ -179,8 +179,8 @@ NormalizeInConst
 ================================================================================
    left-join (hash)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
-    ├── key: (1,4)
-    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── key: (1)
+    ├── fd: (1)-->(2-6), (4)-->(5,6)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
     │    ├── check constraint expressions
@@ -214,8 +214,8 @@ CommuteLeftJoin (higher cost)
   -left-join (hash)
   +right-join (hash)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
-    ├── key: (1,4)
-    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── key: (1)
+    ├── fd: (1)-->(2-6), (4)-->(5,6)
   + ├── scan customers
   + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
   + │    ├── key: (4)
@@ -250,8 +250,8 @@ GenerateLookupJoins (higher cost)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
   + ├── key columns: [2] = [4]
   + ├── lookup columns are key
-    ├── key: (1,4)
-    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── key: (1)
+    ├── fd: (1)-->(2-6), (4)-->(5,6)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
     │    ├── check constraint expressions
@@ -282,8 +282,8 @@ GenerateMergeJoins (higher cost)
   - ├── lookup columns are key
   + ├── left ordering: +4
   + ├── right ordering: +2
-    ├── key: (1,4)
-    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── key: (1)
+    ├── fd: (1)-->(2-6), (4)-->(5,6)
   - ├── scan orders
   + ├── scan customers
   + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
@@ -321,8 +321,8 @@ Final best expression
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
-   ├── key: (1,4)
-   ├── fd: (1)-->(2,3), (4)-->(5,6)
+   ├── key: (1)
+   ├── fd: (1)-->(2-6), (4)-->(5,6)
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
    │    ├── check constraint expressions

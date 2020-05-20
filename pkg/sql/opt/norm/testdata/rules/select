@@ -615,12 +615,12 @@ SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.k > 5 AND (xy.x = 6 OR xy.x IS 
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), (6)-->(7)
  ├── left-join (hash)
  │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-7), (6)-->(7)
  │    ├── select
  │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
@@ -710,8 +710,8 @@ SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.f=1.1
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
- ├── key: (1,6)
- ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4-7), (6)-->(7)
  ├── select
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
@@ -735,12 +735,12 @@ WHERE a.f=1.1 AND (a.i<xy.y OR xy.y IS NULL) AND (a.s='foo' OR a.s='bar')
 ----
 select
  ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:6 y:7
- ├── key: (1,6)
- ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4-7), (6)-->(7)
  ├── left-join (hash)
  │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:6 y:7
- │    ├── key: (1,6)
- │    ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4-7), (6)-->(7)
  │    ├── select
  │    │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5
  │    │    ├── key: (1)
@@ -801,12 +801,12 @@ SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6!null y:7
- ├── key: (1,6)
- ├── fd: (6)-->(7), (1)-->(2-5)
+ ├── key: (6)
+ ├── fd: (6)-->(1-5,7), (1)-->(2-5)
  ├── left-join (hash)
  │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:6!null y:7
- │    ├── key: (1,6)
- │    ├── fd: (6)-->(7), (1)-->(2-5)
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(1-5,7), (1)-->(2-5)
  │    ├── scan xy
  │    │    ├── columns: x:6!null y:7
  │    │    ├── key: (6)
@@ -899,12 +899,12 @@ SELECT * FROM xy LEFT JOIN a ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
  ├── columns: x:1!null y:2 k:3 i:4 f:5 s:6 j:7
- ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4-7)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), (3)-->(4-7)
  ├── left-join (hash)
  │    ├── columns: x:1!null y:2 k:3 i:4 f:5 s:6 j:7
- │    ├── key: (1,3)
- │    ├── fd: (1)-->(2), (3)-->(4-7)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-7), (3)-->(4-7)
  │    ├── scan xy
  │    │    ├── columns: x:1!null y:2
  │    │    ├── key: (1)

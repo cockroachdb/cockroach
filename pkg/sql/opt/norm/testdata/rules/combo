@@ -1781,8 +1781,8 @@ TryDecorrelateProjectSelect
   - │    │    │    │         ├── left-join-apply
   + │    │    │    │         ├── project
     │    │    │    │         │    ├── columns: x:1!null notnull:9
-  - │    │    │    │         │    ├── key: (1)
-  - │    │    │    │         │    ├── fd: (1)-->(9)
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(9)
   - │    │    │    │         │    ├── scan xy
   - │    │    │    │         │    │    ├── columns: x:1!null
   - │    │    │    │         │    │    └── key: (1)
@@ -1810,8 +1810,8 @@ TryDecorrelateProjectSelect
   - │    │    │    │         │    └── filters (true)
   + │    │    │    │         │    └── left-join-apply
   + │    │    │    │         │         ├── columns: x:1!null k:3 i:4 notnull:9
-  + │    │    │    │         │         ├── key: (1,3)
-  + │    │    │    │         │         ├── fd: (1,3)-->(4,9)
+  + │    │    │    │         │         ├── key: (1)
+  + │    │    │    │         │         ├── fd: (1)-->(3,4,9)
   + │    │    │    │         │         ├── scan xy
   + │    │    │    │         │         │    ├── columns: x:1!null
   + │    │    │    │         │         │    └── key: (1)
@@ -1866,12 +1866,14 @@ DecorrelateJoin
     │    │    │    │         ├── fd: (1)-->(10)
     │    │    │    │         ├── project
     │    │    │    │         │    ├── columns: x:1!null notnull:9
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(9)
   - │    │    │    │         │    └── left-join-apply
   + │    │    │    │         │    └── left-join (hash)
     │    │    │    │         │         ├── columns: x:1!null k:3 i:4 notnull:9
-    │    │    │    │         │         ├── key: (1,3)
-  - │    │    │    │         │         ├── fd: (1,3)-->(4,9)
-  + │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1,3)-->(9)
+    │    │    │    │         │         ├── key: (1)
+  - │    │    │    │         │         ├── fd: (1)-->(3,4,9)
+  + │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1)-->(3,4,9)
     │    │    │    │         │         ├── scan xy
     │    │    │    │         │         │    ├── columns: x:1!null
     │    │    │    │         │         │    └── key: (1)
@@ -1926,10 +1928,12 @@ PushFilterIntoJoinRight
     │    │    │    │         ├── fd: (1)-->(10)
     │    │    │    │         ├── project
     │    │    │    │         │    ├── columns: x:1!null notnull:9
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(9)
     │    │    │    │         │    └── left-join (hash)
     │    │    │    │         │         ├── columns: x:1!null k:3 i:4 notnull:9
-    │    │    │    │         │         ├── key: (1,3)
-    │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1,3)-->(9)
+    │    │    │    │         │         ├── key: (1)
+    │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1)-->(3,4,9)
     │    │    │    │         │         ├── scan xy
     │    │    │    │         │         │    ├── columns: x:1!null
     │    │    │    │         │         │    └── key: (1)
@@ -1998,10 +2002,12 @@ PushSelectIntoProject
     │    │    │    │         ├── fd: (1)-->(10)
     │    │    │    │         ├── project
     │    │    │    │         │    ├── columns: x:1!null notnull:9
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(9)
     │    │    │    │         │    └── left-join (hash)
     │    │    │    │         │         ├── columns: x:1!null k:3 i:4 notnull:9
-    │    │    │    │         │         ├── key: (1,3)
-    │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1,3)-->(9)
+    │    │    │    │         │         ├── key: (1)
+    │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1)-->(3,4,9)
     │    │    │    │         │         ├── scan xy
     │    │    │    │         │         │    ├── columns: x:1!null
     │    │    │    │         │         │    └── key: (1)
@@ -2070,10 +2076,12 @@ EliminateSelect
     │    │    │    │         ├── fd: (1)-->(10)
     │    │    │    │         ├── project
     │    │    │    │         │    ├── columns: x:1!null notnull:9
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(9)
     │    │    │    │         │    └── left-join (hash)
     │    │    │    │         │         ├── columns: x:1!null k:3 i:4 notnull:9
-    │    │    │    │         │         ├── key: (1,3)
-    │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1,3)-->(9)
+    │    │    │    │         │         ├── key: (1)
+    │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1)-->(3,4,9)
     │    │    │    │         │         ├── scan xy
     │    │    │    │         │         │    ├── columns: x:1!null
     │    │    │    │         │         │    └── key: (1)
@@ -2149,12 +2157,14 @@ PruneJoinRightCols
     │    │    │    │         ├── fd: (1)-->(10)
     │    │    │    │         ├── project
     │    │    │    │         │    ├── columns: x:1!null notnull:9
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(9)
     │    │    │    │         │    └── left-join (hash)
   - │    │    │    │         │         ├── columns: x:1!null k:3 i:4 notnull:9
   + │    │    │    │         │         ├── columns: x:1!null k:3 notnull:9
-    │    │    │    │         │         ├── key: (1,3)
-  - │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1,3)-->(9)
-  + │    │    │    │         │         ├── fd: (3)-->(9)
+    │    │    │    │         │         ├── key: (1)
+  - │    │    │    │         │         ├── fd: (3)-->(4), (4)~~>(9), (1)-->(3,4,9)
+  + │    │    │    │         │         ├── fd: (3)-->(9), (1)-->(3,9)
     │    │    │    │         │         ├── scan xy
     │    │    │    │         │         │    ├── columns: x:1!null
     │    │    │    │         │         │    └── key: (1)
@@ -2216,10 +2226,14 @@ EliminateGroupByProject
     │    │    │    │         ├── fd: (1)-->(10)
   - │    │    │    │         ├── project
   - │    │    │    │         │    ├── columns: x:1!null notnull:9
+  + │    │    │    │         ├── left-join (hash)
+  + │    │    │    │         │    ├── columns: x:1!null k:3 notnull:9
+    │    │    │    │         │    ├── key: (1)
+  - │    │    │    │         │    ├── fd: (1)-->(9)
   - │    │    │    │         │    └── left-join (hash)
   - │    │    │    │         │         ├── columns: x:1!null k:3 notnull:9
-  - │    │    │    │         │         ├── key: (1,3)
-  - │    │    │    │         │         ├── fd: (3)-->(9)
+  - │    │    │    │         │         ├── key: (1)
+  - │    │    │    │         │         ├── fd: (3)-->(9), (1)-->(3,9)
   - │    │    │    │         │         ├── scan xy
   - │    │    │    │         │         │    ├── columns: x:1!null
   - │    │    │    │         │         │    └── key: (1)
@@ -2241,10 +2255,7 @@ EliminateGroupByProject
   - │    │    │    │         │         │         └── i:4 IS NOT NULL [as=notnull:9, outer=(4)]
   - │    │    │    │         │         └── filters
   - │    │    │    │         │              └── k:3 = x:1 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │         ├── left-join (hash)
-  + │    │    │    │         │    ├── columns: x:1!null k:3 notnull:9
-  + │    │    │    │         │    ├── key: (1,3)
-  + │    │    │    │         │    ├── fd: (3)-->(9)
+  + │    │    │    │         │    ├── fd: (3)-->(9), (1)-->(3,9)
   + │    │    │    │         │    ├── scan xy
   + │    │    │    │         │    │    ├── columns: x:1!null
   + │    │    │    │         │    │    └── key: (1)
@@ -2306,8 +2317,8 @@ EliminateProject
   - │    │    │    │         ├── fd: (1)-->(10)
   - │    │    │    │         ├── left-join (hash)
   - │    │    │    │         │    ├── columns: x:1!null k:3 notnull:9
-  - │    │    │    │         │    ├── key: (1,3)
-  - │    │    │    │         │    ├── fd: (3)-->(9)
+  - │    │    │    │         │    ├── key: (1)
+  - │    │    │    │         │    ├── fd: (3)-->(9), (1)-->(3,9)
   - │    │    │    │         │    ├── scan xy
   - │    │    │    │         │    │    ├── columns: x:1!null
   - │    │    │    │         │    │    └── key: (1)
@@ -2334,8 +2345,8 @@ EliminateProject
   - │    │    │    │                   └── notnull:9
   + │    │    │    │    ├── left-join (hash)
   + │    │    │    │    │    ├── columns: x:1!null k:3 notnull:9
-  + │    │    │    │    │    ├── key: (1,3)
-  + │    │    │    │    │    ├── fd: (3)-->(9)
+  + │    │    │    │    │    ├── key: (1)
+  + │    │    │    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
   + │    │    │    │    │    ├── scan xy
   + │    │    │    │    │    │    ├── columns: x:1!null
   + │    │    │    │    │    │    └── key: (1)
@@ -2389,27 +2400,27 @@ EliminateSelect
   - │    │    │    ├── group-by
   - │    │    │    │    ├── columns: x:1!null bool_or:10
   - │    │    │    │    ├── grouping columns: x:1!null
-  - │    │    │    │    ├── key: (1)
+  + │    │    │    ├── left-join (hash)
+  + │    │    │    │    ├── columns: x:1!null k:3 notnull:9
+    │    │    │    │    ├── key: (1)
   - │    │    │    │    ├── fd: (1)-->(10)
   - │    │    │    │    ├── left-join (hash)
   - │    │    │    │    │    ├── columns: x:1!null k:3 notnull:9
-  - │    │    │    │    │    ├── key: (1,3)
-  + │    │    │    ├── left-join (hash)
-  + │    │    │    │    ├── columns: x:1!null k:3 notnull:9
-  + │    │    │    │    ├── key: (1,3)
-  + │    │    │    │    ├── fd: (3)-->(9)
+  - │    │    │    │    │    ├── key: (1)
+  - │    │    │    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
+  - │    │    │    │    │    ├── scan xy
+  - │    │    │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    │    │    └── key: (1)
+  - │    │    │    │    │    ├── project
+  - │    │    │    │    │    │    ├── columns: notnull:9!null k:3!null
+  + │    │    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
   + │    │    │    │    ├── scan xy
   + │    │    │    │    │    ├── columns: x:1!null
   + │    │    │    │    │    └── key: (1)
   + │    │    │    │    ├── project
   + │    │    │    │    │    ├── columns: notnull:9!null k:3!null
   + │    │    │    │    │    ├── key: (3)
-    │    │    │    │    │    ├── fd: (3)-->(9)
-  - │    │    │    │    │    ├── scan xy
-  - │    │    │    │    │    │    ├── columns: x:1!null
-  - │    │    │    │    │    │    └── key: (1)
-  - │    │    │    │    │    ├── project
-  - │    │    │    │    │    │    ├── columns: notnull:9!null k:3!null
+  + │    │    │    │    │    ├── fd: (3)-->(9)
   + │    │    │    │    │    ├── select
   + │    │    │    │    │    │    ├── columns: k:3!null i:4
     │    │    │    │    │    │    ├── key: (3)
@@ -2471,28 +2482,28 @@ EliminateSelect
   - │    │    ├── group-by
   - │    │    │    ├── columns: x:1!null bool_or:10
   - │    │    │    ├── grouping columns: x:1!null
-  - │    │    │    ├── key: (1)
-  - │    │    │    ├── fd: (1)-->(10)
-  - │    │    │    ├── left-join (hash)
-  - │    │    │    │    ├── columns: x:1!null k:3 notnull:9
-  - │    │    │    │    ├── key: (1,3)
   + │    │    ├── fd: (1)-->(10)
   + │    │    ├── left-join (hash)
   + │    │    │    ├── columns: x:1!null k:3 notnull:9
-  + │    │    │    ├── key: (1,3)
-  + │    │    │    ├── fd: (3)-->(9)
+    │    │    │    ├── key: (1)
+  - │    │    │    ├── fd: (1)-->(10)
+  - │    │    │    ├── left-join (hash)
+  - │    │    │    │    ├── columns: x:1!null k:3 notnull:9
+  - │    │    │    │    ├── key: (1)
+  - │    │    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
+  - │    │    │    │    ├── scan xy
+  - │    │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    │    └── key: (1)
+  - │    │    │    │    ├── project
+  - │    │    │    │    │    ├── columns: notnull:9!null k:3!null
+  + │    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
   + │    │    │    ├── scan xy
   + │    │    │    │    ├── columns: x:1!null
   + │    │    │    │    └── key: (1)
   + │    │    │    ├── project
   + │    │    │    │    ├── columns: notnull:9!null k:3!null
   + │    │    │    │    ├── key: (3)
-    │    │    │    │    ├── fd: (3)-->(9)
-  - │    │    │    │    ├── scan xy
-  - │    │    │    │    │    ├── columns: x:1!null
-  - │    │    │    │    │    └── key: (1)
-  - │    │    │    │    ├── project
-  - │    │    │    │    │    ├── columns: notnull:9!null k:3!null
+  + │    │    │    │    ├── fd: (3)-->(9)
   + │    │    │    │    ├── select
   + │    │    │    │    │    ├── columns: k:3!null i:4
     │    │    │    │    │    ├── key: (3)
@@ -2551,8 +2562,8 @@ PruneProjectCols
     │    │    ├── fd: (1)-->(10)
     │    │    ├── left-join (hash)
     │    │    │    ├── columns: x:1!null k:3 notnull:9
-    │    │    │    ├── key: (1,3)
-    │    │    │    ├── fd: (3)-->(9)
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
     │    │    │    ├── scan xy
     │    │    │    │    ├── columns: x:1!null
     │    │    │    │    └── key: (1)
@@ -2592,11 +2603,6 @@ InlineProjectInProject
   - │    ├── group-by
   - │    │    ├── columns: x:1!null bool_or:10
   - │    │    ├── grouping columns: x:1!null
-  - │    │    ├── key: (1)
-  - │    │    ├── fd: (1)-->(10)
-  - │    │    ├── left-join (hash)
-  - │    │    │    ├── columns: x:1!null k:3 notnull:9
-  - │    │    │    ├── key: (1,3)
   + ├── group-by
   + │    ├── columns: x:1!null bool_or:10
   + │    ├── grouping columns: x:1!null
@@ -2604,20 +2610,25 @@ InlineProjectInProject
   + │    ├── fd: (1)-->(10)
   + │    ├── left-join (hash)
   + │    │    ├── columns: x:1!null k:3 notnull:9
-  + │    │    ├── key: (1,3)
-  + │    │    ├── fd: (3)-->(9)
+    │    │    ├── key: (1)
+  - │    │    ├── fd: (1)-->(10)
+  - │    │    ├── left-join (hash)
+  - │    │    │    ├── columns: x:1!null k:3 notnull:9
+  - │    │    │    ├── key: (1)
+  - │    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    └── key: (1)
+  - │    │    │    ├── project
+  - │    │    │    │    ├── columns: notnull:9!null k:3!null
+  + │    │    ├── fd: (3)-->(9), (1)-->(3,9)
   + │    │    ├── scan xy
   + │    │    │    ├── columns: x:1!null
   + │    │    │    └── key: (1)
   + │    │    ├── project
   + │    │    │    ├── columns: notnull:9!null k:3!null
   + │    │    │    ├── key: (3)
-    │    │    │    ├── fd: (3)-->(9)
-  - │    │    │    ├── scan xy
-  - │    │    │    │    ├── columns: x:1!null
-  - │    │    │    │    └── key: (1)
-  - │    │    │    ├── project
-  - │    │    │    │    ├── columns: notnull:9!null k:3!null
+  + │    │    │    ├── fd: (3)-->(9)
   + │    │    │    ├── select
   + │    │    │    │    ├── columns: k:3!null i:4
     │    │    │    │    ├── key: (3)
@@ -2681,8 +2692,8 @@ CommuteLeftJoin (higher cost)
   - │    ├── left-join (hash)
   + │    ├── right-join (hash)
     │    │    ├── columns: x:1!null k:3 notnull:9
-    │    │    ├── key: (1,3)
-    │    │    ├── fd: (3)-->(9)
+    │    │    ├── key: (1)
+    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
   - │    │    ├── scan xy
   - │    │    │    ├── columns: x:1!null
   - │    │    │    └── key: (1)
@@ -2728,8 +2739,8 @@ GenerateMergeJoins
     │    │    ├── columns: x:1!null k:3 notnull:9
   + │    │    ├── left ordering: +1
   + │    │    ├── right ordering: +3
-    │    │    ├── key: (1,3)
-    │    │    ├── fd: (3)-->(9)
+    │    │    ├── key: (1)
+    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
     │    │    ├── scan xy
     │    │    │    ├── columns: x:1!null
   - │    │    │    └── key: (1)
@@ -2780,8 +2791,8 @@ GenerateMergeJoins (higher cost)
   - │    │    ├── right ordering: +3
   + │    │    ├── left ordering: +3
   + │    │    ├── right ordering: +1
-    │    │    ├── key: (1,3)
-    │    │    ├── fd: (3)-->(9)
+    │    │    ├── key: (1)
+    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
   - │    │    ├── scan xy
   - │    │    │    ├── columns: x:1!null
   - │    │    │    ├── key: (1)
@@ -2831,8 +2842,8 @@ GenerateStreamingGroupBy
     │    │    ├── columns: x:1!null k:3 notnull:9
     │    │    ├── left ordering: +1
     │    │    ├── right ordering: +3
-    │    │    ├── key: (1,3)
-    │    │    ├── fd: (3)-->(9)
+    │    │    ├── key: (1)
+    │    │    ├── fd: (3)-->(9), (1)-->(3,9)
   + │    │    ├── ordering: +1
     │    │    ├── scan xy
     │    │    │    ├── columns: x:1!null
@@ -2879,8 +2890,8 @@ Final best expression
    │    │    ├── columns: x:1!null k:3 notnull:9
    │    │    ├── left ordering: +1
    │    │    ├── right ordering: +3
-   │    │    ├── key: (1,3)
-   │    │    ├── fd: (3)-->(9)
+   │    │    ├── key: (1)
+   │    │    ├── fd: (3)-->(9), (1)-->(3,9)
    │    │    ├── ordering: +1
    │    │    ├── scan xy
    │    │    │    ├── columns: x:1!null

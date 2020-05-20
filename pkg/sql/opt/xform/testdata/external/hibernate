@@ -1593,8 +1593,8 @@ where
 ----
 right-join (hash)
  ├── columns: id1_0_0_:1!null id1_8_1_:3 location2_0_0_:2 address2_8_1_:4 zip3_8_1_:5
- ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4,5)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3)-->(4,5)
  ├── scan location3_
  │    ├── columns: location3_.id:3!null address:4 zip:5!null
  │    ├── key: (3)
@@ -1687,13 +1687,14 @@ where
 ----
 project
  ├── columns: newspape1_23_0_:1!null news_new2_23_0_:2!null formula140_0_:9 news_id1_21_1_:3!null detail2_21_1_:4 title3_21_1_:5
- ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2)
+ ├── key: (3)
+ ├── fd: ()-->(1), (3)-->(4,5,9), (2)==(3), (3)==(2)
  ├── left-join (lookup news)
  │    ├── columns: newspaper_id:1!null news_news_id:2!null news1_.news_id:3!null news1_.detail:4 news1_.title:5 a0.news_id:6 a0.title:8
  │    ├── key columns: [2] = [6]
  │    ├── lookup columns are key
- │    ├── key: (3,6)
- │    ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2), (6)-->(8)
+ │    ├── key: (3)
+ │    ├── fd: ()-->(1), (3)-->(4-6,8), (2)==(3), (3)==(2), (6)-->(8)
  │    ├── inner-join (lookup news)
  │    │    ├── columns: newspaper_id:1!null news_news_id:2!null news1_.news_id:3!null news1_.detail:4 news1_.title:5
  │    │    ├── key columns: [2] = [3]
@@ -1766,25 +1767,26 @@ WHERE ref0_.generationuser_id = 1;
 ----
 project
  ├── columns: generati1_2_0_:1!null ref_id2_2_0_:2!null formula131_0_:19 formula132_0_:20 formula133_0_:21 id1_0_1_:3!null age2_0_1_:4 culture3_0_1_:5 descript4_0_1_:6
- ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
+ ├── key: (3)
+ ├── fd: ()-->(1), (3)-->(4-6,19-21), (2)==(3), (3)==(2)
  ├── left-join (lookup generationgroup)
  │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:3!null generation1_.age:4 generation1_.culture:5 generation1_.description:6 a13.id:7 a13.age:8 a15.id:11 a15.culture:13 a13.id:15 a13.description:18
  │    ├── key columns: [2] = [15]
  │    ├── lookup columns are key
- │    ├── key: (3,7,11,15)
- │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13), (15)-->(18)
+ │    ├── key: (3)
+ │    ├── fd: ()-->(1), (3)-->(4-8,11,13,15,18), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13), (15)-->(18)
  │    ├── left-join (lookup generationgroup)
  │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:3!null generation1_.age:4 generation1_.culture:5 generation1_.description:6 a13.id:7 a13.age:8 a15.id:11 a15.culture:13
  │    │    ├── key columns: [2] = [11]
  │    │    ├── lookup columns are key
- │    │    ├── key: (3,7,11)
- │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13)
+ │    │    ├── key: (3)
+ │    │    ├── fd: ()-->(1), (3)-->(4-8,11,13), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13)
  │    │    ├── left-join (lookup generationgroup)
  │    │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:3!null generation1_.age:4 generation1_.culture:5 generation1_.description:6 a13.id:7 a13.age:8
  │    │    │    ├── key columns: [2] = [7]
  │    │    │    ├── lookup columns are key
- │    │    │    ├── key: (3,7)
- │    │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8)
+ │    │    │    ├── key: (3)
+ │    │    │    ├── fd: ()-->(1), (3)-->(4-8), (2)==(3), (3)==(2), (7)-->(8)
  │    │    │    ├── inner-join (lookup generationgroup)
  │    │    │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:3!null generation1_.age:4 generation1_.culture:5 generation1_.description:6
  │    │    │    │    ├── key columns: [2] = [3]
@@ -2100,28 +2102,28 @@ FROM
 ----
 project
  ├── columns: customer1_0_0_:1!null customer1_1_1_:4 ordernum2_1_1_:5 customer1_2_2_:7 ordernum2_2_2_:8 producti3_2_2_:9 producti1_3_3_:11 name2_0_0_:2!null address3_0_0_:3!null orderdat3_1_1_:6 formula103_1_:30 customer1_1_0__:4 ordernum2_1_0__:5 ordernum2_0__:5 quantity4_2_2_:10 customer1_2_1__:7 ordernum2_2_1__:8 producti3_2_1__:9 descript2_3_3_:12 cost3_3_3_:13 numberav4_3_3_:14 formula104_3_:31
- ├── key: (1,4,5,7-9,11)
- ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,30,31)
+ ├── key: (1,4,5,7-9)
+ ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,30,31)
  ├── group-by
  │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24 sum:29
- │    ├── grouping columns: customer0_.customerid:1!null orders1_.customerid:4 orders1_.ordernumber:5 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 product3_.productid:11
- │    ├── key: (1,4,5,7-9,11)
- │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24,29)
+ │    ├── grouping columns: customer0_.customerid:1!null orders1_.customerid:4 orders1_.ordernumber:5 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9
+ │    ├── key: (1,4,5,7-9)
+ │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24,29)
  │    ├── left-join (hash)
  │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24 li.productid:27 li.quantity:28
- │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24)
+ │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24)
  │    │    ├── group-by
  │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24
- │    │    │    ├── grouping columns: customer0_.customerid:1!null orders1_.customerid:4 orders1_.ordernumber:5 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 product3_.productid:11
- │    │    │    ├── key: (1,4,5,7-9,11)
- │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24)
+ │    │    │    ├── grouping columns: customer0_.customerid:1!null orders1_.customerid:4 orders1_.ordernumber:5 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9
+ │    │    │    ├── key: (1,4,5,7-9)
+ │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24)
  │    │    │    ├── left-join (hash)
  │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 li.customerid:15 li.ordernumber:16 column23:23
- │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14)
+ │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(11-14)
  │    │    │    │    ├── left-join (hash)
  │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14
- │    │    │    │    │    ├── key: (1,4,5,7-9,11)
- │    │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14)
+ │    │    │    │    │    ├── key: (1,4,5,7-9)
+ │    │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(11-14)
  │    │    │    │    │    ├── left-join (hash)
  │    │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10
  │    │    │    │    │    │    ├── key: (1,4,5,7-9)
@@ -2188,6 +2190,8 @@ project
  │    │    │         │    └── orderdate:6
  │    │    │         ├── const-agg [as=lineitems2_.quantity:10, outer=(10)]
  │    │    │         │    └── lineitems2_.quantity:10
+ │    │    │         ├── const-agg [as=product3_.productid:11, outer=(11)]
+ │    │    │         │    └── product3_.productid:11
  │    │    │         ├── const-agg [as=product3_.description:12, outer=(12)]
  │    │    │         │    └── product3_.description:12
  │    │    │         ├── const-agg [as=product3_.cost:13, outer=(13)]
@@ -2209,6 +2213,8 @@ project
  │         │    └── orderdate:6
  │         ├── const-agg [as=lineitems2_.quantity:10, outer=(10)]
  │         │    └── lineitems2_.quantity:10
+ │         ├── const-agg [as=product3_.productid:11, outer=(11)]
+ │         │    └── product3_.productid:11
  │         ├── const-agg [as=product3_.description:12, outer=(12)]
  │         │    └── product3_.description:12
  │         ├── const-agg [as=product3_.cost:13, outer=(13)]
