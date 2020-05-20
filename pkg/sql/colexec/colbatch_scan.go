@@ -118,12 +118,20 @@ func newColBatchScan(
 
 	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
+	evalCtx := flowCtx.NewEvalCtx()
+	// Before we can safely use types from the table descriptor, we need to
+	// make sure they are hydrated. In row execution engine it is done during
+	// the processor initialization, but neither colBatchScan nor cFetcher are
+	// processors, so we need to do the hydration ourselves.
+	if err := execinfrapb.HydrateTypeSlice(evalCtx, typs); err != nil {
+		return nil, err
+	}
 	helper := execinfra.ProcOutputHelper{}
 	if err := helper.Init(
 		post,
 		typs,
-		flowCtx.NewEvalCtx(),
-		nil,
+		evalCtx,
+		nil, /* output */
 	); err != nil {
 		return nil, err
 	}
