@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -53,10 +54,10 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if _, err := GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
 			return err
 		}
-		if _, err := MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
 			return err
 		}
 

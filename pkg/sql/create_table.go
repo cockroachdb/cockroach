@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -180,7 +181,7 @@ func getTableCreateParams(
 		tempSchemaName := params.p.TemporarySchemaName()
 		sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
 		var err error
-		schemaID, err = GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, sKey)
+		schemaID, err = catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, sKey)
 		if err != nil {
 			return nil, 0, err
 		} else if schemaID == sqlbase.InvalidID {
@@ -197,7 +198,7 @@ func getTableCreateParams(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, id)
+		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, id)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -261,7 +262,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 	if err != nil {
 		return err
 	}

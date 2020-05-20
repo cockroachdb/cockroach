@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -142,7 +143,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
-	err = WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	err = catalogkv.WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc.TableDesc())
 	if err != nil {
 		return err
@@ -153,7 +154,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := GetDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
+		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
 			return err
 		}
