@@ -101,7 +101,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		execCfg.InternalExecutor,
 		execCfg.Settings,
 		execCfg.Codec,
-		lease.LeaseManagerTestingKnobs{},
+		lease.ManagerTestingKnobs{},
 		stopper,
 		cfg,
 	)
@@ -1327,7 +1327,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	ctx := context.Background()
 
 	upTableVersion = func() {
-		leaseMgr := s.LeaseManager().(*lease.LeaseManager)
+		leaseMgr := s.LeaseManager().(*lease.Manager)
 		var version sqlbase.DescriptorVersion
 		if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.MutableTableDescriptor) error {
 			// Publish nothing; only update the version.

@@ -72,7 +72,7 @@ type Config struct {
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
 	// lease manager?
-	LeaseManager *lease.LeaseManager
+	LeaseManager *lease.Manager
 }
 
 // SchemaFeed tracks changes to a set of tables and exports them as a queue of
@@ -91,7 +91,7 @@ type SchemaFeed struct {
 	clock    *hlc.Clock
 	settings *cluster.Settings
 	targets  jobspb.ChangefeedTargets
-	leaseMgr *lease.LeaseManager
+	leaseMgr *lease.Manager
 	mu       struct {
 		syncutil.Mutex
 

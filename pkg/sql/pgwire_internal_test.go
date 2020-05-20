@@ -67,7 +67,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	// Verify that there are no leases held.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
-	lm := s.LeaseManager().(*lease.LeaseManager)
+	lm := s.LeaseManager().(*lease.Manager)
 
 	// Looking for a table state validates that there used to be a lease on the
 	// table.

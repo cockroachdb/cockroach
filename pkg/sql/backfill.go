@@ -1569,7 +1569,7 @@ func runSchemaChangesInTxn(
 // reuse an existing kv.Txn safely.
 func validateCheckInTxn(
 	ctx context.Context,
-	leaseMgr *lease.LeaseManager,
+	leaseMgr *lease.Manager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *kv.Txn,
@@ -1613,7 +1613,7 @@ func validateCheckInTxn(
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	leaseMgr *lease.LeaseManager,
+	leaseMgr *lease.Manager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *kv.Txn,
