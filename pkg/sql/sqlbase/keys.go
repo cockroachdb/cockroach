@@ -19,6 +19,31 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	// DefaultDatabaseName is the name ofthe default CockroachDB database used
+	// for connections without a current db set.
+	DefaultDatabaseName = "defaultdb"
+
+	// PgDatabaseName is the name of the default postgres system database.
+	PgDatabaseName = "postgres"
+)
+
+// DefaultUserDBs is a set of the databases which are present in a new cluster.
+var DefaultUserDBs = map[string]struct{}{
+	DefaultDatabaseName: {},
+	PgDatabaseName:      {},
+}
+
+// MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
+// new cluster.
+var MaxDefaultDescriptorID = keys.MaxReservedDescID + ID(len(DefaultUserDBs))
+
+// IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
+// present at the time of starting a cluster.
+func IsDefaultCreatedDescriptor(descID ID) bool {
+	return descID <= MaxDefaultDescriptorID
+}
+
 // MakeNameMetadataKey returns the key for the name, as expected by
 // versions >= 20.1.
 // Pass name == "" in order to generate the prefix key to use to scan over all

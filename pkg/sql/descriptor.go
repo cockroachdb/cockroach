@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -41,16 +40,6 @@ var (
 	errNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
-
-// DefaultUserDBs is a set of the databases which are present in a new cluster.
-var DefaultUserDBs = map[string]struct{}{
-	sessiondata.DefaultDatabaseName: {},
-	sessiondata.PgDatabaseName:      {},
-}
-
-// MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
-// new cluster.
-var MaxDefaultDescriptorID = keys.MaxReservedDescID + sqlbase.ID(len(DefaultUserDBs))
 
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
 // the counter. The incrementing is non-transactional, and the counter could be
@@ -176,9 +165,9 @@ func (p *planner) createDescriptorWithID(
 	return nil
 }
 
-// getDescriptorID looks up the ID for plainKey.
+// GetDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
-func getDescriptorID(
+func GetDescriptorID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey sqlbase.DescriptorKey,
 ) (sqlbase.ID, error) {
 	key := plainKey.Key(codec)
@@ -193,8 +182,8 @@ func getDescriptorID(
 	return sqlbase.ID(gr.ValueInt()), nil
 }
 
-// resolveSchemaID resolves a schema's ID based on db and name.
-func resolveSchemaID(
+// ResolveSchemaID resolves a schema's ID based on db and name.
+func ResolveSchemaID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
 	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
@@ -204,7 +193,7 @@ func resolveSchemaID(
 	}
 
 	sKey := sqlbase.NewSchemaKey(dbID, scName)
-	schemaID, err := getDescriptorID(ctx, txn, codec, sKey)
+	schemaID, err := GetDescriptorID(ctx, txn, codec, sKey)
 	if err != nil || schemaID == sqlbase.InvalidID {
 		return false, sqlbase.InvalidID, err
 	}
@@ -212,11 +201,13 @@ func resolveSchemaID(
 	return true, schemaID, nil
 }
 
-// lookupDescriptorByID looks up the descriptor for `id` and returns it.
+// LookupDescriptorByID looks up the descriptor for `id` and returns it.
 // It can be a table or database descriptor.
 // Returns the descriptor (if found), a bool representing whether the
 // descriptor was found and an error if any.
-func lookupDescriptorByID(
+//
+// TODO(ajwerner): Understand the difference between this and GetDescriptorByID.
+func LookupDescriptorByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (sqlbase.DescriptorProto, bool, error) {
 	var desc sqlbase.DescriptorProto
@@ -241,11 +232,11 @@ func lookupDescriptorByID(
 	return nil, false, nil
 }
 
-// getDescriptorByID looks up the descriptor for `id`, validates it.
+// GetDescriptorByID looks up the descriptor for `id`, validates it.
 //
-// In most cases you'll want to use wrappers: `getDatabaseDescByID` or
+// In most cases you'll want to use wrappers: `GetDatabaseDescByID` or
 // `getTableDescByID`.
-func getDescriptorByID(
+func GetDescriptorByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (sqlbase.DescriptorProto, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
@@ -277,12 +268,6 @@ func getDescriptorByID(
 	}
 }
 
-// IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
-// present at the time of starting a cluster.
-func IsDefaultCreatedDescriptor(descID sqlbase.ID) bool {
-	return descID <= MaxDefaultDescriptorID
-}
-
 // CountUserDescriptors returns the number of descriptors present that were
 // created by the user (i.e. not present when the cluster started).
 func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
@@ -293,7 +278,7 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 
 	count := 0
 	for _, desc := range allDescs {
-		if !IsDefaultCreatedDescriptor(desc.GetID()) {
+		if !sqlbase.IsDefaultCreatedDescriptor(desc.GetID()) {
 			count++
 		}
 	}
@@ -371,10 +356,10 @@ func GetAllDatabaseDescriptorIDs(
 	return descIDs, nil
 }
 
-// writeDescToBatch adds a Put command writing a descriptor proto to the
+// WriteDescToBatch adds a Put command writing a descriptor proto to the
 // descriptors table. It writes the descriptor desc at the id descID. If kvTrace
 // is enabled, it will log an event explaining the put that was performed.
-func writeDescToBatch(
+func WriteDescToBatch(
 	ctx context.Context,
 	kvTrace bool,
 	s *cluster.Settings,

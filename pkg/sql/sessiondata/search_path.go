@@ -17,13 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
-// PgDatabaseName is the name of the default postgres system database.
-const PgDatabaseName = "postgres"
-
-// DefaultDatabaseName is the name ofthe default CockroachDB database used
-// for connections without a current db set.
-const DefaultDatabaseName = "defaultdb"
-
 // PgCatalogName is the name of the pg_catalog system schema.
 const PgCatalogName = "pg_catalog"
 
