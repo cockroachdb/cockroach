@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -355,6 +356,15 @@ func (ib *IndexBackfiller) Init(
 	ib.types = make([]*types.T, len(cols))
 	for i := range cols {
 		ib.types[i] = cols[i].Type
+	}
+
+	// Hydrate types used by the backfiller.
+	// TODO (rohany): As part of #49261, this needs to use cached enum data.
+	if err := ib.evalCtx.DB.Txn(evalCtx.Context, func(_ context.Context, txn *kv.Txn) error {
+		evalCtx.Txn = txn
+		return execinfrapb.HydrateTypeSlice(evalCtx, ib.types)
+	}); err != nil {
+		return err
 	}
 
 	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))

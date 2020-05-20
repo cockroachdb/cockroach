@@ -79,7 +79,12 @@ func newIndexBackfiller(
 	}
 	ib.backfiller.chunks = ib
 
-	if err := ib.IndexBackfiller.Init(flowCtx.NewEvalCtx(), ib.desc); err != nil {
+	// Copy in the DB pointer from flowCtx into evalCtx, because the Init
+	// step needs access to the DB.
+	// TODO (rohany): Not sure why this evalCtx doesn't have a set DB in the first place.
+	evalCtx := flowCtx.NewEvalCtx()
+	evalCtx.DB = flowCtx.Cfg.DB
+	if err := ib.IndexBackfiller.Init(evalCtx, ib.desc); err != nil {
 		return nil, err
 	}
 

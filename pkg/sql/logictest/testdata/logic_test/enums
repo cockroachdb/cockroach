@@ -359,3 +359,67 @@ query T
 SELECT x FROM greeting_stats
 ----
 hi
+
+subtest schema_changes
+
+# Ensure that we can drop and create indexes on user defined type columns,
+# as well as on other columns when the table has a user defined type column.
+statement ok
+CREATE TABLE sc (x greeting NOT NULL, y int NOT NULL);
+INSERT INTO sc VALUES ('hello', 0), ('howdy', 1), ('hi', 2);
+
+statement ok
+CREATE INDEX i1 ON sc (x);
+CREATE INDEX i2 ON sc (y);
+CREATE INDEX i3 ON sc (x, y)
+
+query T rowsort
+SELECT x FROM sc@i1
+----
+hello
+howdy
+hi
+
+query TI rowsort
+SELECT x, y FROM sc@i3
+----
+hello 0
+howdy 1
+hi 2
+
+statement ok
+DROP INDEX sc@i1;
+DROP INDEX sc@i2;
+DROP INDEX sc@i3
+
+# Test the above, but exercise the schema change in txn code path.
+statement ok
+DROP TABLE sc
+
+statement ok
+BEGIN;
+CREATE TABLE sc (x greeting NOT NULL, y int NOT NULL);
+INSERT INTO sc VALUES ('hello', 0), ('howdy', 1), ('hi', 2);
+CREATE INDEX i1 ON sc (x);
+CREATE INDEX i2 ON sc (y);
+CREATE INDEX i3 ON sc (x, y)
+
+query T rowsort
+SELECT x FROM sc@i1
+----
+hello
+howdy
+hi
+
+query TI rowsort
+SELECT x, y FROM sc@i3
+----
+hello 0
+howdy 1
+hi 2
+
+statement ok
+DROP INDEX sc@i1;
+DROP INDEX sc@i2;
+DROP INDEX sc@i3;
+COMMIT
