@@ -1228,25 +1228,25 @@ func TestEngineFS(t *testing.T) {
 				)
 				switch s[0] {
 				case "create":
-					g, err = e.CreateFile(s[1])
+					g, err = e.Create(s[1])
 				case "create-with-sync":
-					g, err = e.CreateFileWithSync(s[1], 1)
+					g, err = e.CreateWithSync(s[1], 1)
 				case "link":
-					err = e.LinkFile(s[1], s[2])
+					err = e.Link(s[1], s[2])
 				case "open":
-					g, err = e.OpenFile(s[1])
+					g, err = e.Open(s[1])
 				case "opendir":
 					g, err = e.OpenDir(s[1])
 				case "delete":
-					err = e.DeleteFile(s[1])
+					err = e.Remove(s[1])
 				case "rename":
-					err = e.RenameFile(s[1], s[2])
+					err = e.Rename(s[1], s[2])
 				case "create-dir":
-					err = e.CreateDir(s[1])
+					err = e.MkdirAll(s[1])
 				case "delete-dir":
-					err = e.DeleteDir(s[1])
+					err = e.RemoveDir(s[1])
 				case "list-dir":
-					result, err := e.ListDir(s[1])
+					result, err := e.List(s[1])
 					if err != nil {
 						break
 					}
@@ -1370,19 +1370,19 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			db := engineImpl.create(t, dir)
 			defer db.Close()
 
-			// Verify DeleteFile returns os.ErrNotExist if file does not exist.
-			if err := db.DeleteFile("/non/existent/file"); !os.IsNotExist(err) {
+			// Verify Remove returns os.ErrNotExist if file does not exist.
+			if err := db.Remove("/non/existent/file"); !os.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
-			// Verify DeleteDirAndFiles returns os.ErrNotExist if dir does not exist.
-			if err := db.DeleteDirAndFiles("/non/existent/file"); !os.IsNotExist(err) {
+			// Verify RemoveDirAndFiles returns os.ErrNotExist if dir does not exist.
+			if err := db.RemoveDirAndFiles("/non/existent/file"); !os.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
 			fname := filepath.Join(dir, "random.file")
 			data := "random data"
-			if f, err := db.CreateFile(fname); err != nil {
+			if f, err := db.Create(fname); err != nil {
 				t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
 			} else {
 				// Write data to file so we can read it later.
@@ -1403,7 +1403,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 				t.Errorf("expected content in %s is '%s', got '%s'", fname, data, string(b))
 			}
 
-			if err := db.DeleteFile(fname); err != nil {
+			if err := db.Remove(fname); err != nil {
 				t.Errorf("unable to delete file with filename %s, got err %v", fname, err)
 			}
 
@@ -1412,8 +1412,8 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
-			// Verify DeleteFile returns os.ErrNotExist if deleting an already deleted file.
-			if err := db.DeleteFile(fname); !os.IsNotExist(err) {
+			// Verify Remove returns os.ErrNotExist if deleting an already deleted file.
+			if err := db.Remove(fname); !os.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 		})

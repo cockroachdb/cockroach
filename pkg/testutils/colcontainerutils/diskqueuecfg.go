@@ -36,7 +36,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 	if inMem {
 		ngn := storage.NewDefaultInMem()
 		testingFS = ngn.(fs.FS)
-		if err := testingFS.CreateDir(inMemDirName); err != nil {
+		if err := testingFS.MkdirAll(inMemDirName); err != nil {
 			t.Fatal(err)
 		}
 		path = inMemDirName
