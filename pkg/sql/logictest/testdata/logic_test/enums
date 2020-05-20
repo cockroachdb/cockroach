@@ -359,3 +359,25 @@ query T
 SELECT x FROM greeting_stats
 ----
 hi
+
+# Regression for #49300. Ensure that virtual tables have access to hydrated
+# type descriptors.
+query TT
+SHOW CREATE t1
+----
+t1  CREATE TABLE t1 (
+    x test.public.greeting NULL,
+    INDEX i (x ASC),
+    FAMILY "primary" (x, rowid)
+)
+
+# SHOW CREATE uses a virtual index, so also check the code path where a
+# descriptor scan is used.
+query T
+SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
+----
+CREATE TABLE t1 (
+   x test.public.greeting NULL,
+   INDEX i (x ASC),
+   FAMILY "primary" (x, rowid)
+)

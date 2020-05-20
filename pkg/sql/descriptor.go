@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -312,6 +313,10 @@ func GetAllDescriptors(
 		return nil, err
 	}
 
+	// Remember the database and type descriptors we found. We'll use these when
+	// hydrating the types in the scanned table descriptors.
+	dbDescs := make(map[sqlbase.ID]*DatabaseDescriptor)
+	typDescs := make(map[sqlbase.ID]*TypeDescriptor)
 	descs := make([]sqlbase.DescriptorProto, 0, len(kvs))
 	for _, kv := range kvs {
 		desc := &sqlbase.Descriptor{}
@@ -326,13 +331,45 @@ func GetAllDescriptors(
 			}
 			descs = append(descs, table)
 		case *sqlbase.Descriptor_Database:
+			dbDesc := desc.GetDatabase()
+			dbDescs[dbDesc.ID] = dbDesc
 			descs = append(descs, desc.GetDatabase())
 		case *sqlbase.Descriptor_Type:
-			descs = append(descs, desc.GetType())
+			typDesc := desc.GetType()
+			typDescs[typDesc.ID] = typDesc
+			descs = append(descs, typDesc)
 		default:
 			return nil, errors.AssertionFailedf("Descriptor.Union has unexpected type %T", t)
 		}
 	}
+
+	// If we found any type descriptors, that means that some of the tables we
+	// scanned might have types that need hydrating.
+	if len(typDescs) > 0 {
+		// Since we just scanned all the descriptors, we already have everything
+		// we need to hydrate our types. Set up an accessor for the type hydration
+		// method to look into the scanned set of descriptors.
+		typeLookup := func(id sqlbase.ID) (*tree.TypeName, *TypeDescriptor, error) {
+			typDesc := typDescs[id]
+			dbDesc := dbDescs[typDesc.ParentID]
+			schemaName, err := schema.ResolveNameByID(ctx, txn, codec, dbDesc.ID, typDesc.ParentSchemaID)
+			if err != nil {
+				return nil, nil, err
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaName, typDesc.Name)
+			return &name, typDesc, nil
+		}
+		// Now hydrate all table descriptors.
+		for i := range descs {
+			desc := descs[i]
+			if tbl, ok := desc.(*TableDescriptor); ok {
+				if err := hydrateTypesInTableDescriptor(tbl, typeLookup); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
 	return descs, nil
 }
 

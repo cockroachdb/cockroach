@@ -4151,7 +4151,14 @@ func (desc *TypeDescriptor) SetName(name string) {
 //  ImmutableTypeDescriptor so that pointers to the cached info
 //  can be shared among callers.
 func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
-	typ.TypeMeta.Name = tree.NewUnqualifiedTypeName(tree.Name(desc.Name))
+	return desc.HydrateTypeInfoWithName(typ, tree.NewUnqualifiedTypeName(tree.Name(desc.Name)))
+}
+
+// HydrateTypeInfoWithName fills in user defined type metadata for
+// a type and also sets the name in the metadata to the passed in name.
+// This is used when hydrating a type with a known qualified name.
+func (desc *TypeDescriptor) HydrateTypeInfoWithName(typ *types.T, name *tree.TypeName) error {
+	typ.TypeMeta.Name = name
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {

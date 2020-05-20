@@ -453,6 +453,8 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
 // CommonLookupFlags, it could use or skip the TableCollection cache. See
 // TableCollection.getTableVersionByID for how it's used.
+// TODO (SQLSchema): This should call into the set of SchemaAccessors instead
+//  of having its own logic for lookups.
 func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
 		return row.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
@@ -463,6 +465,9 @@ func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.
 		if errors.Is(err, errTableAdding) {
 			return row.TableEntry{IsAdding: true}, nil
 		}
+		return row.TableEntry{}, err
+	}
+	if err := p.maybeHydrateTypesInDescriptor(ctx, table); err != nil {
 		return row.TableEntry{}, err
 	}
 	return row.TableEntry{Desc: table}, nil
