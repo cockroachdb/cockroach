@@ -130,7 +130,7 @@ func (t *leaseTest) acquire(
 func (t *leaseTest) acquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
-	return t.node(nodeID).AcquireAndAssertMinVersion(
+	return t.node(nodeID).TestingAcquireAndAssertMinVersion(
 		context.TODO(), t.server.Clock().Now(), descID, minVersion)
 }
 

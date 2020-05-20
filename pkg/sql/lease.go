@@ -343,7 +343,10 @@ func (s LeaseStore) WaitForOneVersion(
 	return tableDesc.Version, nil
 }
 
-var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
+// ErrDidntUpdateDescriptor can be returned from the update function passed to
+// PublishMultiple to suppress an error being returned and return the original
+// values.
+var ErrDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 
 // PublishMultiple updates multiple table descriptors, maintaining the invariant
 // that there are at most two versions of each descriptor out in the wild at any
@@ -462,7 +465,7 @@ func (s LeaseStore) PublishMultiple(
 		})
 
 		switch {
-		case err == nil || errors.Is(err, errDidntUpdateDescriptor):
+		case err == nil || errors.Is(err, ErrDidntUpdateDescriptor):
 			immutTableDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
 			for id, tableDesc := range tableDescs {
 				immutTableDescs[id] = sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor)
@@ -519,15 +522,15 @@ func (s LeaseStore) Publish(
 // meant to map to a single immutable descriptor.
 type IDVersion struct {
 	// name only provided for pretty printing.
-	name    string
-	id      sqlbase.ID
-	version sqlbase.DescriptorVersion
+	Name    string
+	ID      sqlbase.ID
+	Version sqlbase.DescriptorVersion
 }
 
 // NewIDVersionPrev returns an initialized IDVersion with the
 // previous version of the descriptor.
 func NewIDVersionPrev(desc *sqlbase.TableDescriptor) IDVersion {
-	return IDVersion{name: desc.Name, id: desc.ID, version: desc.Version - 1}
+	return IDVersion{Name: desc.Name, ID: desc.ID, Version: desc.Version - 1}
 }
 
 // CountLeases returns the number of unexpired leases for a number of tables
@@ -539,7 +542,7 @@ func CountLeases(
 	for _, t := range tables {
 		whereClauses = append(whereClauses,
 			fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
-				t.id, t.version),
+				t.ID, t.Version),
 		)
 	}
 
@@ -1355,7 +1358,7 @@ func (c *tableNameCache) get(
 
 	defer table.mu.Unlock()
 
-	if !nameMatchesTable(
+	if !NameMatchesTable(
 		&table.ImmutableTableDescriptor.TableDescriptor,
 		dbID,
 		schemaID,
@@ -1507,7 +1510,7 @@ func NewLeaseManager(
 	return lm
 }
 
-func nameMatchesTable(
+func NameMatchesTable(
 	table *sqlbase.TableDescriptor, dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
 ) bool {
 	return table.ParentID == dbID && table.Name == tableName &&
@@ -1587,7 +1590,7 @@ func (m *LeaseManager) AcquireByName(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	if !nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
+	if !NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
 		// We resolved name `tableName`, but the lease has a different name in it.
 		// That can mean two things. Assume the table is being renamed from A to B.
 		// a) `tableName` is A. The transaction doing the RENAME committed (so the
@@ -1620,7 +1623,7 @@ func (m *LeaseManager) AcquireByName(
 		// resolve the current or the old name.
 		//
 		// TODO(vivek): check if the entire above comment is indeed true. Review the
-		// use of nameMatchesTable() throughout this function.
+		// use of NameMatchesTable() throughout this function.
 		if err := m.Release(table); err != nil {
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
@@ -1631,7 +1634,7 @@ func (m *LeaseManager) AcquireByName(
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		if !nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
+		if !NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			if err := m.Release(table); err != nil {
@@ -2295,4 +2298,36 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 			}
 		}
 	})
+}
+
+// DB returns the LeaseManager's handle to a kv.DB.
+func (m *LeaseManager) DB() *kv.DB {
+	return m.db
+}
+
+// Codec return the LeaseManager's SQLCodec.
+func (m *LeaseManager) Codec() keys.SQLCodec {
+	return m.codec
+}
+
+// TestingAcquireAndAssertMinVersion acquires a read lease for the specified
+// table ID. The lease is grabbed on the latest version if >= specified version.
+// It returns a table descriptor and an expiration time valid for the timestamp.
+// This method is useful for testing and is only intended to be used in that
+// context.
+func (m *LeaseManager) TestingAcquireAndAssertMinVersion(
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	tableID sqlbase.ID,
+	minVersion sqlbase.DescriptorVersion,
+) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
+	t := m.findTableState(tableID, true)
+	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	table, _, err := t.findForTimestamp(ctx, timestamp)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	return &table.ImmutableTableDescriptor, table.expiration, nil
 }

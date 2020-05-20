@@ -170,7 +170,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.GetDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
+		dbID, err = tc.databaseCache.GetDatabaseID(ctx, tc.leaseMgr.DB().Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -301,7 +301,7 @@ func (tc *TableCollection) getTableVersion(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.GetDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
+		dbID, err = tc.databaseCache.GetDatabaseID(ctx, tc.leaseMgr.DB().Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -339,10 +339,10 @@ func (tc *TableCollection) getTableVersion(
 	} else if immut := table.ImmutableTableDescriptor; immut != nil {
 		// If not forcing to resolve using KV, tables being added aren't visible.
 		if immut.Adding() && !avoidCache {
-			if flags.Required {
-				err = sqlbase.FilterTableState(immut.TableDesc())
+			if !flags.Required {
+				return nil, nil
 			}
-			return nil, err
+			return nil, sqlbase.FilterTableState(immut.TableDesc())
 		}
 
 		log.VEventf(ctx, 2, "found uncommitted table %d", immut.ID)
@@ -358,7 +358,7 @@ func (tc *TableCollection) getTableVersion(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	for _, table := range tc.leasedTables {
-		if nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tn.Table()) {
+		if NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tn.Table()) {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
 			return table, nil
 		}
@@ -479,7 +479,7 @@ func (tc *TableCollection) releaseTableLeases(ctx context.Context, tables []IDVe
 	// Sort the tables and leases to make it easy to find the leases to release.
 	leasedTables := tc.leasedTables
 	sort.Slice(tables, func(i, j int) bool {
-		return tables[i].id < tables[j].id
+		return tables[i].ID < tables[j].ID
 	})
 	sort.Slice(leasedTables, func(i, j int) bool {
 		return leasedTables[i].ID < leasedTables[j].ID
@@ -488,10 +488,10 @@ func (tc *TableCollection) releaseTableLeases(ctx context.Context, tables []IDVe
 	filteredLeases := leasedTables[:0] // will store the remaining leases
 	tablesToConsider := tables
 	shouldRelease := func(id sqlbase.ID) (found bool) {
-		for len(tablesToConsider) > 0 && tablesToConsider[0].id < id {
+		for len(tablesToConsider) > 0 && tablesToConsider[0].ID < id {
 			tablesToConsider = tablesToConsider[1:]
 		}
-		return len(tablesToConsider) > 0 && tablesToConsider[0].id == id
+		return len(tablesToConsider) > 0 && tablesToConsider[0].ID == id
 	}
 	for _, l := range leasedTables {
 		if !shouldRelease(l.ID) {
@@ -679,7 +679,7 @@ func (tc *TableCollection) getUncommittedTable(
 		}
 
 		// Do we know about a table with this name?
-		if nameMatchesTable(
+		if NameMatchesTable(
 			&mutTbl.TableDescriptor,
 			dbID,
 			schemaID,
@@ -846,7 +846,7 @@ type tableCollectionModifier interface {
 func (tc *TableCollection) validatePrimaryKeys() error {
 	modifiedTables := tc.getTablesWithNewVersion()
 	for i := range modifiedTables {
-		table := tc.getUncommittedTableByID(modifiedTables[i].id).MutableTableDescriptor
+		table := tc.getUncommittedTableByID(modifiedTables[i].ID).MutableTableDescriptor
 		if !table.HasPrimaryKey() {
 			return unimplemented.NewWithIssuef(48026,
 				"primary key of table %s dropped without subsequent addition of new primary key",
@@ -858,7 +858,7 @@ func (tc *TableCollection) validatePrimaryKeys() error {
 }
 
 func (tc *TableCollection) codec() keys.SQLCodec {
-	return tc.leaseMgr.codec
+	return tc.leaseMgr.Codec()
 }
 
 // MigrationSchemaChangeRequiredContext flags a schema change as necessary to

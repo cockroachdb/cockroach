@@ -321,7 +321,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 			table.ID,
 			func(tbl *sqlbase.MutableTableDescriptor) error {
 				if !tbl.Adding() {
-					return errDidntUpdateDescriptor
+					return ErrDidntUpdateDescriptor
 				}
 				tbl.State = sqlbase.TableDescriptor_PUBLIC
 				return nil
@@ -679,7 +679,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		}
 		if doNothing := runStatus == "" || desc.Dropped(); doNothing {
 			// Return error so that Publish() doesn't increment the version.
-			return errDidntUpdateDescriptor
+			return ErrDidntUpdateDescriptor
 		}
 		return nil
 	}, func(txn *kv.Txn) error {
@@ -951,7 +951,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		if i == 0 {
 			// The table descriptor is unchanged. Don't let Publish() increment
 			// the version.
-			return errDidntUpdateDescriptor
+			return ErrDidntUpdateDescriptor
 		}
 		// Trim the executed mutations from the descriptor.
 		scDesc.Mutations = scDesc.Mutations[i:]
@@ -1174,7 +1174,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				// Only reverse the first set of mutations if they have the
 				// mutation ID we're looking for.
 				if i == 0 {
-					return errDidntUpdateDescriptor
+					return ErrDidntUpdateDescriptor
 				}
 				break
 			}
