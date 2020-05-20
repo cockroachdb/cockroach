@@ -757,13 +757,13 @@ var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 
-// databaseCacheHolder is a thread-safe container for a *DatabaseCache.
+// databaseCacheHolder is a thread-safe container for a *Cache.
 // It also allows clients to block until the cache is updated to a desired
 // state.
 //
 // NOTE(andrei): The way in which we handle the database cache is funky: there's
 // this top-level holder, which gets updated on gossip updates. Then, each
-// session gets its *DatabaseCache, which is updated from the holder after every
+// session gets its *Cache, which is updated from the holder after every
 // transaction - the SystemConfig is updated and the lazily computer map of db
 // names to ids is wiped. So many session are sharing and contending on a
 // mutable cache, but nobody's sharing this holder. We should make up our mind
@@ -775,26 +775,26 @@ func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 type databaseCacheHolder struct {
 	mu struct {
 		syncutil.Mutex
-		c  *database.DatabaseCache
+		c  *database.Cache
 		cv *sync.Cond
 	}
 }
 
-func newDatabaseCacheHolder(c *database.DatabaseCache) *databaseCacheHolder {
+func newDatabaseCacheHolder(c *database.Cache) *databaseCacheHolder {
 	dc := &databaseCacheHolder{}
 	dc.mu.c = c
 	dc.mu.cv = sync.NewCond(&dc.mu.Mutex)
 	return dc
 }
 
-func (dc *databaseCacheHolder) getDatabaseCache() *database.DatabaseCache {
+func (dc *databaseCacheHolder) getDatabaseCache() *database.Cache {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	return dc.mu.c
 }
 
 // waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*database.DatabaseCache) bool) {
+func (dc *databaseCacheHolder) waitForCacheState(cond func(*database.Cache) bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for done := cond(dc.mu.c); !done; done = cond(dc.mu.c) {
@@ -809,7 +809,7 @@ var _ dbCacheSubscriber = &databaseCacheHolder{}
 // received.
 func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
-	dc.mu.c = database.NewDatabaseCache(dc.mu.c.Codec(), cfg)
+	dc.mu.c = database.NewCache(dc.mu.c.Codec(), cfg)
 	dc.mu.cv.Broadcast()
 	dc.mu.Unlock()
 }
