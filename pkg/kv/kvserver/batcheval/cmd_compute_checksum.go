@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -53,7 +53,7 @@ func ComputeChecksum(
 	reply.ChecksumID = uuid.MakeV4()
 
 	var pd result.Result
-	pd.Replicated.ComputeChecksum = &storagepb.ComputeChecksum{
+	pd.Replicated.ComputeChecksum = &kvserverpb.ComputeChecksum{
 		Version:      args.Version,
 		ChecksumID:   reply.ChecksumID,
 		SaveSnapshot: args.Snapshot,

@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -384,7 +384,7 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 }
 
 // LatchMetrics implements the MetricExporter interface.
-func (m *managerImpl) LatchMetrics() (global, local storagepb.LatchManagerInfo) {
+func (m *managerImpl) LatchMetrics() (global, local kvserverpb.LatchManagerInfo) {
 	return m.lm.Info()
 }
 

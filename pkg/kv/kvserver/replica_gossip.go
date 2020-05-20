@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -165,7 +165,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
 	for _, kv := range kvs {
-		var kvLiveness, gossipLiveness storagepb.Liveness
+		var kvLiveness, gossipLiveness kvserverpb.Liveness
 		if err := kv.Value.GetProto(&kvLiveness); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
 		}

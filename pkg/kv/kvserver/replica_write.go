@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -63,7 +63,7 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, st storagepb.LeaseStatus, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
@@ -557,7 +557,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
-			res.LogicalOpLog = &storagepb.LogicalOpLog{
+			res.LogicalOpLog = &kvserverpb.LogicalOpLog{
 				Ops: opLogger.LogicalOps(),
 			}
 		}

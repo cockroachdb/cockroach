@@ -10,14 +10,14 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.storagepb;
-option go_package = "storagepb";
+option go_package = "kvserverpb";
 
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
-import "kv/kvserver/storagepb/state.proto";
+import "kv/kvserver/kvserverpb/state.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";

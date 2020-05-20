@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -68,8 +68,8 @@ var (
 // NodeLiveness is the subset of storage.NodeLiveness's interface needed
 // by Registry.
 type NodeLiveness interface {
-	Self() (storagepb.Liveness, error)
-	GetLivenesses() []storagepb.Liveness
+	Self() (kvserverpb.Liveness, error)
+	GetLivenesses() []kvserverpb.Liveness
 }
 
 // Registry creates Jobs and manages their leases and cancelation.

@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -926,7 +926,7 @@ func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
@@ -960,7 +960,7 @@ func (r *Replica) changeReplicasImpl(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
@@ -1050,7 +1050,7 @@ func maybeLeaveAtomicChangeReplicas(
 	//
 	// TODO(tbg): reconsider this.
 	return execChangeReplicasTxn(
-		ctx, store, desc, storagepb.ReasonUnknown /* unused */, "", nil, /* iChgs */
+		ctx, store, desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 	)
 }
 
@@ -1085,7 +1085,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
-			ctx, store, desc, storagepb.ReasonAbandonedLearner, "",
+			ctx, store, desc, kvserverpb.ReasonAbandonedLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
 		)
 		if err != nil {
@@ -1153,7 +1153,7 @@ func addLearnerReplicas(
 	ctx context.Context,
 	store *Store,
 	desc *roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 	targets []roachpb.ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
@@ -1230,7 +1230,7 @@ func (r *Replica) atomicReplicationChange(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
 ) (*roachpb.RangeDescriptor, error) {
@@ -1315,7 +1315,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	target roachpb.ReplicationTarget,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) {
 	repDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
@@ -1535,7 +1535,7 @@ func execChangeReplicasTxn(
 	ctx context.Context,
 	store *Store,
 	referenceDesc *roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs internalReplicationChanges,
 ) (*roachpb.RangeDescriptor, error) {

@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -657,7 +657,7 @@ func RunCommitTrigger(
 			newDesc.StickyBit = nil
 		}
 		var res result.Result
-		res.Replicated.State = &storagepb.ReplicaState{
+		res.Replicated.State = &kvserverpb.ReplicaState{
 			Desc: &newDesc,
 		}
 		return res, nil
@@ -1025,7 +1025,7 @@ func splitTriggerHelper(
 	}
 
 	var pd result.Result
-	pd.Replicated.Split = &storagepb.Split{
+	pd.Replicated.Split = &kvserverpb.Split{
 		SplitTrigger: *split,
 		// NB: the RHSDelta is identical to the stats for the newly created right
 		// hand side range (i.e. it goes from zero to its stats).
@@ -1083,7 +1083,7 @@ func mergeTrigger(
 	}
 
 	var pd result.Result
-	pd.Replicated.Merge = &storagepb.Merge{
+	pd.Replicated.Merge = &kvserverpb.Merge{
 		MergeTrigger: *merge,
 	}
 	return pd, nil
@@ -1121,10 +1121,10 @@ func changeReplicasTrigger(
 		desc.NextReplicaID = change.DeprecatedNextReplicaID
 	}
 
-	pd.Replicated.State = &storagepb.ReplicaState{
+	pd.Replicated.State = &kvserverpb.ReplicaState{
 		Desc: &desc,
 	}
-	pd.Replicated.ChangeReplicas = &storagepb.ChangeReplicas{
+	pd.Replicated.ChangeReplicas = &kvserverpb.ChangeReplicas{
 		ChangeReplicasTrigger: *change,
 	}
 

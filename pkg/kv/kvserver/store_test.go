@@ -31,10 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -709,7 +709,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	st := &storagepb.LeaseStatus{Timestamp: repl1.Clock().Now()}
+	st := &kvserverpb.LeaseStatus{Timestamp: repl1.Clock().Now()}
 	if err = repl1.checkExecutionCanProceed(&roachpb.BatchRequest{}, nil /* g */, st); !errors.Is(err, expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
@@ -2829,7 +2829,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	// because the Raft log index and term are less than the hard state written
 	// above.
 	req := &SnapshotRequest_Header{
-		State: storagepb.ReplicaState{Desc: repl1.Desc()},
+		State: kvserverpb.ReplicaState{Desc: repl1.Desc()},
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID: 1,
 			ToReplica: roachpb.ReplicaDescriptor{
@@ -2857,7 +2857,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	if err := s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
-			State:    &storagepb.ReplicaState{Desc: repl1.Desc()},
+			State:    &kvserverpb.ReplicaState{Desc: repl1.Desc()},
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -2922,7 +2922,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 
 	header := SnapshotRequest_Header{
 		CanDecline: true,
-		State: storagepb.ReplicaState{
+		State: kvserverpb.ReplicaState{
 			Desc: &roachpb.RangeDescriptor{RangeID: 1},
 		},
 	}
@@ -3229,7 +3229,7 @@ func TestPreemptiveSnapshotsAreRemoved(t *testing.T) {
 	lease := roachpb.Lease{
 		Start: s.Clock().Now(),
 	}
-	state := storagepb.ReplicaState{
+	state := kvserverpb.ReplicaState{
 		Desc:        desc,
 		Lease:       &lease,
 		GCThreshold: &hlc.Timestamp{},

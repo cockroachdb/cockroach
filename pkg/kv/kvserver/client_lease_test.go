@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -181,12 +181,12 @@ func TestStoreGossipSystemData(t *testing.T) {
 		systemConfig := mtc.gossips[0].GetSystemConfig()
 		return systemConfig
 	}
-	getNodeLiveness := func() storagepb.Liveness {
-		var liveness storagepb.Liveness
+	getNodeLiveness := func() kvserverpb.Liveness {
+		var liveness kvserverpb.Liveness
 		if err := mtc.gossips[0].GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
 			return liveness
 		}
-		return storagepb.Liveness{}
+		return kvserverpb.Liveness{}
 	}
 
 	// Clear the system-config and node liveness gossip data. This is necessary
@@ -196,14 +196,14 @@ func TestStoreGossipSystemData(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := mtc.gossips[0].AddInfoProto(
-		gossip.MakeNodeLivenessKey(1), &storagepb.Liveness{}, 0); err != nil {
+		gossip.MakeNodeLivenessKey(1), &kvserverpb.Liveness{}, 0); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
 		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
 			return errors.New("system config not empty")
 		}
-		if getNodeLiveness() != (storagepb.Liveness{}) {
+		if getNodeLiveness() != (kvserverpb.Liveness{}) {
 			return errors.New("node liveness not empty")
 		}
 		return nil
@@ -216,7 +216,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
 			return errors.New("system config not gossiped")
 		}
-		if getNodeLiveness() == (storagepb.Liveness{}) {
+		if getNodeLiveness() == (kvserverpb.Liveness{}) {
 			return errors.New("node liveness not gossiped")
 		}
 		return nil

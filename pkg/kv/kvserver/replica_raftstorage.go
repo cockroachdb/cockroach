@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -450,7 +450,7 @@ type OutgoingSnapshot struct {
 	// The complete range iterator for the snapshot to stream.
 	Iter *rditer.ReplicaDataIterator
 	// The replica state within the snapshot.
-	State storagepb.ReplicaState
+	State kvserverpb.ReplicaState
 	// Allows access the the original Replica's sideloaded storage. Note that
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
@@ -482,7 +482,7 @@ type IncomingSnapshot struct {
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
-	State *storagepb.ReplicaState
+	State *kvserverpb.ReplicaState
 	//
 	// When true, this snapshot contains an unreplicated TruncatedState. When
 	// false, the TruncatedState is replicated (see the reference below) and the

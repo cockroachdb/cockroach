@@ -14,7 +14,7 @@ option go_package = "kvserver";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
-import "kv/kvserver/storagepb/state.proto";
+import "kv/kvserver/kvserverpb/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -208,7 +208,7 @@ message ConfChangeContext {
       (gogoproto.customname) = "CommandID"];
 
   // Payload is the application-level command (i.e. an encoded
-  // storagepb.RaftCommand).
+  // kvserverpb.RaftCommand).
   optional bytes payload = 2;
 }
 

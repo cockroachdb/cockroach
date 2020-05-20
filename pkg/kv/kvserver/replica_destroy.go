@@ -16,7 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -153,10 +153,10 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// the deletion of the data itself.
 	if ms != (enginepb.MVCCStats{}) {
 		desc := r.Desc()
-		r.store.compactor.Suggest(ctx, storagepb.SuggestedCompaction{
+		r.store.compactor.Suggest(ctx, kvserverpb.SuggestedCompaction{
 			StartKey: roachpb.Key(desc.StartKey),
 			EndKey:   roachpb.Key(desc.EndKey),
-			Compaction: storagepb.Compaction{
+			Compaction: kvserverpb.Compaction{
 				Bytes:            ms.Total(),
 				SuggestedAtNanos: timeutil.Now().UnixNano(),
 			},

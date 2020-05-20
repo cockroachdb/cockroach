@@ -13,7 +13,7 @@ package kvserver
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -21,8 +21,8 @@ import (
 func TestShouldReplaceLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	l := func(epo int64, expiration hlc.Timestamp, draining, decom bool) storagepb.Liveness {
-		return storagepb.Liveness{
+	l := func(epo int64, expiration hlc.Timestamp, draining, decom bool) kvserverpb.Liveness {
+		return kvserverpb.Liveness{
 			Epoch:           epo,
 			Expiration:      hlc.LegacyTimestamp(expiration),
 			Draining:        draining,
@@ -36,12 +36,12 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	now := hlc.Timestamp{WallTime: 12345}
 
 	for _, test := range []struct {
-		old, new storagepb.Liveness
+		old, new kvserverpb.Liveness
 		exp      bool
 	}{
 		{
 			// Epoch update only.
-			storagepb.Liveness{},
+			kvserverpb.Liveness{},
 			l(1, hlc.Timestamp{}, false, false),
 			yes,
 		},

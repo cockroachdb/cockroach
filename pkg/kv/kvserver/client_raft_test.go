@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -288,7 +288,7 @@ func TestReplicateRange(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 	// Verify no intent remains on range descriptor key.
@@ -374,7 +374,7 @@ func TestRestoreReplicas(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := firstRng.ChangeReplicas(context.Background(), firstRng.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := firstRng.ChangeReplicas(context.Background(), firstRng.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -463,7 +463,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "boom") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "boom") {
 		t.Fatalf("did not get expected error: %+v", err)
 	}
 
@@ -481,7 +481,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	// are pushable by making the transaction abandoned.
 	mtc.manualClock.Increment(10 * base.DefaultTxnHeartbeatInterval.Nanoseconds())
 
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -548,7 +548,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1053,7 +1053,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	header := kvserver.SnapshotRequest_Header{
 		CanDecline: true,
 		RangeSize:  100,
-		State:      storagepb.ReplicaState{Desc: desc},
+		State:      kvserverpb.ReplicaState{Desc: desc},
 		RaftMessageRequest: kvserver.RaftMessageRequest{
 			RangeID:     rep.RangeID,
 			FromReplica: repDesc,
@@ -1217,7 +1217,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			NodeID:  mtc.stores[2].Ident.NodeID,
 			StoreID: mtc.stores[2].Ident.StoreID,
 		})
-		_, err = rep2.ChangeReplicas(context.Background(), &desc, kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs)
+		_, err = rep2.ChangeReplicas(context.Background(), &desc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -1656,7 +1656,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 			NodeID:  mtc.stores[storeNum].Ident.NodeID,
 			StoreID: mtc.stores[storeNum].Ident.StoreID,
 		})
-		_, err := repl.ChangeReplicas(context.Background(), desc, kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs)
+		_, err := repl.ChangeReplicas(context.Background(), desc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -2740,7 +2740,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 					NodeID:  mtc.stores[1].Ident.NodeID,
 					StoreID: mtc.stores[1].Ident.StoreID,
 				})
-				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonUnknown, "", chgs); err != nil {
+				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
 					if kvserver.IsSnapshotError(err) {
 						continue
 					} else {
@@ -2773,7 +2773,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
-			var command storagepb.RaftCommand
+			var command kvserverpb.RaftCommand
 			if err := protoutil.Unmarshal(ccCtx.Payload, &command); err != nil {
 				panic(err)
 			}
@@ -2837,7 +2837,7 @@ func TestReplicaGCRace(t *testing.T) {
 		NodeID:  toStore.Ident.NodeID,
 		StoreID: toStore.Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2886,7 +2886,7 @@ func TestReplicaGCRace(t *testing.T) {
 
 	// Remove the victim replica and manually GC it.
 	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4084,7 +4084,7 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 		NodeID:  deleteStore.Ident.NodeID,
 		StoreID: deleteStore.Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 

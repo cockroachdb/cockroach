@@ -16,8 +16,8 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -441,7 +441,7 @@ func (m *Manager) removeLocked(lg *Guard) {
 }
 
 // Info returns information about the state of the Manager.
-func (m *Manager) Info() (global, local storagepb.LatchManagerInfo) {
+func (m *Manager) Info() (global, local kvserverpb.LatchManagerInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	global = m.scopes[spanset.SpanGlobal].infoLocked()
@@ -449,8 +449,8 @@ func (m *Manager) Info() (global, local storagepb.LatchManagerInfo) {
 	return global, local
 }
 
-func (sm *scopedManager) infoLocked() storagepb.LatchManagerInfo {
-	var info storagepb.LatchManagerInfo
+func (sm *scopedManager) infoLocked() kvserverpb.LatchManagerInfo {
+	var info kvserverpb.LatchManagerInfo
 	info.ReadCount = int64(sm.trees[spanset.SpanReadOnly].Len() + sm.readSet.len)
 	info.WriteCount = int64(sm.trees[spanset.SpanReadWrite].Len())
 	return info

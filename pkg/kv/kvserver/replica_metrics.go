@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"go.etcd.io/etcd/raft"
@@ -27,7 +27,7 @@ type ReplicaMetrics struct {
 	LeaseValid  bool
 	Leaseholder bool
 	LeaseType   roachpb.LeaseType
-	LeaseStatus storagepb.LeaseStatus
+	LeaseStatus kvserverpb.LeaseStatus
 
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
@@ -42,8 +42,8 @@ type ReplicaMetrics struct {
 	Underreplicated bool
 	Overreplicated  bool
 	BehindCount     int64
-	LatchInfoLocal  storagepb.LatchManagerInfo
-	LatchInfoGlobal storagepb.LatchManagerInfo
+	LatchInfoLocal  kvserverpb.LatchManagerInfo
+	LatchInfoGlobal kvserverpb.LatchManagerInfo
 	RaftLogTooLarge bool
 }
 
@@ -96,12 +96,12 @@ func calcReplicaMetrics(
 	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
-	leaseStatus storagepb.LeaseStatus,
+	leaseStatus kvserverpb.LeaseStatus,
 	storeID roachpb.StoreID,
 	quiescent bool,
 	ticking bool,
-	latchInfoLocal storagepb.LatchManagerInfo,
-	latchInfoGlobal storagepb.LatchManagerInfo,
+	latchInfoLocal kvserverpb.LatchManagerInfo,
+	latchInfoGlobal kvserverpb.LatchManagerInfo,
 	raftLogSize int64,
 	raftLogSizeTrusted bool,
 ) ReplicaMetrics {
@@ -109,7 +109,7 @@ func calcReplicaMetrics(
 
 	var leaseOwner bool
 	m.LeaseStatus = leaseStatus
-	if leaseStatus.State == storagepb.LeaseState_VALID {
+	if leaseStatus.State == kvserverpb.LeaseState_VALID {
 		m.LeaseValid = true
 		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
 		m.LeaseType = leaseStatus.Lease.Type()
