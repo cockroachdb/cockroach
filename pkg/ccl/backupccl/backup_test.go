@@ -10,7 +10,6 @@ package backupccl_test
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -74,7 +73,6 @@ const (
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
 	localFoo                    = "nodelocal://0/foo"
-	zipType                     = "application/x-gzip"
 )
 
 func backupRestoreTestSetupEmptyWithParams(
@@ -296,8 +294,8 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 			t.Fatal(err)
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType != zipType {
-			t.Errorf("Expect manifest files to be compressed but the format is" + fileType)
+		if fileType != backupccl.ZipType {
+			t.Errorf("expect manifest files to be compressed but the format is" + fileType)
 		}
 	})
 
@@ -416,8 +414,8 @@ func TestBackupRestorePartitioned(t *testing.T) {
 						t.Fatal(err)
 					}
 					fileType := http.DetectContentType(backupPartitionBytes)
-					if fileType != zipType {
-						t.Errorf("Expect partition descriptor files to be compressed but the format is" + fileType)
+					if fileType != backupccl.ZipType {
+						t.Errorf("expect partition descriptor files to be compressed but the format is" + fileType)
 					}
 				}
 			}
@@ -1131,11 +1129,9 @@ func TestBackupRestoreResume(t *testing.T) {
 		}
 		// This part relies on the assumption that a manifest, if compressed,
 		// is in the gzip format (and not others).
-		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType == zipType {
-			b := bytes.NewBuffer(backupManifestBytes)
-			r, _ := gzip.NewReader(b)
-			backupManifestBytes, _ = ioutil.ReadAll(r)
+		backupManifestBytes, err = backupccl.DecompressAndCheckFile(backupManifestBytes)
+		if err != nil {
+			t.Fatal(err)
 		}
 		var backupManifest backupccl.BackupManifest
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
@@ -2594,11 +2590,9 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType == zipType {
-			b := bytes.NewBuffer(backupManifestBytes)
-			r, _ := gzip.NewReader(b)
-			backupManifestBytes, _ = ioutil.ReadAll(r)
+		backupManifestBytes, err = backupccl.DecompressAndCheckFile(backupManifestBytes)
+		if err != nil {
+			t.Fatalf("%+v", err)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatalf("%+v", err)
