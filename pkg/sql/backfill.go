@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -492,7 +493,7 @@ func (sc *SchemaChanger) addConstraints(
 func (sc *SchemaChanger) validateConstraints(
 	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
 ) error {
-	if testDisableTableLeases {
+	if sqltestutils.TableLeasesAreDisabled() {
 		return nil
 	}
 
@@ -977,7 +978,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
-	if testDisableTableLeases {
+	if sqltestutils.TableLeasesAreDisabled() {
 		return nil
 	}
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -57,7 +58,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	flags tree.DatabaseLookupFlags,
 ) (desc *DatabaseDescriptor, err error) {
 	isSystemDB := name == sqlbase.SystemDB.Name
-	if !(flags.AvoidCached || isSystemDB || testDisableTableLeases) {
+	if !(flags.AvoidCached || isSystemDB || sqltestutils.TableLeasesAreDisabled()) {
 		refuseFurtherLookup, dbID, err := a.tc.getUncommittedDatabaseID(name, flags.Required)
 		if refuseFurtherLookup || err != nil {
 			return nil, err
