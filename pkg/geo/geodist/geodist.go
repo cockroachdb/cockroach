@@ -78,6 +78,8 @@ type DistanceUpdater interface {
 	OnIntersects() bool
 	// Distance returns the distance to return so far.
 	Distance() float64
+	// IsMaxDistance returns whether the updater is looking for maximum distance.
+	IsMaxDistance() bool
 }
 
 // EdgeCrosser is a provided hook that calculates whether edges intersect.
@@ -150,8 +152,9 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 	return false, errors.Newf("unknown shape: %T", a)
 }
 
-// onPointToEdgesExceptFirstEdgeStart updates the distance using the edges between a point and a shape.
-// It will only check the ends of the edges, and assumes the check against .Edge(0).V0 is not required.
+// onPointToEdgesExceptFirstEdgeStart updates the distance against the edges of a shape and a point.
+// It will only check the V1 of each edge and assumes the first edge start does not need the distance
+// to be computed.
 func onPointToEdgesExceptFirstEdgeStart(c DistanceCalculator, a Point, b shapeWithEdges) bool {
 	for edgeIdx := 0; edgeIdx < b.NumEdges(); edgeIdx++ {
 		edge := b.Edge(edgeIdx)
@@ -159,11 +162,16 @@ func onPointToEdgesExceptFirstEdgeStart(c DistanceCalculator, a Point, b shapeWi
 		if c.DistanceUpdater().Update(a, edge.V1) {
 			return true
 		}
-		// Also project the point to the infinite line of the edge, and compare if the closestPoint
-		// lies on the edge.
-		if closestPoint, ok := c.ClosestPointToEdge(edge, a); ok {
-			if c.DistanceUpdater().Update(a, closestPoint) {
-				return true
+		// The max distance between a point and the set of points representing an edge is the
+		// maximum distance from the point and the pair of end-points of the edge, so we don't
+		// need update the distance using the projected point.
+		if !c.DistanceUpdater().IsMaxDistance() {
+			// Also project the point to the infinite line of the edge, and compare if the closestPoint
+			// lies on the edge.
+			if closestPoint, ok := c.ClosestPointToEdge(edge, a); ok {
+				if c.DistanceUpdater().Update(a, closestPoint) {
+					return true
+				}
 			}
 		}
 	}
@@ -183,9 +191,20 @@ func onPointToLineString(c DistanceCalculator, a Point, b LineString) bool {
 // onPointToPolygon updates the distance between a point and a polygon.
 // Returns true if the calling function should early exit.
 func onPointToPolygon(c DistanceCalculator, a Point, b Polygon) bool {
-	// If the exterior ring does not contain the point, we just need to calculate the distance to
+	// MaxDistance: When computing the maximum distance, the cases are:
+	//   - The point P is not contained in the exterior of the polygon G.
+	//     Say vertex V is the vertex of the exterior of the polygon that is
+	//     furthest away from point P (among all the exterior vertices).
+	//   - One can prove that any vertex of the holes will be closer to point P than vertex V.
+	//     Similarly we can prove that any point in the interior of the polygin is closer to P than vertex V.
+	//     Therefore we only need to compare with the exterior.
+	//   - The point P is contained in the exterior and inside a hole of polygon G.
+	//     One can again prove that the furthest point in the polygon from P is one of the vertices of the exterior.
+	//   - The point P is contained in the polygon. One can again prove the same property.
+	//   So we only need to compare with the exterior ring.
+	// MinDistance: If the exterior ring does not contain the point, we just need to calculate the distance to
 	// the exterior ring.
-	if !c.PointInLinearRing(a, b.LinearRing(0)) {
+	if c.DistanceUpdater().IsMaxDistance() || !c.PointInLinearRing(a, b.LinearRing(0)) {
 		return onPointToEdgesExceptFirstEdgeStart(c, a, b.LinearRing(0))
 	}
 	// At this point it may be inside a hole.
@@ -210,9 +229,13 @@ func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWit
 		crosser := c.NewEdgeCrosser(aEdge, b.Edge(0).V0)
 		for bEdgeIdx := 0; bEdgeIdx < b.NumEdges(); bEdgeIdx++ {
 			bEdge := b.Edge(bEdgeIdx)
-			// If the edges cross, the distance is 0.
-			if crosser.ChainCrossing(bEdge.V1) {
-				return c.DistanceUpdater().OnIntersects()
+			// Max distance between 2 edges is the maximum of the distance across pairs of vertices chosen from each edge.
+			// It does not matter whether the edges cross, so we skip this check.
+			if !c.DistanceUpdater().IsMaxDistance() {
+				// If the edges cross, the distance is 0.
+				if crosser.ChainCrossing(bEdge.V1) {
+					return c.DistanceUpdater().OnIntersects()
+				}
 			}
 
 			// Compare each vertex against the edge of the other.
@@ -230,10 +253,12 @@ func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWit
 					c.DistanceUpdater().Update(toCheck.vertex, toCheck.edge.V1) {
 					return true
 				}
-				// Also check the projection of the vertex onto the edge.
-				if closestPoint, ok := c.ClosestPointToEdge(toCheck.edge, toCheck.vertex); ok {
-					if c.DistanceUpdater().Update(toCheck.vertex, closestPoint) {
-						return true
+				if !c.DistanceUpdater().IsMaxDistance() {
+					// Also check the projection of the vertex onto the edge.
+					if closestPoint, ok := c.ClosestPointToEdge(toCheck.edge, toCheck.vertex); ok {
+						if c.DistanceUpdater().Update(toCheck.vertex, closestPoint) {
+							return true
+						}
 					}
 				}
 			}
@@ -245,14 +270,17 @@ func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWit
 // onLineStringToPolygon updates the distance between a polyline and a polygon.
 // Returns true if the calling function should early exit.
 func onLineStringToPolygon(c DistanceCalculator, a LineString, b Polygon) bool {
-	// If we know at least one point is outside the exterior ring, then there are two cases:
-	// * the line is always outside the exterior ring. We only need to compare the line
-	//   against the exterior ring.
-	// * the line intersects with the exterior ring.
-	// In both these cases, we can defer to the edge to edge comparison between the line
-	// and the exterior ring.
-	// We use the first point of the linestring for this check.
-	if !c.PointInLinearRing(a.Vertex(0), b.LinearRing(0)) {
+	// MinDistance: If we know at least one point is outside the exterior ring, then there are two cases:
+	//   * the line is always outside the exterior ring. We only need to compare the line
+	//     against the exterior ring.
+	//   * the line intersects with the exterior ring.
+	//   In both these cases, we can defer to the edge to edge comparison between the line
+	//   and the exterior ring.
+	//   We use the first point of the linestring for this check.
+	// MaxDistance: the furthest distance from a LineString to a Polygon is always against the
+	//   exterior ring. This follows the reasoning under "onPointToPolygon", but we must now
+	//   check each point in the LineString.
+	if c.DistanceUpdater().IsMaxDistance() || !c.PointInLinearRing(a.Vertex(0), b.LinearRing(0)) {
 		return onShapeEdgesToShapeEdges(c, a, b.LinearRing(0))
 	}
 
@@ -291,6 +319,7 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	aFirstPoint := a.LinearRing(0).Vertex(0)
 	bFirstPoint := b.LinearRing(0).Vertex(0)
 
+	// MinDistance:
 	// If there is at least one point on the the exterior ring of B that is outside the exterior ring
 	// of A, then we have one of these two cases:
 	// * The exterior rings of A and B intersect. The distance can always be found by comparing
@@ -304,7 +333,14 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	// that is outside the exterior ring of B.
 	//
 	// As such, we only need to compare the exterior rings if we detect this.
-	if !c.PointInLinearRing(bFirstPoint, a.LinearRing(0)) && !c.PointInLinearRing(aFirstPoint, b.LinearRing(0)) {
+	//
+	// MaxDistance:
+	// The furthest distance between two polygons is always against the exterior rings of each other.
+	// This closely follows the reasoning pointed out in "onPointToPolygon". Holes are always located
+	// inside the exterior ring of a polygon, so the exterior ring will always contain a point
+	// with a larger max distance.
+	if c.DistanceUpdater().IsMaxDistance() ||
+		(!c.PointInLinearRing(bFirstPoint, a.LinearRing(0)) && !c.PointInLinearRing(aFirstPoint, b.LinearRing(0))) {
 		return onShapeEdgesToShapeEdges(c, a.LinearRing(0), b.LinearRing(0))
 	}
 
