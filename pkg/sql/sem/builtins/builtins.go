@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -3865,6 +3866,33 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info:       "This function is used internally to round decimal array values during mutations.",
 			Volatility: tree.VolatilityStable,
+		},
+	),
+	"crdb_internal.completed_migrations": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				prefix := ctx.Codec.MigrationKeyPrefix()
+				keyvals, err := ctx.Txn.Scan(ctx.Context, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to get list of completed migrations")
+				}
+				ret := &tree.DArray{ParamTyp: types.String, Array: make(tree.Datums, 0, len(keyvals))}
+				for _, keyval := range keyvals {
+					key := keyval.Key
+					if len(key) > len(keys.MigrationPrefix) {
+						key = key[len(keys.MigrationPrefix):]
+					}
+					ret.Array = append(ret.Array, tree.NewDString(string(key)))
+				}
+				return ret, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 }
