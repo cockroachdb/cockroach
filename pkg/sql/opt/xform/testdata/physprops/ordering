@@ -1609,13 +1609,13 @@ sort
       │         ├── columns: abcd.a:1!null abcd.b:2!null abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
       │         ├── update-mapping:
-      │         │    ├── column11:11 => abcd.a:1
-      │         │    └── column12:12 => abcd.b:2
+      │         │    ├── a_new:11 => abcd.a:1
+      │         │    └── b_new:12 => abcd.b:2
       │         ├── side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: ()-->(1,2), (5)-->(3,4)
       │         └── project
-      │              ├── columns: column11:11!null column12:12!null abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10!null
+      │              ├── columns: a_new:11!null b_new:12!null abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10!null
       │              ├── key: (10)
       │              ├── fd: ()-->(11,12), (10)-->(6-9)
       │              ├── scan abcd
@@ -1623,8 +1623,8 @@ sort
       │              │    ├── key: (10)
       │              │    └── fd: (10)-->(6-9)
       │              └── projections
-      │                   ├── 1 [as=column11:11]
-      │                   └── 2 [as=column12:12]
+      │                   ├── 1 [as=a_new:11]
+      │                   └── 2 [as=b_new:12]
       └── with-scan &1
            ├── columns: a:13!null b:14!null c:15 d:16
            ├── mapping:
@@ -1657,13 +1657,13 @@ sort
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
       │         ├── update-mapping:
-      │         │    └── column11:11 => abcd.b:2
+      │         │    └── b_new:11 => abcd.b:2
       │         ├── cardinality: [0 - 10]
       │         ├── side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
       │         └── project
-      │              ├── columns: column11:11 abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10!null
+      │              ├── columns: b_new:11 abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10!null
       │              ├── cardinality: [0 - 10]
       │              ├── key: (10)
       │              ├── fd: (10)-->(6-9), (7)-->(11)
@@ -1673,7 +1673,7 @@ sort
       │              │    ├── key: (10)
       │              │    └── fd: (10)-->(6-9)
       │              └── projections
-      │                   └── abcd.b:7 + 1 [as=column11:11, outer=(7)]
+      │                   └── abcd.b:7 + 1 [as=b_new:11, outer=(7)]
       └── with-scan &1
            ├── columns: a:12 b:13 c:14 d:15
            ├── mapping:
@@ -1710,13 +1710,13 @@ sort
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
       │         ├── update-mapping:
-      │         │    └── column11:11 => abcd.b:2
+      │         │    └── b_new:11 => abcd.b:2
       │         ├── cardinality: [0 - 10]
       │         ├── side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
       │         └── project
-      │              ├── columns: column11:11 abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10!null
+      │              ├── columns: b_new:11 abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10!null
       │              ├── cardinality: [0 - 10]
       │              ├── key: (10)
       │              ├── fd: (10)-->(6-9), (7)-->(11)
@@ -1726,7 +1726,7 @@ sort
       │              │    ├── key: (10)
       │              │    └── fd: (10)-->(6-9)
       │              └── projections
-      │                   └── abcd.b:7 + 1 [as=column11:11, outer=(7)]
+      │                   └── abcd.b:7 + 1 [as=b_new:11, outer=(7)]
       └── select
            ├── columns: a:12 b:13!null c:14!null d:15
            ├── cardinality: [0 - 10]

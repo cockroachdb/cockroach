@@ -89,11 +89,11 @@ upsert abc
  │    ├── upsert_a:16 => a:1
  │    └── upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16!null upsert_b:17 upsert_c:18 upsert_rowid:19 x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 column14:14!null column15:15
+      ├── columns: upsert_a:16!null upsert_b:17 upsert_c:18 upsert_rowid:19 x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 a_new:14!null column15:15
       ├── project
-      │    ├── columns: column15:15 x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 column14:14!null
+      │    ├── columns: column15:15 x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 a_new:14!null
       │    ├── project
-      │    │    ├── columns: column14:14!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
+      │    │    ├── columns: a_new:14!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    │    ├── ensure-upsert-distinct-on
@@ -126,11 +126,11 @@ upsert abc
       │    │    │    └── filters
       │    │    │         └── x:5 = a:10
       │    │    └── projections
-      │    │         └── 5 [as=column14:14]
+      │    │         └── 5 [as=a_new:14]
       │    └── projections
       │         └── b:11 + 1 [as=column15:15]
       └── projections
-           ├── CASE WHEN rowid:13 IS NULL THEN x:5 ELSE column14:14 END [as=upsert_a:16]
+           ├── CASE WHEN rowid:13 IS NULL THEN x:5 ELSE a_new:14 END [as=upsert_a:16]
            ├── CASE WHEN rowid:13 IS NULL THEN y:6 ELSE b:11 END [as=upsert_b:17]
            ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column15:15 END [as=upsert_c:18]
            └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:19]
@@ -165,11 +165,11 @@ project
       │    ├── upsert_c:19 => c:3
       │    └── upsert_rowid:20 => rowid:4
       └── project
-           ├── columns: upsert_a:17!null upsert_b:18 upsert_c:19 upsert_rowid:20 x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12 column13:13!null column14:14!null column15:15!null column16:16!null
+           ├── columns: upsert_a:17!null upsert_b:18 upsert_c:19 upsert_rowid:20 x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12 a_new:13!null b_new:14!null rowid_new:15!null column16:16!null
            ├── project
-           │    ├── columns: column16:16!null x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12 column13:13!null column14:14!null column15:15!null
+           │    ├── columns: column16:16!null x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12 a_new:13!null b_new:14!null rowid_new:15!null
            │    ├── project
-           │    │    ├── columns: column13:13!null column14:14!null column15:15!null x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12
+           │    │    ├── columns: a_new:13!null b_new:14!null rowid_new:15!null x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12
            │    │    │    ├── ensure-upsert-distinct-on
@@ -195,16 +195,16 @@ project
            │    │    │         ├── y:6 = b:10
            │    │    │         └── column8:8 = c:11
            │    │    └── projections
-           │    │         ├── 1 [as=column13:13]
-           │    │         ├── 2 [as=column14:14]
-           │    │         └── 3 [as=column15:15]
+           │    │         ├── 1 [as=a_new:13]
+           │    │         ├── 2 [as=b_new:14]
+           │    │         └── 3 [as=rowid_new:15]
            │    └── projections
-           │         └── column14:14 + 1 [as=column16:16]
+           │         └── b_new:14 + 1 [as=column16:16]
            └── projections
-                ├── CASE WHEN rowid:12 IS NULL THEN x:5 ELSE column13:13 END [as=upsert_a:17]
-                ├── CASE WHEN rowid:12 IS NULL THEN y:6 ELSE column14:14 END [as=upsert_b:18]
+                ├── CASE WHEN rowid:12 IS NULL THEN x:5 ELSE a_new:13 END [as=upsert_a:17]
+                ├── CASE WHEN rowid:12 IS NULL THEN y:6 ELSE b_new:14 END [as=upsert_b:18]
                 ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column16:16 END [as=upsert_c:19]
-                └── CASE WHEN rowid:12 IS NULL THEN z:7 ELSE column15:15 END [as=upsert_rowid:20]
+                └── CASE WHEN rowid:12 IS NULL THEN z:7 ELSE rowid_new:15 END [as=upsert_rowid:20]
 
 # UPDATE + WHERE clause.
 build
@@ -227,11 +227,11 @@ upsert abc
  │    ├── upsert_b:17 => b:2
  │    └── upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16 upsert_b:17 upsert_c:18 upsert_rowid:19 x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 column14:14!null column15:15!null
+      ├── columns: upsert_a:16 upsert_b:17 upsert_c:18 upsert_rowid:19 x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 b_new:14!null column15:15!null
       ├── project
-      │    ├── columns: column15:15!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 column14:14!null
+      │    ├── columns: column15:15!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13 b_new:14!null
       │    ├── project
-      │    │    ├── columns: column14:14!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
+      │    │    ├── columns: b_new:14!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    ├── select
       │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    │    ├── left-join (hash)
@@ -268,12 +268,12 @@ upsert abc
       │    │    │    └── filters
       │    │    │         └── (rowid:13 IS NULL) OR (a:10 > 0)
       │    │    └── projections
-      │    │         └── 10 [as=column14:14]
+      │    │         └── 10 [as=b_new:14]
       │    └── projections
-      │         └── column14:14 + 1 [as=column15:15]
+      │         └── b_new:14 + 1 [as=column15:15]
       └── projections
            ├── CASE WHEN rowid:13 IS NULL THEN x:5 ELSE a:10 END [as=upsert_a:16]
-           ├── CASE WHEN rowid:13 IS NULL THEN y:6 ELSE column14:14 END [as=upsert_b:17]
+           ├── CASE WHEN rowid:13 IS NULL THEN y:6 ELSE b_new:14 END [as=upsert_b:17]
            ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column15:15 END [as=upsert_c:18]
            └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:19]
 
@@ -308,11 +308,11 @@ sort
       │         │    ├── upsert_c:17 => abc.c:3
       │         │    └── upsert_rowid:18 => rowid:4
       │         └── project
-      │              ├── columns: upsert_a:15 upsert_b:16!null upsert_c:17!null upsert_rowid:18 column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12 column13:13!null column14:14!null
+      │              ├── columns: upsert_a:15 upsert_b:16!null upsert_c:17!null upsert_rowid:18 column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12 b_new:13!null column14:14!null
       │              ├── project
-      │              │    ├── columns: column14:14!null column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12 column13:13!null
+      │              │    ├── columns: column14:14!null column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12 b_new:13!null
       │              │    ├── project
-      │              │    │    ├── columns: column13:13!null column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
+      │              │    │    ├── columns: b_new:13!null column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
       │              │    │    ├── left-join (hash)
       │              │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
       │              │    │    │    ├── ensure-upsert-distinct-on
@@ -345,12 +345,12 @@ sort
       │              │    │    │    └── filters
       │              │    │    │         └── column1:5 = abc.a:9
       │              │    │    └── projections
-      │              │    │         └── 1 [as=column13:13]
+      │              │    │         └── 1 [as=b_new:13]
       │              │    └── projections
-      │              │         └── column13:13 + 1 [as=column14:14]
+      │              │         └── b_new:13 + 1 [as=column14:14]
       │              └── projections
       │                   ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE abc.a:9 END [as=upsert_a:15]
-      │                   ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE column13:13 END [as=upsert_b:16]
+      │                   ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE b_new:13 END [as=upsert_b:16]
       │                   ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
       │                   └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
       └── with-scan &1
@@ -380,11 +380,11 @@ upsert tab
  │    ├── upsert_a:15 => a:1
  │    └── upsert_c:17 => c:3
  └── project
-      ├── columns: upsert_a:15 upsert_b:16 upsert_c:17 upsert_rowid:18 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 column13:13 column14:14
+      ├── columns: upsert_a:15 upsert_b:16 upsert_c:17 upsert_rowid:18 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 a_new:13 column14:14
       ├── project
-      │    ├── columns: column14:14 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 column13:13
+      │    ├── columns: column14:14 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 a_new:13
       │    ├── project
-      │    │    ├── columns: column13:13 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
+      │    │    ├── columns: a_new:13 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    │    ├── ensure-upsert-distinct-on
@@ -416,11 +416,11 @@ upsert tab
       │    │    │    └── filters
       │    │    │         └── column1:5 = a:9
       │    │    └── projections
-      │    │         └── a:9 * column1:5 [as=column13:13]
+      │    │         └── a:9 * column1:5 [as=a_new:13]
       │    └── projections
       │         └── b:10 + 1 [as=column14:14]
       └── projections
-           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:15]
+           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE a_new:13 END [as=upsert_a:15]
            ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE b:10 END [as=upsert_b:16]
            ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
            └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
@@ -445,11 +445,11 @@ upsert abc
  │    ├── upsert_a:15 => a:1
  │    └── upsert_c:17 => c:3
  └── project
-      ├── columns: upsert_a:15!null upsert_b:16 upsert_c:17 upsert_rowid:18 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 column13:13!null column14:14
+      ├── columns: upsert_a:15!null upsert_b:16 upsert_c:17 upsert_rowid:18 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 a_new:13!null column14:14
       ├── project
-      │    ├── columns: column14:14 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 column13:13!null
+      │    ├── columns: column14:14 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 a_new:13!null
       │    ├── project
-      │    │    ├── columns: column13:13!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
+      │    │    ├── columns: a_new:13!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    │    ├── ensure-upsert-distinct-on
@@ -480,11 +480,11 @@ upsert abc
       │    │    │         ├── column2:6 = b:10
       │    │    │         └── column8:8 = c:11
       │    │    └── projections
-      │    │         └── 5 [as=column13:13]
+      │    │         └── 5 [as=a_new:13]
       │    └── projections
       │         └── b:10 + 1 [as=column14:14]
       └── projections
-           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:15]
+           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE a_new:13 END [as=upsert_a:15]
            ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE b:10 END [as=upsert_b:16]
            ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
            └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
@@ -662,9 +662,9 @@ project
  │    │    ├── upsert_y:14 => y:2
  │    │    └── upsert_z:15 => z:3
  │    └── project
- │         ├── columns: upsert_x:13!null upsert_y:14 upsert_z:15!null column1:4!null column2:5!null column3:6!null x:7 y:8 z:9 column10:10!null column11:11 column12:12!null
+ │         ├── columns: upsert_x:13!null upsert_y:14 upsert_z:15!null column1:4!null column2:5!null column3:6!null x:7 y:8 z:9 x_new:10!null y_new:11 z_new:12!null
  │         ├── project
- │         │    ├── columns: column10:10!null column11:11 column12:12!null column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
+ │         │    ├── columns: x_new:10!null y_new:11 z_new:12!null column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
  │         │    ├── select
  │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
  │         │    │    ├── left-join (hash)
@@ -687,13 +687,13 @@ project
  │         │    │    └── filters
  │         │    │         └── (x:7 IS NULL) OR (column2:5 > y:8)
  │         │    └── projections
- │         │         ├── column1:4 + 1 [as=column10:10]
- │         │         ├── column2:5 * y:8 [as=column11:11]
- │         │         └── column1:4 - column3:6 [as=column12:12]
+ │         │         ├── column1:4 + 1 [as=x_new:10]
+ │         │         ├── column2:5 * y:8 [as=y_new:11]
+ │         │         └── column1:4 - column3:6 [as=z_new:12]
  │         └── projections
- │              ├── CASE WHEN x:7 IS NULL THEN column1:4 ELSE column10:10 END [as=upsert_x:13]
- │              ├── CASE WHEN x:7 IS NULL THEN column2:5 ELSE column11:11 END [as=upsert_y:14]
- │              └── CASE WHEN x:7 IS NULL THEN column3:6 ELSE column12:12 END [as=upsert_z:15]
+ │              ├── CASE WHEN x:7 IS NULL THEN column1:4 ELSE x_new:10 END [as=upsert_x:13]
+ │              ├── CASE WHEN x:7 IS NULL THEN column2:5 ELSE y_new:11 END [as=upsert_y:14]
+ │              └── CASE WHEN x:7 IS NULL THEN column3:6 ELSE z_new:12 END [as=upsert_z:15]
  └── projections
       ├── x:1 * 2 [as="?column?":16]
       └── y:2 + z:3 [as="?column?":17]
@@ -819,11 +819,11 @@ upsert abc
  │    ├── upsert_b:17 => b:2
  │    └── upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16 upsert_b:17!null upsert_c:18!null upsert_rowid:19 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 column13:13 column14:14!null column15:15!null
+      ├── columns: upsert_a:16 upsert_b:17!null upsert_c:18!null upsert_rowid:19 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 a_new:13 b_new:14!null column15:15!null
       ├── project
-      │    ├── columns: column15:15!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 column13:13 column14:14!null
+      │    ├── columns: column15:15!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 a_new:13 b_new:14!null
       │    ├── project
-      │    │    ├── columns: column13:13 column14:14!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
+      │    │    ├── columns: a_new:13 b_new:14!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    │    ├── ensure-upsert-distinct-on
@@ -855,13 +855,13 @@ upsert abc
       │    │    │    └── filters
       │    │    │         └── column1:5 = a:9
       │    │    └── projections
-      │    │         ├── NULL::INT8 [as=column13:13]
-      │    │         └── 10 [as=column14:14]
+      │    │         ├── NULL::INT8 [as=a_new:13]
+      │    │         └── 10 [as=b_new:14]
       │    └── projections
-      │         └── column14:14 + 1 [as=column15:15]
+      │         └── b_new:14 + 1 [as=column15:15]
       └── projections
-           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:16]
-           ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE column14:14 END [as=upsert_b:17]
+           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE a_new:13 END [as=upsert_a:16]
+           ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE b_new:14 END [as=upsert_b:17]
            ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column15:15 END [as=upsert_c:18]
            └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:19]
 
@@ -890,13 +890,13 @@ upsert mutation
  │    └── upsert_p:19 => p:4
  ├── check columns: check1:20
  └── project
-      ├── columns: check1:20 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 column16:16 upsert_m:17 upsert_n:18 upsert_p:19
+      ├── columns: check1:20 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 m_new:15 column16:16 upsert_m:17 upsert_n:18 upsert_p:19
       ├── project
-      │    ├── columns: upsert_m:17 upsert_n:18 upsert_p:19 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 column16:16
+      │    ├── columns: upsert_m:17 upsert_n:18 upsert_p:19 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 m_new:15 column16:16
       │    ├── project
-      │    │    ├── columns: column16:16 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15
+      │    │    ├── columns: column16:16 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 m_new:15
       │    │    ├── project
-      │    │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
+      │    │    │    ├── columns: m_new:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    │    │    │    ├── ensure-upsert-distinct-on
@@ -927,11 +927,11 @@ upsert mutation
       │    │    │    │    └── filters
       │    │    │    │         └── column1:6 = m:10
       │    │    │    └── projections
-      │    │    │         └── m:10 + 1 [as=column15:15]
+      │    │    │         └── m:10 + 1 [as=m_new:15]
       │    │    └── projections
       │    │         └── column8:8 + n:11 [as=column16:16]
       │    └── projections
-      │         ├── CASE WHEN m:10 IS NULL THEN column1:6 ELSE column15:15 END [as=upsert_m:17]
+      │         ├── CASE WHEN m:10 IS NULL THEN column1:6 ELSE m_new:15 END [as=upsert_m:17]
       │         ├── CASE WHEN m:10 IS NULL THEN column2:7 ELSE n:11 END [as=upsert_n:18]
       │         └── CASE WHEN m:10 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_p:19]
       └── projections
@@ -1314,13 +1314,13 @@ upsert checks
  │    └── upsert_d:19 => d:4
  ├── check columns: check1:20 check2:21
  └── project
-      ├── columns: check1:20 check2:21 column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12 column13:13!null column14:14!null column15:15!null upsert_a:16 upsert_b:17!null upsert_c:18 upsert_d:19
+      ├── columns: check1:20 check2:21 column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12 b_new:13!null c_new:14!null column15:15!null upsert_a:16 upsert_b:17!null upsert_c:18 upsert_d:19
       ├── project
-      │    ├── columns: upsert_a:16 upsert_b:17!null upsert_c:18 upsert_d:19 column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12 column13:13!null column14:14!null column15:15!null
+      │    ├── columns: upsert_a:16 upsert_b:17!null upsert_c:18 upsert_d:19 column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12 b_new:13!null c_new:14!null column15:15!null
       │    ├── project
-      │    │    ├── columns: column15:15!null column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12 column13:13!null column14:14!null
+      │    │    ├── columns: column15:15!null column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12 b_new:13!null c_new:14!null
       │    │    ├── project
-      │    │    │    ├── columns: column13:13!null column14:14!null column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
+      │    │    │    ├── columns: b_new:13!null c_new:14!null column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
       │    │    │    │    ├── ensure-upsert-distinct-on
@@ -1354,14 +1354,14 @@ upsert checks
       │    │    │    │    └── filters
       │    │    │    │         └── column1:5 = a:9
       │    │    │    └── projections
-      │    │    │         ├── 3 [as=column13:13]
-      │    │    │         └── 4 [as=column14:14]
+      │    │    │         ├── 3 [as=b_new:13]
+      │    │    │         └── 4 [as=c_new:14]
       │    │    └── projections
-      │    │         └── column14:14 + 1 [as=column15:15]
+      │    │         └── c_new:14 + 1 [as=column15:15]
       │    └── projections
       │         ├── CASE WHEN a:9 IS NULL THEN column1:5 ELSE a:9 END [as=upsert_a:16]
-      │         ├── CASE WHEN a:9 IS NULL THEN column2:6 ELSE column13:13 END [as=upsert_b:17]
-      │         ├── CASE WHEN a:9 IS NULL THEN column7:7 ELSE column14:14 END [as=upsert_c:18]
+      │         ├── CASE WHEN a:9 IS NULL THEN column2:6 ELSE b_new:13 END [as=upsert_b:17]
+      │         ├── CASE WHEN a:9 IS NULL THEN column7:7 ELSE c_new:14 END [as=upsert_c:18]
       │         └── CASE WHEN a:9 IS NULL THEN column8:8 ELSE column15:15 END [as=upsert_d:19]
       └── projections
            ├── upsert_b:17 < upsert_d:19 [as=check1:20]
@@ -1509,13 +1509,13 @@ upsert checks
  │    └── upsert_d:22 => d:4
  ├── check columns: check1:23 check2:24
  └── project
-      ├── columns: check1:23 check2:24!null abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14 column18:18 column19:19 upsert_b:20 upsert_c:21 upsert_d:22
+      ├── columns: check1:23 check2:24!null abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14 b_new:18 column19:19 upsert_b:20 upsert_c:21 upsert_d:22
       ├── project
-      │    ├── columns: upsert_b:20 upsert_c:21 upsert_d:22 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14 column18:18 column19:19
+      │    ├── columns: upsert_b:20 upsert_c:21 upsert_d:22 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14 b_new:18 column19:19
       │    ├── project
-      │    │    ├── columns: column19:19 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14 column18:18
+      │    │    ├── columns: column19:19 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14 b_new:18
       │    │    ├── project
-      │    │    │    ├── columns: column18:18 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14
+      │    │    │    ├── columns: b_new:18 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14
       │    │    │    │    ├── ensure-upsert-distinct-on
@@ -1553,7 +1553,7 @@ upsert checks
       │    │    │    │    └── filters
       │    │    │    │         └── abc.a:5 = checks.a:11
       │    │    │    └── projections
-      │    │    │         └── subquery [as=column18:18]
+      │    │    │         └── subquery [as=b_new:18]
       │    │    │              └── max1-row
       │    │    │                   ├── columns: x:15!null
       │    │    │                   └── project
@@ -1567,7 +1567,7 @@ upsert checks
       │    │    └── projections
       │    │         └── checks.c:13 + 1 [as=column19:19]
       │    └── projections
-      │         ├── CASE WHEN checks.a:11 IS NULL THEN abc.b:6 ELSE column18:18 END [as=upsert_b:20]
+      │         ├── CASE WHEN checks.a:11 IS NULL THEN abc.b:6 ELSE b_new:18 END [as=upsert_b:20]
       │         ├── CASE WHEN checks.a:11 IS NULL THEN column9:9 ELSE checks.c:13 END [as=upsert_c:21]
       │         └── CASE WHEN checks.a:11 IS NULL THEN column10:10 ELSE column19:19 END [as=upsert_d:22]
       └── projections
@@ -1591,9 +1591,9 @@ upsert xyz
  ├── update-mapping:
  │    └── upsert_y:13 => y:2
  └── project
-      ├── columns: upsert_x:12 upsert_y:13 upsert_z:14 a:4!null b:5 c:6 x:8 y:9 z:10 column11:11!null
+      ├── columns: upsert_x:12 upsert_y:13 upsert_z:14 a:4!null b:5 c:6 x:8 y:9 z:10 y_new:11!null
       ├── project
-      │    ├── columns: column11:11!null a:4!null b:5 c:6 x:8 y:9 z:10
+      │    ├── columns: y_new:11!null a:4!null b:5 c:6 x:8 y:9 z:10
       │    ├── left-join (hash)
       │    │    ├── columns: a:4!null b:5 c:6 x:8 y:9 z:10
       │    │    ├── ensure-upsert-distinct-on
@@ -1615,10 +1615,10 @@ upsert xyz
       │    │         ├── b:5 = y:9
       │    │         └── c:6 = z:10
       │    └── projections
-      │         └── 5 [as=column11:11]
+      │         └── 5 [as=y_new:11]
       └── projections
            ├── CASE WHEN x:8 IS NULL THEN a:4 ELSE x:8 END [as=upsert_x:12]
-           ├── CASE WHEN x:8 IS NULL THEN b:5 ELSE column11:11 END [as=upsert_y:13]
+           ├── CASE WHEN x:8 IS NULL THEN b:5 ELSE y_new:11 END [as=upsert_y:13]
            └── CASE WHEN x:8 IS NULL THEN c:6 ELSE z:10 END [as=upsert_z:14]
 
 # ------------------------------------------------------------------------------
