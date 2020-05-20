@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -125,7 +125,7 @@ type ServerConfig struct {
 	VecFDSemaphore semaphore.Semaphore
 
 	// BulkAdder is used by some processors to bulk-ingest data as SSTs.
-	BulkAdder storagebase.BulkAdderFactory
+	BulkAdder kvserverbase.BulkAdderFactory
 
 	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB

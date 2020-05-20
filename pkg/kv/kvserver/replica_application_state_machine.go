@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -128,14 +128,14 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 // then sets the provided command's leaseIndex, proposalRetry, and forcedErr
 // fields and returns whether command should be applied or rejected.
 func (r *Replica) shouldApplyCommand(
-	ctx context.Context, cmd *replicatedCmd, replicaState *storagepb.ReplicaState,
+	ctx context.Context, cmd *replicatedCmd, replicaState *kvserverpb.ReplicaState,
 ) bool {
 	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
 	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
 		var newPropRetry int
-		newPropRetry, cmd.forcedErr = filter(storagebase.ApplyFilterArgs{
+		newPropRetry, cmd.forcedErr = filter(kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
@@ -168,10 +168,10 @@ func (r *Replica) shouldApplyCommand(
 // TODO(nvanbenschoten): Unit test this function now that it is stateless.
 func checkForcedErr(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
-	raftCmd *storagepb.RaftCommand,
+	idKey kvserverbase.CmdIDKey,
+	raftCmd *kvserverpb.RaftCommand,
 	isLocal bool,
-	replicaState *storagepb.ReplicaState,
+	replicaState *kvserverpb.ReplicaState,
 ) (uint64, proposalReevaluationReason, *roachpb.Error) {
 	leaseIndex := replicaState.LeaseAppliedIndex
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
@@ -365,7 +365,7 @@ type replicaAppBatch struct {
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
-	state storagepb.ReplicaState
+	state kvserverpb.ReplicaState
 	// stats is stored on the application batch to avoid an allocation in
 	// tracking the batch's view of replicaState. All pointer fields in
 	// replicaState other than Stats are overwritten completely rather than
@@ -434,7 +434,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
 
 		// Apply an empty command.
-		cmd.raftCmd.ReplicatedEvalResult = storagepb.ReplicatedEvalResult{}
+		cmd.raftCmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
 		cmd.raftCmd.WriteBatch = nil
 		cmd.raftCmd.LogicalOpLog = nil
 	} else {
@@ -529,7 +529,7 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 
 // changeRemovesStore returns true if any of the removals in this change have storeID.
 func changeRemovesStore(
-	desc *roachpb.RangeDescriptor, change *storagepb.ChangeReplicas, storeID roachpb.StoreID,
+	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,
 ) (removesStore bool) {
 	curReplica, existsInDesc := desc.GetReplicaDescriptor(storeID)
 	// NB: if we're catching up from a preemptive snapshot then we won't
@@ -983,7 +983,7 @@ func (b *replicaAppBatch) Close() {
 // determine whether a replicated command should be rejected or applied.
 type ephemeralReplicaAppBatch struct {
 	r     *Replica
-	state storagepb.ReplicaState
+	state kvserverpb.ReplicaState
 }
 
 // Stage implements the apply.Batch interface.
@@ -1057,7 +1057,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.mu.Unlock()
 			sm.stats.stateAssertions++
 		}
-	} else if res := cmd.replicatedResult(); !res.Equal(storagepb.ReplicatedEvalResult{}) {
+	} else if res := cmd.replicatedResult(); !res.Equal(kvserverpb.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
@@ -1110,10 +1110,10 @@ func (sm *replicaStateMachine) ApplySideEffects(
 // non-trivial commands. It is run with the raftMu locked. It is illegal
 // to pass a replicatedResult that does not imply any side-effects.
 func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
-	ctx context.Context, rResult storagepb.ReplicatedEvalResult,
+	ctx context.Context, rResult kvserverpb.ReplicatedEvalResult,
 ) (shouldAssert, isRemoved bool) {
 	// Assert that this replicatedResult implies at least one side-effect.
-	if rResult.Equal(storagepb.ReplicatedEvalResult{}) {
+	if rResult.Equal(kvserverpb.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
@@ -1123,7 +1123,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.State.TruncatedState = nil
 		}
 
-		if (*rResult.State == storagepb.ReplicaState{}) {
+		if (*rResult.State == kvserverpb.ReplicaState{}) {
 			rResult.State = nil
 		}
 	}
@@ -1141,7 +1141,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	// The rest of the actions are "nontrivial" and may have large effects on the
 	// in-memory and on-disk ReplicaStates. If any of these actions are present,
 	// we want to assert that these two states do not diverge.
-	shouldAssert = !rResult.Equal(storagepb.ReplicatedEvalResult{})
+	shouldAssert = !rResult.Equal(kvserverpb.ReplicatedEvalResult{})
 	if !shouldAssert {
 		return false, false
 	}
@@ -1177,7 +1177,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.State.UsingAppliedStateKey = false
 		}
 
-		if (*rResult.State == storagepb.ReplicaState{}) {
+		if (*rResult.State == kvserverpb.ReplicaState{}) {
 			rResult.State = nil
 		}
 	}
@@ -1192,8 +1192,8 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
-	if !rResult.Equal(storagepb.ReplicatedEvalResult{}) {
-		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagepb.ReplicatedEvalResult{}))
+	if !rResult.Equal(kvserverpb.ReplicatedEvalResult{}) {
+		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, kvserverpb.ReplicatedEvalResult{}))
 	}
 	return true, isRemoved
 }

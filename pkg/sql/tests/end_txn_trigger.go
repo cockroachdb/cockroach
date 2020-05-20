@@ -14,14 +14,14 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
 
 // CheckEndTxnTrigger verifies that an EndTxnRequest that includes intents for
 // the SystemDB keys sets the proper trigger.
-func CheckEndTxnTrigger(args storagebase.FilterArgs) *roachpb.Error {
+func CheckEndTxnTrigger(args kvserverbase.FilterArgs) *roachpb.Error {
 	req, ok := args.Req.(*roachpb.EndTxnRequest)
 	if !ok {
 		return nil

@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -77,9 +77,9 @@ func newPropData(leaseReq bool) (*ProposalData, []byte) {
 		ba.Add(&roachpb.PutRequest{})
 	}
 	return &ProposalData{
-		command: &storagepb.RaftCommand{},
+		command: &kvserverpb.RaftCommand{},
 		Request: &ba,
-	}, make([]byte, 0, storagepb.MaxRaftCommandFooterSize())
+	}, make([]byte, 0, kvserverpb.MaxRaftCommandFooterSize())
 }
 
 // TestProposalBuffer tests the basic behavior of the Raft proposal buffer.

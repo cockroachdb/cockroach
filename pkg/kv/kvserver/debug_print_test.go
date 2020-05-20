@@ -14,7 +14,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -24,7 +24,7 @@ import (
 func TestStringifyWriteBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var wb storagepb.WriteBatch
+	var wb kvserverpb.WriteBatch
 	swb := stringifyWriteBatch(wb)
 	if str, expStr := swb.String(), "failed to stringify write batch (): batch repr too small: 0 < 12"; str != expStr {
 		t.Errorf("expected %q for stringified write batch; got %q", expStr, str)

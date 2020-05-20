@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -187,7 +187,7 @@ func ingestKvs(
 	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
 	// will hog memory as it tries to grow more aggressively.
 	minBufferSize, maxBufferSize, stepSize := storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, true /* isPKAdder */)
-	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:              "pkAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
@@ -202,7 +202,7 @@ func ingestKvs(
 	defer pkIndexAdder.Close(ctx)
 
 	minBufferSize, maxBufferSize, stepSize = storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, false /* isPKAdder */)
-	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:              "indexAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
@@ -332,14 +332,14 @@ func ingestKvs(
 				// more efficient than parsing every kv.
 				if indexID == 1 {
 					if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-						if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+						if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 							return errors.Wrap(err, "duplicate key in primary index")
 						}
 						return err
 					}
 				} else {
 					if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-						if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+						if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 							return errors.Wrap(err, "duplicate key in index")
 						}
 						return err
@@ -363,14 +363,14 @@ func ingestKvs(
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
-		if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 			return nil, errors.Wrap(err, "duplicate key in primary index")
 		}
 		return nil, err
 	}
 
 	if err := indexAdder.Flush(ctx); err != nil {
-		if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 			return nil, errors.Wrap(err, "duplicate key in index")
 		}
 		return nil, err

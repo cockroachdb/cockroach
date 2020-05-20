@@ -13,7 +13,7 @@ package storageutils
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -21,7 +21,7 @@ import (
 
 // raftCmdIDAndIndex identifies a batch and a command within it.
 type raftCmdIDAndIndex struct {
-	IDKey storagebase.CmdIDKey
+	IDKey kvserverbase.CmdIDKey
 	Index int
 }
 
@@ -35,14 +35,14 @@ type ReplayProtectionFilterWrapper struct {
 	syncutil.Mutex
 	inFlight          singleflight.Group
 	processedCommands map[raftCmdIDAndIndex]*roachpb.Error
-	filter            storagebase.ReplicaCommandFilter
+	filter            kvserverbase.ReplicaCommandFilter
 }
 
 // WrapFilterForReplayProtection wraps a filter into another one that adds Raft
 // replay protection.
 func WrapFilterForReplayProtection(
-	filter storagebase.ReplicaCommandFilter,
-) storagebase.ReplicaCommandFilter {
+	filter kvserverbase.ReplicaCommandFilter,
+) kvserverbase.ReplicaCommandFilter {
 	wrapper := ReplayProtectionFilterWrapper{
 		processedCommands: make(map[raftCmdIDAndIndex]*roachpb.Error),
 		filter:            filter,
@@ -62,7 +62,7 @@ func shallowCloneErrorWithTxn(pErr *roachpb.Error) *roachpb.Error {
 }
 
 // run executes the wrapped filter.
-func (c *ReplayProtectionFilterWrapper) run(args storagebase.FilterArgs) *roachpb.Error {
+func (c *ReplayProtectionFilterWrapper) run(args kvserverbase.FilterArgs) *roachpb.Error {
 	if !args.InRaftCmd() {
 		return c.filter(args)
 	}

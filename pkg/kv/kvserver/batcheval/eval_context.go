@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -47,7 +47,7 @@ type Limiters struct {
 type EvalContext interface {
 	fmt.Stringer
 	ClusterSettings() *cluster.Settings
-	EvalKnobs() storagebase.BatchEvalTestingKnobs
+	EvalKnobs() kvserverbase.BatchEvalTestingKnobs
 
 	Engine() storage.Engine
 	Clock() *hlc.Clock
@@ -131,8 +131,8 @@ func (m *mockEvalCtxImpl) String() string {
 func (m *mockEvalCtxImpl) ClusterSettings() *cluster.Settings {
 	return m.MockEvalCtx.ClusterSettings
 }
-func (m *mockEvalCtxImpl) EvalKnobs() storagebase.BatchEvalTestingKnobs {
-	return storagebase.BatchEvalTestingKnobs{}
+func (m *mockEvalCtxImpl) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
+	return kvserverbase.BatchEvalTestingKnobs{}
 }
 func (m *mockEvalCtxImpl) Engine() storage.Engine {
 	panic("unimplemented")

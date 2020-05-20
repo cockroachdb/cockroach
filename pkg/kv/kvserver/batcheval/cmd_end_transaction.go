@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -480,7 +480,7 @@ func resolveLocalLocks(
 			if len(span.EndKey) == 0 {
 				// For single-key lock updates, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
-				if !storagebase.ContainsKey(desc, span.Key) {
+				if !kvserverbase.ContainsKey(desc, span.Key) {
 					externalLocks = append(externalLocks, span)
 					return nil
 				}
@@ -498,7 +498,7 @@ func resolveLocalLocks(
 			// For update ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an update range for range-local data is correctly considered local.
-			inSpan, outSpans := storagebase.IntersectSpan(span, desc)
+			inSpan, outSpans := kvserverbase.IntersectSpan(span, desc)
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan
@@ -657,7 +657,7 @@ func RunCommitTrigger(
 			newDesc.StickyBit = nil
 		}
 		var res result.Result
-		res.Replicated.State = &storagepb.ReplicaState{
+		res.Replicated.State = &kvserverpb.ReplicaState{
 			Desc: &newDesc,
 		}
 		return res, nil
@@ -1025,7 +1025,7 @@ func splitTriggerHelper(
 	}
 
 	var pd result.Result
-	pd.Replicated.Split = &storagepb.Split{
+	pd.Replicated.Split = &kvserverpb.Split{
 		SplitTrigger: *split,
 		// NB: the RHSDelta is identical to the stats for the newly created right
 		// hand side range (i.e. it goes from zero to its stats).
@@ -1083,7 +1083,7 @@ func mergeTrigger(
 	}
 
 	var pd result.Result
-	pd.Replicated.Merge = &storagepb.Merge{
+	pd.Replicated.Merge = &kvserverpb.Merge{
 		MergeTrigger: *merge,
 	}
 	return pd, nil
@@ -1121,10 +1121,10 @@ func changeReplicasTrigger(
 		desc.NextReplicaID = change.DeprecatedNextReplicaID
 	}
 
-	pd.Replicated.State = &storagepb.ReplicaState{
+	pd.Replicated.State = &kvserverpb.ReplicaState{
 		Desc: &desc,
 	}
-	pd.Replicated.ChangeReplicas = &storagepb.ChangeReplicas{
+	pd.Replicated.ChangeReplicas = &kvserverpb.ChangeReplicas{
 		ChangeReplicasTrigger: *change,
 	}
 

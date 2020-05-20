@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,7 +26,7 @@ import (
 )
 
 func (s *Store) insertRangeLogEvent(
-	ctx context.Context, txn *kv.Txn, event storagepb.RangeLogEvent,
+	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
 ) error {
 	// Record range log event to console log.
 	var info string
@@ -69,13 +69,13 @@ func (s *Store) insertRangeLogEvent(
 	// corresponding range log entry to reduce potential skew between metrics and
 	// range log.
 	switch event.EventType {
-	case storagepb.RangeLogEventType_split:
+	case kvserverpb.RangeLogEventType_split:
 		s.metrics.RangeSplits.Inc(1)
-	case storagepb.RangeLogEventType_merge:
+	case kvserverpb.RangeLogEventType_merge:
 		s.metrics.RangeMerges.Inc(1)
-	case storagepb.RangeLogEventType_add:
+	case kvserverpb.RangeLogEventType_add:
 		s.metrics.RangeAdds.Inc(1)
-	case storagepb.RangeLogEventType_remove:
+	case kvserverpb.RangeLogEventType_remove:
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
@@ -103,13 +103,13 @@ func (s *Store) logSplit(
 	if !s.cfg.LogRangeEvents {
 		return nil
 	}
-	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
+	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedDesc.RangeID,
-		EventType:    storagepb.RangeLogEventType_split,
+		EventType:    kvserverpb.RangeLogEventType_split,
 		StoreID:      s.StoreID(),
 		OtherRangeID: newDesc.RangeID,
-		Info: &storagepb.RangeLogEvent_Info{
+		Info: &kvserverpb.RangeLogEvent_Info{
 			UpdatedDesc: &updatedDesc,
 			NewDesc:     &newDesc,
 		},
@@ -127,13 +127,13 @@ func (s *Store) logMerge(
 	if !s.cfg.LogRangeEvents {
 		return nil
 	}
-	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
+	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedLHSDesc.RangeID,
-		EventType:    storagepb.RangeLogEventType_merge,
+		EventType:    kvserverpb.RangeLogEventType_merge,
 		StoreID:      s.StoreID(),
 		OtherRangeID: rhsDesc.RangeID,
-		Info: &storagepb.RangeLogEvent_Info{
+		Info: &kvserverpb.RangeLogEvent_Info{
 			UpdatedDesc: &updatedLHSDesc,
 			RemovedDesc: &rhsDesc,
 		},
@@ -150,27 +150,27 @@ func (s *Store) logChange(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
 	if !s.cfg.LogRangeEvents {
 		return nil
 	}
 
-	var logType storagepb.RangeLogEventType
-	var info storagepb.RangeLogEvent_Info
+	var logType kvserverpb.RangeLogEventType
+	var info kvserverpb.RangeLogEvent_Info
 	switch changeType {
 	case roachpb.ADD_REPLICA:
-		logType = storagepb.RangeLogEventType_add
-		info = storagepb.RangeLogEvent_Info{
+		logType = kvserverpb.RangeLogEventType_add
+		info = kvserverpb.RangeLogEvent_Info{
 			AddedReplica: &replica,
 			UpdatedDesc:  &desc,
 			Reason:       reason,
 			Details:      details,
 		}
 	case roachpb.REMOVE_REPLICA:
-		logType = storagepb.RangeLogEventType_remove
-		info = storagepb.RangeLogEvent_Info{
+		logType = kvserverpb.RangeLogEventType_remove
+		info = kvserverpb.RangeLogEvent_Info{
 			RemovedReplica: &replica,
 			UpdatedDesc:    &desc,
 			Reason:         reason,
@@ -180,7 +180,7 @@ func (s *Store) logChange(
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}
 
-	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
+	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp: selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:   desc.RangeID,
 		EventType: logType,

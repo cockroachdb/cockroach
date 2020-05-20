@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -227,7 +227,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], storagepb.RangeLogEventType_add, storagepb.ReasonRangeUnderReplicated,
+		tc.Conns[0], kvserverpb.RangeLogEventType_add, kvserverpb.ReasonRangeUnderReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -310,7 +310,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], storagepb.RangeLogEventType_remove, storagepb.ReasonRangeOverReplicated,
+		tc.Conns[0], kvserverpb.RangeLogEventType_remove, kvserverpb.ReasonRangeOverReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -324,13 +324,13 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 // `SELECT info from system.rangelog ...`.
 func queryRangeLog(
 	conn *gosql.DB, query string, args ...interface{},
-) ([]storagepb.RangeLogEvent_Info, error) {
+) ([]kvserverpb.RangeLogEvent_Info, error) {
 	rows, err := conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	var sl []storagepb.RangeLogEvent_Info
+	var sl []kvserverpb.RangeLogEvent_Info
 	defer rows.Close()
 	var numEntries int
 	for rows.Next() {
@@ -339,7 +339,7 @@ func queryRangeLog(
 		if err := rows.Scan(&infoStr); err != nil {
 			return nil, err
 		}
-		var info storagepb.RangeLogEvent_Info
+		var info kvserverpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
 			return nil, errors.Errorf("error unmarshaling info string %q: %s", infoStr, err)
 		}
@@ -352,8 +352,8 @@ func queryRangeLog(
 }
 
 func filterRangeLog(
-	conn *gosql.DB, eventType storagepb.RangeLogEventType, reason storagepb.RangeLogEventReason,
-) ([]storagepb.RangeLogEvent_Info, error) {
+	conn *gosql.DB, eventType kvserverpb.RangeLogEventType, reason kvserverpb.RangeLogEventReason,
+) ([]kvserverpb.RangeLogEvent_Info, error) {
 	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "eventType" = $1 AND info LIKE concat('%', $2, '%');`, eventType.String(), reason)
 }
 

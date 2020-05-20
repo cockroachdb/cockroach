@@ -32,10 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -415,11 +415,11 @@ type allErrorsFakeLiveness struct{}
 
 var _ jobs.NodeLiveness = (*allErrorsFakeLiveness)(nil)
 
-func (allErrorsFakeLiveness) Self() (storagepb.Liveness, error) {
-	return storagepb.Liveness{}, errors.New("fake liveness")
+func (allErrorsFakeLiveness) Self() (kvserverpb.Liveness, error) {
+	return kvserverpb.Liveness{}, errors.New("fake liveness")
 
 }
-func (allErrorsFakeLiveness) GetLivenesses() []storagepb.Liveness {
+func (allErrorsFakeLiveness) GetLivenesses() []kvserverpb.Liveness {
 	return nil
 }
 

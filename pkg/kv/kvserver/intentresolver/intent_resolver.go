@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -96,7 +96,7 @@ type Config struct {
 	DB                   *kv.DB
 	Stopper              *stop.Stopper
 	AmbientCtx           log.AmbientContext
-	TestingKnobs         storagebase.IntentResolverTestingKnobs
+	TestingKnobs         kvserverbase.IntentResolverTestingKnobs
 	RangeDescriptorCache kvbase.RangeDescriptorCache
 
 	TaskLimit                    int
@@ -114,7 +114,7 @@ type IntentResolver struct {
 	clock        *hlc.Clock
 	db           *kv.DB
 	stopper      *stop.Stopper
-	testingKnobs storagebase.IntentResolverTestingKnobs
+	testingKnobs kvserverbase.IntentResolverTestingKnobs
 	ambientCtx   log.AmbientContext
 	sem          *quotapool.IntPool // semaphore to limit async goroutines
 

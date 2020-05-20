@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -105,7 +105,7 @@ func (s *Store) LogReplicaChangeTest(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
 	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
@@ -238,8 +238,8 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		func() int {
 			return 1
 		},
-		func(roachpb.NodeID, time.Time, time.Duration) storagepb.NodeLivenessStatus {
-			return storagepb.NodeLivenessStatus_LIVE
+		func(roachpb.NodeID, time.Time, time.Duration) kvserverpb.NodeLivenessStatus {
+			return kvserverpb.NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
 	)
@@ -455,8 +455,8 @@ func SetMockAddSSTable() (undo func()) {
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
 
 		return result.Result{
-			Replicated: storagepb.ReplicatedEvalResult{
-				AddSSTable: &storagepb.ReplicatedEvalResult_AddSSTable{
+			Replicated: kvserverpb.ReplicatedEvalResult{
+				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
 					Data:  args.Data,
 					CRC32: util.CRC32(args.Data),
 				},
@@ -500,13 +500,13 @@ func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
 }
 
 func (nl *NodeLiveness) SetDrainingInternal(
-	ctx context.Context, liveness storagepb.Liveness, drain bool,
+	ctx context.Context, liveness kvserverpb.Liveness, drain bool,
 ) error {
 	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
 }
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness storagepb.Liveness, decommission bool,
+	ctx context.Context, nodeID roachpb.NodeID, liveness kvserverpb.Liveness, decommission bool,
 ) (changeCommitted bool, err error) {
 	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
 }

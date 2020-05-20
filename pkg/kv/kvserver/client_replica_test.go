@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -226,7 +226,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// added benefit.
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
 				filterArgs.Req.Header().Key.Equal(roachpb.Key(key)) &&
 				filterArgs.Hdr.Txn == nil {
@@ -520,7 +520,7 @@ type leaseTransferTest struct {
 	replica0Desc, replica1Desc roachpb.ReplicaDescriptor
 	leftKey                    roachpb.Key
 	filterMu                   syncutil.Mutex
-	filter                     func(filterArgs storagebase.FilterArgs) *roachpb.Error
+	filter                     func(filterArgs kvserverbase.FilterArgs) *roachpb.Error
 	waitForTransferBlocked     atomic.Value
 	transferBlocked            chan struct{}
 }
@@ -537,7 +537,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
 		float64((9 * time.Second) / cfg.RaftElectionTimeout())
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			l.filterMu.Lock()
 			filterCopy := l.filter
 			l.filterMu.Unlock()
@@ -637,7 +637,7 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 		l.filter = nil
 		return
 	}
-	l.filter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	l.filter = func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if filterArgs.Sid != l.mtc.stores[1].Ident.StoreID {
 			return nil
 		}
@@ -998,7 +998,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	sc.TestingKnobs.DisableSplitQueue = true
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if args, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
 				if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
 					// Note that we can't just return an error here as we only
@@ -1181,7 +1181,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	readBlocked := make(chan struct{})
-	cmdFilter := func(fArgs storagebase.FilterArgs) *roachpb.Error {
+	cmdFilter := func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if fArgs.Hdr.UserPriority == 42 {
 			// Signal that the read is blocked.
 			readBlocked <- struct{}{}
@@ -1194,7 +1194,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					EvalKnobs: storagebase.BatchEvalTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
 				},
@@ -1421,7 +1421,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 // swallowed.
 func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cmdFilter := func(fArgs storagebase.FilterArgs) *roachpb.Error {
+	cmdFilter := func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if fArgs.Hdr.UserPriority == 42 {
 			return roachpb.NewErrorf("injected error")
 		}
@@ -1431,7 +1431,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					EvalKnobs: storagebase.BatchEvalTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
 				},
@@ -1662,7 +1662,7 @@ func TestDrainRangeRejection(t *testing.T) {
 			NodeID:  mtc.idents[drainingIdx].NodeID,
 			StoreID: mtc.idents[drainingIdx].StoreID,
 		})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -1683,7 +1683,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 		NodeID:  mtc.idents[1].NodeID,
 		StoreID: mtc.idents[1].StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+2)
@@ -1691,7 +1691,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2501,7 +2501,7 @@ func TestReplicaTombstone(t *testing.T) {
 
 		ctx := context.Background()
 		var proposalFilter atomic.Value
-		noopProposalFilter := func(storagebase.ProposalFilterArgs) *roachpb.Error {
+		noopProposalFilter := func(kvserverbase.ProposalFilterArgs) *roachpb.Error {
 			return nil
 		}
 		proposalFilter.Store(noopProposalFilter)
@@ -2509,10 +2509,10 @@ func TestReplicaTombstone(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
-					TestingProposalFilter: storagebase.ReplicaProposalFilter(
-						func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+					TestingProposalFilter: kvserverbase.ReplicaProposalFilter(
+						func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 							return proposalFilter.
-								Load().(func(storagebase.ProposalFilterArgs) *roachpb.Error)(args)
+								Load().(func(kvserverbase.ProposalFilterArgs) *roachpb.Error)(args)
 						},
 					),
 				}},
@@ -2552,7 +2552,7 @@ func TestReplicaTombstone(t *testing.T) {
 				unreliableRaftHandlerFuncs: raftFuncs,
 			},
 		})
-		proposalFilter.Store(func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		proposalFilter.Store(func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 			merge := args.Cmd.ReplicatedEvalResult.Merge
 			if merge != nil && merge.LeftDesc.RangeID == lhsDesc.RangeID {
 				partActive.Store(true)
@@ -2722,7 +2722,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		var rangeToBlockRangeDescriptorRead atomic.Value
 		rangeToBlockRangeDescriptorRead.Store(roachpb.RangeID(0))
 		blockRangeDescriptorReadChan := make(chan struct{}, 1)
-		blockOnChangeReplicasRead := storagebase.ReplicaRequestFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		blockOnChangeReplicasRead := kvserverbase.ReplicaRequestFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			if req, isGet := ba.GetArg(roachpb.Get); !isGet ||
 				ba.RangeID != rangeToBlockRangeDescriptorRead.Load().(roachpb.RangeID) ||
 				!ba.IsSingleRequest() ||
@@ -2894,8 +2894,8 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: storagebase.ReplicaProposalFilter(
-					func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+				TestingProposalFilter: kvserverbase.ReplicaProposalFilter(
+					func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 						if args.Req.RangeID != scratchRangeID.Load().(roachpb.RangeID) {
 							return nil
 						}
@@ -3158,7 +3158,7 @@ func TestProposalOverhead(t *testing.T) {
 	var overhead uint32
 	var key atomic.Value
 	key.Store(roachpb.Key{})
-	filter := func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+	filter := func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 		if len(args.Req.Requests) != 1 {
 			return nil
 		}

@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -201,8 +201,8 @@ func EvalAddSSTable(
 	}
 
 	return result.Result{
-		Replicated: storagepb.ReplicatedEvalResult{
-			AddSSTable: &storagepb.ReplicatedEvalResult_AddSSTable{
+		Replicated: kvserverpb.ReplicatedEvalResult{
+			AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
 				Data:  args.Data,
 				CRC32: util.CRC32(args.Data),
 			},

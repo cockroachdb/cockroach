@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -346,7 +346,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	for _, g := range mtc.gossips {
 		key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 		expKeys = append(expKeys, key)
-		if err := g.AddInfoProto(key, &storagepb.Liveness{}, 0); err != nil {
+		if err := g.AddInfoProto(key, &kvserverpb.Liveness{}, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -403,7 +403,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// Verify liveness is properly initialized. This needs to be wrapped in a
 	// SucceedsSoon because node liveness gets initialized via an async gossip
 	// callback.
-	var liveness storagepb.Liveness
+	var liveness kvserverpb.Liveness
 	testutils.SucceedsSoon(t, func() error {
 		var err error
 		liveness, err = mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
@@ -642,7 +642,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given draining setting.
-	if err := mtc.nodeLivenesses[drainingNodeIdx].SetDrainingInternal(ctx, storagepb.Liveness{}, false); err != nil {
+	if err := mtc.nodeLivenesses[drainingNodeIdx].SetDrainingInternal(ctx, kvserverpb.Liveness{}, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -721,7 +721,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 
 	injectError.Store(true)
 	storeCfg := kvserver.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args kvserverbase.FilterArgs) *roachpb.Error {
 		if _, ok := args.Req.(*roachpb.ConditionalPutRequest); !ok {
 			return nil
 		}
@@ -863,16 +863,16 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	type testCase struct {
 		nodeID         roachpb.NodeID
-		expectedStatus storagepb.NodeLivenessStatus
+		expectedStatus kvserverpb.NodeLivenessStatus
 	}
 
 	// Below we're going to check that all statuses converge and stabilize
 	// to a known situation.
 	testData := []testCase{
-		{liveNodeID, storagepb.NodeLivenessStatus_LIVE},
-		{deadNodeID, storagepb.NodeLivenessStatus_DEAD},
-		{decommissioningNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONING},
-		{removedNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONED},
+		{liveNodeID, kvserverpb.NodeLivenessStatus_LIVE},
+		{deadNodeID, kvserverpb.NodeLivenessStatus_DEAD},
+		{decommissioningNodeID, kvserverpb.NodeLivenessStatus_DECOMMISSIONING},
+		{removedNodeID, kvserverpb.NodeLivenessStatus_DECOMMISSIONED},
 	}
 
 	for _, test := range testData {
@@ -924,7 +924,7 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
-	if _, err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, storagepb.Liveness{}, false); err != nil {
+	if _, err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, kvserverpb.Liveness{}, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -982,7 +982,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	}
 
 	// Pretend the node was once there but isn't gossiped anywhere.
-	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &storagepb.Liveness{
+	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &kvserverpb.Liveness{
 		NodeID:     goneNodeID,
 		Epoch:      1,
 		Expiration: hlc.LegacyTimestamp(mtc.clock().Now()),

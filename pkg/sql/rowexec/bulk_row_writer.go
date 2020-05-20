@@ -14,7 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -126,7 +126,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
-		ctx, sp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{MinBufferSize: bufferSize},
+		ctx, sp.flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{MinBufferSize: bufferSize},
 	)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
 				if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+					if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 						return errors.WithStack(err)
 					}
 					return err
@@ -148,7 +148,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 		}
 
 		if err := adder.Flush(ctx); err != nil {
-			if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+			if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 				return errors.WithStack(err)
 			}
 			return err

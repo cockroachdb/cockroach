@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -46,7 +46,7 @@ func TestCloneProto(t *testing.T) {
 		{&sqlbase.IndexDescriptor{}, false},
 		{&roachpb.SplitTrigger{}, false},
 		{&roachpb.Value{}, false},
-		{&storagepb.ReplicaState{}, false},
+		{&kvserverpb.ReplicaState{}, false},
 		{&roachpb.RangeDescriptor{}, false},
 		{&sqlbase.PartitioningDescriptor{}, false},
 	}

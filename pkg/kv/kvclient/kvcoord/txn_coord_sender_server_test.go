@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -52,7 +52,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	s, _, origDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+				TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 					// We'll eventually expect to see an EndTxn(commit=false)
 					// with the right intents.
 					if args.Req.IsSingleEndTxnRequest() {

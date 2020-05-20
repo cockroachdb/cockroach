@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storagebase
+package kvserverbase
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 )
@@ -55,14 +55,14 @@ type FilterArgs struct {
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
 type ProposalFilterArgs struct {
 	Ctx   context.Context
-	Cmd   storagepb.RaftCommand
+	Cmd   kvserverpb.RaftCommand
 	CmdID CmdIDKey
 	Req   roachpb.BatchRequest
 }
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
 type ApplyFilterArgs struct {
-	storagepb.ReplicatedEvalResult
+	kvserverpb.ReplicatedEvalResult
 	CmdID   CmdIDKey
 	RangeID roachpb.RangeID
 	StoreID roachpb.StoreID

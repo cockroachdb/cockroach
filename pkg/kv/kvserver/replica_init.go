@@ -17,9 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -91,7 +91,7 @@ func newUnloadedReplica(
 	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
 		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
 	})
-	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	r.mu.proposalBuf.Init((*replicaProposer)(r))
 

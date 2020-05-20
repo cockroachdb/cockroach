@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1018,7 +1018,7 @@ func (s *adminServer) RangeLog(
 	}
 	scanner := makeResultScanner(cols)
 	for _, row := range rows {
-		var event storagepb.RangeLogEvent
+		var event kvserverpb.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("Timestamp didn't parse correctly: %s", row[0].String()))
@@ -1038,8 +1038,8 @@ func (s *adminServer) RangeLog(
 		if err := scanner.ScanIndex(row, 3, &eventTypeString); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("EventType didn't parse correctly: %s", row[3].String()))
 		}
-		if eventType, ok := storagepb.RangeLogEventType_value[eventTypeString]; ok {
-			event.EventType = storagepb.RangeLogEventType(eventType)
+		if eventType, ok := kvserverpb.RangeLogEventType_value[eventTypeString]; ok {
+			event.EventType = kvserverpb.RangeLogEventType(eventType)
 		} else {
 			return nil, errors.Errorf("EventType didn't parse correctly: %s", eventTypeString)
 		}
@@ -1376,11 +1376,11 @@ func (s *adminServer) checkReadinessForHealthCheck() error {
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
 	nl *kvserver.NodeLiveness, now time.Time, st *cluster.Settings,
-) map[roachpb.NodeID]storagepb.NodeLivenessStatus {
+) map[roachpb.NodeID]kvserverpb.NodeLivenessStatus {
 	livenesses := nl.GetLivenesses()
 	threshold := kvserver.TimeUntilStoreDead.Get(&st.SV)
 
-	statusMap := make(map[roachpb.NodeID]storagepb.NodeLivenessStatus, len(livenesses))
+	statusMap := make(map[roachpb.NodeID]kvserverpb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
 		status := kvserver.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status

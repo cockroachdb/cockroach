@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -488,7 +488,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 		"boulanger": 2,
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storagebase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *roachpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals, true /* verifyTxn */); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
@@ -588,7 +588,7 @@ INSERT INTO t.public.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timesta
 		"hooly": 2,
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
-		func(args storagebase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *roachpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals, true /* verifyTxn */); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
@@ -796,7 +796,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 					t.Fatal(err)
 				}
 				cleanupFilter := cmdFilters.AppendFilter(
-					func(args storagebase.FilterArgs) *roachpb.Error {
+					func(args kvserverbase.FilterArgs) *roachpb.Error {
 						if err := injectErrors(args.Req, args.Hdr, tc.magicVals, true /* verifyTxn */); err != nil {
 							return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 						}
@@ -1094,7 +1094,7 @@ func TestNonRetryableError(t *testing.T) {
 	testKey := []byte("test_key")
 	hitError := false
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storagebase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *roachpb.Error {
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					hitError = true
@@ -1138,7 +1138,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var clockUpdate int32
 	testKey := []byte("test_key")
 	storeTestingKnobs := &kvserver.StoreTestingKnobs{
-		EvalKnobs: storagebase.BatchEvalTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 		DisableMaxOffsetCheck: true,
@@ -1175,7 +1175,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storagebase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *roachpb.Error {
 			// Allow a set number of restarts so that the auto retry on the
 			// first few uncertainty interval errors also fails.
 			if atomic.LoadInt32(&restartDone) > refreshAttempts {
@@ -1235,7 +1235,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
 	testKey := []byte("test_key")
 	testingKnobs := &kvserver.StoreTestingKnobs{
-		EvalKnobs: storagebase.BatchEvalTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 	}
@@ -1247,7 +1247,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 
 	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storagebase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *roachpb.Error {
 			if atomic.LoadInt32(&restartDone) > 0 {
 				return nil
 			}
@@ -1309,8 +1309,8 @@ func TestDistSQLRetryableError(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						EvalKnobs: storagebase.BatchEvalTestingKnobs{
-							TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
+						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+							TestingEvalFilter: func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 								_, ok := fArgs.Req.(*roachpb.ScanRequest)
 								if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
 									restarted = true
