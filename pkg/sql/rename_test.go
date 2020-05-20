@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -98,7 +99,7 @@ func TestRenameTable(t *testing.T) {
 func TestTxnCanStillResolveOldName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var lmKnobs LeaseManagerTestingKnobs
+	var lmKnobs lease.LeaseManagerTestingKnobs
 	// renameUnblocked is used to block the rename schema change until the test
 	// doesn't need the old name->id mapping to exist anymore.
 	renameUnblocked := make(chan interface{})
@@ -204,8 +205,9 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// that the node doesn't have a lease on it anymore (committing the txn
 	// should have released the lease on the version of the descriptor with the
 	// old name), even though the name mapping still exists.
+
 	var foundLease bool
-	s.LeaseManager().(*LeaseManager).VisitLeases(func(
+	s.LeaseManager().(*lease.LeaseManager).VisitLeases(func(
 		desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp,
 	) (wantMore bool) {
 		if desc.ID == tableDesc.ID && desc.Name == "t" {

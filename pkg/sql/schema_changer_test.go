@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -81,7 +82,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestingDisableTableLeases()()
+	defer lease.TestingDisableTableLeases()()
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -92,7 +93,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	stopper := stop.NewStopper()
 	cfg := base.NewLeaseManagerConfig()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	leaseMgr := sql.NewLeaseManager(
+	leaseMgr := lease.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		execCfg.NodeID,
 		execCfg.DB,
@@ -100,7 +101,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		execCfg.InternalExecutor,
 		execCfg.Settings,
 		execCfg.Codec,
-		sql.LeaseManagerTestingKnobs{},
+		lease.LeaseManagerTestingKnobs{},
 		stopper,
 		cfg,
 	)
@@ -200,7 +201,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer sql.TestingDisableTableLeases()()
+	defer lease.TestingDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
 	params, _ := tests.CreateTestServerParams()
@@ -1326,7 +1327,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	ctx := context.Background()
 
 	upTableVersion = func() {
-		leaseMgr := s.LeaseManager().(*sql.LeaseManager)
+		leaseMgr := s.LeaseManager().(*lease.LeaseManager)
 		var version sqlbase.DescriptorVersion
 		if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.MutableTableDescriptor) error {
 			// Publish nothing; only update the version.

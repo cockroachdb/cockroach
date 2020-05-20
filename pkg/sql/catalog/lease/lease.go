@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+// Package lease provides functionality to create and manage sql schema leases.
+package lease
 
 import (
 	"bytes"
@@ -466,7 +467,7 @@ func (s LeaseStore) PublishMultiple(
 
 		switch {
 		case err == nil || errors.Is(err, ErrDidntUpdateDescriptor):
-			immutTableDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
+			immutTableDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTableDescriptor)
 			for id, tableDesc := range tableDescs {
 				immutTableDescs[id] = sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor)
 			}

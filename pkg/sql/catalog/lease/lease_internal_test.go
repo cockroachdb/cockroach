@@ -10,7 +10,7 @@
 
 // Note that there's also a lease_test.go, in package sql_test.
 
-package sql
+package lease
 
 import (
 	"context"
