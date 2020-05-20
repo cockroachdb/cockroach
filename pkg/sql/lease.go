@@ -205,7 +205,7 @@ func (s LeaseStore) acquire(
 		if err != nil {
 			return err
 		}
-		if err := FilterTableState(tableDesc); err != nil {
+		if err := sqlbase.FilterTableState(tableDesc); err != nil {
 			return err
 		}
 		if err := tableDesc.MaybeFillInDescriptor(ctx, txn, s.codec); err != nil {
@@ -1176,7 +1176,7 @@ func purgeOldVersions(
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
 	table, _, err := t.findForTimestamp(ctx, m.clock.Now())
-	if isInactive := errors.HasType(err, (*inactiveTableError)(nil)); err == nil || isInactive {
+	if isInactive := sqlbase.HasInactiveTableError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if table != nil {
 			s, err := t.release(&table.ImmutableTableDescriptor, m.removeOnceDereferenced())
