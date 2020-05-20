@@ -92,6 +92,17 @@ func MakeTypeNameFromPrefix(prefix ObjectNamePrefix, object Name) TypeName {
 	}}
 }
 
+// MakeNewQualifiedTypeName creates a fully qualified type name.
+func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
+	return TypeName{objName{
+		ObjectNamePrefix: ObjectNamePrefix{
+			CatalogName: Name(db),
+			SchemaName:  Name(schema),
+		},
+		ObjectName: Name(typ),
+	}}
+}
+
 // TypeReferenceResolver is the interface that will provide the ability
 // to actually look up type metadata and transform references into
 // *types.T's.

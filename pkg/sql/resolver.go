@@ -159,6 +159,8 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 		// Override the hydrated name with the fully resolved type name.
 		typ.TypeMeta.Name = &tn
 		return typ, nil
+	case sqlbase.TypeDescriptor_ALIAS:
+		return tdesc.Alias, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
