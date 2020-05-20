@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -173,8 +174,15 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 
 	// Build the plan tree.
 	root := execMemo.RootExpr()
-	execFactory := makeExecFactory(p)
-	bld := execbuilder.New(&execFactory, execMemo, &opc.catalog, root, p.EvalContext())
+	var execFactory exec.Factory
+	if execBuilderDrivenDistSQLSpecCreationClusterMode.Get(&p.execCfg.Settings.SV) {
+		factory := makeExecBuilderDistSQLFactory(p.autoCommit)
+		execFactory = &factory
+	} else {
+		factory := makeExecFactory(p)
+		execFactory = &factory
+	}
+	bld := execbuilder.New(execFactory, execMemo, &opc.catalog, root, p.EvalContext())
 	plan, err := bld.Build()
 	if err != nil {
 		return err

@@ -251,6 +251,15 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
+// execBuilderDrivenDistSQLSpecCreationClusterMode can be used to enable
+// execbuilder-driven DistSQL spec creation that sidesteps intermediate
+// planNode transition when going from opt.Tree to DistSQL processor specs.
+var execBuilderDrivenDistSQLSpecCreationClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_distsql_planning.enabled",
+	"if set to true, enables experimental DistSQL spec creation driven by the execbuilder",
+	false,
+)
+
 // VectorizeClusterSettingName is the name for the cluster setting that controls
 // the VectorizeClusterMode below.
 const VectorizeClusterSettingName = "sql.defaults.vectorize"
@@ -1987,6 +1996,10 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 
 func (m *sessionDataMutator) SetEnumsEnabled(val bool) {
 	m.data.EnumsEnabled = val
+}
+
+func (m *sessionDataMutator) SetExperimentalDistsqlPlanning(val bool) {
+	m.data.ExperimentalDistsqlPlanning = val
 }
 
 func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {

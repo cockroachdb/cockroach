@@ -43,6 +43,9 @@ type SessionData struct {
 	DistSQLMode DistSQLExecMode
 	// EnumsEnabled indicates whether use of ENUM types are allowed.
 	EnumsEnabled bool
+	// ExperimentalDistsqlPlanning indicates whether the experimental
+	// execbuilder-driven DistSQL spec creation is enabled.
+	ExperimentalDistsqlPlanning bool
 	// OptimizerFKChecks indicates whether we should use the new paths to plan foreign
 	// key checks in the optimizer.
 	OptimizerFKChecks bool

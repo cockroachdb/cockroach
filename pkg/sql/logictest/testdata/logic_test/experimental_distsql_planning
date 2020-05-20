@@ -1,0 +1,14 @@
+# LogicTest: !3node-tenant
+
+# Test that we can set the session variable and cluster setting.
+statement ok
+SET experimental_distsql_planning = false
+
+statement ok
+SET experimental_distsql_planning = true
+
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_distsql_planning.enabled = false
+
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_distsql_planning.enabled = true
