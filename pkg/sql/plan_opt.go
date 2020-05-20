@@ -219,7 +219,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		result.flags.Set(planFlagIsDDL)
 	}
 
-	cols := planColumns(result.main)
+	cols := result.main.planColumns()
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
 			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")

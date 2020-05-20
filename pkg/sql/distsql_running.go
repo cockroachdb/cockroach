@@ -882,7 +882,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
 	subqueryPlanCtx.ignoreClose = true
-	subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
+	subqueryPhysPlan, err := dsp.createPhysPlan(subqueryPlanCtx, subqueryPlan.plan)
 	if err != nil {
 		return err
 	}
@@ -993,12 +993,12 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	evalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
-	plan planNode,
+	plan planMaybePhysical,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
 	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
-	physPlan, err := dsp.createPlanForNode(planCtx, plan)
+	physPlan, err := dsp.createPhysPlan(planCtx, plan)
 	if err != nil {
 		recv.SetError(err)
 		return func() {}
@@ -1148,7 +1148,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 // planAndRunPostquery runs a cascade or check query.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
 	ctx context.Context,
-	postqueryPlan planNode,
+	postqueryPlan planMaybePhysical,
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
@@ -1185,7 +1185,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		}
 	}
 
-	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan)
+	postqueryPhysPlan, err := dsp.createPhysPlan(postqueryPlanCtx, postqueryPlan)
 	if err != nil {
 		return err
 	}
