@@ -200,7 +200,16 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
     "blue":
       latency > 0 && std.stddev > 0 && latency > std.stddevPlus2,
   });
-  const renderDescription = (data: string) => _.map(data.split(","), (identity, index) => <p key={index} className="Chip--tooltip__nodes--item-description">{`${identity},`}</p>);
+  const renderDescription = (data: string) => {
+    if (!data) {
+      return;
+    }
+    return _.map(data.split(","), (identity, index) => (
+      <p key={index} className="Chip--tooltip__nodes--item-description">
+        {`${identity},`}
+      </p>
+    ));
+  };
   return (
     <td className={className}>
       {collapsed ? (
@@ -222,7 +231,7 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
                 {renderDescription(identityA.locality)}
               </div>
             </div>
-            <p className={`color--${type}`}>{`${latency.toFixed(2)}ms roundtrip`}</p>
+            {latency > 0 && <p className={`color--${type} Chip--tooltip__latency`}>{`${latency.toFixed(2)}ms roundtrip`}</p>}
           </div>
         )}>
           <div>
