@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -23,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	raven "github.com/getsentry/raven-go"
+	"github.com/cockroachdb/sentry-go"
 	"github.com/kr/pretty"
 )
 
@@ -36,34 +37,41 @@ import (
 // interceptingTransport is an implementation of raven.Transport that delegates
 // calls to the Send method to the send function contained within.
 type interceptingTransport struct {
-	send func(url, authHeader string, packet *raven.Packet)
+	send func(packet *sentry.Event)
 }
 
-// Send implements the raven.Transport interface.
-func (it interceptingTransport) Send(url, authHeader string, packet *raven.Packet) error {
-	it.send(url, authHeader, packet)
-	return nil
+// SendEvent implements the sentry.Transport interface.
+func (it interceptingTransport) SendEvent(packet *sentry.Event) {
+	it.send(packet)
 }
+
+// Flush implements the sentry.Transport interface.
+func (it interceptingTransport) Flush(time.Duration) bool { return true }
+
+// Configure implements the sentry.Transport interface.
+func (it interceptingTransport) Configure(sentry.ClientOptions) {}
 
 func TestCrashReportingPacket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	var packets []*raven.Packet
+	var packets []*sentry.Event
 
 	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
 	log.DiagnosticsReportingEnabled.Override(&st.SV, true)
 
-	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/ignored")()
+	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
 
-	// Install a Transport that locally records packets rather than sending them
+	log.SetupCrashReporter(ctx, "test")
+
+	// Install a Transport that locally records events rather than sending them
 	// to Sentry over HTTP.
-	defer func(transport raven.Transport) {
-		raven.DefaultClient.Transport = transport
-	}(raven.DefaultClient.Transport)
-	raven.DefaultClient.Transport = interceptingTransport{
-		send: func(_, _ string, packet *raven.Packet) {
+	defer func(transport sentry.Transport) {
+		sentry.CurrentHub().Client().Transport = transport
+	}(sentry.CurrentHub().Client().Transport)
+	sentry.CurrentHub().Client().Transport = interceptingTransport{
+		send: func(packet *sentry.Event) {
 			packets = append(packets, packet)
 		},
 	}
@@ -73,8 +81,6 @@ func TestCrashReportingPacket(t *testing.T) {
 			t.Fatalf("'%s' failed to panic", name)
 		}
 	}
-
-	log.SetupCrashReporter(ctx, "test")
 
 	const (
 		panicPre  = "boom"
@@ -113,7 +119,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			if runtime.Compiler == "gccgo" {
 				message += "[0-9]+" // TODO(bdarnell): verify on gccgo
 			} else {
-				message += "1053"
+				message += "1058"
 			}
 			message += ": TestCrashReportingPacket: panic: %v"
 			return message
@@ -127,7 +133,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			if runtime.Compiler == "gccgo" {
 				message += "[0-9]+" // TODO(bdarnell): verify on gccgo
 			} else {
-				message += "1061"
+				message += "1066"
 			}
 			message += ": TestCrashReportingPacket: panic: %v"
 			return message
@@ -156,11 +162,7 @@ func TestCrashReportingPacket(t *testing.T) {
 				}
 			}
 
-			tags := make(map[string]string, len(p.Tags))
-			for _, tag := range p.Tags {
-				tags[tag.Key] = tag.Value
-			}
-
+			tags := p.Tags
 			if e, a := exp.tagCount, len(tags); e != a {
 				t.Errorf("expected %d tags, but got %d", e, a)
 			}
@@ -197,26 +199,26 @@ func TestInternalErrorReporting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	var packets []*raven.Packet
+	var packets []*sentry.Event
 
 	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
 	log.DiagnosticsReportingEnabled.Override(&st.SV, true)
 
-	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/ignored")()
+	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
+
+	log.SetupCrashReporter(ctx, "test")
 
 	// Install a Transport that locally records packets rather than sending them
 	// to Sentry over HTTP.
-	defer func(transport raven.Transport) {
-		raven.DefaultClient.Transport = transport
-	}(raven.DefaultClient.Transport)
-	raven.DefaultClient.Transport = interceptingTransport{
-		send: func(_, _ string, packet *raven.Packet) {
+	defer func(transport sentry.Transport) {
+		sentry.CurrentHub().Client().Transport = transport
+	}(sentry.CurrentHub().Client().Transport)
+	sentry.CurrentHub().Client().Transport = interceptingTransport{
+		send: func(packet *sentry.Event) {
 			packets = append(packets, packet)
 		},
 	}
-
-	log.SetupCrashReporter(ctx, "test")
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -244,10 +246,6 @@ func TestInternalErrorReporting(t *testing.T) {
 		t.Errorf("expected assertion error location in message, got:\n%s", p.Message)
 	}
 
-	if ok, _ := m(`.*sem/builtins`, p.Culprit); !ok {
-		t.Errorf("expected builtins in culprit, got %q", p.Culprit)
-	}
-
 	expectedExtra := []struct {
 		key   string
 		reVal string
@@ -256,6 +254,15 @@ func TestInternalErrorReporting(t *testing.T) {
 		{"2: stacktrace", `.*builtins.go.*\n.*eval.go.*Eval`},
 		{"3: details", `%s\(\).*\n.*force_assertion_error`},
 		{"4: stacktrace", ".*eval.go.*Eval"},
+		{"long message", `\*errors.errorString\n` +
+			`\*safedetails.withSafeDetails: %s \(1\)\n` +
+			`builtins.go:\d+: \*withstack.withStack \(2\)\n` +
+			`\*assert.withAssertionFailure\n` +
+			`\*errutil.withMessage\n` +
+			`\*safedetails.withSafeDetails: %s\(\) \(3\)\n` +
+			`eval.go:\d+: \*withstack.withStack \(4\)\n` +
+			`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(5\)\n` +
+			`\(check the extra data payloads\)`},
 	}
 	for _, ex := range expectedExtra {
 		data, ok := p.Extra[ex.key]
@@ -273,56 +280,28 @@ func TestInternalErrorReporting(t *testing.T) {
 		}
 	}
 
-	if len(p.Interfaces) < 2 {
-		t.Fatalf("expected 2 reportable objects, got %d", len(p.Interfaces))
+	if len(p.Exception) < 1 {
+		t.Fatalf("expected 1 reportable objects, got %d", len(p.Exception))
 	}
-	msgCount := 0
-	excCount := 0
-	otherCount := 0
-	for _, iv := range p.Interfaces {
-		switch part := iv.(type) {
-		case *raven.Message:
-			if ok, _ := m(
-				`\*errors.errorString\n`+
-					`\*safedetails.withSafeDetails: %s \(1\)\n`+
-					`builtins.go:\d+: \*withstack.withStack \(2\)\n`+
-					`\*assert.withAssertionFailure\n`+
-					`\*errutil.withMessage\n`+
-					`\*safedetails.withSafeDetails: %s\(\) \(3\)\n`+
-					`eval.go:\d+: \*withstack.withStack \(4\)\n`+
-					`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(5\)\n`+
-					`\(check the extra data payloads\)`,
-				part.Message,
-			); !ok {
-				t.Errorf("expected stack of message, got:\n%s", part.Message)
-			}
-			msgCount++
-		case *raven.Exception:
-			if ok, _ := m(
+	part := p.Exception[0]
+	/*		if ok, _ := m(
 				`builtins.go:\d+:.*: %s`,
 				part.Value,
 			); !ok {
 				t.Errorf("expected builtin in exception head, got:\n%s", part.Value)
 			}
-			if len(part.Stacktrace.Frames) < 2 {
-				t.Errorf("expected two entries in stack trace, got %d", len(part.Stacktrace.Frames))
-			} else {
-				fr := part.Stacktrace.Frames
-				// Raven stack traces are inverted.
-				if !strings.HasSuffix(fr[len(fr)-1].Filename, "builtins.go") ||
-					!strings.HasSuffix(fr[len(fr)-2].Filename, "eval.go") {
-					t.Errorf("expected builtins and eval at top of stack trace, got:\n%+v\n%+v",
-						fr[len(fr)-1],
-						fr[len(fr)-2],
-					)
-				}
-			}
-			excCount++
-		default:
-			otherCount++
+	*/
+	if len(part.Stacktrace.Frames) < 2 {
+		t.Errorf("expected two entries in stack trace, got %d", len(part.Stacktrace.Frames))
+	} else {
+		fr := part.Stacktrace.Frames
+		// Sentry stack traces are inverted.
+		if !strings.HasSuffix(fr[len(fr)-1].Filename, "builtins.go") ||
+			!strings.HasSuffix(fr[len(fr)-2].Filename, "eval.go") {
+			t.Errorf("expected builtins and eval at top of stack trace, got:\n%+v\n%+v",
+				fr[len(fr)-1],
+				fr[len(fr)-2],
+			)
 		}
-	}
-	if msgCount != 1 || excCount != 1 || otherCount != 0 {
-		t.Fatalf("unexpected objects, got %d %d %d, expected 1 1 0", msgCount, excCount, otherCount)
 	}
 }
