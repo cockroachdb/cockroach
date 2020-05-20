@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -45,7 +45,7 @@ func (rec *SpanSetReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
 }
 
 // EvalKnobs returns the batch evaluation Knobs.
-func (rec *SpanSetReplicaEvalContext) EvalKnobs() storagebase.BatchEvalTestingKnobs {
+func (rec *SpanSetReplicaEvalContext) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
 	return rec.i.EvalKnobs()
 }
 
@@ -129,7 +129,7 @@ func (rec SpanSetReplicaEvalContext) Desc() *roachpb.RangeDescriptor {
 // on Replica.ContainsKey.
 func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 	desc := rec.Desc() // already asserts
-	return storagebase.ContainsKey(desc, key)
+	return kvserverbase.ContainsKey(desc, key)
 }
 
 // GetMVCCStats returns the Replica's MVCCStats.

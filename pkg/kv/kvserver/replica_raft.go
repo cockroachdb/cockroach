@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,10 +40,10 @@ import (
 	"go.etcd.io/etcd/raft/tracker"
 )
 
-func makeIDKey() storagebase.CmdIDKey {
+func makeIDKey() kvserverbase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
-	return storagebase.CmdIDKey(idKeyBuf)
+	return kvserverbase.CmdIDKey(idKeyBuf)
 }
 
 // evalAndPropose prepares the necessary pending command struct and initializes
@@ -172,7 +172,7 @@ func (r *Replica) evalAndPropose(
 	}()
 
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
-		filterArgs := storagebase.ProposalFilterArgs{
+		filterArgs := kvserverbase.ProposalFilterArgs{
 			Ctx:   ctx,
 			Cmd:   *proposal.command,
 			CmdID: idKey,

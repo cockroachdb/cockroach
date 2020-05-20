@@ -28,7 +28,7 @@ import (
 )
 
 // StateLoader contains accessor methods to read or write the
-// fields of storagebase.ReplicaState. It contains an internal buffer
+// fields of kvserverbase.ReplicaState. It contains an internal buffer
 // which is reused to avoid an allocation on frequently-accessed code
 // paths.
 //

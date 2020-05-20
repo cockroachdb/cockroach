@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -142,7 +142,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	ms.SysBytes += probablyLargeAbortSpanSysBytesThreshold
 
 	gcThresh := hlc.Timestamp{WallTime: 1}
-	expiration := storagebase.TxnCleanupThreshold.Nanoseconds() + 1
+	expiration := kvserverbase.TxnCleanupThreshold.Nanoseconds() + 1
 
 	// GC triggered if abort span should all be gc'able and it's likely large.
 	{
@@ -636,7 +636,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
 	testTime := manual.UnixNano() + 2*time.Hour.Nanoseconds()
-	gcExpiration := testTime - storagebase.TxnCleanupThreshold.Nanoseconds()
+	gcExpiration := testTime - kvserverbase.TxnCleanupThreshold.Nanoseconds()
 
 	type spec struct {
 		status      roachpb.TransactionStatus
@@ -741,7 +741,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	// intent resolution.
 	tsc.TestingKnobs.IntentResolverKnobs.MaxIntentResolutionBatchSize = 1
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
 				// Only count finalizing intent resolution attempts in `resolved`.
@@ -1024,7 +1024,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {
 				atomic.AddInt32(&gcRequests, 1)
 				return nil

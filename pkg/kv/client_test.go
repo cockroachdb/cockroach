@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -98,7 +98,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	}{
 		m: make(map[string]struct{}),
 	}
-	filter := func(args storagebase.FilterArgs) *roachpb.Error {
+	filter := func(args kvserverbase.FilterArgs) *roachpb.Error {
 		mu.Lock()
 		defer mu.Unlock()
 		pushArg, ok := args.Req.(*roachpb.PushTxnRequest)
@@ -111,7 +111,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				EvalKnobs: storagebase.BatchEvalTestingKnobs{
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 					TestingEvalFilter: filter,
 				},
 			},

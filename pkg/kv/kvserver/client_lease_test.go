@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -327,20 +327,20 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	var scratchRangeID atomic.Value
 	scratchRangeID.Store(roachpb.RangeID(0))
 	changeReplicasChan := make(chan chan struct{}, 1)
-	shouldBlock := func(args storagebase.ProposalFilterArgs) bool {
+	shouldBlock := func(args kvserverbase.ProposalFilterArgs) bool {
 		// Block if a ChangeReplicas command is removing a node from our range.
 		return args.Req.RangeID == scratchRangeID.Load().(roachpb.RangeID) &&
 			args.Cmd.ReplicatedEvalResult.ChangeReplicas != nil &&
 			len(args.Cmd.ReplicatedEvalResult.ChangeReplicas.Removed()) > 0
 	}
-	blockIfShould := func(args storagebase.ProposalFilterArgs) {
+	blockIfShould := func(args kvserverbase.ProposalFilterArgs) {
 		if shouldBlock(args) {
 			ch := make(chan struct{})
 			changeReplicasChan <- ch
 			<-ch
 		}
 	}
-	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 		blockIfShould(args)
 		return nil
 	}

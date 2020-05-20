@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -392,7 +392,7 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 		Clock:   clock,
 		// Don't let the  intent resolution requests be batched with each other.
 		// This would make it harder to determine how to drain sf.
-		TestingKnobs: storagebase.IntentResolverTestingKnobs{
+		TestingKnobs: kvserverbase.IntentResolverTestingKnobs{
 			MaxIntentResolutionBatchSize: 1,
 		},
 	}
@@ -662,7 +662,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 		// Don't let the transaction record GC requests or the intent resolution
 		// requests be batched with each other. This would make it harder to
 		// determine how to drain sf.
-		TestingKnobs: storagebase.IntentResolverTestingKnobs{
+		TestingKnobs: kvserverbase.IntentResolverTestingKnobs{
 			MaxGCBatchSize:               1,
 			MaxIntentResolutionBatchSize: 1,
 		},

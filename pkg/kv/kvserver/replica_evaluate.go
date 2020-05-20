@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -142,7 +142,7 @@ func optimizePuts(
 // the results.
 func evaluateBatch(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
@@ -428,7 +428,7 @@ func evaluateBatch(
 // remaining for this batch (MaxInt64 for no limit).
 func evaluateCommand(
 	ctx context.Context,
-	raftCmdID storagebase.CmdIDKey,
+	raftCmdID kvserverbase.CmdIDKey,
 	index int,
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
@@ -439,7 +439,7 @@ func evaluateCommand(
 ) (result.Result, *roachpb.Error) {
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
-		filterArgs := storagebase.FilterArgs{
+		filterArgs := kvserverbase.FilterArgs{
 			Ctx:   ctx,
 			CmdID: raftCmdID,
 			Index: index,

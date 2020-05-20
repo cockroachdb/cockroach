@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -344,7 +344,7 @@ func makeGCQueueScoreImpl(
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
 	if probablyLargeAbortSpan(ms) && !r.ShouldQueue &&
-		(r.LikelyLastGC == 0 || r.LikelyLastGC > storagebase.TxnCleanupThreshold) {
+		(r.LikelyLastGC == 0 || r.LikelyLastGC > kvserverbase.TxnCleanupThreshold) {
 		r.ShouldQueue = true
 		r.FinalScore++
 	}

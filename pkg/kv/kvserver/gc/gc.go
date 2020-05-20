@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -165,7 +165,7 @@ func Run(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	txnExp := now.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
 	if err := gcer.SetGCThreshold(ctx, Threshold{
 		Key: newThreshold,
 		Txn: txnExp,

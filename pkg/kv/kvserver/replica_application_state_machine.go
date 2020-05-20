@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -135,7 +135,7 @@ func (r *Replica) shouldApplyCommand(
 	)
 	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
 		var newPropRetry int
-		newPropRetry, cmd.forcedErr = filter(storagebase.ApplyFilterArgs{
+		newPropRetry, cmd.forcedErr = filter(kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
@@ -168,7 +168,7 @@ func (r *Replica) shouldApplyCommand(
 // TODO(nvanbenschoten): Unit test this function now that it is stateless.
 func checkForcedErr(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	raftCmd *kvserverpb.RaftCommand,
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,

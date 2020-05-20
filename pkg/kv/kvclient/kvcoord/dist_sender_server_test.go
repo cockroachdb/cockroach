@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1546,7 +1546,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	var numCPuts int32
 	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
-		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			k := fArgs.Req.Header().Key
 			switch fArgs.Req.(type) {
 			case *roachpb.PutRequest:
@@ -1767,9 +1767,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	var filterFn atomic.Value
 	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
-		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			fnVal := filterFn.Load()
-			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+			if fn, ok := fnVal.(func(kvserverbase.FilterArgs) *roachpb.Error); ok && fn != nil {
 				return fn(fArgs)
 			}
 			return nil
@@ -1794,9 +1794,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	newUncertaintyFilter := func(key roachpb.Key) func(storagebase.FilterArgs) *roachpb.Error {
+	newUncertaintyFilter := func(key roachpb.Key) func(kvserverbase.FilterArgs) *roachpb.Error {
 		var count int32
-		return func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		return func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if (fArgs.Req.Header().Key.Equal(key) ||
 				fArgs.Req.Header().Span().ContainsKey(key)) && fArgs.Hdr.Txn != nil {
 				if atomic.AddInt32(&count, 1) > 1 {
@@ -1821,7 +1821,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		beforeTxnStart             func(context.Context, *kv.DB) error  // called before the txn starts
 		afterTxnStart              func(context.Context, *kv.DB) error  // called after the txn chooses a timestamp
 		retryable                  func(context.Context, *kv.Txn) error // called during the txn; may be retried
-		filter                     func(storagebase.FilterArgs) *roachpb.Error
+		filter                     func(kvserverbase.FilterArgs) *roachpb.Error
 		refreshSpansCondenseFilter func() bool
 		priorReads                 bool
 		tsLeaked                   bool
@@ -2812,7 +2812,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 			if tc.filter != nil {
 				filterFn.Store(tc.filter)
-				defer filterFn.Store((func(storagebase.FilterArgs) *roachpb.Error)(nil))
+				defer filterFn.Store((func(kvserverbase.FilterArgs) *roachpb.Error)(nil))
 			}
 			if tc.refreshSpansCondenseFilter != nil {
 				refreshSpansCondenseFilter.Store(tc.refreshSpansCondenseFilter)
@@ -2912,9 +2912,9 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 	var filterFn atomic.Value
 	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
-		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			fnVal := filterFn.Load()
-			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+			if fn, ok := fnVal.(func(kvserverbase.FilterArgs) *roachpb.Error); ok && fn != nil {
 				return fn(fArgs)
 			}
 			return nil
@@ -3042,7 +3042,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			// Install a filter which will reject requests touching
 			// secondAttemptRejectKey on the retry.
 			var count int32
-			filterFn.Store(func(args storagebase.FilterArgs) *roachpb.Error {
+			filterFn.Store(func(args kvserverbase.FilterArgs) *roachpb.Error {
 				put, ok := args.Req.(*roachpb.ConditionalPutRequest)
 				if !ok {
 					return nil
