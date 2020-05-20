@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -240,7 +240,7 @@ type replicaInQueue interface {
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
 	maybeInitializeRaftGroup(context.Context)
-	redirectOnOrAcquireLease(context.Context) (storagepb.LeaseStatus, *roachpb.Error)
+	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *roachpb.Error)
 	IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool
 	GetLease() (roachpb.Lease, roachpb.Lease)
 }

@@ -12,7 +12,7 @@ package jobs
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -30,7 +30,7 @@ var FakeNodeID = func() *base.NodeIDContainer {
 type FakeNodeLiveness struct {
 	mu struct {
 		syncutil.Mutex
-		livenessMap map[roachpb.NodeID]*storagepb.Liveness
+		livenessMap map[roachpb.NodeID]*kvserverpb.Liveness
 	}
 
 	// A non-blocking send is performed over these channels when the corresponding
@@ -45,10 +45,10 @@ func NewFakeNodeLiveness(nodeCount int) *FakeNodeLiveness {
 		SelfCalledCh:          make(chan struct{}),
 		GetLivenessesCalledCh: make(chan struct{}),
 	}
-	nl.mu.livenessMap = make(map[roachpb.NodeID]*storagepb.Liveness)
+	nl.mu.livenessMap = make(map[roachpb.NodeID]*kvserverpb.Liveness)
 	for i := 0; i < nodeCount; i++ {
 		nodeID := roachpb.NodeID(i + 1)
-		nl.mu.livenessMap[nodeID] = &storagepb.Liveness{
+		nl.mu.livenessMap[nodeID] = &kvserverpb.Liveness{
 			Epoch:      1,
 			Expiration: hlc.LegacyTimestamp(hlc.MaxTimestamp),
 			NodeID:     nodeID,
@@ -63,7 +63,7 @@ func (*FakeNodeLiveness) ModuleTestingKnobs() {}
 // Self implements the implicit storage.NodeLiveness interface. It uses NodeID
 // as the node ID. On every call, a nonblocking send is performed over nl.ch to
 // allow tests to execute a callback.
-func (nl *FakeNodeLiveness) Self() (storagepb.Liveness, error) {
+func (nl *FakeNodeLiveness) Self() (kvserverpb.Liveness, error) {
 	select {
 	case nl.SelfCalledCh <- struct{}{}:
 	default:
@@ -74,7 +74,7 @@ func (nl *FakeNodeLiveness) Self() (storagepb.Liveness, error) {
 }
 
 // GetLivenesses implements the implicit storage.NodeLiveness interface.
-func (nl *FakeNodeLiveness) GetLivenesses() (out []storagepb.Liveness) {
+func (nl *FakeNodeLiveness) GetLivenesses() (out []kvserverpb.Liveness) {
 	select {
 	case nl.GetLivenessesCalledCh <- struct{}{}:
 	default:

@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -84,7 +84,7 @@ type replicatedCmd struct {
 // decodedRaftEntry represents the deserialized content of a raftpb.Entry.
 type decodedRaftEntry struct {
 	idKey      storagebase.CmdIDKey
-	raftCmd    storagepb.RaftCommand
+	raftCmd    kvserverpb.RaftCommand
 	confChange *decodedConfChange // only non-nil for config changes
 }
 
@@ -224,6 +224,6 @@ func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) error {
 	return nil
 }
 
-func (d *decodedRaftEntry) replicatedResult() *storagepb.ReplicatedEvalResult {
+func (d *decodedRaftEntry) replicatedResult() *kvserverpb.ReplicatedEvalResult {
 	return &d.raftCmd.ReplicatedEvalResult
 }

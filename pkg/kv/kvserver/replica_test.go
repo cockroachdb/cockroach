@@ -40,11 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -891,11 +891,11 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
 
-	raftCmd := storagepb.RaftCommand{
+	raftCmd := kvserverpb.RaftCommand{
 		ProposerLeaseSequence: lease.Sequence,
-		ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
+		ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 			IsLeaseRequest: true,
-			State: &storagepb.ReplicaState{
+			State: &kvserverpb.ReplicaState{
 				Lease: &invalidLease,
 			},
 		},
@@ -950,7 +950,7 @@ func hasLease(repl *Replica, timestamp hlc.Timestamp) (owned bool, expired bool)
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 	status := repl.leaseStatus(*repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
-	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != storagepb.LeaseState_VALID
+	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != kvserverpb.LeaseState_VALID
 }
 
 func TestReplicaLease(t *testing.T) {
@@ -1552,7 +1552,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.GetLease()
-	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != storagepb.LeaseState_EXPIRED {
+	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != kvserverpb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -6349,7 +6349,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
 	})
-	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
 		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
 	}
 }
@@ -8650,9 +8650,9 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, zoneConfig,
-				c.liveness, 0, &c.desc, c.raftStatus, storagepb.LeaseStatus{},
+				c.liveness, 0, &c.desc, c.raftStatus, kvserverpb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
-				storagepb.LatchManagerInfo{}, storagepb.LatchManagerInfo{}, c.raftLogSize, true)
+				kvserverpb.LatchManagerInfo{}, kvserverpb.LatchManagerInfo{}, c.raftLogSize, true)
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}
@@ -10299,28 +10299,28 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	}}
 
 	tests := []struct {
-		leaseStatus storagepb.LeaseStatus
+		leaseStatus kvserverpb.LeaseStatus
 		lease       roachpb.Lease
 		raftStatus  raft.Status
 		exp         bool
 	}{
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, followerWithoutLeader, true},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, followerWithoutLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, leader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, followerWithoutLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, leader, false},
 
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, candidate, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, leader, false},
-		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, leader, false},
 	}
 
 	for i, test := range tests {
@@ -12395,12 +12395,12 @@ func TestContainsEstimatesClampApplication(t *testing.T) {
 			},
 			decodedRaftEntry: decodedRaftEntry{
 				idKey: makeIDKey(),
-				raftCmd: storagepb.RaftCommand{
+				raftCmd: kvserverpb.RaftCommand{
 					ProposerLeaseSequence: rAppbatch.state.Lease.Sequence,
-					ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
+					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 						Timestamp:      tc.Clock().Now(),
 						IsLeaseRequest: true,
-						State: &storagepb.ReplicaState{
+						State: &kvserverpb.ReplicaState{
 							Lease: &lease,
 						},
 						Delta: enginepb.MVCCStatsDelta{

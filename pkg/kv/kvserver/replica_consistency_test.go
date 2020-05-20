@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,7 +34,7 @@ func TestReplicaChecksumVersion(t *testing.T) {
 	tc.Start(t, stopper)
 
 	testutils.RunTrueAndFalse(t, "matchingVersion", func(t *testing.T, matchingVersion bool) {
-		cc := storagepb.ComputeChecksum{
+		cc := kvserverpb.ComputeChecksum{
 			ChecksumID: uuid.FastMakeV4(),
 			Mode:       roachpb.ChecksumMode_CHECK_FULL,
 		}

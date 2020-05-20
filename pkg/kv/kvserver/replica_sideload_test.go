@@ -27,10 +27,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -53,7 +53,7 @@ func entryEq(l, r raftpb.Entry) error {
 	}
 	_, lData := DecodeRaftCommand(l.Data)
 	_, rData := DecodeRaftCommand(r.Data)
-	var lc, rc storagepb.RaftCommand
+	var lc, rc kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(lData, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
 	}
@@ -67,10 +67,10 @@ func entryEq(l, r raftpb.Entry) error {
 }
 
 func mkEnt(
-	v raftCommandEncodingVersion, index, term uint64, as *storagepb.ReplicatedEvalResult_AddSSTable,
+	v raftCommandEncodingVersion, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
 	cmdIDKey := strings.Repeat("x", raftCommandIDLen)
-	var cmd storagepb.RaftCommand
+	var cmd kvserverpb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
 	b, err := protoutil.Marshal(&cmd)
 	if err != nil {
@@ -403,11 +403,11 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		expTrace string
 	}
 
-	sstFat := storagepb.ReplicatedEvalResult_AddSSTable{
+	sstFat := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		Data:  []byte("foo"),
 		CRC32: 0, // not checked
 	}
-	sstThin := storagepb.ReplicatedEvalResult_AddSSTable{
+	sstThin := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		CRC32: 0, // not checked
 	}
 
@@ -501,7 +501,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	addSST := storagepb.ReplicatedEvalResult_AddSSTable{
+	addSST := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		Data: []byte("foo"), CRC32: 0, // not checked
 	}
 
@@ -833,7 +833,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		}
 
 		var ent raftpb.Entry
-		var cmd storagepb.RaftCommand
+		var cmd kvserverpb.RaftCommand
 		var finalEnt raftpb.Entry
 		for _, entryBytes := range mockSender.logEntries {
 			if err := protoutil.Unmarshal(entryBytes, &ent); err != nil {

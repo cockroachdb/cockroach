@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -251,7 +251,7 @@ type Replica struct {
 		// the closing of the channel.
 		mergeComplete chan struct{}
 		// The state of the Raft state machine.
-		state storagepb.ReplicaState
+		state kvserverpb.ReplicaState
 		// Last index/term persisted to the raft log (not necessarily
 		// committed). Note that lastTerm may be 0 (and thus invalid) even when
 		// lastIndex is known, in which case the term will have to be retrieved
@@ -772,7 +772,7 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 // is enabled and the TTL has passed. If this is an admin command or this range
 // contains data outside of the user keyspace, we return the true GC threshold.
 func (r *Replica) getImpliedGCThresholdRLocked(
-	st *storagepb.LeaseStatus, isAdmin bool,
+	st *kvserverpb.LeaseStatus, isAdmin bool,
 ) hlc.Timestamp {
 	threshold := *r.mu.state.GCThreshold
 
@@ -791,7 +791,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
-	if st.State != storagepb.LeaseState_VALID || c.readAt.Less(st.Lease.Start) {
+	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start) {
 		return threshold
 	}
 
@@ -980,8 +980,8 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
-func (r *Replica) State() storagepb.RangeInfo {
-	var ri storagepb.RangeInfo
+func (r *Replica) State() kvserverpb.RangeInfo {
+	var ri kvserverpb.RangeInfo
 
 	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
 	// this first before RLocking below. Performance of this extra lock
@@ -995,7 +995,7 @@ func (r *Replica) State() storagepb.RangeInfo {
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagepb.ReplicaState)
+	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*kvserverpb.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = r.mu.raftLogSize
@@ -1071,7 +1071,7 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // they know that they will end up checking for a pending merge at some later
 // time.
 func (r *Replica) checkExecutionCanProceed(
-	ba *roachpb.BatchRequest, g *concurrency.Guard, st *storagepb.LeaseStatus,
+	ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
 ) error {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -1133,7 +1133,7 @@ func (r *Replica) checkSpanInRangeRLocked(rspan roachpb.RSpan) error {
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified
 // by its MVCC timestamp) can be run on the replica.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts hlc.Timestamp, st *storagepb.LeaseStatus, isAdmin bool,
+	ts hlc.Timestamp, st *kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
 	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
 	if threshold.Less(ts) {

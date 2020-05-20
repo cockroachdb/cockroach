@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -287,7 +287,7 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 		preLen = raftCommandPrefixLen
 	}
 	cmdLen := p.command.Size()
-	cap := preLen + cmdLen + storagepb.MaxRaftCommandFooterSize()
+	cap := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
 	data := make([]byte, preLen, cap)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
@@ -1440,7 +1440,7 @@ func (r *Replica) withRaftGroup(
 }
 
 func shouldCampaignOnWake(
-	leaseStatus storagepb.LeaseStatus,
+	leaseStatus kvserverpb.LeaseStatus,
 	lease roachpb.Lease,
 	storeID roachpb.StoreID,
 	raftStatus raft.Status,
@@ -1451,7 +1451,7 @@ func shouldCampaignOnWake(
 	// time, with a lease pre-assigned to one of them). Note that
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
 	// we should err on the side of campaigining here.
-	anotherOwnsLease := leaseStatus.State == storagepb.LeaseState_VALID && !lease.OwnedBy(storeID)
+	anotherOwnsLease := leaseStatus.State == kvserverpb.LeaseState_VALID && !lease.OwnedBy(storeID)
 
 	// If we're already campaigning or know who the leader is, don't
 	// start a new term.
@@ -1593,7 +1593,7 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 // After this method returns successfully the RHS of the split or merge
 // is guaranteed to exist in the Store using GetReplica().
 func (r *Replica) maybeAcquireSplitMergeLock(
-	ctx context.Context, raftCmd storagepb.RaftCommand,
+	ctx context.Context, raftCmd kvserverpb.RaftCommand,
 ) (func(), error) {
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(ctx, &split.SplitTrigger)

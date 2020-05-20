@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -96,7 +96,7 @@ func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 	return s, nil
 }
 
-func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
+func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 	if writeBatch == nil {
 		return "<nil>\n", nil
 	}
@@ -166,7 +166,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 		return "", err
 	}
 
-	var cmd storagepb.RaftCommand
+	var cmd kvserverpb.RaftCommand
 	switch ent.Type {
 	case raftpb.EntryNormal:
 		if len(ent.Data) == 0 {
@@ -360,10 +360,10 @@ func maybeUnmarshalInline(v []byte, dest protoutil.Message) error {
 	return value.GetProto(dest)
 }
 
-type stringifyWriteBatch storagepb.WriteBatch
+type stringifyWriteBatch kvserverpb.WriteBatch
 
 func (s *stringifyWriteBatch) String() string {
-	wbStr, err := decodeWriteBatch((*storagepb.WriteBatch)(s))
+	wbStr, err := decodeWriteBatch((*kvserverpb.WriteBatch)(s))
 	if err == nil {
 		return wbStr
 	}
