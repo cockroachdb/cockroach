@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -280,7 +281,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
-		dbCache:       newDatabaseCacheHolder(NewDatabaseCache(cfg.Codec, systemCfg)),
+		dbCache:       newDatabaseCacheHolder(database.NewDatabaseCache(cfg.Codec, systemCfg)),
 		pool:          pool,
 		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
