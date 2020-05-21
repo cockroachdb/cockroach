@@ -70,3 +70,4 @@ SELECT * FROM crdb_internal.kv_store_status
 
 statement error operation is unsupported
 SELECT * FROM crdb_internal.kv_node_status
+

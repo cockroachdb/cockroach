@@ -31,4 +31,5 @@ type TestingKnobs struct {
 	SQLEvalContext      ModuleTestingKnobs
 	RegistryLiveness    ModuleTestingKnobs
 	Server              ModuleTestingKnobs
+	TenantTestingKnobs  ModuleTestingKnobs
 }

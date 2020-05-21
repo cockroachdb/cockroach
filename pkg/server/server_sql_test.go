@@ -16,9 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSQLServer starts up a semi-dedicated SQL server and runs some smoke test
@@ -38,7 +41,7 @@ func TestSQLServer(t *testing.T) {
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := serverutils.StartTenant(t, tc.Server(0), roachpb.MakeTenantID(10))
+	db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
 	defer db.Close()
 	r := sqlutils.MakeSQLRunner(db)
 	r.QueryStr(t, `SELECT 1`)
@@ -47,4 +50,20 @@ func TestSQLServer(t *testing.T) {
 	r.Exec(t, `INSERT INTO foo.kv VALUES('foo', 'bar')`)
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=off; SELECT * FROM foo.kv`)))
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=auto; SELECT * FROM foo.kv`)))
+}
+
+func TestTenantCannotSetClusterSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// StartTenant with the default permissions to
+	db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: false})
+	defer db.Close()
+	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.vectorize=off`)
+	pqErr, ok := err.(*pq.Error)
+	require.True(t, ok, "expected err to be a *pq.Error but got %v", err)
+	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege), pqErr.Code, "err %v has unexpected code", err)
 }
