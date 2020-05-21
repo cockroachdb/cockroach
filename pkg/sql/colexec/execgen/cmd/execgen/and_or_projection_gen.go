@@ -32,12 +32,14 @@ func genAndOrProjectionOps(wr io.Writer) error {
 		return err
 	}
 
-	s := string(t)
-	s = strings.ReplaceAll(s, "_OP_LOWER", "{{.Lower}}")
-	s = strings.ReplaceAll(s, "_OP_TITLE", "{{.Title}}")
-	s = strings.ReplaceAll(s, "_IS_OR_OP", ".IsOr")
-	s = strings.ReplaceAll(s, "_L_HAS_NULLS", "$.lHasNulls")
-	s = strings.ReplaceAll(s, "_R_HAS_NULLS", "$.rHasNulls")
+	r := strings.NewReplacer(
+		"_OP_LOWER", "{{.Lower}}",
+		"_OP_TITLE", "{{.Title}}",
+		"_IS_OR_OP", ".IsOr",
+		"_L_HAS_NULLS", "$.lHasNulls",
+		"_R_HAS_NULLS", "$.rHasNulls",
+	)
+	s := r.Replace(string(t))
 
 	addTupleForRight := makeFunctionRegex("_ADD_TUPLE_FOR_RIGHT", 1)
 	s = addTupleForRight.ReplaceAllString(s, `{{template "addTupleForRight" buildDict "Global" $ "lHasNulls" $1}}`)

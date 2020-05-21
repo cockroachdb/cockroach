@@ -27,12 +27,13 @@ func genRowsToVec(wr io.Writer) error {
 		return err
 	}
 
-	s := string(f)
-
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
-	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+	r := strings.NewReplacer(
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_GOTYPE", "{{.GoType}}",
+		"TemplateType", "{{.VecMethod}}",
+	)
+	s := r.Replace(string(f))
 
 	rowsToVecRe := makeFunctionRegex("_ROWS_TO_COL_VEC", 4)
 	s = rowsToVecRe.ReplaceAllString(s, `{{template "rowsToColVec" .}}`)

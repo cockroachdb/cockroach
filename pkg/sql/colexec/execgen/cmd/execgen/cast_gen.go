@@ -25,15 +25,16 @@ func genCastOperators(wr io.Writer) error {
 		return err
 	}
 
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_R_GO_TYPE", "{{.Right.GoType}}")
-	s = strings.ReplaceAll(s, "_L_TYP", "{{.Left.VecMethod}}")
-	s = strings.ReplaceAll(s, "_R_TYP", "{{.Right.VecMethod}}")
+	r := strings.NewReplacer(
+		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
+		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
+		"_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}",
+		"_RIGHT_TYPE_WIDTH", typeWidthReplacement,
+		"_R_GO_TYPE", "{{.Right.GoType}}",
+		"_L_TYP", "{{.Left.VecMethod}}",
+		"_R_TYP", "{{.Right.VecMethod}}",
+	)
+	s := r.Replace(string(t))
 
 	castRe := makeFunctionRegex("_CAST", 2)
 	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 2))

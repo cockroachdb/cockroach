@@ -79,19 +79,19 @@ func genHashTable(wr io.Writer, htm hashTableMode) error {
 		return err
 	}
 
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_ProbeType", "{{.Left.VecMethod}}")
-	s = strings.ReplaceAll(s, "_BuildType", "{{.Right.VecMethod}}")
-
-	s = strings.ReplaceAll(s, "_USE_PROBE_SEL", ".UseProbeSel")
-	s = strings.ReplaceAll(s, "_PROBING_AGAINST_ITSELF", "$probingAgainstItself")
-	s = strings.ReplaceAll(s, "_DELETING_PROBE_MODE", "$deletingProbeMode")
-	s = strings.ReplaceAll(s, "_OVERLOADS", ".Overloads")
+	r := strings.NewReplacer(
+		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
+		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
+		"_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}",
+		"_RIGHT_TYPE_WIDTH", typeWidthReplacement,
+		"_ProbeType", "{{.Left.VecMethod}}",
+		"_BuildType", "{{.Right.VecMethod}}",
+		"_USE_PROBE_SEL", ".UseProbeSel",
+		"_PROBING_AGAINST_ITSELF", "$probingAgainstItself",
+		"_DELETING_PROBE_MODE", "$deletingProbeMode",
+		"_OVERLOADS", ".Overloads",
+	)
+	s := r.Replace(string(t))
 
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Global.Left", s)
