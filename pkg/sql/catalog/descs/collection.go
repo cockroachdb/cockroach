@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -777,7 +777,7 @@ func (tc *Collection) GetSchemasForDatabase(
 	}
 	if _, ok := tc.allSchemasForDatabase[dbID]; !ok {
 		var err error
-		tc.allSchemasForDatabase[dbID], err = schema.GetForDatabase(ctx, txn, tc.codec(), dbID)
+		tc.allSchemasForDatabase[dbID], err = resolver.GetForDatabase(ctx, txn, tc.codec(), dbID)
 		if err != nil {
 			return nil, err
 		}

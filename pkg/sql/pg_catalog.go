@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	resolver2 "github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1040,7 +1040,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					resolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					scName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, table.Desc.GetParentSchemaID())
+					scName, err := resolver2.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, table.Desc.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
