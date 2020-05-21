@@ -111,10 +111,11 @@ We are currently operating under three different licenses:
   2.0 license after 3 years on a rolling basis for each release.
   - Enterprise features will always be licensed under the [Cockroach Community License.](https://www.cockroachlabs.com/cockroachdb-community-license/)
 
-Our main goal with licensing is to balance our identity as open source software while creating a viable business.
-By using a BSL for the first 3 years of our newest products, we are able to ensure that no hosting of CockroachDB
-occurs without an agreement with us. Outside of this usage, BSL features will continue to be free to use and source
-code for features under both the BSL and CCL will continue to be available.
+Our main goal in our approach to licensing is balancing our identity as an open source software company while
+continuing to grow as a viable business. By using a BSL for the first 3 years of our newest products, we are
+able to ensure that no hosting of CockroachDB occurs without an agreement with us. Outside of this usage, BSL
+features will continue to be free to use and source code for features under both the BSL and CCL will continue
+to be available.
 
 For more information about our licenses:
   - [Why we relicensed](https://www.cockroachlabs.com/blog/oss-relicensing-cockroachdb/)
