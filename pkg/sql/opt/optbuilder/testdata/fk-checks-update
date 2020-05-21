@@ -526,24 +526,3 @@ update fam
                 └── filters
                      ├── c:14 = two.a:16
                      └── d_new:15 = two.b:17
-
-exec-ddl
-CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON UPDATE CASCADE)
-----
-
-# Fall back to the exec-style checks in the presence of CASCADE.
-build
-UPDATE parent SET p = p+1
-----
-update parent
- ├── columns: <none>
- ├── fetch columns: x:4 parent.p:5 other:6
- ├── update-mapping:
- │    └── p_new:7 => parent.p:2
- ├── fk-fallback
- └── project
-      ├── columns: p_new:7!null x:4 parent.p:5!null other:6
-      ├── scan parent
-      │    └── columns: x:4 parent.p:5!null other:6
-      └── projections
-           └── parent.p:5 + 1 [as=p_new:7]
