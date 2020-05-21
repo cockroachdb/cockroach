@@ -65,8 +65,8 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	p.Tables().addUncommittedDatabase(oldName, descID, dbDropped)
-	p.Tables().addUncommittedDatabase(newName, descID, dbCreated)
+	p.Tables().AddUncommittedDatabase(oldName, descID, DBDropped)
+	p.Tables().AddUncommittedDatabase(newName, descID, DBCreated)
 
 	return p.txn.Run(ctx, b)
 }

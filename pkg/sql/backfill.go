@@ -566,7 +566,7 @@ func (sc *SchemaChanger) validateConstraints(
 	return grp.Wait()
 }
 
-// getTableVersion retrieves the descriptor for the table being
+// GetTableVersion retrieves the descriptor for the table being
 // targeted by the schema changer using the provided txn, and asserts
 // that the retrieved descriptor is at the given version. An error is
 // returned otherwise.
@@ -576,7 +576,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
+	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}
@@ -619,11 +619,8 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := &TableCollection{
-					leaseMgr: sc.leaseMgr,
-					settings: sc.settings,
-				}
-				defer tc.releaseTables(ctx)
+				tc := NewTableCollection(sc.leaseMgr, sc.settings)
+				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
 					return err
@@ -819,12 +816,9 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := &TableCollection{
-				leaseMgr: sc.leaseMgr,
-				settings: sc.settings,
-			}
+			tc := NewTableCollection(sc.leaseMgr, sc.settings)
 			// Use a leased table descriptor for the backfill.
-			defer tc.releaseTables(ctx)
+			defer tc.ReleaseAll(ctx)
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 			if err != nil {
 				return err
@@ -847,7 +841,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 
 				for k := range fkTables {
-					table, err := tc.getTableVersionByID(ctx, txn, k, tree.ObjectLookupFlags{})
+					table, err := tc.GetTableVersionByID(ctx, txn, k, tree.ObjectLookupFlags{})
 					if err != nil {
 						return err
 					}
@@ -1184,12 +1178,9 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			tc := &TableCollection{
-				leaseMgr: sc.leaseMgr,
-				settings: sc.settings,
-			}
+			tc := NewTableCollection(sc.leaseMgr, sc.settings)
 			// pretend that the schema has been modified.
-			if err := tc.addUncommittedTable(*desc); err != nil {
+			if err := tc.AddUncommittedTable(*desc); err != nil {
 				return err
 			}
 
@@ -1381,7 +1372,7 @@ func runSchemaChangesInTxn(
 					if selfReference {
 						referencedTableDesc = tableDesc
 					} else {
-						lookup, err := planner.Tables().getMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
+						lookup, err := planner.Tables().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
 						if err != nil {
 							return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
 						}
@@ -1488,7 +1479,7 @@ func runSchemaChangesInTxn(
 				}
 				if len(oldIndex.Interleave.Ancestors) != 0 {
 					ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
-					ancestor, err := planner.Tables().getMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
+					ancestor, err := planner.Tables().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
 					if err != nil {
 						return err
 					}
@@ -1524,7 +1515,7 @@ func runSchemaChangesInTxn(
 		switch c.ConstraintType {
 		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 			if err := validateCheckInTxn(
-				ctx, planner.Tables().leaseMgr, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
+				ctx, planner.Tables().LeaseManager(), planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
 			); err != nil {
 				return err
 			}
@@ -1578,12 +1569,9 @@ func validateCheckInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{
-			leaseMgr: leaseMgr,
-			settings: evalCtx.Settings,
-		}
+		newTc := NewTableCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
-		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
+		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
 			return err
 		}
 
@@ -1622,12 +1610,9 @@ func validateFkInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{
-			leaseMgr: leaseMgr,
-			settings: evalCtx.Settings,
-		}
+		newTc := NewTableCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
-		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
+		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
 			return err
 		}
 
@@ -1691,8 +1676,8 @@ func columnBackfillInTxn(
 	// All the FKs here are guaranteed to be created in the same transaction
 	// or else this table would be created in the ADD state.
 	for k := range fkTables {
-		t := tc.getUncommittedTableByID(k)
-		if (uncommittedTable{}) == t || !t.IsNewTable() {
+		t := tc.GetUncommittedTableByID(k)
+		if (UncommittedTable{}) == t || !t.IsNewTable() {
 			return errors.AssertionFailedf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
