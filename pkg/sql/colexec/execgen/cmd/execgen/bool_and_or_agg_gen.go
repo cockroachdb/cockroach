@@ -66,10 +66,11 @@ func genBooleanAgg(wr io.Writer) error {
 		return err
 	}
 
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_OP_TYPE", "{{.OpType}}")
-	s = strings.ReplaceAll(s, "_DEFAULT_VAL", "{{.DefaultVal}}")
+	r := strings.NewReplacer(
+		"_OP_TYPE", "{{.OpType}}",
+		"_DEFAULT_VAL", "{{.DefaultVal}}",
+	)
+	s := r.Replace(string(t))
 
 	accumulateBoolean := makeFunctionRegex("_ACCUMULATE_BOOLEAN", 3)
 	s = accumulateBoolean.ReplaceAllString(s, `{{template "accumulateBoolean" buildDict "Global" .}}`)

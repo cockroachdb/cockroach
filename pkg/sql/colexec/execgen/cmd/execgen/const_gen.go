@@ -27,13 +27,14 @@ func genConstOps(wr io.Writer) error {
 		return err
 	}
 
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
-	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
-	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+	r := strings.NewReplacer(
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_GOTYPE", "{{.GoType}}",
+		"_TYPE", "{{.VecMethod}}",
+		"TemplateType", "{{.VecMethod}}",
+	)
+	s := r.Replace(string(d))
 
 	s = replaceManipulationFuncs(s)
 
