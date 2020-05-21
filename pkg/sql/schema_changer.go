@@ -404,16 +404,35 @@ func startGCJob(
 func (sc *SchemaChanger) exec(ctx context.Context) error {
 	ctx = logtags.AddTag(ctx, "scExec", nil)
 
-	// TODO (lucy): Now that marking a schema change job as succeeded doesn't
-	// happen in the same transaction as removing mutations from a table
-	// descriptor, it seems possible for a job to be resumed after the mutation
-	// has already been removed. If there's a mutation provided, we should check
-	// whether it actually exists on the table descriptor and exit the job if not.
-	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
-	if err != nil {
+	var tableDesc *sqlbase.TableDescriptor
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		return err
+	}); err != nil {
 		return err
 	}
-	if notFirst {
+
+	var mutationFound, firstInLine bool
+	for i, mutation := range tableDesc.Mutations {
+		if mutation.MutationID == sc.mutationID {
+			mutationFound = true
+			if i == 0 {
+				firstInLine = true
+			}
+			break
+		}
+	}
+
+	if !mutationFound {
+		log.Warningf(ctx,
+			"schema change on %s (%d v%d) mutation %d: mutation not found on table descriptor",
+			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+		)
+		return nil
+	}
+
+	if !firstInLine {
 		log.Infof(ctx,
 			"schema change on %s (%d v%d) mutation %d: another change is still in progress",
 			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
@@ -497,7 +516,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// Run through mutation state machine and backfill.
-	err = sc.runStateMachineAndBackfill(ctx)
+	err := sc.runStateMachineAndBackfill(ctx)
 	if err != nil {
 		return err
 	}
@@ -1046,31 +1065,6 @@ func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
 	}
 
 	return nil
-}
-
-// notFirstInLine returns true whenever the schema change has been queued
-// up for execution after another schema change.
-func (sc *SchemaChanger) notFirstInLine(
-	ctx context.Context,
-) (*sqlbase.TableDescriptor, bool, error) {
-	var notFirst bool
-	var desc *sqlbase.TableDescriptor
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		notFirst = false
-		var err error
-		desc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
-		if err != nil {
-			return err
-		}
-		for i, mutation := range desc.Mutations {
-			if mutation.MutationID == sc.mutationID {
-				notFirst = i != 0
-				break
-			}
-		}
-		return nil
-	})
-	return desc, notFirst, err
 }
 
 // runStateMachineAndBackfill runs the schema change state machine followed by
