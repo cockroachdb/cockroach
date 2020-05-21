@@ -178,9 +178,15 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	}
 	width := b.Width()
 	if colIdx < width {
-		presentType := b.ColVec(colIdx).Type()
+		presentVec := b.ColVec(colIdx)
+		presentType := presentVec.Type()
 		if presentType.Identical(t) {
 			// We already have the vector of the desired type in place.
+			if presentVec.CanonicalTypeFamily() == types.BytesFamily {
+				// Flat bytes vector needs to be reset before the vector can be
+				// reused.
+				presentVec.Bytes().Reset()
+			}
 			return
 		}
 		if presentType.Family() == types.UnknownFamily {
