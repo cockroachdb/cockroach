@@ -1175,6 +1175,18 @@ func makeTableDescIfAs(
 	return desc, err
 }
 
+// dequalifyColumnRefs returns an expression with table names stripped from
+// qualified column names.
+//
+// For example:
+//
+//   tab.a > 0 AND tab.b = 'foo'
+//   =>
+//   a > 0 AND b = 'foo'
+//
+// This dequalification is necessary when CHECK constraints or partial index
+// predicates are created. If the table name was not stripped, these expressions
+// would become invalid if the table is renamed.
 func dequalifyColumnRefs(
 	ctx context.Context, source *sqlbase.DataSourceInfo, expr tree.Expr,
 ) (tree.Expr, error) {
@@ -1469,6 +1481,12 @@ func MakeTableDesc(
 			if d.Predicate != nil && !sessionData.PartialIndexes {
 				return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 			}
+			if d.Predicate != nil {
+				_, err := validateIndexPredicate(ctx, &desc, d.Predicate, semaCtx, n.Table)
+				if err != nil {
+					return desc, err
+				}
+			}
 
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
@@ -1504,6 +1522,12 @@ func MakeTableDesc(
 			// TODO(mgartner): remove this once partial indexes are fully supported.
 			if d.Predicate != nil && !sessionData.PartialIndexes {
 				return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
+			}
+			if d.Predicate != nil {
+				_, err := validateIndexPredicate(ctx, &desc, d.Predicate, semaCtx, n.Table)
+				if err != nil {
+					return desc, err
+				}
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err
@@ -1670,7 +1694,7 @@ func MakeTableDesc(
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := MakeCheckConstraint(ctx, &desc, d, generatedNames, semaCtx, n.Table)
+			ck, err := makeCheckConstraint(ctx, &desc, d, generatedNames, semaCtx, n.Table)
 			if err != nil {
 				return desc, err
 			}
@@ -1998,8 +2022,9 @@ func makeObjectAlreadyExistsError(collidingObject sqlbase.DescriptorProto, name 
 	return nil
 }
 
-// dummyColumnItem is used in MakeCheckConstraint to construct an expression
-// that can be both type-checked and examined for variable expressions.
+// dummyColumnItem is used in makeCheckConstraint and validateIndexPredicate to
+// construct an expression that can be both type-checked and examined for
+// variable expressions.
 type dummyColumnItem struct {
 	typ *types.T
 	// name is only used for error-reporting.
@@ -2207,9 +2232,8 @@ func iterColDescriptorsInExpr(
 
 		col, dropped, err := desc.FindColumnByName(c.ColumnName)
 		if err != nil || dropped {
-			return false, nil, pgerror.Newf(pgcode.InvalidTableDefinition,
-				"column %q not found, referenced in %q",
-				c.ColumnName, rootExpr)
+			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
+				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
 
 		if err := f(col); err != nil {
@@ -2296,10 +2320,10 @@ func validateComputedColumn(
 // this new expression tree alongside a set containing the ColumnID of each
 // column seen in the expression.
 func replaceVars(
-	desc *sqlbase.MutableTableDescriptor, expr tree.Expr,
+	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr,
 ) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
 	colIDs := make(map[sqlbase.ColumnID]struct{})
-	newExpr, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
 		if !ok {
 			// Not a VarName, don't do anything to this node.
@@ -2318,8 +2342,8 @@ func replaceVars(
 
 		col, dropped, err := desc.FindColumnByName(c.ColumnName)
 		if err != nil || dropped {
-			return false, nil, fmt.Errorf("column %q not found for constraint %q",
-				c.ColumnName, expr.String())
+			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
+				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
@@ -2328,8 +2352,8 @@ func replaceVars(
 	return newExpr, colIDs, err
 }
 
-// MakeCheckConstraint makes a descriptor representation of a check from a def.
-func MakeCheckConstraint(
+// makeCheckConstraint makes a descriptor representation of a check from a def.
+func makeCheckConstraint(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
 	d *tree.CheckConstraintTableDef,

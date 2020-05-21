@@ -323,7 +323,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				ck, err := MakeCheckConstraint(params.ctx,
+				ck, err := makeCheckConstraint(params.ctx,
 					n.tableDesc, d, inuseNames, &params.p.semaCtx, *tn)
 				if err != nil {
 					return err
