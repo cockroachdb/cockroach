@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -453,19 +452,21 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
 // CommonLookupFlags, it could use or skip the Collection cache. See
 // Collection.GetTableVersionByID for how it's used.
-func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
+func (p *planner) LookupTableByID(
+	ctx context.Context, tableID sqlbase.ID,
+) (catalog.TableEntry, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
-		return row.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
+		return catalog.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
 	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().GetTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		if sqlbase.HasAddingTableError(err) {
-			return row.TableEntry{IsAdding: true}, nil
+			return catalog.TableEntry{IsAdding: true}, nil
 		}
-		return row.TableEntry{}, err
+		return catalog.TableEntry{}, err
 	}
-	return row.TableEntry{Desc: table}, nil
+	return catalog.TableEntry{Desc: table}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a
