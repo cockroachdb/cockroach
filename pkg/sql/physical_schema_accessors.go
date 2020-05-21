@@ -59,7 +59,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 ) (desc *DatabaseDescriptor, err error) {
 	isSystemDB := name == sqlbase.SystemDB.Name
 	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
-		refuseFurtherLookup, dbID, err := a.tc.getUncommittedDatabaseID(name, flags.Required)
+		refuseFurtherLookup, dbID, err := a.tc.GetUncommittedDatabaseID(name, flags.Required)
 		if refuseFurtherLookup || err != nil {
 			return nil, err
 		}
@@ -67,7 +67,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 		if dbID != sqlbase.InvalidID {
 			// Some database ID was found in the list of uncommitted DB changes.
 			// Use that to get the descriptor.
-			desc, err := a.tc.databaseCache.GetDatabaseDescByID(ctx, txn, dbID)
+			desc, err := a.tc.DatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
 			if desc == nil && flags.Required {
 				return nil, sqlbase.NewUndefinedDatabaseError(name)
 			}
@@ -76,7 +76,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 		// The database was not known in the uncommitted list. Have the db
 		// cache look it up by name for us.
-		return a.tc.databaseCache.GetDatabaseDesc(ctx, a.tc.leaseMgr.DB().Txn, name, flags.Required)
+		return a.tc.DatabaseCache().GetDatabaseDesc(ctx, a.tc.LeaseManager().DB().Txn, name, flags.Required)
 	}
 
 	// We avoided the cache. Go lower.
@@ -87,7 +87,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 func (a *CachedPhysicalAccessor) IsValidSchema(
 	ctx context.Context, txn *kv.Txn, _ keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
-	return a.tc.resolveSchemaID(ctx, txn, dbID, scName)
+	return a.tc.ResolveSchemaID(ctx, txn, dbID, scName)
 }
 
 // GetObjectDesc implements the Accessor interface.
@@ -105,14 +105,14 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 	case tree.TableObject:
 		a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
 		if flags.RequireMutable {
-			table, err := a.tc.getMutableTableDescriptor(ctx, txn, &a.tn, flags)
+			table, err := a.tc.GetMutableTableDescriptor(ctx, txn, &a.tn, flags)
 			if table == nil {
 				// return nil interface.
 				return nil, err
 			}
 			return table, err
 		}
-		table, err := a.tc.getTableVersion(ctx, txn, &a.tn, flags)
+		table, err := a.tc.GetTableVersion(ctx, txn, &a.tn, flags)
 		if table == nil {
 			// return nil interface.
 			return nil, err

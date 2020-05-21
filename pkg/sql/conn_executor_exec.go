@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -543,7 +544,7 @@ func (ex *connExecutor) execStmtInOpenState(
 // executor's table leases after the txn commits so that schema changes can
 // proceed.
 func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
-	tables := ex.extraTxnState.tables.getTablesWithNewVersion()
+	tables := ex.extraTxnState.tables.GetTablesWithNewVersion()
 	if tables == nil {
 		return nil
 	}
@@ -567,7 +568,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// All this being said, we must retain our leases on tables which we have
 	// not modified to ensure that our writes to those other tables in this
 	// transaction remain valid.
-	ex.extraTxnState.tables.releaseTableLeases(ctx, tables)
+	ex.extraTxnState.tables.ReleaseTableLeases(ctx, tables)
 
 	// We know that so long as there are no leases on the updated tables as of
 	// the current provisional commit timestamp for this transaction then if this
@@ -602,7 +603,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	txn.CleanupOnError(ctx, retryErr)
 	// Release the rest of our leases on unmodified tables so we don't hold up
 	// schema changes there and potentially create a deadlock.
-	ex.extraTxnState.tables.releaseLeases(ctx)
+	ex.extraTxnState.tables.ReleaseLeases(ctx)
 
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
@@ -646,7 +647,7 @@ func (ex *connExecutor) commitSQLTransaction(
 func (ex *connExecutor) commitSQLTransactionInternal(
 	ctx context.Context, stmt tree.Statement,
 ) error {
-	if err := ex.extraTxnState.tables.validatePrimaryKeys(); err != nil {
+	if err := validatePrimaryKeys(&ex.extraTxnState.tables); err != nil {
 		return err
 	}
 
@@ -661,8 +662,25 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 	// Now that we've committed, if we modified any table we need to make sure
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
-	if tables := ex.extraTxnState.tables.getTablesWithNewVersion(); tables != nil {
-		ex.extraTxnState.tables.releaseLeases(ctx)
+	if tables := ex.extraTxnState.tables.GetTablesWithNewVersion(); tables != nil {
+		ex.extraTxnState.tables.ReleaseLeases(ctx)
+	}
+	return nil
+}
+
+// validatePrimaryKeys verifies that all tables modified in the transaction have
+// an enabled primary key after potentially undergoing DROP PRIMARY KEY, which
+// is required to be followed by ADD PRIMARY KEY.
+func validatePrimaryKeys(tc *TableCollection) error {
+	modifiedTables := tc.GetTablesWithNewVersion()
+	for i := range modifiedTables {
+		table := tc.GetUncommittedTableByID(modifiedTables[i].ID).MutableTableDescriptor
+		if !table.HasPrimaryKey() {
+			return unimplemented.NewWithIssuef(48026,
+				"primary key of table %s dropped without subsequent addition of new primary key",
+				table.Name,
+			)
+		}
 	}
 	return nil
 }

@@ -247,10 +247,7 @@ func newInternalPlanner(
 	// The table collection used by the internal planner does not rely on the
 	// DatabaseCache and there are no subscribers to the DatabaseCache, so we can
 	// leave it uninitialized.
-	tables := &TableCollection{
-		leaseMgr: execCfg.LeaseManager,
-		settings: execCfg.Settings,
-	}
+	tables := NewTableCollection(execCfg.LeaseManager, execCfg.Settings)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{
@@ -404,7 +401,7 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 }
 
 func (p *planner) LeaseMgr() *lease.Manager {
-	return p.Tables().leaseMgr
+	return p.Tables().LeaseManager()
 }
 
 func (p *planner) Txn() *kv.Txn {
@@ -454,13 +451,13 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
 // CommonLookupFlags, it could use or skip the TableCollection cache. See
-// TableCollection.getTableVersionByID for how it's used.
+// TableCollection.GetTableVersionByID for how it's used.
 func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
 		return row.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
 	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
-	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
+	table, err := p.Tables().GetTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		if sqlbase.HasAddingTableError(err) {
 			return row.TableEntry{IsAdding: true}, nil

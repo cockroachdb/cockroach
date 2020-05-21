@@ -85,7 +85,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if _, ok := toTruncate[tableID]; ok {
 				return nil
 			}
-			other, err := p.Tables().getMutableTableVersionByID(ctx, tableID, p.txn)
+			other, err := p.Tables().GetMutableTableVersionByID(ctx, tableID, p.txn)
 			if err != nil {
 				return err
 			}
@@ -163,7 +163,7 @@ func (p *planner) truncateTable(
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
-	tableDesc, err := p.Tables().getMutableTableVersionByID(ctx, id, p.txn)
+	tableDesc, err := p.Tables().GetMutableTableVersionByID(ctx, id, p.txn)
 	if err != nil {
 		return err
 	}
@@ -304,7 +304,7 @@ func (p *planner) findAllReferences(
 		if id == table.ID {
 			continue
 		}
-		t, err := p.Tables().getMutableTableVersionByID(ctx, id, p.txn)
+		t, err := p.Tables().GetMutableTableVersionByID(ctx, id, p.txn)
 		if err != nil {
 			return nil, err
 		}
