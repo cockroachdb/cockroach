@@ -419,7 +419,6 @@ message GeoMetadata {
 
 // T is a wrapper around InternalType.
 message T {
-    option (gogoproto.typedecl) = false;
     option (gogoproto.marshaler) = false;
     option (gogoproto.unmarshaler) = false;
     option (gogoproto.sizer) = false;
@@ -430,6 +429,26 @@ message T {
     // string representation of an unexported field. This is a problem when this
     // struct is embedded in a larger struct (like a ColumnDescriptor).
     optional InternalType internal_type = 1 [(gogoproto.nullable) = false];
+}
+
+message UserDefinedTypeMetadata {
+  option (gogoproto.typedecl) = false;
+
+  // EnumData is non-nil iff the metadata is for an ENUM type.
+  optional EnumMetadata enum_data = 1;
+}
+
+// EnumMetadata is metadata about an ENUM needed for evaluation.
+message EnumMetadata {
+  // PhysicalRepresentations is a slice of the byte array
+  // physical representations of enum members.
+  repeated bytes physical_representations = 1;
+  // LogicalRepresentations is a slice of the string logical
+  // representations of enum members.
+  repeated string logical_representations = 2;
+  // TODO (rohany): For small enums, having a map would be slower
+  //  than just an array. Investigate at what point the tradeoff
+  //  should occur, if at all.
 }
 
 // InternalType is the protobuf encoding for SQL types. It is always wrapped by
@@ -513,4 +532,9 @@ message InternalType {
     // StableTypeID is set only for User Defined Types.
     optional uint32 stable_type_id = 15
       [(gogoproto.nullable) = false, (gogoproto.customname) = "StableTypeID"];
+
+    // Fields that are only populated when hydrating from a user defined
+    // type descriptor. It is assumed that a user defined type is only used
+    // once metadata has been hydrated through the process of type resolution.
+    optional UserDefinedTypeMetadata type_meta = 16 [(gogoproto.nullable) = false];
 }

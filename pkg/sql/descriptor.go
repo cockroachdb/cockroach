@@ -383,6 +383,12 @@ func writeDescToBatch(
 	descID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
 ) (err error) {
+	switch t := desc.(type) {
+	case *TableDescriptor:
+		desc = t.MaybeStripTypeMetadata()
+	case *MutableTableDescriptor:
+		desc = t.TableDesc().MaybeStripTypeMetadata()
+	}
 	descKey := sqlbase.MakeDescMetadataKey(codec, descID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {
@@ -405,6 +411,12 @@ func WriteNewDescToBatch(
 	tableID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
 ) (err error) {
+	switch t := desc.(type) {
+	case *TableDescriptor:
+		desc = t.MaybeStripTypeMetadata()
+	case *MutableTableDescriptor:
+		desc = t.TableDesc().MaybeStripTypeMetadata()
+	}
 	descKey := sqlbase.MakeDescMetadataKey(codec, tableID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {

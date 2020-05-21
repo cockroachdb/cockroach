@@ -1460,7 +1460,7 @@ CREATE TABLE pg_catalog.pg_enum (
 			if err := typDesc.HydrateTypeInfo(typ); err != nil {
 				return err
 			}
-			enumData := typ.TypeMeta.EnumData
+			enumData := typ.TypeMeta().EnumData
 			typOID := tree.NewDOid(tree.DInt(typ.Oid()))
 			for i := range enumData.LogicalRepresentations {
 				if err := addRow(

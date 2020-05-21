@@ -165,60 +165,45 @@ import (
 // |---------------|--------------------------------------------|
 // | Family        | EnumFamily                                 |
 // | Oid           | A unique OID generated upon enum creation  |
-//
-// See types.proto for the corresponding proto definition. Its automatic
-// type declaration is suppressed in the proto so that it is possible to
-// add additional fields to T without serializing them.
-type T struct {
-	// InternalType should never be directly referenced outside this package. The
-	// only reason it is exported is because gogoproto panics when printing the
-	// string representation of an unexported field. This is a problem when this
-	// struct is embedded in a larger struct (like a ColumnDescriptor).
-	InternalType InternalType
-
-	// Fields that are only populated when hydrating from a user defined
-	// type descriptor. It is assumed that a user defined type is only used
-	// once its metadata has been hydrated through the process of type resolution.
-	TypeMeta UserDefinedTypeMetadata
-}
 
 // UserDefinedTypeMetadata contains metadata needed for runtime
 // operations on user defined types. The metadata must be read only.
+// Importantly, this metadata should not be serialized to disk in
+// TableDescriptors as it is not the "source of truth" about the
+// metadata for a type. That information is stored in the TypeDescriptor.
+// This metadata is included in the protobuf so that it can be serialized
+// and distributed during SQL execution once it has been hydrated as part
+// of query planning.
+// See types.proto for the corresponding proto definition. Its automatic
+// type declaration is suppressed in the proto so that it is possible to
+// add additional fields to T without serializing them.
 type UserDefinedTypeMetadata struct {
-	Name UserDefinedTypeName
-
-	// enumData is non-nil iff the metadata is for an ENUM type.
+	// Name is the resolved name of this type.
+	Name *UserDefinedTypeName
+	// EnumData is non-nil iff the metadata is for an ENUM type.
 	EnumData *EnumMetadata
-}
-
-// EnumMetadata is metadata about an ENUM needed for evaluation.
-type EnumMetadata struct {
-	// PhysicalRepresentations is a slice of the byte array
-	// physical representations of enum members.
-	PhysicalRepresentations [][]byte
-	// LogicalRepresentations is a slice of the string logical
-	// representations of enum members.
-	LogicalRepresentations []string
-	// TODO (rohany): For small enums, having a map would be slower
-	//  than just an array. Investigate at what point the tradeoff
-	//  should occur, if at all.
-}
-
-func (e *EnumMetadata) debugString() string {
-	return fmt.Sprintf(
-		"PhysicalReps: %v; LogicalReps: %s",
-		e.PhysicalRepresentations,
-		e.LogicalRepresentations,
-	)
 }
 
 // UserDefinedTypeName is an interface for the types package to manipulate
 // qualified type names from higher level packages for name display.
-type UserDefinedTypeName interface {
-	// Basename returns the unqualified name of the type.
-	Basename() string
-	// FQName returns the fully qualified name of the type.
-	FQName() string
+// Note that we redefine a common struct from higher level packages. We
+// do so because proto will panic if any members of a proto struct are
+// private. Rather than expose private members of higher level packages,
+// we define a separate type here to be safe.
+type UserDefinedTypeName struct {
+	Catalog string
+	Schema  string
+	Name    string
+}
+
+func (u *UserDefinedTypeName) fqname() string {
+	var sb strings.Builder
+	sb.WriteString(u.Catalog)
+	sb.WriteString(".")
+	sb.WriteString(u.Schema)
+	sb.WriteString(".")
+	sb.WriteString(u.Name)
+	return sb.String()
 }
 
 // Convenience list of pre-constructed types. Caller code can use any of these
@@ -1229,10 +1214,10 @@ func (t *T) Name() string {
 			return "anyenum"
 		}
 		// This can be nil during unit testing.
-		if t.TypeMeta.Name == nil {
+		if t.TypeMeta().Name == nil {
 			return "unknown_enum"
 		}
-		return t.TypeMeta.Name.Basename()
+		return t.TypeMeta().Name.Name
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %s", t.Family()))
 	}
@@ -1257,7 +1242,7 @@ func (t *T) PGName() string {
 
 	// For user defined types, return the basename.
 	if t.UserDefined() {
-		return t.TypeMeta.Name.Basename()
+		return t.TypeMeta().Name.Name
 	}
 
 	// Postgres does not have an UNKNOWN[] type. However, CRDB does, so
@@ -1283,6 +1268,10 @@ var telemetryNameReplaceRegex = regexp.MustCompile("[^a-zA-Z0-9]")
 // TelemetryName returns a name that is friendly for telemetry.
 func (t *T) TelemetryName() string {
 	return strings.ToLower(telemetryNameReplaceRegex.ReplaceAllString(t.SQLString(), "_"))
+}
+
+func (t *T) TypeMeta() *UserDefinedTypeMetadata {
+	return &t.InternalType.TypeMeta
 }
 
 // SQLStandardNameWithTypmod is like SQLStandardName but it also accepts a
@@ -1456,7 +1445,7 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	case UuidFamily:
 		return "uuid"
 	case EnumFamily:
-		return t.TypeMeta.Name.FQName()
+		return t.TypeMeta().Name.fqname()
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}
@@ -1572,7 +1561,7 @@ func (t *T) SQLString() string {
 		if t.Oid() == oid.T_anyenum {
 			return "anyenum"
 		}
-		return t.TypeMeta.Name.FQName()
+		return t.TypeMeta().Name.fqname()
 	}
 	return strings.ToUpper(t.Name())
 }
@@ -1988,6 +1977,14 @@ func (t *T) MarshalTo(data []byte) (int, error) {
 	return temp.InternalType.MarshalTo(data)
 }
 
+func (t *T) SetUserDefinedMetadata(md UserDefinedTypeMetadata) {
+	t.InternalType.TypeMeta = md
+}
+
+func (t *T) SetUserDefinedTypeName(name *UserDefinedTypeName) {
+	t.InternalType.TypeMeta.Name = name
+}
+
 // of the latest CRDB version. It updates the fields so that they will be
 // marshaled into a format that is compatible with the previous version of
 // CRDB. This is necessary to preserve backwards-compatibility in mixed-version
@@ -2144,7 +2141,7 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) int {
 	t.ensureHydratedEnum()
 	// TODO (rohany): We can either use a map or just binary search here
 	//  since the physical representations are sorted.
-	reps := t.TypeMeta.EnumData.PhysicalRepresentations
+	reps := t.TypeMeta().EnumData.PhysicalRepresentations
 	for i := range reps {
 		if bytes.Equal(phys, reps[i]) {
 			return i
@@ -2153,7 +2150,7 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) int {
 	err := errors.AssertionFailedf(
 		"could not find %v in enum representation %s",
 		phys,
-		t.TypeMeta.EnumData.debugString(),
+		t.TypeMeta().EnumData.String(),
 	)
 	panic(err)
 }
@@ -2162,7 +2159,7 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) int {
 // enum logical representations that matches the input string.
 func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 	t.ensureHydratedEnum()
-	reps := t.TypeMeta.EnumData.LogicalRepresentations
+	reps := t.TypeMeta().EnumData.LogicalRepresentations
 	for i := range reps {
 		if reps[i] == logical {
 			return i, nil
@@ -2173,7 +2170,7 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 }
 
 func (t *T) ensureHydratedEnum() {
-	if t.TypeMeta.EnumData == nil {
+	if t.TypeMeta().EnumData == nil {
 		panic(errors.AssertionFailedf("use of enum metadata before hydration as an enum"))
 	}
 }

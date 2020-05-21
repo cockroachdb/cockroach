@@ -2901,11 +2901,11 @@ may increase either contention or retry errors, or both.`,
 				arg := args[0].(*tree.DEnum)
 				typ := arg.EnumTyp
 				arr := tree.NewDArray(typ)
-				for i := range typ.TypeMeta.EnumData.LogicalRepresentations {
+				for i := range typ.TypeMeta().EnumData.LogicalRepresentations {
 					enum := &tree.DEnum{
 						EnumTyp:     typ,
-						PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],
-						LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[i],
+						PhysicalRep: typ.TypeMeta().EnumData.PhysicalRepresentations[i],
+						LogicalRep:  typ.TypeMeta().EnumData.LogicalRepresentations[i],
 					}
 					if err := arr.Append(enum); err != nil {
 						return nil, err
@@ -2933,7 +2933,7 @@ may increase either contention or retry errors, or both.`,
 				case args[1] == tree.DNull:
 					left := args[0].(*tree.DEnum)
 					typ = left.ResolvedType()
-					bottom, top = typ.EnumGetIdxOfPhysical(left.PhysicalRep), len(typ.TypeMeta.EnumData.PhysicalRepresentations)-1
+					bottom, top = typ.EnumGetIdxOfPhysical(left.PhysicalRep), len(typ.TypeMeta().EnumData.PhysicalRepresentations)-1
 				default:
 					left, right := args[0].(*tree.DEnum), args[1].(*tree.DEnum)
 					if !left.ResolvedType().Equivalent(right.ResolvedType()) {
@@ -2951,8 +2951,8 @@ may increase either contention or retry errors, or both.`,
 				for i := bottom; i <= top; i++ {
 					enum := &tree.DEnum{
 						EnumTyp:     typ,
-						PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],
-						LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[i],
+						PhysicalRep: typ.TypeMeta().EnumData.PhysicalRepresentations[i],
+						LogicalRep:  typ.TypeMeta().EnumData.LogicalRepresentations[i],
 					}
 					if err := arr.Append(enum); err != nil {
 						return nil, err

@@ -3789,8 +3789,8 @@ func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) *DEnum {
 	idx := typ.EnumGetIdxOfPhysical(rep)
 	return &DEnum{
 		EnumTyp:     typ,
-		PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[idx],
-		LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[idx],
+		PhysicalRep: typ.TypeMeta().EnumData.PhysicalRepresentations[idx],
+		LogicalRep:  typ.TypeMeta().EnumData.LogicalRepresentations[idx],
 	}
 }
 
@@ -3810,8 +3810,8 @@ func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error
 	}
 	return &DEnum{
 		EnumTyp:     typ,
-		PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[idx],
-		LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[idx],
+		PhysicalRep: typ.TypeMeta().EnumData.PhysicalRepresentations[idx],
+		LogicalRep:  typ.TypeMeta().EnumData.LogicalRepresentations[idx],
 	}, nil
 }
 
@@ -3850,14 +3850,14 @@ func (d *DEnum) Prev(ctx *EvalContext) (Datum, bool) {
 	}
 	return MakeDEnumFromPhysicalRepresentation(
 		d.EnumTyp,
-		d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations[idx-1],
+		d.EnumTyp.TypeMeta().EnumData.PhysicalRepresentations[idx-1],
 	), true
 }
 
 // Next implements the Datum interface.
 func (d *DEnum) Next(ctx *EvalContext) (Datum, bool) {
 	idx := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
-	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	physReps := d.EnumTyp.TypeMeta().EnumData.PhysicalRepresentations
 	if idx == len(physReps)-1 {
 		return nil, false
 	}
@@ -3866,7 +3866,7 @@ func (d *DEnum) Next(ctx *EvalContext) (Datum, bool) {
 
 // Max implements the Datum interface.
 func (d *DEnum) Max(ctx *EvalContext) (Datum, bool) {
-	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	physReps := d.EnumTyp.TypeMeta().EnumData.PhysicalRepresentations
 	if len(physReps) == 0 {
 		return nil, false
 	}
@@ -3876,7 +3876,7 @@ func (d *DEnum) Max(ctx *EvalContext) (Datum, bool) {
 
 // Min implements the Datum interface.
 func (d *DEnum) Min(ctx *EvalContext) (Datum, bool) {
-	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	physReps := d.EnumTyp.TypeMeta().EnumData.PhysicalRepresentations
 	if len(physReps) == 0 {
 		return nil, false
 	}
@@ -3885,7 +3885,7 @@ func (d *DEnum) Min(ctx *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DEnum) IsMax(_ *EvalContext) bool {
-	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	physReps := d.EnumTyp.TypeMeta().EnumData.PhysicalRepresentations
 	return d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep) == len(physReps)-1
 }
 

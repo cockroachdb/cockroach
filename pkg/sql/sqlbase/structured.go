@@ -902,6 +902,24 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 	return buf.String()
 }
 
+// MaybeStripTypeMetadata returns a new descriptor that has all the user
+// defined type metadata stripped from the type protos.
+func (desc *TableDescriptor) MaybeStripTypeMetadata() *TableDescriptor {
+	descCopy := protoutil.Clone(desc).(*TableDescriptor)
+	for i := range descCopy.Columns {
+		descCopy.Columns[i].Type.SetUserDefinedMetadata(types.UserDefinedTypeMetadata{})
+	}
+	for i := range descCopy.Mutations {
+		mut := descCopy.Mutations[i]
+		if col := mut.GetColumn(); col != nil {
+			col.Type.SetUserDefinedMetadata(types.UserDefinedTypeMetadata{})
+		}
+	}
+	// TODO (rohany): Update this with whether or not the descriptor has changed.
+	//  Or is that even necessary?
+	return descCopy
+}
+
 // MaybeFillInDescriptor performs any modifications needed to the table descriptor.
 // This includes format upgrades and optional changes that can be handled by all version
 // (for example: additional default privileges).
@@ -4151,7 +4169,13 @@ func (desc *TypeDescriptor) SetName(name string) {
 //  ImmutableTypeDescriptor so that pointers to the cached info
 //  can be shared among callers.
 func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
-	typ.TypeMeta.Name = tree.NewUnqualifiedTypeName(tree.Name(desc.Name))
+	// TODO (rohany): A concurrent PR will ensure that we are always
+	//  hydrating a user defined type with a full name.
+	typ.SetUserDefinedTypeName(&types.UserDefinedTypeName{
+		Catalog: "",
+		Schema:  "",
+		Name:    desc.Name,
+	})
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
@@ -4164,7 +4188,7 @@ func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
 			logical[i] = member.LogicalRepresentation
 			physical[i] = member.PhysicalRepresentation
 		}
-		typ.TypeMeta.EnumData = &types.EnumMetadata{
+		typ.TypeMeta().EnumData = &types.EnumMetadata{
 			LogicalRepresentations:  logical,
 			PhysicalRepresentations: physical,
 		}

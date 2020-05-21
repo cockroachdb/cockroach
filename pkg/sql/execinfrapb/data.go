@@ -111,29 +111,6 @@ func (tr *DistSQLTypeResolver) ResolveTypeByID(id uint32) (*types.T, error) {
 	return typ, nil
 }
 
-// HydrateTypeSlice hydrates all user defined types in an input slice of types.
-func HydrateTypeSlice(evalCtx *tree.EvalContext, typs []*types.T) error {
-	for _, t := range typs {
-		if t.UserDefined() {
-			// TODO (rohany): This should eventually look into the set of cached type
-			//  descriptors before attempting to access it here.
-			typDesc, err := sqlbase.GetTypeDescFromID(
-				evalCtx.Context,
-				evalCtx.Txn,
-				evalCtx.Codec,
-				sqlbase.ID(t.StableTypeID()),
-			)
-			if err != nil {
-				return err
-			}
-			if err := typDesc.HydrateTypeInfo(t); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.

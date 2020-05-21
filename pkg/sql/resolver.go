@@ -152,7 +152,6 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 	if err != nil {
 		return nil, err
 	}
-	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
 	tdesc := desc.(*sqlbase.TypeDescriptor)
 	// Hydrate the types.T from the resolved descriptor. Once we cache
 	// descriptors, this hydration should install pointers to cached data.
@@ -163,7 +162,11 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 			return nil, err
 		}
 		// Override the hydrated name with the fully resolved type name.
-		typ.TypeMeta.Name = &tn
+		typ.SetUserDefinedTypeName(&types.UserDefinedTypeName{
+			Catalog: prefix.Catalog(),
+			Schema:  prefix.Schema(),
+			Name:    tdesc.Name,
+		})
 		return typ, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())

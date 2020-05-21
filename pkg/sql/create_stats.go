@@ -397,10 +397,6 @@ func (r *createStatsResumer) Resume(
 
 	dsp := p.DistSQLPlanner()
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Set the transaction on the EvalContext to this txn. This allows for
-		// use of the txn during processor setup during the execution of the flow.
-		evalCtx.Txn = txn
-
 		if details.AsOf != nil {
 			p.semaCtx.AsOfTimestamp = details.AsOf
 			p.extendedEvalCtx.SetTxnTimestamp(details.AsOf.GoTime())
@@ -409,6 +405,8 @@ func (r *createStatsResumer) Resume(
 
 		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
 		planCtx.planner = p
+		// TODO (rohany): The create stats job might need to refresh its table
+		//  descriptor upon resume, rather than just using the same one.
 		if err := dsp.planAndRunCreateStats(
 			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
