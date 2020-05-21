@@ -27,8 +27,11 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -46,8 +49,14 @@ var _ reflect.SliceHeader
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
+// Dummy import to pull in "coldataext" package.
+var _ coldataext.Datum
+
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
+
+// Dummy import to pull in "typeconv" package.
+var _ = typeconv.DatumVecCanonicalTypeFamily
 
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
@@ -118,6 +127,7 @@ func rehash(
 	sel []int,
 	cancelChecker CancelChecker,
 	decimalScratch decimalOverloadScratch,
+	datumAlloc *sqlbase.DatumAlloc,
 ) {
 	switch col.CanonicalTypeFamily() {
 	// {{range .}}

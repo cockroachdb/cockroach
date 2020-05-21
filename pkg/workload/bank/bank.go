@@ -144,7 +144,7 @@ func (b *bank) Tables() []workload.Table {
 				if rowEnd > b.rows {
 					rowEnd = b.rows
 				}
-				cb.Reset(bankTypes, rowEnd-rowBegin)
+				cb.Reset(bankTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
 				idCol := cb.ColVec(0).Int64()
 				balanceCol := cb.ColVec(1).Int64()
 				payloadCol := cb.ColVec(2).Bytes()

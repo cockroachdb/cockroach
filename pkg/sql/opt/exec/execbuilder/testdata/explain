@@ -397,7 +397,7 @@ query TTT
 EXPLAIN SHOW USERS
 ----
 ·                                                                  distributed        false
-·                                                                  vectorized         false
+·                                                                  vectorized         true
 render                                                             ·                  ·
  └── sort                                                          ·                  ·
       │                                                            order              +username

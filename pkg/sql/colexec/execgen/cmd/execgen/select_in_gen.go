@@ -31,6 +31,7 @@ func genSelectIn(wr io.Writer) error {
 
 	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
 	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
 	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
 	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
 	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")

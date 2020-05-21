@@ -64,7 +64,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
 		demoCtx.cacheSize = tc.cacheSize
 
-		actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr)
+		actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "")
 
 		assert.Len(t, actual.StoreSpecs, 1)
 		assert.Equal(

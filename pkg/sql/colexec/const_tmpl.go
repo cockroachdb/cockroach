@@ -142,19 +142,17 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
 func NewConstNullOp(
-	allocator *colmem.Allocator, input colexecbase.Operator, outputIdx int, typ *types.T,
+	allocator *colmem.Allocator, input colexecbase.Operator, outputIdx int,
 ) colexecbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, typ, outputIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
 		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
 		outputIdx:    outputIdx,
 	}
 }
 
 type constNullOp struct {
 	OneInputNode
-	allocator *colmem.Allocator
 	outputIdx int
 }
 
@@ -171,19 +169,6 @@ func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 
-	col := batch.ColVec(c.outputIdx)
-	nulls := col.Nulls()
-	if col.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		nulls.UnsetNulls()
-	}
-	if sel := batch.Selection(); sel != nil {
-		for _, i := range sel[:n] {
-			nulls.SetNull(i)
-		}
-	} else {
-		nulls.SetNulls()
-	}
+	batch.ColVec(c.outputIdx).Nulls().SetNulls()
 	return batch
 }

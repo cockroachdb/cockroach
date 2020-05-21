@@ -218,18 +218,19 @@ func TestOutboxInbox(t *testing.T) {
 		inputMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inputMemAcc.Close(ctx)
 		input := coldatatestutils.NewRandomDataOp(
-			colmem.NewAllocator(ctx, &inputMemAcc), rng, args,
+			colmem.NewAllocator(ctx, &inputMemAcc, coldata.StandardColumnFactory), rng, args,
 		)
 
 		outboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAcc.Close(ctx)
-		outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSource */, nil /* toClose */)
+		outbox, err :=
+			NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSource */, nil /* toClose */)
 		require.NoError(t, err)
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(ctx)
 		inbox, err := NewInbox(
-			colmem.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+			colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0),
 		)
 		require.NoError(t, err)
 
@@ -268,7 +269,7 @@ func TestOutboxInbox(t *testing.T) {
 		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
 		defer deselectorMemAcc.Close(ctx)
 		inputBatches := colexec.NewDeselectorOp(
-			colmem.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
+			colmem.NewAllocator(ctx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
 		)
 		inputBatches.Init()
 		outputBatches := colexecbase.NewBatchBuffer()
@@ -460,7 +461,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			outboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxMemAcc.Close(ctx)
-			outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, []execinfrapb.MetadataSource{
+			outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, []execinfrapb.MetadataSource{
 				execinfrapb.CallbackMetadataSource{
 					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
 						return []execinfrapb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
@@ -472,7 +473,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer inboxMemAcc.Close(ctx)
 			inbox, err := NewInbox(
-				colmem.NewAllocator(ctx, &inboxMemAcc),
+				colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory),
 				typs, execinfrapb.StreamID(0),
 			)
 			require.NoError(t, err)
@@ -534,13 +535,14 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err :=
+		NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(b, err)
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(ctx)
 	inbox, err := NewInbox(
-		colmem.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+		colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0),
 	)
 	require.NoError(b, err)
 
@@ -598,7 +600,8 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err :=
+		NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})

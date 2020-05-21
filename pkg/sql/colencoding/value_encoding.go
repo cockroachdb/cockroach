@@ -14,19 +14,25 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 // DecodeTableValueToCol decodes a value encoded by EncodeTableValue, writing
 // the result to the idx'th position of the input exec.Vec.
 // See the analog in sqlbase/column_type_encoding.go.
 func DecodeTableValueToCol(
-	vec coldata.Vec, idx int, typ encoding.Type, dataOffset int, valTyp *types.T, b []byte,
+	da *sqlbase.DatumAlloc,
+	vec coldata.Vec,
+	idx int,
+	typ encoding.Type,
+	dataOffset int,
+	valTyp *types.T,
+	b []byte,
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
@@ -37,20 +43,22 @@ func DecodeTableValueToCol(
 	if valTyp.Family() != types.BoolFamily {
 		b = b[dataOffset:]
 	}
-	return decodeUntaggedDatumToCol(vec, idx, valTyp, b)
+	return decodeUntaggedDatumToCol(da, vec, idx, valTyp, b)
 }
 
 // decodeUntaggedDatum is used to decode a Datum whose type is known,
 // and which doesn't have a value tag (either due to it having been
 // consumed already or not having one in the first place). It writes the result
-// to the idx'th position of the input exec.Vec.
+// to the idx'th position of the input coldata.Vec.
 //
 // This is used to decode datums encoded using value encoding.
 //
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
 // See the analog in sqlbase/column_type_encoding.go.
-func decodeUntaggedDatumToCol(vec coldata.Vec, idx int, t *types.T, buf []byte) ([]byte, error) {
+func decodeUntaggedDatumToCol(
+	da *sqlbase.DatumAlloc, vec coldata.Vec, idx int, t *types.T, buf []byte,
+) ([]byte, error) {
 	var err error
 	switch t.Family() {
 	case types.BoolFamily:
@@ -91,9 +99,10 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx int, t *types.T, buf []byte) 
 		buf, data, err = encoding.DecodeUntaggedUUIDValue(buf)
 		// TODO(yuzefovich): we could peek inside the encoding package to skip a
 		// couple of conversions.
-		if err == nil {
-			vec.Bytes().Set(idx, data.GetBytes())
+		if err != nil {
+			return buf, err
 		}
+		vec.Bytes().Set(idx, data.GetBytes())
 	case types.TimestampFamily, types.TimestampTZFamily:
 		var t time.Time
 		buf, t, err = encoding.DecodeUntaggedTimeValue(buf)
@@ -102,9 +111,14 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx int, t *types.T, buf []byte) 
 		var d duration.Duration
 		buf, d, err = encoding.DecodeUntaggedDurationValue(buf)
 		vec.Interval()[idx] = d
+	// Types backed by tree.Datums.
 	default:
-		return buf, errors.AssertionFailedf(
-			"couldn't decode type: %s", log.Safe(t))
+		var d tree.Datum
+		d, buf, err = sqlbase.DecodeUntaggedDatum(da, t, buf)
+		if err != nil {
+			return buf, err
+		}
+		vec.Datum().Set(idx, d)
 	}
 	return buf, err
 }

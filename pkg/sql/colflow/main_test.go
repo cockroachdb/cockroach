@@ -15,12 +15,15 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -31,7 +34,8 @@ import (
 
 var (
 	// testAllocator is an Allocator with an unlimited budget for use in tests.
-	testAllocator *colmem.Allocator
+	testAllocator     *colmem.Allocator
+	testColumnFactory coldata.ColumnFactory
 
 	// testMemMonitor and testMemAcc are a test monitor with an unlimited budget
 	// and a memory account bound to it for use in tests.
@@ -51,11 +55,14 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(func() int {
 		ctx := context.Background()
-		testMemMonitor = execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+		st := cluster.MakeTestingClusterSettings()
+		testMemMonitor = execinfra.NewTestMemMonitor(ctx, st)
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
-		testAllocator = colmem.NewAllocator(ctx, testMemAcc)
+		evalCtx := tree.MakeTestingEvalContext(st)
+		testColumnFactory = coldataext.NewExtendedColumnFactory(&evalCtx)
+		testAllocator = colmem.NewAllocator(ctx, testMemAcc, testColumnFactory)
 		defer testMemAcc.Close(ctx)
 
 		testDiskMonitor = execinfra.NewTestDiskMonitor(ctx, cluster.MakeTestingClusterSettings())

@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -176,7 +176,10 @@ func RandomVec(args RandomVecArgs) {
 			intervals[i] = duration.FromFloat64(args.Rand.Float64())
 		}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", args.Vec.Type()))
+		datums := args.Vec.Datum()
+		for i := 0; i < args.N; i++ {
+			datums.Set(i, sqlbase.RandDatum(args.Rand, args.Vec.Type(), false /* nullOk */))
+		}
 	}
 	args.Vec.Nulls().UnsetNulls()
 	if args.NullProbability == 0 {
@@ -188,19 +191,6 @@ func RandomVec(args RandomVecArgs) {
 			args.Vec.Nulls().SetNull(i)
 		}
 	}
-}
-
-func randomType(rng *rand.Rand) *types.T {
-	return typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
-}
-
-// randomTypes returns an n-length slice of random types.T.
-func randomTypes(rng *rand.Rand, n int) []*types.T {
-	typs := make([]*types.T, n)
-	for i := range typs {
-		typs[i] = randomType(rng)
-	}
-	return typs
 }
 
 // RandomBatch returns a batch with a capacity of capacity and a number of
@@ -250,10 +240,6 @@ func RandomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 	return sel
 }
 
-// Suppress unused warnings.
-// TODO(asubiotto): Remove this once this function is actually used.
-var _ = randomTypes
-
 // RandomBatchWithSel is equivalent to RandomBatch, but will also add a
 // selection vector to the batch where each row is selected with probability
 // selProbability. If selProbability is 1, all the rows will be selected, if
@@ -284,15 +270,11 @@ const (
 
 // RandomDataOpArgs are arguments passed in to RandomDataOp. All arguments are
 // optional (refer to the constants above this struct definition for the
-// defaults). Bools are false by default and AvailableTyps defaults to
-// typeconv.AllSupportedSQLTypes.
+// defaults). Bools are false by default.
 type RandomDataOpArgs struct {
-	// DeterministicTyps, if set, overrides AvailableTyps and MaxSchemaLength,
-	// forcing the RandomDataOp to use this schema.
+	// DeterministicTyps, if set, overrides MaxSchemaLength and disables type
+	// randomization, forcing the RandomDataOp to use this schema.
 	DeterministicTyps []*types.T
-	// AvailableTyps is the pool of types from which the operator's schema will
-	// be generated.
-	AvailableTyps []*types.T
 	// MaxSchemaLength is the maximum length of the operator's schema, which will
 	// be at least one type.
 	MaxSchemaLength int
@@ -331,14 +313,10 @@ func NewRandomDataOp(
 	allocator *colmem.Allocator, rng *rand.Rand, args RandomDataOpArgs,
 ) *RandomDataOp {
 	var (
-		availableTyps   = typeconv.AllSupportedSQLTypes
 		maxSchemaLength = defaultMaxSchemaLength
 		batchSize       = coldata.BatchSize()
 		numBatches      = defaultNumBatches
 	)
-	if args.AvailableTyps != nil {
-		availableTyps = args.AvailableTyps
-	}
 	if args.MaxSchemaLength > 0 {
 		maxSchemaLength = args.MaxSchemaLength
 	}
@@ -354,7 +332,7 @@ func NewRandomDataOp(
 		// Generate at least one type.
 		typs = make([]*types.T, 1+rng.Intn(maxSchemaLength))
 		for i := range typs {
-			typs[i] = availableTyps[rng.Intn(len(availableTyps))]
+			typs[i] = sqlbase.RandType(rng)
 		}
 	}
 	return &RandomDataOp{
@@ -373,7 +351,7 @@ func NewRandomDataOp(
 func (o *RandomDataOp) Init() {}
 
 // Next is part of the colexec.Operator interface.
-func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
+func (o *RandomDataOp) Next(context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch

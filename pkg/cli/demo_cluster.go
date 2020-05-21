@@ -124,7 +124,7 @@ func setupTransientCluster(
 			joinAddr = c.s.ServingRPCAddr()
 		}
 		nodeID := roachpb.NodeID(i + 1)
-		args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, joinAddr)
+		args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir)
 
 		// servRPCReadyCh is used if latency simulation is requested to notify that a test server has
 		// successfully computed its RPC address.
@@ -140,12 +140,6 @@ func setupTransientCluster(
 					},
 				},
 			}
-		}
-		if demoCtx.insecure {
-			args.Insecure = true
-		} else {
-			args.Insecure = false
-			args.SSLCertsDir = c.demoDir
 		}
 
 		serv := serverFactory.New(args).(*server.TestServer)
@@ -292,7 +286,7 @@ func setupTransientCluster(
 // testServerArgsForTransientCluster creates the test arguments for
 // a necessary server in the demo cluster.
 func testServerArgsForTransientCluster(
-	sock unixSocketDetails, nodeID roachpb.NodeID, joinAddr string,
+	sock unixSocketDetails, nodeID roachpb.NodeID, joinAddr string, demoDir string,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
@@ -311,6 +305,12 @@ func testServerArgsForTransientCluster(
 
 	if demoCtx.localities != nil {
 		args.Locality = demoCtx.localities[int(nodeID-1)]
+	}
+	if demoCtx.insecure {
+		args.Insecure = true
+	} else {
+		args.Insecure = false
+		args.SSLCertsDir = demoDir
 	}
 
 	return args
@@ -403,7 +403,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	}
 
 	// TODO(#42243): re-compute the latency mapping.
-	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr())
+	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir)
 	serv := server.TestServerFactory.New(args).(*server.TestServer)
 
 	// We want to only return after the server is ready.
