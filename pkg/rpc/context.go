@@ -43,6 +43,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	encodingproto "google.golang.org/grpc/encoding/proto"
@@ -898,7 +899,11 @@ func (ctx *Context) grpcDialRaw(
 	// Add a stats handler to measure client network stats.
 	dialOpts = append(dialOpts, grpc.WithStatsHandler(ctx.stats.newClient(target)))
 
-	dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
+	// Lower the MaxBackoff (which defaults to ~minutes) to something in the
+	// ~second range.
+	backoffConfig := backoff.DefaultConfig
+	backoffConfig.MaxDelay = maxBackoff
+	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoffConfig}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,
 		grpc.WithInitialWindowSize(initialWindowSize),

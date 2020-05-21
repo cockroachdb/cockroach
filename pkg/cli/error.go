@@ -299,7 +299,8 @@ func MaybeDecorateGRPCError(
 			if reGRPCAuthFailure.MatchString(msg) {
 				return connSecurityHint()
 			}
-			if reGRPCConnFailed.MatchString(msg) {
+			if reGRPCConnFailed.MatchString(msg) /* gRPC 1.21 */ ||
+				status.Code(errors.Cause(err)) == codes.Unavailable /* gRPC 1.27 */ {
 				return connRefused()
 			}
 
