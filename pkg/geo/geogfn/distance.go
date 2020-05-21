@@ -276,6 +276,11 @@ func (u *spheroidMinDistanceUpdater) OnIntersects() bool {
 	return true
 }
 
+// IsMaxDistance implements the geodist.DistanceUpdater interface.
+func (u *spheroidMinDistanceUpdater) IsMaxDistance() bool {
+	return false
+}
+
 // spheroidDistanceCalculator implements geodist.DistanceCalculator
 type spheroidDistanceCalculator struct {
 	updater *spheroidMinDistanceUpdater
