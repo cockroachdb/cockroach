@@ -31,11 +31,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
-// TODO(radu): we currently create one batch at a time and run the KV operations
-// on this node. In the future we may want to build separate batches for the
-// nodes that "own" the respective ranges, and send out flows on those nodes.
-const joinReaderBatchSize = 100
-
 // joinReaderState represents the state of the processor.
 type joinReaderState int
 
@@ -82,7 +77,8 @@ type joinReader struct {
 	lookupCols []uint32
 
 	// Batch size for fetches. Not a constant so we can lower for testing.
-	batchSize int
+	batchSizeBytes    int64
+	curBatchSizeBytes int64
 
 	// State variables for each batch of input rows.
 	scratchInputRows sqlbase.EncDatumRows
@@ -109,7 +105,6 @@ func newJoinReader(
 		input:      input,
 		inputTypes: input.OutputTypes(),
 		lookupCols: spec.LookupColumns,
-		batchSize:  joinReaderBatchSize,
 	}
 
 	var err error
@@ -183,6 +178,7 @@ func newJoinReader(
 	}
 
 	jr.initJoinReaderStrategy(flowCtx, jr.desc.ColumnTypesWithMutations(returnMutations), len(columnIDs), spec.MaintainOrdering)
+	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
@@ -259,9 +255,9 @@ func getIndexColSet(
 	return cols
 }
 
-// SetBatchSize sets the desired batch size. It should only be used in tests.
-func (jr *joinReader) SetBatchSize(batchSize int) {
-	jr.batchSize = batchSize
+// SetBatchSizeBytes sets the desired batch size. It should only be used in tests.
+func (jr *joinReader) SetBatchSizeBytes(batchSize int64) {
+	jr.batchSizeBytes = batchSize
 }
 
 // Spilled returns whether the joinReader spilled to disk.
@@ -331,7 +327,7 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata
 // readInput reads the next batch of input rows and starts an index scan.
 func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	// Read the next batch of input rows.
-	for len(jr.scratchInputRows) < jr.batchSize {
+	for jr.curBatchSizeBytes < jr.batchSizeBytes {
 		row, meta := jr.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
@@ -343,6 +339,7 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		if row == nil {
 			break
 		}
+		jr.curBatchSizeBytes += int64(row.Size())
 		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(row))
 	}
 
@@ -360,6 +357,7 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		return jrStateUnknown, jr.DrainHelper()
 	}
 	jr.scratchInputRows = jr.scratchInputRows[:0]
+	jr.curBatchSizeBytes = 0
 	if len(spans) == 0 {
 		// All of the input rows were filtered out. Skip the index lookup.
 		return jrEmittingRows, nil
