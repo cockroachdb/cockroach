@@ -829,13 +829,16 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hashtable_distinct.eg.go \
-  pkg/sql/colexec/hashtable_full.eg.go \
+  pkg/sql/colexec/hashtable_full_default.eg.go \
+  pkg/sql/colexec/hashtable_full_deleting.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/hash_utils.eg.go \
   pkg/sql/colexec/like_ops.eg.go \
   pkg/sql/colexec/mergejoinbase.eg.go \
+  pkg/sql/colexec/mergejoiner_exceptall.eg.go \
   pkg/sql/colexec/mergejoiner_fullouter.eg.go \
   pkg/sql/colexec/mergejoiner_inner.eg.go \
+  pkg/sql/colexec/mergejoiner_intersectall.eg.go \
   pkg/sql/colexec/mergejoiner_leftanti.eg.go \
   pkg/sql/colexec/mergejoiner_leftouter.eg.go \
   pkg/sql/colexec/mergejoiner_leftsemi.eg.go \

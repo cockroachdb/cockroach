@@ -71,7 +71,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_FULL_OUTER,
+			joinType:          sqlbase.FullOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -102,7 +102,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:         sqlbase.JoinType_FULL_OUTER,
+			joinType:         sqlbase.FullOuterJoin,
 			leftEqColsAreKey: true,
 
 			expected: tuples{
@@ -134,7 +134,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_LEFT_OUTER,
+			joinType:          sqlbase.LeftOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -166,7 +166,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			joinType:          sqlbase.RightOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -199,7 +199,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			joinType:          sqlbase.RightOuterJoin,
 			rightEqColsAreKey: true,
 
 			expected: tuples{
@@ -771,7 +771,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: sqlbase.LeftSemiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -804,7 +804,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: sqlbase.LeftAntiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -896,6 +896,30 @@ func init() {
 				{2, 4},
 			},
 		},
+		{
+			description: "25",
+			joinType:    sqlbase.IntersectAllJoin,
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
+			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
+			rightTuples: tuples{{1}, {2}, {3}, {3}, {3}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			leftOutCols: []uint32{0},
+			expected:    tuples{{1}, {2}, {3}, {3}},
+		},
+		{
+			description: "26",
+			joinType:    sqlbase.ExceptAllJoin,
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
+			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
+			rightTuples: tuples{{1}, {2}, {3}, {3}, {3}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			leftOutCols: []uint32{0},
+			expected:    tuples{{1}, {2}, {2}},
+		},
 	}
 }
 
@@ -950,7 +974,9 @@ func runHashJoinTestCase(
 	} else {
 		runner = runTestsWithTyps
 	}
-	runner(t, inputs, typs, tc.expected, unorderedVerifier, hjOpConstructor)
+	t.Run(tc.description, func(t *testing.T) {
+		runner(t, inputs, typs, tc.expected, unorderedVerifier, hjOpConstructor)
+	})
 }
 
 func TestHashJoiner(t *testing.T) {
@@ -1047,9 +1073,9 @@ func BenchmarkHashJoiner(b *testing.B) {
 									for i := 0; i < b.N; i++ {
 										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
 										rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
-										joinType := sqlbase.JoinType_INNER
+										joinType := sqlbase.InnerJoin
 										if fullOuter {
-											joinType = sqlbase.JoinType_FULL_OUTER
+											joinType = sqlbase.FullOuterJoin
 										}
 										hjSpec, err := makeHashJoinerSpec(
 											joinType,

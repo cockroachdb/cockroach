@@ -40,8 +40,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 20
 	nRows := 100
 	const (
@@ -172,8 +171,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 10
 	nRows := 10
 	maxCols := 3
@@ -261,8 +259,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
 	nRows := 8 * coldata.BatchSize()
 	maxCols := 5
@@ -336,8 +333,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
 	nRows := 5 * coldata.BatchSize() / 4
 	maxCols := 3
@@ -416,28 +412,33 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 	}
 	testSpecs := []hjTestSpec{
 		{
-			joinType:        sqlbase.JoinType_INNER,
+			joinType:        sqlbase.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_OUTER,
+			joinType: sqlbase.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_RIGHT_OUTER,
+			joinType: sqlbase.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_FULL_OUTER,
+			joinType: sqlbase.FullOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: sqlbase.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: sqlbase.LeftAntiJoin,
+		},
+		{
+			joinType: sqlbase.IntersectAllJoin,
+		},
+		{
+			joinType: sqlbase.ExceptAllJoin,
 		},
 	}
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -452,7 +453,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 			for _, testSpec := range testSpecs {
 				for nCols := 1; nCols <= maxCols; nCols++ {
 					for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
-						for _, addFilter := range []bool{false, true} {
+						for _, addFilter := range getAddFilterOptions(testSpec.joinType, nEqCols < nCols) {
 							triedWithoutOnExpr, triedWithOnExpr := false, false
 							if !testSpec.onExprSupported {
 								triedWithOnExpr = true
@@ -487,9 +488,10 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								}
 
-								outputTypes := append(lInputTypes, rInputTypes...)
-								if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+								var outputTypes []*types.T
+								if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+									outputTypes = append(lInputTypes, rInputTypes...)
+								} else {
 									outputTypes = lInputTypes
 								}
 								outputColumns := make([]uint32, len(outputTypes))
@@ -500,10 +502,9 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								var filter, onExpr execinfrapb.Expression
 								if addFilter {
 									colTypes := append(lInputTypes, rInputTypes...)
-									forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-										testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 									filter = generateFilterExpr(
-										rng, nCols, nEqCols, colTypes, usingRandomTypes, forceLeftSide,
+										rng, nCols, nEqCols, colTypes, usingRandomTypes,
+										!testSpec.joinType.ShouldIncludeRightColsInOutput(),
 									)
 								}
 								if triedWithoutOnExpr {
@@ -542,7 +543,20 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									// batch. In such case, the spilling might not occur and that's ok.
 									forcedDiskSpillMightNotOccur: !filter.Empty() || !onExpr.Empty(),
 									numForcedRepartitions:        2,
+									rng:                          rng,
 								}
+								if testSpec.joinType.IsSetOpJoin() && nEqCols < nCols {
+									// The output of set operation joins is not fully
+									// deterministic when there are non-equality
+									// columns, however, the rows must match on the
+									// equality columns between vectorized and row
+									// executions.
+									args.colIdxsToCheckForEquality = make([]int, nEqCols)
+									for i := range args.colIdxsToCheckForEquality {
+										args.colIdxsToCheckForEquality[i] = int(lEqCols[i])
+									}
+								}
+
 								if err := verifyColOperator(args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
 										" filter = %q seed = %d run = %d ---\n",
@@ -595,31 +609,36 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	}
 	testSpecs := []mjTestSpec{
 		{
-			joinType:        sqlbase.JoinType_INNER,
+			joinType:        sqlbase.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_OUTER,
+			joinType: sqlbase.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_RIGHT_OUTER,
+			joinType: sqlbase.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_FULL_OUTER,
+			joinType: sqlbase.FullOuterJoin,
 			// FULL OUTER JOIN doesn't guarantee any ordering on its output (since it
 			// is ambiguous), so we're comparing the outputs as sets.
 			anyOrder: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: sqlbase.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: sqlbase.LeftAntiJoin,
+		},
+		{
+			joinType: sqlbase.IntersectAllJoin,
+		},
+		{
+			joinType: sqlbase.ExceptAllJoin,
 		},
 	}
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -633,7 +652,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-					for _, addFilter := range []bool{false, true} {
+					for _, addFilter := range getAddFilterOptions(testSpec.joinType, nOrderingCols < nCols) {
 						triedWithoutOnExpr, triedWithOnExpr := false, false
 						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
@@ -688,9 +707,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								}
 								return cmp < 0
 							})
-							outputTypes := append(lInputTypes, rInputTypes...)
-							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-								testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+							var outputTypes []*types.T
+							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+								outputTypes = append(lInputTypes, rInputTypes...)
+							} else {
 								outputTypes = lInputTypes
 							}
 							outputColumns := make([]uint32, len(outputTypes))
@@ -701,10 +721,9 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							var filter, onExpr execinfrapb.Expression
 							if addFilter {
 								colTypes := append(lInputTypes, rInputTypes...)
-								forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 								filter = generateFilterExpr(
-									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, forceLeftSide,
+									rng, nCols, nOrderingCols, colTypes, usingRandomTypes,
+									!testSpec.joinType.ShouldIncludeRightColsInOutput(),
 								)
 							}
 							if triedWithoutOnExpr {
@@ -718,6 +737,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
 								RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
 								Type:          testSpec.joinType,
+								NullEquality:  testSpec.joinType.IsSetOpJoin(),
 							}
 							pspec := &execinfrapb.ProcessorSpec{
 								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
@@ -730,6 +750,18 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
 								outputTypes: outputTypes,
 								pspec:       pspec,
+								rng:         rng,
+							}
+							if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
+								// The output of set operation joins is not fully
+								// deterministic when there are non-equality
+								// columns, however, the rows must match on the
+								// equality columns between vectorized and row
+								// executions.
+								args.colIdxsToCheckForEquality = make([]int, nOrderingCols)
+								for i := range args.colIdxsToCheckForEquality {
+									args.colIdxsToCheckForEquality[i] = int(lOrderingCols[i].ColIdx)
+								}
 							}
 							if err := verifyColOperator(args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
@@ -772,6 +804,16 @@ func generateColumnOrdering(
 		}
 	}
 	return orderingCols
+}
+
+func getAddFilterOptions(joinType sqlbase.JoinType, nonEqualityColsPresent bool) []bool {
+	if joinType.IsSetOpJoin() && nonEqualityColsPresent {
+		// Output of set operation join when rows have non equality columns is
+		// not deterministic, so applying a filter on top of it can produce
+		// arbitrary results, and we skip such configuration.
+		return []bool{false}
+	}
+	return []bool{false, true}
 }
 
 // generateFilterExpr populates an execinfrapb.Expression that contains a
@@ -831,8 +873,8 @@ func generateFilterExpr(
 
 func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
 
+	rng, seed := randutil.NewPseudoRand()
 	nRows := 2 * coldata.BatchSize()
 	maxCols := 4
 	maxNum := 10
@@ -894,6 +936,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						pspec:       pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
+						fmt.Printf("seed = %d\n", seed)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 						t.Fatal(err)

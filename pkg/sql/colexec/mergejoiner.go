@@ -96,6 +96,12 @@ type mjBuilderCrossProductState struct {
 	groupsIdx      int
 	curSrcStartIdx int
 	numRepeatsIdx  int
+	// setOpLeftSrcIdx tracks the next tuple's index from the left buffered
+	// group for set operation joins. INTERSECT ALL and EXCEPT ALL joins are
+	// special because they need to emit the buffered group partially (namely,
+	// exactly group.rowEndIdx number of rows which could span multiple batches
+	// from the buffered group).
+	setOpLeftSrcIdx int
 }
 
 // mjBufferedGroup is a helper struct that stores information about the tuples
@@ -248,18 +254,22 @@ func newMergeJoinOp(
 		left, right, leftTypes, rightTypes, leftOrdering, rightOrdering, diskAcc,
 	)
 	switch joinType {
-	case sqlbase.JoinType_INNER:
+	case sqlbase.InnerJoin:
 		return &mergeJoinInnerOp{base}, err
-	case sqlbase.JoinType_LEFT_OUTER:
+	case sqlbase.LeftOuterJoin:
 		return &mergeJoinLeftOuterOp{base}, err
-	case sqlbase.JoinType_RIGHT_OUTER:
+	case sqlbase.RightOuterJoin:
 		return &mergeJoinRightOuterOp{base}, err
-	case sqlbase.JoinType_FULL_OUTER:
+	case sqlbase.FullOuterJoin:
 		return &mergeJoinFullOuterOp{base}, err
-	case sqlbase.JoinType_LEFT_SEMI:
+	case sqlbase.LeftSemiJoin:
 		return &mergeJoinLeftSemiOp{base}, err
-	case sqlbase.JoinType_LEFT_ANTI:
+	case sqlbase.LeftAntiJoin:
 		return &mergeJoinLeftAntiOp{base}, err
+	case sqlbase.IntersectAllJoin:
+		return &mergeJoinIntersectAllOp{base}, err
+	case sqlbase.ExceptAllJoin:
+		return &mergeJoinExceptAllOp{base}, err
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
 	}
@@ -290,6 +300,7 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 	s.groupsIdx = target.groupsIdx
 	s.curSrcStartIdx = target.curSrcStartIdx
 	s.numRepeatsIdx = target.numRepeatsIdx
+	s.setOpLeftSrcIdx = target.setOpLeftSrcIdx
 }
 
 func newMergeJoinBase(
@@ -443,7 +454,7 @@ func (o *mergeJoinBase) Init() {
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 	outputTypes := append([]*types.T{}, o.left.sourceTypes...)
-	if o.joinType != sqlbase.LeftSemiJoin && o.joinType != sqlbase.LeftAntiJoin {
+	if o.joinType.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
 	o.output = o.unlimitedAllocator.NewMemBatchWithSize(outputTypes, outBatchSize)

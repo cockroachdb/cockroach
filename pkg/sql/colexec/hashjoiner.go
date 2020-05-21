@@ -223,13 +223,19 @@ func (hj *hashJoiner) Init() {
 	hj.inputOne.Init()
 	hj.inputTwo.Init()
 
+	allowNullEquality, probeMode := false, hashTableDefaultProbeMode
+	if hj.spec.joinType.IsSetOpJoin() {
+		allowNullEquality = true
+		probeMode = hashTableDeletingProbeMode
+	}
 	hj.ht = newHashTable(
 		hj.allocator,
 		hashTableNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
-		false, /* allowNullEquality */
-		hashTableFullMode,
+		allowNullEquality,
+		hashTableFullBuildMode,
+		probeMode,
 	)
 
 	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithSize(hj.spec.right.sourceTypes, 0 /* size */)
@@ -244,11 +250,12 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 			hj.build(ctx)
 			if hj.ht.vals.Length() == 0 {
 				// The build side is empty, so we can short-circuit probing
-				// phase altogether for INNER, RIGHT OUTER, and LEFT SEMI
-				// joins.
-				if hj.spec.joinType == sqlbase.JoinType_INNER ||
-					hj.spec.joinType == sqlbase.JoinType_RIGHT_OUTER ||
-					hj.spec.joinType == sqlbase.JoinType_LEFT_SEMI {
+				// phase altogether for INNER, RIGHT OUTER, LEFT SEMI, and
+				// INTERSECT ALL joins.
+				if hj.spec.joinType == sqlbase.InnerJoin ||
+					hj.spec.joinType == sqlbase.RightOuterJoin ||
+					hj.spec.joinType == sqlbase.LeftSemiJoin ||
+					hj.spec.joinType == sqlbase.IntersectAllJoin {
 					// Next the left side once.
 					// TODO(asubiotto): Figure out why the left side needs to be Nexted.
 					//  Without this, TestLogic/fakedist/inner-join flakes.
@@ -395,9 +402,10 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 
 			var nToCheck uint64
 			switch hj.spec.joinType {
-			case sqlbase.JoinType_LEFT_ANTI:
-				// The setup of probing for LEFT ANTI join needs a special treatment in
-				// order to reuse the same "check" functions below.
+			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+				// The setup of probing for LEFT ANTI and EXCEPT ALL joins
+				// needs a special treatment in order to reuse the same "check"
+				// functions below.
 				//
 				// First, we compute the hash values for all tuples in the batch.
 				hj.ht.computeBuckets(
@@ -478,7 +486,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 	// concern here is only for the variable-sized types that exceed our
 	// estimations.
 
-	if hj.spec.joinType != sqlbase.LeftSemiJoin && hj.spec.joinType != sqlbase.LeftAntiJoin {
+	if hj.spec.joinType.ShouldIncludeRightColsInOutput() {
 		rightColOffset := len(hj.spec.left.sourceTypes)
 		// If the hash table is empty, then there is nothing to copy. The nulls
 		// will be set below.
@@ -534,13 +542,13 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 		// In order to determine which rows to emit for the outer join on the build
 		// table in the end, we need to mark the matched build table rows.
 		if hj.spec.left.outer {
-			for i := int(0); i < nResults; i++ {
+			for i := 0; i < nResults; i++ {
 				if !hj.probeState.probeRowUnmatched[i] {
 					hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
 				}
 			}
 		} else {
-			for i := int(0); i < nResults; i++ {
+			for i := 0; i < nResults; i++ {
 				hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
 			}
 		}
@@ -586,7 +594,7 @@ func (hj *hashJoiner) ExportBuffered(input colexecbase.Operator) coldata.Batch {
 func (hj *hashJoiner) resetOutput() {
 	if hj.output == nil {
 		outputTypes := append([]*types.T{}, hj.spec.left.sourceTypes...)
-		if hj.spec.joinType != sqlbase.LeftSemiJoin && hj.spec.joinType != sqlbase.LeftAntiJoin {
+		if hj.spec.joinType.ShouldIncludeRightColsInOutput() {
 			outputTypes = append(outputTypes, hj.spec.right.sourceTypes...)
 		}
 		hj.output = hj.allocator.NewMemBatch(outputTypes)
@@ -632,15 +640,15 @@ func makeHashJoinerSpec(
 		leftOuter, rightOuter bool
 	)
 	switch joinType {
-	case sqlbase.JoinType_INNER:
-	case sqlbase.JoinType_RIGHT_OUTER:
+	case sqlbase.InnerJoin:
+	case sqlbase.RightOuterJoin:
 		rightOuter = true
-	case sqlbase.JoinType_LEFT_OUTER:
+	case sqlbase.LeftOuterJoin:
 		leftOuter = true
-	case sqlbase.JoinType_FULL_OUTER:
+	case sqlbase.FullOuterJoin:
 		rightOuter = true
 		leftOuter = true
-	case sqlbase.JoinType_LEFT_SEMI:
+	case sqlbase.LeftSemiJoin:
 		// In a semi-join, we don't need to store anything but a single row per
 		// build row, since all we care about is whether a row on the left matches
 		// any row on the right.
@@ -649,7 +657,9 @@ func makeHashJoinerSpec(
 		// with the row on the right to emit it. However, we don't support ON
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
-	case sqlbase.JoinType_LEFT_ANTI:
+	case sqlbase.LeftAntiJoin:
+	case sqlbase.IntersectAllJoin:
+	case sqlbase.ExceptAllJoin:
 	default:
 		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}

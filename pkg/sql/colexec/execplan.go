@@ -244,9 +244,6 @@ func isSupported(
 		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
-		if core.HashJoiner.Type.IsSetOpJoin() {
-			return false, errors.Newf("vectorized hash join of type %s is not supported", core.HashJoiner.Type)
-		}
 		leftInput, rightInput := spec.Input[0], spec.Input[1]
 		if len(leftInput.ColumnTypes) == 0 || len(rightInput.ColumnTypes) == 0 {
 			// We have a cross join of two inputs, and at least one of them has
@@ -260,11 +257,8 @@ func isSupported(
 
 	case core.MergeJoiner != nil:
 		if !core.MergeJoiner.OnExpr.Empty() &&
-			core.MergeJoiner.Type != sqlbase.JoinType_INNER {
+			core.MergeJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Errorf("can't plan non-inner merge join with ON expressions")
-		}
-		if core.MergeJoiner.Type.IsSetOpJoin() {
-			return false, errors.Newf("vectorized merge join of type %s is not supported", core.MergeJoiner.Type)
 		}
 		return true, nil
 
@@ -874,14 +868,13 @@ func NewColOperator(
 			}
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
-			if core.HashJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
-				core.HashJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+			if !core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
 				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
 			} else {
 				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
 			}
 
-			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.JoinType_INNER {
+			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.InnerJoin {
 				if err =
 					result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, core.HashJoiner.OnExpr,
 						streamingMemAccount, processorConstructor, factory); err != nil {
@@ -905,7 +898,7 @@ func NewColOperator(
 			joinType := core.MergeJoiner.Type
 			var onExpr *execinfrapb.Expression
 			if !core.MergeJoiner.OnExpr.Empty() {
-				if joinType != sqlbase.JoinType_INNER {
+				if joinType != sqlbase.InnerJoin {
 					return result, errors.AssertionFailedf(
 						"ON expression (%s) was unexpectedly planned for merge joiner with join type %s",
 						core.MergeJoiner.OnExpr.String(), core.MergeJoiner.Type.String(),
@@ -938,8 +931,7 @@ func NewColOperator(
 			result.ToClose = append(result.ToClose, mj.(IdempotentCloser))
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
-			if core.MergeJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
-				core.MergeJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+			if !core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
 				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
 			} else {
 				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
