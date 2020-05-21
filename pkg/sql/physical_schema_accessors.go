@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -42,7 +43,7 @@ import (
 // CachedPhysicalAccessor adds a cache on top of any Accessor.
 type CachedPhysicalAccessor struct {
 	catalog.Accessor
-	tc *TableCollection
+	tc *descs.TableCollection
 	// Used to avoid allocations.
 	tn TableName
 }

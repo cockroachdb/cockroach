@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
@@ -1838,7 +1839,7 @@ func depublicizeSystemComments(ctx context.Context, r runner) error {
 	// the 20.1 job could interfere with. The update to the table descriptor would
 	// cause a 19.2 SchemaChangeManager to attempt a schema change, but it would
 	// be a no-op.
-	ctx = sql.MigrationSchemaChangeRequiredContext(ctx)
+	ctx = descs.MigrationSchemaChangeRequiredContext(ctx)
 
 	for _, priv := range []string{"GRANT", "INSERT", "DELETE", "UPDATE"} {
 		stmt := fmt.Sprintf(`REVOKE %s ON TABLE system.comments FROM public`, priv)

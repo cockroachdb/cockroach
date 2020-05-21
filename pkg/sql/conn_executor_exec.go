@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -671,7 +672,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 // validatePrimaryKeys verifies that all tables modified in the transaction have
 // an enabled primary key after potentially undergoing DROP PRIMARY KEY, which
 // is required to be followed by ADD PRIMARY KEY.
-func validatePrimaryKeys(tc *TableCollection) error {
+func validatePrimaryKeys(tc *descs.TableCollection) error {
 	modifiedTables := tc.GetTablesWithNewVersion()
 	for i := range modifiedTables {
 		table := tc.GetUncommittedTableByID(modifiedTables[i].ID).MutableTableDescriptor

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -631,7 +632,7 @@ func (s *Server) newConnExecutor(
 		prepStmts: make(map[string]*PreparedStatement),
 		portals:   make(map[string]*PreparedPortal),
 	}
-	ex.extraTxnState.tables = MakeTableCollection(s.cfg.LeaseManager,
+	ex.extraTxnState.tables = descs.MakeTableCollection(s.cfg.LeaseManager,
 		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -665,7 +666,7 @@ func (s *Server) newConnExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	txn *kv.Txn,
-	tcModifier TableCollectionModifier,
+	tcModifier descs.TableCollectionModifier,
 	appStats *appStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, appStats)
@@ -916,7 +917,7 @@ type connExecutor struct {
 	// transaction finishes or gets retried.
 	extraTxnState struct {
 		// tables collects descriptors used by the current transaction.
-		tables TableCollection
+		tables descs.TableCollection
 
 		// jobs accumulates jobs staged for execution inside the transaction.
 		// Staging happens when executing statements that are implemented with a

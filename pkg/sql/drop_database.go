@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -236,7 +237,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 	}
 
-	p.Tables().AddUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, DBDropped)
+	p.Tables().AddUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, descs.DBDropped)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
