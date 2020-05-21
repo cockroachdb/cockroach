@@ -374,6 +374,9 @@ func (h *hasher) HashDatum(val tree.Datum) {
 		// disambiguate.
 		alwaysHashType := len(t.Array) == 0
 		h.hashDatumsWithType(t.Array, t.ResolvedType(), alwaysHashType)
+	case *tree.DCollatedString:
+		h.HashString(t.Locale)
+		h.HashString(t.Contents)
 	default:
 		h.bytes = encodeDatum(h.bytes[:0], val)
 		h.HashBytes(h.bytes)
@@ -702,61 +705,57 @@ func (h *hasher) IsTypeEqual(l, r *types.T) bool {
 }
 
 func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
+	if reflect.TypeOf(l) != reflect.TypeOf(r) {
+		return false
+	}
 	switch lt := l.(type) {
 	case *tree.DBool:
-		if rt, ok := r.(*tree.DBool); ok {
-			return *lt == *rt
-		}
+		rt := r.(*tree.DBool)
+		return *lt == *rt
 	case *tree.DInt:
-		if rt, ok := r.(*tree.DInt); ok {
-			return *lt == *rt
-		}
+		rt := r.(*tree.DInt)
+		return *lt == *rt
 	case *tree.DFloat:
-		if rt, ok := r.(*tree.DFloat); ok {
-			return h.IsFloat64Equal(float64(*lt), float64(*rt))
-		}
+		rt := r.(*tree.DFloat)
+		return h.IsFloat64Equal(float64(*lt), float64(*rt))
 	case *tree.DString:
-		if rt, ok := r.(*tree.DString); ok {
-			return h.IsStringEqual(string(*lt), string(*rt))
-		}
+		rt := r.(*tree.DString)
+		return h.IsStringEqual(string(*lt), string(*rt))
+	case *tree.DCollatedString:
+		rt := r.(*tree.DCollatedString)
+		return lt.Locale == rt.Locale && h.IsStringEqual(lt.Contents, rt.Contents)
 	case *tree.DBytes:
-		if rt, ok := r.(*tree.DBytes); ok {
-			return bytes.Equal([]byte(*lt), []byte(*rt))
-		}
+		rt := r.(*tree.DBytes)
+		return bytes.Equal([]byte(*lt), []byte(*rt))
 	case *tree.DDate:
-		if rt, ok := r.(*tree.DDate); ok {
-			return lt.Date == rt.Date
-		}
+		rt := r.(*tree.DDate)
+		return lt.Date == rt.Date
 	case *tree.DTime:
-		if rt, ok := r.(*tree.DTime); ok {
-			return uint64(*lt) == uint64(*rt)
-		}
+		rt := r.(*tree.DTime)
+		return uint64(*lt) == uint64(*rt)
 	case *tree.DJSON:
-		if rt, ok := r.(*tree.DJSON); ok {
-			return h.IsStringEqual(lt.String(), rt.String())
-		}
+		rt := r.(*tree.DJSON)
+		return h.IsStringEqual(lt.String(), rt.String())
 	case *tree.DTuple:
-		if rt, ok := r.(*tree.DTuple); ok {
-			// Compare datums and then compare static types if nulls or labels
-			// are present.
-			ltyp := lt.ResolvedType()
-			rtyp := rt.ResolvedType()
-			if !h.areDatumsWithTypeEqual(lt.D, rt.D, ltyp, rtyp) {
-				return false
-			}
-			return len(ltyp.TupleLabels()) == 0 || h.IsTypeEqual(ltyp, rtyp)
+		rt := r.(*tree.DTuple)
+		// Compare datums and then compare static types if nulls or labels
+		// are present.
+		ltyp := lt.ResolvedType()
+		rtyp := rt.ResolvedType()
+		if !h.areDatumsWithTypeEqual(lt.D, rt.D, ltyp, rtyp) {
+			return false
 		}
+		return len(ltyp.TupleLabels()) == 0 || h.IsTypeEqual(ltyp, rtyp)
 	case *tree.DArray:
-		if rt, ok := r.(*tree.DArray); ok {
-			// Compare datums and then compare static types if nulls are present
-			// or if arrays are empty.
-			ltyp := lt.ResolvedType()
-			rtyp := rt.ResolvedType()
-			if !h.areDatumsWithTypeEqual(lt.Array, rt.Array, ltyp, rtyp) {
-				return false
-			}
-			return len(lt.Array) != 0 || h.IsTypeEqual(ltyp, rtyp)
+		rt := r.(*tree.DArray)
+		// Compare datums and then compare static types if nulls are present
+		// or if arrays are empty.
+		ltyp := lt.ResolvedType()
+		rtyp := rt.ResolvedType()
+		if !h.areDatumsWithTypeEqual(lt.Array, rt.Array, ltyp, rtyp) {
+			return false
 		}
+		return len(lt.Array) != 0 || h.IsTypeEqual(ltyp, rtyp)
 	default:
 		h.bytes = encodeDatum(h.bytes[:0], l)
 		h.bytes2 = encodeDatum(h.bytes2[:0], r)
@@ -1046,23 +1045,24 @@ func (h *hasher) IsMaterializeClauseEqual(l, r tree.MaterializeClause) bool {
 // encodeDatum turns the given datum into an encoded string of bytes. If two
 // datums are equivalent, then their encoded bytes will be identical.
 // Conversely, if two datums are not equivalent, then their encoded bytes will
-// differ.
+// differ. This will panic if the datum cannot be encoded.
 func encodeDatum(b []byte, val tree.Datum) []byte {
+	var err error
+
 	// Fast path: encode the datum using table key encoding. This does not always
 	// work, because the encoding does not uniquely represent some values which
 	// should not be considered equivalent by the interner (e.g. decimal values
 	// 1.0 and 1.00).
 	if !sqlbase.HasCompositeKeyEncoding(val.ResolvedType()) {
-		var err error
 		b, err = sqlbase.EncodeTableKey(b, val, encoding.Ascending)
 		if err == nil {
 			return b
 		}
 	}
 
-	// Fall back on a string representation which can be used to check for
-	// equivalence.
-	ctx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
-	val.Format(ctx)
-	return ctx.Bytes()
+	b, err = sqlbase.EncodeTableValue(b, sqlbase.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

@@ -12,6 +12,7 @@ package memo
 
 import (
 	"math"
+	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -643,5 +645,36 @@ func TestInternerCollision(t *testing.T) {
 	// Should be no more items.
 	if in.cache.Next() {
 		t.Errorf("expected no more colliding items in cache")
+	}
+}
+
+func BenchmarkEncodeDatum(b *testing.B) {
+	r := rand.New(rand.NewSource(0))
+	datums := make([]tree.Datum, 10000)
+	for i := range datums {
+		datums[i] = sqlbase.RandDatumWithNullChance(r, sqlbase.RandEncodableType(r), 0)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, d := range datums {
+			encodeDatum(nil, d)
+		}
+	}
+}
+
+func BenchmarkIsDatumEqual(b *testing.B) {
+	r := rand.New(rand.NewSource(0))
+	datums := make([]tree.Datum, 1000)
+	for i := range datums {
+		datums[i] = sqlbase.RandDatumWithNullChance(r, sqlbase.RandEncodableType(r), 0)
+	}
+	b.ResetTimer()
+	var h hasher
+	for i := 0; i < b.N; i++ {
+		for _, d1 := range datums {
+			for _, d2 := range datums {
+				h.IsDatumEqual(d1, d2)
+			}
+		}
 	}
 }
