@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // quitCmd command shuts down the node server.
@@ -227,7 +224,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient) (hardError bool, er
 			err = errors.WithHint(err, "You can still stop the process using a service manager or a signal.")
 			hardError = true
 		}
-		if grpcutil.IsClosedConnection(err) || grpcConfusedErrConnClosedByPeer(err) {
+		if grpcutil.IsClosedConnection(err) {
 			// This most likely means that we shut down successfully. Note
 			// that sometimes the connection can be shut down even before a
 			// DrainResponse gets sent back to us, so we don't require a
@@ -269,25 +266,4 @@ func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClien
 		return nil, nil, errors.Wrap(err, "Failed to connect to the node")
 	}
 	return serverpb.NewAdminClient(conn), finish, nil
-}
-
-// grpcConfusedErrConnClosedByPeer returns true if the given error
-// has been likely produced by a gRPC handshake that was confused
-// by the remote end closing the connection.
-// This situation occurs semi-frequently (10-15% of cases) in
-// go 1.13, and may have been eliminated in 1.14.
-func grpcConfusedErrConnClosedByPeer(err error) bool {
-	err = errors.Cause(err)
-	s, ok := status.FromError(err)
-	if !ok {
-		return false
-	}
-	switch {
-	case s.Code() == codes.Internal && strings.Contains(err.Error(), "compressed flag set with identity or empty encoding"):
-		return true
-	case s.Code() == codes.Unimplemented && strings.Contains(err.Error(), "Decompressor is not installed"):
-		return true
-	default:
-		return false
-	}
 }
