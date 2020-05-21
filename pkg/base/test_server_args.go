@@ -193,3 +193,12 @@ const (
 	// all with a single replica on node 1.
 	ReplicationManual
 )
+
+// TestTenantArgs are the arguments used when creating a tenant from a
+// TestServer.
+type TestTenantArgs struct {
+	TenantID roachpb.TenantID
+	// AllowSettingClusterSettings, if true, allows the tenant to set in-memory
+	// cluster settings.
+	AllowSettingClusterSettings bool
+}
