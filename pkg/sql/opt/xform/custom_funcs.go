@@ -1397,11 +1397,13 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			if !ok {
 				break
 			}
+			idxColType := c.e.f.Metadata().ColumnMeta(idxCol).Type
 			constColID := c.e.f.Metadata().AddColumn(
 				fmt.Sprintf("project_const_col_@%d", idxCol),
-				condition.Right.DataType())
+				idxColType,
+			)
 			projections = append(projections, c.e.f.ConstructProjectionsItem(
-				c.e.f.ConstructConst(constValMap[idxCol]),
+				c.e.f.ConstructConst(constValMap[idxCol], condition.Right.DataType()),
 				constColID,
 			))
 

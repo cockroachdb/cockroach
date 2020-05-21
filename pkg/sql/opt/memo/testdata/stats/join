@@ -1420,7 +1420,7 @@ full-join (cross)
 expr
 (SemiJoin
     (Values
-      [ (Tuple [ (Const 1) (Const 2) ] "tuple{int}" ) ]
+      [ (Tuple [ (Const 1 "int") (Const 2 "int") ] "tuple{int}" ) ]
       [ (Cols [ (NewColumn "a" "int") (NewColumn "b" "int") ]) ]
     )
     (Scan [ (Table "uv") (Cols "u,v,rowid") ])
@@ -1451,7 +1451,7 @@ semi-join (cross)
 expr
 (AntiJoin
     (Values
-      [ (Tuple [ (Const 1) (Const 2) ] "tuple{int}" ) ]
+      [ (Tuple [ (Const 1 "int") (Const 2 "int") ] "tuple{int}" ) ]
       [ (Cols [ (NewColumn "a" "int") (NewColumn "b" "int") ]) ]
     )
     (Scan [ (Table "uv") (Cols "u,v,rowid") ])
