@@ -44,7 +44,7 @@ func CreateTestTableDescriptor(
 		desc, err := MakeTableDesc(
 			ctx,
 			nil, /* txn */
-			nil, /* vt */
+			nil, /* vs */
 			st,
 			n,
 			parentID, keys.PublicSchemaID, id,
