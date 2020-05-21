@@ -58,6 +58,15 @@ func NewGeometryFromPointCoords(x, y float64) (*Geometry, error) {
 	return &Geometry{SpatialObject: s}, nil
 }
 
+// NewGeometryFromGeom creates a new Geometry object from a geom.T object.
+func NewGeometryFromGeom(g geom.T) (*Geometry, error) {
+	spatialObject, err := spatialObjectFromGeom(g)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeometry(spatialObject), nil
+}
+
 // ParseGeometry parses a Geometry from a given text.
 func ParseGeometry(str string) (*Geometry, error) {
 	spatialObject, err := parseAmbiguousText(str, geopb.DefaultGeometrySRID)
