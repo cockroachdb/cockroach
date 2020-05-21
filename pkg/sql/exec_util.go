@@ -180,7 +180,7 @@ var optDrivenFKChecksClusterMode = settings.RegisterBoolSetting(
 var optDrivenFKCascadesClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled",
 	"default value for experimental_optimizer_foreign_key_cascades session setting; enables optimizer-driven foreign key cascades by default",
-	false,
+	true,
 )
 
 var optDrivenFKCascadesClusterLimit = settings.RegisterNonNegativeIntSetting(
