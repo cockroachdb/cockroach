@@ -160,6 +160,9 @@ func loadClusters() error {
 			} else {
 				return newInvalidHostsLineErr(l)
 			}
+			if n == "" {
+				return newInvalidHostsLineErr(l)
+			}
 
 			var locality string
 			if len(fields) > 0 {
@@ -181,6 +184,9 @@ func loadClusters() error {
 			c.Users = append(c.Users, u)
 			c.Localities = append(c.Localities, locality)
 			c.VPCs = append(c.VPCs, vpc)
+		}
+		if len(c.VMs) == 0 {
+			return errors.Errorf("found no VMs in %s", contents)
 		}
 		install.Clusters[file.Name()] = c
 	}
