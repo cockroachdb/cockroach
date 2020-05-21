@@ -25,12 +25,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	"github.com/cockroachdb/errors"
 )
 
 const (
-	tpchVecNodeCount  = 3
-	tpchVecNumQueries = 22
+	tpchVecNodeCount = 3
 )
 
 type crdbVersion int
@@ -53,13 +53,19 @@ func toCRDBVersion(v string) (crdbVersion, error) {
 	}
 }
 
-var (
-	vectorizeOnOptionByVersion = map[crdbVersion]string{
-		tpchVecVersion19_2: "experimental_on",
-		tpchVecVersion20_1: "on",
-		tpchVecVersion20_2: "on",
+func vectorizeOptionToSetting(vectorize bool, version crdbVersion) string {
+	if !vectorize {
+		return "off"
 	}
+	switch version {
+	case tpchVecVersion19_2:
+		return "experimental_on"
+	default:
+		return "on"
+	}
+}
 
+var (
 	// queriesToSkipByVersion is a map keyed by version that contains query numbers
 	// to be skipped for the given version (as well as the reasons for why they are skipped).
 	queriesToSkipByVersion = map[crdbVersion]map[int]string{
@@ -209,10 +215,10 @@ func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bo
 	}
 }
 
-func (p *tpchVecPerfTest) postTestRunHook(t *test, _ *gosql.DB, version crdbVersion) {
+func (p *tpchVecPerfTest) postTestRunHook(t *test, conn *gosql.DB, version crdbVersion) {
 	queriesToSkip := queriesToSkipByVersion[version]
 	t.Status("comparing the runtimes (only median values for each query are compared)")
-	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
+	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 		if _, skipped := queriesToSkip[queryNum]; skipped {
 			continue
 		}
@@ -248,6 +254,33 @@ func (p *tpchVecPerfTest) postTestRunHook(t *test, _ *gosql.DB, version crdbVers
 					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 		}
 		if vecOnTime >= slownessThresholdByVersion[version]*vecOffTime {
+			// For some reason, the vectorized engine executed the query a lot
+			// slower than the row-by-row engine which is unexpected. In order
+			// to understand where the slowness comes from, we will run EXPLAIN
+			// ANALYZE of the query with all `vectorize` options
+			// tpchPerfTestNumRunsPerQuery times (hoping at least one will
+			// "catch" the slowness).
+			for _, vectorize := range p.vectorizeOptions() {
+				vectorizeSetting := vectorizeOptionToSetting(vectorize, version)
+				if _, err := conn.Exec(fmt.Sprintf("SET vectorize=%s;", vectorizeSetting)); err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < tpchPerfTestNumRunsPerQuery; i++ {
+					rows, err := conn.Query(fmt.Sprintf(
+						"SELECT url FROM [EXPLAIN ANALYZE %s];", tpch.QueriesByNumber[queryNum],
+					))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer rows.Close()
+					var url string
+					rows.Next()
+					if err = rows.Scan(&url); err != nil {
+						t.Fatal(err)
+					}
+					t.Status(fmt.Sprintf("EXPLAIN ANALYZE with vectorize=%s url:\n%s", vectorizeSetting, url))
+				}
+			}
 			t.Fatal(fmt.Sprintf(
 				"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
 					"vec ON times: %v\nvec OFF times: %v",
@@ -303,16 +336,13 @@ func baseTestRun(
 ) {
 	firstNode := c.Node(1)
 	queriesToSkip := queriesToSkipByVersion[version]
-	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
+	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 		for _, vectorize := range tc.vectorizeOptions() {
 			if reason, skip := queriesToSkip[queryNum]; skip {
 				t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
 				continue
 			}
-			vectorizeSetting := "off"
-			if vectorize {
-				vectorizeSetting = vectorizeOnOptionByVersion[version]
-			}
+			vectorizeSetting := vectorizeOptionToSetting(vectorize, version)
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
 				"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
 				tc.numRunsPerQuery(), queryNum, vectorizeSetting, tpchVecNodeCount)
