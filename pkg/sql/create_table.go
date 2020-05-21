@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -609,7 +610,7 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 func ResolveFK(
 	ctx context.Context,
 	txn *kv.Txn,
-	sc SchemaResolver,
+	sc resolver.SchemaResolver,
 	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
@@ -629,7 +630,7 @@ func ResolveFK(
 		originCols[i] = col
 	}
 
-	target, err := ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
+	target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, resolver.ResolveRequireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -894,7 +895,7 @@ func (p *planner) addInterleave(
 func addInterleave(
 	ctx context.Context,
 	txn *kv.Txn,
-	vt SchemaResolver,
+	vt resolver.SchemaResolver,
 	desc *sqlbase.MutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
@@ -904,8 +905,8 @@ func addInterleave(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	parentTable, err := ResolveExistingTableObject(
-		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc,
+	parentTable, err := resolver.ResolveExistingTableObject(
+		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireTableDesc,
 	)
 	if err != nil {
 		return err
@@ -1231,7 +1232,7 @@ func dequalifyColumnRefs(
 func MakeTableDesc(
 	ctx context.Context,
 	txn *kv.Txn,
-	vt SchemaResolver,
+	vt resolver.SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, parentSchemaID, id sqlbase.ID,
@@ -1875,7 +1876,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			newDefs = make(tree.TableDefs, 0, len(n.Defs))
 			newDefs = append(newDefs, n.Defs[:i]...)
 		}
-		td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, ResolveRequireTableDesc)
+		td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, resolver.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}

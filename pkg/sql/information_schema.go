@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1368,8 +1369,8 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				addRow func(...tree.Datum) error) (bool, error) {
 				// This index is on the TABLE_NAME column.
 				name := tree.MustBeDString(constraint)
-				desc, err := ResolveExistingTableObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)),
-					tree.ObjectLookupFlags{}, ResolveAnyDescType)
+				desc, err := resolver.ResolveExistingTableObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)),
+					tree.ObjectLookupFlags{}, resolver.ResolveAnyDescType)
 				if err != nil || desc == nil {
 					return false, err
 				}

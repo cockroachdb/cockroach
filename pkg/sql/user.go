@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -208,7 +209,7 @@ var roleMembersTableName = tree.MakeTableName("system", "role_members")
 // BumpRoleMembershipTableVersion increases the table version for the
 // role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, ResolveAnyDescType)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, resolver.ResolveAnyDescType)
 	if err != nil {
 		return err
 	}

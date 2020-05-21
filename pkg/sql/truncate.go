@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -59,7 +60,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	for i := range n.Tables {
 		tn := &n.Tables[i]
 		tableDesc, err := p.ResolveMutableTableDescriptor(
-			ctx, tn, true /*required*/, ResolveRequireTableDesc)
+			ctx, tn, true /*required*/, resolver.ResolveRequireTableDesc)
 		if err != nil {
 			return err
 		}
