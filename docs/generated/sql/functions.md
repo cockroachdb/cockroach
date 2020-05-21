@@ -980,6 +980,11 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry, pattern: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the DE-9IM spatial relation between geometry_a and geometry_b matches the DE-9IM pattern.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_segmentize"></a><code>st_segmentize(geography: geography, max_segment_length_meters: <a href="float.html">float</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a modified Geography having no segment longer than the given max_segment_length meters.</p>
+<p>The calculations are done on a sphere.</p>
+<p>This function utilizes the S2 library for spherical calculations.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
 <tr><td><a name="st_setsrid"></a><code>st_setsrid(geography: geography, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Sets a Geography to a new SRID without transforming the coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_setsrid"></a><code>st_setsrid(geometry: geometry, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Sets a Geometry to a new SRID without transforming the coordinates.</p>
