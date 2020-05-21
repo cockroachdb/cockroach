@@ -566,11 +566,14 @@ func ReportOrPanic(
 	SendCrashReport(ctx, sv, 1 /* depth */, format, reportables, ReportTypeError)
 }
 
-const maxTagLen = 500
+// Sentry max tag value length.
+// From: https://github.com/getsentry/sentry-docs/pull/1304/files
+const maxTagLen = 200
 
 func maybeTruncate(tagValue string) string {
 	if len(tagValue) > maxTagLen {
-		return tagValue[:maxTagLen] + " [...]"
+		const truncatedSuffix = " [...]"
+		return tagValue[:maxTagLen-len(truncatedSuffix)] + truncatedSuffix
 	}
 	return tagValue
 }
