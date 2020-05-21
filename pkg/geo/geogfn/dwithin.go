@@ -29,12 +29,18 @@ func DWithin(
 		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
 
-	aRegions, err := a.AsS2()
+	aRegions, err := a.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
-	bRegions, err := b.AsS2()
+	bRegions, err := b.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	spheroid := geographiclib.WGS84Spheroid

@@ -258,6 +258,24 @@ func TestIntersects(t *testing.T) {
 			"MULTIPOLYGON (((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0)))",
 			false,
 		},
+		{
+			"GEOMETRYCOLLECTION EMPTY do not intersect with each other",
+			"GEOMETRYCOLLECTION EMPTY",
+			"GEOMETRYCOLLECTION EMPTY",
+			false,
+		},
+		{
+			"GEOMETRYCOLLECTION EMPTY do not intersect with a point",
+			"POINT(1.0 2.0)",
+			"GEOMETRYCOLLECTION EMPTY",
+			false,
+		},
+		{
+			"GEOMETRYCOLLECTION EMPTY and POINT intersect",
+			"POINT(1.0 2.0)",
+			"GEOMETRYCOLLECTION (LINESTRING EMPTY, POINT(1.0 2.0))",
+			true,
+		},
 	}
 
 	for _, tc := range testCases {

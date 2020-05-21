@@ -11,6 +11,7 @@
 package geogfn
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -269,5 +270,31 @@ func TestDistance(t *testing.T) {
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := Distance(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, UseSpheroid)
 		requireMismatchingSRIDError(t, err)
+	})
+
+	t.Run("empty geographies always error", func(t *testing.T) {
+		for _, tc := range []struct {
+			a string
+			b string
+		}{
+			{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+			{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION (POINT(1.0 1.0), LINESTRING EMPTY)"},
+			{"POINT(1.0 1.0)", "GEOMETRYCOLLECTION (POINT(1.0 1.0), LINESTRING EMPTY)"}, // This case errors (in a bad way) in PostGIS.
+		} {
+			for _, useSphereOrSpheroid := range []UseSphereOrSpheroid{
+				UseSphere,
+				UseSpheroid,
+			} {
+				t.Run(fmt.Sprintf("Distance(%s,%s),spheroid=%t", tc.a, tc.b, useSphereOrSpheroid), func(t *testing.T) {
+					a, err := geo.ParseGeography(tc.a)
+					require.NoError(t, err)
+					b, err := geo.ParseGeography(tc.b)
+					require.NoError(t, err)
+					_, err = Distance(a, b, useSphereOrSpheroid)
+					require.Error(t, err)
+					require.True(t, geo.IsEmptyGeometryError(err))
+				})
+			}
+		}
 	})
 }

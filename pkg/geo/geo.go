@@ -24,6 +24,17 @@ import (
 // EWKBEncodingFormat is the encoding format for EWKB.
 var EWKBEncodingFormat = binary.LittleEndian
 
+// EmptyBehavior is the behavior to adopt when an empty Geometry is encountered.
+type EmptyBehavior uint8
+
+const (
+	// EmptyBehaviorError will error with EmptyGeometryError when an empty geometry
+	// is encountered.
+	EmptyBehaviorError EmptyBehavior = 0
+	// EmptyBehaviorOmit will omit an entry when an empty geometry is encountered.
+	EmptyBehaviorOmit EmptyBehavior = 1
+)
+
 //
 // Geospatial Type
 //
@@ -335,14 +346,14 @@ func (g *Geography) Shape() geopb.Shape {
 	return g.SpatialObject.Shape
 }
 
-// AsS2 converts a given Geography into its S2 form.
-func (g *Geography) AsS2() ([]s2.Region, error) {
+// AsS2 converts a given Geography into it's S2 form.
+func (g *Geography) AsS2(emptyBehavior EmptyBehavior) ([]s2.Region, error) {
 	geomRepr, err := g.AsGeomT()
 	if err != nil {
 		return nil, err
 	}
 	// TODO(otan): convert by reading from EWKB to S2 directly.
-	return S2RegionsFromGeom(geomRepr), nil
+	return S2RegionsFromGeom(geomRepr, emptyBehavior)
 }
 
 // isLinearRingCCW returns whether a given linear ring is counter clock wise.
@@ -389,8 +400,20 @@ func isLinearRingCCW(linearRing *geom.LinearRing) bool {
 
 // S2RegionsFromGeom converts an geom representation of an object
 // to s2 regions.
-func S2RegionsFromGeom(geomRepr geom.T) []s2.Region {
+// As S2 does not really handle empty geometries well, we need to ingest emptyBehavior and
+// react appropriately.
+func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Region, error) {
 	var regions []s2.Region
+	if geomRepr.Empty() {
+		switch emptyBehavior {
+		case EmptyBehaviorOmit:
+			return nil, nil
+		case EmptyBehaviorError:
+			return nil, NewEmptyGeometryError()
+		default:
+			return nil, errors.Newf("programmer error: unknown behavior")
+		}
+	}
 	switch repr := geomRepr.(type) {
 	case *geom.Point:
 		regions = []s2.Region{
@@ -428,22 +451,38 @@ func S2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 		}
 	case *geom.GeometryCollection:
 		for _, geom := range repr.Geoms() {
-			regions = append(regions, S2RegionsFromGeom(geom)...)
+			subRegions, err := S2RegionsFromGeom(geom, emptyBehavior)
+			if err != nil {
+				return nil, err
+			}
+			regions = append(regions, subRegions...)
 		}
 	case *geom.MultiPoint:
 		for i := 0; i < repr.NumPoints(); i++ {
-			regions = append(regions, S2RegionsFromGeom(repr.Point(i))...)
+			subRegions, err := S2RegionsFromGeom(repr.Point(i), emptyBehavior)
+			if err != nil {
+				return nil, err
+			}
+			regions = append(regions, subRegions...)
 		}
 	case *geom.MultiLineString:
 		for i := 0; i < repr.NumLineStrings(); i++ {
-			regions = append(regions, S2RegionsFromGeom(repr.LineString(i))...)
+			subRegions, err := S2RegionsFromGeom(repr.LineString(i), emptyBehavior)
+			if err != nil {
+				return nil, err
+			}
+			regions = append(regions, subRegions...)
 		}
 	case *geom.MultiPolygon:
 		for i := 0; i < repr.NumPolygons(); i++ {
-			regions = append(regions, S2RegionsFromGeom(repr.Polygon(i))...)
+			subRegions, err := S2RegionsFromGeom(repr.Polygon(i), emptyBehavior)
+			if err != nil {
+				return nil, err
+			}
+			regions = append(regions, subRegions...)
 		}
 	}
-	return regions
+	return regions, nil
 }
 
 //
