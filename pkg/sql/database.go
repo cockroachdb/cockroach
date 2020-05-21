@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -65,8 +66,8 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	p.Tables().AddUncommittedDatabase(oldName, descID, DBDropped)
-	p.Tables().AddUncommittedDatabase(newName, descID, DBCreated)
+	p.Tables().AddUncommittedDatabase(oldName, descID, descs.DBDropped)
+	p.Tables().AddUncommittedDatabase(newName, descID, descs.DBCreated)
 
 	return p.txn.Run(ctx, b)
 }
