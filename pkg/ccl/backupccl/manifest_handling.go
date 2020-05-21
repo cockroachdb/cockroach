@@ -142,9 +142,8 @@ func DecompressAndCheckFile(descBytes []byte) ([]byte, error) {
 			return nil, err
 		}
 		return decompressedDescBytes, nil
-	} else {
-		return descBytes, nil
 	}
+	return descBytes, nil
 }
 
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
@@ -173,8 +172,8 @@ func readBackupManifest(
 	// This decompresses any backup manifest in gzip format.
 	descBytes, err = DecompressAndCheckFile(descBytes)
 	if err != nil {
-		return BackupManifest{},
-		errors.Wrap(err, "decompressing backup manifest")
+		return BackupManifest{}, errors.Wrap(
+			err, "decompressing backup manifest")
 	}
 	var backupManifest BackupManifest
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
@@ -228,8 +227,8 @@ func readBackupPartitionDescriptor(
 	// This decompresses any backup partition descriptor in gzip format.
 	descBytes, err = DecompressAndCheckFile(descBytes)
 	if err != nil {
-		return BackupPartitionDescriptor{},
-		errors.Wrap(err, "decompressing backup partition descriptor")
+		return BackupPartitionDescriptor{}, errors.Wrap(
+			err, "decompressing backup partition descriptor")
 	}
 	var backupManifest BackupPartitionDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
