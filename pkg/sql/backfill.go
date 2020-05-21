@@ -527,7 +527,7 @@ func (sc *SchemaChanger) validateConstraints(
 		c := constraints[i]
 		grp.GoCtx(func(ctx context.Context) error {
 			// Make the mutations public in a private copy of the descriptor
-			// and add it to the TableCollection, so that we can use SQL below to perform
+			// and add it to the Collection, so that we can use SQL below to perform
 			// the validation. We wouldn't have needed to do this if we could have
 			// updated the descriptor and run validation in the same transaction. However,
 			// our current system is incapable of running long running schema changes
@@ -574,7 +574,7 @@ func (sc *SchemaChanger) validateConstraints(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func (sc *SchemaChanger) getTableVersion(
-	ctx context.Context, txn *kv.Txn, tc *descs.TableCollection, version sqlbase.DescriptorVersion,
+	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
 	if err != nil {
@@ -619,7 +619,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := descs.NewTableCollection(sc.leaseMgr, sc.settings)
+				tc := descs.NewCollection(sc.leaseMgr, sc.settings)
 				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
@@ -816,7 +816,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := descs.NewTableCollection(sc.leaseMgr, sc.settings)
+			tc := descs.NewCollection(sc.leaseMgr, sc.settings)
 			// Use a leased table descriptor for the backfill.
 			defer tc.ReleaseAll(ctx)
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
@@ -1167,7 +1167,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			// Make the mutations public in a private copy of the descriptor
-			// and add it to the TableCollection, so that we can use SQL below to perform
+			// and add it to the Collection, so that we can use SQL below to perform
 			// the validation. We wouldn't have needed to do this if we could have
 			// updated the descriptor and run validation in the same transaction. However,
 			// our current system is incapable of running long running schema changes
@@ -1178,7 +1178,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			tc := descs.NewTableCollection(sc.leaseMgr, sc.settings)
+			tc := descs.NewCollection(sc.leaseMgr, sc.settings)
 			// pretend that the schema has been modified.
 			if err := tc.AddUncommittedTable(*desc); err != nil {
 				return err
@@ -1569,7 +1569,7 @@ func validateCheckInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewTableCollection(leaseMgr, evalCtx.Settings)
+		newTc := descs.NewCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
 			return err
@@ -1610,7 +1610,7 @@ func validateFkInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewTableCollection(leaseMgr, evalCtx.Settings)
+		newTc := descs.NewCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
 			return err
@@ -1645,7 +1645,7 @@ func validateFkInTxn(
 func columnBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	tc *descs.TableCollection,
+	tc *descs.Collection,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,

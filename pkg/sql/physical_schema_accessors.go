@@ -37,13 +37,13 @@ import (
 //
 // - CachedPhysicalAccessor, which adds an object cache
 //   - plugged on top another Accessor.
-//   - uses a `*TableCollection` (table.go) as cache.
+//   - uses a `*Collection` (table.go) as cache.
 //
 
 // CachedPhysicalAccessor adds a cache on top of any Accessor.
 type CachedPhysicalAccessor struct {
 	catalog.Accessor
-	tc *descs.TableCollection
+	tc *descs.Collection
 	// Used to avoid allocations.
 	tn TableName
 }
