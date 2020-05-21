@@ -182,7 +182,6 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
-		TimestampCachePageSize:      tscache.TestSklPageSize,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 		ClosedTimestamp:             container.NoopContainer(),
@@ -701,9 +700,6 @@ type StoreConfig struct {
 	// to be applied concurrently.
 	concurrentSnapshotApplyLimit int
 
-	// TimestampCachePageSize is (server.Config).TimestampCachePageSize
-	TimestampCachePageSize uint32
-
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
 
@@ -835,7 +831,7 @@ func NewStore(
 	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
 	s.rangefeedReplicas.Unlock()
 
-	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize)
+	s.tsCache = tscache.New(cfg.Clock)
 	s.metrics.registry.AddMetricStruct(s.tsCache.Metrics())
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)

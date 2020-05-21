@@ -19,44 +19,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-const (
-	// defaultSklPageSize is the default size of each page in the sklImpl's
-	// read and write intervalSkl.
-	defaultSklPageSize = 32 << 20 // 32 MB
-	// TestSklPageSize is passed to tests as the size of each page in the
-	// sklImpl to limit its memory footprint. Reducing this size can hurt
-	// performance but it decreases the risk of OOM failures when many tests
-	// are running concurrently.
-	TestSklPageSize = 128 << 10 // 128 KB
-)
-
-// sklImpl implements the Cache interface. It maintains a pair of skiplists
-// containing keys or key ranges and the timestamps at which they were most
-// recently read or written. If a timestamp was read or written by a
-// transaction, the txn ID is stored with the timestamp to avoid advancing
-// timestamps on successive requests from the same transaction.
+// sklImpl implements the Cache interface. It maintains a collection of
+// skiplists containing keys or key ranges and the timestamps at which
+// they were most recently read or written. If a timestamp was read or
+// written by a transaction, the txn ID is stored with the timestamp to
+// avoid advancing timestamps on successive requests from the same
+// transaction.
 type sklImpl struct {
-	cache    *intervalSkl
-	clock    *hlc.Clock
-	pageSize uint32
-	metrics  Metrics
+	cache   *intervalSkl
+	clock   *hlc.Clock
+	metrics Metrics
 }
 
 var _ Cache = &sklImpl{}
 
 // newSklImpl returns a new treeImpl with the supplied hybrid clock.
-func newSklImpl(clock *hlc.Clock, pageSize uint32) *sklImpl {
-	if pageSize == 0 {
-		pageSize = defaultSklPageSize
-	}
-	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: makeMetrics()}
+func newSklImpl(clock *hlc.Clock) *sklImpl {
+	tc := sklImpl{clock: clock, metrics: makeMetrics()}
 	tc.clear(clock.Now())
 	return &tc
 }
 
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
-	tc.cache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl)
+	tc.cache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.metrics.Skl)
 	tc.cache.floorTS = lowWater
 }
 
@@ -101,7 +87,7 @@ func (tc *sklImpl) boundKeyLengths(start, end roachpb.Key) (roachpb.Key, roachpb
 	// and still not trigger the "key range too large" panic in intervalSkl,
 	// but anything larger could require multiple page rotations before it's
 	// able to fit in if other ranges are being added concurrently.
-	maxKeySize := int(tc.pageSize / 32)
+	maxKeySize := int(maximumSklPageSize / 32)
 
 	// If either key is too long, truncate its length, making sure to always
 	// grow the [start,end) range instead of shrinking it. This will reduce the
