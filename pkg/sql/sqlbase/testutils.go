@@ -270,6 +270,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return RandArray(rng, typ, 0)
 	case types.AnyFamily:
 		return RandDatumWithNullChance(rng, RandType(rng), nullChance)
+	case types.EnumFamily:
+		// We don't yet have the ability to generate random user defined types.
+		return tree.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %v", typ.DebugString()))
 	}
