@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -250,7 +251,7 @@ func (p *planner) resolveTableForZone(
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.IncludeOffline = true
-			immutRes, err = ResolveExistingTableObject(ctx, p, &zs.TableOrIndex.Table, flags, ResolveAnyDescType)
+			immutRes, err = resolver.ResolveExistingTableObject(ctx, p, &zs.TableOrIndex.Table, flags, resolver.ResolveAnyDescType)
 		})
 		if err != nil {
 			return nil, err

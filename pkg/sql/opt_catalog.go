@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -109,7 +110,7 @@ func (os *optSchema) Name() *cat.SchemaName {
 
 // GetDataSourceNames is part of the cat.Schema interface.
 func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
-	return GetObjectNames(
+	return resolver.GetObjectNames(
 		ctx,
 		os.planner.Txn(),
 		os.planner,
@@ -170,7 +171,7 @@ func (oc *optCatalog) ResolveDataSource(
 	}
 
 	oc.tn = *name
-	desc, err := ResolveExistingTableObject(ctx, oc.planner, &oc.tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
+	desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveAnyDescType)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
