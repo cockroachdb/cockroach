@@ -1,0 +1,75 @@
+#### Partial Indexes
+
+# TODO(mgartner): remove this once partial indexes are fully supported.
+statement ok
+SET experimental_partial_indexes=on
+
+#### Validate partial index predicates.
+
+statement ok
+CREATE TABLE t1 (a INT, INDEX (a) WHERE a = 0)
+
+statement ok
+CREATE TABLE t2 (a INT, INDEX (a) WHERE false)
+
+# Allow immutable functions.
+statement ok
+CREATE TABLE t3 (a INT, INDEX (a) WHERE abs(1) > 2)
+
+# Don't allow non-boolean expressions.
+statement error expected index predicate expression to have type bool, but '1' has type int
+CREATE TABLE error (a INT, INDEX (a) WHERE 1)
+
+# Don't allow columns not in table.
+statement error pgcode 42703 column "b" does not exist, referenced in "b = 3"
+CREATE TABLE error (a INT, INDEX (a) WHERE b = 3)
+
+# Don't allow mutable functions.
+# TODO(mgartner): The error code for this should be 42P17, not 0A000.
+statement error pgcode 0A000 impure functions are not allowed in index predicate
+CREATE TABLE error (t TIMESTAMPTZ, INDEX (t) WHERE t < now())
+
+# Don't allow variable subexpressions.
+statement error pgcode 42601 variable sub-expressions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE count(*) = 1)
+
+# Don't allow subqueries.
+statement error pgcode 42601 variable sub-expressions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE (SELECT true))
+
+# Don't allow aggregate functions.
+statement error pgcode 42803 aggregate functions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE sum(a) > 1)
+
+# Don't allow window functions.
+statement error pgcode 42P20 window functions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE row_number() OVER () > 1)
+
+# Don't allow set-returning functions.
+statement error pgcode 0A000 generator functions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE generate_series(1, 1))
+
+# Fail on bad types.
+statement error pq: unsupported binary operator: <bool> - <bool>
+CREATE TABLE error (a INT, INDEX (a) WHERE false - true)
+
+#### Validate CREATE TABLE ... UNIQUE INDEX predicate.
+
+statement ok
+CREATE TABLE t4 (a INT, UNIQUE INDEX (a) WHERE a = 0)
+
+# Don't allow invalid predicates.
+statement error expected index predicate expression to have type bool, but '1' has type int
+CREATE TABLE error (a INT, UNIQUE INDEX (a) WHERE 1)
+
+#### Validate CREATE INDEX predicate.
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+CREATE INDEX i1 ON t (a) WHERE a = 0
+
+# Don't allow invalid predicates.
+statement error expected index predicate expression to have type bool, but '1' has type int
+CREATE INDEX error ON t (a) WHERE 1

@@ -102,7 +102,7 @@ CREATE TABLE bad (a INT CHECK(sum(a) OVER () > 1))
 statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE t4 (a INT CHECK (false - true))
 
-statement error column "b" not found, referenced in "a < b"
+statement error pgcode 42703 column "b" does not exist, referenced in "a < b"
 CREATE TABLE t4 (a INT, CHECK (a < b), CHECK (a+b+c+d < 20))
 
 statement ok
