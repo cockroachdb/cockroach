@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -108,7 +107,6 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
-	cfg.TimestampCachePageSize = tscache.TestSklPageSize
 
 	// Enable web session authentication.
 	cfg.EnableWebSessionAuthentication = true

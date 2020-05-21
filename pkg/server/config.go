@@ -212,10 +212,6 @@ type Config struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
-	// TimestampCachePageSize is the size in bytes of the pages in the
-	// timestamp cache held by each store.
-	TimestampCachePageSize uint32
-
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner. Set to 0 to disable.
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
