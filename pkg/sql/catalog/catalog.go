@@ -19,6 +19,14 @@ import (
 type ObjectDescriptor interface {
 	tree.NameResolutionResult
 
+	// DatabaseDesc returns the underlying database descriptor, or nil if the
+	// descriptor is not a table backed object.
+	DatabaseDesc() *sqlbase.DatabaseDescriptor
+
+	// SchemaDesc returns the underlying schema descriptor, or nil if the
+	// descriptor is not a table backed object.
+	SchemaDesc() *sqlbase.SchemaDescriptor
+
 	// TableDesc returns the underlying table descriptor, or nil if the
 	// descriptor is not a table backed object.
 	TableDesc() *sqlbase.TableDescriptor
