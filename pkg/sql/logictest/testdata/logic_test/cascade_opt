@@ -308,7 +308,7 @@ statement error pq: delete on table "a" violates foreign key constraint "fk_dele
 DELETE FROM a WHERE id = 1;
 
 # 2. ON UPDATE NO ACTION
-statement error pq: foreign key violation: values \[2\] in columns \[id\] referenced in table "b"
+statement error pq: update on table "a" violates foreign key constraint "fk_update_no_action_ref_a" on table "b"\nDETAIL: Key \(id\)=\(2\) is still referenced from table "b"\.
 UPDATE a SET id = 1000 WHERE id = 2;
 
 # 3. ON DELETE RESTRICT
@@ -316,7 +316,7 @@ statement error pq: delete on table "a" violates foreign key constraint "fk_dele
 DELETE FROM a WHERE id = 3;
 
 # 4. ON UPDATE RESTRICT
-statement error pq: foreign key violation: values \[4\] in columns \[id\] referenced in table "b"
+statement error pq: update on table "a" violates foreign key constraint "fk_update_restrict_ref_a" on table "b"\nDETAIL: Key \(id\)=\(4\) is still referenced from table "b"\.
 UPDATE a SET id = 1000 WHERE id = 4;
 
 # 5. ON DELETE CASCADE
@@ -1676,7 +1676,7 @@ statement ok
 INSERT INTO d1 VALUES ('d1-pk1', 'original');
 
 # ON UPDATE CASCADE
-statement error foreign key violation: values \['original'\] in columns \[update_cascade\] referenced in table "d1"
+statement error pq: update on table "c2" violates foreign key constraint "fk_update_restrict_ref_c2" on table "d1"\nDETAIL: Key \(update_cascade\)=\('original'\) is still referenced from table "d1"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 statement ok
@@ -1687,7 +1687,7 @@ statement ok
 INSERT INTO d2 VALUES ('original');
 
 # ON UPDATE CASCADE
-statement error foreign key violation: values \['original'\] in columns \[id\] referenced in table "d2"
+statement error pq: update on table "c3" violates foreign key constraint "fk_id_ref_c3" on table "d2"\nDETAIL: Key \(id\)=\('original'\) is still referenced from table "d2"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -1854,7 +1854,7 @@ SELECT
 updated original updated updated original
 
 # ON UPDATE CASCADE from a downward
-statement error foreign key violation: values \['original'\] in columns \[id\] referenced in table "c3"
+statement error pq: update on table "b2" violates foreign key constraint "fk_id_ref_b2" on table "c3"\nDETAIL: Key \(id\)=\('original'\) is still referenced from table "c3"\.
 UPDATE a SET id = 'updated2' WHERE id = 'original';
 
 # Clean up after the test.
@@ -2608,7 +2608,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error pq: null value in column "b_a_id" violates not-null constraint
 DELETE FROM a WHERE id = 'delete-me';
 
 # Clean up after the test.
@@ -2853,7 +2853,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error null value in column "b_a_id" violates not-null constraint
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3278,7 +3278,7 @@ INSERT INTO c VALUES
 
 # Cascade the delete in a to the SET DEFAULT in b to the CASCADE in c which
 # should violate the NOT NULL in c.b_a_id.
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error null value in column "b_a_id" violates not-null constraint
 DELETE FROM a WHERE id = 'delete-me';
 
 # Clean up after the test.
@@ -3409,7 +3409,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
 INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
 
 # ON UPDATE CASCADE, which should fail since the value 'missing' is not in a.
-statement error pq: foreign key violation: value \['missing'\] not found in a@primary \[id\]
+statement error update on table "b3" violates foreign key constraint "fk_update_set_null_ref_a"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "a"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3570,7 +3570,7 @@ INSERT INTO c3 VALUES
 
 # ON UPDATE CASCADE all b tables into the c tables, but fail due to a default
 # value that does not exist.
-statement error pq: foreign key violation: value \['missing'\] not found in b1@b1_update_cascade_key \[update_cascade\]
+statement error update on table "c2" violates foreign key constraint "fk_update_set_null_ref_b1"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "b1"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3661,7 +3661,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error null value in column "b_a_id" violates not-null constraint
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3898,11 +3898,11 @@ INSERT INTO b VALUES (2,2);
 INSERT INTO c VALUES (2,2);
 
 # C's MATCH FULL should reject this.
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error pq: update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
 DELETE FROM a;
 
 # Again, for the same reason.
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
 UPDATE a SET x = 3 WHERE x = 2;
 
 # Ensure nothing has changed.
@@ -3950,10 +3950,10 @@ statement ok
 DELETE FROM a WHERE x = 2;
 
 # We can't cascade the null value though to c, since it would break MATCH FULL.
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
 UPDATE a SET x = NULL WHERE x = 3;
 
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
 UPDATE a SET y = NULL WHERE y = 3;
 
 # Now update (3,3) to (null, null) which should cascade.

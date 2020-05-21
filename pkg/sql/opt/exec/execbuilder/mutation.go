@@ -332,6 +332,10 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	if err := b.buildFKCascades(upd.WithID, upd.FKCascades); err != nil {
+		return execPlan{}, err
+	}
+
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if upd.NeedResults() {

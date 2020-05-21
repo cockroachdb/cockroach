@@ -131,26 +131,30 @@ CREATE TABLE a (
 
 statement ok
 CREATE TABLE b1 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 
 statement ok
 CREATE TABLE b2 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 
 statement ok
 CREATE TABLE c1 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING NOT NULL REFERENCES b1 (update_cascade) ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING NOT NULL REFERENCES b1 (update_cascade) ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 
 statement ok
 CREATE TABLE c2 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING NOT NULL REFERENCES b1 (update_cascade) ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING NOT NULL REFERENCES b1 (update_cascade) ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 
 statement ok
@@ -183,10 +187,39 @@ UPDATE a SET id = 'updated' WHERE id = 'original';
 statement ok
 SET tracing = on,kv,results; UPDATE a SET id = 'updated2' WHERE id = 'updated'; SET tracing = off
 
-query I
-SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'cascading %';
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-5
+Del /Table/59/1/"updated"/0
+CPut /Table/59/1/"updated2"/0 -> /TUPLE/
+executing cascade for constraint fk_update_cascade_ref_a
+Del /Table/60/2/"updated"/0
+CPut /Table/60/2/"updated2"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+executing cascade for constraint fk_update_cascade_ref_a
+Del /Table/61/2/"updated"/0
+CPut /Table/61/2/"updated2"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+executing cascade for constraint fk_update_cascade_ref_b1
+Del /Table/62/2/"updated"/"c1-pk1"/0
+CPut /Table/62/2/"updated2"/"c1-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/62/2/"updated"/"c1-pk2"/0
+CPut /Table/62/2/"updated2"/"c1-pk2"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/62/2/"updated"/"c1-pk3"/0
+CPut /Table/62/2/"updated2"/"c1-pk3"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/62/2/"updated"/"c1-pk4"/0
+CPut /Table/62/2/"updated2"/"c1-pk4"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_cascade_ref_b1
+Del /Table/63/2/"updated"/"c2-pk1"/0
+CPut /Table/63/2/"updated2"/"c2-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/63/2/"updated"/"c2-pk2"/0
+CPut /Table/63/2/"updated2"/"c2-pk2"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/63/2/"updated"/"c2-pk3"/0
+CPut /Table/63/2/"updated2"/"c2-pk3"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/63/2/"updated"/"c2-pk4"/0
+CPut /Table/63/2/"updated2"/"c2-pk4"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_id_ref_b2
+Del /Table/64/1/"updated"/0
+CPut /Table/64/1/"updated2"/0 -> /TUPLE/
 
 # Clean up after the test.
 statement ok
@@ -365,20 +398,24 @@ CREATE TABLE a (
   id STRING PRIMARY KEY
 );
 CREATE TABLE b1 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES a ON UPDATE SET NULL
+  id STRING PRIMARY KEY,
+  update_set_null STRING REFERENCES a ON UPDATE SET NULL,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE b2 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES a ON UPDATE SET NULL
+  id STRING PRIMARY KEY,
+  update_set_null STRING REFERENCES a ON UPDATE SET NULL,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE b3 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES a ON UPDATE SET NULL
+  id STRING PRIMARY KEY,
+  update_set_null STRING REFERENCES a ON UPDATE SET NULL,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE b4 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES a ON UPDATE SET NULL
+  id STRING PRIMARY KEY,
+  update_set_null STRING REFERENCES a ON UPDATE SET NULL,
+  FAMILY (id, update_set_null)
 );
 
 statement ok
@@ -393,10 +430,24 @@ INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
 statement ok
 SET tracing = on,kv,results; UPDATE a SET id = 'updated' WHERE id = 'original'; SET tracing = off
 
-query I
-SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'cascading %';
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-4
+Del /Table/76/1/"original"/0
+CPut /Table/76/1/"updated"/0 -> /TUPLE/
+executing cascade for constraint fk_update_set_null_ref_a
+executing cascade for constraint fk_update_set_null_ref_a
+Del /Table/78/2/"original"/"b2-pk2"/0
+CPut /Table/78/2/NULL/"b2-pk2"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_a
+Del /Table/79/2/"original"/"b3-pk1"/0
+CPut /Table/79/2/NULL/"b3-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/79/2/"original"/"b4-pk1"/0
+CPut /Table/79/2/NULL/"b4-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/79/2/"original"/"b4-pk2"/0
+CPut /Table/79/2/NULL/"b4-pk2"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_a
 
 # Clean up after the test.
 statement ok
@@ -415,24 +466,29 @@ CREATE TABLE a (
   id STRING PRIMARY KEY
 );
 CREATE TABLE b1 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 CREATE TABLE b2 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 CREATE TABLE c1 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES b1(update_cascade) ON UPDATE SET NULL
+  id STRING PRIMARY KEY,
+  update_set_null STRING REFERENCES b1(update_cascade) ON UPDATE SET NULL,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE c2 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES b1(update_cascade) ON UPDATE SET NULL
+  id STRING PRIMARY KEY,
+  update_set_null STRING REFERENCES b1(update_cascade) ON UPDATE SET NULL,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE c3 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES b2(update_cascade) ON UPDATE SET NULL
+  id STRING PRIMARY KEY,
+  update_set_null STRING REFERENCES b2(update_cascade) ON UPDATE SET NULL,
+  FAMILY (id, update_set_null)
 );
 
 statement ok
@@ -463,10 +519,33 @@ INSERT INTO c3 VALUES
 statement ok
 SET tracing = on,kv,results; UPDATE a SET id = 'updated' WHERE id = 'original'; SET tracing = off
 
-query I
-SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'cascading %';
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-5
+Del /Table/81/1/"original"/0
+CPut /Table/81/1/"updated"/0 -> /TUPLE/
+executing cascade for constraint fk_update_cascade_ref_a
+Del /Table/82/2/"original"/0
+CPut /Table/82/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+executing cascade for constraint fk_update_cascade_ref_a
+Del /Table/83/2/"original"/0
+CPut /Table/83/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_b1
+Del /Table/84/2/"original"/"c1-pk1-b1-pk1"/0
+CPut /Table/84/2/NULL/"c1-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/84/2/"original"/"c1-pk2-b1-pk1"/0
+CPut /Table/84/2/NULL/"c1-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_b1
+Del /Table/85/2/"original"/"c2-pk1-b1-pk1"/0
+CPut /Table/85/2/NULL/"c2-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/85/2/"original"/"c2-pk2-b1-pk1"/0
+CPut /Table/85/2/NULL/"c2-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_b2
+Del /Table/86/2/"original"/"c3-pk1-b2-pk1"/0
+CPut /Table/86/2/NULL/"c3-pk1-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/86/2/"original"/"c3-pk2-b2-pk1"/0
+CPut /Table/86/2/NULL/"c3-pk2-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
 
 # Clean up after the test.
 statement ok
@@ -647,20 +726,24 @@ CREATE TABLE a (
   id STRING PRIMARY KEY
 );
 CREATE TABLE b1 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING DEFAULT 'b1-default' REFERENCES a ON UPDATE SET DEFAULT
+  id STRING PRIMARY KEY,
+  update_set_null STRING DEFAULT 'b1-default' REFERENCES a ON UPDATE SET DEFAULT,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE b2 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING DEFAULT 'b2-default' REFERENCES a ON UPDATE SET DEFAULT
+  id STRING PRIMARY KEY,
+  update_set_null STRING DEFAULT 'b2-default' REFERENCES a ON UPDATE SET DEFAULT,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE b3 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING DEFAULT 'b3-default' REFERENCES a ON UPDATE SET DEFAULT
+  id STRING PRIMARY KEY,
+  update_set_null STRING DEFAULT 'b3-default' REFERENCES a ON UPDATE SET DEFAULT,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE b4 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING DEFAULT 'b4-default' REFERENCES a ON UPDATE SET DEFAULT
+  id STRING PRIMARY KEY,
+  update_set_null STRING DEFAULT 'b4-default' REFERENCES a ON UPDATE SET DEFAULT,
+  FAMILY (id, update_set_null)
 );
 
 statement ok
@@ -675,10 +758,24 @@ INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
 statement ok
 SET tracing = on,kv,results; UPDATE a SET id = 'updated' WHERE id = 'original'; SET tracing = off
 
-query I
-SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'cascading %';
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-4
+Del /Table/98/1/"original"/0
+CPut /Table/98/1/"updated"/0 -> /TUPLE/
+executing cascade for constraint fk_update_set_null_ref_a
+executing cascade for constraint fk_update_set_null_ref_a
+Del /Table/100/2/"original"/"b2-pk2"/0
+CPut /Table/100/2/"b2-default"/"b2-pk2"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_a
+Del /Table/101/2/"original"/"b3-pk1"/0
+CPut /Table/101/2/"b3-default"/"b3-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/101/2/"original"/"b4-pk1"/0
+CPut /Table/101/2/"b3-default"/"b4-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/101/2/"original"/"b4-pk2"/0
+CPut /Table/101/2/"b3-default"/"b4-pk2"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_a
 
 # Clean up after the test.
 statement ok
@@ -697,24 +794,29 @@ CREATE TABLE a (
   id STRING PRIMARY KEY
 );
 CREATE TABLE b1 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 CREATE TABLE b2 (
-  id STRING PRIMARY KEY
- ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+  id STRING PRIMARY KEY,
+  update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE,
+  FAMILY (id, update_cascade)
 );
 CREATE TABLE c1 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING DEFAULT 'b1-default' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT
+  id STRING PRIMARY KEY,
+  update_set_null STRING DEFAULT 'b1-default' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE c2 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING DEFAULT 'b1-default' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT
+  id STRING PRIMARY KEY,
+  update_set_null STRING DEFAULT 'b1-default' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT,
+  FAMILY (id, update_set_null)
 );
 CREATE TABLE c3 (
-  id STRING PRIMARY KEY
- ,update_set_null STRING DEFAULT 'b2-default' REFERENCES b2(update_cascade) ON UPDATE SET DEFAULT
+  id STRING PRIMARY KEY,
+  update_set_null STRING DEFAULT 'b2-default' REFERENCES b2(update_cascade) ON UPDATE SET DEFAULT,
+  FAMILY (id, update_set_null)
 );
 
 statement ok
@@ -745,10 +847,33 @@ INSERT INTO c3 VALUES
 statement ok
 SET tracing = on,kv,results; UPDATE a SET id = 'updated' WHERE id = 'original'; SET tracing = off
 
-query I
-SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'cascading %';
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-5
+Del /Table/103/1/"original"/0
+CPut /Table/103/1/"updated"/0 -> /TUPLE/
+executing cascade for constraint fk_update_cascade_ref_a
+Del /Table/104/2/"original"/0
+CPut /Table/104/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+executing cascade for constraint fk_update_cascade_ref_a
+Del /Table/105/2/"original"/0
+CPut /Table/105/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_b1
+Del /Table/106/2/"original"/"c1-pk1-b1-pk1"/0
+CPut /Table/106/2/"b1-default"/"c1-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/106/2/"original"/"c1-pk2-b1-pk1"/0
+CPut /Table/106/2/"b1-default"/"c1-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_b1
+Del /Table/107/2/"original"/"c2-pk1-b1-pk1"/0
+CPut /Table/107/2/"b1-default"/"c2-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/107/2/"original"/"c2-pk2-b1-pk1"/0
+CPut /Table/107/2/"b1-default"/"c2-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
+executing cascade for constraint fk_update_set_null_ref_b2
+Del /Table/108/2/"original"/"c3-pk1-b2-pk1"/0
+CPut /Table/108/2/"b2-default"/"c3-pk1-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
+Del /Table/108/2/"original"/"c3-pk2-b2-pk1"/0
+CPut /Table/108/2/"b2-default"/"c3-pk2-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
 
 # Clean up after the test.
 statement ok
