@@ -112,7 +112,7 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
 
-	// Ensure a database zone config applies to that database and its tables, and
+	// Ensure a database zone config applies to that database and its descCollection, and
 	// no other zones.
 	sqlutils.SetZoneConfig(t, sqlDB, "DATABASE d", yamlOverride)
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialDbRow)
@@ -184,14 +184,14 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
 
 	// Ensure the system database zone can be configured, even though zones on
-	// config tables are disallowed.
+	// config descCollection are disallowed.
 	sqlutils.SetZoneConfig(t, sqlDB, "DATABASE system", yamlOverride)
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialSystemRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", systemRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.namespace", systemRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.jobs", systemRow)
 
-	// Ensure zones for non-config tables in the system database can be
+	// Ensure zones for non-config descCollection in the system database can be
 	// configured.
 	sqlutils.SetZoneConfig(t, sqlDB, "TABLE system.jobs", yamlOverride)
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialSystemRow, partialJobsRow)
@@ -296,7 +296,7 @@ func TestInvalidSetShowZones(t *testing.T) {
 		},
 		{
 			"ALTER TABLE system.namespace CONFIGURE ZONE USING DEFAULT",
-			"cannot set zone configs for system config tables",
+			"cannot set zone configs for system config descCollection",
 		},
 		{
 			"ALTER RANGE foo CONFIGURE ZONE USING DEFAULT",

@@ -1241,7 +1241,7 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-func newSchemaInterface(tables *descs.TableCollection, vt VirtualTabler) *schemaInterface {
+func newSchemaInterface(tables *descs.Collection, vt VirtualTabler) *schemaInterface {
 	sc := &schemaInterface{
 		physical: &CachedPhysicalAccessor{
 			Accessor: catalogkv.UncachedPhysicalAccessor{},

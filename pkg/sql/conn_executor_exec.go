@@ -545,7 +545,7 @@ func (ex *connExecutor) execStmtInOpenState(
 // executor's table leases after the txn commits so that schema changes can
 // proceed.
 func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
-	tables := ex.extraTxnState.tables.GetTablesWithNewVersion()
+	tables := ex.extraTxnState.descCollection.GetTablesWithNewVersion()
 	if tables == nil {
 		return nil
 	}
@@ -569,7 +569,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// All this being said, we must retain our leases on tables which we have
 	// not modified to ensure that our writes to those other tables in this
 	// transaction remain valid.
-	ex.extraTxnState.tables.ReleaseTableLeases(ctx, tables)
+	ex.extraTxnState.descCollection.ReleaseTableLeases(ctx, tables)
 
 	// We know that so long as there are no leases on the updated tables as of
 	// the current provisional commit timestamp for this transaction then if this
@@ -604,7 +604,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	txn.CleanupOnError(ctx, retryErr)
 	// Release the rest of our leases on unmodified tables so we don't hold up
 	// schema changes there and potentially create a deadlock.
-	ex.extraTxnState.tables.ReleaseLeases(ctx)
+	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
@@ -648,7 +648,7 @@ func (ex *connExecutor) commitSQLTransaction(
 func (ex *connExecutor) commitSQLTransactionInternal(
 	ctx context.Context, stmt tree.Statement,
 ) error {
-	if err := validatePrimaryKeys(&ex.extraTxnState.tables); err != nil {
+	if err := validatePrimaryKeys(&ex.extraTxnState.descCollection); err != nil {
 		return err
 	}
 
@@ -663,8 +663,8 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 	// Now that we've committed, if we modified any table we need to make sure
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
-	if tables := ex.extraTxnState.tables.GetTablesWithNewVersion(); tables != nil {
-		ex.extraTxnState.tables.ReleaseLeases(ctx)
+	if tables := ex.extraTxnState.descCollection.GetTablesWithNewVersion(); tables != nil {
+		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 	}
 	return nil
 }
@@ -672,7 +672,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 // validatePrimaryKeys verifies that all tables modified in the transaction have
 // an enabled primary key after potentially undergoing DROP PRIMARY KEY, which
 // is required to be followed by ADD PRIMARY KEY.
-func validatePrimaryKeys(tc *descs.TableCollection) error {
+func validatePrimaryKeys(tc *descs.Collection) error {
 	modifiedTables := tc.GetTablesWithNewVersion()
 	for i := range modifiedTables {
 		table := tc.GetUncommittedTableByID(modifiedTables[i].ID).MutableTableDescriptor
