@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/lib/pq"
 )
 
@@ -256,9 +257,9 @@ func TestCopyRandom(t *testing.T) {
 			case time.Time:
 				var dt tree.NodeFormatter
 				if typs[i].Family() == types.TimeFamily {
-					dt = tree.MakeDTime(timeofday.FromTime(d))
+					dt = tree.MakeDTime(timeofday.FromTimeAllow2400(d))
 				} else if typs[i].Family() == types.TimeTZFamily {
-					dt = tree.NewDTimeTZFromTime(d)
+					dt = tree.NewDTimeTZ(timetz.MakeTimeTZFromTimeAllow2400(d))
 				} else {
 					dt = tree.MustMakeDTimestamp(d, time.Microsecond)
 				}
