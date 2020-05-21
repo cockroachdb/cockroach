@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -1242,17 +1243,11 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-func newSchemaInterface(tables *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
+func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
 	sc := &schemaInterface{
-		physical: &CachedPhysicalAccessor{
-			Accessor: catalogkv.UncachedPhysicalAccessor{},
-			tc:       tables,
-		},
+		physical: accessors.NewCachedAccessor(catalogkv.UncachedPhysicalAccessor{}, descsCol),
 	}
-	sc.logical = &LogicalSchemaAccessor{
-		Accessor: sc.physical,
-		vs:       vs,
-	}
+	sc.logical = accessors.NewLogicalAccessor(sc.physical, vs)
 	return sc
 }
 

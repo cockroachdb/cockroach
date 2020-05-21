@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package accessors
 
 import (
 	"context"
@@ -27,13 +27,24 @@ import (
 // interfaces defined in schema_accessors.go.
 //
 
+// NewLogicalAccessor constructs a new accessor given an underlying physical
+// accessor and VirtualSchemas.
+func NewLogicalAccessor(
+	physicalAccessor catalog.Accessor, vs catalog.VirtualSchemas,
+) *LogicalSchemaAccessor {
+	return &LogicalSchemaAccessor{
+		Accessor: physicalAccessor,
+		vs:       vs,
+	}
+}
+
 // LogicalSchemaAccessor extends an existing DatabaseLister with the
 // ability to list tables in a virtual schema.
 type LogicalSchemaAccessor struct {
 	catalog.Accessor
 	vs catalog.VirtualSchemas
 	// Used to avoid allocations.
-	tn TableName
+	tn tree.TableName
 }
 
 var _ catalog.Accessor = &LogicalSchemaAccessor{}
@@ -55,10 +66,10 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	dbDesc *DatabaseDescriptor,
+	dbDesc *sqlbase.DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
-) (TableNames, error) {
+) (tree.TableNames, error) {
 
 	if entry, ok := l.vs.GetVirtualSchema(scName); ok {
 		names := make(tree.TableNames, 0, entry.NumTables())
