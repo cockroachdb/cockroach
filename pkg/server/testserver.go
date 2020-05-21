@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,6 +69,10 @@ func makeTestConfig(st *cluster.Settings) Config {
 
 	// Configure test storage engine.
 	cfg.StorageEngine = storage.DefaultStorageEngine
+	// Resolve the storage engine to a specific type if it's the default value.
+	if cfg.StorageEngine == enginepb.EngineTypeDefault {
+		cfg.StorageEngine = enginepb.EngineTypeRocksDB
+	}
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
