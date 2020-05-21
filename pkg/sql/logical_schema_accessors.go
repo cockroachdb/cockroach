@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,7 +31,7 @@ import (
 // ability to list tables in a virtual schema.
 type LogicalSchemaAccessor struct {
 	catalog.Accessor
-	vt VirtualTabler
+	vs catalog.VirtualSchemas
 	// Used to avoid allocations.
 	tn TableName
 }
@@ -43,7 +42,7 @@ var _ catalog.Accessor = &LogicalSchemaAccessor{}
 func (l *LogicalSchemaAccessor) IsValidSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
-	if _, ok := l.vt.getVirtualSchemaEntry(scName); ok {
+	if _, ok := l.vs.GetVirtualSchema(scName); ok {
 		return true, sqlbase.InvalidID, nil
 	}
 
@@ -60,15 +59,17 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (TableNames, error) {
-	if entry, ok := l.vt.getVirtualSchemaEntry(scName); ok {
-		names := make(TableNames, len(entry.orderedDefNames))
-		for i, name := range entry.orderedDefNames {
-			names[i] = tree.MakeTableNameWithSchema(
-				tree.Name(dbDesc.Name), tree.Name(entry.desc.Name), tree.Name(name))
-			names[i].ExplicitCatalog = flags.ExplicitPrefix
-			names[i].ExplicitSchema = flags.ExplicitPrefix
-		}
 
+	if entry, ok := l.vs.GetVirtualSchema(scName); ok {
+		names := make(tree.TableNames, 0, entry.NumTables())
+		desc := entry.Desc().TableDesc()
+		entry.VisitTables(func(table catalog.VirtualObject) {
+			name := tree.MakeTableNameWithSchema(
+				tree.Name(dbDesc.Name), tree.Name(desc.Name), tree.Name(table.Desc().TableDesc().Name))
+			name.ExplicitCatalog = flags.ExplicitPrefix
+			name.ExplicitSchema = flags.ExplicitPrefix
+			names = append(names, name)
+		})
 		return names, nil
 	}
 
@@ -87,26 +88,35 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 ) (catalog.ObjectDescriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
+		// TODO(ajwerner): Change this function if we ever expose non-table objects
+		// underneath virtual schemas. For now we assume that the only objects
+		// ever handed back from GetObjectByName is
 		return (catalogkv.UncachedPhysicalAccessor{}).GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 	case tree.TableObject:
 		l.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
-		if scEntry, ok := l.vt.getVirtualSchemaEntry(l.tn.Schema()); ok {
-			tableName := l.tn.Table()
-			if t, ok := scEntry.defs[tableName]; ok {
-				if flags.RequireMutable {
-					return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil
+		if scEntry, ok := l.vs.GetVirtualSchema(schema); ok {
+			table, err := scEntry.GetObjectByName(object)
+			if err != nil {
+				return nil, err
+			}
+			if table == nil {
+				if flags.Required {
+					return nil, sqlbase.NewUndefinedRelationError(&l.tn)
 				}
-				return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
+				return nil, nil
 			}
-			if _, ok := scEntry.allTableNames[tableName]; ok {
-				return nil, unimplemented.Newf(l.tn.Schema()+"."+tableName,
-					"virtual schema table not implemented: %s.%s", l.tn.Schema(), tableName)
+			desc := table.Desc().TableDesc()
+			if desc == nil {
+				// This can only happen if we have a non-table object stored on a
+				// virtual schema. For now we'll return an assertion error.
+				return nil, errors.AssertionFailedf(
+					"non-table object of type %T returned from virtual schema for %v",
+					table.Desc(), l.tn)
 			}
-
-			if flags.Required {
-				return nil, sqlbase.NewUndefinedRelationError(&l.tn)
+			if flags.RequireMutable {
+				return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
 			}
-			return nil, nil
+			return sqlbase.NewImmutableTableDescriptor(*desc), nil
 		}
 
 		// Fallthrough.
