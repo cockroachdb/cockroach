@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -574,7 +575,7 @@ func (sc *SchemaChanger) validateConstraints(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func (sc *SchemaChanger) getTableVersion(
-	ctx context.Context, txn *kv.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
+	ctx context.Context, txn *kv.Txn, tc *descs.TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
 	if err != nil {
@@ -619,7 +620,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := NewTableCollection(sc.leaseMgr, sc.settings)
+				tc := descs.NewTableCollection(sc.leaseMgr, sc.settings)
 				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
@@ -816,7 +817,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := NewTableCollection(sc.leaseMgr, sc.settings)
+			tc := descs.NewTableCollection(sc.leaseMgr, sc.settings)
 			// Use a leased table descriptor for the backfill.
 			defer tc.ReleaseAll(ctx)
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
@@ -1178,7 +1179,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			tc := NewTableCollection(sc.leaseMgr, sc.settings)
+			tc := descs.NewTableCollection(sc.leaseMgr, sc.settings)
 			// pretend that the schema has been modified.
 			if err := tc.AddUncommittedTable(*desc); err != nil {
 				return err
@@ -1569,7 +1570,7 @@ func validateCheckInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := NewTableCollection(leaseMgr, evalCtx.Settings)
+		newTc := descs.NewTableCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
 			return err
@@ -1610,7 +1611,7 @@ func validateFkInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := NewTableCollection(leaseMgr, evalCtx.Settings)
+		newTc := descs.NewTableCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
 			return err
@@ -1645,7 +1646,7 @@ func validateFkInTxn(
 func columnBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	tc *TableCollection,
+	tc *descs.TableCollection,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
@@ -1677,7 +1678,7 @@ func columnBackfillInTxn(
 	// or else this table would be created in the ADD state.
 	for k := range fkTables {
 		t := tc.GetUncommittedTableByID(k)
-		if (UncommittedTable{}) == t || !t.IsNewTable() {
+		if (descs.UncommittedTable{}) == t || !t.IsNewTable() {
 			return errors.AssertionFailedf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}

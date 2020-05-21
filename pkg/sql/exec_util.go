@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -804,7 +805,7 @@ func (dc *databaseCacheHolder) WaitForCacheState(cond func(*database.Cache) bool
 }
 
 // databaseCacheHolder implements the DatabaseCacheSubscriber interface.
-var _ DatabaseCacheSubscriber = &databaseCacheHolder{}
+var _ descs.DatabaseCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.
@@ -1240,7 +1241,7 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
+func newSchemaInterface(tables *descs.TableCollection, vt VirtualTabler) *schemaInterface {
 	sc := &schemaInterface{
 		physical: &CachedPhysicalAccessor{
 			Accessor: catalogkv.UncachedPhysicalAccessor{},

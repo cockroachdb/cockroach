@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -61,7 +62,7 @@ type extendedEvalContext struct {
 	MemMetrics *MemoryMetrics
 
 	// Tables points to the Session's table collection (& cache).
-	Tables *TableCollection
+	Tables *descs.TableCollection
 
 	ExecCfg *ExecutorConfig
 
@@ -247,7 +248,7 @@ func newInternalPlanner(
 	// The table collection used by the internal planner does not rely on the
 	// DatabaseCache and there are no subscribers to the DatabaseCache, so we can
 	// leave it uninitialized.
-	tables := NewTableCollection(execCfg.LeaseManager, execCfg.Settings)
+	tables := descs.NewTableCollection(execCfg.LeaseManager, execCfg.Settings)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{
@@ -326,7 +327,7 @@ func internalExtendedEvalCtx(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
 	dataMutator *sessionDataMutator,
-	tables *TableCollection,
+	tables *descs.TableCollection,
 	txn *kv.Txn,
 	txnTimestamp time.Time,
 	stmtTimestamp time.Time,
@@ -391,7 +392,7 @@ func (p *planner) EvalContext() *tree.EvalContext {
 	return &p.extendedEvalCtx.EvalContext
 }
 
-func (p *planner) Tables() *TableCollection {
+func (p *planner) Tables() *descs.TableCollection {
 	return p.extendedEvalCtx.Tables
 }
 
