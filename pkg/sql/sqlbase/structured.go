@@ -3541,6 +3541,29 @@ func (desc *DatabaseDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
+// DatabaseDesc implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return desc
+}
+
+// SchemaDesc implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) SchemaDesc() *SchemaDescriptor {
+	return nil
+}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) TableDesc() *TableDescriptor {
+	return nil
+}
+
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
+	return nil
+}
+
+// NameResolutionResult implements the ObjectDescriptor interface.
+func (desc *DatabaseDescriptor) NameResolutionResult() {}
+
 // Validate validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
@@ -4080,6 +4103,16 @@ func (desc *ImmutableTableDescriptor) DeleteOnlyIndexes() []IndexDescriptor {
 	return desc.publicAndNonPublicIndexes[len(desc.Indexes)+desc.writeOnlyIndexCount:]
 }
 
+// DatabaseDesc implements the ObjectDescriptor interface.
+func (desc *MutableTableDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return nil
+}
+
+// SchemaDesc implements the ObjectDescriptor interface.
+func (desc *MutableTableDescriptor) SchemaDesc() *SchemaDescriptor {
+	return nil
+}
+
 // TableDesc implements the ObjectDescriptor interface.
 func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
@@ -4101,6 +4134,16 @@ func (desc *MutableTableDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
 
+// DatabaseDesc implements the ObjectDescriptor interface.
+func (desc *ImmutableTableDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return nil
+}
+
+// SchemaDesc implements the ObjectDescriptor interface.
+func (desc *ImmutableTableDescriptor) SchemaDesc() *SchemaDescriptor {
+	return nil
+}
+
 // TableDesc implements the ObjectDescriptor interface.
 func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
@@ -4108,6 +4151,16 @@ func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 
 // TypeDesc implements the ObjectDescriptor interface.
 func (desc *ImmutableTableDescriptor) TypeDesc() *TypeDescriptor {
+	return nil
+}
+
+// DatabaseDesc implements the ObjectDescriptor interface.
+func (desc *TypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return nil
+}
+
+// SchemaDesc implements the ObjectDescriptor interface.
+func (desc *TypeDescriptor) SchemaDesc() *SchemaDescriptor {
 	return nil
 }
 
@@ -4196,6 +4249,29 @@ func (desc *SchemaDescriptor) TypeName() string {
 func (desc *SchemaDescriptor) SetName(name string) {
 	desc.Name = name
 }
+
+// DatabaseDesc implements the ObjectDescriptor interface.
+func (desc *SchemaDescriptor) DatabaseDesc() *DatabaseDescriptor {
+	return nil
+}
+
+// SchemaDesc implements the ObjectDescriptor interface.
+func (desc *SchemaDescriptor) SchemaDesc() *SchemaDescriptor {
+	return desc
+}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *SchemaDescriptor) TableDesc() *TableDescriptor {
+	return nil
+}
+
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *SchemaDescriptor) TypeDesc() *TypeDescriptor {
+	return nil
+}
+
+// NameResolutionResult implements the ObjectDescriptor interface.
+func (desc *SchemaDescriptor) NameResolutionResult() {}
 
 // DatabaseKey implements DescriptorKey.
 type DatabaseKey struct {
