@@ -128,7 +128,7 @@ func doDrain(
 		hardError, remainingWork, err = doDrainNoTimeout(ctx, c)
 		return err
 	})
-	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
 		log.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout")
 	}
@@ -160,7 +160,7 @@ func doDrainNoTimeout(
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "\n") // finish the line started above.
-			return true, remainingWork, errors.Wrap(err, "error sending drain request")
+			return !grpcutil.IsTimeout(err), remainingWork, errors.Wrap(err, "error sending drain request")
 		}
 		for {
 			resp, err := stream.Recv()
