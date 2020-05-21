@@ -3135,9 +3135,7 @@ func TestCanSendToFollower(t *testing.T) {
 		args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
 		sentTo = r[0]
-		reply := &roachpb.BatchResponse{}
-		reply.Error = roachpb.NewErrorf("boom")
-		return reply, nil
+		return args.CreateReply(), nil
 	}
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -3195,9 +3193,8 @@ func TestCanSendToFollower(t *testing.T) {
 			ds.clusterID = &base.ClusterIDContainer{}
 			// set 2 to be the leaseholder
 			ds.LeaseHolderCache().Update(context.Background(), 2 /* rangeID */, 2 /* storeID */)
-			if _, pErr := client.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
-				t.Fatalf("%d: unexpected error: %v", i, pErr)
-			}
+			_, pErr := client.SendWrappedWith(context.Background(), ds, c.header, c.msg)
+			require.Nil(t, pErr)
 			if sentTo.NodeID != c.expectedNode {
 				t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
 			}
