@@ -141,7 +141,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	leftSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	tc := &joinTestCase{
-		joinType:     sqlbase.JoinType_INNER,
+		joinType:     sqlbase.InnerJoin,
 		leftTypes:    sourceTypes,
 		leftOutCols:  []uint32{0},
 		leftEqCols:   []uint32{0},
@@ -240,9 +240,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					name := fmt.Sprintf(
 						"nulls=%t/fullOuter=%t/batches=%d/spillForced=%t",
 						hasNulls, fullOuter, nBatches, spillForced)
-					joinType := sqlbase.JoinType_INNER
+					joinType := sqlbase.InnerJoin
 					if fullOuter {
-						joinType = sqlbase.JoinType_FULL_OUTER
+						joinType = sqlbase.FullOuterJoin
 					}
 					tc := &joinTestCase{
 						joinType:     joinType,

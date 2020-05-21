@@ -142,14 +142,13 @@ CREATE TABLE xyz (
   z TEXT
 )
 
-# Check that we fallback gracefully to row-by-row engine on a join type that
-# we don't support.
+# Check that we fallback gracefully to row-by-row engine on a join type with
+# ON expression that we don't support.
 query T
-EXPLAIN (VEC) (SELECT y FROM xyz) EXCEPT ALL (SELECT x AS y FROM xyz) ORDER BY y
+EXPLAIN (VEC) SELECT * FROM xyz AS t1 FULL OUTER JOIN xyz AS t2 ON t1.x = t2.x AND t1.x + t2.x = 0
 ----
 │
 └ Node 1
-  └ *colexec.sortOp
-    └ *rowexec.hashJoiner
-      ├ *colexec.colBatchScan
-      └ *colexec.colBatchScan
+  └ *rowexec.hashJoiner
+    ├ *colexec.colBatchScan
+    └ *colexec.colBatchScan

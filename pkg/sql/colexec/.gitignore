@@ -8,13 +8,16 @@ count_agg.eg.go
 distinct.eg.go
 hashjoiner.eg.go
 hashtable_distinct.eg.go
-hashtable_full.eg.go
+hashtable_full_default.eg.go
+hashtable_full_deleting.eg.go
 hash_utils.eg.go
 hash_aggregator.eg.go
 like_ops.eg.go
 mergejoinbase.eg.go
+mergejoiner_exceptall.eg.go
 mergejoiner_fullouter.eg.go
 mergejoiner_inner.eg.go
+mergejoiner_intersectall.eg.go
 mergejoiner_leftanti.eg.go
 mergejoiner_leftouter.eg.go
 mergejoiner_leftsemi.eg.go

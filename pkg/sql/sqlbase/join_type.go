@@ -54,3 +54,14 @@ func JoinTypeFromAstString(joinStr string) JoinType {
 func (j JoinType) IsSetOpJoin() bool {
 	return j == IntersectAllJoin || j == ExceptAllJoin
 }
+
+// ShouldIncludeRightColsInOutput returns true if this join should include
+// the columns from the right side into the output.
+func (j JoinType) ShouldIncludeRightColsInOutput() bool {
+	switch j {
+	case LeftSemiJoin, LeftAntiJoin, IntersectAllJoin, ExceptAllJoin:
+		return false
+	default:
+		return true
+	}
+}
