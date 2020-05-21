@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -307,7 +306,7 @@ func (p *planner) getQualifiedTableName(
 		return "", err
 	}
 	schemaID := desc.GetParentSchemaID()
-	schemaName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID, schemaID)
+	schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID, schemaID)
 	if err != nil {
 		return "", err
 	}
