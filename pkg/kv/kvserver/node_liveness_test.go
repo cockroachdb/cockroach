@@ -656,7 +656,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for i, sp := range mtc.storePools {
 				curNodeID := mtc.gossips[i].NodeID.Get()
-				sl, alive, _ := sp.GetStoreList(0)
+				sl, alive, _ := sp.GetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
 						"expected %d live stores but got %d from node %d",
@@ -690,7 +690,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for i, sp := range mtc.storePools {
 				curNodeID := mtc.gossips[i].NodeID.Get()
-				sl, alive, _ := sp.GetStoreList(0)
+				sl, alive, _ := sp.GetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
 						"expected %d live stores but got %d from node %d",

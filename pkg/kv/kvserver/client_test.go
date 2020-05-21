@@ -515,7 +515,7 @@ func (m *multiTestContext) initGossipNetwork() {
 	m.gossipStores()
 	testutils.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
-			if _, alive, _ := m.storePools[i].GetStoreList(roachpb.RangeID(0)); alive != len(m.stores) {
+			if _, alive, _ := m.storePools[i].GetStoreList(); alive != len(m.stores) {
 				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
 					m.stores[i].Ident.NodeID, alive, len(m.stores))
 			}
