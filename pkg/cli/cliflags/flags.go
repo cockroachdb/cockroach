@@ -915,11 +915,6 @@ If specified, print the system config contents. Beware that the output will be
 long and not particularly human-readable.`,
 	}
 
-	Decommission = FlagInfo{
-		Name:        "decommission",
-		Description: `Deprecated: use 'node decommission' instead.`,
-	}
-
 	DrainWait = FlagInfo{
 		Name: "drain-wait",
 		Description: `
