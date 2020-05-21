@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -66,19 +65,6 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 		return err
 	}
 	defer finish()
-
-	// If --decommission was passed, perform the decommission as first
-	// step. (Note that this flag is deprecated. It will be removed.)
-	if quitCtx.serverDecommission {
-		var myself []roachpb.NodeID // will remain empty, which means target yourself
-		if err := runDecommissionNodeImpl(ctx, c, nodeDecommissionWaitAll, myself); err != nil {
-			log.Warningf(ctx, "%v", err)
-			if server.IsWaitingForInit(err) {
-				err = errors.New("node cannot be decommissioned before it has been initialized")
-			}
-			return err
-		}
-	}
 
 	return drainAndShutdown(ctx, c)
 }

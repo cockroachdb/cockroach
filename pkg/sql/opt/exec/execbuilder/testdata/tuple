@@ -123,7 +123,7 @@ query TTTTT
 EXPLAIN (VERBOSE, TYPES) SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
 ----
 ·          distributed  false                                                                               ·                                        ·
-·          vectorized   false                                                                               ·                                        ·
+·          vectorized   true                                                                                ·                                        ·
 render     ·            ·                                                                                   (x tuple{int AS a, int AS b, int AS c})  ·
  │         render 0     ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]  ·                                        ·
  └── scan  ·            ·                                                                                   (v int)                                  ·
@@ -134,7 +134,7 @@ query TTTTT
 EXPLAIN (VERBOSE, TYPES) SELECT (x).a, (x).b, (x).c FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
 ----
 ·               distributed  false                                                                               ·                                        ·
-·               vectorized   false                                                                               ·                                        ·
+·               vectorized   true                                                                                ·                                        ·
 render          ·            ·                                                                                   (a int, b int, c int)                    ·
  │              render 0     (((x)[tuple{int AS a, int AS b, int AS c}]).a)[int]                                 ·                                        ·
  │              render 1     (((x)[tuple{int AS a, int AS b, int AS c}]).b)[int]                                 ·                                        ·

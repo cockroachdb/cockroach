@@ -157,6 +157,29 @@ func TestDistinct(t *testing.T) {
 				{0, "11"},
 			},
 		},
+		{
+			distinctCols: []uint32{0},
+			typs:         []*types.T{types.Jsonb, types.String},
+			tuples: tuples{
+				{`{"id": 1}`, "a"},
+				{`{"id": 2}`, "b"},
+				{`{"id": 3}`, "c"},
+				{`{"id": 1}`, "1"},
+				{`{"id": null}`, "d"},
+				{`{"id": 2}`, "2"},
+				{`{"id": 5}`, "e"},
+				{`{"id": 6}`, "f"},
+				{`{"id": 3}`, "3"},
+			},
+			expected: tuples{
+				{`{"id": 1}`, "a"},
+				{`{"id": 2}`, "b"},
+				{`{"id": 3}`, "c"},
+				{`{"id": null}`, "d"},
+				{`{"id": 5}`, "e"},
+				{`{"id": 6}`, "f"},
+			},
+		},
 	}
 
 	for _, tc := range tcs {

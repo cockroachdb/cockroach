@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -31,8 +32,9 @@ import (
 //
 // In the future this can also be used to pool coldata.Vec allocations.
 type Allocator struct {
-	ctx context.Context
-	acc *mon.BoundAccount
+	ctx     context.Context
+	acc     *mon.BoundAccount
+	factory coldata.ColumnFactory
 }
 
 func selVectorSize(capacity int) int64 {
@@ -77,8 +79,14 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 }
 
 // NewAllocator constructs a new Allocator instance.
-func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
-	return &Allocator{ctx: ctx, acc: acc}
+func NewAllocator(
+	ctx context.Context, acc *mon.BoundAccount, factory coldata.ColumnFactory,
+) *Allocator {
+	return &Allocator{
+		ctx:     ctx,
+		acc:     acc,
+		factory: factory,
+	}
 }
 
 // NewMemBatch allocates a new in-memory coldata.Batch.
@@ -93,7 +101,7 @@ func (a *Allocator) NewMemBatchWithSize(typs []*types.T, size int) coldata.Batch
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemBatchWithSize(typs, size)
+	return coldata.NewMemBatchWithSize(typs, size, a.factory)
 }
 
 // NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
@@ -158,7 +166,7 @@ func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemColumn(t, n)
+	return coldata.NewMemColumn(t, n, a.factory)
 }
 
 // MaybeAppendColumn might append a newly allocated coldata.Vec of the given
@@ -327,10 +335,11 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			acc += SizeOfTime
 		case types.IntervalFamily:
 			acc += SizeOfDuration
-		case types.UnknownFamily:
-			// Placeholder coldata.Vecs of unknown types are allowed.
+		case typeconv.DatumVecCanonicalTypeFamily:
+			size, _ := tree.DatumTypeSize(t)
+			acc += int(size)
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
 	return acc * batchLength

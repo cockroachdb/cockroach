@@ -109,7 +109,7 @@ EXPLAIN (VERBOSE) SELECT x, y, z, information_schema._pg_expandarray(ARRAY[x, y,
   FROM xy NATURAL JOIN xz WHERE y < z ORDER BY 1, 2, 3
 ----
 ·                               distributed         false                                                  ·                                                ·
-·                               vectorized          false                                                  ·                                                ·
+·                               vectorized          true                                                   ·                                                ·
 render                          ·                   ·                                                      (x, y, z, "information_schema._pg_expandarray")  ·
  │                              render 0            x                                                      ·                                                ·
  │                              render 1            y                                                      ·                                                ·
@@ -230,7 +230,7 @@ FROM
   groups g
 ----
 ·                                   distributed         false                     ·                                             ·
-·                                   vectorized          false                     ·                                             ·
+·                                   vectorized          true                      ·                                             ·
 render                              ·                   ·                         (group_name, jsonb_array_elements)            ·
  │                                  render 0            data->>'name'             ·                                             ·
  │                                  render 1            jsonb_array_elements      ·                                             ·
@@ -293,7 +293,7 @@ ORDER BY a0.created_at
   OFFSET 0;
 ----
 ·                                     distributed  false                      ·                                                                                        ·
-·                                     vectorized   false                      ·                                                                                        ·
+·                                     vectorized   true                       ·                                                                                        ·
 limit                                 ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
  │                                    count        10                         ·                                                                                        ·
  └── sort                             ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at

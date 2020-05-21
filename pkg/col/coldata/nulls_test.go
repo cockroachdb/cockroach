@@ -224,7 +224,7 @@ func TestSetAndUnsetNulls(t *testing.T) {
 func TestNullsSet(t *testing.T) {
 	args := SliceArgs{
 		// Neither type nor the length here matter.
-		Src: NewMemColumn(types.Bool, 0),
+		Src: NewMemColumn(types.Bool, 0, StandardColumnFactory),
 	}
 	for _, withSel := range []bool{false, true} {
 		t.Run(fmt.Sprintf("WithSel=%t", withSel), func(t *testing.T) {
