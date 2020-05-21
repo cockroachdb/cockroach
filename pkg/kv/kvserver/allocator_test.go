@@ -391,7 +391,6 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	result, _, err := a.AllocateTarget(
 		context.Background(),
 		&simpleZoneConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
 	if err != nil {
@@ -410,7 +409,6 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	result, _, err := a.AllocateTarget(
 		context.Background(),
 		&simpleZoneConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
 	if result != nil {
@@ -431,7 +429,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	result1, _, err := a.AllocateTarget(
 		ctx,
 		&multiDCConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
 	if err != nil {
@@ -440,7 +437,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	result2, _, err := a.AllocateTarget(
 		ctx,
 		&multiDCConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{{
 			NodeID:  result1.Node.NodeID,
 			StoreID: result1.StoreID,
@@ -458,7 +454,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	result3, _, err := a.AllocateTarget(
 		ctx,
 		&multiDCConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{
 			{
 				NodeID:  result1.Node.NodeID,
@@ -494,7 +489,6 @@ func TestAllocatorExistingReplica(t *testing.T) {
 				},
 			},
 		},
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{
 			{
 				NodeID:  2,
@@ -597,7 +591,6 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 			result, _, err := a.AllocateTarget(
 				context.Background(),
 				zonepb.EmptyCompleteZoneConfig(),
-				firstRangeID,
 				tc.existing,
 			)
 			if e, a := tc.expectTarget, result != nil; e != a {
@@ -612,7 +605,6 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				context.Background(),
 				zonepb.EmptyCompleteZoneConfig(),
 				nil, /* raftStatus */
-				firstRangeID,
 				tc.existing,
 				rangeUsageInfo,
 				storeFilterThrottled,
@@ -686,7 +678,6 @@ func TestAllocatorRebalance(t *testing.T) {
 			ctx,
 			zonepb.EmptyCompleteZoneConfig(),
 			nil,
-			firstRangeID,
 			[]roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}},
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -708,7 +699,7 @@ func TestAllocatorRebalance(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+		sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 		result := shouldRebalance(ctx, desc, sl, a.scorerOptions())
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
@@ -837,7 +828,6 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			context.Background(),
 			zonepb.EmptyCompleteZoneConfig(),
 			status,
-			firstRangeID,
 			replicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -858,7 +848,6 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			context.Background(),
 			zonepb.EmptyCompleteZoneConfig(),
 			status,
-			firstRangeID,
 			replicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -876,7 +865,6 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			context.Background(),
 			zonepb.EmptyCompleteZoneConfig(),
 			status,
-			firstRangeID,
 			replicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -956,7 +944,6 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				ctx,
 				zonepb.EmptyCompleteZoneConfig(),
 				nil,
-				firstRangeID,
 				c.existing,
 				rangeUsageInfo,
 				storeFilterThrottled)
@@ -1084,7 +1071,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 
 			// Ensure gossiped store descriptor changes have propagated.
 			testutils.SucceedsSoon(t, func() error {
-				sl, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+				sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 				for j, s := range sl.stores {
 					if a, e := s.Capacity.RangeCount, cluster[j].rangeCount; a != e {
 						return errors.Errorf("range count for %d = %d != expected %d", j, a, e)
@@ -1092,7 +1079,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				}
 				return nil
 			})
-			sl, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+			sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 
 			// Verify shouldRebalance returns the expected value.
 			for j, store := range stores {
@@ -1151,7 +1138,6 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			ctx,
 			zonepb.EmptyCompleteZoneConfig(),
 			nil,
-			firstRangeID,
 			[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -1167,7 +1153,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+		sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 		result := shouldRebalance(ctx, desc, sl, a.scorerOptions())
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -1225,7 +1211,6 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
-				0,
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
@@ -1301,7 +1286,6 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
-				0,
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
@@ -1435,7 +1419,6 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			ctx,
 			zonepb.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
-			firstRangeID,
 			tc.existing,
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -1506,7 +1489,6 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			ctx,
 			zonepb.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
-			firstRangeID,
 			tc.existing,
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -1573,7 +1555,6 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				existing,
 				c.leaseholder,
-				0,
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
@@ -1630,7 +1611,6 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
-				0,
 				nil, /* replicaStats */
 			)
 			if c.expected != result {
@@ -1692,7 +1672,6 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
-				0,
 				nil, /* replicaStats */
 			)
 			if c.expected != result {
@@ -1822,7 +1801,6 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				zone,
 				c.existing,
 				c.leaseholder,
-				0,
 				nil, /* replicaStats */
 			)
 			expectTransfer := c.expectedCheckTrue != 0
@@ -1834,7 +1812,6 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				zone,
 				c.existing,
 				c.leaseholder,
-				0,
 				nil,   /* replicaStats */
 				true,  /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -1848,7 +1825,6 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				zone,
 				c.existing,
 				c.leaseholder,
-				0,
 				nil,   /* replicaStats */
 				false, /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -1931,7 +1907,6 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 				zone,
 				c.existing,
 				c.leaseholder,
-				0,
 				nil,   /* replicaStats */
 				true,  /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -1945,7 +1920,6 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 				zone,
 				c.existing,
 				c.leaseholder,
-				0,
 				nil,   /* replicaStats */
 				false, /* checkTransferLeaseSource */
 				true,  /* checkCandidateFullness */
@@ -2091,7 +2065,6 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 		targetStore, details, err := a.AllocateTarget(
 			context.Background(),
 			zonepb.EmptyCompleteZoneConfig(),
-			firstRangeID,
 			existingRepls,
 		)
 		if err != nil {
@@ -2214,7 +2187,6 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			context.Background(),
 			zonepb.EmptyCompleteZoneConfig(),
 			nil,
-			firstRangeID,
 			existingRepls,
 			rangeUsageInfo,
 			storeFilterThrottled,
@@ -2358,7 +2330,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(multiDiversityDCStores, t)
-	sl, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+	sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 
 	// Given a set of existing replicas for a range, rank which of the remaining
 	// stores from multiDiversityDCStores would be the best addition to the range
@@ -2773,7 +2745,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 	}
 
 	for testIdx, tc := range testCases {
-		sl, _, _ := a.storePool.getStoreListFromIDs(tc.existing, roachpb.RangeID(0), storeFilterNone)
+		sl, _, _ := a.storePool.getStoreListFromIDs(tc.existing, storeFilterNone)
 		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
 		for i, storeID := range tc.existing {
 			existingRepls[i] = roachpb.ReplicaDescriptor{
@@ -2819,7 +2791,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(multiDiversityDCStores, t)
-	sl, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+	sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 
 	// Given a set of existing replicas for a range, rank which of the remaining
 	// stores would be best to remove if we had to remove one purely on the basis
@@ -3609,7 +3581,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			// Also verify that RebalanceTarget picks out one of the best options as
 			// the final rebalance choice.
 			target, _, details, ok := a.RebalanceTarget(
-				context.Background(), zone, nil, firstRangeID, existingRepls, rangeUsageInfo, storeFilterThrottled)
+				context.Background(), zone, nil, existingRepls, rangeUsageInfo, storeFilterThrottled)
 			var found bool
 			if !ok && len(tc.validTargets) == 0 {
 				found = true
@@ -3786,7 +3758,6 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				existing,
 				c.leaseholder,
-				0,
 				c.stats,
 				c.check,
 				true,  /* checkCandidateFullness */
@@ -5178,7 +5149,6 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, _, err := a.AllocateTarget(
 		ctx,
 		&simpleZoneConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
 	if !errors.HasInterface(err, (*purgatoryError)(nil)) {
@@ -5190,7 +5160,6 @@ func TestAllocatorThrottled(t *testing.T) {
 	result, _, err := a.AllocateTarget(
 		ctx,
 		&simpleZoneConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
 	if err != nil {
@@ -5212,7 +5181,6 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, _, err = a.AllocateTarget(
 		ctx,
 		&simpleZoneConfig,
-		firstRangeID,
 		[]roachpb.ReplicaDescriptor{},
 	)
 	if errors.HasInterface(err, (*purgatoryError)(nil)) {
@@ -5533,7 +5501,6 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				ctx,
 				&zonepb.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []zonepb.ConstraintsConjunction{constraints}},
 				nil,
-				firstRangeID,
 				existingReplicas,
 				rangeUsageInfo,
 				storeFilterThrottled,
@@ -5699,7 +5666,6 @@ func TestAllocatorFullDisks(t *testing.T) {
 						ctx,
 						zonepb.EmptyCompleteZoneConfig(),
 						nil,
-						firstRangeID,
 						[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 						rangeUsageInfo,
 						storeFilterThrottled,
@@ -5828,7 +5794,6 @@ func Example_rebalancing() {
 				context.Background(),
 				zonepb.EmptyCompleteZoneConfig(),
 				nil,
-				firstRangeID,
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 				rangeUsageInfo,
 				storeFilterThrottled,

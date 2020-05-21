@@ -355,18 +355,15 @@ func (a *Allocator) ComputeAction(
 		return AllocatorRemoveLearner, removeLearnerReplicaPriority
 	}
 	// computeAction expects to operate only on voters.
-	return a.computeAction(ctx, zone, desc.RangeID, desc.Replicas().Voters())
+	return a.computeAction(ctx, zone, desc.Replicas().Voters())
 }
 
 func (a *Allocator) computeAction(
-	ctx context.Context,
-	zone *zonepb.ZoneConfig,
-	rangeID roachpb.RangeID,
-	voterReplicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, zone *zonepb.ZoneConfig, voterReplicas []roachpb.ReplicaDescriptor,
 ) (AllocatorAction, float64) {
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	have := len(voterReplicas)
-	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeID, voterReplicas)
+	decommissioningReplicas := a.storePool.decommissioningReplicas(voterReplicas)
 	clusterNodes := a.storePool.ClusterNodeCount()
 	need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
 	desiredQuorum := computeQuorum(need)
@@ -383,7 +380,7 @@ func (a *Allocator) computeAction(
 		return action, priority
 	}
 
-	liveVoterReplicas, deadVoterReplicas := a.storePool.liveAndDeadReplicas(rangeID, voterReplicas)
+	liveVoterReplicas, deadVoterReplicas := a.storePool.liveAndDeadReplicas(voterReplicas)
 
 	if len(liveVoterReplicas) < quorum {
 		// Do not take any replacement/removal action if we do not have a quorum of live
@@ -469,12 +466,9 @@ type decisionDetails struct {
 //
 // TODO(tbg): AllocateReplacement?
 func (a *Allocator) AllocateTarget(
-	ctx context.Context,
-	zone *zonepb.ZoneConfig,
-	rangeID roachpb.RangeID,
-	existingReplicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, zone *zonepb.ZoneConfig, existingReplicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.StoreDescriptor, string, error) {
-	sl, aliveStoreCount, throttled := a.storePool.getStoreList(rangeID, storeFilterThrottled)
+	sl, aliveStoreCount, throttled := a.storePool.getStoreList(storeFilterThrottled)
 
 	target, details := a.allocateTargetFromList(
 		ctx, sl, zone, existingReplicas, a.scorerOptions())
@@ -566,7 +560,7 @@ func (a Allocator) RemoveTarget(
 	for i, exist := range candidates {
 		existingStoreIDs[i] = exist.StoreID
 	}
-	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
+	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, storeFilterNone)
 
 	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
@@ -625,12 +619,11 @@ func (a Allocator) RebalanceTarget(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
 	raftStatus *raft.Status,
-	rangeID roachpb.RangeID,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
 ) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
-	sl, _, _ := a.storePool.getStoreList(rangeID, filter)
+	sl, _, _ := a.storePool.getStoreList(filter)
 
 	zero := roachpb.ReplicationTarget{}
 
@@ -778,13 +771,12 @@ func (a *Allocator) TransferLeaseTarget(
 	zone *zonepb.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
-	rangeID roachpb.RangeID,
 	stats *replicaStats,
 	checkTransferLeaseSource bool,
 	checkCandidateFullness bool,
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
 	sl = sl.filter(zone.Constraints)
 
 	// Filter stores that are on nodes containing existing replicas, but leave
@@ -849,7 +841,7 @@ func (a *Allocator) TransferLeaseTarget(
 	}
 
 	// Only consider live, non-draining replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(rangeID, existing)
+	existing, _ = a.storePool.liveAndDeadReplicas(existing)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseStoreID) {
@@ -926,7 +918,6 @@ func (a *Allocator) ShouldTransferLease(
 	zone *zonepb.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
-	rangeID roachpb.RangeID,
 	stats *replicaStats,
 ) bool {
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
@@ -949,12 +940,12 @@ func (a *Allocator) ShouldTransferLease(
 		}
 	}
 
-	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
 	sl = sl.filter(zone.Constraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	// Only consider live, non-draining replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(rangeID, existing)
+	existing, _ = a.storePool.liveAndDeadReplicas(existing)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == source.StoreID) {
