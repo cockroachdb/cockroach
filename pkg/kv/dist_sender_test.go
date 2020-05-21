@@ -3188,18 +3188,20 @@ func TestCanSendToFollower(t *testing.T) {
 			2,
 		},
 	} {
-		sentTo = ReplicaInfo{}
-		canSend = c.canSendToFollower
-		ds := NewDistSender(cfg, g)
-		ds.clusterID = &base.ClusterIDContainer{}
-		// set 2 to be the leaseholder
-		ds.LeaseHolderCache().Update(context.Background(), 2 /* rangeID */, 2 /* storeID */)
-		if _, pErr := client.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
-			t.Fatalf("%d: unexpected error: %v", i, pErr)
-		}
-		if sentTo.NodeID != c.expectedNode {
-			t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
-		}
+		t.Run("", func(t *testing.T) {
+			sentTo = ReplicaInfo{}
+			canSend = c.canSendToFollower
+			ds := NewDistSender(cfg, g)
+			ds.clusterID = &base.ClusterIDContainer{}
+			// set 2 to be the leaseholder
+			ds.LeaseHolderCache().Update(context.Background(), 2 /* rangeID */, 2 /* storeID */)
+			if _, pErr := client.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
+				t.Fatalf("%d: unexpected error: %v", i, pErr)
+			}
+			if sentTo.NodeID != c.expectedNode {
+				t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
+			}
+		})
 	}
 }
 
