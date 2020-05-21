@@ -134,7 +134,6 @@ func initCLIDefaults() {
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib"
 
-	quitCtx.serverDecommission = false
 	quitCtx.drainWait = 10 * time.Minute
 
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
@@ -353,9 +352,6 @@ var startCtx struct {
 // `node drain` commands.
 // Defaults set by InitCLIDefaults() above.
 var quitCtx struct {
-	// serverDecommission indicates the server should be decommissioned
-	// before it is drained.
-	serverDecommission bool
 	// drainWait is the amount of time to wait for the server
 	// to drain. Set to 0 to disable a timeout (let the server decide).
 	drainWait time.Duration
