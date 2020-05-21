@@ -341,10 +341,6 @@ type cmdRes struct {
 // Also note that if the command exits with an error code, its output is also
 // included in cmdRes.err.
 func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
-	// NB: It is important that this waitgroup Waits after cancel() below.
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
@@ -360,8 +356,9 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 	// context cancellation as Run() will wait for any subprocesses to finish.
 	// For example, "roachprod run x -- sleep 20" would wait 20 seconds, even
 	// if the context got canceled right away. Work around the problem by passing
-	// pipes to the command on which we set aggressive deadlines once the context
-	// expires.
+	// pipes to the command which we close after we know the command is done.
+	var closePipes func()
+	var wg sync.WaitGroup
 	{
 		rOut, wOut, err := os.Pipe()
 		if err != nil {
@@ -377,8 +374,15 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 		defer rErr.Close()
 		defer wErr.Close()
 
+		closePipes = func() {
+			// Closes the writing end of the pipes, meaning the goroutines we start
+			// below consume everything gracefully when this is called.
+			wOut.Close()
+			wErr.Close()
+		}
+
 		cmd.Stdout = wOut
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer wg.Done()
 			_, _ = io.Copy(l.stdout, io.TeeReader(rOut, debugStdoutBuffer))
@@ -398,18 +402,17 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 		}
 
 		go func() {
-			defer wg.Done()
 			<-ctx.Done()
-			// NB: setting a more aggressive deadline here makes TestClusterMonitor flaky.
-			now := timeutil.Now().Add(3 * time.Second)
-			_ = rOut.SetDeadline(now)
-			_ = wOut.SetDeadline(now)
-			_ = rErr.SetDeadline(now)
-			_ = wErr.SetDeadline(now)
+			if err := ctx.Err(); err != nil {
+				closePipes()
+			}
 		}()
 	}
 
 	err := cmd.Run()
+	closePipes() // lets copier goroutines finish gracefully
+	wg.Wait()
+
 	if err != nil {
 		// Context errors opaquely appear as "signal killed" when manifested.
 		// We surface this error explicitly.
@@ -417,10 +420,6 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 			err = errors.CombineErrors(ctx.Err(), err)
 		}
 
-		// Synchronize access to ring buffers before using them to create an
-		// error to return.
-		cancel()
-		wg.Wait()
 		if err != nil {
 			err = &withCommandDetails{
 				cause:  err,
@@ -430,6 +429,7 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 			}
 		}
 	}
+
 	return cmdRes{
 		err:    err,
 		stdout: debugStdoutBuffer.String(),
