@@ -3120,6 +3120,14 @@ func TestCanSendToFollower(t *testing.T) {
 			if sentTo.NodeID != c.expectedNode {
 				t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
 			}
+			// Check that the leaseholder cache doesn't change, even if the request is
+			// served by a follower. This tests a regression for a bug we've had where
+			// we were always updating the leaseholder cache on successful RPCs
+			// because we erroneously assumed that a success must come from the
+			// leaseholder.
+			storeID, ok := ds.LeaseHolderCache().Lookup(context.Background(), 2 /* rangeID */)
+			require.True(t, ok)
+			require.Equal(t, roachpb.StoreID(2), storeID)
 		})
 	}
 }
