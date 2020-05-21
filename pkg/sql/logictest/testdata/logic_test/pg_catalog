@@ -231,6 +231,21 @@ oid         nspname             nspowner  nspacl
 1841002695  pg_extension        NULL      NULL
 3426283741  public              NULL      NULL
 
+user testuser
+
+# Should be globally visible
+query OTOT colnames
+SELECT * FROM pg_catalog.pg_namespace
+----
+oid         nspname             nspowner  nspacl
+3604332469  crdb_internal       NULL      NULL
+3672231114  information_schema  NULL      NULL
+2508829085  pg_catalog          NULL      NULL
+1841002695  pg_extension        NULL      NULL
+3426283741  public              NULL      NULL
+
+user root
+
 ## pg_catalog.pg_database
 
 query OTOITTBB colnames

@@ -1869,7 +1869,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db *sqlbase.DatabaseDescriptor) error {
 				return forEachSchemaName(ctx, p, db, func(s string) error {
 					return addRow(
