@@ -801,8 +801,8 @@ func (dc *databaseCacheHolder) getDatabaseCache() *database.Cache {
 	return dc.mu.c
 }
 
-// waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*database.Cache) bool) {
+// WaitForCacheState implements the DatabaseCacheSubscriber interface.
+func (dc *databaseCacheHolder) WaitForCacheState(cond func(*database.Cache) bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for done := cond(dc.mu.c); !done; done = cond(dc.mu.c) {
@@ -810,8 +810,8 @@ func (dc *databaseCacheHolder) waitForCacheState(cond func(*database.Cache) bool
 	}
 }
 
-// databaseCacheHolder implements the dbCacheSubscriber interface.
-var _ dbCacheSubscriber = &databaseCacheHolder{}
+// databaseCacheHolder implements the DatabaseCacheSubscriber interface.
+var _ DatabaseCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.

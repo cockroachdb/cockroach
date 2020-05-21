@@ -963,7 +963,7 @@ type oneAtATimeSchemaResolver struct {
 }
 
 func (r oneAtATimeSchemaResolver) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error) {
-	return r.p.Tables().databaseCache.GetDatabaseDescByID(r.ctx, r.p.txn, id)
+	return r.p.Tables().DatabaseCache().GetDatabaseDescByID(r.ctx, r.p.txn, id)
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id sqlbase.ID) (*TableDescriptor, error) {
@@ -1438,7 +1438,7 @@ CREATE TABLE pg_catalog.pg_enum (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+		descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -2743,7 +2743,7 @@ CREATE TABLE pg_catalog.pg_type (
 				}
 
 				// Now generate rows for user defined types in this database.
-				descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+				descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
 				if err != nil {
 					return err
 				}

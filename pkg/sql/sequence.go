@@ -330,7 +330,7 @@ func removeSequenceOwnerIfExists(
 	if opts.SequenceOwner.Equal(sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}) {
 		return nil
 	}
-	tableDesc, err := p.Tables().getMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
+	tableDesc, err := p.Tables().GetMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
 	if err != nil {
 		return err
 	}
@@ -468,7 +468,7 @@ func (p *planner) dropSequencesOwnedByCol(
 	ctx context.Context, col *sqlbase.ColumnDescriptor,
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
-		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
+		seqDesc, err := p.Tables().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}
@@ -493,7 +493,7 @@ func (p *planner) removeSequenceDependencies(
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
+		seqDesc, err := p.Tables().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}

@@ -323,3 +323,47 @@ func MustGetDatabaseDescByID(
 	}
 	return desc, nil
 }
+
+// GetDatabaseDescriptorsFromIDs returns the database descriptors from an input
+// set of database IDs. It will return an error if any one of the IDs is not a
+// database. It attempts to perform this operation in a single request,
+// rather than making a round trip for each ID.
+func GetDatabaseDescriptorsFromIDs(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []sqlbase.ID,
+) ([]*sqlbase.DatabaseDescriptor, error) {
+	b := txn.NewBatch()
+	for _, id := range ids {
+		key := sqlbase.MakeDescMetadataKey(codec, id)
+		b.Get(key)
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		return nil, err
+	}
+	results := make([]*sqlbase.DatabaseDescriptor, 0, len(ids))
+	for i := range b.Results {
+		result := &b.Results[i]
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		if len(result.Rows) != 1 {
+			return nil, errors.AssertionFailedf(
+				"expected one result for key %s but found %d",
+				result.Keys[0],
+				len(result.Rows),
+			)
+		}
+		desc := &sqlbase.Descriptor{}
+		if err := result.Rows[0].ValueProto(desc); err != nil {
+			return nil, err
+		}
+		db := desc.GetDatabase()
+		if db == nil {
+			return nil, errors.AssertionFailedf(
+				"%q is not a database",
+				desc.String(),
+			)
+		}
+		results = append(results, db)
+	}
+	return results, nil
+}

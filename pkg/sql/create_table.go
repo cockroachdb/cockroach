@@ -315,7 +315,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			var foundExternalReference bool
 			for id := range refs {
-				if t := params.p.Tables().getUncommittedTableByID(id).MutableTableDescriptor; t == nil || !t.IsNewTable() {
+				if t := params.p.Tables().GetUncommittedTableByID(id).MutableTableDescriptor; t == nil || !t.IsNewTable() {
 					foundExternalReference = true
 					break
 				}
@@ -998,7 +998,7 @@ func (p *planner) finalizeInterleave(
 		ancestorTable = desc
 	} else {
 		var err error
-		ancestorTable, err = p.Tables().getMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
+		ancestorTable, err = p.Tables().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
 			return err
 		}
