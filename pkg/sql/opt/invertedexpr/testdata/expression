@@ -213,7 +213,7 @@ INTERSECTION
  ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
  └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
 
-and result=_ left=foo right=bar
+and result=foo-and-bar left=foo right=bar
 ----
 tight: true, toRead: ["a", "j") unionSpans: ["b", "c")
 INTERSECTION
@@ -229,7 +229,7 @@ INTERSECTION
       ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
       └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
 
-or result=_ left=foo right=bar
+or result=foo-or-bar left=foo right=bar
 ----
 tight: true, toRead: ["a", "j") unionSpans: ["a", "j")
 UNION
@@ -244,3 +244,130 @@ UNION
      INTERSECTION
       ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
       └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
+
+to-proto name=foo-and-bar
+----
+spans_to_read: <
+  start: "a"
+  end: "j"
+>
+node: <
+  factored_union_spans: <
+    start: "b"
+    end: "c"
+  >
+  operator: SetIntersection
+  left: <
+    operator: SetIntersection
+    left: <
+      operator: SetIntersection
+      left: <
+        factored_union_spans: <
+          start: "c"
+          end: "j"
+        >
+      >
+      right: <
+        factored_union_spans: <
+          start: "a"
+          end: "b"
+        >
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+  >
+  right: <
+    factored_union_spans: <
+      start: "a"
+      end: "b"
+    >
+    factored_union_spans: <
+      start: "c"
+      end: "j"
+    >
+    operator: SetIntersection
+    left: <
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+    >
+  >
+>
+
+to-proto name=foo-or-bar
+----
+spans_to_read: <
+  start: "a"
+  end: "j"
+>
+node: <
+  factored_union_spans: <
+    start: "a"
+    end: "j"
+  >
+  operator: SetUnion
+  left: <
+    operator: SetIntersection
+    left: <
+      operator: SetIntersection
+      left: <
+        factored_union_spans: <
+          start: "c"
+          end: "j"
+        >
+      >
+      right: <
+        factored_union_spans: <
+          start: "a"
+          end: "b"
+        >
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+  >
+  right: <
+    operator: SetIntersection
+    left: <
+      factored_union_spans: <
+        start: "c"
+        end: "j"
+      >
+    >
+    right: <
+      factored_union_spans: <
+        start: "a"
+        end: "b"
+      >
+    >
+  >
+>
+
+# A nil *SpanExpression
+to-proto name=none
+----
+<nil>

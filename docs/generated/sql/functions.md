@@ -1000,6 +1000,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_wkbtosql"></a><code>st_wkbtosql(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation.</p>
+</span></td></tr>
+<tr><td><a name="st_wkttosql"></a><code>st_wkttosql(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation.</p>
 </span></td></tr></tbody>
 </table>
 

@@ -202,6 +202,13 @@ INSERT INTO parse_test (geom, geog) VALUES
   (ST_GeomFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
   (st_geomfromgeojson('null':::jsonb), st_geogfromgeojson('null':::jsonb))
 
+query BB
+SELECT
+  st_geomfromwkb(decode('0101000000000000000000F03F000000000000F03F', 'hex')) = st_wkbtosql(decode('0101000000000000000000F03F000000000000F03F', 'hex')),
+  st_geomfromtext('POINT(1.0 2.0)') = st_wkttosql('POINT(1.0 2.0)')
+----
+true  true
+
 query TTTTTTTT
 SELECT
   ST_AsText(geom),

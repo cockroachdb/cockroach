@@ -71,18 +71,7 @@ func (ib infoBuilder) String() string {
 // geometryFromText is the builtin for ST_GeomFromText/ST_GeometryFromText.
 var geometryFromText = makeBuiltin(
 	defProps(),
-	stringOverload1(
-		func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDGeometry(g), nil
-		},
-		types.Geometry,
-		infoBuilder{info: "Returns the Geometry from a WKT or EWKT representation."}.String(),
-		tree.VolatilityImmutable,
-	),
+	geomFromWKTOverload,
 	tree.Overload{
 		Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
 		ReturnType: tree.FixedReturnType(types.Geometry),
@@ -100,6 +89,35 @@ var geometryFromText = makeBuiltin(
 		}.String(),
 		Volatility: tree.VolatilityImmutable,
 	},
+)
+
+// geomFromWKTOverload converts an (E)WKT string to its Geometry form.
+var geomFromWKTOverload = stringOverload1(
+	func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+		g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(otan): to truly have PostGIS behavior, this needs a warning if it starts with SRID=.
+		return tree.NewDGeometry(g), nil
+	},
+	types.Geometry,
+	infoBuilder{info: "Returns the Geometry from a WKT or EWKT representation."}.String(),
+	tree.VolatilityImmutable,
+)
+
+// geomFromWKBOverload converts a WKB bytea to its Geometry form.
+var geomFromWKBOverload = bytesOverload1(
+	func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+		g, err := geo.ParseGeometryFromWKB([]byte(s), geopb.DefaultGeometrySRID)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDGeometry(g), nil
+	},
+	types.Geometry,
+	infoBuilder{info: "Returns the Geometry from a WKB representation."}.String(),
+	tree.VolatilityImmutable,
 )
 
 // geometryFromTextCheckShapeBuiltin is used for the ST_<Shape>FromText builtins.
@@ -274,20 +292,11 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_wkbtosql": makeBuiltin(defProps(), geomFromWKBOverload),
+	"st_wkttosql": makeBuiltin(defProps(), geomFromWKTOverload),
 	"st_geomfromwkb": makeBuiltin(
 		defProps(),
-		bytesOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeometryFromWKB([]byte(s), geopb.DefaultGeometrySRID)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(g), nil
-			},
-			types.Geometry,
-			infoBuilder{info: "Returns the Geometry from a WKB representation."}.String(),
-			tree.VolatilityImmutable,
-		),
+		geomFromWKBOverload,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
