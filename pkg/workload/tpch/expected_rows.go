@@ -11,39 +11,39 @@
 package tpch
 
 var (
-	maxCols                    int
-	numColsByQueryName         = map[string]int{}
-	numExpectedRowsByQueryName = map[string]int{
-		`11`: 1048,
-		`16`: 18314,
+	maxCols                      int
+	numColsByQueryNumber         = map[int]int{}
+	numExpectedRowsByQueryNumber = map[int]int{
+		11: 1048,
+		16: 18314,
 	}
-	queriesToCheckOnlyNumRows = map[string]bool{
-		`11`: true,
-		`16`: true,
+	queriesToCheckOnlyNumRows = map[int]bool{
+		11: true,
+		16: true,
 	}
 )
 
 func init() {
-	for queryName, expectedRows := range expectedRowsByQueryName {
-		numColsByQueryName[queryName] = len(expectedRows[0])
-		numExpectedRowsByQueryName[queryName] = len(expectedRows)
+	for queryNumber, expectedRows := range expectedRowsByQueryNumber {
+		numColsByQueryNumber[queryNumber] = len(expectedRows[0])
+		numExpectedRowsByQueryNumber[queryNumber] = len(expectedRows)
 		if len(expectedRows[0]) > maxCols {
 			maxCols = len(expectedRows[0])
 		}
 	}
 }
 
-// expectedRowsByQueryName maps a query name to the expected rows for that
+// expectedRowsByQueryNumber maps a query number to the expected rows for that
 // query. Queries 11 and 16 return 1048 and 18314 rows, respectively, so we
 // only verify the number of rows and these both are omitted from the map.
-var expectedRowsByQueryName = map[string][][]string{
-	`1`: {
+var expectedRowsByQueryNumber = map[int][][]string{
+	1: {
 		{`A`, `F`, `3.7734107e+07`, `5.65865544007299e+10`, `5.375825713486514e+10`, `5.590906522282561e+10`, `25.522005853257337`, `38273.1297346216`, `0.04998529583825443`, `1478493`},
 		{`N`, `F`, `991417`, `1.4875047103799965e+09`, `1.413082168054104e+09`, `1.4696492231943603e+09`, `25.516471920522985`, `38284.467760848216`, `0.05009342667419324`, `38854`},
 		{`N`, `O`, `7.447604e+07`, `1.1170172969773557e+11`, `1.0611823030761223e+11`, `1.1036704387249208e+11`, `25.50222676958499`, `38249.11798890675`, `0.04999658605362673`, `2920374`},
 		{`R`, `F`, `3.7719753e+07`, `5.656804138090447e+10`, `5.374129268460378e+10`, `5.588961911982966e+10`, `25.50579361269077`, `38250.85462610268`, `0.050009405829983596`, `1478870`},
 	},
-	`2`: {
+	2: {
 		{`9938.53`, `Supplier#000005359`, `UNITED KINGDOM`, `185358`, `Manufacturer#4`, `QKuHYh,vZGiwu2FWEJoLDx04`, `33-429-790-6131`, `uriously regular requests hag`},
 		{`9937.84`, `Supplier#000005969`, `ROMANIA`, `108438`, `Manufacturer#1`, `ANDENSOSmk,miq23Xfb5RWt6dvUcvt6Qa`, `29-520-692-3537`, `efully express instructions. regular requests against the slyly fin`},
 		{`9936.22`, `Supplier#000005250`, `UNITED KINGDOM`, `249`, `Manufacturer#4`, `B3rqp0xbSEim4Mpy2RH J`, `33-320-228-2957`, `etect about the furiously final accounts. slyly ironic pinto beans sleep inside the furiously`},
@@ -145,7 +145,7 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`7850.66`, `Supplier#000001518`, `UNITED KINGDOM`, `86501`, `Manufacturer#1`, `ONda3YJiHKJOC`, `33-730-383-3892`, `ifts haggle fluffily pending pai`},
 		{`7843.52`, `Supplier#000006683`, `FRANCE`, `11680`, `Manufacturer#4`, `2Z0JGkiv01Y00oCFwUGfviIbhzCdy`, `16-464-517-8943`, ` express, final pinto beans x-ray slyly asymptotes. unusual, unusual`},
 	},
-	`3`: {
+	3: {
 		{`2456423`, `406181.0111`, `1995-03-05 00:00:00 +0000 +0000`, `0`},
 		{`3459808`, `405838.69889999996`, `1995-03-04 00:00:00 +0000 +0000`, `0`},
 		{`492164`, `390324.061`, `1995-02-19 00:00:00 +0000 +0000`, `0`},
@@ -157,34 +157,34 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`993600`, `371407.4595`, `1995-03-05 00:00:00 +0000 +0000`, `0`},
 		{`2300070`, `367371.1452000001`, `1995-03-13 00:00:00 +0000 +0000`, `0`},
 	},
-	`4`: {
+	4: {
 		{`1-URGENT`, `10594`},
 		{`2-HIGH`, `10476`},
 		{`3-MEDIUM`, `10410`},
 		{`4-NOT SPECIFIED`, `10556`},
 		{`5-LOW`, `10487`},
 	},
-	`5`: {
+	5: {
 		{`INDONESIA`, `5.5502041169699945e+07`},
 		{`VIETNAM`, `5.529508699669996e+07`},
 		{`CHINA`, `5.372449425659997e+07`},
 		{`INDIA`, `5.203551200020005e+07`},
 		{`JAPAN`, `4.5410175695400015e+07`},
 	},
-	`6`: {
+	6: {
 		{`1.2314107822829871e+08`},
 	},
-	`7`: {
+	7: {
 		{`FRANCE`, `GERMANY`, `1995`, `5.463973273359995e+07`},
 		{`FRANCE`, `GERMANY`, `1996`, `5.463308330759997e+07`},
 		{`GERMANY`, `FRANCE`, `1995`, `5.253174666969997e+07`},
 		{`GERMANY`, `FRANCE`, `1996`, `5.252054902239985e+07`},
 	},
-	`8`: {
+	8: {
 		{`1995`, `0.03443589040665483`},
 		{`1996`, `0.04148552129353034`},
 	},
-	`9`: {
+	9: {
 		{`ALGERIA`, `1998`, `2.713690018030001e+07`},
 		{`ALGERIA`, `1997`, `4.861183349620003e+07`},
 		{`ALGERIA`, `1996`, `4.828548267819995e+07`},
@@ -361,7 +361,7 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`VIETNAM`, `1993`, `4.5352676867199965e+07`},
 		{`VIETNAM`, `1992`, `4.7846355648499995e+07`},
 	},
-	`10`: {
+	10: {
 		{`57040`, `Customer#000057040`, `734235.2455000001`, `632.87`, `JAPAN`, `Eioyzjf4pp`, `22-895-641-3466`, `sits. slyly regular requests sleep alongside of the regular inst`},
 		{`143347`, `Customer#000143347`, `721002.6947999999`, `2557.47`, `EGYPT`, `1aReFYv,Kw4`, `14-742-935-3718`, `ggle carefully enticing requests. final deposits use bold, bold pinto beans. ironic, idle re`},
 		{`60838`, `Customer#000060838`, `679127.3077000001`, `2454.77`, `BRAZIL`, `64EaJ5vMAHWJlBOxJklpNc2RJiWE`, `12-913-494-9813`, ` need to boost against the slyly regular account`},
@@ -384,11 +384,11 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`23431`, `Customer#000023431`, `554269.536`, `3381.86`, `ROMANIA`, `HgiV0phqhaIa9aydNoIlb`, `29-915-458-2654`, `nusual, even instructions: furiously stealthy n`},
 	},
 	// Query 11 returns 1048 rows, so we verify only the number of rows returned.
-	`12`: {
+	12: {
 		{`MAIL`, `6202`, `9324`},
 		{`SHIP`, `6200`, `9262`},
 	},
-	`13`: {
+	13: {
 		{`0`, `50005`},
 		{`9`, `6641`},
 		{`10`, `6532`},
@@ -432,17 +432,17 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`41`, `2`},
 		{`39`, `1`},
 	},
-	`14`: {
+	14: {
 		{`16.380778626395557`},
 	},
-	`15`: {
+	15: {
 		{`8449`, `Supplier#000008449`, `Wp34zim9qYFbVctdW`, `20-469-856-8873`, `1.7726272086999996e+06`},
 	},
 	// Query 16 returns 18314 rows, so we verify only the number of rows returned.
-	`17`: {
+	17: {
 		{`348406.05428571376`},
 	},
-	`18`: {
+	18: {
 		{`Customer#000128120`, `128120`, `4722021`, `1994-04-07 00:00:00 +0000 +0000`, `544089.09`, `323`},
 		{`Customer#000144617`, `144617`, `3043270`, `1997-02-12 00:00:00 +0000 +0000`, `530604.44`, `317`},
 		{`Customer#000013940`, `13940`, `2232932`, `1997-04-13 00:00:00 +0000 +0000`, `522720.61`, `304`},
@@ -501,10 +501,10 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`Customer#000082441`, `82441`, `857959`, `1994-02-07 00:00:00 +0000 +0000`, `382579.74`, `305`},
 		{`Customer#000088703`, `88703`, `2995076`, `1994-01-30 00:00:00 +0000 +0000`, `363812.12`, `302`},
 	},
-	`19`: {
+	19: {
 		{`3.0838430578e+06`},
 	},
-	`20`: {
+	20: {
 		{`Supplier#000000020`, `iybAE,RmTymrZVYaFZva2SH,j`},
 		{`Supplier#000000091`, `YV45D7TkfdQanOOZ7q9QxkyGUapU1oOWU6q3`},
 		{`Supplier#000000205`, `rF uV8d0JNEk`},
@@ -692,7 +692,7 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`Supplier#000009899`, `7XdpAHrzr1t,UQFZE`},
 		{`Supplier#000009974`, `7wJ,J5DKcxSU4Kp1cQLpbcAvB5AsvKT`},
 	},
-	`21`: {
+	21: {
 		{`Supplier#000002829`, `20`},
 		{`Supplier#000005808`, `18`},
 		{`Supplier#000000262`, `17`},
@@ -794,7 +794,7 @@ var expectedRowsByQueryName = map[string][][]string{
 		{`Supplier#000002357`, `12`},
 		{`Supplier#000002483`, `12`},
 	},
-	`22`: {
+	22: {
 		{`13`, `888`, `6.737713990000005e+06`},
 		{`17`, `861`, `6.460573720000007e+06`},
 		{`18`, `964`, `7.236687400000006e+06`},

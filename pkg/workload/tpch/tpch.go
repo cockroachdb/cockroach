@@ -66,7 +66,7 @@ type tpch struct {
 	verbose       bool
 
 	queriesRaw      string
-	selectedQueries []string
+	selectedQueries []int
 
 	textPool   textPool
 	localsPool *sync.Pool
@@ -130,10 +130,14 @@ func (w *tpch) Hooks() workload.Hooks {
 				w.disableChecks = true
 			}
 			for _, queryName := range strings.Split(w.queriesRaw, `,`) {
-				if _, ok := queriesByName[queryName]; !ok {
+				queryNum, err := strconv.Atoi(queryName)
+				if err != nil {
+					return err
+				}
+				if _, ok := QueriesByNumber[queryNum]; !ok {
 					return errors.Errorf(`unknown query: %s`, queryName)
 				}
-				w.selectedQueries = append(w.selectedQueries, queryName)
+				w.selectedQueries = append(w.selectedQueries, queryNum)
 			}
 			return nil
 		},
@@ -325,10 +329,10 @@ type worker struct {
 }
 
 func (w *worker) run(ctx context.Context) error {
-	queryName := w.config.selectedQueries[w.ops%len(w.config.selectedQueries)]
+	queryNum := w.config.selectedQueries[w.ops%len(w.config.selectedQueries)]
 	w.ops++
 
-	query := fmt.Sprintf("SET vectorize = '%s'; %s", w.config.vectorize, queriesByName[queryName])
+	query := fmt.Sprintf("SET vectorize = '%s'; %s", w.config.vectorize, QueriesByNumber[queryNum])
 
 	vals := make([]interface{}, maxCols)
 	for i := range vals {
@@ -341,7 +345,7 @@ func (w *worker) run(ctx context.Context) error {
 		defer rows.Close()
 	}
 	if err != nil {
-		return errors.Errorf("[q%s]: %s", queryName, err)
+		return errors.Errorf("[q%d]: %s", queryNum, err)
 	}
 	var numRows int
 	// NOTE: we should *NOT* return an error from this function right away
@@ -350,12 +354,12 @@ func (w *worker) run(ctx context.Context) error {
 	checkExpectedOutput := func() error {
 		for rows.Next() {
 			if !w.config.disableChecks {
-				if !queriesToCheckOnlyNumRows[queryName] {
-					if err = rows.Scan(vals[:numColsByQueryName[queryName]]...); err != nil {
-						return errors.Errorf("[q%s]: %s", queryName, err)
+				if !queriesToCheckOnlyNumRows[queryNum] {
+					if err = rows.Scan(vals[:numColsByQueryNumber[queryNum]]...); err != nil {
+						return errors.Errorf("[q%d]: %s", queryNum, err)
 					}
 
-					expectedRow := expectedRowsByQueryName[queryName][numRows]
+					expectedRow := expectedRowsByQueryNumber[queryNum][numRows]
 					for i, expectedValue := range expectedRow {
 						if val := *vals[i].(*interface{}); val != nil {
 							var actualValue string
@@ -372,15 +376,15 @@ func (w *worker) run(ctx context.Context) error {
 								var expectedFloatRounded, actualFloatRounded float64
 								expectedFloat, err = strconv.ParseFloat(expectedValue, 64)
 								if err != nil {
-									return errors.Errorf("[q%s] failed parsing expected value as float64 with %s\n"+
+									return errors.Errorf("[q%d] failed parsing expected value as float64 with %s\n"+
 										"wrong result in row %d in column %d: got %q, expected %q",
-										queryName, err, numRows, i, actualValue, expectedValue)
+										queryNum, err, numRows, i, actualValue, expectedValue)
 								}
 								actualFloat, err = strconv.ParseFloat(actualValue, 64)
 								if err != nil {
-									return errors.Errorf("[q%s] failed parsing actual value as float64 with %s\n"+
+									return errors.Errorf("[q%d] failed parsing actual value as float64 with %s\n"+
 										"wrong result in row %d in column %d: got %q, expected %q",
-										queryName, err, numRows, i, actualValue, expectedValue)
+										queryNum, err, numRows, i, actualValue, expectedValue)
 								}
 								// TPC-H spec requires 0.01 precision for DECIMALs, so we will
 								// first round the values to use in the comparison. Note that we
@@ -392,15 +396,15 @@ func (w *worker) run(ctx context.Context) error {
 								// 0.01).
 								expectedFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", expectedFloat), 64)
 								if err != nil {
-									return errors.Errorf("[q%s] failed parsing rounded expected value as float64 with %s\n"+
+									return errors.Errorf("[q%d] failed parsing rounded expected value as float64 with %s\n"+
 										"wrong result in row %d in column %d: got %q, expected %q",
-										queryName, err, numRows, i, actualValue, expectedValue)
+										queryNum, err, numRows, i, actualValue, expectedValue)
 								}
 								actualFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", actualFloat), 64)
 								if err != nil {
-									return errors.Errorf("[q%s] failed parsing rounded actual value as float64 with %s\n"+
+									return errors.Errorf("[q%d] failed parsing rounded actual value as float64 with %s\n"+
 										"wrong result in row %d in column %d: got %q, expected %q",
-										queryName, err, numRows, i, actualValue, expectedValue)
+										queryNum, err, numRows, i, actualValue, expectedValue)
 								}
 								if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.02 {
 									// We only fail the check if the difference is more than 0.02
@@ -412,9 +416,9 @@ func (w *worker) run(ctx context.Context) error {
 									//   "ideal" - expected < 0.01 && actual - "ideal" < 0.01
 									// so in the worst case, actual and expected might differ by
 									// 0.02 and still be considered correct.
-									return errors.Errorf("[q%s] %f and %f differ by more than 0.02\n"+
+									return errors.Errorf("[q%d] %f and %f differ by more than 0.02\n"+
 										"wrong result in row %d in column %d: got %q, expected %q",
-										queryName, actualFloatRounded, expectedFloatRounded,
+										queryNum, actualFloatRounded, expectedFloatRounded,
 										numRows, i, actualValue, expectedValue)
 								}
 							}
@@ -437,33 +441,33 @@ func (w *worker) run(ctx context.Context) error {
 	// We first check whether there is any error that came from the server (for
 	// example, an out of memory error). If there is, we return it.
 	if err := rows.Err(); err != nil {
-		return errors.Errorf("[q%s]: %s", queryName, err)
+		return errors.Errorf("[q%d]: %s", queryNum, err)
 	}
 	// Now we check whether there was an error while consuming the rows.
 	if expectedOutputError != nil {
 		return wrongOutputError{error: expectedOutputError}
 	}
 	if !w.config.disableChecks {
-		if numRows != numExpectedRowsByQueryName[queryName] {
+		if numRows != numExpectedRowsByQueryNumber[queryNum] {
 			return wrongOutputError{
 				error: errors.Errorf(
-					"[q%s] returned wrong number of rows: got %d, expected %d",
-					queryName, numRows, numExpectedRowsByQueryName[queryName],
+					"[q%d] returned wrong number of rows: got %d, expected %d",
+					queryNum, numRows, numExpectedRowsByQueryNumber[queryNum],
 				)}
 		}
 	}
 	elapsed := timeutil.Since(start)
 	if w.config.verbose {
-		w.hists.Get(queryName).Record(elapsed)
+		w.hists.Get(fmt.Sprintf("%d", queryNum)).Record(elapsed)
 		// Note: if you are changing the output format here, please change the
 		// regex in roachtest/tpchvec.go accordingly.
-		log.Infof(ctx, "[q%s] returned %d rows after %4.2f seconds:\n%s",
-			queryName, numRows, elapsed.Seconds(), query)
+		log.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds:\n%s",
+			queryNum, numRows, elapsed.Seconds(), query)
 	} else {
 		// Note: if you are changing the output format here, please change the
 		// regex in roachtest/tpchvec.go accordingly.
-		log.Infof(ctx, "[q%s] returned %d rows after %4.2f seconds",
-			queryName, numRows, elapsed.Seconds())
+		log.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds",
+			queryNum, numRows, elapsed.Seconds())
 	}
 	return nil
 }

@@ -10,29 +10,34 @@
 
 package tpch
 
-var queriesByName = map[string]string{
-	`1`:  query1,
-	`2`:  query2,
-	`3`:  query3,
-	`4`:  query4,
-	`5`:  query5,
-	`6`:  query6,
-	`7`:  query7,
-	`8`:  query8,
-	`9`:  query9,
-	`10`: query10,
-	`11`: query11,
-	`12`: query12,
-	`13`: query13,
-	`14`: query14,
-	`15`: query15,
-	`16`: query16,
-	`17`: query17,
-	`18`: query18,
-	`19`: query19,
-	`20`: query20,
-	`21`: query21,
-	`22`: query22,
+// NumQueries specifies the number of queries in TPC-H benchmark.
+const NumQueries = 22
+
+// QueriesByNumber is a mapping from the number of a TPC-H query to the actual
+// query.
+var QueriesByNumber = map[int]string{
+	1:  query1,
+	2:  query2,
+	3:  query3,
+	4:  query4,
+	5:  query5,
+	6:  query6,
+	7:  query7,
+	8:  query8,
+	9:  query9,
+	10: query10,
+	11: query11,
+	12: query12,
+	13: query13,
+	14: query14,
+	15: query15,
+	16: query16,
+	17: query17,
+	18: query18,
+	19: query19,
+	20: query20,
+	21: query21,
+	22: query22,
 }
 
 const (
