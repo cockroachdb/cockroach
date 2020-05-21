@@ -27,12 +27,14 @@ func genOrderedSynchronizer(wr io.Writer) error {
 		return err
 	}
 
-	s := string(d)
+	r := strings.NewReplacer(
 
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
-	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+		"_TYPE", "{{.VecMethod}}",
+	)
+	s := r.Replace(string(d))
 
 	s = replaceManipulationFuncs(s)
 

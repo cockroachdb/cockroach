@@ -27,11 +27,12 @@ func genHashAggregator(wr io.Writer) error {
 		return err
 	}
 
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+	r := strings.NewReplacer(
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"TemplateType", "{{.VecMethod}}",
+	)
+	s := r.Replace(string(t))
 
 	s = replaceManipulationFuncsAmbiguous(".Global", s)
 

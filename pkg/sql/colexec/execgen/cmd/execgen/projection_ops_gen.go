@@ -44,18 +44,21 @@ func replaceProjTmplVariables(tmpl string) string {
 	tmpl = strings.ReplaceAll(tmpl, "_RETURN_UNSAFEGET", "execgen.RETURNUNSAFEGET")
 	tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
 
-	tmpl = strings.ReplaceAll(tmpl, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
-	tmpl = strings.ReplaceAll(tmpl, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
-	tmpl = strings.ReplaceAll(tmpl, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
-	tmpl = strings.ReplaceAll(tmpl, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
+	r := strings.NewReplacer(
+		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
+		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
+		"_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}",
+		"_RIGHT_TYPE_WIDTH", typeWidthReplacement,
 
-	tmpl = strings.ReplaceAll(tmpl, "_OP_NAME", "proj{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}Op")
-	tmpl = strings.ReplaceAll(tmpl, "_NAME", "{{.Name}}")
-	tmpl = strings.ReplaceAll(tmpl, "_L_GO_TYPE", "{{.Left.GoType}}")
-	tmpl = strings.ReplaceAll(tmpl, "_R_GO_TYPE", "{{.Right.GoType}}")
-	tmpl = strings.ReplaceAll(tmpl, "_L_TYP", "{{.Left.VecMethod}}")
-	tmpl = strings.ReplaceAll(tmpl, "_R_TYP", "{{.Right.VecMethod}}")
-	tmpl = strings.ReplaceAll(tmpl, "_RET_TYP", "{{.Right.RetVecMethod}}")
+		"_OP_NAME", "proj{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}Op",
+		"_NAME", "{{.Name}}",
+		"_L_GO_TYPE", "{{.Left.GoType}}",
+		"_R_GO_TYPE", "{{.Right.GoType}}",
+		"_L_TYP", "{{.Left.VecMethod}}",
+		"_R_TYP", "{{.Right.VecMethod}}",
+		"_RET_TYP", "{{.Right.RetVecMethod}}",
+	)
+	tmpl = r.Replace(tmpl)
 
 	assignRe := makeFunctionRegex("_ASSIGN", 6)
 	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Right.Assign", 6))
