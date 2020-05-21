@@ -149,7 +149,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	mutDesc, err := MakeTableDesc(
 		ctx,
 		nil, /* txn */
-		nil, /* vt */
+		nil, /* vs */
 		st,
 		create,
 		0, /* parentID */
