@@ -90,9 +90,21 @@ const (
 )
 
 const (
-	encodedTsSize      = int(unsafe.Sizeof(int64(0)) + unsafe.Sizeof(int32(0)))
-	encodedTxnIDSize   = int(unsafe.Sizeof(uuid.UUID{}))
-	encodedValSize     = encodedTsSize + encodedTxnIDSize
+	encodedTsSize    = int(unsafe.Sizeof(int64(0)) + unsafe.Sizeof(int32(0)))
+	encodedTxnIDSize = int(unsafe.Sizeof(uuid.UUID{}))
+	encodedValSize   = encodedTsSize + encodedTxnIDSize
+
+	// initialSklPageSize is the initial size of each page in the sklImpl's
+	// intervalSkl. The pages start small to limit the memory footprint of
+	// the data structure for short-lived tests. Reducing this size can hurt
+	// performance but it decreases the risk of OOM failures when many tests
+	// are running concurrently.
+	initialSklPageSize = 128 << 10 // 128 KB
+	// maximumSklPageSize is the maximum size of each page in the sklImpl's
+	// intervalSkl. A long-running server is expected to settle on pages of
+	// this size under steady-state load.
+	maximumSklPageSize = 32 << 20 // 32 MB
+
 	defaultMinSklPages = 2
 )
 
@@ -147,12 +159,17 @@ type intervalSkl struct {
 	clock  *hlc.Clock
 	minRet time.Duration
 
-	// The size of each page in the data structure, in bytes. When a page fills,
-	// the pages will be rotated and older entries will be discarded. The entire
-	// data structure will usually have a size limit of pageSize*minPages.
-	// However, this limit can be violated if the intervalSkl needs to grow
-	// larger to enforce a minimum retention policy.
-	pageSize uint32
+	// The size of the last allocated page in the data structure, in bytes. When
+	// a page fills, a new page will be allocate, the pages will be rotated, and
+	// older entries will be discarded. Page sizes grow logarithmically as pages
+	// are allocated up to a maximum of maximumSklPageSize. The value will never
+	// regress over the lifetime of an intervalSkl instance.
+	//
+	// The entire data structure is typically bound to a maximum a size of
+	// maximumSklPageSize*minPages. However, this limit can be violated if the
+	// intervalSkl needs to grow larger to enforce a minimum retention policy.
+	pageSize      uint32
+	pageSizeFixed bool
 
 	// The linked list maintains fixed-size skiplist pages, ordered by creation
 	// time such that the first page is the one most recently created. When the
@@ -177,13 +194,11 @@ type intervalSkl struct {
 
 // newIntervalSkl creates a new interval skiplist with the given minimum
 // retention duration and the maximum size.
-func newIntervalSkl(
-	clock *hlc.Clock, minRet time.Duration, pageSize uint32, metrics sklMetrics,
-) *intervalSkl {
+func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, metrics sklMetrics) *intervalSkl {
 	s := intervalSkl{
 		clock:    clock,
 		minRet:   minRet,
-		pageSize: pageSize,
+		pageSize: initialSklPageSize / 2, // doubled in pushNewPage
 		minPages: defaultMinSklPages,
 		metrics:  metrics,
 	}
@@ -222,7 +237,7 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 	if from == nil && to == nil {
 		panic("from and to keys cannot be nil")
 	}
-	if encodedRangeSize(from, to, opt) > int(s.pageSize)-initialSklAllocSize {
+	if encodedRangeSize(from, to, opt) > int(s.maximumPageSize())-initialSklAllocSize {
 		// Without this check, we could fall into an infinite page rotation loop
 		// if a range would take up more space than available in an empty page.
 		panic("key range too large to fit in any page")
@@ -371,15 +386,39 @@ func (s *intervalSkl) frontPage() *sklPage {
 // pushNewPage prepends a new empty page to the front of the pages list. It
 // accepts an optional arena argument to facilitate re-use.
 func (s *intervalSkl) pushNewPage(maxWallTime int64, arena *arenaskl.Arena) {
-	if arena != nil {
+	size := s.nextPageSize()
+	if arena != nil && arena.Cap() == size {
 		// Re-use the provided arena, if possible.
 		arena.Reset()
 	} else {
-		arena = arenaskl.NewArena(s.pageSize)
+		// Otherwise, construct new memory arena.
+		arena = arenaskl.NewArena(size)
 	}
 	p := newSklPage(arena)
 	p.maxWallTime = maxWallTime
 	s.pages.PushFront(p)
+}
+
+// nextPageSize returns the size that the next allocated page should use.
+func (s *intervalSkl) nextPageSize() uint32 {
+	if s.pageSizeFixed || s.pageSize == maximumSklPageSize {
+		return s.pageSize
+	}
+	s.pageSize *= 2
+	if s.pageSize > maximumSklPageSize {
+		s.pageSize = maximumSklPageSize
+	}
+	return s.pageSize
+}
+
+// maximumPageSize returns the maximum page size that this instance of the
+// intervalSkl will be able to accommodate. The method takes into consideration
+// whether the page size is fixed or dynamic.
+func (s *intervalSkl) maximumPageSize() uint32 {
+	if s.pageSizeFixed {
+		return s.pageSize
+	}
+	return maximumSklPageSize
 }
 
 // rotatePages makes the later page the earlier page, and then discards the

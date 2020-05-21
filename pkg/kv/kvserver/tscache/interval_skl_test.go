@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andy-kimball/arenaskl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -63,6 +64,14 @@ func makeSklMetrics() sklMetrics {
 	return makeMetrics().Skl
 }
 
+// setFixedPageSize sets the pageSize of the intervalSkl to a fixed value.
+func (s *intervalSkl) setFixedPageSize(pageSize uint32) {
+	s.pageSize = pageSize
+	s.pageSizeFixed = true
+	s.pages.Init() // clear
+	s.pushNewPage(0 /* maxWallTime */, nil /* arena */)
+}
+
 // setMinPages sets the minimum number of pages intervalSkl will evict down to.
 // This is only exposed as a testing method because there's no reason to use
 // this outside of testing.
@@ -78,7 +87,7 @@ func TestIntervalSklAdd(t *testing.T) {
 	val1 := makeVal(ts1, "1")
 	val2 := makeVal(ts2, "2")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 	s.Add([]byte("apricot"), val1)
 	require.Equal(t, ts1.WallTime, s.frontPage().maxWallTime)
@@ -100,7 +109,7 @@ func TestIntervalSklSingleRange(t *testing.T) {
 	val3 := makeVal(makeTS(300, 50), "3")
 	val4 := makeVal(makeTS(400, 50), "4")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 	// val1:  [a--------------o]
 	s.AddRange([]byte("apricot"), []byte("orange"), 0, val1)
@@ -190,7 +199,7 @@ func TestIntervalSklKeyBoundaries(t *testing.T) {
 	val4 := makeVal(makeTS(400, 0), "4")
 	val5 := makeVal(makeTS(500, 0), "5")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 	s.floorTS = floorTS
 
 	// Can't insert a key at infinity.
@@ -264,7 +273,7 @@ func TestIntervalSklSupersetRange(t *testing.T) {
 	val5 := makeVal(makeTS(500, 0), "5")
 	val6 := makeVal(makeTS(600, 0), "6")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 	s.floorTS = floorTS
 
 	// Same range.
@@ -359,7 +368,7 @@ func TestIntervalSklContiguousRanges(t *testing.T) {
 	val2 := makeVal(ts1, "2")
 	val2WithoutID := makeValWithoutID(ts1)
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 	s.floorTS = floorTS
 
 	// val1:  [b---------k)
@@ -393,7 +402,7 @@ func TestIntervalSklOverlappingRanges(t *testing.T) {
 	val3 := makeVal(makeTS(300, 0), "3")
 	val4 := makeVal(makeTS(400, 0), "4")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 	s.floorTS = floorTS
 
 	// val1:  [b---------k]
@@ -437,7 +446,7 @@ func TestIntervalSklOverlappingRanges(t *testing.T) {
 func TestIntervalSklSingleKeyRanges(t *testing.T) {
 	val1 := makeVal(makeTS(100, 100), "1")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 	// Don't allow inverted ranges.
 	require.Panics(t, func() { s.AddRange([]byte("kiwi"), []byte("apple"), 0, val1) })
@@ -493,7 +502,7 @@ func TestIntervalSklRatchetTxnIDs(t *testing.T) {
 	val6 := makeVal(ts3, "5")
 	val6WithoutID := makeValWithoutID(ts3)
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 	s.AddRange([]byte("apricot"), []byte("raspberry"), 0, val1)
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
@@ -569,7 +578,7 @@ func TestIntervalSklLookupRange(t *testing.T) {
 	val4 := makeVal(ts3, "4")
 	val5 := makeVal(ts4, "5")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 	// Perform range lookups over a single key.
 	s.Add([]byte("apricot"), val1)
@@ -644,7 +653,7 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 
 	// Perform range lookups over [key, key.Next()) ranges.
 	t.Run("[key, key.Next())", func(t *testing.T) {
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 		s.AddRange(key1, key2, excludeTo, val1)
 		s.AddRange(key2, key3, excludeTo, val2)
@@ -690,7 +699,7 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 
 	// Perform the same lookups, but this time use single key ranges.
 	t.Run("[key, key]", func(t *testing.T) {
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 		s.AddRange(key1, key1, 0, val1) // same as Add(key1, val1)
 		s.AddRange(key2, key2, 0, val2) //   ...   Add(key2, val2)
@@ -737,7 +746,7 @@ func TestIntervalSklLookupEqualsEarlierMaxWallTime(t *testing.T) {
 	txnID2 := "2"
 
 	testutils.RunTrueAndFalse(t, "tsWithLogicalPart", func(t *testing.T, logicalPart bool) {
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeSklMetrics())
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 		s.floorTS = floorTS
 
 		// Insert an initial value into intervalSkl.
@@ -797,7 +806,8 @@ func TestIntervalSklFill(t *testing.T) {
 	const n = 200
 	const txnID = "123"
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 1500, makeSklMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
+	s.setFixedPageSize(1500)
 
 	for i := 0; i < n; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
@@ -826,9 +836,10 @@ func TestIntervalSklFill2(t *testing.T) {
 	const txnID = "123"
 
 	// n >> 1000 so the intervalSkl's pages will be filled.
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 1000, makeSklMetrics())
-	key := []byte("some key")
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
+	s.setFixedPageSize(1000)
 
+	key := []byte("some key")
 	for i := 0; i < n; i++ {
 		val := makeVal(makeTS(int64(i), int32(i)), txnID)
 		s.Add(key, val)
@@ -844,7 +855,8 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
 	const minRet = 500
-	s := newIntervalSkl(clock, minRet, 1500, makeSklMetrics())
+	s := newIntervalSkl(clock, minRet, makeSklMetrics())
+	s.setFixedPageSize(1500)
 	s.floorTS = floorTS
 
 	// Add an initial value. Rotate the page so it's alone.
@@ -906,7 +918,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 		{name: "Pages", pageSize: 4096, minPages: 16},
 		// Test concurrency with a larger page size in order to test slot
 		// concurrency without the added complication of page rotations.
-		{name: "Slots", pageSize: TestSklPageSize},
+		{name: "Slots", pageSize: initialSklPageSize},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -916,7 +928,8 @@ func TestIntervalSklConcurrency(t *testing.T) {
 			// testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-				s := newIntervalSkl(clock, 0 /* minRet */, tc.pageSize, makeSklMetrics())
+				s := newIntervalSkl(clock, 0 /* minRet */, makeSklMetrics())
+				s.setFixedPageSize(tc.pageSize)
 				if tc.minPages != 0 {
 					s.setMinPages(tc.minPages)
 				}
@@ -1016,8 +1029,10 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 
 		const smallPageSize = 32 * 1024 // 32 KB
 		const retainForever = math.MaxInt64
-		sequentialS := newIntervalSkl(clock, retainForever, smallPageSize, makeSklMetrics())
-		concurrentS := newIntervalSkl(clock, retainForever, smallPageSize, makeSklMetrics())
+		sequentialS := newIntervalSkl(clock, retainForever, makeSklMetrics())
+		sequentialS.setFixedPageSize(smallPageSize)
+		concurrentS := newIntervalSkl(clock, retainForever, makeSklMetrics())
+		concurrentS.setFixedPageSize(smallPageSize)
 
 		// We run a goroutine for each slot. Goroutines insert new value
 		// over random intervals, but verify that the value in their
@@ -1144,22 +1159,108 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 // rotation loop for ranges that are too large to fit in a single page. Instead,
 // we detect this scenario early and panic.
 func TestIntervalSklMaxEncodedSize(t *testing.T) {
-	ts := makeTS(200, 0)
+	manual := hlc.NewManualClock(200)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+	ts := clock.Now()
 	val := makeVal(ts, "1")
 
-	key := make([]byte, 65)
-	encSize := encodedRangeSize(key, nil, 0)
+	testutils.RunTrueAndFalse(t, "fit", func(t *testing.T, fit bool) {
+		testutils.RunTrueAndFalse(t, "fixed", func(t *testing.T, fixed bool) {
+			var key []byte
+			var encSize int
+			if fixed {
+				// Create an arbitrarily sized key. We'll set the pageSize to
+				// either exactly accommodate this or to be one byte too small.
+				key = make([]byte, 65)
+				encSize = encodedRangeSize(key, nil, 0)
+			} else {
+				// Create either the largest possible key that will fit in the
+				// maximumSklPageSize or a key one byte larger than this. This
+				// test forces the intervalSkl to quickly grow its page size
+				// until it is large enough to accommodate the key.
+				encSize = maximumSklPageSize - initialSklAllocSize
+				encOverhead := encodedRangeSize(nil, nil, 0)
+				keySize := encSize - encOverhead
+				if !fit {
+					keySize++
+				}
+				key = make([]byte, keySize)
+				if fit {
+					require.Equal(t, encSize, encodedRangeSize(key, nil, 0))
+				} else {
+					require.Equal(t, encSize+1, encodedRangeSize(key, nil, 0))
+				}
+			}
 
-	t.Run("fit", func(t *testing.T) {
-		size := uint32(initialSklAllocSize + encSize)
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, size, makeSklMetrics())
-		require.NotPanics(t, func() { s.Add(key, val) })
+			s := newIntervalSkl(clock, 1, makeSklMetrics())
+			if fixed {
+				fixedSize := uint32(initialSklAllocSize + encSize)
+				if !fit {
+					fixedSize--
+				}
+				s.setFixedPageSize(fixedSize)
+			}
+			initPageSize := s.pageSize
+
+			if fit {
+				require.NotPanics(t, func() { s.Add(key, val) })
+			} else {
+				require.Panics(t, func() { s.Add(key, val) })
+			}
+
+			if fit && !fixed {
+				// Page size should have grown to maximum.
+				require.Equal(t, uint32(maximumSklPageSize), s.pageSize)
+			} else {
+				// Page size should not have grown.
+				require.Equal(t, initPageSize, s.pageSize)
+			}
+		})
 	})
-	t.Run("!fit", func(t *testing.T) {
-		size := uint32(initialSklAllocSize + encSize - 1)
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, size, makeSklMetrics())
-		require.Panics(t, func() { s.Add(key, val) })
-	})
+}
+
+// TestArenaReuse tests that arenas are re-used when possible during page
+// rotations. Skiplist memory arenas are only re-used when they have the same
+// capacity as the new page.
+func TestArenaReuse(t *testing.T) {
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
+
+	// Track the unique arenas that we observe in use.
+	arenas := make(map[*arenaskl.Arena]struct{})
+	const iters = 256
+	for i := 0; i < iters; i++ {
+		for e := s.pages.Front(); e != nil; e = e.Next() {
+			p := e.Value.(*sklPage)
+			arenas[p.list.Arena()] = struct{}{}
+		}
+		s.rotatePages(s.frontPage())
+	}
+
+	// We expect to see a single arena with each of the allocation sizes between
+	// initialSklPageSize and maximumSklPageSize. We then expect to see repeated
+	// pages with the same size once we hit maximumSklPageSize. Only then do we
+	// expect to see arena re-use.
+	//
+	// Example:
+	//  initSize = 4
+	//  maxSize  = 32
+	//  minPages = 2
+	//
+	//  arena sizes:
+	//   4  (A1)
+	//   8  (A2)
+	//   16 (A3)
+	//   32 (A4)
+	//   32 (A5)
+	//   32 (A4)
+	//   32 (A5)
+	//   ...
+	//
+	intermediatePages := int(math.Log2(maximumSklPageSize) - math.Log2(initialSklPageSize))
+	expArenas := defaultMinSklPages + intermediatePages
+	require.Less(t, expArenas, iters)
+	require.Equal(t, expArenas, len(arenas))
 }
 
 func BenchmarkIntervalSklAdd(b *testing.B) {
@@ -1167,7 +1268,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	const txnID = "123"
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
-	s := newIntervalSkl(clock, MinRetentionWindow, defaultSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(clock, MinRetentionWindow, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	size := 1
@@ -1192,7 +1293,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	const txnID = "123"
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
-	s := newIntervalSkl(clock, MinRetentionWindow, defaultSklPageSize, makeSklMetrics())
+	s := newIntervalSkl(clock, MinRetentionWindow, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	for i := 0; i < data; i++ {
