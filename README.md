@@ -82,7 +82,7 @@ looking at the [good first issue](https://github.com/cockroachdb/cockroach/issue
 list. We do our best to tag issues suitable for new external contributors with
 that label, so it's a great way to find something you can help with! See our
 [Wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB)
-for more details. 
+for more details.
 
 Engineering discussion takes place on our public mailing list,
 [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db),
@@ -103,8 +103,24 @@ doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 To see how key features of CockroachDB stack up against other databases,
 check out [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/stable/cockroachdb-in-comparison.html).
 
-## See Also
+## Licensing
 
+We are currently operating under three different licenses:
+  - Apache 2.0 for our core features that have been released up to version 19.1
+  - BSL for core features released in and after the 19.2 release that converts to the standard Apache
+  2.0 license after 3 years on a rolling basis for each release.
+  - Enterprise features will always be licensed under the [Cockroach Community License.](https://www.cockroachlabs.com/cockroachdb-community-license/)
+
+Our main goal with licensing is to balance our identity as open source software while creating a viable business.
+By using a BSL for the first 3 years of our newest products, we are able to ensure that no hosting of CockroachDB
+occurs without an agreement with us. Outside of this usage, BSL features will continue to be free to use and source
+code for features under both the BSL and CCL will continue to be available.
+
+For more information about our licenses:
+  - [Why we relicensed](https://www.cockroachlabs.com/blog/oss-relicensing-cockroachdb/)
+  - [Licenses FAQ](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html)
+
+## See Also
 - [Tech Talks](https://www.cockroachlabs.com/community/tech-talks/) (by CockroachDB founders and engineers)
 - [CockroachDB User Documentation](https://cockroachlabs.com/docs/stable/)
 - [The CockroachDB Blog](https://www.cockroachlabs.com/blog/)
