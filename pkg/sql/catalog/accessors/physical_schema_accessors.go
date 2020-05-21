@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package accessors
 
 import (
 	"context"
@@ -40,12 +40,23 @@ import (
 //   - uses a `*Collection` (table.go) as cache.
 //
 
+// NewCachedAccessor constructs a new cached accessor using a physical accessor
+// and a descs.Collection.
+func NewCachedAccessor(
+	physicalAccessor catalog.Accessor, descsCol *descs.Collection,
+) *CachedPhysicalAccessor {
+	return &CachedPhysicalAccessor{
+		Accessor: physicalAccessor,
+		tc:       descsCol,
+	}
+}
+
 // CachedPhysicalAccessor adds a cache on top of any Accessor.
 type CachedPhysicalAccessor struct {
 	catalog.Accessor
 	tc *descs.Collection
 	// Used to avoid allocations.
-	tn TableName
+	tn tree.TableName
 }
 
 var _ catalog.Accessor = &CachedPhysicalAccessor{}
@@ -57,7 +68,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	codec keys.SQLCodec,
 	name string,
 	flags tree.DatabaseLookupFlags,
-) (desc *DatabaseDescriptor, err error) {
+) (desc *sqlbase.DatabaseDescriptor, err error) {
 	isSystemDB := name == sqlbase.SystemDB.Name
 	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
 		refuseFurtherLookup, dbID, err := a.tc.GetUncommittedDatabaseID(name, flags.Required)
@@ -102,7 +113,9 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 ) (catalog.ObjectDescriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
-		return nil, errors.AssertionFailedf("accesses to type descriptors aren't cached")
+		// TypeObjects are not caches so fall through to the underlying physical
+		// Accessor.
+		return a.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 	case tree.TableObject:
 		a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
 		if flags.RequireMutable {
