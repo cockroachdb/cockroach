@@ -500,12 +500,17 @@ const (
 	pgDateFormat              = "2006-01-02"
 	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
 	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+	pgTime2400Format          = "24:00:00"
 )
 
 // formatTime formats t into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
 // the resulting buffer.
 func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
+	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
+	if t == timeofday.Time2400 {
+		return []byte(pgTime2400Format)
+	}
 	return t.ToTime().AppendFormat(tmp, pgTimeFormat)
 }
 
@@ -515,7 +520,16 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 // Note it does not understand the "second" component of the offset as lib/pq
 // cannot parse it.
 func formatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
-	return t.ToTime().AppendFormat(tmp, pgTimeTZFormat)
+	ret := t.ToTime().AppendFormat(tmp, pgTimeTZFormat)
+	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
+	if t.TimeOfDay == timeofday.Time2400 {
+		// It instead reads 00:00:00. Replace that text.
+		var newRet []byte
+		newRet = append(newRet, pgTime2400Format...)
+		newRet = append(newRet, ret[len(pgTime2400Format):]...)
+		ret = newRet
+	}
+	return ret
 }
 
 func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {

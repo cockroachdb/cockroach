@@ -68,11 +68,25 @@ func MakeTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) TimeTZ {
 
 // MakeTimeTZFromTime creates a TimeTZ from a time.Time.
 // It will be trimmed to microsecond precision.
+// 2400 time will overflow to 0000. If 2400 is needed, use
+// MakeTimeTZFromTimeAllow2400.
 func MakeTimeTZFromTime(t time.Time) TimeTZ {
 	return MakeTimeTZFromLocation(
 		timeofday.New(t.Hour(), t.Minute(), t.Second(), t.Nanosecond()/1000),
 		t.Location(),
 	)
+}
+
+// MakeTimeTZFromTimeAllow2400 creates a TimeTZ from a time.Time,
+// but factors in that Time2400 may be possible.
+// This assumes either a lib/pq time or unix time is set.
+// This should be used for storage and network deserialization, where
+// 2400 time is allowed.
+func MakeTimeTZFromTimeAllow2400(t time.Time) TimeTZ {
+	if t.Day() != 1 {
+		return MakeTimeTZFromLocation(timeofday.Time2400, t.Location())
+	}
+	return MakeTimeTZFromTime(t)
 }
 
 // Now returns the TimeTZ of the current location.
