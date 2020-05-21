@@ -1475,7 +1475,7 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
-2310524507  admin     true      true        true           true         false         false        false
+2310524507  admin     true      true        true           true         false         true         false
 1546506610  root      true      false       true           true         false         true         false
 2264919399  testuser  false     false       false          false        false         true         false
 
@@ -2425,3 +2425,18 @@ SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
 88  88    jt
+
+subtest regression_49207
+statement ok
+CREATE ROLE role_test_login with LOGIN;
+CREATE ROLE role_test_nologin;
+
+query B
+SELECT rolcanlogin FROM pg_roles WHERE rolname = 'role_test_login';
+----
+true
+
+query B
+SELECT rolcanlogin FROM pg_roles WHERE rolname = 'role_test_nologin';
+----
+false

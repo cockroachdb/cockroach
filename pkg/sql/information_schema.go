@@ -1769,12 +1769,23 @@ func forEachColumnInIndex(
 }
 
 func forEachRole(
-	ctx context.Context, p *planner, fn func(username string, isRole bool) error,
+	ctx context.Context, p *planner, fn func(username string, isRole bool, noLogin bool) error,
 ) error {
-	query := `SELECT username, "isRole" FROM system.users`
+	query := `
+SELECT username, 
+       "isRole",
+       EXISTS 
+       (
+              SELECT option 
+              FROM   system.role_options r 
+              WHERE  r.username = u.username 
+              AND    option ='NOLOGIN') AS noLogin 
+FROM system.users u;
+`
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
 		ctx, "read-roles", p.txn, query,
 	)
+
 	if err != nil {
 		return err
 	}
@@ -1785,11 +1796,15 @@ func forEachRole(
 		if !ok {
 			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
 		}
-
-		if err := fn(string(username), bool(*isRole)); err != nil {
+		noLogin, ok := row[2].(*tree.DBool)
+		if !ok {
+			return errors.Errorf("noLogin should be a boolean value, found %s instead", row[1].ResolvedType())
+		}
+		if err := fn(string(username), bool(*isRole), bool(*noLogin)); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
