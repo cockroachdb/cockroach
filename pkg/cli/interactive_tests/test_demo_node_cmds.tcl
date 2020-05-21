@@ -1,7 +1,5 @@
 #! /usr/bin/env expect -f
 
-# disabled until solution found in #42634
-
 source [file join [file dirname $argv0] common.tcl]
 
 start_test "Check \\demo commands work as expected"
@@ -12,8 +10,8 @@ spawn $argv demo movr --nodes=5
 eexpect "movr>"
 
 # Wrong number of args
-send "\\demo\r"
-eexpect "Usage:"
+send "\\demo node\r"
+eexpect "\\demo expects 2 parameters"
 
 # Cannot shutdown node 1
 send "\\demo shutdown 1\r"
