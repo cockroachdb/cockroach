@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1374,7 +1373,7 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				if err != nil || desc == nil {
 					return false, err
 				}
-				schemaName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, desc.GetParentSchemaID())
+				schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, desc.GetParentSchemaID())
 				if err != nil {
 					return false, err
 				}

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -290,7 +290,7 @@ func cleanupSchemaObjects(
 					if err != nil {
 						return err
 					}
-					schema, err := schema.ResolveNameByID(
+					schema, err := resolver.ResolveSchemaNameByID(
 						ctx,
 						txn,
 						codec,
@@ -488,7 +488,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		var schemaNames map[sqlbase.ID]string
 		if err := retryFunc(ctx, func() error {
 			var err error
-			schemaNames, err = schema.GetForDatabase(ctx, txn, c.codec, dbID)
+			schemaNames, err = resolver.GetForDatabase(ctx, txn, c.codec, dbID)
 			return err
 		}); err != nil {
 			return err

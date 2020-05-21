@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -521,7 +520,7 @@ func qualifyFKColErrorWithDB(
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
-	schema, err := schema.ResolveNameByID(ctx, txn, codec, db.ID, tbl.GetParentSchemaID())
+	schema, err := resolver.ResolveSchemaNameByID(ctx, txn, codec, db.ID, tbl.GetParentSchemaID())
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
