@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -38,7 +39,7 @@ type createIndexNode struct {
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(
-		ctx, &n.Table, true /*required*/, ResolveRequireTableDesc,
+		ctx, &n.Table, true /*required*/, resolver.ResolveRequireTableDesc,
 	)
 	if err != nil {
 		return nil, err

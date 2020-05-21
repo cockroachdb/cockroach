@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -48,7 +49,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 	td := make(map[sqlbase.ID]toDelete, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
-		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, ResolveRequireTableDesc)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, resolver.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +157,10 @@ func (*dropTableNode) Close(context.Context)        {}
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
-	ctx context.Context, name *tree.TableName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context,
+	name *tree.TableName,
+	required bool,
+	requiredType resolver.ResolveRequiredType,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {

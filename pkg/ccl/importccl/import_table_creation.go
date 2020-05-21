@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -244,7 +245,7 @@ func (so *importSequenceOperators) SetSequenceValue(
 
 type fkResolver map[string]*sqlbase.MutableTableDescriptor
 
-var _ sql.SchemaResolver = fkResolver{}
+var _ resolver.SchemaResolver = fkResolver{}
 
 // Implements the sql.SchemaResolver interface.
 func (r fkResolver) Txn() *kv.Txn {

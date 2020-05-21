@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -443,7 +444,7 @@ func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 
 // ResolveTableName implements the tree.EvalDatabase interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
-	desc, err := ResolveExistingTableObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
+	desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveAnyDescType)
 	if err != nil {
 		return 0, err
 	}
