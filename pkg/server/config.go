@@ -126,6 +126,14 @@ type BothConfig struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
+	// DefaultZoneConfig is used to set the default zone config inside the server.
+	// It can be overridden during tests by setting the DefaultZoneConfigOverride
+	// server testing knob.
+	DefaultZoneConfig zonepb.ZoneConfig
+
+	// Locality is a description of the topography of the server.
+	Locality roachpb.Locality
+
 	// StorageEngine specifies the engine type (eg. rocksdb, pebble) to use to
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
@@ -218,17 +226,10 @@ type Config struct {
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
 
-	// DefaultZoneConfig is used to set the default zone config inside the server.
-	// It can be overridden during tests by setting the DefaultZoneConfigOverride
-	// server testing knob.
-	DefaultZoneConfig zonepb.ZoneConfig
 	// DefaultSystemZoneConfig is used to set the default system zone config
 	// inside the server. It can be overridden during tests by setting the
 	// DefaultSystemZoneConfigOverride server testing knob.
 	DefaultSystemZoneConfig zonepb.ZoneConfig
-
-	// Locality is a description of the topography of the server.
-	Locality roachpb.Locality
 
 	// LocalityAddresses contains private IP addresses the can only be accessed
 	// in the corresponding locality.
@@ -341,16 +342,16 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	}
 
 	bothCfg := BothConfig{
-		Config:        new(base.Config),
-		Settings:      st,
-		MaxOffset:     MaxOffsetType(base.DefaultMaxClockOffset),
-		StorageEngine: storage.DefaultStorageEngine,
+		Config:            new(base.Config),
+		Settings:          st,
+		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
+		StorageEngine:     storage.DefaultStorageEngine,
+		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
 	}
 
 	cfg := Config{
 		BothConfig:                     bothCfg,
 		SQLConfig:                      sqlCfg,
-		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
 		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
 		CacheSize:                      DefaultCacheSize,
 		ScanInterval:                   defaultScanInterval,
