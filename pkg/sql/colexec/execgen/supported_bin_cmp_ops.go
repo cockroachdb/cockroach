@@ -15,10 +15,15 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // BinaryOpName is a mapping from all binary operators that are supported by
 // the vectorized engine to their names.
 var BinaryOpName = map[tree.BinaryOperator]string{
-	tree.Plus:  "Plus",
-	tree.Minus: "Minus",
-	tree.Mult:  "Mult",
-	tree.Div:   "Div",
+	tree.Bitand:   "Bitand",
+	tree.Bitor:    "Bitor",
+	tree.Bitxor:   "Bitxor",
+	tree.Plus:     "Plus",
+	tree.Minus:    "Minus",
+	tree.Mult:     "Mult",
+	tree.Div:      "Div",
+	tree.FloorDiv: "FloorDiv",
+	tree.Mod:      "Mod",
 }
 
 // ComparisonOpName is a mapping from all comparison operators that are
