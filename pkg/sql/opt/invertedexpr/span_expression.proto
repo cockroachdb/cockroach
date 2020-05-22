@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.sql.opt.inverteexpr;
+package cockroach.sql.opt.invertedexpr;
 option go_package = "invertedexpr";
 
 import "gogoproto/gogo.proto";

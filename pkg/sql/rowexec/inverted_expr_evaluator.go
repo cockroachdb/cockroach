@@ -29,7 +29,7 @@ import (
 // complete, the expressions are evaluated.
 
 // KeyIndex is used as a set element. It is already de-duped.
-type KeyIndex int
+type KeyIndex = int
 
 // setContainer is a set of key indexes in increasing order.
 type setContainer []KeyIndex
@@ -231,9 +231,8 @@ type invertedSpanRoutingInfo struct {
 // batched evaluator can be reused by calling reset(). In the build phase,
 // append expressions directly to exprs. A nil expression is permitted, and is
 // just a placeholder that will result in a nil []KeyIndex in evaluate().
-// getSpans() must be called before calls to addIndexRow() even if the result
-// of getSpans() is not needed -- it builds the fragmentedSpans used for
-// routing the added rows.
+// init() must be called before calls to addIndexRow() -- it builds the
+// fragmentedSpans used for routing the added rows.
 type batchedInvertedExprEvaluator struct {
 	exprs []*invertedexpr.SpanExpressionProto
 	// The evaluators for all the exprs.
@@ -345,9 +344,9 @@ func (b *batchedInvertedExprEvaluator) pendingLenWithSameEnd() int {
 	return length
 }
 
-// getSpans fragments the spans for later routing of rows and returns spans
+// init fragments the spans for later routing of rows and returns spans
 // representing a union of all the spans (for executing the scan).
-func (b *batchedInvertedExprEvaluator) getSpans() []invertedSpan {
+func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 	if cap(b.exprEvals) < len(b.exprs) {
 		b.exprEvals = make([]*invertedExprEvaluator, len(b.exprs))
 	} else {
