@@ -57,7 +57,7 @@ func TestHandleCSV(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			res, err := httputil.Get(context.TODO(), ts.URL+`/bank/bank`+test.params)
+			res, err := httputil.Get(context.Background(), ts.URL+`/bank/bank`+test.params)
 			if err != nil {
 				t.Fatal(err)
 			}

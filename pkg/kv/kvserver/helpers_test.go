@@ -165,7 +165,7 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
-	ctx := repl.AnnotateCtx(context.TODO())
+	ctx := repl.AnnotateCtx(context.Background())
 	return q.process(ctx, repl, cfg)
 }
 
@@ -182,7 +182,7 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 
 // ManualRaftSnapshot will manually send a raft snapshot to the target replica.
 func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) error {
-	return s.raftSnapshotQueue.processRaftSnapshot(context.TODO(), repl, target)
+	return s.raftSnapshotQueue.processRaftSnapshot(context.Background(), repl, target)
 }
 
 func (s *Store) ReservationCount() int {

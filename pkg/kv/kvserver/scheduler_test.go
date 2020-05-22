@@ -192,7 +192,7 @@ func TestSchedulerLoop(t *testing.T) {
 	p := newTestProcessor()
 	s := newRaftScheduler(nil, p, 1)
 	stopper := stop.NewStopper()
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	s.Start(ctx, stopper)
 	s.EnqueueRaftTick(1, 2, 3)
@@ -214,7 +214,7 @@ func TestSchedulerBuffering(t *testing.T) {
 	p := newTestProcessor()
 	s := newRaftScheduler(nil, p, 1)
 	stopper := stop.NewStopper()
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	s.Start(ctx, stopper)
 

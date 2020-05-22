@@ -120,7 +120,7 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(context.TODO(), func(context.Context) {
+	stopper.RunWorker(context.Background(), func(context.Context) {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):
@@ -229,7 +229,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	})
 
 	// Stop scanner and verify both queues are stopped.
-	stopper.Stop(context.TODO())
+	stopper.Stop(context.Background())
 	if !q1.isDone() || !q2.isDone() {
 		t.Errorf("expected all queues to stop; got %t, %t", q1.isDone(), q2.isDone())
 	}
@@ -257,7 +257,7 @@ func TestScannerTiming(t *testing.T) {
 			stopper := stop.NewStopper()
 			s.Start(stopper)
 			time.Sleep(runTime)
-			stopper.Stop(context.TODO())
+			stopper.Stop(context.Background())
 
 			avg := s.avgScan()
 			log.Infof(context.Background(), "%d: average scan: %s", i, avg)
@@ -336,7 +336,7 @@ func TestScannerDisabled(t *testing.T) {
 	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	s.Start(stopper)
 
 	// Verify queue gets all ranges.
@@ -399,7 +399,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	s := newReplicaScanner(makeAmbCtx(), clock, time.Hour, 0, 0, ranges)
 	s.AddQueues(q)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	s.Start(stopper)
 	time.Sleep(time.Millisecond) // give it some time to (not) busy loop
 	if count := s.scanCount(); count > 1 {

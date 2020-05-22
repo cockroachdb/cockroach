@@ -57,7 +57,7 @@ func TestTimeSeriesWriteMetrics(t *testing.T) {
 	}
 
 	// Introduce an error into the db.
-	if err := tm.DB.StoreData(context.TODO(), resolutionInvalid, []tspb.TimeSeriesData{
+	if err := tm.DB.StoreData(context.Background(), resolutionInvalid, []tspb.TimeSeriesData{
 		{
 			Name:   "test.multimetric",
 			Source: "source3",

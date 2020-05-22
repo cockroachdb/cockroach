@@ -627,7 +627,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 		}
 		stopper.AddCloser(tc.engine)
 	}
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
@@ -963,7 +963,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 	makeInMemSideloaded(tc.repl)
 	ctx := context.Background()

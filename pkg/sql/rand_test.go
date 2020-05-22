@@ -25,7 +25,7 @@ func TestGenerateRandInterestingTable(t *testing.T) {
 	// Ensure that we can create the random table.
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	if _, err := db.Exec("CREATE DATABASE d"); err != nil {
 		t.Fatal(err)
 	}

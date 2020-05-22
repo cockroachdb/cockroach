@@ -72,7 +72,7 @@ func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -115,7 +115,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// intent error. If it did, it would go into a deadloop attempting
 	// to push the transaction, which in turn requires another range
 	// lookup, etc, ad nauseam.
-	if _, err := db.Get(context.TODO(), "a"); err != nil {
+	if _, err := db.Get(context.Background(), "a"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -328,8 +328,8 @@ func checkReverseScanResults(
 func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	db := s.DB()
 	splits := []string{"a", "b", "c", "d", "e", "f"}
@@ -519,7 +519,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -763,7 +763,7 @@ func checkResumeSpanDelRangeResults(
 func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -824,7 +824,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 func TestMultiRangeBoundedBatchDelRangePartialResponses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -1012,7 +1012,7 @@ func TestMultiRangeBoundedBatchDelRangePartialResponses(t *testing.T) {
 func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -1058,7 +1058,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "c", "d"); err != nil {
@@ -1081,7 +1081,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b"); err != nil {
@@ -1103,7 +1103,7 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
@@ -1167,7 +1167,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
 			s, _ := startNoSplitMergeServer(t)
-			ctx := context.TODO()
+			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)
 			db := s.DB()
 			if err := setupMultipleRanges(ctx, db, "b"); err != nil {
@@ -1255,13 +1255,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 func TestParallelSender(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	// Split into multiple ranges.
 	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 	for _, key := range splitKeys {
-		if err := db.AdminSplit(context.TODO(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1288,7 +1288,7 @@ func TestParallelSender(t *testing.T) {
 	psCount = newPSCount
 
 	// Scan across all rows.
-	if rows, err := db.Scan(context.TODO(), "a", "z", 0); err != nil {
+	if rows, err := db.Scan(context.Background(), "a", "z", 0); err != nil {
 		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != len(splitKeys) {
 		t.Fatalf("expected %d rows; got %d", len(splitKeys), l)
@@ -1306,13 +1306,13 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
 	for _, key := range []string{"b", "e", "g"} {
 		// Split the keyspace at the given key.
-		if err := db.AdminSplit(context.TODO(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Write keys before, at, and after the split key.
 	for _, key := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
-		if err := db.Put(context.TODO(), key, "value"); err != nil {
+		if err := db.Put(context.Background(), key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1324,9 +1324,9 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Case 1: Request.EndKey is in the middle of the range.
 	if rows, err := db.ReverseScan(ctx, "b", "d", 0); err != nil {
@@ -1369,9 +1369,9 @@ func TestSingleRangeReverseScan(t *testing.T) {
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Case 1: Request.EndKey is in the middle of the range.
 	if rows, pErr := db.ReverseScan(ctx, "a", "d", 0); pErr != nil {
@@ -1399,16 +1399,16 @@ func TestMultiRangeReverseScan(t *testing.T) {
 func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Split first using the default client and scan to make sure that
 	// the range descriptor cache reflects the split.
 	for _, key := range []string{"b", "f"} {
-		if err := db.AdminSplit(context.TODO(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if rows, err := db.Scan(context.TODO(), "a", "z", 0); err != nil {
+	if rows, err := db.Scan(context.Background(), "a", "z", 0); err != nil {
 		t.Fatal(err)
 	} else if l := len(rows); l != 0 {
 		t.Fatalf("expected empty keyspace; got %d rows", l)
@@ -1445,7 +1445,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	for i, key := range []string{"a1", "b1", "c1", "d1", "f1"} {
 		b.Put(key, fmt.Sprintf("value-%d", i))
 	}
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1455,17 +1455,17 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
-	if err := db.AdminSplit(context.TODO(), "c", "c", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(context.Background(), "c", "c", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
 	// The ReverseScan will run into a stale descriptor.
-	if rows, err := db.ReverseScan(context.TODO(), "a", "d", 0); err != nil {
+	if rows, err := db.ReverseScan(context.Background(), "a", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -1473,10 +1473,10 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 2: encounter with range merge .
 	// Merge the range ["e", "g") and ["g", "\xff\xff") .
-	if err := db.AdminMerge(context.TODO(), "e"); err != nil {
+	if err := db.AdminMerge(context.Background(), "e"); err != nil {
 		t.Fatal(err)
 	}
-	if rows, err := db.ReverseScan(context.TODO(), "d", "g", 0); err != nil {
+	if rows, err := db.ReverseScan(context.Background(), "d", "g", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -1489,8 +1489,8 @@ func TestBadRequest(t *testing.T) {
 		"I suspect the reason is that there is no longer a single Range " +
 		"that spans [KeyMin, z), so we're not hitting the error.")
 	s, db := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	// Write key "a".
 	if err := db.Put(ctx, "a", "value"); err != nil {
@@ -1568,7 +1568,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -1734,7 +1734,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	}
 
 	// Run a high-priority txn that will abort the previous one.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
