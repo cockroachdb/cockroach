@@ -236,6 +236,15 @@ func NewProcessor(
 		}
 		return NewReadImportDataProcessor(flowCtx, processorID, *core.ReadImport, outputs[0])
 	}
+	if core.ExportData != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewExportDataProcessor == nil {
+			return nil, errors.New("ExportData processor unimplemented")
+		}
+		return NewExportDataProcessor(flowCtx, processorID, *core.ExportData, outputs[0])
+	}
 	if core.CSVWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
@@ -319,9 +328,11 @@ func NewProcessor(
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
-// NewReadImportDataProcessor is externally implemented and registered by
-// ccl/sqlccl/csv.go.
+// NewReadImportDataProcessor is externally implemented.
 var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewExportDataProcessor is externally implemented.
+var NewExportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ExportDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewCSVWriterProcessor is externally implemented.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
