@@ -24,6 +24,71 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+var (
+	testGeomPoint              = geom.NewPointFlat(geom.XY, []float64{1.0, 2.0})
+	testGeomLineString         = geom.NewLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0})
+	testGeomPolygon            = geom.NewPolygonFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0}, []int{8})
+	testGeomMultiPoint         = geom.NewMultiPointFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0})
+	testGeomMultiLineString    = geom.NewMultiLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0}, []int{4, 8})
+	testGeomMultiPolygon       = geom.NewMultiPolygon(geom.XY)
+	testGeomGeometryCollection = geom.NewGeometryCollection()
+)
+var (
+	emptyGeomPoint                       = geom.NewPointEmpty(geom.XY)
+	emptyGeomLineString                  = geom.NewLineString(geom.XY)
+	emptyGeomPolygon                     = geom.NewPolygon(geom.XY)
+	emptyGeomMultiPoint                  = geom.NewMultiPoint(geom.XY)
+	emptyGeomMultiLineString             = geom.NewMultiLineString(geom.XY)
+	emptyGeomMultiPolygon                = geom.NewMultiPolygon(geom.XY)
+	emptyGeomGeometryCollection          = geom.NewGeometryCollection()
+	emptyGeomObjectsInGeometryCollection = geom.NewGeometryCollection()
+	emptyGeomPointInGeometryCollection   = geom.NewGeometryCollection()
+)
+
+func init() {
+	testGeomLineString.SetSRID(4326)
+	// Initialize geomTestMultiPolygon.
+	{
+		for _, polygon := range []*geom.Polygon{
+			testGeomPolygon,
+			geom.NewPolygonFlat(geom.XY, []float64{3.0, 3.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0}, []int{8}),
+		} {
+			err := testGeomMultiPolygon.Push(polygon)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	// Initialize testGeomGeometryCollection.
+	{
+		err := testGeomGeometryCollection.Push(testGeomPoint, testGeomMultiPoint)
+		if err != nil {
+			panic(err)
+		}
+	}
+	// Initialize emptyGeomPointInGeometryCollection.
+	{
+		err := emptyGeomPointInGeometryCollection.Push(
+			geom.NewLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0}),
+			emptyGeomPoint,
+		)
+		if err != nil {
+			panic(err)
+		}
+	}
+	// Initialize emptyGeomObjectsInGeometryCollection.
+	{
+		err := emptyGeomObjectsInGeometryCollection.Push(
+			emptyGeomPoint,
+			emptyGeomLineString,
+			emptyGeomPolygon,
+		)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 func mustDecodeEWKBFromString(t *testing.T, h string) geopb.EWKB {
 	decoded, err := hex.DecodeString(h)
 	require.NoError(t, err)
@@ -59,18 +124,6 @@ func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 }
 
 func TestSpatialObjectFromGeom(t *testing.T) {
-	point := geom.NewPointFlat(geom.XY, []float64{1.0, 2.0})
-	linestring := geom.NewLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0})
-	linestring.SetSRID(4326)
-	polygon := geom.NewPolygonFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0}, []int{8})
-	multipoint := geom.NewMultiPointFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0})
-	multilinestring := geom.NewMultiLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0}, []int{4, 8})
-	multipolygon := geom.NewMultiPolygon(geom.XY)
-	require.NoError(t, multipolygon.Push(polygon))
-	require.NoError(t, multipolygon.Push(geom.NewPolygonFlat(geom.XY, []float64{3.0, 3.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0}, []int{8})))
-	geometrycollection := geom.NewGeometryCollection()
-	require.NoError(t, geometrycollection.Push(point, multipoint))
-
 	testCases := []struct {
 		desc string
 		g    geom.T
@@ -78,65 +131,72 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 	}{
 		{
 			"point",
-			point,
+			testGeomPoint,
 			geopb.SpatialObject{
-				EWKB:  mustDecodeEWKBFromString(t, "0101000000000000000000F03F0000000000000040"),
-				SRID:  0,
-				Shape: geopb.Shape_Point,
+				EWKB:        mustDecodeEWKBFromString(t, "0101000000000000000000F03F0000000000000040"),
+				SRID:        0,
+				Shape:       geopb.Shape_Point,
+				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 2, MaxY: 2},
 			},
 		},
 		{
 			"linestring",
-			linestring,
+			testGeomLineString,
 			geopb.SpatialObject{
-				EWKB:  mustDecodeEWKBFromString(t, "0102000020E610000002000000000000000000F03F000000000000F03F00000000000000400000000000000040"),
-				SRID:  4326,
-				Shape: geopb.Shape_LineString,
+				EWKB:        mustDecodeEWKBFromString(t, "0102000020E610000002000000000000000000F03F000000000000F03F00000000000000400000000000000040"),
+				SRID:        4326,
+				Shape:       geopb.Shape_LineString,
+				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
 		{
 			"polygon",
-			polygon,
+			testGeomPolygon,
 			geopb.SpatialObject{
-				EWKB:  mustDecodeEWKBFromString(t, "01030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F"),
-				SRID:  0,
-				Shape: geopb.Shape_Polygon,
+				EWKB:        mustDecodeEWKBFromString(t, "01030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F"),
+				SRID:        0,
+				Shape:       geopb.Shape_Polygon,
+				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
 		{
 			"multipoint",
-			multipoint,
+			testGeomMultiPoint,
 			geopb.SpatialObject{
-				EWKB:  mustDecodeEWKBFromString(t, "0104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
-				SRID:  0,
-				Shape: geopb.Shape_MultiPoint,
+				EWKB:        mustDecodeEWKBFromString(t, "0104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
+				SRID:        0,
+				Shape:       geopb.Shape_MultiPoint,
+				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
 		{
 			"multilinestring",
-			multilinestring,
+			testGeomMultiLineString,
 			geopb.SpatialObject{
-				EWKB:  mustDecodeEWKBFromString(t, "010500000002000000010200000002000000000000000000F03F000000000000F03F000000000000004000000000000000400102000000020000000000000000000840000000000000084000000000000010400000000000001040"),
-				SRID:  0,
-				Shape: geopb.Shape_MultiLineString,
+				EWKB:        mustDecodeEWKBFromString(t, "010500000002000000010200000002000000000000000000F03F000000000000F03F000000000000004000000000000000400102000000020000000000000000000840000000000000084000000000000010400000000000001040"),
+				SRID:        0,
+				Shape:       geopb.Shape_MultiLineString,
+				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 4, MinY: 1, MaxY: 4},
 			},
 		},
 		{
 			"multipolygon",
-			multipolygon,
+			testGeomMultiPolygon,
 			geopb.SpatialObject{
-				EWKB:  mustDecodeEWKBFromString(t, "01060000000200000001030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F0103000000010000000400000000000000000008400000000000000840000000000000104000000000000010400000000000000840000000000000104000000000000008400000000000000840"),
-				SRID:  0,
-				Shape: geopb.Shape_MultiPolygon,
+				EWKB:        mustDecodeEWKBFromString(t, "01060000000200000001030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F0103000000010000000400000000000000000008400000000000000840000000000000104000000000000010400000000000000840000000000000104000000000000008400000000000000840"),
+				SRID:        0,
+				Shape:       geopb.Shape_MultiPolygon,
+				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 4, MinY: 1, MaxY: 4},
 			},
 		},
 		{
 			"geometrycollection",
-			geometrycollection,
+			testGeomGeometryCollection,
 			geopb.SpatialObject{
-				EWKB:  mustDecodeEWKBFromString(t, "0107000000020000000101000000000000000000F03F00000000000000400104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
-				SRID:  0,
-				Shape: geopb.Shape_GeometryCollection,
+				EWKB:        mustDecodeEWKBFromString(t, "0107000000020000000101000000000000000000F03F00000000000000400104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
+				SRID:        0,
+				Shape:       geopb.Shape_GeometryCollection,
+				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
 	}
