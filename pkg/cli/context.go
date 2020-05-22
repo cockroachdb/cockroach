@@ -112,7 +112,7 @@ func initCLIDefaults() {
 	serverCfg.HeapProfileDirName = ""
 	serverCfg.ReadyFn = nil
 	serverCfg.DelayedBootstrapFn = nil
-	serverCfg.SocketFile = ""
+	serverCfg.SQLSocketFile = ""
 	serverCfg.JoinList = nil
 	serverCfg.JoinPreferSRVRecords = false
 	serverCfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
