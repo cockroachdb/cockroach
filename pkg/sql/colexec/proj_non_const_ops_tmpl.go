@@ -106,7 +106,7 @@ type projConstOpBase struct {
 	allocator      *colmem.Allocator
 	colIdx         int
 	outputIdx      int
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
 }
 
 // projOpBase contains all of the fields for non-constant projections.
@@ -116,7 +116,7 @@ type projOpBase struct {
 	col1Idx        int
 	col2Idx        int
 	outputIdx      int
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
 }
 
 // {{define "projOp"}}
@@ -127,11 +127,11 @@ type _OP_NAME struct {
 
 func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `decimalScratch` local variable of type `decimalOverloadScratch`.
-	decimalScratch := p.decimalScratch
+	// `_overloadHelper` local variable of type `overloadHelper`.
+	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
-	_ = decimalScratch
+	_ = _overloadHelper
 	batch := p.input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
@@ -268,14 +268,16 @@ func GetProjectionOperator(
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
+	overloadHelper overloadHelper,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
-		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
-		col1Idx:      col1Idx,
-		col2Idx:      col2Idx,
-		outputIdx:    outputIdx,
+		OneInputNode:   NewOneInputNode(input),
+		allocator:      allocator,
+		col1Idx:        col1Idx,
+		col2Idx:        col2Idx,
+		outputIdx:      outputIdx,
+		overloadHelper: overloadHelper,
 	}
 
 	switch op.(type) {

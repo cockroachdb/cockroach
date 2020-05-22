@@ -126,7 +126,7 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker CancelChecker,
-	decimalScratch decimalOverloadScratch,
+	_overloadHelper overloadHelper,
 	datumAlloc *sqlbase.DatumAlloc,
 ) {
 	switch col.CanonicalTypeFamily() {

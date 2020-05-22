@@ -166,7 +166,7 @@ type hashAggregator struct {
 	aggFnsAlloc    *aggregateFuncsAlloc
 	hashAlloc      hashAggFuncsAlloc
 	cancelChecker  CancelChecker
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
 	datumAlloc     sqlbase.DatumAlloc
 }
 
@@ -329,7 +329,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b c
 			nKeys,
 			b.Selection(),
 			op.cancelChecker,
-			op.decimalScratch,
+			op.overloadHelper,
 			&op.datumAlloc,
 		)
 	}
