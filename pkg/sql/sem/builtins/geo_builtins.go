@@ -18,8 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -1256,6 +1259,266 @@ The calculations are done on a sphere.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+
+	//
+	// Schema changes
+	//
+	"addgeometrycolumn": makeBuiltin(
+		tree.FunctionProperties{
+			Class:    tree.SQLClass,
+			Category: categoryGeospatial,
+			Impure:   true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_name", types.String},
+				{"column_name", types.String},
+				{"srid", types.Int},
+				{"type", types.String},
+				{"dimension", types.Int},
+				{"use_typmod", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+				return addGeometryColumnSql(
+					ctx,
+					"", /* catalogName */
+					"", /* schemaName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					int(tree.MustBeDInt(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					bool(tree.MustBeDBool(args[5])),
+				)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return addGeometryColumnSummary(
+					ctx,
+					"", /* catalogName */
+					"", /* schemaName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					int(tree.MustBeDInt(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					bool(tree.MustBeDBool(args[5])),
+				)
+			},
+			Info: infoBuilder{
+				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"column_name", types.String},
+				{"srid", types.Int},
+				{"type", types.String},
+				{"dimension", types.Int},
+				{"use_typmod", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+				return addGeometryColumnSql(
+					ctx,
+					"", /* catalogName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					int(tree.MustBeDInt(args[3])),
+					string(tree.MustBeDString(args[4])),
+					int(tree.MustBeDInt(args[5])),
+					bool(tree.MustBeDBool(args[6])),
+				)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return addGeometryColumnSummary(
+					ctx,
+					"", /* catalogName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					int(tree.MustBeDInt(args[3])),
+					string(tree.MustBeDString(args[4])),
+					int(tree.MustBeDInt(args[5])),
+					bool(tree.MustBeDBool(args[6])),
+				)
+			},
+			Info: infoBuilder{
+				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"catalog_name", types.String},
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"column_name", types.String},
+				{"srid", types.Int},
+				{"type", types.String},
+				{"dimension", types.Int},
+				{"use_typmod", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+				return addGeometryColumnSql(
+					ctx,
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					string(tree.MustBeDString(args[5])),
+					int(tree.MustBeDInt(args[6])),
+					bool(tree.MustBeDBool(args[7])),
+				)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return addGeometryColumnSummary(
+					ctx,
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					string(tree.MustBeDString(args[5])),
+					int(tree.MustBeDInt(args[6])),
+					bool(tree.MustBeDBool(args[7])),
+				)
+			},
+			Info: infoBuilder{
+				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_name", types.String},
+				{"column_name", types.String},
+				{"srid", types.Int},
+				{"type", types.String},
+				{"dimension", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+				return addGeometryColumnSql(
+					ctx,
+					"", /* catalogName */
+					"", /* schemaName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					int(tree.MustBeDInt(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					true, /* useTypmod */
+				)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return addGeometryColumnSummary(
+					ctx,
+					"", /* catalogName */
+					"", /* schemaName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					int(tree.MustBeDInt(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					true, /* useTypmod */
+				)
+			},
+			Info: infoBuilder{
+				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"column_name", types.String},
+				{"srid", types.Int},
+				{"type", types.String},
+				{"dimension", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+				return addGeometryColumnSql(
+					ctx,
+					"", /* catalogName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					int(tree.MustBeDInt(args[3])),
+					string(tree.MustBeDString(args[4])),
+					int(tree.MustBeDInt(args[5])),
+					true, /* useTypmod */
+				)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return addGeometryColumnSummary(
+					ctx,
+					"", /* catalogName */
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					int(tree.MustBeDInt(args[3])),
+					string(tree.MustBeDString(args[4])),
+					int(tree.MustBeDInt(args[5])),
+					true, /* useTypmod */
+				)
+			},
+			Info: infoBuilder{
+				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"catalog_name", types.String},
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"column_name", types.String},
+				{"srid", types.Int},
+				{"type", types.String},
+				{"dimension", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+				return addGeometryColumnSql(
+					ctx,
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					string(tree.MustBeDString(args[5])),
+					int(tree.MustBeDInt(args[6])),
+					true, /* useTypmod */
+				)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return addGeometryColumnSummary(
+					ctx,
+					string(tree.MustBeDString(args[0])),
+					string(tree.MustBeDString(args[1])),
+					string(tree.MustBeDString(args[2])),
+					string(tree.MustBeDString(args[3])),
+					int(tree.MustBeDInt(args[4])),
+					string(tree.MustBeDString(args[5])),
+					int(tree.MustBeDInt(args[6])),
+					true, /* useTypmod */
+				)
+			},
+			Info: infoBuilder{
+				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
 
 // geometryOverload1 hides the boilerplate for builtins operating on one geometry.
@@ -1444,4 +1707,77 @@ func initGeoBuiltins() {
 		v.props.Category = categoryGeospatial
 		builtins[k] = v
 	}
+}
+
+// addGeometryColumnSql returns the SQL statement that should be executed to
+// add a geometry column.
+func addGeometryColumnSql(
+	ctx *tree.EvalContext,
+	catalogName string,
+	schemaName string,
+	tableName string,
+	columnName string,
+	srid int,
+	shape string,
+	dimension int,
+	useTypmod bool,
+) (string, error) {
+	if dimension != 2 {
+		return "", pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"only dimension=2 is currently supported",
+		)
+	}
+	if !useTypmod {
+		return "", unimplemented.NewWithIssue(
+			49402,
+			"useTypmod=false is currently not supported with AddGeometryColumn",
+		)
+	}
+
+	tn := makeTableName(catalogName, schemaName, tableName)
+	stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s GEOMETRY(%s,%d)",
+		tn.String(),
+		columnName,
+		shape,
+		srid,
+	)
+	return stmt, nil
+}
+
+// addGeometryColumnSummary returns metadata about the geometry column that
+// was added.
+func addGeometryColumnSummary(
+	ctx *tree.EvalContext,
+	catalogName string,
+	schemaName string,
+	tableName string,
+	columnName string,
+	srid int,
+	shape string,
+	dimension int,
+	useTypmod bool,
+) (tree.Datum, error) {
+	tn := makeTableName(catalogName, schemaName, tableName)
+	summary := fmt.Sprintf("%s.%s SRID:%d TYPE:%s DIMS:%d",
+		tn.String(),
+		columnName,
+		srid,
+		strings.ToUpper(shape),
+		dimension,
+	)
+	return tree.NewDString(summary), nil
+}
+
+func makeTableName(
+	catalogName string,
+	schemaName string,
+	tableName string,
+) tree.UnresolvedName {
+	if catalogName != "" {
+		return tree.MakeUnresolvedName(catalogName, schemaName, tableName)
+	} else if schemaName != "" {
+		return tree.MakeUnresolvedName(schemaName, tableName)
+	}
+	return tree.MakeUnresolvedName(tableName)
 }
