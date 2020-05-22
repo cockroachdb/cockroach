@@ -19,7 +19,7 @@ import "./statements.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
-import { StatementTableTitle, StatementTableCell, NodeNames } from "./statemetsTableContent";
+import { StatementTableTitles, StatementTableCell, NodeNames } from "./statemetsTableContent";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -53,15 +53,16 @@ export function makeStatementsColumns(
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
 ): ColumnDescriptor<AggregateStatistics>[]  {
+
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
-      title: StatementTableTitle.statements,
+      title: StatementTableTitles.statements,
       className: "cl-table__col-query-text",
       cell: StatementTableCell.statements(search, selectedApp),
       sort: (stmt) => stmt.label,
     },
     {
-      title: StatementTableTitle.txtType,
+      title: StatementTableTitles.txtType,
       className: "statements-table__col-time",
       cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
@@ -71,7 +72,7 @@ export function makeStatementsColumns(
 
   if (activateDiagnosticsRef) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
-      title: StatementTableTitle.diagnostics,
+      title: StatementTableTitles.diagnostics,
       cell: StatementTableCell.diagnostics(activateDiagnosticsRef),
       sort: (stmt) => {
         if (stmt.diagnosticsReport) {
@@ -107,25 +108,25 @@ function makeCommonColumns(statements: AggregateStatistics[])
 
   return [
     {
-      title: StatementTableTitle.retries,
+      title: StatementTableTitles.retries,
       className: "statements-table__col-retries",
       cell: retryBar,
       sort: (stmt) => (longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count)),
     },
     {
-      title: StatementTableTitle.executionCount,
+      title: StatementTableTitles.executionCount,
       className: "statements-table__col-count",
       cell: countBar,
       sort: (stmt) => FixLong(stmt.stats.count).toInt(),
     },
     {
-      title: StatementTableTitle.rowsAffected,
+      title: StatementTableTitles.rowsAffected,
       className: "statements-table__col-rows",
       cell: rowsBar,
       sort: (stmt) => stmt.stats.num_rows.mean,
     },
     {
-      title: StatementTableTitle.latency,
+      title: StatementTableTitles.latency,
       className: "statements-table__col-latency",
       cell: latencyBar,
       sort: (stmt) => stmt.stats.service_lat.mean,

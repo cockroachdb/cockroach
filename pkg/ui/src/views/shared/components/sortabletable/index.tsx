@@ -129,7 +129,6 @@ export class SortableTable extends React.Component<TableProps> {
 
   clickSort(clickedSortKey: any) {
     const { sortSetting, onChangeSortSetting } = this.props;
-
     // If the sort key is different than the previous key, initial sort
     // descending. If the same sort key is clicked multiple times consecutively,
     // first change to ascending, then remove the sort key.
@@ -268,7 +267,7 @@ export class SortableTable extends React.Component<TableProps> {
                 if (!isUndefined(c.sortKey)) {
                   classes.push("sort-table__cell--sortable");
                   onClick = () => {
-                    trackTableSort(className, c, sortSetting);
+                    trackTableSort(className, { ...c, title: c.title.toString() }, sortSetting);
                     this.clickSort(c.sortKey);
                   };
                   if (c.sortKey === sortSetting.sortKey) {

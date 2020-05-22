@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Anchor, Tooltip } from "src/components";
 import { statementDiagnostics, statementsRetries, statementsSql, statementsTimeInterval, transactionalPipelining } from "src/util/docs";
@@ -20,171 +21,95 @@ import { shortStatement } from "./statementsTable";
 
 export type NodeNames = { [nodeId: string]: string };
 
-export const StatementTableTitle = {
-  statements: (
+const HeadTooltip = ({ i18nText, title }: { i18nText: string, title: any }) => {
+  const { t } = useTranslation("common");
+  return (
     <Tooltip
       placement="bottom"
       title={
         <div className="tooltip__table--title">
-          <p>
-            {"SQL statement "}
-            <Anchor
-              href={statementsSql}
-              target="_blank"
-            >
-              fingerprint.
-            </Anchor>
-          </p>
-          <p>
-            To view additional details of a SQL statement fingerprint, click this to open the Statement Details page.
-          </p>
+          {title}
         </div>
       }
     >
-      Statements
+      {t(i18nText)}
     </Tooltip>
-  ),
-  txtType: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className="tooltip__table--title">
-          <p>
-            {"Type of transaction (implicit or explicit). Explicit transactions refer to statements that are wrapped by "}
-            <code>BEGIN</code>
-            {" and "}
-            <code>COMMIT</code>
-            {" statements by the client. Explicit transactions employ "}
-            <Anchor
-              href={transactionalPipelining}
-              target="_blank"
-            >
-              transactional pipelining
-            </Anchor>
-            {" and therefore report latencies that do not account for replication."}
-          </p>
-          <p>
-            For statements not in explicit transactions, CockroachDB wraps each statement in individual implicit transactions.
-          </p>
-        </div>
-      }
-    >
-      TXN Type
-    </Tooltip>
-  ),
-  diagnostics: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className="tooltip__table--title">
-          <p>
-            {"Option to activate "}
-            <Anchor
-              href={statementDiagnostics}
-              target="_blank"
-            >
-              diagnostics
-            </Anchor>
-            {" for each statement. If activated, this displays the status of diagnostics collection ("}
-            <code>WAITING FOR QUERY</code>, <code>READY</code>, OR <code>ERROR</code>).
-          </p>
-        </div>
-      }
-    >
-      Diagnostics
-    </Tooltip>
-  ),
-  retries: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className="tooltip__table--title">
-          <p>
-            {"Cumulative number of "}
-            <Anchor
-              href={statementsRetries}
-              target="_blank"
-            >
-              retries
-            </Anchor>
-            {" of statements with this fingerprint within the last hour or specified time interval."}
-          </p>
-        </div>
-      }
-    >
-      Retries
-    </Tooltip>
-  ),
-  executionCount: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className="tooltip__table--title">
-          <p>
-            {"Cumulative number of executions of statements with this fingerprint within the last hour or specified "}
-            <Anchor
-              href={statementsTimeInterval}
-              target="_blank"
-            >
-              time interval
-            </Anchor>.
-          </p>
-          <p>
-            {"The bar indicates the ratio of runtime success (gray) to "}
-            <Anchor
-              href={statementsRetries}
-              target="_blank"
-            >
-              retries
-            </Anchor>
-            {" (red) for the SQL statement fingerprint."}
-          </p>
-        </div>
-      }
-    >
-      Execution Count
-    </Tooltip>
-  ),
-  rowsAffected: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className="tooltip__table--title">
-          <p>
-            {"Average number of rows returned while executing statements with this fingerprint within the last hour or specified "}
-            <Anchor
-              href={statementsTimeInterval}
-              target="_blank"
-            >
-              time interval
-            </Anchor>.
-          </p>
-          <p>
-            The gray bar indicates the mean number of rows returned. The blue bar indicates one standard deviation from the mean.
-          </p>
-        </div>
-      }
-    >
-      Rows Affected
-    </Tooltip>
-  ),
-  latency: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className="tooltip__table--title">
-          <p>
-            Average service latency of statements with this fingerprint within the last hour or specified time interval.
-          </p>
-          <p>
-            The gray bar indicates the mean latency. The blue bar indicates one standard deviation from the mean.
-          </p>
-        </div>
-      }
-    >
-      Latency
-    </Tooltip>
-  ),
+  );
+};
+
+const i18nKey = (value: string) => `common:statements.table.head.${value}`;
+
+export const StatementTableTitles =  {
+    statements: (
+      <HeadTooltip
+        i18nText="statements.table.head.statements.label"
+        title={
+          <Trans i18nKey={i18nKey("statements.tooltip")}>
+            .<Anchor href={statementsSql} target="_blank">.</Anchor>.<br/><br/>.
+          </Trans>
+        }
+      />
+    ),
+    txtType: (
+      <HeadTooltip
+        i18nText="statements.table.head.txn.label"
+        title={
+          <Trans i18nKey={i18nKey("txn.tooltip")}>
+            .<code>.</code>.<code>.</code>.<Anchor href={transactionalPipelining} target="_blank">.</Anchor>.<br/><br/>.
+          </Trans>
+        }
+      />
+    ),
+    diagnostics: (
+      <HeadTooltip
+        i18nText="statements.table.head.diagnostics.label"
+        title={
+          <Trans i18nKey={i18nKey("diagnostics.tooltip")}>
+            .<Anchor href={statementDiagnostics} target="_blank">.</Anchor>.<code>.</code>.<code>.</code>.<code>.</code>.
+          </Trans>
+        }
+      />
+    ),
+    retries: (
+      <HeadTooltip
+        i18nText="statements.table.head.retries.label"
+        title={
+          <Trans i18nKey={i18nKey("retries.tooltip")}>
+            .<Anchor href={statementsRetries} target="_blank">.</Anchor>.
+          </Trans>
+        }
+      />
+    ),
+    executionCount: (
+      <HeadTooltip
+        i18nText="statements.table.head.execution-count.label"
+        title={
+          <Trans i18nKey={i18nKey("execution-count.tooltip")}>
+            .<Anchor href={statementsTimeInterval} target="_blank">.</Anchor>.<br/><br/>.<Anchor href={statementsRetries} target="_blank">.</Anchor>.
+          </Trans>
+        }
+      />
+    ),
+    rowsAffected: (
+      <HeadTooltip
+        i18nText="statements.table.head.rows.label"
+        title={
+          <Trans i18nKey={i18nKey("rows.tooltip")}>
+            .<Anchor href={statementsTimeInterval} target="_blank">.</Anchor>.<br/><br/>.
+          </Trans>
+        }
+      />
+    ),
+    latency: (
+      <HeadTooltip
+        i18nText="statements.table.head.latency.label"
+        title={
+          <Trans i18nKey={i18nKey("latency.tooltip")}>
+            .<br/><br/>.
+          </Trans>
+        }
+      />
+    ),
 };
 
 export const StatementTableCell = {
