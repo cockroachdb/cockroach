@@ -23,7 +23,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -41,7 +41,7 @@ var _ = execgen.UNSAFEGET
 
 // Declarations to make the template compile properly.
 
-// Dummy import to pull in "apd" package.
+// Dummy import to pull in "apd/v2" package.
 var _ apd.Decimal
 
 // Dummy import to pull in "time" package.
