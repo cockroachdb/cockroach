@@ -137,7 +137,7 @@ func backupRestoreTestSetupWithParams(
 
 	cleanupFn := func() {
 		tc.Stopper().Stop(context.Background()) // cleans up in memory storage's auxiliary dirs
-		dirCleanupFn()                    // cleans up dir, which is the nodelocal:// storage
+		dirCleanupFn()                          // cleans up dir, which is the nodelocal:// storage
 	}
 
 	return ctx, tc, sqlDB, dir, cleanupFn
