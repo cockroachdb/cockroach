@@ -53,11 +53,8 @@ const (
 	defaultScanInterval      = 10 * time.Minute
 	defaultScanMinIdleTime   = 10 * time.Millisecond
 	defaultScanMaxIdleTime   = 1 * time.Second
-	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
-	// See https://github.com/cockroachdb/cockroach/issues/20310.
-	DefaultMetricsSampleInterval   = 10 * time.Second
-	DefaultHistogramWindowInterval = 6 * DefaultMetricsSampleInterval
-	defaultStorePath               = "cockroach-data"
+
+	defaultStorePath = "cockroach-data"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
 	TempDirPrefix = "cockroach-temp"
@@ -116,6 +113,7 @@ func (mo *MaxOffsetType) String() string {
 // unifying.
 type BothConfig struct {
 	Settings *cluster.Settings
+	*base.Config
 
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
@@ -137,7 +135,6 @@ type BothConfig struct {
 // TODO(tbg): this should end up being just SQLConfig union KVConfig union BothConfig.
 type Config struct {
 	// Embed the base context.
-	*base.Config
 	BothConfig
 	base.RaftConfig
 	SQLConfig
@@ -293,33 +290,6 @@ type SQLConfig struct {
 	SQLQueryCacheSize int64
 }
 
-// HistogramWindowInterval is used to determine the approximate length of time
-// that individual samples are retained in in-memory histograms. Currently,
-// it is set to the arbitrary length of six times the Metrics sample interval.
-//
-// The length of the window must be longer than the sampling interval due to
-// issue #12998, which was causing histograms to return zero values when sampled
-// because all samples had been evicted.
-//
-// Note that this is only intended to be a temporary fix for the above issue,
-// as our current handling of metric histograms have numerous additional
-// problems. These are tracked in github issue #7896, which has been given
-// a relatively high priority in light of recent confusion around histogram
-// metrics. For more information on the issues underlying our histogram system
-// and the proposed fixes, please see issue #7896.
-func (cfg Config) HistogramWindowInterval() time.Duration {
-	hwi := DefaultHistogramWindowInterval
-
-	// Rudimentary overflow detection; this can result if
-	// DefaultMetricsSampleInterval is set to an extremely large number, likely
-	// in the context of a test or an intentional attempt to disable metrics
-	// collection. Just return the default in this case.
-	if hwi < DefaultMetricsSampleInterval {
-		return DefaultMetricsSampleInterval
-	}
-	return hwi
-}
-
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
@@ -367,12 +337,12 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	}
 
 	bothCfg := BothConfig{
+		Config:    new(base.Config),
 		MaxOffset: MaxOffsetType(base.DefaultMaxClockOffset),
 		Settings:  st,
 	}
 
 	cfg := Config{
-		Config:                         new(base.Config),
 		BothConfig:                     bothCfg,
 		SQLConfig:                      sqlCfg,
 		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
@@ -613,10 +583,6 @@ func (cfg *Config) InitNode(ctx context.Context) error {
 
 	// Initialize attributes.
 	cfg.NodeAttributes = parseAttributes(cfg.Attrs)
-
-	// Expose HistogramWindowInterval to parts of the code that can't import the
-	// server package. This code should be cleaned up within a month or two.
-	cfg.Config.HistogramWindowInterval = cfg.HistogramWindowInterval()
 
 	// Get the gossip bootstrap resolvers.
 	resolvers, err := cfg.parseGossipBootstrapResolvers(ctx)

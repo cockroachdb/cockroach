@@ -468,7 +468,7 @@ func NewContextWithTestingKnobs(
 	ctx.Stopper = stopper
 	ctx.heartbeatInterval = baseCtx.RPCHeartbeatInterval
 	ctx.RemoteClocks = newRemoteClockMonitor(
-		ctx.LocalClock, 10*ctx.heartbeatInterval, baseCtx.HistogramWindowInterval)
+		ctx.LocalClock, 10*ctx.heartbeatInterval, baseCtx.HistogramWindowInterval())
 	ctx.heartbeatTimeout = 2 * ctx.heartbeatInterval
 	ctx.metrics = makeMetrics()
 
