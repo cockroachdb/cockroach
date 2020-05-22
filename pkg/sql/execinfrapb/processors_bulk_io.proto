@@ -25,6 +25,8 @@ import "sql/sqlbase/structured.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "roachpb/api.proto";
 
 // BackfillerSpec is the specification for a "schema change backfiller".
 // The created backfill processor runs a backfill for the first mutations in
@@ -127,6 +129,21 @@ message ReadImportDataSpec {
   optional int32 readerParallelism = 13 [(gogoproto.nullable) = false];
 
   // NEXTID: 14
+}
+
+message BackupDataSpec {
+  repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
+  optional string default_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "DefaultURI"];
+  map<string, string> uris_by_locality_kv = 4 [(gogoproto.customname) = "URIsByLocalityKV"];
+  optional roachpb.MVCCFilter mvcc_filter = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCFilter"];
+  optional roachpb.FileEncryptionOptions encryption = 6;
+  optional util.hlc.Timestamp backup_start_time = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp backup_end_time = 8 [(gogoproto.nullable) = false];
+
+  // PKIDs is used to convert result from an ExportRequest into row count
+  // information passed back to track progress in the backup job.
+  map<uint64, bool> pk_ids = 9 [(gogoproto.customname) = "PKIDs"];
 }
 
 // FileCompression list of the compression codecs which are currently

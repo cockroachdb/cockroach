@@ -512,19 +512,32 @@ type rowResultWriter interface {
 	Err() error
 }
 
-type metadataResultWriter interface {
+// MetadataResultWriter is used to stream metadata rather than row results in a
+// DistSQL flow.
+type MetadataResultWriter interface {
 	AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata)
 }
 
-type metadataCallbackWriter struct {
+// MetadataCallbackWriter wraps a rowResultWriter to stream metadata in a
+// DistSQL flow. It executes a given callback when metadata is added.
+type MetadataCallbackWriter struct {
 	rowResultWriter
 	fn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error
 }
 
-func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) {
+// AddMeta implements the MetadataResultWriter interface.
+func (w *MetadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) {
 	if err := w.fn(ctx, meta); err != nil {
 		w.SetError(err)
 	}
+}
+
+// NewMetadataCallbackWriter creates a new MetadataCallbackWriter.
+func NewMetadataCallbackWriter(
+	rowResultWriter rowResultWriter,
+	metaFn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error,
+) *MetadataCallbackWriter {
+	return &MetadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn}
 }
 
 // errOnlyResultWriter is a rowResultWriter that only supports receiving an
@@ -682,7 +695,7 @@ func (r *DistSQLReceiver) Push(
 			meta.Metrics.Release()
 			meta.Release()
 		}
-		if metaWriter, ok := r.resultWriter.(metadataResultWriter); ok {
+		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
 			metaWriter.AddMeta(r.ctx, meta)
 		}
 		return r.status

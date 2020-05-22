@@ -30,6 +30,8 @@ import "sql/sqlbase/encoded_datum.proto";
 import "sql/types/types.proto";
 import "util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
+import "google/protobuf/any.proto";
 
 // Error is a generic representation including a string message.
 message Error {
@@ -268,9 +270,11 @@ message RemoteProducerMetadata {
     optional bool histogram_disabled = 2 [(gogoproto.nullable) = false];
   }
   message BulkProcessorProgress {
-     repeated roachpb.Span completed_spans = 1 [(gogoproto.nullable) = false];
-     map<int32, float> completed_fraction = 2;
-     map<int32, int64> resume_pos = 3;
+    repeated roachpb.Span completed_spans = 1 [(gogoproto.nullable) = false];
+    map<int32, float> completed_fraction = 2;
+    map<int32, int64> resume_pos = 3;
+    // Used to stream back progress to the coordinator of a bulk job.
+    optional google.protobuf.Any progress_details = 4 [(gogoproto.nullable) = false];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
