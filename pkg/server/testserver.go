@@ -515,7 +515,9 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 				return nil, errors.New("fake external uri storage")
 			},
 		},
-		Config:                   &cfg,
+		Config: &cfg,
+		// SQLConfig:                &cfg.SQLConfig,
+		// BothConfig:               &cfg.BothConfig,
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),

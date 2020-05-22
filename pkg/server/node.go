@@ -454,7 +454,7 @@ func (n *Node) start(
 		}
 	}
 
-	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
+	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
 
 	// Be careful about moving this line above `startStores`; store migrations rely
 	// on the fact that the cluster version has not been updated via Gossip (we
