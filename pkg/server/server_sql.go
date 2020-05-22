@@ -230,7 +230,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		codec,
 		lmKnobs,
 		cfg.stopper,
-		cfg.LeaseManagerConfig,
+		cfg.SQLLeaseManagerConfig,
 	)
 
 	// Set up internal memory metrics for use by internal SQL executors.
@@ -261,8 +261,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 	// Set up the DistSQL temp engine.
 
-	useStoreSpec := cfg.Stores.Specs[cfg.TempStorageConfig.SpecIdx]
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.TempStorageConfig, useStoreSpec)
+	useStoreSpec := cfg.Stores.Specs[cfg.SQLTempStorageConfig.SpecIdx]
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.SQLTempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
@@ -270,12 +270,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
 	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		firstStore := cfg.Stores.Specs[cfg.TempStorageConfig.SpecIdx]
+		firstStore := cfg.Stores.Specs[cfg.SQLTempStorageConfig.SpecIdx]
 		var err error
 		if firstStore.InMemory {
 			// First store is in-memory so we remove the temp
 			// directory directly since there is no record file.
-			err = os.RemoveAll(cfg.TempStorageConfig.Path)
+			err = os.RemoveAll(cfg.SQLTempStorageConfig.Path)
 		} else {
 			// If record file exists, we invoke CleanupTempDirs to
 			// also remove the record after the temp directory is
@@ -307,14 +307,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		Stopper:        cfg.stopper,
 
 		TempStorage:     tempEngine,
-		TempStoragePath: cfg.TempStorageConfig.Path,
+		TempStoragePath: cfg.SQLTempStorageConfig.Path,
 		TempFS:          tempFS,
 		// COCKROACH_VEC_MAX_OPEN_FDS specifies the maximum number of open file
 		// descriptors that the vectorized execution engine may have open at any
 		// one time. This limit is implemented as a weighted semaphore acquired
 		// before opening files.
 		VecFDSemaphore: semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
-		DiskMonitor:    cfg.TempStorageConfig.Mon,
+		DiskMonitor:    cfg.SQLTempStorageConfig.Mon,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		BulkAdder: func(
@@ -336,7 +336,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
 	}
-	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
+	cfg.SQLTempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}

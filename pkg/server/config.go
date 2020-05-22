@@ -118,7 +118,7 @@ type Config struct {
 	base.RaftConfig
 
 	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
-	LeaseManagerConfig *base.LeaseManagerConfig
+	SQLLeaseManagerConfig *base.LeaseManagerConfig
 
 	// SocketFile, if non-empty, sets up a TLS-free local listener using
 	// a unix datagram socket at the specified path.
@@ -133,11 +133,11 @@ type Config struct {
 
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
-	TempStorageConfig base.TempStorageConfig
+	SQLTempStorageConfig base.TempStorageConfig
 
-	// ExternalIOConfig is used to configure external storage
+	// SQLExternalIOConfig is used to configure external storage
 	// access (http://, nodelocal://, etc)
-	ExternalIOConfig base.ExternalIOConfig
+	SQLExternalIOConfig base.SQLExternalIOConfig
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -366,14 +366,14 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 			Specs: []base.StoreSpec{storeSpec},
 		},
 		StorageEngine: storage.DefaultStorageEngine,
-		TempStorageConfig: base.TempStorageConfigFromEnv(
+		SQLTempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
 	cfg.Config.InitDefaults()
 	cfg.RaftConfig.SetDefaults()
-	cfg.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	cfg.SQLLeaseManagerConfig = base.NewLeaseManagerConfig()
 
 	return cfg
 }

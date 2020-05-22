@@ -98,7 +98,7 @@ func TestCloudStorageSink(t *testing.T) {
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIOConfig{}, settings, clientFactory)
+		return cloud.ExternalStorageFromURI(ctx, uri, base.SQLExternalIOConfig{}, settings, clientFactory)
 	}
 
 	t.Run(`golden`, func(t *testing.T) {

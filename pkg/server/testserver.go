@@ -87,7 +87,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
-	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
+	cfg.SQLTempStorageConfig = base.DefaultTestTempStorageConfig(st)
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
@@ -128,9 +128,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RaftConfig = params.RaftConfig
 	cfg.RaftConfig.SetDefaults()
 	if params.LeaseManagerConfig != nil {
-		cfg.LeaseManagerConfig = params.LeaseManagerConfig
+		cfg.SQLLeaseManagerConfig = params.LeaseManagerConfig
 	} else {
-		cfg.LeaseManagerConfig = base.NewLeaseManagerConfig()
+		cfg.SQLLeaseManagerConfig = base.NewLeaseManagerConfig()
 	}
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}
@@ -246,7 +246,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
 	if params.TempStorageConfig != (base.TempStorageConfig{}) {
-		cfg.TempStorageConfig = params.TempStorageConfig
+		cfg.SQLTempStorageConfig = params.TempStorageConfig
 	}
 
 	if cfg.TestingKnobs.Store == nil {
