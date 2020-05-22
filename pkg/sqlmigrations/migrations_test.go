@@ -807,3 +807,50 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		return nil
 	}))
 }
+
+func TestAlterSystemJobsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// We need to use "old" jobs table descriptor without newly added columns
+	// in order to test migration.
+	jobsTable := sqlbase.JobsTable
+	sqlbase.JobsTable = sqlbase.OldJobsTable
+	defer func() {
+		sqlbase.JobsTable = jobsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add created_by columns to system.jobs")
+	mt.start(t, base.TestServerArgs{})
+
+	// We expect to create 2 new clolumns
+	oldColumns := [][]string{{"id"}, {"status"}, {"created"}, {"payload"}, {"progress"}}
+	newColumns := [][]string{{"created_by_type"}, {"created_by_id"}}
+
+	// We also create a new index which stores 4 columns:
+	// 2 new columns, plus status column and the primary key (id)
+	expectedIndexCols := 4
+
+	queryCols := `SELECT column_name FROM [SHOW COLUMNS FROM system.jobs]`
+	queryIdx := `
+SELECT count(*) FROM [SHOW INDEX FROM system.jobs] 
+WHERE index_name='jobs_created_by_type_created_by_id_idx'
+`
+
+	// Check that we don't have new columns or index
+	mt.sqlDB.CheckQueryResults(t, queryCols, oldColumns)
+	var numIndexCols int
+	mt.sqlDB.QueryRow(t, queryIdx).Scan(&numIndexCols)
+	require.Equal(t, 0, numIndexCols)
+
+	// Run the migration to alter system.jobs table.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	// Check that we have the new columns and an index.
+	mt.sqlDB.CheckQueryResults(t, queryCols, append(oldColumns, newColumns...))
+	mt.sqlDB.QueryRow(t, queryIdx).Scan(&numIndexCols)
+	require.Equal(t, expectedIndexCols, numIndexCols)
+}

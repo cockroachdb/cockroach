@@ -162,8 +162,12 @@ CREATE TABLE system.jobs (
 	created           TIMESTAMP NOT NULL DEFAULT now(),
 	payload           BYTES     NOT NULL,
 	progress          BYTES,
+  created_by_type   STRING,
+  created_by_id     INT,
 	INDEX (status, created),
-	FAMILY (id, status, created, payload),
+  INDEX (created_by_type, created_by_id) STORING (status),
+
+	FAMILY "primary" (id, status, created, payload, created_by_type, created_by_id),
 	FAMILY progress (progress)
 );`
 
@@ -801,6 +805,71 @@ var (
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = TableDescriptor{
+		Name:                    "jobs",
+		ID:                      keys.JobsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "status", ID: 2, Type: types.String},
+			{Name: "created", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
+			{Name: "payload", ID: 4, Type: types.Bytes},
+			{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
+			{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
+			{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
+		},
+		NextColumnID: 8,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 6, 7},
+			},
+			{
+				Name:            "progress",
+				ID:              1,
+				ColumnNames:     []string{"progress"},
+				ColumnIDs:       []ColumnID{5},
+				DefaultColumnID: 5,
+			},
+		},
+		NextFamilyID: 2,
+		PrimaryIndex: pk("id"),
+		Indexes: []IndexDescriptor{
+			{
+				Name:             "jobs_status_created_idx",
+				ID:               2,
+				Unique:           false,
+				ColumnNames:      []string{"status", "created"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{2, 3},
+				ExtraColumnIDs:   []ColumnID{1},
+				Version:          SecondaryIndexFamilyFormatVersion,
+			},
+			{
+				Name:             "jobs_created_by_type_created_by_id_idx",
+				ID:               3,
+				Unique:           false,
+				ColumnNames:      []string{"created_by_type", "created_by_id"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{6, 7},
+				StoreColumnIDs:   []ColumnID{2},
+				StoreColumnNames: []string{"status"},
+				ExtraColumnIDs:   []ColumnID{1},
+				Version:          SecondaryIndexFamilyFormatVersion,
+			},
+		},
+		NextIndexID:    4,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// OldJobsTable is the descriptor for JobsTable prior to 20.2.
+	// Remove when migration code is baked in (after 22.1 release).
+	OldJobsTable = TableDescriptor{
 		Name:                    "jobs",
 		ID:                      keys.JobsTableID,
 		ParentID:                keys.SystemDatabaseID,
