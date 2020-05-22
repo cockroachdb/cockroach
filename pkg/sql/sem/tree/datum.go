@@ -3784,6 +3784,10 @@ func (d *DEnum) Size() uintptr {
 // MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
 // and the input physical representation.
 func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (*DEnum, error) {
+	// Return a nice error if the input requested type is types.AnyEnum.
+	if typ.Oid() == oid.T_anyenum {
+		return nil, errors.New("cannot create enum of unspecified type")
+	}
 	// Take a pointer into the enum metadata rather than holding on
 	// to a pointer to the input bytes.
 	idx, err := typ.EnumGetIdxOfPhysical(rep)
