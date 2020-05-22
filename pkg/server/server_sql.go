@@ -128,10 +128,8 @@ type sqlServerOptionalArgs struct {
 type sqlServerArgs struct {
 	sqlServerOptionalArgs
 
-	*Config
-	// TODO(tbg): replace Config with:
-	// *SQLConfig
-	// *BothConfig
+	*SQLConfig
+	*BothConfig
 
 	stopper *stop.Stopper
 
@@ -489,7 +487,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
 	pgServer := pgwire.MakeServer(
 		cfg.AmbientCtx,
-		cfg.Config.Config,
+		cfg.Config,
 		cfg.Settings,
 		sqlMemMetrics,
 		&rootSQLMemoryMonitor,
