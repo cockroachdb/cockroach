@@ -55,15 +55,15 @@ statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE error (a INT, INDEX (a) WHERE false - true)
 
 # Don't allow references to other tables.
-statement error no data source matches prefix: t1
+statement error pq: cannot reference column in table t1
 CREATE TABLE error (a INT, INDEX (a) WHERE t1.a > 0)
 
 # Don't allow references to unknown tables.
-statement error no data source matches prefix: unknown
+statement error pq: cannot reference column in table unknown
 CREATE TABLE error (a INT, INDEX (a) WHERE unknown.a > 0)
 
 # Don't allow reference to unknown databases.
-statement error no data source matches prefix: unknown.error
+statement error pq: cannot qualify columns in expression with database or schema
 CREATE TABLE error (a INT, INDEX (a) WHERE unknown.error.a > 9)
 
 #### Validate CREATE TABLE ... UNIQUE INDEX predicate.
@@ -88,7 +88,7 @@ statement error expected index predicate expression to have type bool, but '1' h
 CREATE INDEX error ON t5 (a) WHERE 1
 
 # Don't allow references to other tables in predicates.
-statement error no data source matches prefix: t4
+statement error pq: cannot reference column in table t4
 CREATE INDEX error ON t5 (a) WHERE t4.a = 1
 
 #### Dequalify table references.
@@ -98,16 +98,16 @@ CREATE TABLE t6 (
     a INT,
     INDEX (a) WHERE a > 0,
     INDEX (a) WHERE t6.a > 1,
-    INDEX (a DESC) WHERE test.t6.a > 2,
+    INDEX (a DESC) WHERE t6.a > 2,
     UNIQUE INDEX (a) WHERE a > 3,
     UNIQUE INDEX (a) WHERE t6.a > 4,
-    UNIQUE INDEX (a DESC) WHERE test.t6.a > 5
+    UNIQUE INDEX (a DESC) WHERE t6.a > 5
 )
 
 statement ok
 CREATE INDEX t6i1 ON t6 (a) WHERE a > 6;
 CREATE INDEX t6i2 ON t6 (a) WHERE t6.a > 7;
-CREATE INDEX t6i3 ON t6 (a DESC) WHERE test.t6.a > 8;
+CREATE INDEX t6i3 ON t6 (a DESC) WHERE t6.a > 8;
 
 query TT
 SHOW CREATE TABLE t6
