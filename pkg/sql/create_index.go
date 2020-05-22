@@ -204,10 +204,13 @@ func MakeIndexDescriptor(
 		return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 	}
 	if n.Predicate != nil {
-		_, err := validateIndexPredicate(params.ctx, tableDesc, n.Predicate, &params.p.semaCtx, n.Table)
+		expr, err := validateIndexPredicate(params.ctx, tableDesc, n.Predicate, &params.p.semaCtx, n.Table)
 		if err != nil {
 			return nil, err
 		}
+
+		// Store the serialized predicate expression in the IndexDescriptor.
+		indexDesc.Predicate = tree.Serialize(expr)
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {

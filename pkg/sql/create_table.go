@@ -1482,10 +1482,13 @@ func MakeTableDesc(
 				return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 			}
 			if d.Predicate != nil {
-				_, err := validateIndexPredicate(ctx, &desc, d.Predicate, semaCtx, n.Table)
+				expr, err := validateIndexPredicate(ctx, &desc, d.Predicate, semaCtx, n.Table)
 				if err != nil {
 					return desc, err
 				}
+
+				// Store the serialized predicate expression in the IndexDescriptor.
+				idx.Predicate = tree.Serialize(expr)
 			}
 
 			if err := desc.AddIndex(idx, false); err != nil {
@@ -1524,10 +1527,13 @@ func MakeTableDesc(
 				return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 			}
 			if d.Predicate != nil {
-				_, err := validateIndexPredicate(ctx, &desc, d.Predicate, semaCtx, n.Table)
+				expr, err := validateIndexPredicate(ctx, &desc, d.Predicate, semaCtx, n.Table)
 				if err != nil {
 					return desc, err
 				}
+
+				// Store the serialized predicate expression in the IndexDescriptor.
+				idx.Predicate = tree.Serialize(expr)
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err

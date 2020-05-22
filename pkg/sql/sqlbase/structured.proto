@@ -464,6 +464,10 @@ message IndexDescriptor {
   // GeoConfig, if it's not the zero value, describes configuration for
   // this geospatial inverted index.
   optional geo.geoindex.Config geo_config = 22 [(gogoproto.nullable) = false];
+
+  // If Predicate is not the empty string, describes a predicate expression for
+  // a partial index.
+  optional string predicate = 23 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

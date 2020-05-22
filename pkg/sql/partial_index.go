@@ -38,7 +38,7 @@ func validateIndexPredicate(
 ) (tree.Expr, error) {
 
 	// Replace column variables with dummyColumnItems.
-	expr, _, err := replaceVars(desc, expr)
+	replacedExpr, _, err := replaceVars(desc, expr)
 	if err != nil {
 		return nil, err
 	}
@@ -46,9 +46,18 @@ func validateIndexPredicate(
 	// Check that the type of the expression is a types.Bool and that there are
 	// no variable expressions (besides dummyColumnItems) and no impure
 	// functions.
-	if _, err := sqlbase.SanitizeVarFreeExpr(expr, types.Bool, "index predicate", semaCtx, false); err != nil {
+	if _, err := sqlbase.SanitizeVarFreeExpr(replacedExpr, types.Bool, "index predicate", semaCtx, false); err != nil {
 		return nil, err
 	}
 
-	return expr, nil
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
+		tableName, sqlbase.ResultColumnsFromColDescs(
+			desc.GetID(),
+			desc.TableDesc().AllNonDropColumns(),
+		),
+	)
+
+	// Dequalify column references so that they do not contain database or
+	// table names.
+	return dequalifyColumnRefs(ctx, sourceInfo, expr)
 }
