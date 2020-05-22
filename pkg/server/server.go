@@ -520,6 +520,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(grpcServer.Server)
 	}
 
+	var jobAdoptionStopFile string
+	for _, spec := range cfg.Stores.Specs {
+		if !spec.InMemory && spec.Path != "" {
+			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
+			break
+		}
+	}
+
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalArgs: sqlServerOptionalArgs{
 			rpcContext:             rpcContext,
@@ -549,6 +557,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sessionRegistry:          sessionRegistry,
 		circularInternalExecutor: internalExecutor,
 		jobRegistry:              jobRegistry,
+		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
 	})
 	if err != nil {

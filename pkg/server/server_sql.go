@@ -164,7 +164,8 @@ type sqlServerArgs struct {
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
-	jobRegistry *jobs.Registry
+	jobRegistry         *jobs.Registry
+	jobAdoptionStopFile string
 
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
@@ -173,14 +174,6 @@ type sqlServerArgs struct {
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	execCfg := &sql.ExecutorConfig{}
 	codec := keys.MakeSQLCodec(cfg.tenantID)
-
-	var jobAdoptionStopFile string
-	for _, spec := range cfg.Stores.Specs {
-		if !spec.InMemory && spec.Path != "" {
-			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
-			break
-		}
-	}
 
 	// Create blob service for inter-node file sharing.
 	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
@@ -211,7 +204,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 				// in sql/jobs/registry.go on planHookMaker.
 				return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, execCfg)
 			},
-			jobAdoptionStopFile,
+			cfg.jobAdoptionStopFile,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
