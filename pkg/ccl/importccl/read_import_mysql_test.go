@@ -37,7 +37,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 
 	files := getMysqldumpTestdata(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table}}
 
@@ -110,7 +110,7 @@ func readMysqlCreateFrom(
 	}
 	defer f.Close()
 
-	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, nil, id, expectedParent, name, fks, map[sqlbase.ID]int64{})
+	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, nil, id, expectedParent, name, fks, map[sqlbase.ID]int64{})
 	if err != nil {
 		t.Fatal(err)
 	}

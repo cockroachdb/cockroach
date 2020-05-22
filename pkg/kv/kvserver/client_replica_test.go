@@ -218,7 +218,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	var numGets int32
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	manual := hlc.NewManualClock(123)
 	cfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	// Splits can cause our chosen key to end up on a range other than range 1,
@@ -249,7 +249,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Put an initial value.
 	initVal := []byte("initVal")
-	err := store.DB().Put(context.TODO(), key, initVal)
+	err := store.DB().Put(context.Background(), key, initVal)
 	if err != nil {
 		t.Fatalf("failed to put: %+v", err)
 	}
@@ -266,7 +266,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		errChan <- store.DB().Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+		errChan <- store.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 			epoch++
 
 			if epoch == 1 {
@@ -282,7 +282,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			updatedVal := []byte("updatedVal")
 			if err := txn.CPut(ctx, key, updatedVal, strToValue("initVal")); err != nil {
-				log.Errorf(context.TODO(), "failed put value: %+v", err)
+				log.Errorf(context.Background(), "failed put value: %+v", err)
 				return err
 			}
 
@@ -380,7 +380,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	store := createTestStoreWithOpts(
 		t,
 		testStoreOpts{
@@ -610,7 +610,7 @@ func (l *leaseTransferTest) sendRead(storeIdx int) *roachpb.Error {
 		getArgs(l.leftKey),
 	)
 	if pErr != nil {
-		log.Warningf(context.TODO(), "%v", pErr)
+		log.Warningf(context.Background(), "%v", pErr)
 	}
 	return pErr
 }
@@ -1036,7 +1036,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Now, a successful transfer from LHS replica 0 to replica 1.
 	injectLeaseTransferError.Store(false)
 	if err := mtc.dbs[0].AdminTransferLease(
-		context.TODO(), keyMinReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
+		context.Background(), keyMinReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
 	); err != nil {
 		t.Fatalf("unable to transfer lease to replica 1: %+v", err)
 	}
@@ -1055,7 +1055,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	injectLeaseTransferError.Store(true)
 	keyAReplica0 := mtc.stores[0].LookupReplica(splitKey)
 	if err := mtc.dbs[0].AdminTransferLease(
-		context.TODO(), keyAReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
+		context.Background(), keyAReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
 	); err == nil {
 		t.Fatal("expected an error transferring to an unknown store ID")
 	}
@@ -1071,8 +1071,8 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Expire current leases and put a key to RHS of split to request
 	// an epoch-based lease.
 	testutils.SucceedsSoon(t, func() error {
-		mtc.advanceClock(context.TODO())
-		if err := mtc.stores[0].DB().Put(context.TODO(), "a", "foo"); err != nil {
+		mtc.advanceClock(context.Background())
+		if err := mtc.stores[0].DB().Put(context.Background(), "a", "foo"); err != nil {
 			return err
 		}
 
@@ -1201,7 +1201,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			},
 		})
 	s := srv.(*server.TestServer)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	if err != nil {
@@ -1254,7 +1254,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 
 		for {
-			curLease, _, err := s.GetRangeLease(context.TODO(), key)
+			curLease, _, err := s.GetRangeLease(context.Background(), key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1305,7 +1305,7 @@ func LeaseInfo(
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	kvDB0 := tc.Servers[0].DB()
 	kvDB1 := tc.Servers[1].DB()
@@ -1438,7 +1438,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 			},
 		})
 	s := srv.(*server.TestServer)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Send the lease request.
 	key := roachpb.Key("a")
@@ -1613,7 +1613,7 @@ func TestRangeInfo(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = mtc.dbs[0].AdminTransferLease(context.TODO(),
+		if err = mtc.dbs[0].AdminTransferLease(context.Background(),
 			r.Desc().StartKey.AsRawKey(), replDesc.StoreID); err != nil {
 			t.Fatalf("unable to transfer lease to replica %s: %+v", r, err)
 		}
@@ -2576,7 +2576,7 @@ func TestReplicaTombstone(t *testing.T) {
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
 			ok, err := storage.MVCCGetProto(
-				context.TODO(), store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+				context.Background(), store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 			)
 			require.NoError(t, err)
 			if !ok {
@@ -2912,7 +2912,7 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 		},
 		ReplicationMode: base.ReplicationManual,
 	})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	scratch := tc.ScratchRange(t)
 	makeKey := func() roachpb.Key {
@@ -2926,7 +2926,7 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 	// filter.
 	incErr := make(chan error)
 	go func() {
-		_, err := tc.Server(1).DB().Inc(context.TODO(), makeKey(), 1)
+		_, err := tc.Server(1).DB().Inc(context.Background(), makeKey(), 1)
 		incErr <- err
 	}()
 

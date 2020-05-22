@@ -74,7 +74,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -160,7 +160,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatalf("expected update to silently fail since queue is disabled")
 	}
 
-	if resp, pErr := q.MaybeWaitForPush(context.TODO(), &req); resp != nil || pErr != nil {
+	if resp, pErr := q.MaybeWaitForPush(context.Background(), &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 	if err := checkAllGaugesZero(tc); err != nil {
@@ -172,7 +172,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -235,7 +235,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -431,7 +431,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -502,7 +502,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 			return nil
 		}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, tc.Clock())
@@ -599,7 +599,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 			t.Run(fmt.Sprintf("recordEpoch=%s", c.name), func(t *testing.T) {
 				tc := testContext{}
 				stopper := stop.NewStopper()
-				defer stopper.Stop(context.TODO())
+				defer stopper.Stop(context.Background())
 				tc.Start(t, stopper)
 
 				txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -696,7 +696,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txnA, err := createTxnForPushQueue(context.Background(), &tc)
@@ -789,7 +789,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	// Create txnA with a lower priority so it won't think it could push

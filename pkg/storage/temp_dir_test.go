@@ -27,7 +27,7 @@ func TestCreateTempDir(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	// Temporary parent directory to test this.
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {

@@ -131,7 +131,7 @@ func TestPurgeOldVersions(t *testing.T) {
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 	// Block gossip.
 	gossipSem <- struct{}{}
@@ -153,10 +153,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var expiration hlc.Timestamp
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
-			if err := leaseManager.AcquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
+			if err := leaseManager.AcquireFreshestFromStore(context.Background(), tableDesc.ID); err != nil {
 				t.Fatal(err)
 			}
-			table, exp, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
+			table, exp, err := leaseManager.Acquire(context.Background(), s.Clock().Now(), tableDesc.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -174,14 +174,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Verifies that errDidntUpdateDescriptor doesn't leak from Publish().
-	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
+	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
 		return errDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Publish a new version for the table
-	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
+	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
 		return nil
 	}, nil); err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.Background(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -225,7 +225,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.Background(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {
@@ -239,7 +239,7 @@ func TestNameCacheDBConflictingTableNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := db.Exec(`SET experimental_enable_temp_tables = true`); err != nil {
@@ -287,7 +287,7 @@ CREATE TEMP TABLE t2 (temp int);
 func TestNameCacheIsUpdated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := db.Exec(`
@@ -358,7 +358,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	const tableName = "test"
@@ -408,7 +408,7 @@ func TestNameCacheContainsLatestLease(t *testing.T) {
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	const tableName = "test"
@@ -436,7 +436,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	tracker := removalTracker.TrackRemoval(&lease.ImmutableTableDescriptor)
 
 	// Acquire another lease.
-	if _, err := acquireNodeLease(context.TODO(), leaseManager, tableDesc.ID); err != nil {
+	if _, err := acquireNodeLease(context.Background(), leaseManager, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -467,7 +467,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 func TestTableNameCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := db.Exec(`
@@ -508,7 +508,7 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(
 		t, base.TestServerArgs{Knobs: testingKnobs})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := sqlDB.Exec(`
@@ -521,7 +521,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Populate the name cache.
-	ctx := context.TODO()
+	ctx := context.Background()
 	table, _, err := leaseManager.AcquireByName(
 		ctx,
 		leaseManager.clock.Now(),
@@ -551,7 +551,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	for i := 0; i < 50; i++ {
 		timestamp := leaseManager.clock.Now()
-		ctx := context.TODO()
+		ctx := context.Background()
 		table, _, err := leaseManager.AcquireByName(
 			ctx,
 			timestamp,
@@ -624,7 +624,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestAcquireFreshestFromStoreRaces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := db.Exec(`
@@ -642,10 +642,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			if err := leaseManager.AcquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
+			if err := leaseManager.AcquireFreshestFromStore(context.Background(), tableDesc.ID); err != nil {
 				t.Error(err)
 			}
-			table, _, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
+			table, _, err := leaseManager.Acquire(context.Background(), s.Clock().Now(), tableDesc.ID)
 			if err != nil {
 				t.Error(err)
 			}
@@ -676,7 +676,7 @@ func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(
 		t, base.TestServerArgs{Knobs: testingKnobs})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := sqlDB.Exec(`
@@ -695,7 +695,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			table, _, err := leaseManager.Acquire(context.TODO(), now, tableDesc.ID)
+			table, _, err := leaseManager.Acquire(context.Background(), now, tableDesc.ID)
 			if err != nil {
 				t.Error(err)
 			}
@@ -836,7 +836,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)
-			defer s.Stopper().Stop(context.TODO())
+			defer s.Stopper().Stop(context.Background())
 			leaseManager := s.LeaseManager().(*LeaseManager)
 
 			acquireResultChan := make(chan Result)

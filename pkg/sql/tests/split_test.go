@@ -29,7 +29,7 @@ import (
 
 // getRangeKeys returns the end keys of all ranges.
 func getRangeKeys(db *kv.DB) ([]roachpb.Key, error) {
-	rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
+	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	params.ScanMinIdleTime = time.Millisecond
 	params.ScanMaxIdleTime = time.Millisecond
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	expectedInitialRanges, err := server.ExpectedInitialRangeCount(kvDB, &s.(*server.TestServer).Cfg.DefaultZoneConfig, &s.(*server.TestServer).Cfg.DefaultSystemZoneConfig)
 	if err != nil {

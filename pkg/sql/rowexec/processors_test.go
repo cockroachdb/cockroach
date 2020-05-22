@@ -290,7 +290,7 @@ func TestPostProcess(t *testing.T) {
 			}
 			// Run the rows through the helper.
 			for i := range input {
-				status, err := out.EmitRow(context.TODO(), input[i])
+				status, err := out.EmitRow(context.Background(), input[i])
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -556,7 +556,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	origDB0 := tc.ServerConn(0)
 	sqlutils.CreateTable(t, origDB0, "t",

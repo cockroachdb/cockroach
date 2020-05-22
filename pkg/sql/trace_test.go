@@ -250,7 +250,7 @@ func TestTrace(t *testing.T) {
 	// Create a cluster. We'll run sub-tests using each node of this cluster.
 	const numNodes = 3
 	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
-	defer cluster.Stopper().Stop(context.TODO())
+	defer cluster.Stopper().Stop(context.Background())
 
 	clusterDB := cluster.ServerConn(0)
 	if _, err := clusterDB.Exec(`
@@ -405,7 +405,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
 
@@ -515,7 +515,7 @@ func TestKVTraceWithCountStar(t *testing.T) {
 	// Test that we don't crash if we try to do a KV trace
 	// on a COUNT(*) query (#19846).
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE DATABASE test")
@@ -535,7 +535,7 @@ func TestKVTraceDistSQL(t *testing.T) {
 			UseDatabase: "test",
 		},
 	})
-	defer cluster.Stopper().Stop(context.TODO())
+	defer cluster.Stopper().Stop(context.Background())
 
 	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
 	r.Exec(t, "CREATE DATABASE test")

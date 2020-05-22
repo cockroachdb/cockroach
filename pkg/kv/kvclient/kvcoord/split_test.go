@@ -62,7 +62,7 @@ func startTestWriter(
 			return
 		default:
 			first := true
-			err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+			err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:
@@ -99,7 +99,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	splitKeys := []roachpb.RKey{roachpb.RKey("G"), keys.RangeMetaKey(roachpb.RKey("F")),
 		keys.RangeMetaKey(roachpb.RKey("K")), keys.RangeMetaKey(roachpb.RKey("H"))}
@@ -146,7 +146,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		go startTestWriter(s.DB, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {
 		// Allow txns to start before initiating split.
@@ -154,7 +154,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if pErr := s.DB.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); pErr != nil {
+		if pErr := s.DB.AdminSplit(context.Background(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); pErr != nil {
 			t.Error(pErr)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -200,7 +200,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	wg.Add(1)
 	go startTestWriter(s.DB, int64(0), 1<<15, &wg, nil, nil, done, t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Check that we split 5 times in allotted time.
 	testutils.SucceedsSoon(t, func() error {
@@ -243,7 +243,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	})
 	defer s.Stop()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	splitKey := roachpb.Key("aa")
 	log.Infof(ctx, "starting split at key %q...", splitKey)
@@ -270,7 +270,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	})
 	defer s.Stop()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	splitKey := roachpb.RKey("aa")
 	descKey := keys.RangeDescriptorKey(splitKey)
 

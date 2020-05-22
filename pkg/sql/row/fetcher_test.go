@@ -167,7 +167,7 @@ func TestNextRowSingle(t *testing.T) {
 			}
 
 			if err := rf.StartScan(
-				context.TODO(),
+				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PrimaryIndex.ID)},
 				false, /*limitBatches*/
@@ -181,7 +181,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
+				datums, desc, index, err := rf.NextRowDecoded(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -287,7 +287,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 			}
 
 			if err := rf.StartScan(
-				context.TODO(),
+				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PrimaryIndex.ID)},
 				true,  /*limitBatches*/
@@ -301,7 +301,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
+				datums, desc, index, err := rf.NextRowDecoded(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -415,7 +415,7 @@ INDEX(c)
 	indexSpan.EndKey = midKey
 
 	if err := rf.StartScan(
-		context.TODO(),
+		context.Background(),
 		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{indexSpan,
 			roachpb.Span{Key: midKey, EndKey: endKey},
@@ -433,7 +433,7 @@ INDEX(c)
 	for {
 		// Just try to grab the row - we don't need to validate the contents
 		// in this test.
-		datums, _, _, err := rf.NextRowDecoded(context.TODO())
+		datums, _, _, err := rf.NextRowDecoded(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -579,7 +579,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			}
 
 			if err := rf.StartScan(
-				context.TODO(),
+				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.Indexes[0].ID)},
 				false, /*limitBatches*/
@@ -593,7 +593,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
+				datums, desc, index, err := rf.NextRowDecoded(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -941,7 +941,7 @@ func TestNextRowInterleaved(t *testing.T) {
 			}
 
 			if err := rf.StartScan(
-				context.TODO(),
+				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				lookupSpans,
 				false, /*limitBatches*/
@@ -955,7 +955,7 @@ func TestNextRowInterleaved(t *testing.T) {
 			count := make(map[string]int, len(entries))
 
 			for {
-				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
+				datums, desc, index, err := rf.NextRowDecoded(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -168,7 +168,7 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 		signalRevMigrationDone,
 		signalMigrationDone,
 	)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	defer disableGCTTLStrictEnforcement(t, sqlDB)()
 
 	log.Info(ctx, "waiting for all schema changes to block")
@@ -865,7 +865,7 @@ func TestGCJobCreated(t *testing.T) {
 		AlwaysRunJobMigration: true,
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 

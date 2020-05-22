@@ -803,7 +803,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 		// node will wait forever.
 		ReplicationMode: base.ReplicationManual,
 	})
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
 	ctx = logtags.AddTag(ctx, "in test", nil)

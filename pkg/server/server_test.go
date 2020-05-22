@@ -62,7 +62,7 @@ func TestSelfBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if s.RPCContext().ClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
@@ -86,7 +86,7 @@ func TestHealthCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	ctx := context.Background()
 
@@ -124,7 +124,7 @@ func TestHealthCheck(t *testing.T) {
 func TestEngineTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	rows, err := db.Query("SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'storage.engine.%' AND usage_count > 0;")
 	defer func() {
@@ -162,7 +162,7 @@ func TestServerStartClock(t *testing.T) {
 		},
 	}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Run a command so that we are sure to touch the timestamp cache. This is
 	// actually not needed because other commands run during server
@@ -192,7 +192,7 @@ func TestPlainHTTPServer(t *testing.T) {
 		// The default context uses embedded certs.
 		Insecure: true,
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// First, make sure that the TestServer's built-in client interface
 	// still works in insecure mode.
@@ -209,7 +209,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	if !strings.HasPrefix(url, "http://") {
 		t.Fatalf("expected insecure admin url to start with http://, but got %s", url)
 	}
-	if resp, err := httputil.Get(context.TODO(), url); err != nil {
+	if resp, err := httputil.Get(context.Background(), url); err != nil {
 		t.Error(err)
 	} else {
 		if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
@@ -222,7 +222,7 @@ func TestPlainHTTPServer(t *testing.T) {
 
 	// Attempting to connect to the insecure server with HTTPS doesn't work.
 	secureURL := strings.Replace(url, "http://", "https://", 1)
-	if _, err := httputil.Get(context.TODO(), secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+	if _, err := httputil.Get(context.Background(), secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
 		t.Error(err)
 	}
 }
@@ -230,7 +230,7 @@ func TestPlainHTTPServer(t *testing.T) {
 func TestSecureHTTPRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	httpClient, err := s.GetHTTPClient()
@@ -280,7 +280,7 @@ func TestSecureHTTPRedirect(t *testing.T) {
 func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	client, err := s.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -632,7 +632,7 @@ func TestListenerFileCreation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	files, err := filepath.Glob(filepath.Join(dir, "cockroach.*"))
 	if err != nil {
@@ -694,7 +694,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	}
 
 	_, err := inspectEngines(
-		context.TODO(), engines, roachpb.Version{}, roachpb.Version{})
+		context.Background(), engines, roachpb.Version{}, roachpb.Version{})
 	expected := "conflicting store ClusterIDs"
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s error, got %v", expected, err)
@@ -764,7 +764,7 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 			}
 
 			ensureClockMonotonicity(
-				context.TODO(),
+				context.Background(),
 				c,
 				c.PhysicalTime(),
 				test.prevHLCUpperBound,
@@ -969,7 +969,7 @@ func TestServeIndexHTML(t *testing.T) {
 			// In test servers, web sessions are required by default.
 			DisableWebSessionAuthentication: true,
 		})
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 		tsrv := s.(*TestServer)
 
 		client, err := tsrv.GetHTTPClient()
@@ -1035,7 +1035,7 @@ Binary built without web UI.
 		linkInFakeUI()
 		defer unlinkFakeUI()
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 		tsrv := s.(*TestServer)
 
 		loggedInClient, err := tsrv.GetAdminAuthenticatedHTTPClient()

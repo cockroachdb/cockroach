@@ -157,7 +157,7 @@ func TestHeuristic(t *testing.T) {
 				dir: dumpDir,
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 			for _, v := range c.vals {
 				currentTime = baseTime.Add(v.secs * time.Second)
 				numGoroutinesThreshold.Override(&st.SV, v.threshold)
@@ -283,7 +283,7 @@ func TestGC(t *testing.T) {
 				err = os.Truncate(path, f.size)
 				assert.NoError(t, err, "unexpected error when truncating file %s", path)
 			}
-			ctx := context.TODO()
+			ctx := context.Background()
 			gc(ctx, tempDir, c.sizeLimit)
 			files, err := ioutil.ReadDir(tempDir)
 			assert.NoError(t, err, "unexpected error when listing files in %s", tempDir)

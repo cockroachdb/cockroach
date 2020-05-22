@@ -38,7 +38,7 @@ func TestManualReplication(t *testing.T) {
 				UseDatabase: "t",
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	s0 := sqlutils.MakeSQLRunner(tc.Conns[0])
 	s1 := sqlutils.MakeSQLRunner(tc.Conns[1])
@@ -139,7 +139,7 @@ func TestBasicManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	desc, err := tc.AddReplicas(keys.MinKey, tc.Target(1), tc.Target(2))
 	if err != nil {
@@ -171,7 +171,7 @@ func TestBasicAutoReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	// NB: StartTestCluster will wait for full replication.
 }
 
@@ -187,7 +187,7 @@ func TestStopServer(t *testing.T) {
 		},
 		ReplicationMode: base.ReplicationAuto,
 	})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Connect to server 1, ensure it is answering requests over HTTP and GRPC.
 	server1 := tc.Server(1)

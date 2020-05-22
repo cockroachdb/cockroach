@@ -46,7 +46,7 @@ func TestCancelSelectQuery(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
@@ -124,7 +124,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
@@ -181,7 +181,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 }
 
 func testCancelSession(t *testing.T, hasActiveSession bool) {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	numNodes := 2
 	tc := serverutils.StartTestCluster(t, numNodes,
@@ -275,7 +275,7 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 func TestCancelMultipleSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
@@ -333,7 +333,7 @@ func TestCancelIfExists(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn := tc.ServerConn(0)
 

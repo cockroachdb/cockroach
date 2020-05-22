@@ -26,7 +26,7 @@ func TestRowsToStrMatrixError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// We'll run a query that only fails after returning some rows, so that the
 	// error is discovered by RowsToStrMatrix below.

@@ -34,8 +34,8 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 	codec := keys.SystemSQLCodec
 
 	// IDs to map (parentID, name) to. Actual ID value is irrelevant to the test.

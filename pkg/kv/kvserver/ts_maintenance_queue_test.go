@@ -223,7 +223,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 	tsdb := tsrv.TsDB()
 
@@ -251,7 +251,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			Value:          300.0,
 		},
 	}
-	if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:       seriesName,
 			Source:     sourceName,
@@ -268,7 +268,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	// Force a range split in between near past and far past. This guarantees
 	// that the pruning operation will issue a DeleteRange which spans ranges.
-	if err := db.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(context.Background(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -281,8 +281,8 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	memMon.Start(context.TODO(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	defer memMon.Stop(context.TODO())
+	memMon.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memMon.Stop(context.Background())
 	memContext := ts.MakeQueryMemoryContext(
 		&memMon,
 		&memMon,
@@ -292,13 +292,13 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			InterpolationLimitNanos: 0,
 		},
 	)
-	defer memContext.Close(context.TODO())
+	defer memContext.Close(context.Background())
 
 	// getDatapoints queries all datapoints in the series from the beginning
 	// of time to a point in the near future.
 	getDatapoints := func() ([]tspb.TimeSeriesDatapoint, error) {
 		dps, _, err := tsdb.Query(
-			context.TODO(),
+			context.Background(),
 			tspb.Query{Name: seriesName},
 			ts.Resolution10s,
 			ts.QueryTimespan{

@@ -33,7 +33,7 @@ func TestVerifyPassword(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	ie := sql.MakeInternalExecutor(
-		context.TODO(),
+		context.Background(),
 		s.(*server.TestServer).Server.PGServer().SQLServer,
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
@@ -112,7 +112,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"cthon98", "12345", true, ""},
 	} {
 		t.Run("", func(t *testing.T) {
-			exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(context.TODO(), &ie, tc.username)
+			exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(context.Background(), &ie, tc.username)
 
 			if err != nil {
 				t.Errorf(

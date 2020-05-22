@@ -40,7 +40,7 @@ func lookupFlow(fr *FlowRegistry, fid execinfrapb.FlowID, timeout time.Duration)
 	if entry.flow != nil {
 		return entry.flow
 	}
-	entry = fr.waitForFlowLocked(context.TODO(), fid, timeout)
+	entry = fr.waitForFlowLocked(context.Background(), fid, timeout)
 	if entry == nil {
 		return nil
 	}
@@ -225,7 +225,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		streamID1: {receiver: RowInboundStreamHandler{consumer}, waitGroup: wg},
 	}
 	if err := reg.RegisterFlow(
-		context.TODO(), id1, f1, inboundStreams, jiffy,
+		context.Background(), id1, f1, inboundStreams, jiffy,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	}
 	defer cleanup()
 
-	_, _, _, err = reg.ConnectInboundStream(context.TODO(), id1, streamID1, serverStream, jiffy)
+	_, _, _, err = reg.ConnectInboundStream(context.Background(), id1, streamID1, serverStream, jiffy)
 	if !testutils.IsError(err, "came too late") {
 		t.Fatalf("expected %q, got: %v", "came too late", err)
 	}
@@ -263,7 +263,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	// Unregister the flow. Subsequent attempts to connect a stream should result
 	// in a different error than before.
 	reg.UnregisterFlow(id1)
-	_, _, _, err = reg.ConnectInboundStream(context.TODO(), id1, streamID1, serverStream, jiffy)
+	_, _, _, err = reg.ConnectInboundStream(context.Background(), id1, streamID1, serverStream, jiffy)
 	if !testutils.IsError(err, "not found") {
 		t.Fatalf("expected %q, got: %v", "not found", err)
 	}
@@ -308,7 +308,7 @@ func TestHandshake(t *testing.T) {
 				// async because the consumer is not yet there and ConnectInboundStream
 				// is blocking.
 				if _, _, _, err := reg.ConnectInboundStream(
-					context.TODO(), flowID, streamID, serverStream, time.Hour,
+					context.Background(), flowID, streamID, serverStream, time.Hour,
 				); err != nil {
 					t.Error(err)
 				}
@@ -322,7 +322,7 @@ func TestHandshake(t *testing.T) {
 					streamID: {receiver: RowInboundStreamHandler{consumer}, waitGroup: wg},
 				}
 				if err := reg.RegisterFlow(
-					context.TODO(), flowID, f1, inboundStreams, time.Hour, /* timeout */
+					context.Background(), flowID, f1, inboundStreams, time.Hour, /* timeout */
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -375,7 +375,7 @@ func TestHandshake(t *testing.T) {
 func TestFlowRegistryDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	reg := NewFlowRegistry(0)
 
 	flow := &FlowBase{}

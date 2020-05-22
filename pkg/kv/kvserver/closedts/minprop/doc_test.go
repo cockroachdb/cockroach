@@ -22,7 +22,7 @@ import (
 )
 
 func Example() {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tracker := NewTracker()
 	const ep1 ctpb.Epoch = 1

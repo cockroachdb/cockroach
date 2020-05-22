@@ -63,8 +63,8 @@ func TestPGCode(t *testing.T) {
 
 				tt.Run("local", func(tt testutils.T) { theTest(tt, origErr) })
 
-				enc := errors.EncodeError(context.TODO(), origErr)
-				newErr := errors.DecodeError(context.TODO(), enc)
+				enc := errors.EncodeError(context.Background(), origErr)
+				newErr := errors.DecodeError(context.Background(), enc)
 
 				tt.Run("remote", func(tt testutils.T) { theTest(tt, newErr) })
 
