@@ -59,8 +59,6 @@ var (
 	// ErrDivByZero is reported on a division by zero.
 	ErrDivByZero       = pgerror.New(pgcode.DivisionByZero, "division by zero")
 	errSqrtOfNegNumber = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "cannot take square root of a negative number")
-	// ErrZeroModulus is reported when computing the rest of a division by zero.
-	ErrZeroModulus = pgerror.New(pgcode.DivisionByZero, "zero modulus")
 
 	big10E6  = big.NewInt(1e6)
 	big10E10 = big.NewInt(1e10)
@@ -1231,13 +1229,13 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Decimal,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
+				if rInt == 0 {
+					return nil, ErrDivByZero
+				}
 				div := ctx.getTmpDec().SetFinite(int64(rInt), 0)
 				dd := &DDecimal{}
 				dd.SetFinite(int64(MustBeDInt(left)), 0)
-				cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
-				}
+				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
 				return dd, err
 			},
 		},
@@ -1260,11 +1258,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
-				dd := &DDecimal{}
-				cond, err := DecimalCtx.Quo(&dd.Decimal, l, r)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
+				if r.IsZero() {
+					return nil, ErrDivByZero
 				}
+				dd := &DDecimal{}
+				_, err := DecimalCtx.Quo(&dd.Decimal, l, r)
 				return dd, err
 			},
 		},
@@ -1275,12 +1273,12 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
+				if r == 0 {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				dd.SetFinite(int64(r), 0)
-				cond, err := DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
-				}
+				_, err := DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
 		},
@@ -1291,12 +1289,12 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
+				if r.IsZero() {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				dd.SetFinite(int64(l), 0)
-				cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
-				}
+				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
 		},
@@ -1346,6 +1344,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
 				r := float64(*right.(*DFloat))
+				if r == 0.0 {
+					return nil, ErrDivByZero
+				}
 				return NewDFloat(DFloat(math.Trunc(l / r))), nil
 			},
 		},
@@ -1356,6 +1357,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
+				if r.IsZero() {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, l, r)
 				return dd, err
@@ -1384,7 +1388,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
-				if r.Sign() == 0 {
+				if r.IsZero() {
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
@@ -1403,7 +1407,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := MustBeDInt(right)
 				if r == 0 {
-					return nil, ErrZeroModulus
+					return nil, ErrDivByZero
 				}
 				return NewDInt(MustBeDInt(left) % r), nil
 			},
@@ -1413,7 +1417,12 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Float,
 			ReturnType: types.Float,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDFloat(DFloat(math.Mod(float64(*left.(*DFloat)), float64(*right.(*DFloat))))), nil
+				l := float64(*left.(*DFloat))
+				r := float64(*right.(*DFloat))
+				if r == 0.0 {
+					return nil, ErrDivByZero
+				}
+				return NewDFloat(DFloat(math.Mod(l, r))), nil
 			},
 		},
 		&BinOp{
@@ -1423,6 +1432,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
+				if r.IsZero() {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, l, r)
 				return dd, err
@@ -1435,6 +1447,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
+				if r == 0 {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				dd.SetFinite(int64(r), 0)
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, l, &dd.Decimal)
@@ -1448,6 +1463,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
+				if r.IsZero() {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				dd.SetFinite(int64(l), 0)
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, &dd.Decimal, r)

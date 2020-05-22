@@ -877,10 +877,10 @@ SELECT mod(5.0::float, 2.0), mod(1.0::float, 0.0), mod(5, 2), mod(19.3::decimal,
 # mod returns the same results as PostgreSQL 9.4.4
 # in tests below (except for the error message).
 
-query error mod\(\): zero modulus
+query error mod\(\): division by zero
 SELECT mod(5, 0)
 
-query error mod\(\): zero modulus
+query error mod\(\): division by zero
 SELECT mod(5::decimal, 0::decimal)
 
 query II

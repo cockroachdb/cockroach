@@ -447,7 +447,7 @@ func TestEvalError(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		{`1 % 0`, `zero modulus`},
+		{`1 % 0`, `division by zero`},
 		{`1 / 0`, `division by zero`},
 		{`1::float / 0::float`, `division by zero`},
 		{`1 // 0`, `division by zero`},
