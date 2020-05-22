@@ -169,6 +169,8 @@ type Config struct {
 	JoinPreferSRVRecords bool
 
 	// RetryOptions controls the retry behavior of the server.
+	//
+	// TODO(tbg): this is only ever used in one test. Make it a testing knob.
 	RetryOptions retry.Options
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
