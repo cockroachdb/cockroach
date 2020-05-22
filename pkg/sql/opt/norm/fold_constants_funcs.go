@@ -445,6 +445,10 @@ func (c *CustomFuncs) FoldFunction(
 // FoldFunctionWhitelist contains non-immutable functions that are nevertheless
 // known to be safe for folding.
 var FoldFunctionWhitelist = map[string]struct{}{
+	// The SQL statement is generated in the optbuilder phase, so the remaining
+	// function execution is immutable.
+	"addgeometrycolumn": {},
+
 	// Query plan cache is invalidated on location changes.
 	"crdb_internal.locality_value": {},
 }
