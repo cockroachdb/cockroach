@@ -523,6 +523,11 @@ message ComputedColumnSwap {
   option (gogoproto.equal) = true;
   optional uint32 new_column_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
   optional uint32 old_column_id = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  // Currently this field will always be NULL and is used to check if a column
+  // should become read only during the ALTER COLUMN TYPE process.
+  // May be used in the future to store the INVERSE expression if we
+  // allow users to provide an inverse.
+  optional string inverse_expr = 3 [(gogoproto.nullable) = true];
 }
 
 // A DescriptorMutation represents a column or an index that

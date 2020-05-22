@@ -86,6 +86,65 @@ ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
 	wg.Wait()
 }
 
+// TestInsertBeforeOldColumnIsDroppedUsingExpr converts a column from INT to
+// bool and then tries inserting true into the new column before the old column
+// is dropped.
+func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	childJobStartNotification := make(chan struct{})
+	waitBeforeContinuing := make(chan struct{})
+	var doOnce sync.Once
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeChildJobs: func() {
+				doOnce.Do(func() {
+					childJobStartNotification <- struct{}{}
+					<-waitBeforeContinuing
+				})
+			},
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB.Exec(t, `
+CREATE TABLE test (x INT);
+CREATE TABLE test2 (x BOOL);
+INSERT INTO test2 VALUES (true);
+`)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		sqlDB.Exec(t, `
+SET enable_experimental_alter_column_type_general = true;
+ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
+		wg.Done()
+	}()
+
+	// Wait until column swap progresses and we start to run child jobs
+	// before continuing.
+	<-childJobStartNotification
+
+	expected := "pq: Column x is undergoing the ALTER COLUMN TYPE USING EXPRESSION schema change"
+
+	sqlDB.ExpectErrSucceedsSoon(t, expected, `
+	INSERT INTO test VALUES (true);
+	`)
+
+	// This insert uses the regular insert path.
+	sqlDB.ExpectErrSucceedsSoon(t, expected, `
+	INSERT INTO test (SELECT * FROM test2);
+	`)
+
+	waitBeforeContinuing <- struct{}{}
+	wg.Wait()
+}
+
 // TestVisibilityDuringAlterColumnType tests to see that only one column
 // is visible at a time during the swap process and ensures that the visible
 // column has the correct type.
