@@ -678,8 +678,8 @@ type TempStorageConfig struct {
 	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
-	// StoreIdx stores the index of the StoreSpec this TempStorageConfig will use.
-	SpecIdx int
+	// Spec stores the StoreSpec this TempStorageConfig will use.
+	Spec StoreSpec
 }
 
 // SQLExternalIOConfig describes various configuration options pertaining
@@ -702,12 +702,11 @@ type SQLExternalIOConfig struct {
 func TempStorageConfigFromEnv(
 	ctx context.Context,
 	st *cluster.Settings,
-	firstStore StoreSpec,
+	useStore StoreSpec,
 	parentDir string,
 	maxSizeBytes int64,
-	specIdx int,
 ) TempStorageConfig {
-	inMem := parentDir == "" && firstStore.InMemory
+	inMem := parentDir == "" && useStore.InMemory
 	var monitorName string
 	if inMem {
 		monitorName = "in-mem temp storage"
@@ -727,7 +726,7 @@ func TempStorageConfigFromEnv(
 	return TempStorageConfig{
 		InMemory: inMem,
 		Mon:      &monitor,
-		SpecIdx:  specIdx,
+		Spec:     useStore,
 	}
 }
 

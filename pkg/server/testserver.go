@@ -245,7 +245,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
-	if params.TempStorageConfig != (base.TempStorageConfig{}) {
+	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
 		cfg.SQLTempStorageConfig = params.TempStorageConfig
 	}
 

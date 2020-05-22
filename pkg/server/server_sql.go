@@ -264,7 +264,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 	// Set up the DistSQL temp engine.
 
-	useStoreSpec := cfg.Stores.Specs[cfg.SQLTempStorageConfig.SpecIdx]
+	useStoreSpec := cfg.SQLTempStorageConfig.Spec
 	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.SQLTempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
@@ -273,17 +273,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
 	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		firstStore := cfg.Stores.Specs[cfg.SQLTempStorageConfig.SpecIdx]
+		useStore := cfg.SQLTempStorageConfig.Spec
 		var err error
-		if firstStore.InMemory {
-			// First store is in-memory so we remove the temp
+		if useStore.InMemory {
+			// Used store is in-memory so we remove the temp
 			// directory directly since there is no record file.
 			err = os.RemoveAll(cfg.SQLTempStorageConfig.Path)
 		} else {
 			// If record file exists, we invoke CleanupTempDirs to
 			// also remove the record after the temp directory is
 			// removed.
-			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
+			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
 			err = storage.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
