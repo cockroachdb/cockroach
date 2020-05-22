@@ -272,12 +272,13 @@ type lastArgWidthOverload struct {
 func newLastArgWidthOverload(
 	typeOverload *lastArgTypeOverload, width int32, retType *types.T,
 ) *lastArgWidthOverload {
+	retCanonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(retType.Family())
 	lawo := &lastArgWidthOverload{
 		lastArgTypeOverload:  typeOverload,
 		argWidthOverloadBase: newArgWidthOverloadBase(typeOverload.argTypeOverloadBase, width),
 		RetType:              retType,
-		RetVecMethod:         toVecMethod(retType.Family(), retType.Width()),
-		RetGoType:            toPhysicalRepresentation(retType.Family(), retType.Width()),
+		RetVecMethod:         toVecMethod(retCanonicalTypeFamily, retType.Width()),
+		RetGoType:            toPhysicalRepresentation(retCanonicalTypeFamily, retType.Width()),
 	}
 	typeOverload.WidthOverloads = append(typeOverload.WidthOverloads, lawo)
 	return lawo
@@ -464,15 +465,19 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 	return fmt.Sprintf("%s = %s", dest, src)
 }
 
-// Set is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Set(target, i, new string) string {
-	switch b.CanonicalTypeFamily {
+func set(family types.Family, target, i, new string) string {
+	switch family {
 	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	case types.DecimalFamily:
 		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
+}
+
+// Set is a function that should only be used in templates.
+func (b *argWidthOverloadBase) Set(target, i, new string) string {
+	return set(b.CanonicalTypeFamily, target, i, new)
 }
 
 // Slice is a function that should only be used in templates.
@@ -751,6 +756,18 @@ type decimalIntervalCustomizer struct{}
 // datumCustomizer supports overloads on tree.Datums.
 type datumCustomizer struct{}
 
+// datumNonDatumCustomizer supports overloads of mixed type binary expressions
+// with a datum left-hand side and non-datum right-hand side.
+type datumNonDatumCustomizer struct{}
+
+// nonDatumDatumCustomizer supports overloads of mixed type binary expressions
+// with a non-datum left-hand side and datum right-hand side.
+type nonDatumDatumCustomizer struct {
+	leftCanonicalTypeFamily types.Family
+}
+
+// TODO(yuzefovich): add support for datums on both sides and non-datum result.
+
 func registerTypeCustomizers() {
 	typeCustomizers = make(map[typePair]typeCustomizer)
 	registerTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.BoolFamily, anyWidth}, boolCustomizer{})
@@ -788,6 +805,15 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}, intervalTimestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.DecimalFamily, anyWidth}, intervalDecimalCustomizer{})
 	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.IntervalFamily, anyWidth}, decimalIntervalCustomizer{})
+
+	for _, compatibleFamily := range compatibleCanonicalTypeFamilies[typeconv.DatumVecCanonicalTypeFamily] {
+		if compatibleFamily != typeconv.DatumVecCanonicalTypeFamily {
+			for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
+				registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}, datumNonDatumCustomizer{})
+				registerTypeCustomizer(typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, nonDatumDatumCustomizer{compatibleFamily})
+			}
+		}
+	}
 }
 
 var supportedCanonicalTypeFamilies = []types.Family{
@@ -823,8 +849,6 @@ var supportedWidthsByCanonicalTypeFamily = map[types.Family][]int32{
 }
 
 var numericCanonicalTypeFamilies = []types.Family{types.IntFamily, types.FloatFamily, types.DecimalFamily}
-
-var timeCanonicalTypeFamilies = []types.Family{types.TimestampTZFamily, types.IntervalFamily}
 
 // toVecMethod returns the method name from coldata.Vec interface that can be
 // used to get the well-typed underlying memory from a vector.
@@ -900,4 +924,21 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 	}
 	// This code is unreachable, but the compiler cannot infer that.
 	return ""
+}
+
+// getDatumVecVariableName returns the variable name for a datumVec given
+// leftCol and rightCol (either of which could be "_" - meaning there is no
+// vector in scope for the corresponding side).
+// - preferRightSide determines whether we prefer the right side.
+func getDatumVecVariableName(leftCol, rightCol string, preferRightSide bool) string {
+	preferredSide, otherSide := leftCol, rightCol
+	if preferRightSide {
+		preferredSide, otherSide = rightCol, leftCol
+	}
+	switch preferredSide {
+	case "_":
+		return otherSide
+	default:
+		return preferredSide
+	}
 }

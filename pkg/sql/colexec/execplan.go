@@ -1612,9 +1612,12 @@ func planProjectionOperators(
 			columnTypes, input, acc, factory, overloadHelper{},
 		)
 	case *tree.BinaryExpr:
+		if err = checkSupportedBinaryExpr(t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
+			return op, resultIdx, typs, internalMemUsed, err
+		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, overloadHelper{},
+			columnTypes, input, acc, factory, overloadHelper{binFn: t.Fn},
 		)
 	case *tree.IsNullExpr:
 		t.TypedInnerExpr()
@@ -1801,9 +1804,20 @@ func checkSupportedProjectionExpr(left, right tree.TypedExpr) error {
 	// The types are not equivalent. Check if either is a type we'd like to avoid.
 	for _, t := range []*types.T{leftTyp, rightTyp} {
 		switch t.Family() {
-		case types.DateFamily, types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily:
-			return errors.New("dates, timestamp(tz), and intervals not supported in mixed-type expressions in the vectorized engine")
+		case types.DateFamily, types.TimestampFamily, types.TimestampTZFamily:
+			return errors.New("dates and timestamp(tz) not supported in mixed-type expressions in the vectorized engine")
 		}
+	}
+	return nil
+}
+
+func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) error {
+	leftDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(left.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
+	rightDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(right.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
+	outputDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(outputType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	if (leftDatumBacked || rightDatumBacked) && !outputDatumBacked {
+		return errors.New("datum-backed arguments and not datum-backed " +
+			"output of a binary expression is currently not supported")
 	}
 	return nil
 }
