@@ -65,6 +65,7 @@ const (
 	VersionEnums
 	VersionRangefeedLeases
 	VersionAlterColumnTypeGeneral
+	VersionAlterSystemJobsAddCreatedByColumns
 
 	// Add new versions here (step one of two).
 )
@@ -498,6 +499,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// conversions that require the column data to be rewritten.
 		Key:     VersionAlterColumnTypeGeneral,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 5},
+	},
+	{
+		// VersionAlterSystemJobsTable is a version which modified system.jobs table
+		//
+		Key:     VersionAlterSystemJobsAddCreatedByColumns,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 6},
 	},
 
 	// Add new versions here (step two of two).
