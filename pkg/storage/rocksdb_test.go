@@ -1655,7 +1655,7 @@ func TestRocksDBGlobalSeqnumIssue(t *testing.T) {
 
 	// When this file is ingested, it'll be added to L0, since it overlaps in key
 	// bounds (but not actual keys) with the SSTable flushed earlier.
-	if err := db.IngestExternalFiles(context.TODO(), []string{sstFilePath}); err != nil {
+	if err := db.IngestExternalFiles(context.Background(), []string{sstFilePath}); err != nil {
 		t.Fatal(err)
 	}
 	snapshot.Close()

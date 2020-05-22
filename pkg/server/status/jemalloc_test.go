@@ -22,7 +22,7 @@ import (
 func TestJemalloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	cgoAllocated, _, err := getJemallocStats(ctx)
 	if err != nil {
 		t.Fatal(err)

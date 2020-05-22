@@ -132,7 +132,7 @@ func TestValues(t *testing.T) {
 		},
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			plan, err := func() (_ planNode, err error) {
@@ -141,7 +141,7 @@ func TestValues(t *testing.T) {
 						err = errors.Errorf("%v", r)
 					}
 				}()
-				return p.Values(context.TODO(), tc.stmt, nil)
+				return p.Values(context.Background(), tc.stmt, nil)
 			}()
 			if plan != nil {
 				defer plan.Close(ctx)

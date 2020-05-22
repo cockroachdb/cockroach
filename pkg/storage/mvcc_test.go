@@ -1394,7 +1394,7 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			iter.Next() // key2/5
 
 			// Lay down an intent on key3, which will go at key3/0 and sort before key3/5.
-			err = MVCCDelete(context.TODO(), batch, nil, testKey3, txn.WriteTimestamp, txn)
+			err = MVCCDelete(context.Background(), batch, nil, testKey3, txn.WriteTimestamp, txn)
 			if err != nil {
 				t.Fatal(err)
 			}

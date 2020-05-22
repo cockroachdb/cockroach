@@ -162,7 +162,7 @@ func TestMakeFkMetadata(t *testing.T) {
 
 	test := func(t *testing.T, usage FKCheckType, expectedIDs []TableID) {
 		tableLookups, err := MakeFkMetadata(
-			context.TODO(),
+			context.Background(),
 			xDesc,
 			usage,
 			lookup,

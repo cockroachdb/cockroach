@@ -138,7 +138,7 @@ func TestSRV(t *testing.T) {
 		func() {
 			defer TestingOverrideSRVLookupFn(tc.lookuper)()
 
-			resolvers, err := SRV(context.TODO(), tc.address)
+			resolvers, err := SRV(context.Background(), tc.address)
 
 			if err != nil {
 				t.Errorf("#%d: expected success, got err=%v", tcNum, err)

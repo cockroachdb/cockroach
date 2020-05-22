@@ -884,7 +884,7 @@ CREATE TABLE bench.insert_distinct (
 						fmt.Fprintf(&buf, "(%d, %d)", zipf.Uint64(), n)
 					}
 
-					if _, err := db.DB.ExecContext(context.TODO(), buf.String()); err != nil {
+					if _, err := db.DB.ExecContext(context.Background(), buf.String()); err != nil {
 						return err
 					}
 				}

@@ -62,7 +62,7 @@ func TestQueryCounts(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -170,7 +170,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
 		params, cmdFilters := tests.CreateTestServerParams()
 		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 
 		accum := initializeQueryCounter(s)
 
@@ -274,7 +274,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)
 
@@ -308,7 +308,7 @@ func TestSavepointMetrics(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)
 

@@ -56,16 +56,16 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 
 	// Verify that queueing is immediately possible.
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock().Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); !shouldQ {
+		context.Background(), mtc.clock().Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); !shouldQ {
 		t.Fatalf("expected shouldQ true; got %t, %f", shouldQ, priority)
 	}
 
 	// Stop a node and expire leases.
 	mtc.stopStore(2)
-	mtc.advanceClock(context.TODO())
+	mtc.advanceClock(context.Background())
 
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock().Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); shouldQ {
+		context.Background(), mtc.clock().Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); shouldQ {
 		t.Fatalf("expected shouldQ false; got %t, %f", shouldQ, priority)
 	}
 }
@@ -444,7 +444,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	rangeID := func() roachpb.RangeID {
 		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-		defer tc.Stopper().Stop(context.TODO())
+		defer tc.Stopper().Stop(context.Background())
 
 		db0 := tc.Servers[0].DB()
 

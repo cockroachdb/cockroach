@@ -35,7 +35,7 @@ func TestAsOfTime(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }}
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const val1 = 1
 	const val2 = 2
@@ -251,7 +251,7 @@ func TestAsOfRetry(t *testing.T) {
 
 	params, cmdFilters := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const val1 = 1
 	const val2 = 2
@@ -348,7 +348,7 @@ func TestShowTraceAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const val1 = 456
 	const val2 = 789

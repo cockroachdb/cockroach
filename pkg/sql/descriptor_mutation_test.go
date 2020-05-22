@@ -55,7 +55,7 @@ func (mt mutationTest) checkTableSize(e int) {
 	// Check that there are no hidden values
 	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(mt.tableDesc.ID))
 	tableEndKey := tableStartKey.PrefixEnd()
-	if kvs, err := mt.kvDB.Scan(context.TODO(), tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := mt.kvDB.Scan(context.Background(), tableStartKey, tableEndKey, 0); err != nil {
 		mt.Error(err)
 	} else if len(kvs) != e {
 		mt.Errorf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -84,7 +84,7 @@ func (mt mutationTest) makeMutationsActive() {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
-		context.TODO(),
+		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
 		sqlbase.WrapDescriptor(mt.tableDesc),
 	); err != nil {
@@ -142,7 +142,7 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
-		context.TODO(),
+		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
 		sqlbase.WrapDescriptor(mt.tableDesc),
 	); err != nil {
@@ -167,7 +167,7 @@ func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -224,7 +224,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -489,7 +489,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -635,7 +635,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	// Create a table with column i and an index on v and i. Fix the column
 	// families so the key counts below don't change if the family heuristics
@@ -841,7 +841,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1048,7 +1048,7 @@ func TestTableMutationQueue(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
@@ -1143,7 +1143,7 @@ func TestAddingFKs(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE t;
@@ -1159,7 +1159,7 @@ func TestAddingFKs(t *testing.T) {
 	ordersDesc.State = sqlbase.TableDescriptor_ADD
 	ordersDesc.Version++
 	if err := kvDB.Put(
-		context.TODO(),
+		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, ordersDesc.ID),
 		sqlbase.WrapDescriptor(ordersDesc),
 	); err != nil {

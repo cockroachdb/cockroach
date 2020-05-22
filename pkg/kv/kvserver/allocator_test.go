@@ -5516,7 +5516,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 	}
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
 
@@ -5738,7 +5738,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 func Example_rebalancing() {
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -5834,7 +5834,7 @@ func Example_rebalancing() {
 				storeFilterThrottled,
 			)
 			if ok {
-				log.Infof(context.TODO(), "rebalancing to %v; details: %s", target, details)
+				log.Infof(context.Background(), "rebalancing to %v; details: %s", target, details)
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
 		}

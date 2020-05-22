@@ -167,7 +167,7 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 		}
 
 		// Check fractional values.
-		maxMem, err := status.GetTotalMemory(context.TODO())
+		maxMem, err := status.GetTotalMemory(context.Background())
 		if err != nil {
 			t.Logf("total memory unknown: %v", err)
 			return

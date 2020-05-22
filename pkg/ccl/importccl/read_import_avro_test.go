@@ -536,7 +536,7 @@ func BenchmarkBinaryJSONImport(b *testing.B) {
 }
 
 func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData string) {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	b.SetBytes(120) // Raw input size. With 8 indexes, expect more on output side.
 

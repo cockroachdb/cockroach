@@ -516,7 +516,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.TODO(), item.request.LatchSpans)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans)
 			if err != nil {
 				return err
 			}
@@ -769,7 +769,7 @@ func (e *workloadExecutor) tryFinishTxn(
 func (e *workloadExecutor) execute(strict bool, maxNonStrictConcurrency int) error {
 	numOutstanding := 0
 	i := 0
-	group, ctx := errgroup.WithContext(context.TODO())
+	group, ctx := errgroup.WithContext(context.Background())
 	timer := time.NewTimer(time.Second)
 	timer.Stop()
 	var err error
@@ -1058,7 +1058,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.TODO(), item.LatchSpans); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1093,7 +1093,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.TODO(), item.LatchSpans); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
 		doneCh <- err
 		return
 	}
@@ -1240,7 +1240,7 @@ func BenchmarkLockTable(b *testing.B) {
 							runRequests(b, iters, requestsPerGroup[0], env)
 						}
 						if log.V(1) {
-							log.Infof(context.TODO(), "num requests that waited: %d, num scan calls: %d\n",
+							log.Infof(context.Background(), "num requests that waited: %d, num scan calls: %d\n",
 								atomic.LoadUint64(&numRequestsWaited), atomic.LoadUint64(&numScanCalls))
 						}
 					})

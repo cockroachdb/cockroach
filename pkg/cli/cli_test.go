@@ -142,8 +142,8 @@ func newCLITest(params cliTestParams) cliTest {
 		}
 		c.TestServer = s.(*server.TestServer)
 
-		log.Infof(context.TODO(), "server started at %s", c.ServingRPCAddr())
-		log.Infof(context.TODO(), "SQL listener at %s", c.ServingSQLAddr())
+		log.Infof(context.Background(), "server started at %s", c.ServingRPCAddr())
+		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
 	}
 
 	baseCfg.User = security.NodeUser
@@ -171,7 +171,7 @@ func setCLIDefaultsForTests() {
 // stopServer stops the test server.
 func (c *cliTest) stopServer() {
 	if c.TestServer != nil {
-		log.Infof(context.TODO(), "stopping server at %s / %s",
+		log.Infof(context.Background(), "stopping server at %s / %s",
 			c.ServingRPCAddr(), c.ServingSQLAddr())
 		select {
 		case <-c.Stopper().ShouldStop():
@@ -179,7 +179,7 @@ func (c *cliTest) stopServer() {
 			// called Stop(). We just need to wait.
 			<-c.Stopper().IsStopped()
 		default:
-			c.Stopper().Stop(context.TODO())
+			c.Stopper().Stop(context.Background())
 		}
 	}
 }
@@ -188,7 +188,7 @@ func (c *cliTest) stopServer() {
 // have changed after this method returns.
 func (c *cliTest) restartServer(params cliTestParams) {
 	c.stopServer()
-	log.Info(context.TODO(), "restarting server")
+	log.Info(context.Background(), "restarting server")
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{
 		Insecure:    params.insecure,
 		SSLCertsDir: c.certsDir,
@@ -198,7 +198,7 @@ func (c *cliTest) restartServer(params cliTestParams) {
 		c.fail(err)
 	}
 	c.TestServer = s.(*server.TestServer)
-	log.Infof(context.TODO(), "restarted server at %s / %s",
+	log.Infof(context.Background(), "restarted server at %s / %s",
 		c.ServingRPCAddr(), c.ServingSQLAddr())
 }
 
@@ -212,7 +212,7 @@ func (c *cliTest) cleanup() {
 	// Restore stderr.
 	stderr = log.OrigStderr
 
-	log.Info(context.TODO(), "stopping server and cleaning up CLI test")
+	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
 	c.stopServer()
 

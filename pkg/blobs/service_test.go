@@ -34,7 +34,7 @@ func TestBlobServiceList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	t.Run("list-correct-files", func(t *testing.T) {
 		resp, err := service.List(ctx, &blobspb.GlobRequest{
@@ -78,7 +78,7 @@ func TestBlobServiceDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	t.Run("delete-correct-file", func(t *testing.T) {
 		_, err := service.Delete(ctx, &blobspb.DeleteRequest{
@@ -127,7 +127,7 @@ func TestBlobServiceStat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	t.Run("get-correct-file-size", func(t *testing.T) {
 		resp, err := service.Stat(ctx, &blobspb.StatRequest{

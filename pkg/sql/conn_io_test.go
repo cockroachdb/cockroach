@@ -52,7 +52,7 @@ func mustPush(ctx context.Context, t *testing.T, buf *StmtBuf, cmd Command) {
 func TestStmtBuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestStmtBuf(t *testing.T) {
 func TestStmtBufSignal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	buf := NewStmtBuf()
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
@@ -164,7 +164,7 @@ func TestStmtBufSignal(t *testing.T) {
 func TestStmtBufLtrim(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	buf := NewStmtBuf()
 	for i := 0; i < 5; i++ {
 		stmt, err := parser.ParseOne(
@@ -192,7 +192,7 @@ func TestStmtBufLtrim(t *testing.T) {
 func TestStmtBufClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	buf := NewStmtBuf()
 	stmt, err := parser.ParseOne("SELECT 1")
 	if err != nil {
@@ -229,7 +229,7 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buf := NewStmtBuf()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
@@ -272,7 +272,7 @@ func TestStmtBufBatching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buf := NewStmtBuf()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {

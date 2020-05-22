@@ -23,27 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
 )
 
-// tpchBench is a benchmark run on tpch data. There are different groups of
-// queries we run against tpch data, represented by different tpchBench values.
-type tpchBench int
-
-//go:generate stringer -type=tpchBench
-
-const (
-	sql20 tpchBench = iota
-	tpch
-)
-
-var urlMap = map[tpchBench]string{
-	sql20: `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`,
-	tpch:  `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
-}
-
 type tpchBenchSpec struct {
 	Nodes           int
 	CPUs            int
 	ScaleFactor     int
-	benchType       tpchBench
+	benchType       string
+	url             string
 	numRunsPerQuery int
 	// minVersion specifies the minimum version of CRDB nodes. If omitted, it
 	// will default to maybeMinVersionForFixturesImport.
@@ -71,10 +56,9 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
 	c.Put(ctx, workload, "./workload", loadNode)
 
-	url := urlMap[b.benchType]
-	filename := b.benchType.String()
-	t.Status(fmt.Sprintf("downloading %s query file from %s", filename, url))
-	if err := c.RunE(ctx, loadNode, fmt.Sprintf("curl %s > %s", url, filename)); err != nil {
+	filename := b.benchType
+	t.Status(fmt.Sprintf("downloading %s query file from %s", filename, b.url))
+	if err := c.RunE(ctx, loadNode, fmt.Sprintf("curl %s > %s", b.url, filename)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +75,7 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 
 		t.l.Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
 
-		numQueries, err := getNumQueriesInFile(filename, url)
+		numQueries, err := getNumQueriesInFile(filename, b.url)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -165,7 +149,7 @@ func downloadFile(filename string, url string) (*os.File, error) {
 func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 	nameParts := []string{
 		"tpchbench",
-		b.benchType.String(),
+		b.benchType,
 		fmt.Sprintf("nodes=%d", b.Nodes),
 		fmt.Sprintf("cpu=%d", b.CPUs),
 		fmt.Sprintf("sf=%d", b.ScaleFactor),
@@ -195,7 +179,8 @@ func registerTPCHBench(r *testRegistry) {
 			Nodes:           3,
 			CPUs:            4,
 			ScaleFactor:     1,
-			benchType:       sql20,
+			benchType:       `sql20`,
+			url:             `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`,
 			numRunsPerQuery: 3,
 			maxLatency:      100 * time.Second,
 		},
@@ -203,7 +188,8 @@ func registerTPCHBench(r *testRegistry) {
 			Nodes:           3,
 			CPUs:            4,
 			ScaleFactor:     1,
-			benchType:       tpch,
+			benchType:       `tpch`,
+			url:             `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
 			numRunsPerQuery: 3,
 			minVersion:      `v19.2.0`,
 			maxLatency:      500 * time.Second,

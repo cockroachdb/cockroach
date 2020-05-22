@@ -200,7 +200,7 @@ func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -359,7 +359,7 @@ func TestSendRPCOrder(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 
 	for n, tc := range testCases {
-		log.Infof(context.TODO(), "testcase %d", n)
+		log.Infof(context.Background(), "testcase %d", n)
 		verifyCall = makeVerifier(tc.expReplica)
 
 		{
@@ -378,11 +378,11 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		ds.leaseHolderCache.Update(
-			context.TODO(), rangeID, roachpb.StoreID(0),
+			context.Background(), rangeID, roachpb.StoreID(0),
 		)
 		if tc.leaseHolder > 0 {
 			ds.leaseHolderCache.Update(
-				context.TODO(), rangeID, descriptor.InternalReplicas[tc.leaseHolder-1].StoreID,
+				context.Background(), rangeID, descriptor.InternalReplicas[tc.leaseHolder-1].StoreID,
 			)
 		}
 
@@ -496,7 +496,7 @@ var threeReplicaMockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
 func TestImmutableBatchArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -554,7 +554,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -606,7 +606,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		t.Errorf("The command did not retry")
 	}
 	rangeID := roachpb.RangeID(2)
-	if cur, ok := ds.leaseHolderCache.Lookup(context.TODO(), rangeID); !ok {
+	if cur, ok := ds.leaseHolderCache.Lookup(context.Background(), rangeID); !ok {
 		t.Errorf("lease holder cache was not updated: expected %+v", leaseHolder)
 	} else if cur != leaseHolder.StoreID {
 		t.Errorf("lease holder cache was not updated: expected %d, got %d", leaseHolder.StoreID, cur)
@@ -619,7 +619,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -794,7 +794,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 func TestRetryOnDescriptorLookupError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -844,7 +844,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -960,7 +960,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 	for i, tc := range testCases {
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.TODO())
+		defer stopper.Stop(context.Background())
 
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 		rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -971,7 +971,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
-		ctx, cancel := context.WithCancel(context.TODO())
+		ctx, cancel := context.WithCancel(context.Background())
 
 		var testFn simpleSendFn = func(
 			ctx context.Context,
@@ -1013,14 +1013,14 @@ func TestEvictCacheOnError(t *testing.T) {
 			Settings:          cluster.MakeTestingClusterSettings(),
 		}
 		ds := NewDistSender(cfg, g)
-		ds.leaseHolderCache.Update(context.TODO(), 1, leaseHolder.StoreID)
+		ds.leaseHolderCache.Update(context.Background(), 1, leaseHolder.StoreID)
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
 		if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
-		if _, ok := ds.leaseHolderCache.Lookup(context.TODO(), 1); ok != !tc.shouldClearLeaseHolder {
+		if _, ok := ds.leaseHolderCache.Lookup(context.Background(), 1); ok != !tc.shouldClearLeaseHolder {
 			t.Errorf("%d: lease holder cache eviction: shouldClearLeaseHolder=%t, but value is %t", i, tc.shouldClearLeaseHolder, ok)
 		}
 		if cachedDesc, err := ds.rangeCache.GetCachedRangeDescriptor(roachpb.RKey(key), false /* inverted */); err != nil {
@@ -1034,7 +1034,7 @@ func TestEvictCacheOnError(t *testing.T) {
 func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1099,7 +1099,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 func TestRetryOnWrongReplicaError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1197,7 +1197,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1288,7 +1288,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	n := simulation.NewNetwork(stopper, 3, true, zonepb.DefaultZoneConfigRef())
 	for _, node := range n.Nodes {
@@ -1339,7 +1339,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 func TestSendRPCRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1414,7 +1414,7 @@ func TestSendRPCRetry(t *testing.T) {
 func TestSendRPCRangeNotFoundError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1501,7 +1501,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 func TestGetNodeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1528,7 +1528,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 func TestMultiRangeGapReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1620,7 +1620,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1724,7 +1724,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1761,7 +1761,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 func TestClockUpdateOnResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1818,7 +1818,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -1944,7 +1944,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -2072,7 +2072,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 func TestMultiRangeWithEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -2272,7 +2272,7 @@ func TestMultiRangeWithEndTxn(t *testing.T) {
 func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -2391,7 +2391,7 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -2515,7 +2515,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 func TestCountRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -2616,7 +2616,7 @@ func TestSenderTransport(t *testing.T) {
 func TestGatewayNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -2669,7 +2669,7 @@ func TestGatewayNodeID(t *testing.T) {
 func TestMultipleErrorsMerged(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -2881,7 +2881,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 func TestErrorIndexAlignment(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -3023,7 +3023,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	old := CanSendToFollower
 	defer func() { CanSendToFollower = old }()
@@ -3112,7 +3112,7 @@ func TestCanSendToFollower(t *testing.T) {
 		ds := NewDistSender(cfg, g)
 		ds.clusterID = &base.ClusterIDContainer{}
 		// set 2 to be the leaseholder
-		ds.LeaseHolderCache().Update(context.TODO(), 2, 2)
+		ds.LeaseHolderCache().Update(context.Background(), 2, 2)
 		if _, pErr := kv.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
 			t.Fatalf("%d: unexpected error: %v", i, pErr)
 		}
@@ -3127,7 +3127,7 @@ func TestCanSendToFollower(t *testing.T) {
 func TestEvictMetaRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	testutils.RunTrueAndFalse(t, "hasSuggestedRange", func(t *testing.T, hasSuggestedRange bool) {
 		splitKey := keys.RangeMetaKey(roachpb.RKey("b"))
@@ -3318,7 +3318,7 @@ func TestEvictMetaRange(t *testing.T) {
 func TestConnectionClass(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	// Create a mock range descriptor DB that can resolve made up meta1, node
 	// liveness and user ranges.
 	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
@@ -3402,7 +3402,7 @@ func TestConnectionClass(t *testing.T) {
 					Key: key,
 				},
 			})
-			_, err := ds.Send(context.TODO(), ba)
+			_, err := ds.Send(context.Background(), ba)
 			require.Nil(t, err)
 		})
 	}
@@ -3414,7 +3414,7 @@ func TestConnectionClass(t *testing.T) {
 func TestEvictionTokenCoalesce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	initGen := int64(1)
 	testUserRangeDescriptor := roachpb.RangeDescriptor{

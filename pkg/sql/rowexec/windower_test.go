@@ -253,7 +253,7 @@ func BenchmarkWindower(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					d.Run(context.TODO())
+					d.Run(context.Background())
 					input.Reset()
 				}
 				b.StopTimer()

@@ -104,7 +104,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	ranges := []struct {
 		start, end roachpb.Key
 	}{
@@ -1072,7 +1072,7 @@ func TestTxnCommit(t *testing.T) {
 	value := []byte("value")
 
 	// Test a write txn commit.
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		key := []byte("key-commit")
 		return txn.Put(ctx, key, value)
 	}); err != nil {
@@ -1081,7 +1081,7 @@ func TestTxnCommit(t *testing.T) {
 	checkTxnMetrics(t, metrics, "commit txn", 1 /* commits */, 0 /* commits1PC */, 0, 0)
 
 	// Test a read-only txn.
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		key := []byte("key-commit")
 		_, err := txn.Get(ctx, key)
 		return err
@@ -1100,7 +1100,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 
 	value := []byte("value")
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		key := []byte("key-commit")
 		b := txn.NewBatch()
@@ -1135,7 +1135,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 	intentionalErrText := "intentional error to cause abort"
 	// Test aborted transaction.
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		key := []byte("key-abort")
 
 		if err := txn.Put(ctx, key, value); err != nil {
@@ -1216,7 +1216,7 @@ func TestTxnDurations(t *testing.T) {
 	const incr int64 = 1000
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
-		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+		if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.Put(ctx, key, []byte("val")); err != nil {
 				return err
 			}
@@ -1710,7 +1710,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		sender,
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		return errors.New("foo")
 	}); err == nil {
 		t.Fatal("expected error on abort")
@@ -1858,7 +1858,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		defer func() { attempt++ }()
 		b := txn.NewBatch()
 		b.Put(keys[attempt], "b")

@@ -131,8 +131,8 @@ func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -262,8 +262,8 @@ func TestDropDatabaseEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -308,8 +308,8 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.
@@ -489,7 +489,7 @@ func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -539,7 +539,7 @@ func TestDropIndex(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.
@@ -704,7 +704,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	numRows := 2*chunkSize + 1
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
@@ -732,8 +732,8 @@ func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
@@ -821,8 +821,8 @@ func TestDropTableDeleteData(t *testing.T) {
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.
@@ -1040,7 +1040,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
@@ -1077,7 +1077,7 @@ func TestDropTableInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1124,7 +1124,7 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if err := tests.CreateKVTable(sqlDB, "kv", 100); err != nil {
 		t.Fatal(err)
@@ -1162,7 +1162,7 @@ func TestDropAndCreateTable(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = "test"
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
@@ -1212,7 +1212,7 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sql := `
 CREATE DATABASE test;
@@ -1266,7 +1266,7 @@ func TestDropNameReuse(t *testing.T) {
 	}
 
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sql := `
 CREATE DATABASE test;

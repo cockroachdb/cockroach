@@ -27,11 +27,11 @@ import (
 func TestRevertTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s, sqlDB, kv := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -70,7 +70,7 @@ func TestRevertTable(t *testing.T) {
 		// Revert the table to ts.
 		desc := sqlbase.GetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 		desc.State = sqlbase.TableDescriptor_OFFLINE // bypass the offline check.
-		require.NoError(t, RevertTables(context.TODO(), kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
+		require.NoError(t, RevertTables(context.Background(), kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)

@@ -54,7 +54,7 @@ func newKVNative(b *testing.B) kvInterface {
 	return &kvNative{
 		db: db,
 		doneFn: func() {
-			s.Stopper().Stop(context.TODO())
+			s.Stopper().Stop(context.Background())
 		},
 	}
 }
@@ -62,7 +62,7 @@ func newKVNative(b *testing.B) kvInterface {
 func (kv *kvNative) Insert(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
-	err := kv.db.Txn(context.TODO(), func(ctx context.Context, txn *kv2.Txn) error {
+	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
 		b := txn.NewBatch()
 		for i := firstRow; i < lastRow; i++ {
 			b.Put(fmt.Sprintf("%s%08d", kv.prefix, i), i)
@@ -74,7 +74,7 @@ func (kv *kvNative) Insert(rows, run int) error {
 
 func (kv *kvNative) Update(rows, run int) error {
 	perm := rand.Perm(rows)
-	err := kv.db.Txn(context.TODO(), func(ctx context.Context, txn *kv2.Txn) error {
+	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
 		// Read all values in a batch.
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
@@ -97,7 +97,7 @@ func (kv *kvNative) Update(rows, run int) error {
 func (kv *kvNative) Delete(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
-	err := kv.db.Txn(context.TODO(), func(ctx context.Context, txn *kv2.Txn) error {
+	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
 		b := txn.NewBatch()
 		for i := firstRow; i < lastRow; i++ {
 			b.Del(fmt.Sprintf("%s%08d", kv.prefix, i))
@@ -109,7 +109,7 @@ func (kv *kvNative) Delete(rows, run int) error {
 
 func (kv *kvNative) Scan(rows, run int) error {
 	var kvs []kv2.KeyValue
-	err := kv.db.Txn(context.TODO(), func(ctx context.Context, txn *kv2.Txn) error {
+	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
 		var err error
 		kvs, err = txn.Scan(ctx, fmt.Sprintf("%s%08d", kv.prefix, 0), fmt.Sprintf("%s%08d", kv.prefix, rows), int64(rows))
 		return err
@@ -126,7 +126,7 @@ func (kv *kvNative) prep(rows int, initData bool) error {
 	if !initData {
 		return nil
 	}
-	err := kv.db.Txn(context.TODO(), func(ctx context.Context, txn *kv2.Txn) error {
+	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
 			b.Put(fmt.Sprintf("%s%08d", kv.prefix, i), i)
@@ -157,7 +157,7 @@ func newKVSQL(b *testing.B) kvInterface {
 	kv := &kvSQL{}
 	kv.db = db
 	kv.doneFn = func() {
-		s.Stopper().Stop(context.TODO())
+		s.Stopper().Stop(context.Background())
 	}
 	return kv
 }

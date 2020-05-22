@@ -157,7 +157,7 @@ func TestTransactionConfig(t *testing.T) {
 	db := NewDBWithContext(
 		testutils.MakeAmbientCtx(),
 		newTestTxnFactory(nil), clock, dbCtx)
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
+	if err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
 		if txn.db.ctx.UserPriority != db.ctx.UserPriority {
 			t.Errorf("expected txn user priority %f; got %f",
 				db.ctx.UserPriority, txn.db.ctx.UserPriority)
@@ -181,7 +181,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 			count++
 			return ba.CreateReply(), nil
 		}), clock)
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
+	if err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("z", "adding a write exposed a bug in #1882")
 		return txn.CommitInBatch(ctx, b)
@@ -209,7 +209,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 			return ba.CreateReply(), nil
 		}), clock)
 
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
+	if err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
 		if err := txn.Put(ctx, "a", "b"); err != nil {
 			return err
 		}
@@ -279,7 +279,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 						}
 						return ba.CreateReply(), nil
 					}), clock)
-			err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
+			err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
 				return txn.Put(ctx, "a", "b")
 			})
 			if test.retry {
@@ -420,7 +420,7 @@ func TestWrongTxnRetry(t *testing.T) {
 		return roachpb.NewTransactionRetryWithProtoRefreshError("test error", uuid.MakeV4(), roachpb.Transaction{})
 	}
 
-	if err := db.Txn(context.TODO(), txnClosure); !testutils.IsError(err, "test error") {
+	if err := db.Txn(context.Background(), txnClosure); !testutils.IsError(err, "test error") {
 		t.Fatal(err)
 	}
 	if retries != 1 {
@@ -436,7 +436,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTxnRequest{})
 	b.Put("x", "y")
-	if err := db.Run(context.TODO(), b); !testutils.IsError(err, "non-raw operations") {
+	if err := db.Run(context.Background(), b); !testutils.IsError(err, "non-raw operations") {
 		t.Fatal(err)
 	}
 }

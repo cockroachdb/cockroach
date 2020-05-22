@@ -73,7 +73,7 @@ func TestConn(t *testing.T) {
 	// execute some metadata queries that pgx sends whenever it opens a
 	// connection.
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Start a pgwire "server".
 	addr := util.TestAddr
@@ -82,10 +82,10 @@ func TestConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverAddr := ln.Addr()
-	log.Infof(context.TODO(), "started listener on %s", serverAddr)
+	log.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	var g errgroup.Group
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	var clientWG sync.WaitGroup
 	clientWG.Add(1)
@@ -288,7 +288,7 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	batch := conn.BeginBatch()
 	batch.Queue("select 7", nil, nil, nil)
 	batch.Queue("select 8", nil, nil, nil)
-	if err := batch.Send(context.TODO(), &pgx.TxOptions{}); err != nil {
+	if err := batch.Send(context.Background(), &pgx.TxOptions{}); err != nil {
 		return err
 	}
 	if err := batch.Close(); err != nil {
@@ -332,7 +332,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	// Consume the connection options.
-	if _, err := parseClientProvidedSessionParameters(context.TODO(), nil, &buf); err != nil {
+	if _, err := parseClientProvidedSessionParameters(context.Background(), nil, &buf); err != nil {
 		return nil, err
 	}
 
@@ -602,7 +602,7 @@ func finishQuery(t finishType, c *conn) error {
 	case describe:
 		skipFinish = true
 		if err := c.writeRowDescription(
-			context.TODO(), nil /* columns */, nil /* formatCodes */, c.conn,
+			context.Background(), nil /* columns */, nil /* formatCodes */, c.conn,
 		); err != nil {
 			return err
 		}
@@ -641,7 +641,7 @@ func finishQuery(t finishType, c *conn) error {
 type pgxTestLogger struct{}
 
 func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Infof(context.TODO(), "pgx log [%s] %s - %s", level, msg, data)
+	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -655,7 +655,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 	// state.
 	testutils.RunTrueAndFalse(t, "open state", func(t *testing.T, open bool) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		ctx := context.TODO()
+		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
 
 		pgURL, cleanupFunc := sqlutils.PGUrl(
@@ -723,7 +723,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 func TestConnCloseWhileProducingRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	// Disable results buffering.
@@ -784,7 +784,7 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 func TestMaliciousInputs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	for _, tc := range [][]byte{
 		// This byte string sends a pgwirebase.ClientMsgClose message type. When
@@ -870,7 +870,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Infof(context.TODO(), "started listener on %s", ln.Addr())
+	log.Infof(context.Background(), "started listener on %s", ln.Addr())
 	defer func() {
 		if err := ln.Close(); err != nil {
 			t.Fatal(err)

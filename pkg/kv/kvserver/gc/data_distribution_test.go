@@ -40,7 +40,7 @@ type dataDistribution func() (storage.MVCCKeyValue, *roachpb.Transaction, bool)
 func (ds dataDistribution) setupTest(
 	t testing.TB, eng storage.Engine, desc roachpb.RangeDescriptor,
 ) enginepb.MVCCStats {
-	ctx := context.TODO()
+	ctx := context.Background()
 	var maxTs hlc.Timestamp
 	var ms enginepb.MVCCStats
 	for {

@@ -33,7 +33,7 @@ func TestInvertedIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(tc.Conns[0])
 

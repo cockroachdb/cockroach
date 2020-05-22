@@ -63,7 +63,7 @@ func TestIndexBackfiller(t *testing.T) {
 		base.TestClusterArgs{
 			ServerArgs: params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	sqlDB := tc.ServerConn(0)
 
 	execOrFail := func(query string) gosql.Result {

@@ -50,7 +50,7 @@ func TestBinPackingOracleIsConsistent(t *testing.T) {
 	})
 	// For our purposes, an uninitialized binPackingOracle will do.
 	bp := of.Oracle(nil)
-	repl, err := bp.ChoosePreferredReplica(context.TODO(), rng, queryState)
+	repl, err := bp.ChoosePreferredReplica(context.Background(), rng, queryState)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestBinPackingOracleIsConsistent(t *testing.T) {
 func TestClosest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	g, _ := makeGossip(t, stopper)
 	nd, _ := g.GetNodeDescriptor(1)
 	of := NewOracleFactory(ClosestChoice, Config{
@@ -76,7 +76,7 @@ func TestClosest(t *testing.T) {
 		return time.Millisecond, true
 	}
 	o := of.Oracle(nil)
-	info, err := o.ChoosePreferredReplica(context.TODO(), roachpb.RangeDescriptor{
+	info, err := o.ChoosePreferredReplica(context.Background(), roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},

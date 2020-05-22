@@ -69,7 +69,7 @@ func descForTable(
 	} else {
 		stmt = parsed[0].AST.(*tree.CreateTable)
 	}
-	table, err := MakeSimpleTableDescriptor(context.TODO(), settings, stmt, parent, id, fks, nanos)
+	table, err := MakeSimpleTableDescriptor(context.Background(), settings, stmt, parent, id, fks, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
 	}

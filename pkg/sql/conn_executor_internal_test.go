@@ -218,7 +218,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 func mustParseOne(s string) parser.Statement {
 	stmts, err := parser.Parse(s)
 	if err != nil {
-		log.Fatalf(context.TODO(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	return stmts[0]
 }

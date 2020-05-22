@@ -31,7 +31,7 @@ func TestConcurrentRequestLimiter(t *testing.T) {
 	const runs = 1000000
 	var count int64
 
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	for thread := 0; thread < threads; thread++ {

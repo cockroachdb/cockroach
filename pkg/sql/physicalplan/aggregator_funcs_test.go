@@ -59,7 +59,7 @@ func runTestFlow(
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsql.ServerImpl)
 
-	leafInputState := txn.GetLeafTxnInputState(context.TODO())
+	leafInputState := txn.GetLeafTxnInputState(context.Background())
 	req := execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
 		LeafTxnInputState: &leafInputState,
@@ -71,7 +71,7 @@ func runTestFlow(
 
 	var rowBuf distsqlutils.RowBuffer
 
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.TODO(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf)
+	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +406,7 @@ func TestDistAggregationTable(t *testing.T) {
 	const numRows = 100
 
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Create a table with a few columns:
 	//  - random integer values from 0 to numRows

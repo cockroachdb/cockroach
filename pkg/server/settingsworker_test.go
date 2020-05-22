@@ -68,7 +68,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// need to do this before starting the server, or there will be data races.
 	st := cluster.MakeTestingClusterSettings()
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
@@ -192,7 +192,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 	// need to do this before starting the server, or there will be data races.
 	st := cluster.MakeTestingClusterSettings()
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
@@ -300,7 +300,7 @@ func TestSettingsShowAll(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
