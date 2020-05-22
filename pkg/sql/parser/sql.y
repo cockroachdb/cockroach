@@ -4991,7 +4991,7 @@ generated_as:
 
 
 index_def:
-  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
+  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
   {
     $$.val = &tree.IndexTableDef{
       Name:    tree.Name($2),
@@ -5000,9 +5000,10 @@ index_def:
       Storing: $7.nameList(),
       Interleave: $8.interleave(),
       PartitionBy: $9.partitionBy(),
+      Predicate: $10.expr(),
     }
   }
-| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
+| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
@@ -5012,15 +5013,17 @@ index_def:
         Storing: $8.nameList(),
         Interleave: $9.interleave(),
         PartitionBy: $10.partitionBy(),
+        Predicate: $11.expr(),
       },
     }
   }
-| INVERTED INDEX opt_name '(' index_params ')'
+| INVERTED INDEX opt_name '(' index_params ')' opt_where_clause
   {
     $$.val = &tree.IndexTableDef{
       Name:    tree.Name($3),
       Columns: $5.idxElems(),
       Inverted: true,
+      Predicate: $7.expr(),
     }
   }
 
@@ -5054,7 +5057,7 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by  opt_deferrable
+| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_deferrable opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
@@ -5062,6 +5065,7 @@ constraint_elem:
         Storing: $5.nameList(),
         Interleave: $6.interleave(),
         PartitionBy: $7.partitionBy(),
+        Predicate: $9.expr(),
       },
     }
   }
@@ -5646,7 +5650,7 @@ enum_val_list:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_idx_where
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5658,11 +5662,12 @@ create_index_stmt:
       Storing: $13.nameList(),
       Interleave: $14.interleave(),
       PartitionBy: $15.partitionBy(),
+      Predicate: $16.expr(),
       Inverted: $8.bool(),
       Concurrently: $4.bool(),
     }
   }
-| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_idx_where
+| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
   {
     table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5676,10 +5681,11 @@ create_index_stmt:
       Interleave:  $17.interleave(),
       PartitionBy: $18.partitionBy(),
       Inverted:    $11.bool(),
+      Predicate:   $19.expr(),
       Concurrently: $4.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+| CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
   {
     table := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5691,10 +5697,11 @@ create_index_stmt:
       Storing:     $12.nameList(),
       Interleave:  $13.interleave(),
       PartitionBy: $14.partitionBy(),
+      Predicate:   $15.expr(),
       Concurrently: $5.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+| CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
   {
     table := $11.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5707,14 +5714,11 @@ create_index_stmt:
       Storing:     $15.nameList(),
       Interleave:  $16.interleave(),
       PartitionBy: $17.partitionBy(),
+      Predicate:   $18.expr(),
       Concurrently: $5.bool(),
     }
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
-
-opt_idx_where:
-  /* EMPTY */ { /* no error */ }
-| WHERE error { return unimplementedWithIssue(sqllex, 9683) }
 
 opt_using_gin_btree:
   USING name
