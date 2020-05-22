@@ -1116,6 +1116,8 @@ system         pg_extension  geometry_columns                 f_table_schema    
 system         pg_extension  geometry_columns                 srid                      6
 system         pg_extension  geometry_columns                 type                      7
 system         public        jobs                             created                   3
+system         public        jobs                             created_by_id             7
+system         public        jobs                             created_by_type           6
 system         public        jobs                             id                        1
 system         public        jobs                             payload                   4
 system         public        jobs                             progress                  5

@@ -138,11 +138,13 @@ lastUpdated  TIMESTAMP  false  NULL  ·  {}         false
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id        INT8       false  unique_rowid()     ·  {primary,jobs_status_created_idx}  false
-status    STRING     false  NULL               ·  {jobs_status_created_idx}          false
-created   TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}          false
-payload   BYTES      false  NULL               ·  {}                                 false
-progress  BYTES      true   NULL               ·  {}                                 false
+id               INT8       false  unique_rowid()     ·  {primary,jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}  false
+status           STRING     false  NULL               ·  {jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}          false
+created          TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}                                                 false
+payload          BYTES      false  NULL               ·  {}                                                                        false
+progress         BYTES      true   NULL               ·  {}                                                                        false
+created_by_type  STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
+created_by_id    INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings
