@@ -44,7 +44,7 @@ func TestLocalIOLimits(t *testing.T) {
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 
 	baseDir, err := ExternalStorageFromURI(
-		ctx, "nodelocal://0/", base.ExternalIOConfig{}, testSettings, clientFactory)
+		ctx, "nodelocal://0/", base.SQLExternalIOConfig{}, testSettings, clientFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestLocalIOLimits(t *testing.T) {
 	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
 		u := fmt.Sprintf("nodelocal://0%s", dest)
 		e, err := ExternalStorageFromURI(
-			ctx, u, base.ExternalIOConfig{}, testSettings, clientFactory)
+			ctx, u, base.SQLExternalIOConfig{}, testSettings, clientFactory)
 		if err != nil {
 			t.Fatal(err)
 		}
