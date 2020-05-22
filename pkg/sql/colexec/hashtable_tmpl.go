@@ -239,8 +239,8 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 	// {{$deletingProbeMode := .DeletingProbeMode}}
 	// {{with .Global}}
 	// In order to inline the templated code of overloads, we need to have a
-	// `decimalScratch` local variable of type `decimalOverloadScratch`.
-	decimalScratch := ht.decimalScratch
+	// `_overloadHelper` local variable of type `overloadHelper`.
+	_overloadHelper := ht.overloadHelper
 	switch probeVec.CanonicalTypeFamily() {
 	// {{range .LeftFamilies}}
 	case _LEFT_CANONICAL_TYPE_FAMILY:

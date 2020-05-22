@@ -1529,7 +1529,10 @@ func planSelectionOperators(
 				op = newIsNullSelOp(leftOp, leftIdx, negate)
 				return op, resultIdx, ct, internalMemUsedLeft, err
 			}
-			op, err := GetSelectionConstOperator(lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx, constArg)
+			op, err := GetSelectionConstOperator(
+				lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx,
+				constArg, overloadHelper{},
+			)
 			return op, resultIdx, ct, internalMemUsedLeft, err
 		}
 		rightOp, rightIdx, ct, internalMemUsedRight, err := planProjectionOperators(
@@ -1538,7 +1541,10 @@ func planSelectionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, internalMemUsed, err
 		}
-		op, err := GetSelectionOperator(lTyp, ct[rightIdx], cmpOp, rightOp, leftIdx, rightIdx)
+		op, err := GetSelectionOperator(
+			lTyp, ct[rightIdx], cmpOp, rightOp, leftIdx, rightIdx,
+			overloadHelper{},
+		)
 		return op, resultIdx, ct, internalMemUsedLeft + internalMemUsedRight, err
 	default:
 		return nil, resultIdx, nil, internalMemUsed, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
@@ -1601,10 +1607,15 @@ func planProjectionOperators(
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, internalMemUsed, nil
 	case *tree.ComparisonExpr:
-		return planProjectionExpr(ctx, evalCtx, t.Operator, t.ResolvedType(),
-			t.TypedLeft(), t.TypedRight(), columnTypes, input, acc, factory)
+		return planProjectionExpr(
+			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
+			columnTypes, input, acc, factory, overloadHelper{},
+		)
 	case *tree.BinaryExpr:
-		return planProjectionExpr(ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input, acc, factory)
+		return planProjectionExpr(
+			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
+			columnTypes, input, acc, factory, overloadHelper{},
+		)
 	case *tree.IsNullExpr:
 		t.TypedInnerExpr()
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory)
@@ -1780,7 +1791,7 @@ func planProjectionOperators(
 	}
 }
 
-func checkSupportedProjectionExpr(projOp tree.Operator, left, right tree.TypedExpr) error {
+func checkSupportedProjectionExpr(left, right tree.TypedExpr) error {
 	leftTyp := left.ResolvedType()
 	rightTyp := right.ResolvedType()
 	if leftTyp.Equivalent(rightTyp) {
@@ -1793,16 +1804,6 @@ func checkSupportedProjectionExpr(projOp tree.Operator, left, right tree.TypedEx
 		case types.DateFamily, types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily:
 			return errors.New("dates, timestamp(tz), and intervals not supported in mixed-type expressions in the vectorized engine")
 		}
-	}
-
-	// Because we want to be conservative, we allow specialized mixed-type
-	// operators with simple types and deny all else.
-	switch projOp {
-	case tree.Like, tree.NotLike:
-	case tree.In, tree.NotIn:
-	case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
-	default:
-		return errors.New("binary operation not supported with mixed types")
 	}
 	return nil
 }
@@ -1817,8 +1818,9 @@ func planProjectionExpr(
 	input colexecbase.Operator,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
+	overloadHelper overloadHelper,
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
-	if err := checkSupportedProjectionExpr(projOp, left, right); err != nil {
+	if err := checkSupportedProjectionExpr(left, right); err != nil {
 		return nil, resultIdx, typs, internalMemUsed, err
 	}
 	resultIdx = -1
@@ -1867,7 +1869,7 @@ func planProjectionExpr(
 		// to the input batch.
 		op, err = GetProjectionLConstOperator(
 			colmem.NewAllocator(ctx, acc, factory), left.ResolvedType(), typs[rightIdx], actualOutputType,
-			projOp, input, rightIdx, lConstArg, resultIdx,
+			projOp, input, rightIdx, lConstArg, resultIdx, overloadHelper,
 		)
 	} else {
 		var (
@@ -1915,7 +1917,7 @@ func planProjectionExpr(
 			} else {
 				op, err = GetProjectionRConstOperator(
 					colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], right.ResolvedType(), actualOutputType,
-					projOp, input, leftIdx, rConstArg, resultIdx,
+					projOp, input, leftIdx, rConstArg, resultIdx, overloadHelper,
 				)
 			}
 		} else {
@@ -1934,7 +1936,7 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			op, err = GetProjectionOperator(
 				colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], typs[rightIdx], actualOutputType,
-				projOp, input, leftIdx, rightIdx, resultIdx,
+				projOp, input, leftIdx, rightIdx, resultIdx, overloadHelper,
 			)
 		}
 	}

@@ -189,7 +189,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 type selConstOpBase struct {
 	OneInputNode
 	colIdx         int
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
@@ -197,7 +197,7 @@ type selOpBase struct {
 	OneInputNode
 	col1Idx        int
 	col2Idx        int
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
 }
 
 // {{define "selConstOp"}}
@@ -208,11 +208,11 @@ type _OP_CONST_NAME struct {
 
 func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `decimalScratch` local variable of type `decimalOverloadScratch`.
-	decimalScratch := p.decimalScratch
+	// `_overloadHelper` local variable of type `overloadHelper`.
+	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
-	_ = decimalScratch
+	_ = _overloadHelper
 	var isNull bool
 	for {
 		batch := p.input.Next(ctx)
@@ -250,11 +250,11 @@ type _OP_NAME struct {
 
 func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `decimalScratch` local variable of type `decimalOverloadScratch`.
-	decimalScratch := p.decimalScratch
+	// `_overloadHelper` local variable of type `overloadHelper`.
+	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
-	_ = decimalScratch
+	_ = _overloadHelper
 	var isNull bool
 	for {
 		batch := p.input.Next(ctx)
@@ -312,14 +312,16 @@ func GetSelectionConstOperator(
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
+	overloadHelper overloadHelper,
 ) (colexecbase.Operator, error) {
 	c, err := getDatumToPhysicalFn(constType)(constArg)
 	if err != nil {
 		return nil, err
 	}
 	selConstOpBase := selConstOpBase{
-		OneInputNode: NewOneInputNode(input),
-		colIdx:       colIdx,
+		OneInputNode:   NewOneInputNode(input),
+		colIdx:         colIdx,
+		overloadHelper: overloadHelper,
 	}
 	switch cmpOp {
 	// {{range .CmpOps}}
@@ -359,11 +361,13 @@ func GetSelectionOperator(
 	input colexecbase.Operator,
 	col1Idx int,
 	col2Idx int,
+	overloadHelper overloadHelper,
 ) (colexecbase.Operator, error) {
 	selOpBase := selOpBase{
-		OneInputNode: NewOneInputNode(input),
-		col1Idx:      col1Idx,
-		col2Idx:      col2Idx,
+		OneInputNode:   NewOneInputNode(input),
+		col1Idx:        col1Idx,
+		col2Idx:        col2Idx,
+		overloadHelper: overloadHelper,
 	}
 	switch cmpOp {
 	// {{range .CmpOps}}

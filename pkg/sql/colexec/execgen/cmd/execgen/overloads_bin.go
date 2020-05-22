@@ -256,7 +256,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				if {{.Right}} == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
-				leftTmpDec, rightTmpDec := &decimalScratch.tmpDec1, &decimalScratch.tmpDec2
+				leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
 				leftTmpDec.SetFinite(int64({{.Left}}), 0)
 				rightTmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
@@ -293,7 +293,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				tmpDec := &decimalScratch.tmpDec1
+				tmpDec := &_overloadHelper.tmpDec1
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
 					colexecerror.ExpectedError(err)
@@ -319,7 +319,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &decimalScratch.tmpDec1
+				tmpDec := &_overloadHelper.tmpDec1
 				tmpDec.SetFinite(int64({{.Left}}), 0)
 				{{if .IsDivision}}
 				cond, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
