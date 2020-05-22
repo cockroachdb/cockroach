@@ -12,9 +12,13 @@ package sql
 
 import (
 	"context"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,6 +36,64 @@ var pgExtension = virtualSchema{
 	validWithNoDatabaseContext: false,
 }
 
+func postgisColumnsTablePopulator(
+	matchingFamily types.Family,
+) func(context.Context, *planner, *DatabaseDescriptor, func(...tree.Datum) error) error {
+	return func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(
+			ctx,
+			p,
+			dbContext,
+			hideVirtual,
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+				if !table.IsPhysicalTable() {
+					return nil
+				}
+				for _, colDesc := range table.Columns {
+					if colDesc.Type.Family() != matchingFamily {
+						continue
+					}
+					m := colDesc.Type.InternalType.GeoMetadata
+
+					var datumNDims tree.Datum
+					switch m.Shape {
+					case geopb.Shape_Point, geopb.Shape_LineString, geopb.Shape_Polygon,
+						geopb.Shape_MultiPoint, geopb.Shape_MultiLineString, geopb.Shape_MultiPolygon,
+						geopb.Shape_GeometryCollection:
+						datumNDims = tree.NewDInt(2)
+					case geopb.Shape_Geometry, geopb.Shape_Unset:
+						// For geometry_columns, the query in PostGIS COALESCES the value to 2.
+						// Otherwise, the value is NULL.
+						if matchingFamily == types.GeometryFamily {
+							datumNDims = tree.NewDInt(2)
+						} else {
+							datumNDims = tree.DNull
+						}
+					}
+
+					shapeName := m.Shape.String()
+					if m.Shape == geopb.Shape_Unset {
+						shapeName = geopb.Shape_Geometry.String()
+					}
+
+					if err := addRow(
+						tree.NewDString(db.GetName()),
+						tree.NewDString(scName),
+						tree.NewDString(table.GetName()),
+						tree.NewDString(colDesc.Name),
+						datumNDims,
+						tree.NewDInt(tree.DInt(m.SRID)),
+						tree.NewDString(strings.ToUpper(shapeName)),
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		)
+	}
+}
+
 var pgExtensionGeographyColumnsTable = virtualSchemaTable{
 	comment: `Shows all defined geography columns. Matches PostGIS' geography_columns functionality.`,
 	schema: `
@@ -44,9 +106,7 @@ CREATE TABLE pg_extension.geography_columns (
 	srid integer,
 	type text
 )`,
-	generator: func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
-		return nil, func() {}, errors.Newf("not yet implemented")
-	},
+	populate: postgisColumnsTablePopulator(types.GeographyFamily),
 }
 
 var pgExtensionGeometryColumnsTable = virtualSchemaTable{
@@ -61,9 +121,7 @@ CREATE TABLE pg_extension.geometry_columns (
 	srid integer,
 	type text
 )`,
-	generator: func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
-		return nil, func() {}, errors.Newf("not yet implemented")
-	},
+	populate: postgisColumnsTablePopulator(types.GeometryFamily),
 }
 
 var pgExtensionSpatialRefSysTable = virtualSchemaTable{
