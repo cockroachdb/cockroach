@@ -108,21 +108,13 @@ func (mo *MaxOffsetType) String() string {
 	return time.Duration(*mo).String()
 }
 
-// Config holds parameters needed to setup a server.
+// Config holds parameters needed to setup a (KV and SQL) server.
 type Config struct {
 	// Embed the base context.
 	*base.Config
-
-	Settings *cluster.Settings
-
 	base.RaftConfig
-
-	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
-	SQLLeaseManagerConfig *base.LeaseManagerConfig
-
-	// SocketFile, if non-empty, sets up a TLS-free local listener using
-	// a unix datagram socket at the specified path.
-	SocketFile string
+	SQLConfig
+	Settings *cluster.Settings
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
@@ -130,14 +122,6 @@ type Config struct {
 	// StorageEngine specifies the engine type (eg. rocksdb, pebble) to use to
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
-
-	// TempStorageConfig is used to configure temp storage, which stores
-	// ephemeral data when processing large queries.
-	SQLTempStorageConfig base.TempStorageConfig
-
-	// SQLExternalIOConfig is used to configure external storage
-	// access (http://, nodelocal://, etc)
-	SQLExternalIOConfig base.SQLExternalIOConfig
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -163,20 +147,6 @@ type Config struct {
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
 	TimeSeriesServerConfig ts.ServerConfig
-
-	// SQLMemoryPoolSize is the amount of memory in bytes that can be
-	// used by SQL clients to store row data in server RAM.
-	SQLMemoryPoolSize int64
-
-	// SQLAuditLogDirName is the target directory name for SQL audit logs.
-	SQLAuditLogDirName *log.DirName
-
-	// SQLTableStatCacheSize is the size (number of tables) of the table
-	// statistics cache.
-	SQLTableStatCacheSize int
-
-	// SQLQueryCacheSize is the memory size (in bytes) of the query plan cache.
-	SQLQueryCacheSize int64
 
 	// GoroutineDumpDirName is the directory name for goroutine dumps using
 	// goroutinedumper.
@@ -279,6 +249,38 @@ type Config struct {
 	enginesCreated bool
 }
 
+// SQLConfig holds the parameters to setup a SQL server.
+type SQLConfig struct {
+	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
+	SQLLeaseManagerConfig *base.LeaseManagerConfig
+
+	// SQLSocketFile, if non-empty, sets up a TLS-free local listener using
+	// a unix datagram socket at the specified path.
+	SQLSocketFile string
+
+	// TempStorageConfig is used to configure temp storage, which stores
+	// ephemeral data when processing large queries.
+	SQLTempStorageConfig base.TempStorageConfig
+
+	// SQLExternalIOConfig is used to configure external storage
+	// access (http://, nodelocal://, etc)
+	SQLExternalIOConfig base.SQLExternalIOConfig
+
+	// SQLMemoryPoolSize is the amount of memory in bytes that can be
+	// used by SQL clients to store row data in server RAM.
+	SQLMemoryPoolSize int64
+
+	// SQLAuditLogDirName is the target directory name for SQL audit logs.
+	SQLAuditLogDirName *log.DirName
+
+	// SQLTableStatCacheSize is the size (number of tables) of the table
+	// statistics cache.
+	SQLTableStatCacheSize int
+
+	// SQLQueryCacheSize is the memory size (in bytes) of the query plan cache.
+	SQLQueryCacheSize int64
+}
+
 // HistogramWindowInterval is used to determine the approximate length of time
 // that individual samples are retained in in-memory histograms. Currently,
 // it is set to the arbitrary length of six times the Metrics sample interval.
@@ -334,7 +336,7 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 	return setOpenFileLimit(1)
 }
 
-// MakeConfig returns a Context with default values.
+// MakeConfig returns a Config with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
 	if err != nil {
@@ -343,16 +345,22 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 
+	sqlCfg := SQLConfig{
+		SQLMemoryPoolSize:     defaultSQLMemoryPoolSize,
+		SQLTableStatCacheSize: defaultSQLTableStatCacheSize,
+		SQLQueryCacheSize:     defaultSQLQueryCacheSize,
+		SQLTempStorageConfig: base.TempStorageConfigFromEnv(
+			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
+	}
+
 	cfg := Config{
 		Config:                         new(base.Config),
+		SQLConfig:                      sqlCfg,
 		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
 		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
 		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
 		Settings:                       st,
 		CacheSize:                      DefaultCacheSize,
-		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
-		SQLTableStatCacheSize:          defaultSQLTableStatCacheSize,
-		SQLQueryCacheSize:              defaultSQLQueryCacheSize,
 		ScanInterval:                   defaultScanInterval,
 		ScanMinIdleTime:                defaultScanMinIdleTime,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
@@ -362,8 +370,6 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 			Specs: []base.StoreSpec{storeSpec},
 		},
 		StorageEngine: storage.DefaultStorageEngine,
-		SQLTempStorageConfig: base.TempStorageConfigFromEnv(
-			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 

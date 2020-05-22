@@ -706,9 +706,9 @@ func TestServerSocketSettings(t *testing.T) {
 			if err := extraServerFlagInit(startCmd); err != nil {
 				t.Fatal(err)
 			}
-			if td.expectedSocket != serverCfg.SocketFile {
-				t.Errorf("%d. serverCfg.SocketFile expected '%s', but got '%s'. td.args was '%#v'.",
-					i, td.expectedSocket, serverCfg.SocketFile, td.args)
+			if td.expectedSocket != serverCfg.SQLSocketFile {
+				t.Errorf("%d. serverCfg.SQLSocketFile expected '%s', but got '%s'. td.args was '%#v'.",
+					i, td.expectedSocket, serverCfg.SQLSocketFile, td.args)
 			}
 		})
 	}
