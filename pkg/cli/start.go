@@ -584,7 +584,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 		}
 	}
 	useStore := serverCfg.Stores.Specs[specIdx]
-	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, useStore, specIdx); err != nil {
+	if serverCfg.SQLTempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, useStore, specIdx); err != nil {
 		return err
 	}
 
