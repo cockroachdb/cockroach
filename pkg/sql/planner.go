@@ -366,6 +366,7 @@ func (p *planner) PhysicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.physical
 }
 
+// LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
 func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.logical
 }
@@ -379,10 +380,12 @@ func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
 	return p.extendedEvalCtx.copy()
 }
 
+// CurrentDatabase is part of the resolver.SchemaResolver interface.
 func (p *planner) CurrentDatabase() string {
 	return p.SessionData().Database
 }
 
+// CurrentSearchPath is part of the resolver.SchemaResolver interface.
 func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
 	return p.SessionData().SearchPath
 }
