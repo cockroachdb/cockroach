@@ -419,7 +419,6 @@ var ignoredErrorPatterns = []string{
 	"overflow",
 	"requested length too large",
 	"division by zero",
-	"zero modulus",
 	"is out of range",
 
 	// Type checking

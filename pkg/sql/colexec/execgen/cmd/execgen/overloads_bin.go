@@ -241,7 +241,29 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 
 func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
-		return fmt.Sprintf("%s = float64(%s) %s float64(%s)", targetElem, leftElem, op.overloadBase.OpStr, rightElem)
+		binOp := op.overloadBase.BinOp
+		computeBinOp := fmt.Sprintf("float64(%s) %s float64(%s)", leftElem, binOp, rightElem)
+		args := map[string]interface{}{
+			"CheckRightIsZero": binOp == tree.Div,
+			"Target":           targetElem,
+			"Right":            rightElem,
+			"ComputeBinOp":     computeBinOp,
+		}
+		buf := strings.Builder{}
+		t := template.Must(template.New("").Parse(`
+			{
+				{{if .CheckRightIsZero}}
+				if {{.Right}} == 0.0 {
+					colexecerror.ExpectedError(tree.ErrDivByZero)
+				}
+				{{end}}
+				{{.Target}} = {{.ComputeBinOp}}
+			}
+			`))
+		if err := t.Execute(&buf, args); err != nil {
+			colexecerror.InternalError(err)
+		}
+		return buf.String()
 	}
 }
 

@@ -334,7 +334,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		}, "Calculates `x`%`y`.", tree.VolatilityImmutable),
 		decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
 			if y.Sign() == 0 {
-				return nil, tree.ErrZeroModulus
+				return nil, tree.ErrDivByZero
 			}
 			dd := &tree.DDecimal{}
 			_, err := tree.HighPrecisionCtx.Rem(&dd.Decimal, x, y)
@@ -346,7 +346,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				y := tree.MustBeDInt(args[1])
 				if y == 0 {
-					return nil, tree.ErrZeroModulus
+					return nil, tree.ErrDivByZero
 				}
 				x := tree.MustBeDInt(args[0])
 				return tree.NewDInt(x % y), nil
