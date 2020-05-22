@@ -3269,16 +3269,8 @@ func (desc *MutableTableDescriptor) performComputedColumnSwap(swap *ComputedColu
 	// Mark newCol as no longer a computed column.
 	newCol.ComputeExpr = nil
 
-	// oldCol still needs to have values written to it in case nodes read it from
-	// it with a TableDescriptor version from before the swap.
-	// To achieve this, we make oldCol a computed column of newCol.
-	oldColComputeExpr := tree.CastExpr{
-		Expr:       &tree.ColumnItem{ColumnName: tree.Name(oldCol.Name)},
-		Type:       oldCol.DatumType(),
-		SyntaxMode: tree.CastShort,
-	}
-	s := tree.Serialize(&oldColComputeExpr)
-	oldCol.ComputeExpr = &s
+	// Make the oldCol a computed column by setting it's computed expression.
+	oldCol.ComputeExpr = &swap.InverseExpr
 
 	// Generate unique name for old column.
 	nameExists := func(name string) bool {
