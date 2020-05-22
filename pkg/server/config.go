@@ -126,6 +126,10 @@ type BothConfig struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
+	// StorageEngine specifies the engine type (eg. rocksdb, pebble) to use to
+	// instantiate stores.
+	StorageEngine enginepb.EngineType
+
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 }
@@ -141,10 +145,6 @@ type Config struct {
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
-
-	// StorageEngine specifies the engine type (eg. rocksdb, pebble) to use to
-	// instantiate stores.
-	StorageEngine enginepb.EngineType
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -337,9 +337,10 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	}
 
 	bothCfg := BothConfig{
-		Config:    new(base.Config),
-		MaxOffset: MaxOffsetType(base.DefaultMaxClockOffset),
-		Settings:  st,
+		Config:        new(base.Config),
+		Settings:      st,
+		MaxOffset:     MaxOffsetType(base.DefaultMaxClockOffset),
+		StorageEngine: storage.DefaultStorageEngine,
 	}
 
 	cfg := Config{
@@ -356,7 +357,6 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		StorageEngine: storage.DefaultStorageEngine,
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
