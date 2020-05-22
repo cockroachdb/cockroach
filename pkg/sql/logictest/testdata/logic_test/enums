@@ -359,3 +359,16 @@ query T
 SELECT x FROM greeting_stats
 ----
 hi
+
+# Test that we can cast from bytes to enum.
+# Use a singleton enum so that the bytes encoding is simple.
+statement ok
+CREATE TYPE as_bytes AS ENUM ('bytes')
+
+query TT
+SELECT b'\x80'::as_bytes, b'\x80':::as_bytes
+----
+bytes bytes
+
+query error pq: could not find \[255\] in enum representation
+SELECT b'\xFF'::as_bytes
