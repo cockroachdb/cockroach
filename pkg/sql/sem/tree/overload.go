@@ -68,6 +68,10 @@ type Overload struct {
 	Fn            func(*EvalContext, Datums) (Datum, error)
 	Generator     GeneratorFactory
 
+	// SqlFn must be set for overloads of type SqlClass. It should return a SQL
+	// statement which will be executed as a common table expression in the query.
+	SqlFn func(*EvalContext, Datums) (string, error)
+
 	// counter, if non-nil, should be incremented upon successful
 	// type check of expressions using this overload.
 	counter telemetry.Counter

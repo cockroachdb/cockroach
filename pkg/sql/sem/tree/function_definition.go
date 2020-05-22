@@ -122,6 +122,8 @@ const (
 	WindowClass
 	// GeneratorClass is a builtin generator function.
 	GeneratorClass
+	// SqlClass is a builtin function that executes a SQL statement.
+	SqlClass
 )
 
 // Avoid vet warning about unused enum value.
