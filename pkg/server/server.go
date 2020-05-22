@@ -381,7 +381,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// This function defines how ExternalStorage objects are created.
 	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
 		return cloud.MakeExternalStorage(
-			ctx, dest, cfg.ExternalIOConfig, st,
+			ctx, dest, cfg.SQLExternalIOConfig, st,
 			blobs.NewBlobClientFactory(
 				nodeIDContainer.Get(),
 				nodeDialer,
@@ -391,7 +391,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
 		return cloud.ExternalStorageFromURI(
-			ctx, uri, cfg.ExternalIOConfig, st,
+			ctx, uri, cfg.SQLExternalIOConfig, st,
 			blobs.NewBlobClientFactory(
 				nodeIDContainer.Get(),
 				nodeDialer,
@@ -1957,7 +1957,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // TempDir returns the filepath of the temporary directory used for temp storage.
 // It is empty for an in-memory temp storage.
 func (s *Server) TempDir() string {
-	return s.cfg.TempStorageConfig.Path
+	return s.cfg.SQLTempStorageConfig.Path
 }
 
 // PGServer exports the pgwire server. Used by tests.

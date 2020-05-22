@@ -230,7 +230,7 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 func ExternalStorageFromURI(
 	ctx context.Context,
 	uri string,
-	externalConfig base.ExternalIOConfig,
+	externalConfig base.SQLExternalIOConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
@@ -279,7 +279,7 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 func MakeExternalStorage(
 	ctx context.Context,
 	dest roachpb.ExternalStorage,
-	conf base.ExternalIOConfig,
+	conf base.SQLExternalIOConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
