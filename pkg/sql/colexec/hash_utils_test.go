@@ -38,16 +38,16 @@ func TestHashFunctionFamily(t *testing.T) {
 	}
 	numBuckets := uint64(16)
 	var (
-		cancelChecker  CancelChecker
-		decimalScratch decimalOverloadScratch
-		datumAlloc     sqlbase.DatumAlloc
+		cancelChecker     CancelChecker
+		overloadHelperVar overloadHelper
+		datumAlloc        sqlbase.DatumAlloc
 	)
 
 	for initHashValue, buckets := range [][]uint64{bucketsA, bucketsB} {
 		// We need +1 here because 0 is not a valid initial hash value.
 		initHash(buckets, nKeys, uint64(initHashValue+1))
 		for _, keysCol := range keys {
-			rehash(ctx, buckets, keysCol, nKeys, nil /* sel */, cancelChecker, decimalScratch, &datumAlloc)
+			rehash(ctx, buckets, keysCol, nKeys, nil /* sel */, cancelChecker, overloadHelperVar, &datumAlloc)
 		}
 		finalizeHash(buckets, nKeys, numBuckets)
 	}

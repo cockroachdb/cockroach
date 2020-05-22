@@ -3194,22 +3194,22 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if left == DNull && !expr.fn.NullableArgs {
+	if left == DNull && !expr.Fn.NullableArgs {
 		return DNull, nil
 	}
 	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if right == DNull && !expr.fn.NullableArgs {
+	if right == DNull && !expr.Fn.NullableArgs {
 		return DNull, nil
 	}
-	res, err := expr.fn.Fn(ctx, left, right)
+	res, err := expr.Fn.Fn(ctx, left, right)
 	if err != nil {
 		return nil, err
 	}
 	if ctx.TestingKnobs.AssertBinaryExprReturnTypes {
-		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
+		if err := ensureExpectedType(expr.Fn.ReturnType, res); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"binary op %q", expr)
 		}

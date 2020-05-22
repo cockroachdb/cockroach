@@ -1154,7 +1154,7 @@ type BinaryExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn *BinOp
+	Fn *BinOp
 }
 
 // TypedLeft returns the BinaryExpr's left expression as a TypedExpr.
@@ -1170,7 +1170,7 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 // ResolvedBinOp returns the resolved binary op overload; can only be called
 // after Resolve (which happens during TypeCheck).
 func (node *BinaryExpr) ResolvedBinOp() *BinOp {
-	return node.fn
+	return node.Fn
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
@@ -1190,7 +1190,7 @@ func (node *BinaryExpr) memoizeFn() {
 		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
-	node.fn = fn
+	node.Fn = fn
 }
 
 // newBinExprIfValidOverload constructs a new BinaryExpr if and only
@@ -1204,7 +1204,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 			Operator: op,
 			Left:     left,
 			Right:    right,
-			fn:       fn,
+			Fn:       fn,
 		}
 		expr.typ = returnTypeToFixedType(fn.returnType())
 		return expr

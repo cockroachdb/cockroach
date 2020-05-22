@@ -361,7 +361,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.fn = binOp
+	expr.Fn = binOp
 	expr.typ = binOp.returnType()(typedSubExprs)
 	return expr, nil
 }
@@ -2434,7 +2434,7 @@ func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	case *UnaryExpr:
 		t.fn = nil
 	case *BinaryExpr:
-		t.fn = nil
+		t.Fn = nil
 	case *ComparisonExpr:
 		t.fn = nil
 	case *FuncExpr:

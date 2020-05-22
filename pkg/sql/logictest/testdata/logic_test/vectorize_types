@@ -1,6 +1,7 @@
 # LogicTest: local fakedist
 
-# Check that all types supported by the vectorized engine can be read correctly.
+# Check that all native types as well as some datum-backed types can be read
+# correctly.
 statement ok
 CREATE TABLE all_types (
     _bool        BOOL,
@@ -16,13 +17,17 @@ CREATE TABLE all_types (
     _uuid        UUID,
     _timestamp   TIMESTAMP,
     _timestamptz TIMESTAMPTZ,
-    _interval  INTERVAL
+    _interval    INTERVAL,
+    _inet        INet,
+    _json        JSON
 )
 
 statement ok
 INSERT
   INTO all_types
 VALUES (
+        NULL,
+        NULL,
         NULL,
         NULL,
         NULL,
@@ -52,62 +57,16 @@ VALUES (
        '63616665-6630-3064-6465-616462656562',
        '1-1-18 1:00:00.001',
        '1-1-18 1:00:00.001-8',
-       '12:34:56.123456'
+       '12:34:56.123456',
+       '127.0.0.1',
+       '[1, "hello", {"a": ["foo", {"b": 3}]}]'
        )
 
-query BTTRIIIORTTTTT
+query BTTRIIIORTTTTTTT
 SELECT * FROM all_types ORDER BY 1
 ----
-NULL   NULL  NULL                             NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL                                  NULL                                 NULL                               NULL
-false  123   2019-10-22 00:00:00 +0000 +0000  1.23  123   123   123   123   1.23  123   63616665-6630-3064-6465-616462656562  2001-01-18 01:00:00.001 +0000 +0000  2001-01-18 09:00:00.001 +0000 UTC  12:34:56.123456
-
-statement ok
-CREATE TABLE skip_unneeded_cols (
-  _id UUID,
-  _id2 INT8,
-  _float FLOAT8,
-  _unsupported1 INT ARRAY,
-  _bool BOOL,
-  _unsupported2 INT ARRAY,
-  _bool2 BOOL,
-  PRIMARY KEY(_id, _id2)
-)
-
-statement ok
-INSERT INTO skip_unneeded_cols VALUES ('63616665-6630-3064-6465-616462656562', 1, '1.2', NULL, true, NULL, false)
-
-statement ok
-SET vectorize=experimental_always
-
-query IBB
-SELECT _id2, _bool, _bool2 FROM skip_unneeded_cols
-----
-1 true false
-
-statement ok
-RESET vectorize
-
-# This query uses a builtin that returns currently unsupported type
-# (TimestampTZ). We're only interested in not getting an error. See #42871.
-statement ok
-SELECT experimental_strptime(_string, _string) IS NULL FROM all_types
-
-statement ok
-CREATE TABLE unsupported_type (id INT PRIMARY KEY, unsupported INT ARRAY)
-
-statement ok
-INSERT INTO unsupported_type (id) SELECT * FROM generate_series(1, 2000)
-
-statement ok
-SET vectorize=experimental_always
-
-# This query makes sure that CFetcher when reading from a table with an
-# unhandled type (that isn't needed) is reset correctly between batches.
-statement ok
-SELECT id FROM unsupported_type LIMIT 1 OFFSET 1100
-
-statement ok
-RESET vectorize
+NULL   NULL  NULL                             NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL                                  NULL                                 NULL                               NULL             NULL       NULL
+false  123   2019-10-22 00:00:00 +0000 +0000  1.23  123   123   123   123   1.23  123   63616665-6630-3064-6465-616462656562  2001-01-18 01:00:00.001 +0000 +0000  2001-01-18 09:00:00.001 +0000 UTC  12:34:56.123456  127.0.0.1  [1, "hello", {"a": ["foo", {"b": 3}]}]
 
 # Regression test for #44904 (mismatched physical types between materializer's
 # input and output, root of the problem is outside of the vectorized engine).
