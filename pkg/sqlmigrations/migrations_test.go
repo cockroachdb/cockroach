@@ -807,3 +807,34 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		return nil
 	}))
 }
+
+func TestAlterSystemJobsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// We need to use "old" jobs table descriptor without newly added columns
+	// in order to test migration.
+	jobsTable := sqlbase.JobsTable
+	sqlbase.JobsTable = sqlbase.OldJobsTable
+	defer func() {
+		sqlbase.JobsTable = jobsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add created_by columns to system.jobs")
+	mt.start(t, base.TestServerArgs{})
+
+	query := `SELECT count(*) FROM system.jobs WHERE created_by_type='foo' and created_by_id=123`
+
+	// Check that we don't have created_by columns.
+	var count int
+	require.Error(t, mt.sqlDB.DB.QueryRowContext(ctx, query).Scan(&count))
+
+	// Run the migration to alter system.jobs table.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	// Check that we have the new columns.
+	mt.sqlDB.QueryRow(t, query).Scan(&count)
+}

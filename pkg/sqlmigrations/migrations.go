@@ -319,6 +319,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add CREATEROLE privilege to admin/root",
 		workFn: addCreateRoleToAdminAndRoot,
 	},
+	{
+		// Introduced in v20.2.
+		name:                "add created_by columns to system.jobs",
+		workFn:              alterSystemJobsAddCreatedByColumns,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionStart20_2),
+	},
 }
 
 func staticIDs(
@@ -1850,4 +1856,27 @@ func depublicizeSystemComments(ctx context.Context, r runner) error {
 		}
 	}
 	return nil
+}
+
+func alterSystemJobsAddCreatedByColumns(ctx context.Context, r runner) error {
+	addColsStmt := `
+ALTER TABLE system.jobs
+ADD COLUMN IF NOT EXISTS created_by_type STRING,
+ADD COLUMN IF NOT EXISTS created_by_id INT
+`
+	addIdxStmt := `
+CREATE INDEX IF NOT EXISTS idx_created_by 
+ON system.jobs (created_by_type, created_by_id) 
+STORING (status)
+`
+
+	asNode := sqlbase.InternalExecutorSessionDataOverride{
+		User: security.NodeUser,
+	}
+
+	if _, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-cols", nil, asNode, addColsStmt); err != nil {
+		return err
+	}
+	_, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-idx", nil, asNode, addIdxStmt)
+	return err
 }
