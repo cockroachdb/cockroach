@@ -104,6 +104,7 @@ message ProcessorCoreUnion {
   optional OrdinalitySpec ordinality = 27;
   optional BulkRowWriterSpec bulkRowWriter = 28;
   optional InvertedFiltererSpec invertedFilterer = 29;
+  optional BackupDataSpec backupData = 30;
 
   reserved 6, 12;
 }
