@@ -1406,13 +1406,13 @@ func (s *Server) Start(ctx context.Context) error {
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
 
 	// Begin recording runtime statistics.
-	if err := s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval); err != nil {
+	if err := s.startSampleEnvironment(ctx, base.DefaultMetricsSampleInterval); err != nil {
 		return err
 	}
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	var graphiteOnce sync.Once
@@ -1470,7 +1470,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	// Begin recording status summaries.
-	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
+	s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval)
 
 	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {

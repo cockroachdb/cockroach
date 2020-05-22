@@ -62,6 +62,10 @@ const (
 	// leader lease active duration should be of the raft election timeout.
 	defaultRangeLeaseRaftElectionTimeoutMultiplier = 3
 
+	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
+	// See https://github.com/cockroachdb/cockroach/issues/20310.
+	DefaultMetricsSampleInterval = 10 * time.Second
+
 	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatInterval
 	// used by the rpc context.
 	defaultRPCHeartbeatInterval = 3 * time.Second
@@ -94,6 +98,21 @@ const (
 	// before a lease expires when acquisition to renew the lease begins.
 	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
 )
+
+// DefaultHistogramWindowInterval returns the default rotation window for
+// histograms.
+func DefaultHistogramWindowInterval() time.Duration {
+	const defHWI = 6 * DefaultMetricsSampleInterval
+
+	// Rudimentary overflow detection; this can result if
+	// DefaultMetricsSampleInterval is set to an extremely large number, likely
+	// in the context of a test or an intentional attempt to disable metrics
+	// collection. Just return the default in this case.
+	if defHWI < DefaultMetricsSampleInterval {
+		return DefaultMetricsSampleInterval
+	}
+	return defHWI
+}
 
 var (
 	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
@@ -203,12 +222,6 @@ type Config struct {
 	// httpClient uses the client TLS config. It is initialized lazily.
 	httpClient lazyHTTPClient
 
-	// HistogramWindowInterval is used to determine the approximate length of time
-	// that individual samples are retained in in-memory histograms. Currently,
-	// it is set to the arbitrary length of six times the Metrics sample interval.
-	// See the comment in server.Config for more details.
-	HistogramWindowInterval time.Duration
-
 	// RPCHeartbeatInterval controls how often a Ping request is sent on peer
 	// connections to determine connection health and update the local view
 	// of remote clocks.
@@ -217,6 +230,24 @@ type Config struct {
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
 	ClockDevicePath string
+}
+
+// HistogramWindowInterval is used to determine the approximate length of time
+// that individual samples are retained in in-memory histograms. Currently,
+// it is set to the arbitrary length of six times the Metrics sample interval.
+//
+// The length of the window must be longer than the sampling interval due to
+// issue #12998, which was causing histograms to return zero values when sampled
+// because all samples had been evicted.
+//
+// Note that this is only intended to be a temporary fix for the above issue,
+// as our current handling of metric histograms have numerous additional
+// problems. These are tracked in github issue #7896, which has been given
+// a relatively high priority in light of recent confusion around histogram
+// metrics. For more information on the issues underlying our histogram system
+// and the proposed fixes, please see issue #7896.
+func (*Config) HistogramWindowInterval() time.Duration {
+	return DefaultHistogramWindowInterval()
 }
 
 func wrapError(err error) error {
