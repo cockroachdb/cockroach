@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -203,7 +202,7 @@ func createBenchmarkChangefeed(
 	sink := makeBenchSink()
 
 	settings := s.ClusterSettings()
-	metrics := MakeMetrics(server.DefaultHistogramWindowInterval).(*Metrics)
+	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := s.LeaseManager().(*lease.Manager)
 	mm := mon.MakeUnlimitedMonitor(

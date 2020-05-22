@@ -133,6 +133,7 @@ type sqlServerArgs struct {
 	// TODO(tbg): replace Config with:
 	// *SQLConfig
 	// *BothConfig
+
 	stopper *stop.Stopper
 
 	// SQL uses the clock to assign timestamps to transactions, among many
