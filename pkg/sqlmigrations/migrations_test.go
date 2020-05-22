@@ -807,3 +807,67 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		return nil
 	}))
 }
+
+func TestAlterSystemJobsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// We need to use "old" jobs table descriptor without newly added columns
+	// in order to test migration.
+	// oldJobsTableSchema is system.jobs definition prior to 20.2
+	oldJobsTableSchema := `
+CREATE TABLE system.jobs (
+	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
+	status            STRING    NOT NULL,
+	created           TIMESTAMP NOT NULL DEFAULT now(),
+	payload           BYTES     NOT NULL,
+	progress          BYTES,
+	INDEX (status, created),
+
+	FAMILY (id, status, created, payload),
+	FAMILY progress (progress)
+)
+`
+	oldJobsTable, err := sql.CreateTestTableDescriptor(
+		context.Background(),
+		keys.SystemDatabaseID,
+		keys.JobsTableID,
+		oldJobsTableSchema,
+		sqlbase.JobsTable.Privileges,
+	)
+	require.NoError(t, err)
+
+	// Sanity check oldJobsTable does not have new columns.
+	require.Equal(t, 5, len(oldJobsTable.Columns))
+	require.Equal(t, 2, len(oldJobsTable.Families))
+	require.Equal(t, "fam_0_id_status_created_payload", oldJobsTable.Families[0].Name)
+
+	jobsTable := sqlbase.JobsTable
+	sqlbase.JobsTable = oldJobsTable
+	defer func() {
+		sqlbase.JobsTable = jobsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add created_by columns to system.jobs")
+	mt.start(t, base.TestServerArgs{})
+
+	// Run migration and verify we have added columns and renamed column family.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	newJobsTable := sqlbase.GetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.Equal(t, 7, len(newJobsTable.Columns))
+	require.Equal(t, "created_by_type", newJobsTable.Columns[5].Name)
+	require.Equal(t, "created_by_id", newJobsTable.Columns[6].Name)
+	require.Equal(t, 2, len(newJobsTable.Families))
+	require.Equal(t, "primary", newJobsTable.Families[0].Name)
+
+	// Run the migration again -- it should be a no-op.
+	require.NoError(t, mt.runMigration(ctx, migration))
+	newJobsTableAgain := sqlbase.GetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.True(t, proto.Equal(newJobsTable, newJobsTableAgain))
+}

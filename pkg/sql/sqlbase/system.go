@@ -162,8 +162,12 @@ CREATE TABLE system.jobs (
 	created           TIMESTAMP NOT NULL DEFAULT now(),
 	payload           BYTES     NOT NULL,
 	progress          BYTES,
+	created_by_type   STRING,
+	created_by_id     INT,
 	INDEX (status, created),
-	FAMILY (id, status, created, payload),
+	INDEX (created_by_type, created_by_id) STORING (status),
+
+	FAMILY "primary" (id, status, created, payload, created_by_type, created_by_id),
 	FAMILY progress (progress)
 );`
 
@@ -812,14 +816,16 @@ var (
 			{Name: "created", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
 			{Name: "payload", ID: 4, Type: types.Bytes},
 			{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
+			{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
+			{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
 		},
-		NextColumnID: 6,
+		NextColumnID: 8,
 		Families: []ColumnFamilyDescriptor{
 			{
-				Name:        "fam_0_id_status_created_payload",
+				Name:        "primary",
 				ID:          0,
-				ColumnNames: []string{"id", "status", "created", "payload"},
-				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+				ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 6, 7},
 			},
 			{
 				Name:            "progress",
@@ -842,8 +848,20 @@ var (
 				ExtraColumnIDs:   []ColumnID{1},
 				Version:          SecondaryIndexFamilyFormatVersion,
 			},
+			{
+				Name:             "jobs_created_by_type_created_by_id_idx",
+				ID:               3,
+				Unique:           false,
+				ColumnNames:      []string{"created_by_type", "created_by_id"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{6, 7},
+				StoreColumnIDs:   []ColumnID{2},
+				StoreColumnNames: []string{"status"},
+				ExtraColumnIDs:   []ColumnID{1},
+				Version:          SecondaryIndexFamilyFormatVersion,
+			},
 		},
-		NextIndexID:    3,
+		NextIndexID:    4,
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,

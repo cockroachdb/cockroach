@@ -319,6 +319,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add CREATEROLE privilege to admin/root",
 		workFn: addCreateRoleToAdminAndRoot,
 	},
+	{
+		// Introduced in v20.2.
+		name:                "add created_by columns to system.jobs",
+		workFn:              alterSystemJobsAddCreatedByColumns,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionStart20_2),
+	},
 }
 
 func staticIDs(
@@ -1850,4 +1856,79 @@ func depublicizeSystemComments(ctx context.Context, r runner) error {
 		}
 	}
 	return nil
+}
+
+func renameColumnFamily(
+	ctx context.Context,
+	tableID sqlbase.ID,
+	requiredTableDescriptorVersion sqlbase.DescriptorVersion,
+	familyID sqlbase.FamilyID,
+	newFamilyName string,
+	r runner,
+) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Retrieve the existing system.jobs table's descriptor and see
+		// if it has already been updated.
+		tableKey := sqlbase.MakeDescMetadataKey(r.codec, tableID)
+		tableDescriptor := &sqlbase.Descriptor{}
+		ts, err := txn.GetProtoTs(ctx, tableKey, tableDescriptor)
+		if err != nil {
+			return err
+		}
+
+		table := tableDescriptor.Table(ts)
+		if table.Version > requiredTableDescriptorVersion {
+			// Migration already done
+			return nil
+		}
+
+		// Bump up version table descriptor version so that we don't attempt
+		// to run this migration again.
+		table.Version = requiredTableDescriptorVersion + 1
+
+		// Find the family we want to rename and rename it.
+		var family *sqlbase.ColumnFamilyDescriptor
+		for i := 0; i < len(table.Families) && family == nil; i++ {
+			if table.Families[i].ID == familyID {
+				family = &table.Families[i]
+			}
+		}
+
+		if family == nil {
+			return errors.Newf(
+				"cannot find family %d for rename in table %d", familyID, tableID)
+		}
+
+		family.Name = newFamilyName
+		return txn.Put(ctx, tableKey, tableDescriptor)
+	})
+}
+
+func alterSystemJobsAddCreatedByColumns(ctx context.Context, r runner) error {
+	addColsStmt := `
+ALTER TABLE system.jobs
+ADD COLUMN IF NOT EXISTS created_by_type STRING FAMILY "primary",
+ADD COLUMN IF NOT EXISTS created_by_id INT FAMILY "primary"
+`
+	addIdxStmt := `
+CREATE INDEX IF NOT EXISTS jobs_created_by_type_created_by_id_idx
+ON system.jobs (created_by_type, created_by_id) 
+STORING (status)
+`
+	asNode := sqlbase.InternalExecutorSessionDataOverride{
+		User: security.NodeUser,
+	}
+
+	if err := renameColumnFamily(ctx, keys.JobsTableID, sqlbase.DescriptorVersion(1),
+		sqlbase.FamilyID(0), "primary", r); err != nil {
+		return err
+	}
+
+	if _, err := r.sqlExecutor.ExecEx(
+		ctx, "add-jobs-cols", nil, asNode, addColsStmt); err != nil {
+		return err
+	}
+
+	_, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-idx", nil, asNode, addIdxStmt)
+	return err
 }
