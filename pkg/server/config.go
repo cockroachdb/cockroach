@@ -362,7 +362,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		SQLTableStatCacheSize: defaultSQLTableStatCacheSize,
 		SQLQueryCacheSize:     defaultSQLQueryCacheSize,
 		SQLTempStorageConfig: base.TempStorageConfigFromEnv(
-			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
+			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes),
 		SQLLeaseManagerConfig: base.NewLeaseManagerConfig(),
 	}
 

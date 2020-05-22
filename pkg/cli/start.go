@@ -319,15 +319,11 @@ func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, 
 }
 
 func initTempStorageConfig(
-	ctx context.Context,
-	st *cluster.Settings,
-	stopper *stop.Stopper,
-	firstStore base.StoreSpec,
-	specIdx int,
+	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, useStore base.StoreSpec,
 ) (base.TempStorageConfig, error) {
 	var recordPath string
-	if !firstStore.InMemory {
-		recordPath = filepath.Join(firstStore.Path, server.TempDirsRecordFilename)
+	if !useStore.InMemory {
+		recordPath = filepath.Join(useStore.Path, server.TempDirsRecordFilename)
 	}
 
 	var err error
@@ -343,8 +339,8 @@ func initTempStorageConfig(
 	// The temp store size can depend on the location of the first regular store
 	// (if it's expressed as a percentage), so we resolve that flag here.
 	var tempStorePercentageResolver percentResolverFunc
-	if !firstStore.InMemory {
-		dir := firstStore.Path
+	if !useStore.InMemory {
+		dir := useStore.Path
 		// Create the store dir, if it doesn't exist. The dir is required to exist
 		// by diskPercentResolverFactory.
 		if err = os.MkdirAll(dir, 0755); err != nil {
@@ -367,7 +363,7 @@ func initTempStorageConfig(
 		// The default temp storage size is different when the temp
 		// storage is in memory (which occurs when no temp directory
 		// is specified and the first store is in memory).
-		if startCtx.tempDir == "" && firstStore.InMemory {
+		if startCtx.tempDir == "" && useStore.InMemory {
 			tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 		} else {
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
@@ -379,17 +375,16 @@ func initTempStorageConfig(
 	tempStorageConfig := base.TempStorageConfigFromEnv(
 		ctx,
 		st,
-		firstStore,
+		useStore,
 		startCtx.tempDir,
 		tempStorageMaxSizeBytes,
-		specIdx,
 	)
 
 	// Set temp directory to first store's path if the temp storage is not
 	// in memory.
 	tempDir := startCtx.tempDir
 	if tempDir == "" && !tempStorageConfig.InMemory {
-		tempDir = firstStore.Path
+		tempDir = useStore.Path
 	}
 	// Create the temporary subdirectory for the temp engine.
 	if tempStorageConfig.Path, err = storage.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
@@ -583,8 +578,10 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 			specIdx = i
 		}
 	}
-	useStore := serverCfg.Stores.Specs[specIdx]
-	if serverCfg.SQLTempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, useStore, specIdx); err != nil {
+
+	if serverCfg.SQLTempStorageConfig, err = initTempStorageConfig(
+		ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[specIdx],
+	); err != nil {
 		return err
 	}
 
