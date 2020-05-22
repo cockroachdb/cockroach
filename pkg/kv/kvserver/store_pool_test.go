@@ -127,7 +127,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 0 }, /* NodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
 	sp.detailsMu.RLock()
@@ -195,7 +195,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	constraints := []zonepb.ConstraintsConjunction{
 		{
@@ -452,7 +452,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	stores := []*roachpb.StoreDescriptor{
 		{
@@ -623,7 +623,7 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
@@ -643,7 +643,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
 	stores := []*roachpb.StoreDescriptor{
@@ -746,7 +746,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(0, []roachpb.ReplicaDescriptor{{StoreID: 1}})
 	if len(liveReplicas) != 0 || len(deadReplicas) != 0 {
@@ -771,7 +771,7 @@ func TestStorePoolThrottle(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
@@ -809,7 +809,7 @@ func TestGetLocalities(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
 	// Creates a node with a locality with the number of tiers passed in. The
@@ -880,7 +880,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		kvserverpb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
 	stores := []*roachpb.StoreDescriptor{

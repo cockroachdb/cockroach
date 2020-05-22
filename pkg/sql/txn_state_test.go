@@ -72,7 +72,7 @@ func makeTestContext() testContext {
 			settings,
 		),
 		tracer:   ambient.Tracer,
-		ctx:      context.TODO(),
+		ctx:      context.Background(),
 		settings: settings,
 	}
 }
@@ -206,7 +206,7 @@ func checkTxn(txn *kv.Txn, exp expKVTxn) error {
 func TestTransitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
 	testCon := makeTestContext()
 	tranCtx := transitionCtx{

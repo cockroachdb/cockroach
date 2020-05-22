@@ -27,7 +27,7 @@ import (
 func TestSSTSnapshotStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	testRangeID := roachpb.RangeID(1)
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)

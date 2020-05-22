@@ -125,7 +125,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 func TestJobsTableProgressFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
@@ -826,7 +826,7 @@ func TestJobLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer jobs.ResetConstructors()()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -1386,7 +1386,7 @@ func TestShowJobs(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// row represents a row returned from crdb_internal.jobs, but
 	// *not* a row in system.jobs.
@@ -1530,7 +1530,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// row represents a row returned from crdb_internal.jobs, but
 	// *not* a row in system.jobs.
@@ -1621,7 +1621,7 @@ func TestShowJobsWithError(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create at least 6 rows, ensuring 3 rows are corrupted.
 	// Ensure there is at least one row in system.jobs.
@@ -1773,7 +1773,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
-	ctx := context.TODO()
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
@@ -2260,7 +2260,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	}(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)

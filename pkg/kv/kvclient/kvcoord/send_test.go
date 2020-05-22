@@ -52,7 +52,7 @@ func TestSendToOneClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -122,7 +122,7 @@ func TestComplexScenarios(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)

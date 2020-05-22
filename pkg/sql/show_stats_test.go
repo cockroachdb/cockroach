@@ -26,7 +26,7 @@ func TestShowStatisticsJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)

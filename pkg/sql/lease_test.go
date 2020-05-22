@@ -80,7 +80,7 @@ func newLeaseTest(tb testing.TB, params base.TestServerArgs) *leaseTest {
 }
 
 func (t *leaseTest) cleanup() {
-	t.server.Stopper().Stop(context.TODO())
+	t.server.Stopper().Stop(context.Background())
 }
 
 func (t *leaseTest) getLeases(descID sqlbase.ID) string {
@@ -123,14 +123,14 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
-	return t.node(nodeID).Acquire(context.TODO(), t.server.Clock().Now(), descID)
+	return t.node(nodeID).Acquire(context.Background(), t.server.Clock().Now(), descID)
 }
 
 func (t *leaseTest) acquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	return t.node(nodeID).AcquireAndAssertMinVersion(
-		context.TODO(), t.server.Clock().Now(), descID, minVersion)
+		context.Background(), t.server.Clock().Now(), descID, minVersion)
 }
 
 func (t *leaseTest) mustAcquire(
@@ -240,7 +240,7 @@ func TestLeaseManager(testingT *testing.T) {
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// We can't acquire a lease on a non-existent table.
 	expected := "descriptor not found"
@@ -402,7 +402,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, err := n1.Publish(context.TODO(), descID, func(*sqlbase.MutableTableDescriptor) error {
+		_, err := n1.Publish(context.Background(), descID, func(*sqlbase.MutableTableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -423,7 +423,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, err := n2.Publish(context.TODO(), descID, func(*sqlbase.MutableTableDescriptor) error {
+		_, err := n2.Publish(context.Background(), descID, func(*sqlbase.MutableTableDescriptor) error {
 			return nil
 		}, nil)
 		if err != nil {
@@ -446,14 +446,14 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 	defer t.cleanup()
 
 	if _, err := t.node(1).Publish(
-		context.TODO(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
+		context.Background(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
 			table.Version++
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 	if _, err := t.node(1).Publish(
-		context.TODO(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
+		context.Background(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
 			table.Version--
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
@@ -616,7 +616,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	stmt := `
 CREATE DATABASE test;
@@ -628,7 +628,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	lease1, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
 	if err != nil {
@@ -713,7 +713,7 @@ func TestSubqueryLeases(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -780,7 +780,7 @@ func TestAsOfSystemTimeUsesCache(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -840,7 +840,7 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -905,7 +905,7 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.
@@ -1123,7 +1123,7 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 BEGIN;
@@ -1154,7 +1154,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 	// Increment the table version after the txn has started.
 	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 	if _, err := leaseMgr.Publish(
-		context.TODO(), tableDesc.ID, func(table *sqlbase.MutableTableDescriptor) error {
+		context.Background(), tableDesc.ID, func(table *sqlbase.MutableTableDescriptor) error {
 			// Do nothing: increments the version.
 			return nil
 		}, nil); err != nil {
@@ -1205,7 +1205,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Acquire the lease so it is put into the tableNameCache.
 	_, _, err := leaseManager.AcquireByName(
-		context.TODO(),
+		context.Background(),
 		t.server.Clock().Now(),
 		dbID,
 		tableDesc.GetParentSchemaID(),
@@ -1220,7 +1220,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			_, _, err := leaseManager.AcquireByName(
-				context.TODO(),
+				context.Background(),
 				t.server.Clock().Now(),
 				dbID,
 				tableDesc.GetParentSchemaID(),
@@ -1407,7 +1407,7 @@ func TestIncrementTableVersion(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1509,7 +1509,7 @@ func TestTwoVersionInvariantRetryError(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1614,7 +1614,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// When to end the test.
 	end := timeutil.Now().Add(maxTime)
@@ -1812,7 +1812,7 @@ func TestReadBeforeDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1863,7 +1863,7 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`

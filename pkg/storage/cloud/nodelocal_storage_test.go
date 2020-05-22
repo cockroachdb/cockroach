@@ -37,7 +37,7 @@ func TestPutLocal(t *testing.T) {
 func TestLocalIOLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	const allowed = "/allowed"
 	testSettings.ExternalIODir = allowed
 

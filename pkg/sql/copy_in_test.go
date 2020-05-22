@@ -39,7 +39,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -138,7 +138,7 @@ func TestCopyRandom(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -277,7 +277,7 @@ func TestCopyError(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -332,7 +332,7 @@ func TestCopyOne(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -366,7 +366,7 @@ func TestCopyInProgress(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -399,7 +399,7 @@ func TestCopyTransaction(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -452,7 +452,7 @@ func TestCopyFKCheck(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	db.SetMaxOpenConns(1)
 	r := sqlutils.MakeSQLRunner(db)

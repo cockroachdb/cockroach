@@ -56,7 +56,7 @@ func TestInitialKeys(t *testing.T) {
 		// Add an additional table.
 		sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
 		desc, err := sql.CreateTestTableDescriptor(
-			context.TODO(),
+			context.Background(),
 			keys.SystemDatabaseID,
 			keys.MaxReservedDescID,
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
@@ -184,7 +184,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	} {
 		privs := *test.pkg.Privileges
 		gen, err := sql.CreateTestTableDescriptor(
-			context.TODO(),
+			context.Background(),
 			keys.SystemDatabaseID,
 			test.id,
 			test.schema,

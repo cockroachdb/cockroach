@@ -108,8 +108,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 
 	// Allow leases to expire and send commands to ensure we
 	// re-acquire, then check types again.
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(context.Background())
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -125,8 +125,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = false
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(context.Background())
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -142,8 +142,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = true
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(context.Background())
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	}
 
 	newStoreIdx := (initialStoreIdx + 1) % numStores
-	mtc.transferLease(context.TODO(), rangeID, initialStoreIdx, newStoreIdx)
+	mtc.transferLease(context.Background(), rangeID, initialStoreIdx, newStoreIdx)
 
 	testutils.SucceedsSoon(t, func() error {
 		if mtc.stores[initialStoreIdx].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
@@ -354,7 +354,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	desc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
 	scratchRangeID.Store(desc.RangeID)
 	// Make sure n1 has the lease to start with.
-	err := tc.Server(0).DB().AdminTransferLease(context.TODO(),
+	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
 		scratchStartKey, tc.Target(0).StoreID)
 	require.NoError(t, err)
 
@@ -384,7 +384,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := tc.Server(0).DB().AdminTransferLease(context.TODO(),
+			err := tc.Server(0).DB().AdminTransferLease(context.Background(),
 				scratchStartKey, tc.Target(2).StoreID)
 			require.Error(t, err)
 			require.Regexp(t,

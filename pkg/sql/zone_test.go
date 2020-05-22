@@ -32,7 +32,7 @@ func TestValidSetShowZones(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE d; USE d; CREATE TABLE t ();`)
@@ -234,7 +234,7 @@ func TestZoneInheritField(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlutils.RemoveAllZoneConfigs(t, sqlDB)
@@ -280,7 +280,7 @@ func TestInvalidSetShowZones(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	for i, tc := range []struct {
 		query string

@@ -131,7 +131,7 @@ func createTestStoreWithOpts(
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+	rpcContext.ClusterID.Set(context.Background(), uuid.MakeV4())
 	nodeDesc := &roachpb.NodeDescriptor{
 		NodeID:  1,
 		Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:26257"),
@@ -368,7 +368,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		// Ensure that tests using this test context and restart/shut down
 		// their servers do not inadvertently start talking to servers from
 		// unrelated concurrent tests.
-		m.rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+		m.rpcContext.ClusterID.Set(context.Background(), uuid.MakeV4())
 		// We are sharing the same RPC context for all simulated nodes, so we can't enforce
 		// some of the RPC check validation.
 		m.rpcContext.TestingAllowNamedRPCToAnonymousServer = true
@@ -431,7 +431,7 @@ func (m *multiTestContext) Stop() {
 					// any test (TestRaftAfterRemove is a good example) results
 					// in deadlocks where a task can't finish because of
 					// getting stuck in addWriteCommand.
-					s.Quiesce(context.TODO())
+					s.Quiesce(context.Background())
 				}
 			}(s)
 		}
@@ -442,13 +442,13 @@ func (m *multiTestContext) Stop() {
 		defer m.mu.RUnlock()
 		for _, stopper := range m.stoppers {
 			if stopper != nil {
-				stopper.Stop(context.TODO())
+				stopper.Stop(context.Background())
 			}
 		}
-		m.transportStopper.Stop(context.TODO())
+		m.transportStopper.Stop(context.Background())
 
 		for _, s := range m.engineStoppers {
-			s.Stop(context.TODO())
+			s.Stop(context.Background())
 		}
 		close(done)
 	}()
@@ -1023,7 +1023,7 @@ func (m *multiTestContext) stopStore(i int) {
 	stopper := m.stoppers[i]
 	m.mu.RUnlock()
 
-	stopper.Stop(context.TODO())
+	stopper.Stop(context.Background())
 
 	m.mu.Lock()
 	m.stoppers[i] = nil
@@ -1298,13 +1298,13 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 		val, _, err := storage.MVCCGet(context.Background(), eng, key, m.clocks[i].Now(),
 			storage.MVCCGetOptions{})
 		if err != nil {
-			log.VEventf(context.TODO(), 1, "engine %d: error reading from key %s: %s", i, key, err)
+			log.VEventf(context.Background(), 1, "engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
-			log.VEventf(context.TODO(), 1, "engine %d: missing key %s", i, key)
+			log.VEventf(context.Background(), 1, "engine %d: missing key %s", i, key)
 		} else {
 			results[i], err = val.GetInt()
 			if err != nil {
-				log.Errorf(context.TODO(), "engine %d: error decoding %s from key %s: %+v", i, val, key, err)
+				log.Errorf(context.Background(), "engine %d: error decoding %s from key %s: %+v", i, val, key, err)
 			}
 		}
 	}
@@ -1614,7 +1614,7 @@ func waitForTombstone(
 	testutils.SucceedsSoon(t, func() error {
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := storage.MVCCGetProto(
-			context.TODO(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+			context.Background(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		)
 		if err != nil {
 			t.Fatalf("failed to read tombstone: %v", err)

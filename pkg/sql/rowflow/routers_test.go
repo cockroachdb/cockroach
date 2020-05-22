@@ -57,7 +57,7 @@ func setupRouter(
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
@@ -79,7 +79,7 @@ func TestRouters(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	ctx := context.TODO()
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -292,7 +292,7 @@ var (
 func TestConsumerStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -448,7 +448,7 @@ func preimageAttack(
 func TestMetadataIsForwarded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -607,7 +607,7 @@ func TestRouterBlocks(t *testing.T) {
 				t.Fatal(err)
 			}
 			st := cluster.MakeTestingClusterSettings()
-			ctx := context.TODO()
+			ctx := context.Background()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
 			diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)

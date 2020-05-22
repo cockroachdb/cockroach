@@ -87,7 +87,7 @@ func doTestDrain(tt *testing.T, newInterface bool) {
 
 	// Now expect the server to be shut down.
 	testutils.SucceedsSoon(t, func() error {
-		_, err := t.c.Drain(context.TODO(), &serverpb.DrainRequest{Shutdown: false})
+		_, err := t.c.Drain(context.Background(), &serverpb.DrainRequest{Shutdown: false})
 		if grpcutil.IsClosedConnection(err) {
 			return nil
 		}
@@ -118,7 +118,7 @@ func newTestDrainContext(t *testing.T, newInterface bool) *testDrainContext {
 
 	// We'll have the RPC talk to the first node.
 	var err error
-	tc.c, tc.connCloser, err = getAdminClientForServer(context.TODO(),
+	tc.c, tc.connCloser, err = getAdminClientForServer(context.Background(),
 		tc.tc, 0 /* serverIdx */)
 	if err != nil {
 		tc.Close()
@@ -132,7 +132,7 @@ func (t *testDrainContext) Close() {
 	if t.connCloser != nil {
 		t.connCloser()
 	}
-	t.tc.Stopper().Stop(context.TODO())
+	t.tc.Stopper().Stop(context.Background())
 }
 
 func (t *testDrainContext) sendProbe() *serverpb.DrainResponse {
@@ -155,7 +155,7 @@ func (t *testDrainContext) drainRequest(drain, shutdown bool) *serverpb.DrainRes
 		}
 	}
 
-	drainStream, err := t.c.Drain(context.TODO(), req)
+	drainStream, err := t.c.Drain(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func (t *testDrainContext) drainRequest(drain, shutdown bool) *serverpb.DrainRes
 
 func (t *testDrainContext) sendShutdown() *serverpb.DrainResponse {
 	req := &serverpb.DrainRequest{Shutdown: true}
-	drainStream, err := t.c.Drain(context.TODO(), req)
+	drainStream, err := t.c.Drain(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}

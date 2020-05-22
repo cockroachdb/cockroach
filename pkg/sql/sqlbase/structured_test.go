@@ -1286,7 +1286,7 @@ func TestKeysPerRow(t *testing.T) {
 	// a TableDescriptor. It should be possible to move MakeTableDesc into
 	// sqlbase. If/when that happens, use it here instead of this server.
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -1359,7 +1359,7 @@ func TestColumnNeedsBackfill(t *testing.T) {
 
 func TestDefaultExprNil(t *testing.T) {
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	if _, err := conn.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatalf("%+v", err)
 	}

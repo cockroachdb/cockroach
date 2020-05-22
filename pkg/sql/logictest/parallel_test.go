@@ -59,7 +59,7 @@ type parallelTest struct {
 func (t *parallelTest) close() {
 	t.clients = nil
 	if t.cluster != nil {
-		t.cluster.Stopper().Stop(context.TODO())
+		t.cluster.Stopper().Stop(context.Background())
 	}
 }
 

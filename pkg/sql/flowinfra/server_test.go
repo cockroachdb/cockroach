@@ -100,7 +100,7 @@ func TestServer(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(context.TODO(), msg)
+		err = decoder.AddMessage(context.Background(), msg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +163,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var v execinfrapb.DistSQLVersionGossipInfo
 	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(

@@ -26,7 +26,7 @@ func staticSize(size int64) func() int64 {
 
 func TestLeaseHolderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.TODO()
+	ctx := context.Background()
 	cacheSize := (1 << 4) * defaultShards
 	lc := NewLeaseHolderCache(staticSize(int64(cacheSize)))
 	if repStoreID, ok := lc.Lookup(ctx, 12); ok {
@@ -65,7 +65,7 @@ func TestLeaseHolderCache(t *testing.T) {
 
 func BenchmarkLeaseHolderCacheParallel(b *testing.B) {
 	defer leaktest.AfterTest(b)()
-	ctx := context.TODO()
+	ctx := context.Background()
 	cacheSize := (1 << 4) * defaultShards
 	lc := NewLeaseHolderCache(staticSize(int64(cacheSize)))
 	numRanges := 2 * len(lc.shards)

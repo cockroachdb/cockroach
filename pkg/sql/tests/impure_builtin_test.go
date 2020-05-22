@@ -28,7 +28,7 @@ func TestClusterID(t *testing.T) {
 		ReplicationMode: base.ReplicationAuto,
 	}
 	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	for i := 0; i < 3; i++ {
 		db := sqlutils.MakeSQLRunner(tc.Conns[i])

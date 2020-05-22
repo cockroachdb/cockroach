@@ -40,7 +40,7 @@ func TestSingleKey(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	ctx := context.Background()
 
 	// Initialize the value for our test key to zero.

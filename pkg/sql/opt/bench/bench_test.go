@@ -350,7 +350,7 @@ func newHarness() *harness {
 
 func (h *harness) close() {
 	if h.s != nil {
-		h.s.Stopper().Stop(context.TODO())
+		h.s.Stopper().Stop(context.Background())
 	}
 }
 

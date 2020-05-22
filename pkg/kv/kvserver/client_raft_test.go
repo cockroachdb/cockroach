@@ -87,7 +87,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	key2 := roachpb.Key("z")
 
 	engineStopper := stop.NewStopper()
-	defer engineStopper.Stop(context.TODO())
+	defer engineStopper.Stop(context.Background())
 	eng := storage.NewDefaultInMem()
 	engineStopper.AddCloser(eng)
 	var rangeID2 roachpb.RangeID
@@ -115,7 +115,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// that both predate and postdate the split.
 	func() {
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.TODO())
+		defer stopper.Stop(context.Background())
 		store := createTestStoreWithOpts(t,
 			testStoreOpts{
 				eng: eng,
@@ -201,7 +201,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	func() {
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.TODO())
+		defer stopper.Stop(context.Background())
 		keyA := roachpb.Key("a")
 		storeCfg := storeCfg // copy
 		storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
@@ -236,7 +236,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Recover from the engine.
 	store := createTestStoreWithOpts(t,
@@ -1192,7 +1192,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mtc.advanceClock(context.TODO())
+	mtc.advanceClock(context.Background())
 
 	// Restart store 2.
 	mtc.restartStore(2)
@@ -1204,7 +1204,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		startKey := roachpb.RKey(splitKey)
 
 		var desc roachpb.RangeDescriptor
-		if err := mtc.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		if err := mtc.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1455,7 +1455,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			propIdx, otherIdx = 1, 0
 		}
 		propNode := mtc.stores[propIdx].TestSender()
-		mtc.transferLease(context.TODO(), rangeID, otherIdx, propIdx)
+		mtc.transferLease(context.Background(), rangeID, otherIdx, propIdx)
 		testutils.SucceedsSoon(t, func() error {
 			// Lease transfers may not be immediately observed by the new
 			// leaseholder. Wait until the new leaseholder is aware.
@@ -1624,7 +1624,7 @@ func TestUnreplicateFirstRange(t *testing.T) {
 	// Replicate the range to store 1.
 	mtc.replicateRange(rangeID, 1)
 	// Move the lease away from store 0 before removing its replica.
-	mtc.transferLease(context.TODO(), rangeID, 0, 1)
+	mtc.transferLease(context.Background(), rangeID, 0, 1)
 	// Unreplicate the from from store 0.
 	mtc.unreplicateRange(rangeID, 0)
 	// Replicate the range to store 2. The first range is no longer available on
@@ -2007,7 +2007,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	}))
 
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
-	mtc.advanceClock(context.TODO())
+	mtc.advanceClock(context.Background())
 	mtc.manualClock.Increment(int64(kvserver.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	mtc.stores[1].MustForceReplicaGCScanAndProcess()
@@ -2428,7 +2428,7 @@ outer:
 						t.Fatal(err)
 					}
 					if lease, _ := repl.GetLease(); lease.Replica.Equal(repDesc) {
-						mtc.transferLease(context.TODO(), rangeID, leaderIdx, replicaIdx)
+						mtc.transferLease(context.Background(), rangeID, leaderIdx, replicaIdx)
 					}
 					mtc.unreplicateRange(rangeID, leaderIdx)
 					cb := mtc.transport.GetCircuitBreaker(toStore.Ident.NodeID, rpc.DefaultClass)
@@ -2667,7 +2667,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Expire leases to ensure any remaining intent resolutions can complete.
 	// TODO(bdarnell): understand why some tests need this.
-	mtc.advanceClock(context.TODO())
+	mtc.advanceClock(context.Background())
 }
 
 // TestRaftRemoveRace adds and removes a replica repeatedly in an attempt to
@@ -3147,7 +3147,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// moved under the lock, then the GC scan can be moved out of this loop.
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	testutils.SucceedsSoon(t, func() error {
-		mtc.advanceClock(context.TODO())
+		mtc.advanceClock(context.Background())
 		mtc.manualClock.Increment(int64(
 			kvserver.ReplicaGCQueueInactivityThreshold) + 1)
 		mtc.stores[1].MustForceReplicaGCScanAndProcess()
@@ -3233,7 +3233,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// will see that the range has been moved and delete the old
 	// replica.
 	mtc.stores[2].SetReplicaGCQueueActive(true)
-	mtc.advanceClock(context.TODO())
+	mtc.advanceClock(context.Background())
 	mtc.manualClock.Increment(int64(
 		kvserver.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].MustForceReplicaGCScanAndProcess()
@@ -3288,7 +3288,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// Move the first range from the first node to the other three.
 	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2, 3)
-	mtc.transferLease(context.TODO(), rangeID, 0, 1)
+	mtc.transferLease(context.Background(), rangeID, 0, 1)
 	mtc.unreplicateRange(rangeID, 0)
 
 	// Ensure that we have a stable lease and raft leader so we can tell if the
@@ -3636,7 +3636,7 @@ func TestRemovedReplicaError(t *testing.T) {
 
 	raftID := roachpb.RangeID(1)
 	mtc.replicateRange(raftID, 1)
-	mtc.transferLease(context.TODO(), raftID, 0, 1)
+	mtc.transferLease(context.Background(), raftID, 0, 1)
 	mtc.unreplicateRange(raftID, 0)
 
 	mtc.manualClock.Increment(mtc.storeConfig.LeaseExpiration())
@@ -3739,7 +3739,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// expire-request in a loop until we get our foot in the door.
 	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
 	for {
-		mtc.advanceClock(context.TODO())
+		mtc.advanceClock(context.Background())
 		if _, pErr := kv.SendWrappedWith(
 			context.Background(), store1, roachpb.Header{RangeID: repl0.RangeID}, getArgs,
 		); pErr == nil {
@@ -3964,7 +3964,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	// problem.
 	// Verify the raft group isn't initialized yet.
 	if repl.IsRaftGroupInitialized() {
-		log.Errorf(context.TODO(), "expected raft group to be uninitialized")
+		log.Errorf(context.Background(), "expected raft group to be uninitialized")
 	}
 
 	// Send an increment and verify that initializes the Raft group.

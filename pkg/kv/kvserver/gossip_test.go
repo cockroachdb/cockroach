@@ -37,7 +37,7 @@ func TestGossipFirstRange(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	errors := make(chan error, 1)
 	descs := make(chan *roachpb.RangeDescriptor)
@@ -78,7 +78,7 @@ func TestGossipFirstRange(t *testing.T) {
 				if reflect.DeepEqual(&desc, gossiped) {
 					return
 				}
-				log.Infof(context.TODO(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
+				log.Infof(context.Background(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
 			}
 		}
 	}
@@ -165,7 +165,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		base.TestClusterArgs{
 			ServerArgs: serverArgs,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0

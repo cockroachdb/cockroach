@@ -152,13 +152,13 @@ func TestOracleFactory(t *testing.T) {
 	kvserver.FollowerReadsEnabled.Override(&st.SV, true)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	c := kv.NewDB(log.AmbientContext{
 		Tracer: tracing.NewTracer(),
 	}, kv.MockTxnSenderFactory{},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond))
-	txn := kv.NewTxn(context.TODO(), c, 0)
+	txn := kv.NewTxn(context.Background(), c, 0)
 	of := replicaoracle.NewOracleFactory(followerReadAwareChoice, replicaoracle.Config{
 		Settings:   st,
 		RPCContext: rpcContext,
@@ -167,7 +167,7 @@ func TestOracleFactory(t *testing.T) {
 	old := hlc.Timestamp{
 		WallTime: timeutil.Now().Add(2 * expectedFollowerReadOffset).UnixNano(),
 	}
-	txn.SetFixedTimestamp(context.TODO(), old)
+	txn.SetFixedTimestamp(context.Background(), old)
 	followerReadOracle := of.Oracle(txn)
 	if reflect.TypeOf(followerReadOracle) == reflect.TypeOf(noFollowerReadOracle) {
 		t.Fatalf("expected types of %T and %T to differ", followerReadOracle,

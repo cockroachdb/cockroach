@@ -146,7 +146,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 		s, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because

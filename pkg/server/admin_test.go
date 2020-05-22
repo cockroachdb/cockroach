@@ -124,7 +124,7 @@ func debugURL(s serverutils.TestServerInterface) string {
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
@@ -144,7 +144,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	jI, err := getJSON(s, debugURL(s)+"metrics")
 	if err != nil {
@@ -164,7 +164,7 @@ func TestAdminDebugMetrics(t *testing.T) {
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	body, err := getText(s, debugURL(s)+"pprof/block?debug=1")
 	if err != nil {
@@ -180,7 +180,7 @@ func TestAdminDebugPprof(t *testing.T) {
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	tc := []struct {
 		segment, search string
@@ -205,7 +205,7 @@ func TestAdminDebugTrace(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	expURL := debugURL(s)
 	origURL := expURL + "incorrect"
@@ -246,7 +246,7 @@ func TestAdminDebugRedirect(t *testing.T) {
 func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
@@ -367,7 +367,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const errPattern = "database.+does not exist"
 	if err := getAdminJSONProto(s, "databases/i_do_not_exist", nil); !testutils.IsError(err, errPattern) {
@@ -378,7 +378,7 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const fakedb = "system;DROP DATABASE system;"
 	const path = "databases/" + fakedb
@@ -524,7 +524,7 @@ select range_id, database_name, table_name, start_pretty, end_pretty from crdb_i
 func TestAdminAPITableDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const fakename = "i_do_not_exist"
 	const badDBPath = "databases/" + fakename + "/tables/foo"
@@ -543,7 +543,7 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 func TestAdminAPITableSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const fakeTable = "users;DROP DATABASE system;"
 	const path = "databases/system/tables/" + fakeTable
@@ -565,7 +565,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-			defer s.Stopper().Stop(context.TODO())
+			defer s.Stopper().Stop(context.Background())
 			ts := s.(*TestServer)
 
 			escDBName := tree.NameStringP(&tc.dbName)
@@ -700,7 +700,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 func TestAdminAPIZoneDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	// Create database and table.
@@ -800,7 +800,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 func TestAdminAPIUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create sample users.
 	query := `
@@ -836,7 +836,7 @@ VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
 func TestAdminAPIEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
@@ -967,7 +967,7 @@ func TestAdminAPISettings(t *testing.T) {
 	defer sc.Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Any bool that defaults to true will work here.
 	const settingKey = "sql.metrics.statement_details.enabled"
@@ -1069,7 +1069,7 @@ func TestAdminAPISettings(t *testing.T) {
 func TestAdminAPIUIData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
 		start := timeutil.Now()
@@ -1175,7 +1175,7 @@ func TestAdminAPIUIData(t *testing.T) {
 func TestAdminAPIUISeparateData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Make a setting for an admin user.
 	if err := postAdminJSONProtoWithAdminOption(s, "uidata",
@@ -1213,7 +1213,7 @@ func TestAdminAPIUISeparateData(t *testing.T) {
 func TestClusterAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	testutils.RunTrueAndFalse(t, "reportingOn", func(t *testing.T, reportingOn bool) {
 		testutils.RunTrueAndFalse(t, "enterpriseOn", func(t *testing.T, enterpriseOn bool) {
@@ -1322,7 +1322,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Get list of existing jobs (migrations). Assumed to all have succeeded.
@@ -1417,7 +1417,7 @@ func TestAdminAPILocations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	testLocations := []struct {
@@ -1457,7 +1457,7 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `CREATE DATABASE api_test`)

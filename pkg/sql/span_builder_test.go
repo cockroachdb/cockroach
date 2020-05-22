@@ -28,7 +28,7 @@ import (
 
 func TestSpanBuilderCanSplitSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.TODO()
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)

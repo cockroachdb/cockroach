@@ -122,7 +122,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 
 	// Wait for index drop to complete so zone configs are updated.
 	testutils.SucceedsSoon(t, func() error {
-		if kvs, err := kvDB.Scan(context.TODO(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {
+		if kvs, err := kvDB.Scan(context.Background(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {
 			return err
 		} else if l := 0; len(kvs) != l {
 			return errors.Errorf("expected %d key value pairs, but got %d", l, len(kvs))

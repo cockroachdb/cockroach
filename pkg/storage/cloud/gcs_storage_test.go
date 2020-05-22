@@ -102,9 +102,9 @@ func TestAntagonisticRead(t *testing.T) {
 	require.NoError(t, err)
 
 	s, err := MakeExternalStorage(
-		context.TODO(), conf, base.ExternalIOConfig{}, testSettings, nil)
+		context.Background(), conf, base.ExternalIOConfig{}, testSettings, nil)
 	require.NoError(t, err)
-	stream, err := s.ReadFile(context.TODO(), "")
+	stream, err := s.ReadFile(context.Background(), "")
 	require.NoError(t, err)
 	defer stream.Close()
 	_, err = ioutil.ReadAll(stream)

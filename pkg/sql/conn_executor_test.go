@@ -206,7 +206,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				}
 			}()
 
-			ctx := context.TODO()
+			ctx := context.Background()
 			conn := c.(driver.ConnBeginTx)
 			txn, err := conn.BeginTx(ctx, driver.TxOptions{})
 			if err != nil {
@@ -327,7 +327,7 @@ func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
 
@@ -381,7 +381,7 @@ func TestErrorOnRollback(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
@@ -445,7 +445,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
@@ -494,7 +494,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Prepare a session with a custom application name.
 	pgURL := url.URL{
@@ -575,7 +575,7 @@ func TestQueryProgress(t *testing.T) {
 		},
 	}
 	s, rawDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
