@@ -679,6 +679,18 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="addgeometrycolumn"></a><code>addgeometrycolumn(catalog_name: <a href="string.html">string</a>, schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>, srid: <a href="int.html">int</a>, type: <a href="string.html">string</a>, dimension: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Adds a new geometry column to an existing table and returns metadata about the column created.</p>
+</span></td></tr>
+<tr><td><a name="addgeometrycolumn"></a><code>addgeometrycolumn(catalog_name: <a href="string.html">string</a>, schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>, srid: <a href="int.html">int</a>, type: <a href="string.html">string</a>, dimension: <a href="int.html">int</a>, use_typmod: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Adds a new geometry column to an existing table and returns metadata about the column created.</p>
+</span></td></tr>
+<tr><td><a name="addgeometrycolumn"></a><code>addgeometrycolumn(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>, srid: <a href="int.html">int</a>, type: <a href="string.html">string</a>, dimension: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Adds a new geometry column to an existing table and returns metadata about the column created.</p>
+</span></td></tr>
+<tr><td><a name="addgeometrycolumn"></a><code>addgeometrycolumn(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>, srid: <a href="int.html">int</a>, type: <a href="string.html">string</a>, dimension: <a href="int.html">int</a>, use_typmod: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Adds a new geometry column to an existing table and returns metadata about the column created.</p>
+</span></td></tr>
+<tr><td><a name="addgeometrycolumn"></a><code>addgeometrycolumn(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>, srid: <a href="int.html">int</a>, type: <a href="string.html">string</a>, dimension: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Adds a new geometry column to an existing table and returns metadata about the column created.</p>
+</span></td></tr>
+<tr><td><a name="addgeometrycolumn"></a><code>addgeometrycolumn(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>, srid: <a href="int.html">int</a>, type: <a href="string.html">string</a>, dimension: <a href="int.html">int</a>, use_typmod: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Adds a new geometry column to an existing table and returns metadata about the column created.</p>
+</span></td></tr>
 <tr><td><a name="st_area"></a><code>st_area(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geography in meters^2. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>

@@ -364,6 +364,9 @@ func (b *Builder) buildScalar(
 		to := b.buildScalar(t.TypedTo(), inScope, nil, nil, colRefs)
 		out = b.buildRangeCond(t.Not, t.Symmetric, inputFrom, from, inputTo, to)
 
+	case *sqlFnInfo:
+		out = b.buildSQLFn(t, inScope, outScope, outCol, colRefs)
+
 	case *srf:
 		if len(t.cols) == 1 {
 			if inGroupingContext {

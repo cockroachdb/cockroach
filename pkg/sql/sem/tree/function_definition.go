@@ -122,6 +122,18 @@ const (
 	WindowClass
 	// GeneratorClass is a builtin generator function.
 	GeneratorClass
+	// SQLClass is a builtin function that executes a SQL statement as a side
+	// effect of the function call.
+	//
+	// For example, AddGeometryColumn is a SQLClass function that executes an
+	// ALTER TABLE ... ADD COLUMN statement to add a geometry column to an
+	// existing table. It returns metadata about the column added.
+	//
+	// All builtin functions of this class should include a definition for
+	// Overload.SQLFn, which returns the SQL statement to be executed. They
+	// should also include a definition for Overload.Fn, which is executed
+	// like a NormalClass function and returns a Datum.
+	SQLClass
 )
 
 // Avoid vet warning about unused enum value.
