@@ -29,7 +29,7 @@ import (
 // complete, the expressions are evaluated.
 
 // KeyIndex is used as a set element. It is already de-duped.
-type KeyIndex int
+type KeyIndex = int
 
 // setContainer is a set of key indexes in increasing order.
 type setContainer []KeyIndex

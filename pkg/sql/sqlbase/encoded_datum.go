@@ -79,6 +79,12 @@ func (ed *EncDatum) EncodedString() string {
 	return string(ed.encoded)
 }
 
+// EncodedBytes returns this EncDatum's encoded field. This should be rarely
+// used, and the caller must not modify the returned slice.
+func (ed *EncDatum) EncodedBytes() []byte {
+	return ed.encoded
+}
+
 // EncDatumOverhead is the overhead of EncDatum in bytes.
 const EncDatumOverhead = unsafe.Sizeof(EncDatum{})
 
