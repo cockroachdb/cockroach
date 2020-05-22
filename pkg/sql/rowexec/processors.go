@@ -236,6 +236,15 @@ func NewProcessor(
 		}
 		return NewReadImportDataProcessor(flowCtx, processorID, *core.ReadImport, outputs[0])
 	}
+	if core.BackupData != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewBackupDataProcessor == nil {
+			return nil, errors.New("BackupData processor unimplemented")
+		}
+		return NewBackupDataProcessor(flowCtx, processorID, *core.BackupData, outputs[0])
+	}
 	if core.CSVWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
@@ -325,15 +334,17 @@ func NewProcessor(
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
-// NewReadImportDataProcessor is externally implemented and registered by
-// ccl/sqlccl/csv.go.
+// NewReadImportDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
-// NewCSVWriterProcessor is externally implemented.
+// NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
-// NewChangeAggregatorProcessor is externally implemented.
+// NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
-// NewChangeFrontierProcessor is externally implemented.
+// NewChangeFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)

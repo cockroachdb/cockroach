@@ -629,9 +629,9 @@ func restore(
 			}
 		})
 
-	pkIDs := make(map[uint64]struct{})
+	pkIDs := make(map[uint64]bool)
 	for _, tbl := range tables {
-		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.ID), uint64(tbl.PrimaryIndex.ID))] = struct{}{}
+		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.ID), uint64(tbl.PrimaryIndex.ID))] = true
 	}
 
 	// We're already limiting these on the server-side, but sending all the
