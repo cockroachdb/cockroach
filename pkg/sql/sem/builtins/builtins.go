@@ -2929,11 +2929,19 @@ may increase either contention or retry errors, or both.`,
 				case args[0] == tree.DNull:
 					right := args[1].(*tree.DEnum)
 					typ = right.ResolvedType()
-					bottom, top = 0, typ.EnumGetIdxOfPhysical(right.PhysicalRep)
+					idx, err := typ.EnumGetIdxOfPhysical(right.PhysicalRep)
+					if err != nil {
+						return nil, err
+					}
+					bottom, top = 0, idx
 				case args[1] == tree.DNull:
 					left := args[0].(*tree.DEnum)
 					typ = left.ResolvedType()
-					bottom, top = typ.EnumGetIdxOfPhysical(left.PhysicalRep), len(typ.TypeMeta.EnumData.PhysicalRepresentations)-1
+					idx, err := typ.EnumGetIdxOfPhysical(left.PhysicalRep)
+					if err != nil {
+						return nil, err
+					}
+					bottom, top = idx, len(typ.TypeMeta.EnumData.PhysicalRepresentations)-1
 				default:
 					left, right := args[0].(*tree.DEnum), args[1].(*tree.DEnum)
 					if !left.ResolvedType().Equivalent(right.ResolvedType()) {
@@ -2945,7 +2953,15 @@ may increase either contention or retry errors, or both.`,
 						)
 					}
 					typ = left.ResolvedType()
-					bottom, top = typ.EnumGetIdxOfPhysical(left.PhysicalRep), typ.EnumGetIdxOfPhysical(right.PhysicalRep)
+					var err error
+					bottom, err = typ.EnumGetIdxOfPhysical(left.PhysicalRep)
+					if err != nil {
+						return nil, err
+					}
+					top, err = typ.EnumGetIdxOfPhysical(right.PhysicalRep)
+					if err != nil {
+						return nil, err
+					}
 				}
 				arr := tree.NewDArray(typ)
 				for i := bottom; i <= top; i++ {
