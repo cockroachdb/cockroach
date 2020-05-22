@@ -103,6 +103,7 @@ message ProcessorCoreUnion {
   optional ChangeFrontierSpec changeFrontier = 26;
   optional OrdinalitySpec ordinality = 27;
   optional BulkRowWriterSpec bulkRowWriter = 28;
+  optional BackupDataSpec backupData = 29;
 
   reserved 6, 12;
 }
