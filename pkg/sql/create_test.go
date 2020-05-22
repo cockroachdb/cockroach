@@ -37,8 +37,8 @@ func TestDatabaseDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 	codec := keys.SystemSQLCodec
 	expectedCounter := int64(keys.MinNonPredefinedUserDescID)
 
@@ -265,7 +265,7 @@ func verifyTables(
 		}
 		descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
 		desc := &sqlbase.Descriptor{}
-		if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil {
+		if err := kvDB.GetProto(context.Background(), descKey, desc); err != nil {
 			t.Fatal(err)
 		}
 		if (*desc != sqlbase.Descriptor{}) {
@@ -285,7 +285,7 @@ func TestParallelCreateTables(t *testing.T) {
 	const numberOfNodes = 3
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)
@@ -338,7 +338,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	const numberOfNodes = 3
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)
@@ -386,7 +386,7 @@ func TestTableReadErrorsBeforeTableCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -444,7 +444,7 @@ SELECT * FROM t.kv%d
 func TestCreateStatementType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -488,7 +488,7 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	errFail := "setting or updating a password is not supported in insecure mode"
 

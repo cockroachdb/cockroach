@@ -68,7 +68,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 			},
 		},
 	)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()

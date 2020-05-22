@@ -152,8 +152,8 @@ func decodeTestKey(kvDB *kv.DB, key roachpb.Key) (string, error) {
 				return "", err
 			}
 
-			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
-				desc, err := sqlbase.GetTableDescFromID(context.TODO(), txn, keys.SystemSQLCodec, sqlbase.ID(descID))
+			if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+				desc, err := sqlbase.GetTableDescFromID(context.Background(), txn, keys.SystemSQLCodec, sqlbase.ID(descID))
 				if err != nil {
 					return err
 				}
@@ -227,7 +227,7 @@ func TestUseInterleavedJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
@@ -362,7 +362,7 @@ func TestMaximalJoinPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
@@ -472,7 +472,7 @@ func TestAlignInterleavedSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
@@ -806,7 +806,7 @@ func TestInterleavedNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 

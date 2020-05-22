@@ -211,7 +211,7 @@ func TestRegistryGC(t *testing.T) {
 		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.Mutations = mutations
 		if err := kvDB.Put(
-			context.TODO(),
+			context.Background(),
 			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			sqlbase.WrapDescriptor(desc),
 		); err != nil {
@@ -224,7 +224,7 @@ func TestRegistryGC(t *testing.T) {
 		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.GCMutations = gcMutations
 		if err := kvDB.Put(
-			context.TODO(),
+			context.Background(),
 			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			sqlbase.WrapDescriptor(desc),
 		); err != nil {
@@ -242,7 +242,7 @@ func TestRegistryGC(t *testing.T) {
 			desc.DropJobID = 0
 		}
 		if err := kvDB.Put(
-			context.TODO(),
+			context.Background(),
 			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			sqlbase.WrapDescriptor(desc),
 		); err != nil {

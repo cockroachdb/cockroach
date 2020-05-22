@@ -61,7 +61,7 @@ func TestRotateCerts(t *testing.T) {
 		DisableWebSessionAuthentication: true,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Client test function.
 	clientTest := func(httpClient http.Client) error {

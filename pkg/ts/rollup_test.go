@@ -205,7 +205,7 @@ func TestRollupBasic(t *testing.T) {
 		Columnar:                tm.DB.WriteColumnar(),
 	}
 	if err := tm.DB.rollupTimeSeries(
-		context.TODO(),
+		context.Background(),
 		[]timeSeriesResolutionInfo{
 			{
 				Name:       "test.othermetric",
@@ -222,7 +222,7 @@ func TestRollupBasic(t *testing.T) {
 	}
 
 	if err := tm.DB.pruneTimeSeries(
-		context.TODO(),
+		context.Background(),
 		tm.DB.db,
 		[]timeSeriesResolutionInfo{
 			{
@@ -273,8 +273,8 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		math.MaxInt64,
 		cluster.MakeTestingClusterSettings(),
 	)
-	adjustedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
-	defer adjustedMon.Stop(context.TODO())
+	adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+	defer adjustedMon.Stop(context.Background())
 
 	// Roll up time series with the new monitor to measure high-water mark
 	// of
@@ -318,8 +318,8 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		tm.assertKeyCount(51 + i /* rollups from previous iterations */ + 50)
 
 		// Restart monitor to clear query memory options.
-		adjustedMon.Stop(context.TODO())
-		adjustedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
+		adjustedMon.Stop(context.Background())
+		adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
 
 		qmc := MakeQueryMemoryContext(&adjustedMon, &adjustedMon, QueryMemoryOptions{
 			// Large budget, but not maximum to avoid overflows.

@@ -38,7 +38,7 @@ import (
 func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 
 	// Create the table and the row entry.
@@ -74,7 +74,7 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	}
 
 	// Delete the entry.
-	if err := kvDB.Del(context.TODO(), secondaryIndexKey[0].Key); err != nil {
+	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -111,7 +111,7 @@ INSERT INTO t."tEst" VALUES (10, 20);
 func TestScrubIndexDanglingIndexReference(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -142,7 +142,7 @@ CREATE INDEX secondary ON t.test (v);
 	}
 
 	// Put the new secondary k/v into the database.
-	if err := kvDB.Put(context.TODO(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
+	if err := kvDB.Put(context.Background(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -203,7 +203,7 @@ CREATE INDEX secondary ON t.test (v);
 func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -236,7 +236,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Delete the existing secondary k/v.
-	if err := kvDB.Del(context.TODO(), secondaryIndex[0].Key); err != nil {
+	if err := kvDB.Del(context.Background(), secondaryIndex[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -248,7 +248,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Put the incorrect secondary k/v.
-	if err := kvDB.Put(context.TODO(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
+	if err := kvDB.Put(context.Background(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -323,7 +323,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 func TestScrubCheckConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -368,7 +368,7 @@ INSERT INTO t.test VALUES (10, 2);
 	value.SetTuple(valueBuf)
 
 	// Overwrite the existing value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Run SCRUB and find the CHECK violation created.
@@ -413,7 +413,7 @@ INSERT INTO t.test VALUES (10, 2);
 func TestScrubFKConstraintFKMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 
 	// Create the table and the row entry.
@@ -456,7 +456,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 
 	// Delete the existing secondary key entry, as we will later replace
 	// it.
-	if err := kvDB.Del(context.TODO(), secondaryIndexKey[0].Key); err != nil {
+	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -475,7 +475,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	}
 
 	// Add the new, replacement secondary index entry.
-	if err := kvDB.Put(context.TODO(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -513,7 +513,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 func TestScrubFKConstraintFKNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -558,7 +558,7 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 func TestScrubPhysicalNonnullableNullInSingleColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -595,7 +595,7 @@ INSERT INTO t.test VALUES (217, 314);
 	var value roachpb.Value
 	value.SetTuple([]byte(nil))
 
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -639,7 +639,7 @@ INSERT INTO t.test VALUES (217, 314);
 func TestScrubPhysicalNonnullableNullInMulticolumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -686,7 +686,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	value.SetTuple(valueBuf)
 
 	// Overwrite the existing value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -732,7 +732,7 @@ func TestScrubPhysicalUnexpectedFamilyID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("currently KV pairs with unexpected family IDs are not noticed by the fetcher")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -786,7 +786,7 @@ CREATE TABLE t.test (
 	value.SetTuple(valueBuf)
 
 	// Insert the value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKeyWithFamily, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKeyWithFamily, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -804,7 +804,7 @@ CREATE TABLE t.test (
 	value.SetTuple(valueBuf)
 
 	// Insert the incorrect family k/v.
-	if err := kvDB.Put(context.TODO(), primaryIndexKeyWithFamily, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKeyWithFamily, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -849,7 +849,7 @@ func TestScrubPhysicalIncorrectPrimaryIndexValueColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("the test is not failing, as it would be expected")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -897,7 +897,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	value.SetTuple(valueBuf)
 
 	// Overwrite the existing value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 

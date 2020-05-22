@@ -526,7 +526,7 @@ func queryJob(db sqlutils.DBHandle, jobID int64) (js jobState) {
 	}
 	var progressBytes, payloadBytes []byte
 	js.err = db.QueryRowContext(
-		context.TODO(), "SELECT status, payload, progress FROM system.jobs WHERE id = $1", jobID).Scan(
+		context.Background(), "SELECT status, payload, progress FROM system.jobs WHERE id = $1", jobID).Scan(
 		&js.status, &payloadBytes, &progressBytes)
 	if js.err != nil {
 		return
@@ -584,7 +584,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 			},
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -690,7 +690,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 			},
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)

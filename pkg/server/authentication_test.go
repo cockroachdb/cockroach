@@ -83,7 +83,7 @@ func TestSSLEnforcement(t *testing.T) {
 		// clients being instantiated.
 		DisableWebSessionAuthentication: true,
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// HTTPS with client certs for security.RootUser.
 	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)
@@ -254,7 +254,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"cthon98", "12345", true, ""},
 	} {
 		t.Run("", func(t *testing.T) {
-			valid, expired, err := ts.authentication.verifyPassword(context.TODO(), tc.username, tc.password)
+			valid, expired, err := ts.authentication.verifyPassword(context.Background(), tc.username, tc.password)
 			if err != nil {
 				t.Errorf(
 					"credentials %s/%s failed with error %s, wanted no error",
@@ -279,7 +279,7 @@ func TestVerifyPassword(t *testing.T) {
 func TestCreateSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	username := "testUser"
@@ -287,7 +287,7 @@ func TestCreateSession(t *testing.T) {
 	// Create an authentication, noting the time before and after creation. This
 	// lets us ensure that the timestamps created are accurate.
 	timeBoundBefore := ts.clock.PhysicalTime()
-	id, origSecret, err := ts.authentication.newAuthSession(context.TODO(), username)
+	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), username)
 	if err != nil {
 		t.Fatalf("error creating auth session: %s", err)
 	}
@@ -370,11 +370,11 @@ WHERE id = $1`
 func TestVerifySession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	sessionUsername := "testUser"
-	id, origSecret, err := ts.authentication.newAuthSession(context.TODO(), sessionUsername)
+	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), sessionUsername)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +429,7 @@ func TestVerifySession(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testname, func(t *testing.T) {
-			valid, username, err := ts.authentication.verifySession(context.TODO(), &tc.cookie)
+			valid, username, err := ts.authentication.verifySession(context.Background(), &tc.cookie)
 			if err != nil {
 				t.Fatalf("test got error %s, wanted no error", err)
 			}
@@ -446,7 +446,7 @@ func TestVerifySession(t *testing.T) {
 func TestAuthenticationAPIUserLogin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	const (
@@ -536,7 +536,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 func TestLogout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	// Log in.
@@ -617,7 +617,7 @@ func TestLogout(t *testing.T) {
 func TestAuthenticationMux(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*TestServer)
 
 	// Both the normal and authenticated client will be used for each test.

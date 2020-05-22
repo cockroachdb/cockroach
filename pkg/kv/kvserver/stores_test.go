@@ -220,7 +220,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 		eng := storage.NewDefaultInMem()
 		stopper.AddCloser(eng)
-		s := NewStore(context.TODO(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		s := NewStore(context.Background(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident = &roachpb.StoreIdent{StoreID: storeIDAlloc}
 		stores = append(stores, s)
@@ -233,7 +233,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 func TestStoresGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual, stores, ls, stopper := createStores(2, t)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	ls.AddStore(stores[0])
 
 	// Verify initial read is empty.
@@ -282,7 +282,7 @@ func TestStoresGossipStorage(t *testing.T) {
 func TestStoresGossipStorageReadLatest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual, stores, ls, stopper := createStores(2, t)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	ls.AddStore(stores[0])
 
 	// Add a fake address and write.

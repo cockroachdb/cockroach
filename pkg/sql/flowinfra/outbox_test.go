@@ -51,7 +51,7 @@ func TestOutbox(t *testing.T) {
 
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 	if err != nil {
@@ -75,7 +75,7 @@ func TestOutbox(t *testing.T) {
 	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
 	outbox.Init(sqlbase.OneIntCol)
 	var outboxWG sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
@@ -140,7 +140,7 @@ func TestOutbox(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(context.TODO(), msg)
+		err = decoder.AddMessage(context.Background(), msg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,7 +206,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 	if err != nil {
@@ -231,7 +231,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
 
 	var outboxWG sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	outbox.Init(sqlbase.OneIntCol)
 	// Start the outbox. This should cause the stream to connect, even though
@@ -280,7 +280,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
+			defer stopper.Stop(context.Background())
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 			if err != nil {
@@ -306,7 +306,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			var wg sync.WaitGroup
 			var expectedErr error
 			consumerReceivedMsg := make(chan struct{})
-			ctx, cancel := context.WithCancel(context.TODO())
+			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			if tc.outboxIsClient {
 				outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
@@ -416,7 +416,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 	if err != nil {
@@ -440,7 +440,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	streamID := execinfrapb.StreamID(42)
 	var outbox *Outbox
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// We could test this on ctx.cancel(), but this mock
@@ -474,7 +474,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
@@ -533,7 +533,7 @@ func BenchmarkOutbox(b *testing.B) {
 
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 	if err != nil {
@@ -563,7 +563,7 @@ func BenchmarkOutbox(b *testing.B) {
 			outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
 			outbox.Init(sqlbase.MakeIntCols(numCols))
 			var outboxWG sync.WaitGroup
-			ctx, cancel := context.WithCancel(context.TODO())
+			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			// Start the outbox. This should cause the stream to connect, even though
 			// we're not sending any rows.

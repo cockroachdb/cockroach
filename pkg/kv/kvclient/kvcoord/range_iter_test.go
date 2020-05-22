@@ -54,7 +54,7 @@ func init() {
 func TestRangeIterForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -89,7 +89,7 @@ func TestRangeIterForward(t *testing.T) {
 func TestRangeIterSeekForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -127,7 +127,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 func TestRangeIterReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -162,7 +162,7 @@ func TestRangeIterReverse(t *testing.T) {
 func TestRangeIterSeekReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)

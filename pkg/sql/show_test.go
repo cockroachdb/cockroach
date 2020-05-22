@@ -38,7 +38,7 @@ func TestShowCreateTable(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE d;
@@ -338,7 +338,7 @@ func TestShowCreateView(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE d;
@@ -432,7 +432,7 @@ func TestShowCreateSequence(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE d;
@@ -601,7 +601,7 @@ func TestShowQueries(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
@@ -658,7 +658,7 @@ func TestShowSessions(t *testing.T) {
 	var conn *gosql.DB
 
 	tc := serverutils.StartTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn = tc.ServerConn(0)
 	sqlutils.CreateTable(t, conn, "t", "num INT", 0, nil)
@@ -770,7 +770,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 	params.Insecure = true
 	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Prepare a non-root session.
 	_ = sqlDBroot.Exec(t, `CREATE USER nonroot`)
@@ -844,7 +844,7 @@ func TestLintClusterSettingNames(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	rows, err := sqlDB.Query(`SELECT variable, setting_type, description FROM [SHOW ALL CLUSTER SETTINGS]`)
 	if err != nil {

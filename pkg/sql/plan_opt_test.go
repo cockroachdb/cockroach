@@ -67,7 +67,7 @@ func makeQueryCacheTestHelper(tb testing.TB, numConns int) *queryCacheTestHelper
 }
 
 func (h *queryCacheTestHelper) Stop() {
-	h.srv.Stopper().Stop(context.TODO())
+	h.srv.Stopper().Stop(context.Background())
 }
 
 func (h *queryCacheTestHelper) GetStats() (numHits, numMisses int) {

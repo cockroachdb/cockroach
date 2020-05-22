@@ -163,7 +163,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			},
 		},
 	)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Start and close two temporary schemas.
 	for _, dbID := range []int{0, 1} {
@@ -232,7 +232,7 @@ func TestTemporarySchemaDropDatabase(t *testing.T) {
 			},
 		},
 	)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Create a database to drop that has a temporary table inside.
 	{

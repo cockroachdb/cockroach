@@ -60,7 +60,7 @@ func readNextMessages(t testing.TB, f cdctest.TestFeed, numMessages int, stripTs
 	for len(actual) < numMessages {
 		m, err := f.Next()
 		if log.V(1) {
-			log.Infof(context.TODO(), `%v %s: %s->%s`, err, m.Topic, m.Key, m.Value)
+			log.Infof(context.Background(), `%v %s: %s->%s`, err, m.Topic, m.Key, m.Value)
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -352,7 +352,7 @@ func forceTableGC(
 	database, table string,
 ) {
 	t.Helper()
-	if err := tsi.ForceTableGC(context.TODO(), database, table, tsi.Clock().Now()); err != nil {
+	if err := tsi.ForceTableGC(context.Background(), database, table, tsi.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
 }

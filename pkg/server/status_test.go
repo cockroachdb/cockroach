@@ -83,7 +83,7 @@ func getStatusJSONProtoWithAdminOption(
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Verify match with at least two goroutine stacks.
 	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
@@ -104,7 +104,7 @@ func TestStatusLocalStacks(t *testing.T) {
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	nodeID := ts.Gossip().NodeID.Get()
@@ -157,7 +157,7 @@ func TestStatusJson(t *testing.T) {
 func TestHealthTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	rows, err := db.Query("SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'monitoring%' AND usage_count > 0;")
 	defer func() {
@@ -231,7 +231,7 @@ func TestHealthTelemetry(t *testing.T) {
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var data gossip.InfoStatus
 	if err := getStatusJSONProto(s, "gossip/local", &data); err != nil {
@@ -267,7 +267,7 @@ func TestStatusEngineStatsJson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var engineStats serverpb.EngineStatsResponse
 	if err := getStatusJSONProto(s, "enginestats/local", &engineStats); err != nil {
@@ -327,14 +327,14 @@ func startServer(t *testing.T) *TestServer {
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
-	if _, err := kvDB.Get(context.TODO(), "a"); err != nil {
+	if _, err := kvDB.Get(context.Background(), "a"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.node.computePeriodicMetrics(context.TODO(), 0); err != nil {
+	if err := ts.node.computePeriodicMetrics(context.Background(), 0); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
@@ -352,7 +352,7 @@ func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let
 	// its test RPC client talk to a server started by an unrelated concurrent test.
-	rpcContext.ClusterID.Set(context.TODO(), ts.ClusterID())
+	rpcContext.ClusterID.Set(context.Background(), ts.ClusterID())
 	return rpcContext
 }
 
@@ -371,7 +371,7 @@ func TestStatusGetFiles(t *testing.T) {
 		},
 	})
 	ts := tsI.(*TestServer)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
@@ -492,7 +492,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	defer s.Close(t)
 
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	// Log an error of each main type which we expect to be able to retrieve.
 	// The resolution of our log timestamps is such that it's possible to get
@@ -635,7 +635,7 @@ func TestStatusLocalLogs(t *testing.T) {
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
@@ -700,7 +700,7 @@ func TestMetricsRecording(t *testing.T) {
 func TestMetricsEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := getText(s, s.AdminURL()+statusPrefix+"metrics/"+s.Gossip().NodeID.String()); err != nil {
 		t.Fatal(err)
@@ -712,7 +712,7 @@ func TestMetricsEndpoint(t *testing.T) {
 func TestMetricsMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	metricsMetadata := s.recorder.GetMetricsMetadata()
 
@@ -740,7 +740,7 @@ func TestMetricsMetadata(t *testing.T) {
 func TestChartCatalogGen(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	metricsMetadata := s.recorder.GetMetricsMetadata()
 
@@ -815,7 +815,7 @@ func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metad
 func TestChartCatalogMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	metricsMetadata := s.recorder.GetMetricsMetadata()
 
@@ -856,7 +856,7 @@ func TestChartCatalogMetrics(t *testing.T) {
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	var hotRangesResp serverpb.HotRangesResponse
 	if err := getStatusJSONProto(ts, "hotranges", &hotRangesResp); err != nil {
@@ -900,10 +900,10 @@ func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer kvserver.EnableLeaseHistory(100)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -943,7 +943,7 @@ func TestRangesResponse(t *testing.T) {
 func TestRaftDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var resp serverpb.RaftDebugResponse
 	if err := getStatusJSONProto(s, "raft", &resp); err != nil {
@@ -994,7 +994,7 @@ func TestRaftDebug(t *testing.T) {
 func TestStatusVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if body, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
 		t.Fatal(err)
@@ -1006,7 +1006,7 @@ func TestStatusVars(t *testing.T) {
 func TestSpanStatsResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	httpClient, err := ts.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
@@ -1072,7 +1072,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 func TestNodesGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
@@ -1099,7 +1099,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 func TestCertificatesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	var response serverpb.CertificatesResponse
 	if err := getStatusJSONProto(ts, "certificates/local", &response); err != nil {
@@ -1149,7 +1149,7 @@ func TestDiagnosticsResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var resp diagnosticspb.DiagnosticReport
 	if err := getStatusJSONProto(s, "diagnostics/local", &resp); err != nil {
@@ -1167,7 +1167,7 @@ func TestRangeResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer kvserver.EnableLeaseHistory(100)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	// Perform a scan to ensure that all the raft groups are initialized.
 	if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
@@ -1232,7 +1232,7 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		},
 	})
 	ts := s.(*TestServer)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`SET CLUSTER SETTING server.remote_debugging.mode = 'off'`); err != nil {
 		t.Fatal(err)
@@ -1444,9 +1444,9 @@ func TestListSessionsSecurity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ts := s.(*TestServer)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	for _, requestWithAdmin := range []bool{true, false} {
 		t.Run(fmt.Sprintf("admin=%v", requestWithAdmin), func(t *testing.T) {
@@ -1520,7 +1520,7 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	req := &serverpb.CreateStatementDiagnosticsReportRequest{
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
@@ -1544,7 +1544,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	if err != nil {
@@ -1590,7 +1590,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 func TestJobStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.Background())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)

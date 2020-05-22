@@ -410,7 +410,7 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 func TestNewTruncateDecisionMaxSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	cfg := TestStoreConfig(hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond))
 	const exp = 1881
@@ -443,7 +443,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/38584")
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
 		testStoreOpts{
 			// This test was written before test stores could start with more than one
@@ -694,7 +694,7 @@ func TestTruncateLog(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
@@ -860,7 +860,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	key := roachpb.Key("a")

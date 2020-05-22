@@ -38,7 +38,7 @@ func TestSampleAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

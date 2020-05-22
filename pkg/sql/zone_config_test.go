@@ -51,7 +51,7 @@ func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
-	if err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
@@ -100,7 +100,7 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 
 	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
@@ -336,7 +336,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 	}
 
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 
 	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
@@ -638,7 +638,7 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 
 	params, _ := tests.CreateTestServerParams()
 	srv, _, _ := serverutils.StartServer(b, params)
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 	cfg := forceNewConfig(b, s)
 

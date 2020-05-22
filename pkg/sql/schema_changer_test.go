@@ -84,7 +84,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var id = sqlbase.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
 	var instance = base.SQLInstanceID(2)
@@ -104,7 +104,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		cfg,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	changer := sql.NewSchemaChangerForTesting(
 		id, 0, instance, *kvDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
 
@@ -119,7 +119,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	// Read table descriptor for version.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	expectedVersion := tableDesc.Version
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
 	// if there are no mutations queued.
@@ -204,7 +204,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	// changer executes all schema changes.
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -346,7 +346,7 @@ func runSchemaChangeWithOperations(
 	<-backfillNotification
 
 	// Run a variety of operations during the backfill.
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Update some rows.
 	var updatedKeys []int
@@ -486,7 +486,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
@@ -511,7 +511,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 	sql.SplitTable(t, tc, tableDesc, sps)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
@@ -662,7 +662,7 @@ func TestDropWhileBackfill(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
@@ -687,7 +687,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 	sql.SplitTable(t, tc, tableDesc, sps)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
@@ -760,7 +760,7 @@ func TestBackfillErrors(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
@@ -800,7 +800,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 	sql.SplitTable(t, tc, tableDesc, sps)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
@@ -903,7 +903,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.
@@ -999,7 +999,7 @@ COMMIT;
 
 			wg.Wait() // for schema change to complete
 
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			// Verify the number of keys left behind in the table to validate
 			// schema change operations.
@@ -1050,7 +1050,7 @@ func addIndexSchemaChange(
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if err := checkTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
@@ -1087,7 +1087,7 @@ func addColumnSchemaChange(
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if err := checkTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
@@ -1102,7 +1102,7 @@ func dropColumnSchemaChange(
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if err := checkTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
@@ -1118,7 +1118,7 @@ func dropIndexSchemaChange(
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(context.TODO(), kvDB, numKeysPerRow, maxValue); err != nil {
+	if err := checkTableKeyCount(context.Background(), kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1130,7 +1130,7 @@ func TestDropColumn(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1234,7 +1234,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1311,7 +1311,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1322,7 +1322,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	id := tableDesc.ID
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*sql.LeaseManager)
@@ -1413,7 +1413,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.
@@ -1484,7 +1484,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// rows from k = 0 to k = chunkSize - 1 have index values.
 	numGarbageValues := chunkSize
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue+1+numGarbageValues); err != nil {
 		t.Fatal(err)
@@ -1558,7 +1558,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1573,7 +1573,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+	if err := checkTableKeyCount(context.Background(), kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1583,7 +1583,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// No garbage left behind.
-	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+	if err := checkTableKeyCount(context.Background(), kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1597,7 +1597,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// No garbage left behind.
-	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+	if err := checkTableKeyCount(context.Background(), kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1637,7 +1637,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.
@@ -1835,7 +1835,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		return nil
 	})
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Check that the number of k-v pairs is accurate.
 	if err := checkTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
@@ -1892,7 +1892,7 @@ func TestParseSentinelValueWithNewColumnInSentinelFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1918,7 +1918,7 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Convert table data created by the above INSERT into sentinel
 	// values. This is done to make the table appear like it were
@@ -2020,7 +2020,7 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -2106,7 +2106,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -2120,7 +2120,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(context.TODO(), kvDB, 2, maxValue); err != nil {
+	if err := checkTableKeyCount(context.Background(), kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3140,7 +3140,7 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -3368,7 +3368,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
@@ -3411,7 +3411,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 				t.Error(err)
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			// Verify the number of keys left behind in the table to
 			// validate schema change operations.
@@ -3430,7 +3430,7 @@ func TestSchemaChangeInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -3544,7 +3544,7 @@ func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE d;
@@ -3573,7 +3573,7 @@ CREATE TABLE d.t (
 		tableDesc.Indexes[i] = index
 	}
 	if err := kvDB.Put(
-		context.TODO(),
+		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
 		sqlbase.WrapDescriptor(tableDesc),
 	); err != nil {
@@ -3673,7 +3673,7 @@ func TestSchemaChangeEvalContext(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
@@ -3747,7 +3747,7 @@ func TestSchemaChangeCompletion(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
@@ -3831,7 +3831,7 @@ func TestTruncateInternals(t *testing.T) {
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
@@ -3934,7 +3934,7 @@ func TestTruncateCompletion(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -4102,7 +4102,7 @@ func TestTruncateWhileColumnBackfill(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -4152,7 +4152,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.Background(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 0; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -4199,7 +4199,7 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -4266,7 +4266,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	}
 
 	tc = serverutils.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	db := tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -4278,7 +4278,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(context.TODO(), kvDB, 2, 0); err != nil {
+	if err := checkTableKeyCount(context.Background(), kvDB, 2, 0); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -4310,7 +4310,7 @@ func TestAddComputedColumn(t *testing.T) {
 	}
 
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	db = tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -4325,7 +4325,7 @@ func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// The schema change below can occasionally take more than
 	// 5 seconds and gets pushed by the closed timestamp mechanism
@@ -4390,7 +4390,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(context.TODO(), kvDB, 2, maxValue); err != nil {
+	if err := checkTableKeyCount(context.Background(), kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4490,7 +4490,7 @@ func TestCancelSchemaChange(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	db = tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
 	sqlDB = sqlutils.MakeSQLRunner(db)
@@ -4518,7 +4518,7 @@ func TestCancelSchemaChange(t *testing.T) {
 	}
 	sql.SplitTable(t, tc, tableDesc, sps)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
@@ -4651,7 +4651,7 @@ func TestSchemaChangeRetryError(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
@@ -4726,7 +4726,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
@@ -4739,7 +4739,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
@@ -4750,7 +4750,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ctx := context.TODO()
+		ctx := context.Background()
 		// When using db.Exec(), CANCEL SESSION below will result in the
 		// database client retrying the request on another connection.
 		// Use a connection here so when the session gets canceled; a
@@ -4800,7 +4800,7 @@ func TestSchemaChangeGRPCError(t *testing.T) {
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
@@ -4813,7 +4813,7 @@ func TestSchemaChangeGRPCError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
@@ -4852,7 +4852,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
@@ -4865,7 +4865,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
@@ -4916,11 +4916,11 @@ func TestIndexBackfillValidation(t *testing.T) {
 				if count == 2 {
 					// drop an index value before validation.
 					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.ID), uint32(tableDesc.NextIndexID))
-					kv, err := db.Scan(context.TODO(), key, key.PrefixEnd(), 1)
+					kv, err := db.Scan(context.Background(), key, key.PrefixEnd(), 1)
 					if err != nil {
 						t.Error(err)
 					}
-					if err := db.Del(context.TODO(), kv[0].Key); err != nil {
+					if err := db.Del(context.Background(), kv[0].Key); err != nil {
 						t.Error(err)
 					}
 				}
@@ -4933,7 +4933,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	db = kvDB
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -4985,11 +4985,11 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 				if count == 2 {
 					// drop an index value before validation.
 					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.ID), uint32(tableDesc.NextIndexID))
-					kv, err := db.Scan(context.TODO(), key, key.PrefixEnd(), 1)
+					kv, err := db.Scan(context.Background(), key, key.PrefixEnd(), 1)
 					if err != nil {
 						t.Error(err)
 					}
-					if err := db.Del(context.TODO(), kv[0].Key); err != nil {
+					if err := db.Del(context.Background(), kv[0].Key); err != nil {
 						t.Error(err)
 					}
 				}
@@ -5002,7 +5002,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	db = kvDB
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -5054,7 +5054,7 @@ func TestMultipleIndexBackfills(t *testing.T) {
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -5112,7 +5112,7 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	stats.DefaultAsOfTime = time.Microsecond
 
 	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 
 	sqlRun.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
@@ -5192,7 +5192,7 @@ func TestTableValidityWhileAddingFK(t *testing.T) {
 	}
 
 	server, sqlDB, _ := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -5282,7 +5282,7 @@ func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
 	}
 
 	server, sqlDB, _ := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -5380,7 +5380,7 @@ func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
 	}
 
 	server, sqlDB, _ := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -5477,11 +5477,11 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 
 	readyToBackfill = make(chan struct{})
 	canStartBackfill = make(chan struct{})
@@ -5591,7 +5591,7 @@ func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -5644,7 +5644,7 @@ func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -5838,7 +5838,7 @@ func TestMultipleRevert(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	db = sqlDB
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with addImmediateGCZoneConfig.

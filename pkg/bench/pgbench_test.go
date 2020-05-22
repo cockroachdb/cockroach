@@ -109,7 +109,7 @@ func BenchmarkPgbenchExec(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	b.Run("Cockroach", func(b *testing.B) {
 		s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 
 		pgURL, cleanupFn := sqlutils.PGUrl(
 			b, s.ServingSQLAddr(), "benchmarkCockroach", url.User(security.RootUser))

@@ -58,7 +58,7 @@ func TestDistBackfill(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	cdb := tc.Server(0).DB()
 
 	sqlutils.CreateTable(

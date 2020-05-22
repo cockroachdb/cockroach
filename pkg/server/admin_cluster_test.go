@@ -39,7 +39,7 @@ func TestAdminAPITableStats(t *testing.T) {
 			ScanMaxIdleTime: time.Millisecond,
 		},
 	})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	server0 := tc.Server(0)
 
 	// Create clients (SQL, HTTP) connected to server 0.
@@ -142,7 +142,7 @@ func TestAdminAPITableStats(t *testing.T) {
 func TestLivenessAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	startTime := tc.Server(0).Clock().PhysicalNow()
 

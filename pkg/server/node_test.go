@@ -274,7 +274,7 @@ func compareNodeStatus(
 	// ========================================
 	nodeStatusKey := keys.NodeStatusKey(ts.node.Descriptor.NodeID)
 	nodeStatus := &statuspb.NodeStatus{}
-	if err := ts.db.GetProto(context.TODO(), nodeStatusKey, nodeStatus); err != nil {
+	if err := ts.db.GetProto(context.Background(), nodeStatusKey, nodeStatus); err != nil {
 		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
 	}
 
@@ -388,9 +388,9 @@ func TestNodeStatusWritten(t *testing.T) {
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DisableEventLog: true,
 	})
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	ts := srv.(*TestServer)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Retrieve the first store from the Node.
 	s, err := ts.node.stores.GetStore(roachpb.StoreID(1))
@@ -404,7 +404,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	leftKey := "a"
 
 	// Scan over all keys to "wake up" all replicas (force a lease holder election).
-	if _, err := kvDB.Scan(context.TODO(), keys.MetaMax, keys.MaxKey, 0); err != nil {
+	if _, err := kvDB.Scan(context.Background(), keys.MetaMax, keys.MaxKey, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -526,7 +526,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := ts.db.AdminSplit(context.Background(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 

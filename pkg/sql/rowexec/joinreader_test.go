@@ -609,7 +609,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTable(
 		t,

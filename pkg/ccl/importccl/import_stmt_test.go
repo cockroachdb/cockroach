@@ -2596,7 +2596,7 @@ var _ importRowProducer = &csvBenchmarkStream{}
 // BenchmarkConvertRecord-16    	  500000	      2376 ns/op	  50.49 MB/s	    3606 B/op	     101 allocs/op
 // BenchmarkConvertRecord-16    	  500000	      2390 ns/op	  50.20 MB/s	    3606 B/op	     101 allocs/op
 func BenchmarkCSVConvertRecord(b *testing.B) {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
@@ -2691,7 +2691,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 // BenchmarkDelimitedConvertRecord-16    	  500000	      3004 ns/op	  39.94 MB/s
 // BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
 func BenchmarkDelimitedConvertRecord(b *testing.B) {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},

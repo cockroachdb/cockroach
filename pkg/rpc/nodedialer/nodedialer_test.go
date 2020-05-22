@@ -42,7 +42,7 @@ const staticNodeID = 1
 func TestNodedialerPositive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, _, nd := setUpNodedialerTest(t, staticNodeID)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	// Ensure that dialing works.
 	breaker := nd.GetCircuitBreaker(1, rpc.DefaultClass)
 	assert.True(t, breaker.Ready())
@@ -108,7 +108,7 @@ func TestDialNoBreaker(t *testing.T) {
 func TestConcurrentCancellationAndTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, _, nd := setUpNodedialerTest(t, staticNodeID)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	ctx := context.Background()
 	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
 	// Test that when a context is canceled during dialing we always return that
@@ -142,7 +142,7 @@ func TestConcurrentCancellationAndTimeout(t *testing.T) {
 func TestResolverErrorsTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, rpcCtx, _, _, _ := setUpNodedialerTest(t, staticNodeID)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	boom := fmt.Errorf("boom")
 	nd := New(rpcCtx, func(id roachpb.NodeID) (net.Addr, error) {
 		return nil, boom
@@ -156,7 +156,7 @@ func TestResolverErrorsTrip(t *testing.T) {
 func TestDisconnectsTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, ln, hb, nd := setUpNodedialerTest(t, staticNodeID)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	ctx := context.Background()
 	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
 
@@ -237,7 +237,7 @@ func setUpNodedialerTest(
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	// Create an rpc Context and then
 	rpcCtx = newTestContext(clock, stopper)
-	rpcCtx.NodeID.Set(context.TODO(), nodeID)
+	rpcCtx.NodeID.Set(context.Background(), nodeID)
 	_, ln, hb = newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	nd = New(rpcCtx, newSingleNodeResolver(nodeID, ln.Addr()))
 	testutils.SucceedsSoon(t, func() error {
@@ -295,7 +295,7 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rctx.ClusterID.Set(context.TODO(), uuid.MakeV4())
+	rctx.ClusterID.Set(context.Background(), uuid.MakeV4())
 
 	return rctx
 }

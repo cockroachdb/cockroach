@@ -53,7 +53,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 	// Create some keys across the ranges.
 	incKeys := []string{"b", "bb", "bbb", "d", "dd", "h"}
 	for _, k := range incKeys {
-		if _, err := mtc.dbs[0].Inc(context.TODO(), []byte(k), 5); err != nil {
+		if _, err := mtc.dbs[0].Inc(context.Background(), []byte(k), 5); err != nil {
 			t.Fatal(err)
 		}
 	}

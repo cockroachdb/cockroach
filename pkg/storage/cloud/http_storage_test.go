@@ -140,7 +140,7 @@ func TestPutHttp(t *testing.T) {
 
 	// Ensure that servers that error on HEAD are handled gracefully.
 	t.Run("bad-head-response", func(t *testing.T) {
-		ctx := context.TODO()
+		ctx := context.Background()
 
 		srv, _, cleanup := makeServer()
 		defer cleanup()
@@ -292,7 +292,7 @@ func TestCanDisableHttp(t *testing.T) {
 		DisableHTTP: true,
 	}
 	s, err := MakeExternalStorage(
-		context.TODO(),
+		context.Background(),
 		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http},
 		conf,
 		testSettings, blobs.TestEmptyBlobClientFactory)
@@ -320,9 +320,9 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 	conf, err := ExternalStorageConfFromURI("http://my-server")
 	require.NoError(t, err)
 	s, err := MakeExternalStorage(
-		context.TODO(), conf, base.ExternalIOConfig{}, testSettings, nil)
+		context.Background(), conf, base.ExternalIOConfig{}, testSettings, nil)
 	require.NoError(t, err)
-	stream, err := s.ReadFile(context.TODO(), "file")
+	stream, err := s.ReadFile(context.Background(), "file")
 	require.NoError(t, err)
 	defer stream.Close()
 	data, err := ioutil.ReadAll(stream)

@@ -95,7 +95,7 @@ func TestFileUpload(t *testing.T) {
 	params.ExternalIODir = localExternalDir
 
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -125,7 +125,7 @@ func TestUploadEmptyFile(t *testing.T) {
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -155,7 +155,7 @@ func TestFileNotExist(t *testing.T) {
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	err := runCopyFile(t, db, filepath.Join(localExternalDir, filename))
 	expectedErr := "no such file"
@@ -172,7 +172,7 @@ func TestFileExist(t *testing.T) {
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	destination := filepath.Join(localExternalDir, filename)
 	writeFile(t, destination, []byte("file exists"))
@@ -193,7 +193,7 @@ func TestNotAdmin(t *testing.T) {
 	params.ExternalIODir = localExternalDir
 	params.Insecure = true
 	s, rootDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	_, err := rootDB.Exec("CREATE USER jsmith")
 	require.NoError(t, err)

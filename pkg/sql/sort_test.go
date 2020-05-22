@@ -24,7 +24,7 @@ func TestOrderByRandom(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	seenOne := false
 	seenTwo := false

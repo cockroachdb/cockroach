@@ -138,7 +138,7 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		const numReplicas = 3
 		tc := testcluster.StartTestCluster(t, numReplicas, testClusterArgs)
-		defer tc.Stopper().Stop(context.TODO())
+		defer tc.Stopper().Stop(context.Background())
 
 		// Avoid distSQL so we can reliably hydrate the intended dist
 		// sender's cache below.

@@ -96,7 +96,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all RPC peers (this ensures that the peers
 	// don't talk to servers from unrelated tests by accident).
@@ -104,7 +104,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 
 	serverCtx := newTestContext(clusterID, clock, stopper)
 	const serverNodeID = 1
-	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+	serverCtx.NodeID.Set(context.Background(), serverNodeID)
 	s := newTestServer(t, serverCtx)
 
 	heartbeat := &ManualHeartbeatService{
@@ -171,7 +171,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 		if s, c := serverVal.(*Stats).Outgoing(), clientVal.(*Stats).Incoming(); s == 0 || c == 0 || s > c {
 			return fmt.Errorf("expected server.outgoing < client.incoming; got %d, %d", s, c)
 		}
-		log.Infof(context.TODO(), "server incoming = %v, server outgoing = %v, client incoming = %v, client outgoing = %v",
+		log.Infof(context.Background(), "server incoming = %v, server outgoing = %v, client incoming = %v, client outgoing = %v",
 			serverVal.(*Stats).Incoming(), serverVal.(*Stats).Outgoing(), clientVal.(*Stats).Incoming(), clientVal.(*Stats).Outgoing())
 		return nil
 	})

@@ -129,7 +129,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 }
 
 func verifyRocksDBStats(t *testing.T, s *kvserver.Store) {
-	if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
+	if err := s.ComputeMetrics(context.Background(), 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,7 +289,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Add some data to the "right" range.
 	dataKey := []byte("z")
-	if _, err := mtc.dbs[0].Inc(context.TODO(), dataKey, 5); err != nil {
+	if _, err := mtc.dbs[0].Inc(context.Background(), dataKey, 5); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
@@ -298,7 +298,7 @@ func TestStoreMetrics(t *testing.T) {
 	verifyStats(t, mtc, 0, 1, 2)
 
 	// Create a transaction statement that fails. Regression test for #4969.
-	if err := mtc.dbs[0].Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := mtc.dbs[0].Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		var expVal roachpb.Value
 		expVal.SetInt(6)
@@ -315,7 +315,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Unreplicate range from the first store.
 	testutils.SucceedsSoon(t, func() error {
 		// This statement can fail if store 0 is not the leaseholder.
-		if err := mtc.transferLeaseNonFatal(context.TODO(), replica.RangeID, 0, 1); err != nil {
+		if err := mtc.transferLeaseNonFatal(context.Background(), replica.RangeID, 0, 1); err != nil {
 			t.Log(err)
 		}
 		// This statement will fail if store 0 IS the leaseholder. This can happen

@@ -984,7 +984,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 		t.Helper()
 		for {
 			if ev, err := f.Next(); err != nil {
-				log.Infof(context.TODO(), "got event %v %v", ev, err)
+				log.Infof(context.Background(), "got event %v %v", ev, err)
 				tsStr = timestampStrFromError(t, err)
 				_ = f.Close()
 				return tsStr
@@ -2412,7 +2412,7 @@ func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
 			args.Knobs.Store = storeKnobs
 		},
 		func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-			ctx := context.TODO()
+			ctx := context.Background()
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 			_, err := f.Feed(`CREATE CHANGEFEED FOR foo WITH resolved`)

@@ -37,7 +37,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 		bootstrapMode: bootstrapRangeOnly,
 	}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	ms := tc.repl.GetMVCCStats()
@@ -50,7 +50,7 @@ func TestRangeStatsInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 	ms := enginepb.MVCCStats{
 		LiveBytes:       1,

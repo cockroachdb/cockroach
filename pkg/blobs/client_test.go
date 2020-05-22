@@ -41,7 +41,7 @@ func createTestResources(t testing.TB) (string, string, *stop.Stopper, func()) {
 	return localExternalDir, remoteExternalDir, stopper, func() {
 		cleanupFn()
 		cleanupFn2()
-		stopper.Stop(context.TODO())
+		stopper.Stop(context.Background())
 		leaktest.AfterTest(t)()
 	}
 }
@@ -173,7 +173,7 @@ func TestBlobClientReadFile(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.TODO()
+			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -244,7 +244,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.TODO()
+			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -359,7 +359,7 @@ func TestBlobClientList(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.TODO()
+			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -441,7 +441,7 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.TODO()
+			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -517,7 +517,7 @@ func TestBlobClientStat(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.TODO()
+			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)

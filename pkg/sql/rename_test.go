@@ -29,7 +29,7 @@ import (
 func TestRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	counter := int64(keys.MinNonPredefinedUserDescID)
 
@@ -48,7 +48,7 @@ func TestRenameTable(t *testing.T) {
 	// Check the table descriptor.
 	desc := &sqlbase.Descriptor{}
 	tableDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(counter))
-	ts, err := kvDB.GetProtoTs(context.TODO(), tableDescKey, desc)
+	ts, err := kvDB.GetProtoTs(context.Background(), tableDescKey, desc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor again.
-	ts, err = kvDB.GetProtoTs(context.TODO(), tableDescKey, desc)
+	ts, err = kvDB.GetProtoTs(context.Background(), tableDescKey, desc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 			}
 		}
 	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sql := `
 CREATE DATABASE test;
@@ -224,7 +224,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 func TestTxnCanUseNewNameAfterRename(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sql := `
 CREATE DATABASE test;
@@ -288,7 +288,7 @@ SELECT * FROM test.t2
 func TestSeriesOfRenames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sql := `
 CREATE DATABASE test;
@@ -366,7 +366,7 @@ func TestRenameDuringDrainingName(t *testing.T) {
 		}}
 
 	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sql := `
 CREATE DATABASE test;
