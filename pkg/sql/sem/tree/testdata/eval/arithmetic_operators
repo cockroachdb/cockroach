@@ -89,9 +89,29 @@ eval
 2
 
 eval
+1 // 0
+----
+division by zero
+
+eval
 -4.5 // 1.2
 ----
 -3
+
+eval
+1.0 // 0.0
+----
+division by zero
+
+eval
+1.0 // 0
+----
+division by zero
+
+eval
+1 // 0.0
+----
+division by zero
 
 eval
 3.1 % 2.0
@@ -117,6 +137,11 @@ eval
 5 % 3
 ----
 2
+
+eval
+1 % 0
+----
+division by zero
 
 eval
 1 + NULL
@@ -149,9 +174,34 @@ eval
 1
 
 eval
+1.0 % 0.0
+----
+division by zero
+
+eval
+1.0 % 0
+----
+division by zero
+
+eval
+1 % 0.0
+----
+division by zero
+
+eval
 -4.5:::float // 1.2:::float
 ----
 -3.0
+
+eval
+1:::float // 0:::float
+----
+division by zero
+
+eval
+1:::float % 0:::float
+----
+division by zero
 
 eval
 2 ^ 3
