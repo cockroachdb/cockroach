@@ -838,6 +838,15 @@ func MakeGeography(shape geopb.Shape, srid geopb.SRID) *T {
 	}}
 }
 
+// GeoMetadata returns the GeoMetadata of the type object if it exists.
+// This should only exist on Geometry and Geography types.
+func (t *T) GeoMetadata() (*GeoMetadata, error) {
+	if t.InternalType.GeoMetadata == nil {
+		return nil, errors.Newf("GeoMetadata does not exist on type")
+	}
+	return t.InternalType.GeoMetadata, nil
+}
+
 var (
 	// DefaultIntervalTypeMetadata returns a duration field that is unset,
 	// using INTERVAL or INTERVAL ( iconst32 ) syntax instead of INTERVAL
