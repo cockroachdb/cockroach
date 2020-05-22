@@ -1549,7 +1549,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.TestingKnobs,
 		connManager,
 		pgL,
-		s.cfg.SocketFile,
+		s.cfg.SQLSocketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err

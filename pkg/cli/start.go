@@ -820,8 +820,8 @@ If problems persist, please see %s.`
 			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
 
 			fmt.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
-			if len(serverCfg.SocketFile) != 0 {
-				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
+			if len(serverCfg.SQLSocketFile) != 0 {
+				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SQLSocketFile)
 			}
 			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
 			if serverCfg.SQLAuditLogDirName.IsSet() {
