@@ -126,9 +126,12 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker CancelChecker,
-	decimalScratch decimalOverloadScratch,
+	overloadHelper overloadHelper,
 	datumAlloc *sqlbase.DatumAlloc,
 ) {
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := overloadHelper
 	switch col.CanonicalTypeFamily() {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
