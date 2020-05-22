@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -46,7 +46,7 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
 
-// Dummy import to pull in "apd" package.
+// Dummy import to pull in "apd/v2" package.
 var _ apd.Decimal
 
 // Dummy import to pull in "time" package.

@@ -23,11 +23,13 @@ if [ "$require_justification" = 1 ]; then
 fi
 
 tc_start_block "Ensure dependencies are up-to-date"
-run build/builder.sh go install ./vendor/github.com/golang/dep/cmd/dep ./pkg/cmd/github-pull-request-make
+run build/builder.sh go install ./pkg/cmd/github-pull-request-make
 run build/builder.sh env GITHUB_API_TOKEN="$GITHUB_API_TOKEN" BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=checkdeps github-pull-request-make
 tc_end_block "Ensure dependencies are up-to-date"
 
 tc_start_block "Ensure generated code is up-to-date"
+# Run go mod tidy and ensure nothing changes.
+run build/builder.sh go mod tidy
 # Buffer noisy output and only print it on failure.
 run build/builder.sh make generate buildshort &> artifacts/generate.log || (cat artifacts/generate.log && false)
 rm artifacts/generate.log
