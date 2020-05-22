@@ -513,9 +513,8 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 				return nil, errors.New("fake external uri storage")
 			},
 		},
-		Config: &cfg,
-		// SQLConfig:                &cfg.SQLConfig,
-		// BothConfig:               &cfg.BothConfig,
+		SQLConfig:                &cfg.SQLConfig,
+		BothConfig:               &cfg.BothConfig,
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
@@ -570,7 +569,7 @@ func (ts *TestServer) StartTenant() (addr string, _ error) {
 
 	if err := s.start(ctx,
 		args.stopper,
-		args.Config.TestingKnobs,
+		args.TestingKnobs,
 		connManager,
 		pgL,
 		socketFile,
