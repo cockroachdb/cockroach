@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -19,15 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
-
-var usingExpressionNotSupportedErr = unimplemented.NewWithIssuef(
-	47706, "ALTER COLUMN TYPE USING EXPRESSION is not supported")
 
 var colInIndexNotSupportedErr = unimplemented.NewWithIssuef(
 	47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
@@ -162,13 +161,6 @@ func alterColumnTypeGeneral(
 					"`SET enable_experimental_alter_column_type_general = true`"),
 			pgcode.FeatureNotSupported)
 	}
-	// Disallow ALTER COLUMN ... TYPE ... USING EXPRESSION.
-	// TODO(richardjcai): Need to handle "inverse" expression
-	// during state after column swap but the old column has not been dropped.
-	// Can allow the user to provide an inverse expression.
-	if Using != nil {
-		return usingExpressionNotSupportedErr
-	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
 	if len(col.OwnsSequenceIds) != 0 {
@@ -231,14 +223,75 @@ func alterColumnTypeGeneral(
 
 	shadowColName := sqlbase.GenerateUniqueConstraintName(col.Name, nameExists)
 
-	// The default computed expression is casting the column to the new type.
-	newComputedExpr := tree.CastExpr{
-		Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
-		Type:       toType,
-		SyntaxMode: tree.CastShort,
+	var newColComputeExpr *string
+	// oldCol still needs to have values written to it in case nodes read it from
+	// it with a TableDescriptor version from before the swap.
+	// To achieve this, we make oldCol a computed column of newCol using
+	// inverseExpr.
+	// If a USING EXPRESSION was provided, we cannot generally invert
+	// the expression to insert into the old column and thus will force an
+	// error using the computed expression. Any inserts into the new column
+	// will fail until the old column is dropped.
+	var inverseExpr string
+	if Using != nil {
+		// Ensure the USING EXPRESSION returns the new type.
+		// Replace column references with typed dummies to allow typechecking.
+		typedExpr, _, err := schemaexpr.ReplaceColumnVarsAndSanitizeExpr(
+			ctx,
+			&tableDesc.TableDescriptor,
+			Using,
+			toType,
+			"ALTER COLUMN TYPE USING EXPRESSION",
+			&params.p.semaCtx,
+			true, /* allowImpure */
+		)
+
+		if err != nil {
+			return err
+		}
+		s := tree.Serialize(typedExpr)
+		newColComputeExpr = &s
+
+		insertedValToString := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
+			Type:       types.String,
+			SyntaxMode: tree.CastShort,
+		}
+		insertedVal := tree.Serialize(&insertedValToString)
+		// Set the computed expression to use crdb_internal.force_error() to
+		// prevent writes into the column. Whenever the new column is written to
+		// crdb_internal.force_error() will cause the write to error out.
+		// This prevents writes to the column undergoing ALTER COLUMN TYPE
+		// until the original column is dropped.
+		// This is safe to do so because after the column swap, the old column
+		// should become "read-only".
+		// The computed expression uses the old column to trigger the error
+		// by using the string 'tried to insert <value> into <column name>'.
+		errMsg := fmt.Sprintf(
+			"column %s is undergoing the ALTER COLUMN TYPE USING EXPRESSION "+
+				"schema change, inserts are not supported until the schema change is "+
+				"finalized, tried to insert , %s,  into %s",
+			col.Name, insertedVal, col.Name)
+		inverseExpr = fmt.Sprintf(
+			"crdb_internal.force_error('%s', '%s')",
+			pgcode.SQLStatementNotYetComplete, errMsg)
+	} else {
+		// The default computed expression is casting the column to the new type.
+		newComputedExpr := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
+			Type:       toType,
+			SyntaxMode: tree.CastShort,
+		}
+		s := tree.Serialize(&newComputedExpr)
+		newColComputeExpr = &s
+
+		oldColComputeExpr := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
+			Type:       col.DatumType(),
+			SyntaxMode: tree.CastShort,
+		}
+		inverseExpr = tree.Serialize(&oldColComputeExpr)
 	}
-	s := tree.Serialize(&newComputedExpr)
-	newColComputeExpr := &s
 
 	// Create the default expression for the new column.
 	hasDefault := col.HasDefault()
@@ -299,6 +352,7 @@ func alterColumnTypeGeneral(
 	swapArgs := &sqlbase.ComputedColumnSwap{
 		OldColumnId: col.ID,
 		NewColumnId: newCol.ID,
+		InverseExpr: inverseExpr,
 	}
 
 	tableDesc.AddComputedColumnSwapMutation(swapArgs)

@@ -55,15 +55,15 @@ statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE error (a INT, INDEX (a) WHERE false - true)
 
 # Don't allow references to other tables.
-statement error no data source matches prefix: t1
+statement error pq: cannot reference columns from other tables
 CREATE TABLE error (a INT, INDEX (a) WHERE t1.a > 0)
 
 # Don't allow references to unknown tables.
-statement error no data source matches prefix: unknown
+statement error pq: cannot reference columns from other tables
 CREATE TABLE error (a INT, INDEX (a) WHERE unknown.a > 0)
 
 # Don't allow reference to unknown databases.
-statement error no data source matches prefix: unknown.error
+statement error pq: no data source matches prefix: unknown.error
 CREATE TABLE error (a INT, INDEX (a) WHERE unknown.error.a > 9)
 
 #### Validate CREATE TABLE ... UNIQUE INDEX predicate.
@@ -88,7 +88,7 @@ statement error expected index predicate expression to have type bool, but '1' h
 CREATE INDEX error ON t5 (a) WHERE 1
 
 # Don't allow references to other tables in predicates.
-statement error no data source matches prefix: t4
+statement error pq: cannot reference columns from other tables
 CREATE INDEX error ON t5 (a) WHERE t4.a = 1
 
 #### Dequalify table references.

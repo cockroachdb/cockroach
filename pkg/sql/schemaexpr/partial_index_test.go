@@ -77,10 +77,12 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 
 		// Dequalify column names.
 		{"bar.a", true, "a"},
-		{"foo.bar.a", true, "a"},
 		{"bar.b = 0", true, "b = 0"},
-		{"foo.bar.b = 0", true, "b = 0"},
-		{"bar.a AND foo.bar.b = 0", true, "a AND (b = 0)"},
+
+		//  Cannot use reference columns with database or schema names.
+		{"foo.bar.a", false, ""},
+		{"foo.bar.b = 0", false, ""},
+		{"bar.a AND foo.bar.b = 0", false, ""},
 	}
 
 	for _, d := range testData {

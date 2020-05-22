@@ -99,18 +99,12 @@ func (b *CheckConstraintBuilder) Build(
 		return nil, err
 	}
 
-	// Replace the column variables with dummyColumns so that they can be
-	// type-checked.
-	replacedExpr, colIDs, err := replaceVars(&b.desc.TableDescriptor, expr)
-	if err != nil {
-		return nil, err
-	}
-
 	// Verify that the expression results in a boolean and does not use
 	// invalid functions.
-	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+	typedExpr, colIDs, err := ReplaceColumnVarsAndSanitizeExpr(
 		b.ctx,
-		replacedExpr,
+		&b.desc.TableDescriptor,
+		expr,
 		types.Bool,
 		"CHECK",
 		b.semaCtx,
