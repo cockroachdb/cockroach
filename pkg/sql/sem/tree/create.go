@@ -116,6 +116,7 @@ type CreateIndex struct {
 	Storing      NameList
 	Interleave   *InterleaveDef
 	PartitionBy  *PartitionBy
+	Predicate    Expr
 	Concurrently bool
 }
 
@@ -165,6 +166,10 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.Predicate != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.Predicate)
 	}
 }
 
@@ -643,6 +648,7 @@ type IndexTableDef struct {
 	Interleave  *InterleaveDef
 	Inverted    bool
 	PartitionBy *PartitionBy
+	Predicate   Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -671,6 +677,10 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.Predicate != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.Predicate)
 	}
 }
 
@@ -730,6 +740,10 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.Predicate != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.Predicate)
 	}
 }
 

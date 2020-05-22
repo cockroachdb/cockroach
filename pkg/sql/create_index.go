@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -196,6 +197,11 @@ func MakeIndexDescriptor(
 			}
 		}
 		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
+	}
+
+	// TODO(mgartner): remove this once partial indexes are fully supported.
+	if n.Predicate != nil && !params.SessionData().PartialIndexes {
+		return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
