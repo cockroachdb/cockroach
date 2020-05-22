@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // DequalifyColumnRefs returns an expression with database nad table names
@@ -234,6 +235,18 @@ func replaceVars(
 			return true, expr, nil
 		}
 
+		// Check if a column is being referenced from another table. It may be the
+		// case where the column being referenced has the same name as a column
+		// in our current table.
+		if c.TableName != nil {
+			name := c.TableName.ToTableName()
+			if name.Table() != desc.Name {
+				return false, nil,
+					errors.Newf("cannot reference columns from other tables\n"+
+						"tried to reference column from table %s", name.String())
+			}
+		}
+
 		col, dropped, err := desc.FindColumnByName(c.ColumnName)
 		if err != nil || dropped {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
@@ -246,4 +259,39 @@ func replaceVars(
 	})
 
 	return newExpr, colIDs, err
+}
+
+// ReplaceColumnVarsAndSanitizeExpr takes an expr and replaces all column
+// variables with a dummyColumn of the column's type and then sanitizes
+// the expression.
+func ReplaceColumnVarsAndSanitizeExpr(
+	ctx context.Context,
+	desc *sqlbase.TableDescriptor,
+	expr tree.Expr,
+	types *types.T,
+	op string,
+	semaCtx *tree.SemaContext,
+	allowImpure bool,
+) (tree.TypedExpr, sqlbase.TableColSet, error) {
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	replacedExpr, colIDs, err := replaceVars(desc, expr)
+	if err != nil {
+		return nil, colIDs, err
+	}
+
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		ctx,
+		replacedExpr,
+		types,
+		op,
+		semaCtx,
+		allowImpure,
+	)
+
+	if err != nil {
+		return nil, colIDs, err
+	}
+
+	return typedExpr, colIDs, nil
 }

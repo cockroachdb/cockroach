@@ -316,9 +316,6 @@ ALTER TABLE t10 ALTER COLUMN y TYPE STRING
 statement ok
 CREATE TABLE t11 (x INT)
 
-statement error pq: unimplemented: ALTER COLUMN TYPE USING EXPRESSION is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue/47706
-ALTER TABLE t11 ALTER COLUMN x TYPE STRING USING CAST(x AS STRING)
-
 # Ensure ALTER COLUMN TYPE is disallowed if the column has a constraint.
 statement ok
 CREATE TABLE t12 (x INT check (x > 0))
@@ -442,3 +439,57 @@ CREATE TABLE t22 (x INT);
 
 statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
 ALTER TABLE t22 ALTER COLUMN x SET NOT NULL, ALTER COLUMN x TYPE STRING;
+
+# Ensure ALTER COLUMN TYPE USING EXPRESSION works.
+statement ok
+CREATE TABLE t23 (x INT);
+INSERT INTO t23 VALUES (-3), (-2), (-1), (0), (1), (2), (3)
+
+statement ok
+ALTER TABLE t23 ALTER COLUMN x TYPE BOOL USING (x > 0)
+
+query B
+SELECT x FROM t23 ORDER BY x
+----
+false
+false
+false
+false
+true
+true
+true
+
+# Ensure ALTER COLUMN TYPE rolls back if  is not applicable to value in the column.
+statement ok
+CREATE TABLE t24 (x STRING);
+INSERT INTO t24 VALUES ('1'), ('hello');
+
+statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+ALTER TABLE t24  ALTER COLUMN x TYPE INT USING (x::int + 5)
+
+query TT colnames
+show create table t24
+----
+table_name  create_statement
+t24         CREATE TABLE t24 (
+            x STRING NULL,
+            FAMILY "primary" (x, rowid)
+)
+
+# Ensure USING EXPRESSION cannot reference other columns.
+statement ok
+CREATE TABLE t25 (x INT);
+CREATE TABLE t26 (x INT);
+INSERT INTO t26 VALUES (1);
+
+statement error pq: cannot reference columns from other tables
+ALTER TABLE t25 ALTER COLUMN x TYPE BOOL USING (t26.x > 0);
+
+# Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform
+# to the new type of the column.
+statement ok
+CREATE TABLE t27 (x INT);
+INSERT INTO t27 VALUES (1);
+
+statement error pq: expected ALTER COLUMN TYPE USING EXPRESSION expression to have type string, but '\(x\)' has type int
+ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (x);

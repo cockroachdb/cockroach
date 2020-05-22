@@ -56,19 +56,13 @@ func NewIndexPredicateValidator(
 //     functions.
 //
 func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
-	// Replace the column variables with dummyColumns so that they can be
-	// type-checked.
-	replacedExpr, _, err := replaceVars(&v.desc.TableDescriptor, expr)
-	if err != nil {
-		return nil, err
-	}
-
 	// Check that the type of the expression is a types.Bool and that there are
 	// no variable expressions (besides dummyColumnItems) and no impure
 	// functions.
-	_, err = sqlbase.SanitizeVarFreeExpr(
+	_, _, err := ReplaceColumnVarsAndSanitizeExpr(
 		v.ctx,
-		replacedExpr,
+		&v.desc.TableDescriptor,
+		expr,
 		types.Bool,
 		"index predicate",
 		v.semaCtx,
