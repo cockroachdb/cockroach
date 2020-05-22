@@ -25,6 +25,7 @@ import "sql/sqlbase/locking.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
+import "sql/opt/invertedexpr/span_expression.proto";
 import "gogoproto/gogo.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
@@ -527,6 +528,29 @@ message InvertedJoinerSpec {
   // allow the false positives to be eliminated by evaluating the exact
   // expression on the rows output by this join.
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+}
+
+// InvertedFiltererSpec is the specification of a processor that does filtering
+// on a table by evaluating an invertedexpr.SpanExpressionProto on an inverted
+// index of the table. The input consists of the inverted index rows from
+// SpanExpressionProto.SpansToRead.
+//
+// Example:
+// Table columns: | a | b | c | d |
+// where a, b are the primary key and d is the column with the inverted index.
+// Inverted index columns: | d' | a | b |
+// where d' is derived from d. For instance, if d is an array, d' will be
+// elements of the array.
+//
+// Internal columns are | a | b |.
+message InvertedFiltererSpec {
+  // The expression to evaluate.
+  optional opt.invertedexpr.SpanExpressionProto inverted_expr = 1 [(gogoproto.nullable) = false];
+
+  // Optional expression involving the primary key columns, where
+  // @1 refers to the first PK column, and so on. The inverted index
+  // column is not part of this numbering.
+  optional Expression on_expr = 2 [(gogoproto.nullable) = false];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core
