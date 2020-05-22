@@ -126,6 +126,7 @@ func (p *planner) LookupObject(
 	return objDesc != nil, objDesc, err
 }
 
+// CommonLookupFlags is part of the resolver.SchemaResolver interface.
 func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{
 		Required:    required,
@@ -232,6 +233,7 @@ func (p *planner) maybeHydrateTypesInDescriptor(
 	return nil
 }
 
+// ObjectLookupFlags is part of the resolver.SchemaResolver interface.
 func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLookupFlags {
 	return tree.ObjectLookupFlags{
 		CommonLookupFlags: p.CommonLookupFlags(required),
