@@ -3783,15 +3783,18 @@ func (d *DEnum) Size() uintptr {
 
 // MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
 // and the input physical representation.
-func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) *DEnum {
+func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (*DEnum, error) {
 	// Take a pointer into the enum metadata rather than holding on
 	// to a pointer to the input bytes.
-	idx := typ.EnumGetIdxOfPhysical(rep)
+	idx, err := typ.EnumGetIdxOfPhysical(rep)
+	if err != nil {
+		return nil, err
+	}
 	return &DEnum{
 		EnumTyp:     typ,
 		PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[idx],
 		LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[idx],
-	}
+	}, nil
 }
 
 // MakeDEnumFromLogicalRepresentation creates a DEnum of the input type
@@ -3844,54 +3847,82 @@ func (d *DEnum) Compare(ctx *EvalContext, other Datum) int {
 
 // Prev implements the Datum interface.
 func (d *DEnum) Prev(ctx *EvalContext) (Datum, bool) {
-	idx := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
+	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
+	if err != nil {
+		panic(err)
+	}
 	if idx == 0 {
 		return nil, false
 	}
-	return MakeDEnumFromPhysicalRepresentation(
-		d.EnumTyp,
-		d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations[idx-1],
-	), true
+	enumData := d.EnumTyp.TypeMeta.EnumData
+	return &DEnum{
+		EnumTyp:     d.EnumTyp,
+		PhysicalRep: enumData.PhysicalRepresentations[idx-1],
+		LogicalRep:  enumData.LogicalRepresentations[idx-1],
+	}, true
 }
 
 // Next implements the Datum interface.
 func (d *DEnum) Next(ctx *EvalContext) (Datum, bool) {
-	idx := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
-	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
-	if idx == len(physReps)-1 {
+	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
+	if err != nil {
+		panic(err)
+	}
+	enumData := d.EnumTyp.TypeMeta.EnumData
+	if idx == len(enumData.PhysicalRepresentations)-1 {
 		return nil, false
 	}
-	return MakeDEnumFromPhysicalRepresentation(d.EnumTyp, physReps[idx+1]), true
+	return &DEnum{
+		EnumTyp:     d.EnumTyp,
+		PhysicalRep: enumData.PhysicalRepresentations[idx+1],
+		LogicalRep:  enumData.LogicalRepresentations[idx+1],
+	}, true
 }
 
 // Max implements the Datum interface.
 func (d *DEnum) Max(ctx *EvalContext) (Datum, bool) {
-	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
-	if len(physReps) == 0 {
+	enumData := d.EnumTyp.TypeMeta.EnumData
+	if len(enumData.PhysicalRepresentations) == 0 {
 		return nil, false
 	}
-	idx := len(physReps) - 1
-	return MakeDEnumFromPhysicalRepresentation(d.EnumTyp, physReps[idx]), true
+	idx := len(enumData.PhysicalRepresentations) - 1
+	return &DEnum{
+		EnumTyp:     d.EnumTyp,
+		PhysicalRep: enumData.PhysicalRepresentations[idx],
+		LogicalRep:  enumData.LogicalRepresentations[idx],
+	}, true
 }
 
 // Min implements the Datum interface.
 func (d *DEnum) Min(ctx *EvalContext) (Datum, bool) {
-	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
-	if len(physReps) == 0 {
+	enumData := d.EnumTyp.TypeMeta.EnumData
+	if len(enumData.PhysicalRepresentations) == 0 {
 		return nil, false
 	}
-	return MakeDEnumFromPhysicalRepresentation(d.EnumTyp, physReps[0]), true
+	return &DEnum{
+		EnumTyp:     d.EnumTyp,
+		PhysicalRep: enumData.PhysicalRepresentations[0],
+		LogicalRep:  enumData.LogicalRepresentations[0],
+	}, true
 }
 
 // IsMax implements the Datum interface.
 func (d *DEnum) IsMax(_ *EvalContext) bool {
 	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
-	return d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep) == len(physReps)-1
+	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
+	if err != nil {
+		panic(err)
+	}
+	return idx == len(physReps)-1
 }
 
 // IsMin implements the Datum interface.
 func (d *DEnum) IsMin(_ *EvalContext) bool {
-	return d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep) == 0
+	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
+	if err != nil {
+		panic(err)
+	}
+	return idx == 0
 }
 
 // AmbiguousFormat implements the Datum interface.
