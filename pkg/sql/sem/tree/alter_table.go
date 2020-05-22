@@ -219,6 +219,7 @@ type AlterTableAlterColumnType struct {
 	Column    Name
 	ToType    ResolvableTypeReference
 	Using     Expr
+	Inverse   Expr
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.

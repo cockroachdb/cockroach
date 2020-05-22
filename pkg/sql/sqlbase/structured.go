@@ -3272,13 +3272,33 @@ func (desc *MutableTableDescriptor) performComputedColumnSwap(swap *ComputedColu
 	// oldCol still needs to have values written to it in case nodes read it from
 	// it with a TableDescriptor version from before the swap.
 	// To achieve this, we make oldCol a computed column of newCol.
-	oldColComputeExpr := tree.CastExpr{
-		Expr:       &tree.ColumnItem{ColumnName: tree.Name(oldCol.Name)},
-		Type:       oldCol.DatumType(),
-		SyntaxMode: tree.CastShort,
+	// If a USING EXPRESSION was provided, we cannot generally invert
+	// the EXPRESSION to insert into the old column and thus will force an
+	// error using the computed expression. Any inserts into the new column
+	// will fail until the old column is dropped.
+	if swap.UsingExpr {
+		errMsg := fmt.Sprintf(
+			"Column %s is undergoing the ALTER COLUMN TYPE USING EXPRESSION "+
+				"schema change. Inserts are not supported until the schema change is "+
+				"finalized", oldCol.Name)
+		insertedValToString := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(oldCol.Name)},
+			Type:       types.String,
+			SyntaxMode: tree.CastShort,
+		}
+		insertedVal := tree.Serialize(&insertedValToString)
+		s := fmt.Sprintf(
+			"crdb_internal.force_error('03000', concat('%s', '\nTried to insert ', %s, ' into %s'))", errMsg, insertedVal, oldCol.Name)
+		oldCol.ComputeExpr = &s
+	} else {
+		oldColComputeExpr := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(oldCol.Name)},
+			Type:       oldCol.DatumType(),
+			SyntaxMode: tree.CastShort,
+		}
+		s := tree.Serialize(&oldColComputeExpr)
+		oldCol.ComputeExpr = &s
 	}
-	s := tree.Serialize(&oldColComputeExpr)
-	oldCol.ComputeExpr = &s
 
 	// Generate unique name for old column.
 	nameExists := func(name string) bool {

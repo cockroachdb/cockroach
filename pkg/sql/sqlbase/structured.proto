@@ -523,6 +523,8 @@ message ComputedColumnSwap {
   option (gogoproto.equal) = true;
   optional uint32 new_column_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
   optional uint32 old_column_id = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  // Used to indicate that ALTER COLUMN TYPE ... USING EXPR was used.
+  optional bool using_expr = 3 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that

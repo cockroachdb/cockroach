@@ -26,9 +26,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var usingExpressionNotSupportedErr = unimplemented.NewWithIssuef(
-	47706, "ALTER COLUMN TYPE USING EXPRESSION is not supported")
-
 var colInIndexNotSupportedErr = unimplemented.NewWithIssuef(
 	47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
 		"data is currently not supported for columns that are part of an index")
@@ -162,13 +159,6 @@ func alterColumnTypeGeneral(
 					"`SET enable_experimental_alter_column_type_general = true`"),
 			pgcode.FeatureNotSupported)
 	}
-	// Disallow ALTER COLUMN ... TYPE ... USING EXPRESSION.
-	// TODO(richardjcai): Need to handle "inverse" expression
-	// during state after column swap but the old column has not been dropped.
-	// Can allow the user to provide an inverse expression.
-	if Using != nil {
-		return usingExpressionNotSupportedErr
-	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
 	if len(col.OwnsSequenceIds) != 0 {
@@ -231,14 +221,20 @@ func alterColumnTypeGeneral(
 
 	shadowColName := sqlbase.GenerateUniqueConstraintName(col.Name, nameExists)
 
-	// The default computed expression is casting the column to the new type.
-	newComputedExpr := tree.CastExpr{
-		Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
-		Type:       toType,
-		SyntaxMode: tree.CastShort,
+	var newColComputeExpr *string
+	if Using != nil {
+		s := tree.Serialize(Using)
+		newColComputeExpr = &s
+	} else {
+		// The default computed expression is casting the column to the new type.
+		newComputedExpr := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
+			Type:       toType,
+			SyntaxMode: tree.CastShort,
+		}
+		s := tree.Serialize(&newComputedExpr)
+		newColComputeExpr = &s
 	}
-	s := tree.Serialize(&newComputedExpr)
-	newColComputeExpr := &s
 
 	// Create the default expression for the new column.
 	hasDefault := col.HasDefault()
@@ -299,6 +295,7 @@ func alterColumnTypeGeneral(
 	swapArgs := &sqlbase.ComputedColumnSwap{
 		OldColumnId: col.ID,
 		NewColumnId: newCol.ID,
+		UsingExpr:   Using != nil,
 	}
 
 	tableDesc.AddComputedColumnSwapMutation(swapArgs)
