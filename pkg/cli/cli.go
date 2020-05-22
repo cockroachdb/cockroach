@@ -21,10 +21,11 @@ import (
 
 	_ "github.com/benesch/cgosymbolizer" // calls runtime.SetCgoTraceback on import
 	"github.com/cockroachdb/cockroach/pkg/build"
+	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl" // foo
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"       // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest" // registers workloads
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
