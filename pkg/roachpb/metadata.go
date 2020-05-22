@@ -310,11 +310,60 @@ func (r RangeDescriptor) String() string {
 	return buf.String()
 }
 
+// SafeMessage implements the SafeMessager interface.
+//
+// This method should be kept in sync with the String() method, except for the Start/End keys, which are customer data.
+func (r RangeDescriptor) SafeMessage() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "r%d:", r.RangeID)
+	if !r.IsInitialized() {
+		buf.WriteString("{-}")
+	}
+	buf.WriteString(" [")
+
+	if allReplicas := r.Replicas().All(); len(allReplicas) > 0 {
+		for i, rep := range allReplicas {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(rep.SafeMessage())
+		}
+	} else {
+		buf.WriteString("<no replicas>")
+	}
+	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.Generation)
+	if s := r.GetStickyBit(); !s.IsEmpty() {
+		fmt.Fprintf(&buf, ", sticky=%s", s)
+	}
+	buf.WriteString("]")
+
+	return buf.String()
+}
+
 func (r ReplicationTarget) String() string {
 	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
 }
 
 func (r ReplicaDescriptor) String() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "(n%d,s%d):", r.NodeID, r.StoreID)
+	if r.ReplicaID == 0 {
+		buf.WriteString("?")
+	} else {
+		fmt.Fprintf(&buf, "%d", r.ReplicaID)
+	}
+	if typ := r.GetType(); typ != VOTER_FULL {
+		buf.WriteString(typ.String())
+	}
+	return buf.String()
+}
+
+// SafeMessage implements the SafeMessager interface.
+//
+// This method should be kept in sync with the String() method, while there is no customer data in the ReplicaDescriptor
+// today, we maintain this method for future compatibility, since its used from other places
+// such as RangeDescriptor#SafeMessage()
+func (r ReplicaDescriptor) SafeMessage() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "(n%d,s%d):", r.NodeID, r.StoreID)
 	if r.ReplicaID == 0 {
