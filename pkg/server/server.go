@@ -535,7 +535,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			externalStorageFromURI: externalStorageFromURI,
 			isMeta1Leaseholder:     node.stores.IsMeta1Leaseholder,
 		},
-		Config:                   &cfg, // NB: s.cfg has a populated AmbientContext.
+		// NB: s.cfg has a populated AmbientContext.
+		Config: &cfg,
+		// TODO(tbg): use this once we get rid of Config
+		// SQLConfig:                &cfg.SQLConfig,
+		// BothConfig:               &cfg.BothConfig,
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  runtimeSampler,

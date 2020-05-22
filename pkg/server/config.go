@@ -108,13 +108,39 @@ func (mo *MaxOffsetType) String() string {
 	return time.Duration(*mo).String()
 }
 
-// Config holds parameters needed to setup a (KV and SQL) server.
+// BothConfig holds parameters that are needed to setup either a KV or a SQL
+// server.
+//
+// TODO(tbg): you might almost call it... base.Config. Too many names flying
+// around here. Consider moving the whole Config shebang into `base` and
+// unifying.
+type BothConfig struct {
+	Settings *cluster.Settings
+
+	// AmbientCtx is used to annotate contexts used inside the server.
+	AmbientCtx log.AmbientContext
+
+	// Maximum allowed clock offset for the cluster. If observed clock
+	// offsets exceed this limit, inconsistency may result, and servers
+	// will panic to minimize the likelihood of inconsistent data.
+	// Increasing this value will increase time to recovery after
+	// failures, and increase the frequency and impact of
+	// ReadWithinUncertaintyIntervalError.
+	MaxOffset MaxOffsetType
+
+	// TestingKnobs is used for internal test controls only.
+	TestingKnobs base.TestingKnobs
+}
+
+// Config holds parameters needed to setup a (combined KV and SQL) server.
+//
+// TODO(tbg): this should end up being just SQLConfig union KVConfig union BothConfig.
 type Config struct {
 	// Embed the base context.
 	*base.Config
+	BothConfig
 	base.RaftConfig
 	SQLConfig
-	Settings *cluster.Settings
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
@@ -174,14 +200,6 @@ type Config struct {
 	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
 	Linearizable bool
 
-	// Maximum allowed clock offset for the cluster. If observed clock
-	// offsets exceed this limit, inconsistency may result, and servers
-	// will panic to minimize the likelihood of inconsistent data.
-	// Increasing this value will increase time to recovery after
-	// failures, and increase the frequency and impact of
-	// ReadWithinUncertaintyIntervalError.
-	MaxOffset MaxOffsetType
-
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner. Set to 0 to disable.
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
@@ -198,12 +216,6 @@ type Config struct {
 	// stores.
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
-
-	// TestingKnobs is used for internal test controls only.
-	TestingKnobs base.TestingKnobs
-
-	// AmbientCtx is used to annotate contexts used inside the server.
-	AmbientCtx log.AmbientContext
 
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
@@ -351,15 +363,20 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		SQLQueryCacheSize:     defaultSQLQueryCacheSize,
 		SQLTempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
+		SQLLeaseManagerConfig: base.NewLeaseManagerConfig(),
+	}
+
+	bothCfg := BothConfig{
+		MaxOffset: MaxOffsetType(base.DefaultMaxClockOffset),
+		Settings:  st,
 	}
 
 	cfg := Config{
 		Config:                         new(base.Config),
+		BothConfig:                     bothCfg,
 		SQLConfig:                      sqlCfg,
 		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
 		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
-		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
-		Settings:                       st,
 		CacheSize:                      DefaultCacheSize,
 		ScanInterval:                   defaultScanInterval,
 		ScanMinIdleTime:                defaultScanMinIdleTime,
@@ -375,7 +392,6 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	cfg.Config.InitDefaults()
 	cfg.RaftConfig.SetDefaults()
-	cfg.SQLLeaseManagerConfig = base.NewLeaseManagerConfig()
 
 	return cfg
 }
