@@ -46,6 +46,19 @@ func IsLocalRequestContext(ctx context.Context) bool {
 	return ctx.Value(localRequestKey{}) != nil
 }
 
+// IsTimeout returns true if err's Cause is a gRPC timeout, or the request
+// was canceled by a context timeout.
+func IsTimeout(err error) bool {
+	err = errors.Cause(err)
+	if err == context.DeadlineExceeded {
+		return true
+	}
+	if s, ok := status.FromError(err); ok {
+		return s.Code() == codes.DeadlineExceeded
+	}
+	return false
+}
+
 // IsClosedConnection returns true if err's Cause is an error produced by gRPC
 // on closed connections.
 func IsClosedConnection(err error) bool {
