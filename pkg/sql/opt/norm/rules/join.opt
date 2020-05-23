@@ -341,7 +341,7 @@
 (LeftJoin | LeftJoinApply | FullJoin
     $left:*
     $right:*
-    $on:^[] & (JoinFiltersMatchAllLeftRows $left $right $on)
+    $on:* & (JoinFiltersMatchAllLeftRows $left $right $on)
     $private:*
 )
 =>
@@ -355,7 +355,7 @@
 (FullJoin
     $left:*
     $right:*
-    $on:^[] & (JoinFiltersMatchAllLeftRows $right $left $on)
+    $on:* & (JoinFiltersMatchAllLeftRows $right $left $on)
     $private:*
 )
 =>
