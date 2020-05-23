@@ -10,6 +10,28 @@ exec-ddl
 CREATE TABLE mn (m INT PRIMARY KEY, n INT, UNIQUE (n))
 ----
 
+exec-ddl
+CREATE TABLE fk (
+    k INT PRIMARY KEY,
+    v INT,
+    r1 INT NOT NULL REFERENCES xysd(x),
+    r2 INT REFERENCES xysd(x)
+)
+----
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+----
+
+exec-ddl
+CREATE TABLE ref (
+    r1 INT NOT NULL,
+    r2 INT NOT NULL,
+    r3 INT NOT NULL,
+    FOREIGN KEY (r1, r2, r3) REFERENCES abc(a, b, c)
+)
+----
+
 # Inner-join.
 build
 SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
@@ -20,6 +42,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── prune: (2-4,6,7)
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-zero)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -121,6 +144,7 @@ project
       │    │    ├── prune: (2-4)
       │    │    ├── reject-nulls: (6,9)
       │    │    ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-zero)
       │    │    ├── scan xysd
       │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    │    ├── key: (1)
@@ -131,6 +155,7 @@ project
       │    │    │    ├── columns: v:6(int!null) n:9(int!null)
       │    │    │    ├── fd: (6)==(9), (9)==(6)
       │    │    │    ├── interesting orderings: (+9)
+      │    │    │    ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: v:6(int!null)
       │    │    │    │    └── prune: (6)
@@ -240,6 +265,7 @@ left-join (hash)
  ├── prune: (2-4,6,7)
  ├── reject-nulls: (5-7)
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-zero)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -284,6 +310,7 @@ project
       │    │    ├── prune: (2-4)
       │    │    ├── reject-nulls: (5)
       │    │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-zero)
       │    │    ├── scan xysd
       │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    │    ├── key: (1)
@@ -350,6 +377,7 @@ full-join (hash)
  ├── prune: (2-4,6,7)
  ├── reject-nulls: (1-7)
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -598,6 +626,7 @@ select
                 ├── key: ()
                 ├── fd: ()-->(5,6)
                 ├── prune: (6)
+                ├── multiplicity: left-rows(one-or-zero), right-rows(one-or-zero)
                 ├── project
                 │    ├── columns: x:5(int)
                 │    ├── outer: (1)
@@ -644,6 +673,7 @@ project
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(5)
+      ├── multiplicity: left-rows(one-or-zero), right-rows(one-or-zero)
       ├── select
       │    ├── columns: count_rows:5(int!null)
       │    ├── cardinality: [0 - 1]
@@ -792,6 +822,7 @@ left-join (cross)
  ├── cardinality: [3 - 6]
  ├── prune: (1-3)
  ├── reject-nulls: (2,3)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── values
  │    ├── columns: column1:1(int!null)
  │    ├── cardinality: [3 - 3]
@@ -868,6 +899,7 @@ full-join (cross)
  ├── cardinality: [2 - 4]
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
@@ -896,6 +928,7 @@ full-join (hash)
  ├── cardinality: [1 - 2]
  ├── prune: (2,4)
  ├── reject-nulls: (1-4)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── values
  │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── cardinality: [1 - 1]
@@ -928,6 +961,7 @@ full-join (cross)
  ├── cardinality: [2 - 4]
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
@@ -959,6 +993,7 @@ full-join (cross)
  ├── prune: (1-5)
  ├── reject-nulls: (1-5)
  ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -986,6 +1021,7 @@ full-join (cross)
  ├── prune: (1-8)
  ├── reject-nulls: (1-8)
  ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── limit
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── cardinality: [0 - 1]
@@ -1030,6 +1066,7 @@ left-join (cross)
  ├── prune: (1-4,8)
  ├── reject-nulls: (5,8)
  ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -1070,6 +1107,7 @@ left-join (cross)
  ├── prune: (1-4,8)
  ├── reject-nulls: (5,8)
  ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -1206,6 +1244,7 @@ full-join (cross)
  ├── prune: (1-4,8)
  ├── reject-nulls: (1-5,8)
  ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -1246,6 +1285,7 @@ full-join (cross)
  ├── prune: (4-8)
  ├── reject-nulls: (1,4-8)
  ├── interesting orderings: (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── group-by
  │    ├── columns: u:1(int) sum:4(decimal!null)
  │    ├── grouping columns: u:1(int)
@@ -1475,6 +1515,7 @@ full-join (cross)
  ├── cardinality: [2 - 2]
  ├── prune: (1)
  ├── reject-nulls: (1)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [1 - 1]
@@ -1519,6 +1560,7 @@ full-join (hash)
  ├── lax-key: (1,4)
  ├── fd: (1)~~>(2), (4)~~>(5), (1,4)~~>(2,5)
  ├── reject-nulls: (1,2,4,5)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── select
  │    ├── columns: t1.x:1(int) t1.y:2(int!null)
  │    ├── key: (1)
@@ -1563,3 +1605,518 @@ full-join (hash)
       └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
            ├── variable: t1.x:1 [type=int]
            └── variable: t2.x:4 [type=int]
+
+# InnerJoin with an equality between one key column and one non-key column.
+# Neither input is guaranteed a match for every row. Rows from uv will not be
+# duplicated because the x column is unique. Rows from xysd may be duplicated
+# because the v column is not unique.
+norm
+SELECT * FROM xysd INNER JOIN uv ON x=v
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(6), (6)==(1)
+ ├── prune: (2-5)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-zero)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan uv
+ │    ├── columns: u:5(int) v:6(int!null)
+ │    └── prune: (5,6)
+ └── filters
+      └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: v:6 [type=int]
+
+# InnerJoin with a not-null foreign key equality. Since the foreign key is
+# not-null, rows from the fk table are guaranteed a match. Since x is a key
+# column, rows from the fk table will not be duplicated.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r1
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (3)==(5), (5)==(3)
+ ├── prune: (1,2,4,6-8)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters
+      └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           ├── variable: x:5 [type=int]
+           └── variable: r1:3 [type=int]
+
+# InnerJoin with a nullable foreign key equality condition.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r2
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (4)==(5), (5)==(4)
+ ├── prune: (1-3,6-8)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters
+      └── eq [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
+           ├── variable: x:5 [type=int]
+           └── variable: r2:4 [type=int]
+
+# Cross join. Rows from fk are guaranteed matches because the not-null foreign
+# key implies that xysd has at least one row whenever fk does.
+norm
+SELECT * FROM fk CROSS JOIN xysd
+----
+inner-join (cross)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6)
+ ├── prune: (1-8)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters (true)
+
+# LeftJoin case with a not-null foreign key. Since fk rows are all guaranteed
+# exactly one match, xysd will not be null-extended and the LeftJoin can
+# therefore be simplified.
+norm
+SELECT * FROM fk LEFT JOIN xysd ON x = r1
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (3)==(5), (5)==(3)
+ ├── prune: (1,2,4,6-8)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters
+      └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           ├── variable: x:5 [type=int]
+           └── variable: r1:3 [type=int]
+
+
+# LeftJoin case with a nullable foreign key. The LeftJoin cannot be simplified
+# because a nullable foreign key is not guaranteed matches.
+norm
+SELECT * FROM fk LEFT JOIN xysd ON x = r2
+----
+left-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int) y:6(int) s:7(string) d:8(decimal)
+ ├── key: (1)
+ ├── fd: (1)-->(2-8), (5)-->(6-8), (7,8)~~>(5,6)
+ ├── prune: (1-3,6-8)
+ ├── reject-nulls: (5-8)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters
+      └── eq [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
+           ├── variable: x:5 [type=int]
+           └── variable: r2:4 [type=int]
+
+# FullJoin with equality between key columns. The FullJoin adds back any rows
+# that are filtered out, and the equality between key columns ensures that no
+# rows are duplicated. Note that both sides may be null-extended.
+norm
+SELECT * FROM mn FULL JOIN xysd ON m = x
+----
+full-join (hash)
+ ├── columns: m:1(int) n:2(int) x:3(int) y:4(int) s:5(string) d:6(decimal)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (2)~~>(1), (3)-->(4-6), (5,6)~~>(3,4)
+ ├── prune: (2,4-6)
+ ├── reject-nulls: (1-6)
+ ├── interesting orderings: (+1) (+2,+1) (+3) (-5,+6,+3)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── scan mn
+ │    ├── columns: m:1(int!null) n:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (2)~~>(1)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1) (+2,+1)
+ ├── scan xysd
+ │    ├── columns: x:3(int!null) y:4(int) s:5(string) d:6(decimal!null)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(4-6), (5,6)~~>(3,4)
+ │    ├── prune: (3-6)
+ │    └── interesting orderings: (+3) (-5,+6,+3)
+ └── filters
+      └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+           ├── variable: m:1 [type=int]
+           └── variable: x:3 [type=int]
+
+# Self-join case. Since the condition is equating a key column with itself,
+# every row from both inputs is guaranteed to be included in the join output
+# exactly once.
+norm
+SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ ├── key: (5)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(6-8), (7,8)~~>(5,6), (1)==(5), (5)==(1)
+ ├── prune: (2-4,6-8)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan a
+ │    ├── columns: a.x:5(int!null) a.y:6(int) a.s:7(string) a.d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: xysd.x:1 [type=int]
+           └── variable: a.x:5 [type=int]
+
+# Case with a values cross join in the input of an InnerJoin.
+norm
+SELECT * FROM
+fk INNER JOIN (SELECT * FROM xysd CROSS JOIN (VALUES (1), (2))) ON r1 = x
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null) column1:9(int!null)
+ ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (3)==(5), (5)==(3)
+ ├── prune: (1,2,4,6-9)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── inner-join (cross)
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null) column1:9(int!null)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-9)
+ │    ├── interesting orderings: (+5) (-7,+8,+5)
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan xysd
+ │    │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    │    ├── prune: (5-8)
+ │    │    └── interesting orderings: (+5) (-7,+8,+5)
+ │    ├── values
+ │    │    ├── columns: column1:9(int!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── prune: (9)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 2 [type=int]
+ │    └── filters (true)
+ └── filters
+      └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           ├── variable: r1:3 [type=int]
+           └── variable: x:5 [type=int]
+
+# Case with a self-join in the input of an InnerJoin.
+norm
+SELECT * FROM fk
+INNER JOIN (SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x) f(x) ON r1 = f.x
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null) x:9(int!null) y:10(int) s:11(string) d:12(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (9)-->(10-12), (11,12)~~>(9,10), (5)==(3,9), (9)==(3,5), (3)==(5,9)
+ ├── prune: (1,2,4,6-8,10-12)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5) (+9) (-11,+12,+9)
+ ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── inner-join (hash)
+ │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null) a.x:9(int!null) a.y:10(int) a.s:11(string) a.d:12(decimal!null)
+ │    ├── key: (9)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (9)-->(10-12), (11,12)~~>(9,10), (5)==(9), (9)==(5)
+ │    ├── prune: (6-8,10-12)
+ │    ├── interesting orderings: (+5) (-7,+8,+5) (+9) (-11,+12,+9)
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    ├── scan xysd
+ │    │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    │    ├── prune: (5-8)
+ │    │    └── interesting orderings: (+5) (-7,+8,+5)
+ │    ├── scan a
+ │    │    ├── columns: a.x:9(int!null) a.y:10(int) a.s:11(string) a.d:12(decimal!null)
+ │    │    ├── key: (9)
+ │    │    ├── fd: (9)-->(10-12), (11,12)~~>(9,10)
+ │    │    ├── prune: (9-12)
+ │    │    └── interesting orderings: (+9) (-11,+12,+9)
+ │    └── filters
+ │         └── eq [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+ │              ├── variable: xysd.x:5 [type=int]
+ │              └── variable: a.x:9 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           ├── variable: r1:3 [type=int]
+           └── variable: xysd.x:5 [type=int]
+
+# Case with an equality with a synthesized column.
+norm
+SELECT * FROM mn LEFT JOIN xysd ON y = (n * 2)
+----
+project
+ ├── columns: m:1(int!null) n:2(int) x:3(int) y:4(int) s:5(string) d:6(decimal)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (2)~~>(1), (3)-->(4-6), (5,6)~~>(3,4)
+ ├── prune: (1-6)
+ ├── reject-nulls: (3-6)
+ ├── interesting orderings: (+1) (+2,+1) (+3) (-5,+6,+3)
+ └── left-join (hash)
+      ├── columns: m:1(int!null) n:2(int) x:3(int) y:4(int) s:5(string) d:6(decimal) column7:7(int)
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (2)~~>(1), (2)-->(7), (3)-->(4-6), (5,6)~~>(3,4)
+      ├── prune: (1-3,5,6)
+      ├── reject-nulls: (3-6)
+      ├── interesting orderings: (+1) (+2,+1) (+3) (-5,+6,+3)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      ├── project
+      │    ├── columns: column7:7(int) m:1(int!null) n:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (2)~~>(1), (2)-->(7)
+      │    ├── prune: (1,2,7)
+      │    ├── interesting orderings: (+1) (+2,+1)
+      │    ├── scan mn
+      │    │    ├── columns: m:1(int!null) n:2(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2), (2)~~>(1)
+      │    │    ├── prune: (1,2)
+      │    │    └── interesting orderings: (+1) (+2,+1)
+      │    └── projections
+      │         └── mult [as=column7:7, type=int, outer=(2)]
+      │              ├── variable: n:2 [type=int]
+      │              └── const: 2 [type=int]
+      ├── scan xysd
+      │    ├── columns: x:3(int!null) y:4(int) s:5(string) d:6(decimal!null)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4-6), (5,6)~~>(3,4)
+      │    ├── prune: (3-6)
+      │    └── interesting orderings: (+3) (-5,+6,+3)
+      └── filters
+           └── eq [type=bool, outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
+                ├── variable: column7:7 [type=int]
+                └── variable: y:4 [type=int]
+
+# Case with columns that don't come from base tables.
+norm
+SELECT * FROM (SELECT * FROM uv UNION (SELECT * FROM uv)) f(v1, v2) INNER JOIN xysd ON v2 = x
+----
+inner-join (hash)
+ ├── columns: v1:7(int) v2:8(int!null) x:9(int!null) y:10(int) s:11(string) d:12(decimal!null)
+ ├── key: (7,9)
+ ├── fd: (9)-->(10-12), (11,12)~~>(9,10), (8)==(9), (9)==(8)
+ ├── prune: (10-12)
+ ├── interesting orderings: (+9) (-11,+12,+9)
+ ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+ ├── union
+ │    ├── columns: u:7(int) v:8(int!null)
+ │    ├── left columns: uv.u:1(int) uv.v:2(int)
+ │    ├── right columns: uv.u:4(int) uv.v:5(int)
+ │    ├── key: (7,8)
+ │    ├── scan uv
+ │    │    ├── columns: uv.u:1(int) uv.v:2(int!null)
+ │    │    └── prune: (1,2)
+ │    └── scan uv
+ │         ├── columns: uv.u:4(int) uv.v:5(int!null)
+ │         └── prune: (4,5)
+ ├── scan xysd
+ │    ├── columns: x:9(int!null) y:10(int) s:11(string) d:12(decimal!null)
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(10-12), (11,12)~~>(9,10)
+ │    ├── prune: (9-12)
+ │    └── interesting orderings: (+9) (-11,+12,+9)
+ └── filters
+      └── eq [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+           ├── variable: v:8 [type=int]
+           └── variable: x:9 [type=int]
+
+# Self-join case with different columns.
+norm
+SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.y
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int!null) s:7(string) d:8(decimal!null)
+ ├── key: (5)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(6-8), (7,8)~~>(5,6), (1)==(6), (6)==(1)
+ ├── prune: (2-5,7,8)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-zero)
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan a
+ │    ├── columns: a.x:5(int!null) a.y:6(int) a.s:7(string) a.d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters
+      └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── variable: xysd.x:1 [type=int]
+           └── variable: a.y:6 [type=int]
+
+# Case with an equality between a not-null foreign key and an unreferenced
+# column.
+norm
+SELECT * FROM fk INNER JOIN xysd ON r1 = y
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int!null) s:7(string) d:8(decimal!null)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (3)==(6), (6)==(3)
+ ├── prune: (1,2,4,5,7,8)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
+ └── filters
+      └── eq [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+           ├── variable: r1:3 [type=int]
+           └── variable: y:6 [type=int]
+
+# Case where left table has a foreign key that references a table that isn't
+# from the right input.
+norm
+SELECT * FROM fk INNER JOIN mn ON k = m
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) m:5(int!null) n:6(int)
+ ├── key: (5)
+ ├── fd: (1)-->(2-4), (5)-->(6), (6)~~>(5), (1)==(5), (5)==(1)
+ ├── prune: (2-4,6)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (+6,+5)
+ ├── multiplicity: left-rows(one-or-zero), right-rows(one-or-zero)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
+ ├── scan mn
+ │    ├── columns: m:5(int!null) n:6(int)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6), (6)~~>(5)
+ │    ├── prune: (5,6)
+ │    └── interesting orderings: (+5) (+6,+5)
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: k:1 [type=int]
+           └── variable: m:5 [type=int]
+
+# Case with a multi-column foreign key.
+norm
+SELECT * FROM ref INNER JOIN abc ON (r1, r2, r3) = (a, b, c)
+----
+inner-join (hash)
+ ├── columns: r1:1(int!null) r2:2(int!null) r3:3(int!null) a:5(int!null) b:6(int!null) c:7(int!null)
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+ ├── interesting orderings: (+1,+2,+3) (+5,+6,+7)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── scan ref
+ │    ├── columns: r1:1(int!null) r2:2(int!null) r3:3(int!null)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2,+3)
+ ├── scan abc
+ │    ├── columns: a:5(int!null) b:6(int!null) c:7(int!null)
+ │    ├── key: (5-7)
+ │    ├── prune: (5-7)
+ │    └── interesting orderings: (+5,+6,+7)
+ └── filters
+      ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    ├── variable: r1:1 [type=int]
+      │    └── variable: a:5 [type=int]
+      ├── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      │    ├── variable: r2:2 [type=int]
+      │    └── variable: b:6 [type=int]
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: r3:3 [type=int]
+           └── variable: c:7 [type=int]

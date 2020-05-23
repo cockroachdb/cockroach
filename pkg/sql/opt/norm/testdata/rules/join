@@ -1900,6 +1900,29 @@ inner-join (hash)
  └── filters
       └── d.z:3 = c.z:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
+# Cross join case. The presence of a not-null foreign key implies that there
+# will be at least one right row when there is at least one left row, so left
+# rows will always be matched at least once.
+norm expect=SimplifyLeftJoinWithFilters
+SELECT *
+FROM d
+LEFT OUTER JOIN c
+ON True
+----
+inner-join (cross)
+ ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── key: (1,4)
+ ├── fd: (1)-->(2,3), (4)-->(5,6)
+ ├── scan d
+ │    ├── columns: d.x:1!null d.y:2!null d.z:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: c.x:4!null c.y:5!null c.z:6!null
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5,6)
+ └── filters (true)
+
 # Can't simplify: joins on non-foreign keys.
 norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT *
