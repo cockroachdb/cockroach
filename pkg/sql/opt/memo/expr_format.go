@@ -686,6 +686,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if r.JoinSize > 1 {
 			tp.Childf("join-size: %d", r.JoinSize)
 		}
+		switch e.Op() {
+		case opt.InnerJoinOp, opt.LeftJoinOp, opt.FullJoinOp:
+			if (r.Available & props.MultiplicityProps) != 0 {
+				tp.Childf("multiplicity: %s", r.MultiplicityProps.String())
+			}
+		}
 		if withUses := relational.Shared.Rule.WithUses; len(withUses) > 0 {
 			n := tp.Childf("cte-uses")
 			ids := make([]opt.WithID, 0, len(withUses))

@@ -21,6 +21,7 @@ inner-join (hash)
  ├── fd: (1)==(5), (5)==(1)
  ├── prune: (2,3,6,7)
  ├── interesting orderings: (+1,+2)
+ ├── multiplicity: left-rows(can-dup, can-discard), right-rows(can-dup, can-discard)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]

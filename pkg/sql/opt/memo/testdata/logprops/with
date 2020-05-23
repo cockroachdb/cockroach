@@ -193,6 +193,7 @@ project
  ├── fd: ()-->(7)
  ├── prune: (7)
  ├── inner-join (cross)
+ │    ├── multiplicity: left-rows(can-dup, can-discard), right-rows(can-dup, can-discard)
  │    ├── scan t40930
  │    ├── scan tab_10102
  │    └── filters (true)

@@ -31,16 +31,16 @@ const (
 	// field is populated.
 	InterestingOrderings
 
-	// UnfilteredCols is set when the Relational.Rule.UnfilteredCols field is
-	// populated.
-	UnfilteredCols
-
 	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
 	// is populated.
 	HasHoistableSubquery
 
 	// JoinSize is set when the Relational.Rule.JoinSize field is populated.
 	JoinSize
+
+	// MultiplicityProps is set when the Relational.Rule.MultiplicityProps
+	// field is populated.
+	MultiplicityProps
 
 	// WithUses is set when the Shared.Rule.WithUses field is populated.
 	WithUses
@@ -331,21 +331,20 @@ type Relational struct {
 		// been set.
 		InterestingOrderings opt.OrderingSet
 
-		// UnfilteredCols is the set of output columns that have values for every
-		// row in their owner table. Rows may be duplicated, but no rows can be
-		// missing. For example, an unconstrained, unlimited Scan operator can
-		// add all of its output columns to this property, but a Select operator
-		// cannot add any columns, as it may have filtered rows.
-		//
-		// UnfilteredCols is lazily populated by the SimplifyLeftJoinWithFilters
-		// and SimplifyRightJoinWithFilters rules. It is only valid once the
-		// Rule.Available.UnfilteredCols bit has been set.
-		UnfilteredCols opt.ColSet
-
 		// JoinSize is the number of relations being *inner* joined underneath
 		// this node. It is used to only reorder joins via AssociateJoin up to
 		// a certain limit.
 		JoinSize int
+
+		// MultiplicityProps is a struct that describes how rows from the input of
+		// a join are affected by the join. Rows from the left or right input are
+		// described as being duplicated, filtered or null-extended.
+		// MultiplicityProps also contains a ColSet that contains columns from base
+		// tables that are guaranteed not to have been filtered.
+		//
+		// MultiplicityProps is lazily populated by multiplicity_builder.go. It is
+		// only valid once the Rule.Available.MultiplicityProps bit has been set.
+		MultiplicityProps Multiplicity
 	}
 }
 

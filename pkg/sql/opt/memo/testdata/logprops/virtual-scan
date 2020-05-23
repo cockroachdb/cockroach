@@ -13,6 +13,7 @@ project
       ├── prune: (4-6,9-12)
       ├── reject-nulls: (6-12)
       ├── interesting orderings: (+6)
+      ├── multiplicity: left-rows(can-dup, all-preserved), right-rows(can-dup, can-discard)
       ├── project
       │    ├── columns: catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string)
       │    ├── fd: ()-->(3)

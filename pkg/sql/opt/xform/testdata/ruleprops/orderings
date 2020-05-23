@@ -269,6 +269,7 @@ inner-join (hash)
  ├── fd: (3)~~>(1,2), (5,6)~~>(7), (1)==(5), (5)==(1)
  ├── prune: (2,3,6,7)
  ├── interesting orderings: (+1,+2) (+3) (+7) (+5,+6)
+ ├── multiplicity: left-rows(can-dup, can-discard), right-rows(can-dup, can-discard)
  ├── scan abc
  │    ├── columns: a:1 b:2 c:3
  │    ├── lax-key: (1-3)

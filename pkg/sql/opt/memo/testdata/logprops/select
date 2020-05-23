@@ -42,6 +42,7 @@ select
  │    ├── fd: (1)-->(2), (3)-->(4,5)
  │    ├── prune: (1-5)
  │    ├── interesting orderings: (+1) (+3)
+ │    ├── multiplicity: left-rows(can-dup, can-discard), right-rows(can-dup, can-discard)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── key: (1)
