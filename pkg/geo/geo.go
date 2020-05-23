@@ -21,8 +21,8 @@ import (
 	"github.com/twpayne/go-geom/encoding/ewkb"
 )
 
-// EWKBEncodingFormat is the encoding format for EWKB.
-var EWKBEncodingFormat = binary.LittleEndian
+// DefaultEWKBEncodingFormat is the default encoding format for EWKB.
+var DefaultEWKBEncodingFormat = binary.LittleEndian
 
 //
 // Geospatial Type
@@ -461,7 +461,7 @@ func S2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 
 // spatialObjectFromGeom creates a geopb.SpatialObject from a geom.T.
 func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
-	ret, err := ewkb.Marshal(t, EWKBEncodingFormat)
+	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}

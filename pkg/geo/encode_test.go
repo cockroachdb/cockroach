@@ -70,7 +70,7 @@ func TestEWKBToWKB(t *testing.T) {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToWKB(so.EWKB)
+			encoded, err := EWKBToWKB(so.EWKB, DefaultEWKBEncodingFormat)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})

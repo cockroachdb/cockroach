@@ -554,7 +554,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB())
+				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
@@ -563,13 +563,51 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geography.EWKB())
+				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the WKB representation of a given Geography."},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"xdr_or_ndr", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				text := string(tree.MustBeDString(args[1]))
+
+				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.StringToByteOrder(text))
+				return tree.NewDBytes(tree.DBytes(wkb)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the WKB representation of a given Geometry. " +
+					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"xdr_or_ndr", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				text := string(tree.MustBeDString(args[1]))
+
+				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.StringToByteOrder(text))
+				return tree.NewDBytes(tree.DBytes(wkb)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the WKB representation of a given Geography. " +
+					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_asewkb": makeBuiltin(
 		defProps(),
