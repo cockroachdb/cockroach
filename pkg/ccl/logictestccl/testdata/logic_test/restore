@@ -6,6 +6,7 @@ RESTORE foo FROM "bar"
 
 # Check that user defined types are disallowed in backups.
 statement ok
+SET experimental_enable_enums=true;
 CREATE TYPE t AS ENUM ('hello');
 CREATE TABLE tt (x t)
 
