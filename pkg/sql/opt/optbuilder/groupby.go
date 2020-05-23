@@ -836,6 +836,10 @@ func isGenerator(def *tree.FunctionDefinition) bool {
 	return def.Class == tree.GeneratorClass
 }
 
+func isSQLFn(def *tree.FunctionDefinition) bool {
+	return def.Class == tree.SQLClass
+}
+
 func newGroupingError(name *tree.Name) error {
 	return pgerror.Newf(pgcode.Grouping,
 		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",

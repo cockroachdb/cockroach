@@ -1,0 +1,243 @@
+# LogicTest: local
+
+# ------------------------------------------------------------------------------
+# AddGeometryColumn tests
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE my_spatial_table (k INT PRIMARY KEY)
+
+query T
+SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
+----
+test.public.my_spatial_table.geom1 SRID:4326 TYPE:POINT DIMS:2
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
+----
+·                           distributed    false                                                                               ·                    ·
+·                           vectorized     false                                                                               ·                    ·
+root                        ·              ·                                                                                   (addgeometrycolumn)  ·
+ ├── values                 ·              ·                                                                                   (addgeometrycolumn)  ·
+ │                          size           1 column, 1 row                                                                     ·                    ·
+ │                          row 0, expr 0  addgeometrycolumn('test', 'public', 'my_spatial_table', 'geom1', 4326, 'POINT', 2)  ·                    ·
+ └── subquery               ·              ·                                                                                   ·                    ·
+      │                     id             @S1                                                                                 ·                    ·
+      │                     original sql   ALTER TABLE test.public.my_spatial_table ADD COLUMN geom1 GEOMETRY(POINT,4326)      ·                    ·
+      │                     exec mode      all rows                                                                            ·                    ·
+      └── buffer node       ·              ·                                                                                   ()                   ·
+           │                label          buffer 1                                                                            ·                    ·
+           └── alter table  ·              ·                                                                                   ()                   ·
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1)
+)
+
+query T
+SELECT AddGeometryColumn ('public','my_spatial_table','geom2',4326,'POLYGON',2)
+----
+public.my_spatial_table.geom2 SRID:4326 TYPE:POLYGON DIMS:2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POLYGON,4326) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1, geom2)
+)
+
+query T
+SELECT AddGeometryColumn ('my_spatial_table','geom3',4326,'MULTIPOLYGON',2)
+----
+my_spatial_table.geom3 SRID:4326 TYPE:MULTIPOLYGON DIMS:2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POLYGON,4326) NULL,
+   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1, geom2, geom3)
+)
+
+query T
+SELECT AddGeometryColumn ('test','public','my_spatial_table','geom4',4326,'LINESTRING',2,true)
+----
+test.public.my_spatial_table.geom4 SRID:4326 TYPE:LINESTRING DIMS:2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POLYGON,4326) NULL,
+   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+   geom4 GEOMETRY(LINESTRING,4326) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1, geom2, geom3, geom4)
+)
+
+query T
+SELECT AddGeometryColumn ('public','my_spatial_table','geom5',4326,'MULTIPOINT',2,true)
+----
+public.my_spatial_table.geom5 SRID:4326 TYPE:MULTIPOINT DIMS:2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POLYGON,4326) NULL,
+   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+   geom4 GEOMETRY(LINESTRING,4326) NULL,
+   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5)
+)
+
+query T
+SELECT AddGeometryColumn ('my_spatial_table','geom6',4326,'MULTILINESTRING',2,true)
+----
+my_spatial_table.geom6 SRID:4326 TYPE:MULTILINESTRING DIMS:2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POLYGON,4326) NULL,
+   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+   geom4 GEOMETRY(LINESTRING,4326) NULL,
+   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+   geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6)
+)
+
+query error relation "missing_table" does not exist
+SELECT AddGeometryColumn ('missing_table','geom',4326,'POINT',2)
+
+query error column "geom6" of relation "my_spatial_table" already exists
+SELECT AddGeometryColumn ('my_spatial_table','geom6',4326,'POINT',2)
+
+query error unimplemented: useTypmod=false is currently not supported with AddGeometryColumn
+SELECT AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',2,false)
+
+query error only dimension=2 is currently supported
+SELECT AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',3)
+
+query error unimplemented: non-constant argument passed to addgeometrycolumn
+SELECT AddGeometryColumn ('my_spatial_table','geom'||k::string,4326,'POINT',2) FROM my_spatial_table
+
+query error at or near "fakeshape": syntax error
+SELECT AddGeometryColumn ('my_spatial_table','geom7',4326,'FAKESHAPE',2)
+
+statement ok
+CREATE TABLE other_table (k INT PRIMARY KEY); INSERT INTO other_table VALUES (1), (2)
+
+# It's ok to select other columns and multiple rows. Each geom column only gets
+# added once.
+query ITT
+SELECT
+  k,
+  AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',2),
+  AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
+FROM other_table
+----
+1  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
+2  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT
+  k,
+  AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',2),
+  AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
+FROM other_table
+----
+·                           distributed   false                                                               ·                                          ·
+·                           vectorized    true                                                                ·                                          ·
+root                        ·             ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
+ ├── render                 ·             ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
+ │    │                     render 0      k                                                                   ·                                          ·
+ │    │                     render 1      addgeometrycolumn('my_spatial_table', 'geom7', 4326, 'POINT', 2)    ·                                          ·
+ │    │                     render 2      addgeometrycolumn('my_spatial_table', 'geom8', 4326, 'POINT', 2)    ·                                          ·
+ │    └── scan              ·             ·                                                                   (k)                                        ·
+ │                          table         other_table@primary                                                 ·                                          ·
+ │                          spans         FULL SCAN                                                           ·                                          ·
+ ├── subquery               ·             ·                                                                   ·                                          ·
+ │    │                     id            @S1                                                                 ·                                          ·
+ │    │                     original sql  ALTER TABLE my_spatial_table ADD COLUMN geom7 GEOMETRY(POINT,4326)  ·                                          ·
+ │    │                     exec mode     all rows                                                            ·                                          ·
+ │    └── buffer node       ·             ·                                                                   ()                                         ·
+ │         │                label         buffer 1                                                            ·                                          ·
+ │         └── alter table  ·             ·                                                                   ()                                         ·
+ └── subquery               ·             ·                                                                   ·                                          ·
+      │                     id            @S2                                                                 ·                                          ·
+      │                     original sql  ALTER TABLE my_spatial_table ADD COLUMN geom8 GEOMETRY(POINT,4326)  ·                                          ·
+      │                     exec mode     all rows                                                            ·                                          ·
+      └── buffer node       ·             ·                                                                   ()                                         ·
+           │                label         buffer 2                                                            ·                                          ·
+           └── alter table  ·             ·                                                                   ()                                         ·
+
+# TODO(rytaft): Figure out why goem7 didn't get added even though the ALTER
+# TABLE statement is included in the EXPLAIN plan above.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POLYGON,4326) NULL,
+   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+   geom4 GEOMETRY(LINESTRING,4326) NULL,
+   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+   geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+   geom8 GEOMETRY(POINT,4326) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6, geom8)
+)
+
+# In a WHERE clause.
+query I
+SELECT * FROM other_table WHERE AddGeometryColumn ('my_spatial_table','geom9',4326,'GEOMETRY',2) IS NOT NULL
+----
+1
+2
+
+# In a subquery.
+query T
+SELECT (SELECT AddGeometryColumn ('my_spatial_table','geom10',0,'GEOMETRYCOLLECTION',2))
+----
+my_spatial_table.geom10 SRID:0 TYPE:GEOMETRYCOLLECTION DIMS:2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POLYGON,4326) NULL,
+   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+   geom4 GEOMETRY(LINESTRING,4326) NULL,
+   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+   geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+   geom8 GEOMETRY(POINT,4326) NULL,
+   geom9 GEOMETRY(GEOMETRY,4326) NULL,
+   geom10 GEOMETRY(GEOMETRYCOLLECTION) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6, geom8, geom9, geom10)
+)
