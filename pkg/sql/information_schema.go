@@ -19,8 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1367,12 +1368,12 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				addRow func(...tree.Datum) error) (bool, error) {
 				// This index is on the TABLE_NAME column.
 				name := tree.MustBeDString(constraint)
-				desc, err := ResolveExistingTableObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)),
-					tree.ObjectLookupFlags{}, ResolveAnyDescType)
+				desc, err := resolver.ResolveExistingTableObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)),
+					tree.ObjectLookupFlags{}, resolver.ResolveAnyDescType)
 				if err != nil || desc == nil {
 					return false, err
 				}
-				schemaName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, desc.GetParentSchemaID())
+				schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, desc.GetParentSchemaID())
 				if err != nil {
 					return false, err
 				}
@@ -1502,7 +1503,7 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []*sqlbase.DatabaseDescriptor
 	if dbContext == nil {
-		allDbDescs, err := p.Tables().getAllDatabaseDescriptors(ctx, p.txn)
+		allDbDescs, err := p.Tables().GetAllDatabaseDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -1510,7 +1511,7 @@ func forEachDatabaseDesc(
 	} else {
 		// We can't just use dbContext here because we need to fetch the descriptor
 		// with privileges from kv.
-		fetchedDbDesc, err := getDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []sqlbase.ID{dbContext.ID})
+		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []sqlbase.ID{dbContext.ID})
 		if err != nil {
 			return err
 		}
@@ -1626,15 +1627,15 @@ func getSchemaNames(
 	ctx context.Context, p *planner, dbContext *DatabaseDescriptor,
 ) (map[sqlbase.ID]string, error) {
 	if dbContext != nil {
-		return p.Tables().getSchemasForDatabase(ctx, p.txn, dbContext.ID)
+		return p.Tables().GetSchemasForDatabase(ctx, p.txn, dbContext.ID)
 	}
 	ret := make(map[sqlbase.ID]string)
-	dbs, err := p.Tables().getAllDatabaseDescriptors(ctx, p.txn)
+	dbs, err := p.Tables().GetAllDatabaseDescriptors(ctx, p.txn)
 	if err != nil {
 		return nil, err
 	}
 	for _, db := range dbs {
-		schemas, err := p.Tables().getSchemasForDatabase(ctx, p.txn, db.ID)
+		schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, db.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -1658,7 +1659,7 @@ func forEachTableDescWithTableLookupInternal(
 	allowAdding bool,
 	fn func(*DatabaseDescriptor, string, *TableDescriptor, tableLookupFn) error,
 ) error {
-	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+	descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}

@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -963,7 +963,7 @@ type oneAtATimeSchemaResolver struct {
 }
 
 func (r oneAtATimeSchemaResolver) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error) {
-	return r.p.Tables().databaseCache.getDatabaseDescByID(r.ctx, r.p.txn, id)
+	return r.p.Tables().DatabaseCache().GetDatabaseDescByID(r.ctx, r.p.txn, id)
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id sqlbase.ID) (*TableDescriptor, error) {
@@ -1039,12 +1039,12 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 						return false, nil
 					}
 					h := makeOidHasher()
-					resolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					scName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, table.Desc.GetParentSchemaID())
+					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
+					scName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, table.Desc.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
-					if err := populateFromTable(ctx, p, h, db, scName, table.Desc.TableDesc(), resolver,
+					if err := populateFromTable(ctx, p, h, db, scName, table.Desc.TableDesc(), scResolver,
 						addRow); err != nil {
 						return false, err
 					}
@@ -1438,7 +1438,7 @@ CREATE TABLE pg_catalog.pg_enum (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+		descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -2743,7 +2743,7 @@ CREATE TABLE pg_catalog.pg_type (
 				}
 
 				// Now generate rows for user defined types in this database.
-				descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+				descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
 				if err != nil {
 					return err
 				}

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -93,38 +94,6 @@ func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 		return errors.Errorf("descriptor exists = %v", exists)
 	}
 	return nil
-}
-
-// Set the GC TTL to 0 for the given table ID. One must make sure to disable
-// strict GC TTL enforcement when using this.
-func addImmediateGCZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (zonepb.ZoneConfig, error) {
-	cfg := zonepb.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0
-	buf, err := protoutil.Marshal(&cfg)
-	if err != nil {
-		return cfg, err
-	}
-	_, err = sqlDB.Exec(`UPSERT INTO system.zones VALUES ($1, $2)`, id, buf)
-	return cfg, err
-}
-
-func disableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) {
-	_, err := db.Exec(`SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false`)
-	require.NoError(t, err)
-	return func() {
-		_, err := db.Exec(`SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
-		require.NoError(t, err)
-	}
-}
-
-func addDefaultZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (zonepb.ZoneConfig, error) {
-	cfg := zonepb.DefaultZoneConfig()
-	buf, err := protoutil.Marshal(&cfg)
-	if err != nil {
-		return cfg, err
-	}
-	_, err = sqlDB.Exec(`UPSERT INTO system.zones VALUES ($1, $2)`, id, buf)
-	return cfg, err
 }
 
 func TestDropDatabase(t *testing.T) {
@@ -281,7 +250,7 @@ CREATE DATABASE t;
 	}
 	dbID := sqlbase.ID(r.ValueInt())
 
-	if cfg, err := addDefaultZoneConfig(sqlDB, dbID); err != nil {
+	if cfg, err := sqltestutils.AddDefaultZoneConfig(sqlDB, dbID); err != nil {
 		t.Fatal(err)
 	} else if err := zoneExists(sqlDB, &cfg, dbID); err != nil {
 		t.Fatal(err)
@@ -312,8 +281,8 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	ctx := context.Background()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -377,7 +346,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
-	if _, err := addDefaultZoneConfig(sqlDB, dbDesc.ID); err != nil {
+	if _, err := sqltestutils.AddDefaultZoneConfig(sqlDB, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -409,7 +378,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	// Push a new zone config for the table with TTL=0 so the data is
 	// deleted immediately.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tbDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -440,10 +409,10 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		})
 	})
 
-	if _, err := addImmediateGCZoneConfig(sqlDB, tb2Desc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tb2Desc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := addImmediateGCZoneConfig(sqlDB, dbDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -542,8 +511,8 @@ func TestDropIndex(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	numRows := 2*chunkSize + 1
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
@@ -598,7 +567,7 @@ func TestDropIndex(t *testing.T) {
 
 	clearIndexAttempt = true
 	// Add a zone config for the table.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -753,7 +722,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	// Add a zone config for the table.
-	cfg, err := addDefaultZoneConfig(sqlDB, tableDesc.ID)
+	cfg, err := sqltestutils.AddDefaultZoneConfig(sqlDB, tableDesc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -825,8 +794,8 @@ func TestDropTableDeleteData(t *testing.T) {
 	ctx := context.Background()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	const numRows = 2*sql.TableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
@@ -883,7 +852,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 	// The closure pushes a zone config reducing the TTL to 0 for descriptor i.
 	pushZoneCfg := func(i int) {
-		if _, err := addImmediateGCZoneConfig(sqlDB, descs[i].ID); err != nil {
+		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descs[i].ID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -983,8 +952,8 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with addImmediateGCZoneConfig.
-	defer disableGCTTLStrictEnforcement(t, sqlDBRaw)()
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDBRaw)()
 
 	const numRows = 100
 	sqlutils.CreateTable(t, sqlDBRaw, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
@@ -1019,7 +988,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	}
 
 	// Set TTL so the data is deleted immediately.
-	if _, err := addImmediateGCZoneConfig(sqlDBRaw, tableDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDBRaw, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1062,7 +1031,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDescInterleaved.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDescInterleaved.ID); err != nil {
 		t.Fatal(err)
 	}
 

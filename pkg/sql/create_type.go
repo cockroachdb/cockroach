@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -82,7 +83,7 @@ func getCreateTypeParams(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.ID, schemaID, name.Type())
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := getDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided)
+		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -91,7 +92,7 @@ func getCreateTypeParams(
 	if err != nil {
 		return nil, 0, err
 	}
-	id, err := GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
+	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
 	if err != nil {
 		return nil, 0, err
 	}

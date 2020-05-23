@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -54,7 +55,7 @@ func (p *planner) ShowFingerprints(
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
 	tableDesc, err := p.ResolveUncachedTableDescriptorEx(
-		ctx, n.Table, true /*required*/, ResolveRequireTableDesc)
+		ctx, n.Table, true /*required*/, resolver.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

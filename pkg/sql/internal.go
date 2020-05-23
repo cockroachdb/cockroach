@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,14 +62,14 @@ type InternalExecutor struct {
 	// the executor will run on copies of this data.
 	sessionData *sessiondata.SessionData
 
-	// The internal executor uses its own TableCollection. A TableCollection
+	// The internal executor uses its own Collection. A Collection
 	// is a schema cache for each transaction and contains data like the schema
 	// modified by a transaction. Occasionally an internal executor is called
 	// within the context of a transaction that has modified the schema, the
 	// internal executor should see the modified schema. This interface allows
-	// the internal executor to modify its TableCollection to match the
-	// TableCollection of the parent executor.
-	tcModifier tableCollectionModifier
+	// the internal executor to modify its Collection to match the
+	// Collection of the parent executor.
+	tcModifier descs.ModifiedCollectionCopier
 }
 
 // MakeInternalExecutor creates an InternalExecutor.

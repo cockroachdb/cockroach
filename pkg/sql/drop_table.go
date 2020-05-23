@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -48,7 +49,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 	td := make(map[sqlbase.ID]toDelete, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
-		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, ResolveRequireTableDesc)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, resolver.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +157,10 @@ func (*dropTableNode) Close(context.Context)        {}
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
-	ctx context.Context, name *tree.TableName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context,
+	name *tree.TableName,
+	required bool,
+	requiredType resolver.ResolveRequiredType,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
@@ -186,7 +190,7 @@ func (p *planner) prepareDropWithTableDesc(
 func (p *planner) canRemoveFKBackreference(
 	ctx context.Context, from string, ref *sqlbase.ForeignKeyConstraint, behavior tree.DropBehavior,
 ) error {
-	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
+	table, err := p.Tables().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 	if err != nil {
 		return err
 	}
@@ -201,7 +205,7 @@ func (p *planner) canRemoveFKBackreference(
 func (p *planner) canRemoveInterleave(
 	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
 ) error {
-	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
+	table, err := p.Tables().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
 	}
@@ -219,7 +223,7 @@ func (p *planner) canRemoveInterleave(
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
-	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
+	table, err := p.Tables().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
 	}
@@ -428,7 +432,7 @@ func (p *planner) removeFKForBackReference(
 	if tableDesc.ID == ref.OriginTableID {
 		originTableDesc = tableDesc
 	} else {
-		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
+		lookup, err := p.Tables().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving origin table ID %d: %v", ref.OriginTableID, err)
 		}
@@ -486,7 +490,7 @@ func (p *planner) removeFKBackReference(
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
 	} else {
-		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		lookup, err := p.Tables().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
 		}
@@ -543,7 +547,7 @@ func (p *planner) removeInterleaveBackReference(
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
 	} else {
-		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
+		lookup, err := p.Tables().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
 		}

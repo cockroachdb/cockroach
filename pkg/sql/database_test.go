@@ -19,32 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func TestMakeDatabaseDesc(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stmt, err := parser.ParseOne("CREATE DATABASE test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	desc := makeDatabaseDesc(stmt.AST.(*tree.CreateDatabase))
-	if desc.Name != "test" {
-		t.Fatalf("expected Name == test, got %s", desc.Name)
-	}
-	// ID is not set yet.
-	if desc.ID != 0 {
-		t.Fatalf("expected ID == 0, got %d", desc.ID)
-	}
-	if len(desc.GetPrivileges().Users) != 2 {
-		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))
-	}
-}
 
 func TestDatabaseAccessors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -53,15 +33,15 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if _, err := getDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
 			return err
 		}
-		if _, err := MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
 			return err
 		}
 
-		databaseCache := newDatabaseCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
-		_, err := databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
+		databaseCache := database.NewCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
+		_, err := databaseCache.GetDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

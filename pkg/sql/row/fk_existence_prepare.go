@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -53,7 +54,7 @@ func MakeFkMetadata(
 	// - we do process the mutatedTable that's given even if it is
 	//   in "adding" state or non-public.
 	//
-	queue.result[mutatedTable.ID] = TableEntry{Desc: mutatedTable, CheckHelper: checkHelper}
+	queue.result[mutatedTable.ID] = catalog.TableEntry{Desc: mutatedTable, CheckHelper: checkHelper}
 	if err := queue.enqueue(ctx, mutatedTable.ID, startUsage); err != nil {
 		return nil, err
 	}

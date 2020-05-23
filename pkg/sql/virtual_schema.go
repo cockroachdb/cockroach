@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -148,7 +149,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	mutDesc, err := MakeTableDesc(
 		ctx,
 		nil, /* txn */
-		nil, /* vt */
+		nil, /* vs */
 		st,
 		create,
 		0, /* parentID */
@@ -272,11 +273,46 @@ type VirtualSchemaHolder struct {
 	orderedNames []string
 }
 
+// GetVirtualSchema makes VirtualSchemaHolder implement schema.VirtualSchemas.
+func (vs *VirtualSchemaHolder) GetVirtualSchema(schemaName string) (catalog.VirtualSchema, bool) {
+	virtualSchema, ok := vs.entries[schemaName]
+	return virtualSchema, ok
+}
+
+var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
+
 type virtualSchemaEntry struct {
+	// TODO(ajwerner): Use a sqlbase.SchemaDescriptor here as part of the
+	// user-defined schema work.
 	desc            *sqlbase.DatabaseDescriptor
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
+}
+
+func (v virtualSchemaEntry) Desc() catalog.ObjectDescriptor {
+	return v.desc
+}
+
+func (v virtualSchemaEntry) NumTables() int {
+	return len(v.defs)
+}
+
+func (v virtualSchemaEntry) VisitTables(f func(object catalog.VirtualObject)) {
+	for _, name := range v.orderedDefNames {
+		f(v.defs[name])
+	}
+}
+
+func (v virtualSchemaEntry) GetObjectByName(name string) (catalog.VirtualObject, error) {
+	if def, ok := v.defs[name]; ok {
+		return &def, nil
+	}
+	if _, ok := v.allTableNames[name]; ok {
+		return nil, unimplemented.Newf(v.desc.Name+"."+name,
+			"virtual schema table not implemented: %s.%s", v.desc.Name, name)
+	}
+	return nil, nil
 }
 
 type virtualDefEntry struct {
@@ -284,6 +320,10 @@ type virtualDefEntry struct {
 	desc                       *sqlbase.TableDescriptor
 	comment                    string
 	validWithNoDatabaseContext bool
+}
+
+func (e virtualDefEntry) Desc() catalog.ObjectDescriptor {
+	return sqlbase.NewImmutableTableDescriptor(*e.desc)
 }
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)

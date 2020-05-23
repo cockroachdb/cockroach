@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -67,13 +69,13 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 // CCL statements to get access to a "planner" is through this PlanHookState
 // that gets passed back due to this inversion of roles.
 type PlanHookState interface {
-	SchemaResolver
+	resolver.SchemaResolver
 	RunParams(ctx context.Context) runParams
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
-	LeaseMgr() *LeaseManager
+	LeaseMgr() *lease.Manager
 	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(
@@ -89,7 +91,7 @@ type PlanHookState interface {
 	ResolveUncachedDatabaseByName(
 		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
 	ResolveMutableTableDescriptor(
-		ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
+		ctx context.Context, tn *TableName, required bool, requiredType resolver.ResolveRequiredType,
 	) (table *MutableTableDescriptor, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []sqlbase.Descriptor, desc *sqlbase.TableDescriptor, displayOptions ShowCreateDisplayOptions,

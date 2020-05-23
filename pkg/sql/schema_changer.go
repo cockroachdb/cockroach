@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -75,7 +76,7 @@ type SchemaChanger struct {
 	droppedDatabaseID sqlbase.ID
 	sqlInstanceID     base.SQLInstanceID
 	db                *kv.DB
-	leaseMgr          *LeaseManager
+	leaseMgr          *lease.Manager
 
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
@@ -99,7 +100,7 @@ func NewSchemaChangerForTesting(
 	mutationID sqlbase.MutationID,
 	sqlInstanceID base.SQLInstanceID,
 	db kv.DB,
-	leaseMgr *LeaseManager,
+	leaseMgr *lease.Manager,
 	jobRegistry *jobs.Registry,
 	execCfg *ExecutorConfig,
 	settings *cluster.Settings,
@@ -321,7 +322,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 			table.ID,
 			func(tbl *sqlbase.MutableTableDescriptor) error {
 				if !tbl.Adding() {
-					return errDidntUpdateDescriptor
+					return lease.ErrDidntUpdateDescriptor
 				}
 				tbl.State = sqlbase.TableDescriptor_PUBLIC
 				return nil
@@ -679,7 +680,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		}
 		if doNothing := runStatus == "" || desc.Dropped(); doNothing {
 			// Return error so that Publish() doesn't increment the version.
-			return errDidntUpdateDescriptor
+			return lease.ErrDidntUpdateDescriptor
 		}
 		return nil
 	}, func(txn *kv.Txn) error {
@@ -951,7 +952,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		if i == 0 {
 			// The table descriptor is unchanged. Don't let Publish() increment
 			// the version.
-			return errDidntUpdateDescriptor
+			return lease.ErrDidntUpdateDescriptor
 		}
 		// Trim the executed mutations from the descriptor.
 		scDesc.Mutations = scDesc.Mutations[i:]
@@ -1174,7 +1175,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				// Only reverse the first set of mutations if they have the
 				// mutation ID we're looking for.
 				if i == 0 {
-					return errDidntUpdateDescriptor
+					return lease.ErrDidntUpdateDescriptor
 				}
 				break
 			}

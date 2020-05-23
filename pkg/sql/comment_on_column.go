@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,7 +33,7 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 	if n.ColumnItem.TableName != nil {
 		tableName = n.ColumnItem.TableName.ToTableName()
 	}
-	tableDesc, err := p.ResolveUncachedTableDescriptor(ctx, &tableName, true, ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveUncachedTableDescriptor(ctx, &tableName, true, resolver.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

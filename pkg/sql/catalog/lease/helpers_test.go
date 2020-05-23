@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package lease
 
 import (
-	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,16 +24,13 @@ type tableVersionID struct {
 	version sqlbase.DescriptorVersion
 }
 
-// SQLTxnName is the transaction name used by sql transactions.
-const SQLTxnName = sqlTxnName
-
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
-// store (leases are removed from the store async w.r.t. LeaseManager
+// store (leases are removed from the store async w.r.t. Manager
 // operations).
 // To use it, its LeaseRemovedNotification method must be hooked up to
-// LeaseStoreTestingKnobs.LeaseReleasedEvent. Then, every time you want to wait
+// StorageTestingKnobs.LeaseReleasedEvent. Then, every time you want to wait
 // for a lease, get a tracker object through TrackRemoval() before calling
-// LeaseManager.Release(), and then call WaitForRemoval() on the tracker to
+// Manager.Release(), and then call WaitForRemoval() on the tracker to
 // block for the removal from the store.
 //
 // All methods are thread-safe.
@@ -84,7 +80,7 @@ func (t RemovalTracker) WaitForRemoval() error {
 
 // LeaseRemovedNotification has to be called after a lease is removed from the
 // store. This should be hooked up as a callback to
-// LeaseStoreTestingKnobs.LeaseReleasedEvent.
+// StorageTestingKnobs.LeaseReleasedEvent.
 func (w *LeaseRemovalTracker) LeaseRemovedNotification(
 	id sqlbase.ID, version sqlbase.DescriptorVersion, err error,
 ) {
@@ -103,7 +99,7 @@ func (w *LeaseRemovalTracker) LeaseRemovedNotification(
 	}
 }
 
-func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
+func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	past := clock.Now().GoTime().Add(-time.Millisecond)
 
 	m.tableNames.mu.Lock()
@@ -111,24 +107,4 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.tableNames.mu.Unlock()
-}
-
-// AcquireAndAssertMinVersion acquires a read lease for the specified table ID.
-// The lease is grabbed on the latest version if >= specified version.
-// It returns a table descriptor and an expiration time valid for the timestamp.
-func (m *LeaseManager) AcquireAndAssertMinVersion(
-	ctx context.Context,
-	timestamp hlc.Timestamp,
-	tableID sqlbase.ID,
-	minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
-	t := m.findTableState(tableID, true)
-	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-	table, _, err := t.findForTimestamp(ctx, timestamp)
-	if err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-	return &table.ImmutableTableDescriptor, table.expiration, nil
 }

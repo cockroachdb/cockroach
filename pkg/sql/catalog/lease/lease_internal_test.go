@@ -10,7 +10,7 @@
 
 // Note that there's also a lease_test.go, in package sql_test.
 
-package sql
+package lease
 
 import (
 	"context"
@@ -121,7 +121,7 @@ func TestPurgeOldVersions(t *testing.T) {
 	gossipSem := make(chan struct{}, 1)
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			SQLLeaseManager: &LeaseManagerTestingKnobs{
+			SQLLeaseManager: &ManagerTestingKnobs{
 				TestingTableUpdateEvent: func(t *sqlbase.TableDescriptor) error {
 					gossipSem <- struct{}{}
 					<-gossipSem
@@ -132,7 +132,8 @@ func TestPurgeOldVersions(t *testing.T) {
 	}
 	s, db, kvDB := serverutils.StartServer(t, serverParams)
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
+
 	// Block gossip.
 	gossipSem <- struct{}{}
 	defer func() {
@@ -173,9 +174,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 
-	// Verifies that errDidntUpdateDescriptor doesn't leak from Publish().
+	// Verifies that ErrDidntUpdateDescriptor doesn't leak from Publish().
 	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
-		return errDidntUpdateDescriptor
+		return ErrDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +241,7 @@ func TestNameCacheDBConflictingTableNames(t *testing.T) {
 
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`SET experimental_enable_temp_tables = true`); err != nil {
 		t.Fatal(err)
@@ -288,7 +289,7 @@ func TestNameCacheIsUpdated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
@@ -359,7 +360,7 @@ func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	const tableName = "test"
 
@@ -401,15 +402,15 @@ func TestNameCacheContainsLatestLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	removalTracker := NewLeaseRemovalTracker()
 	testingKnobs := base.TestingKnobs{
-		SQLLeaseManager: &LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+		SQLLeaseManager: &ManagerTestingKnobs{
+			LeaseStoreTestingKnobs: StorageTestingKnobs{
 				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
 			},
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	const tableName = "test"
 
@@ -468,7 +469,7 @@ func TestTableNameCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
@@ -499,8 +500,8 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	removalTracker := NewLeaseRemovalTracker()
 	testingKnobs := base.TestingKnobs{
-		SQLLeaseManager: &LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+		SQLLeaseManager: &ManagerTestingKnobs{
+			LeaseStoreTestingKnobs: StorageTestingKnobs{
 				LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
 				RemoveOnceDereferenced: true,
 			},
@@ -509,7 +510,7 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(
 		t, base.TestServerArgs{Knobs: testingKnobs})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -620,12 +621,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 }
 
 // TestAcquireFreshestFromStoreRaces runs
-// LeaseManager.acquireFreshestFromStore() in parallel to test for races.
+// Manager.acquireFreshestFromStore() in parallel to test for races.
 func TestAcquireFreshestFromStoreRaces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
@@ -665,8 +666,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testingKnobs := base.TestingKnobs{
-		SQLLeaseManager: &LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+		SQLLeaseManager: &ManagerTestingKnobs{
+			LeaseStoreTestingKnobs: StorageTestingKnobs{
 				// Immediate remove tableVersionState and release its
 				// lease when it is dereferenced. This forces threads
 				// waiting on a lease to reacquire the lease.
@@ -677,7 +678,7 @@ func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(
 		t, base.TestServerArgs{Knobs: testingKnobs})
 	defer s.Stopper().Stop(context.Background())
-	leaseManager := s.LeaseManager().(*LeaseManager)
+	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -744,7 +745,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	// acquireBlock calls Acquire.
 	acquireBlock := func(
 		ctx context.Context,
-		m *LeaseManager,
+		m *Manager,
 		acquireChan chan Result,
 	) {
 		table, e, err := m.Acquire(ctx, m.clock.Now(), descID)
@@ -753,7 +754,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 	testCases := []struct {
 		name string
-		// Whether the second routine is a call to LeaseManager.acquireFreshest or
+		// Whether the second routine is a call to Manager.acquireFreshest or
 		// not. This determines which channel we unblock.
 		isSecondCallAcquireFreshest bool
 	}{
@@ -797,19 +798,19 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			removalTracker := NewLeaseRemovalTracker()
 			testingKnobs := base.TestingKnobs{
-				SQLLeaseManager: &LeaseManagerTestingKnobs{
-					LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				SQLLeaseManager: &ManagerTestingKnobs{
+					LeaseStoreTestingKnobs: StorageTestingKnobs{
 						RemoveOnceDereferenced: true,
 						LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
-						LeaseAcquireResultBlockEvent: func(leaseBlockType LeaseAcquireBlockType) {
-							if leaseBlockType == LeaseAcquireBlock {
+						LeaseAcquireResultBlockEvent: func(leaseBlockType AcquireBlockType) {
+							if leaseBlockType == AcquireBlock {
 								if count := atomic.LoadInt32(&acquireArrivals); (count < 1 && test.isSecondCallAcquireFreshest) ||
 									(count < 2 && !test.isSecondCallAcquireFreshest) {
 									atomic.AddInt32(&acquireArrivals, 1)
 									preblock.Done()
 									<-blockChan
 								}
-							} else if leaseBlockType == LeaseAcquireFreshestBlock {
+							} else if leaseBlockType == AcquireFreshestBlock {
 								if atomic.LoadInt32(&acquireFreshestArrivals) < 1 {
 									atomic.AddInt32(&acquireFreshestArrivals, 1)
 									preblock.Done()
@@ -837,7 +838,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)
 			defer s.Stopper().Stop(context.Background())
-			leaseManager := s.LeaseManager().(*LeaseManager)
+			leaseManager := s.LeaseManager().(*Manager)
 
 			acquireResultChan := make(chan Result)
 
@@ -845,7 +846,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			preblock.Add(2)
 			go acquireBlock(ctx, leaseManager, acquireResultChan)
 			if test.isSecondCallAcquireFreshest {
-				go func(ctx context.Context, m *LeaseManager, acquireChan chan Result) {
+				go func(ctx context.Context, m *Manager, acquireChan chan Result) {
 					if err := m.AcquireFreshestFromStore(ctx, descID); err != nil {
 						acquireChan <- Result{err: err, exp: hlc.Timestamp{}, table: nil}
 						return

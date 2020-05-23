@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -40,30 +41,7 @@ import (
 // TODO(knz): the redundancy between this struct and the code in other
 // packages (sql, sqlbase) is troubling! Some of this should be
 // factored.
-type FkTableMetadata map[TableID]TableEntry
-
-// TableEntry is the value type of FkTableMetadata: An optional table
-// descriptor, populated when the table is public/leasable, and an IsAdding
-// flag.
-//
-// This also includes an optional CheckHelper for the table (for CHECK
-// constraints). This is needed for FK work because CASCADE actions
-// can modify rows, and CHECK constraints must be applied to rows
-// modified by CASCADE.
-type TableEntry struct {
-	// Desc is the descriptor of the table. This can be nil if eg.
-	// the table is not public.
-	Desc *sqlbase.ImmutableTableDescriptor
-
-	// IsAdding indicates the descriptor is being created.
-	IsAdding bool
-
-	// CheckHelper is the utility responsible for CHECK constraint
-	// checks. The lookup function (see TableLookupFunction below) needs
-	// not populate this field; this is populated by the lookup queue
-	// below.
-	CheckHelper *sqlbase.CheckHelper
-}
+type FkTableMetadata map[TableID]catalog.TableEntry
 
 //
 // ------- table metadata lookup logic, used at start of query execution -------
@@ -112,7 +90,7 @@ type tableLookupQueue struct {
 type tableLookupQueueElement struct {
 	// tableEntry is the metadata of the table to check for FK
 	// constraints.
-	tableEntry TableEntry
+	tableEntry catalog.TableEntry
 
 	// usage is the type of mutation for which to look up additional
 	// metadata. At the top level this is the type of SQL statement
@@ -136,13 +114,13 @@ const (
 
 // TableLookupFunction is the function type used by MakeFkMetadata
 // that will perform the actual lookup of table metadata.
-type TableLookupFunction func(context.Context, TableID) (TableEntry, error)
+type TableLookupFunction func(context.Context, TableID) (catalog.TableEntry, error)
 
 // NoLookup is a stub that can be used to not actually fetch metadata.
 // This can be used when the FK work is initialized from a pre-populated
 // FkTableMetadata map.
-func NoLookup(_ context.Context, _ TableID) (TableEntry, error) {
-	return TableEntry{}, nil
+func NoLookup(_ context.Context, _ TableID) (catalog.TableEntry, error) {
+	return catalog.TableEntry{}, nil
 }
 
 // CheckPrivilegeFunction is the function type used by MakeFkMetadata that will
@@ -159,7 +137,9 @@ func NoCheckPrivilege(_ context.Context, _ sqlbase.DescriptorProto, _ privilege.
 // getTable retrieves one table's metadata during FK work preparation.
 // A cached TableEntry, if one exists, is reused; otherwise it is
 // created and initialized.
-func (q *tableLookupQueue) getTable(ctx context.Context, tableID TableID) (TableEntry, error) {
+func (q *tableLookupQueue) getTable(
+	ctx context.Context, tableID TableID,
+) (catalog.TableEntry, error) {
 	// Do we already have an entry for this table?
 	if tableEntry, exists := q.result[tableID]; exists {
 		// Yes, simply reuse it.
@@ -171,12 +151,12 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID TableID) (Table
 	// Ask the caller to retrieve it for us.
 	tableEntry, err := q.tblLookupFn(ctx, tableID)
 	if err != nil {
-		return TableEntry{}, err
+		return catalog.TableEntry{}, err
 	}
 	if !tableEntry.IsAdding && tableEntry.Desc != nil {
 		// If we have a real table, we need first to verify the user has permission.
 		if err := q.privCheckFn(ctx, tableEntry.Desc, privilege.SELECT); err != nil {
-			return TableEntry{}, err
+			return catalog.TableEntry{}, err
 		}
 
 		// All is fine. Simply prepare the CHECK helper for when there are
@@ -187,7 +167,7 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID TableID) (Table
 		// different place.
 		checkHelper, err := sqlbase.NewEvalCheckHelper(ctx, q.analyzeExprFn, tableEntry.Desc)
 		if err != nil {
-			return TableEntry{}, err
+			return catalog.TableEntry{}, err
 		}
 		tableEntry.CheckHelper = checkHelper
 	}
@@ -252,9 +232,9 @@ func (q *tableLookupQueue) enqueue(ctx context.Context, tableID TableID, usage F
 }
 
 // dequeue retrieves the next item in the queue (and pops it).
-func (q *tableLookupQueue) dequeue() (TableEntry, FKCheckType, bool) {
+func (q *tableLookupQueue) dequeue() (catalog.TableEntry, FKCheckType, bool) {
 	if len((*q).queue) == 0 {
-		return TableEntry{}, 0, false
+		return catalog.TableEntry{}, 0, false
 	}
 	elem := (*q).queue[0]
 	(*q).queue = (*q).queue[1:]

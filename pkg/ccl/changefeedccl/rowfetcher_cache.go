@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -28,7 +28,7 @@ import (
 // column families of one row) into a row.
 type rowFetcherCache struct {
 	codec    keys.SQLCodec
-	leaseMgr *sql.LeaseManager
+	leaseMgr *lease.Manager
 	fetchers map[idVersion]*row.Fetcher
 
 	a sqlbase.DatumAlloc
@@ -39,7 +39,7 @@ type idVersion struct {
 	version sqlbase.DescriptorVersion
 }
 
-func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *sql.LeaseManager) *rowFetcherCache {
+func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *lease.Manager) *rowFetcherCache {
 	return &rowFetcherCache{
 		codec:    codec,
 		leaseMgr: leaseMgr,
@@ -64,7 +64,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		// own caching.
 		tableDesc, _, err = c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
-			// LeaseManager can return all kinds of errors during chaos, but based on
+			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
 			return nil, MarkRetryableError(err)
 		}
