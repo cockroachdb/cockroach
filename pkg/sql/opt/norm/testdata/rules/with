@@ -83,6 +83,7 @@ inner-join (cross)
  ├── key: ()
  ├── fd: ()-->(2,3)
  ├── prune: (2,3)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── values
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
@@ -302,6 +303,7 @@ with &1 (foo)
            ├── key: ()
            ├── fd: ()-->(3-6)
            ├── prune: (3-6)
+           ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            ├── cte-uses
            │    ├── &1: count=2 used-columns=(1)
            │    └── &2: count=2 used-columns=(2)
@@ -314,6 +316,7 @@ with &1 (foo)
            │    ├── fd: ()-->(3-5)
            │    ├── prune: (3-5)
            │    ├── join-size: 3
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    ├── cte-uses
            │    │    ├── &1: count=1 used-columns=(1)
            │    │    └── &2: count=2 used-columns=(2)
@@ -326,6 +329,7 @@ with &1 (foo)
            │    │    ├── fd: ()-->(3,4)
            │    │    ├── prune: (3,4)
            │    │    ├── join-size: 2
+           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    │    ├── cte-uses
            │    │    │    ├── &1: count=1 used-columns=(1)
            │    │    │    └── &2: count=1 used-columns=(2)
