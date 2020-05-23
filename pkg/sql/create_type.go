@@ -106,6 +106,12 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 			"not all nodes are the correct version for ENUM type creation")
 	}
 
+	// Check that usage of ENUM types is enabled.
+	if !p.EvalContext().SessionData.EnumsEnabled {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"session variable experimental_enable_enums is set to false, cannot create an enum")
+	}
+
 	// Ensure there are no duplicates in the input enum values.
 	seenVals := make(map[string]struct{})
 	for _, value := range n.EnumLabels {

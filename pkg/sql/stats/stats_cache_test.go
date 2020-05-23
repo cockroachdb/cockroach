@@ -270,6 +270,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
+SET experimental_enable_enums=true;
 CREATE DATABASE t;
 USE t;
 CREATE TYPE t AS ENUM ('hello');
