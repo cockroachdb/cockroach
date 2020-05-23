@@ -23,21 +23,37 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// canCoordinateMultiTenancy returns whether the current tenant can coordinate
-// tenant management operations on behalf of a multi-tenant cluster. Only the
-// system tenant currently has permissions to do so.
-func (p *planner) canCoordinateMultiTenancy() bool {
-	return p.ExecCfg().Codec.ForSystemTenant()
+// rejectIfCantCoordinateMultiTenancy returns an error if the current tenant is
+// disallowed from coordinating tenant management operations on behalf of a
+// multi-tenant cluster. Only the system tenant has permissions to do so.
+func rejectIfCantCoordinateMultiTenancy(codec keys.SQLCodec, op string) error {
+	// NOTE: even if we got this wrong, the rest of the function would fail for
+	// a non-system tenant because they would be missing a system.tenant table.
+	if !codec.ForSystemTenant() {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only the system tenant can %s other tenants", op)
+	}
+	return nil
+}
+
+// rejectIfSystemTenant returns an error if the provided tenant ID is the system
+// tenant's ID.
+func rejectIfSystemTenant(tenID uint64, op string) error {
+	if roachpb.IsSystemTenantID(tenID) {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"cannot %s tenant \"%d\", ID assigned to system tenant", op, tenID)
+	}
+	return nil
 }
 
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(ctx context.Context, tenID uint64, tenInfo []byte) error {
-	if !p.canCoordinateMultiTenancy() {
-		// NOTE: even if we got this wrong, the rest of the function would fail
-		// for a non-system tenant because they would be missing a system.tenant
-		// table.
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only the system tenant can create other tenants")
+	const op = "create"
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(tenID, op); err != nil {
+		return err
 	}
 
 	// NB: interface{}([]byte(nil)) != interface{}(nil).
@@ -93,12 +109,12 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64, tenInfo []byte
 
 // DestroyTenant implements the tree.TenantOperator interface.
 func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
-	if !p.canCoordinateMultiTenancy() {
-		// NOTE: even if we got this wrong, the rest of the function would fail
-		// for a non-system tenant because they would be missing a system.tenant
-		// table.
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only the system tenant can destroy other tenants")
+	const op = "destroy"
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(tenID, op); err != nil {
+		return err
 	}
 
 	// Query the tenant's active status. If it is marked as inactive, it is
