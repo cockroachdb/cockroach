@@ -428,7 +428,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanInterval:            cfg.ScanInterval,
 		ScanMinIdleTime:         cfg.ScanMinIdleTime,
 		ScanMaxIdleTime:         cfg.ScanMaxIdleTime,
-		TimestampCachePageSize:  cfg.TimestampCachePageSize,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		StorePool:               storePool,
 		SQLExecutor:             internalExecutor,
