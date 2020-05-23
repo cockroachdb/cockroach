@@ -1298,3 +1298,59 @@ select
                 └── lt [type=bool]
                      ├── variable: y:2 [type=int]
                      └── const: 50 [type=int]
+
+# A union constraint set is tight if the left is a contradiction and the right
+# is tight.
+opt
+SELECT * FROM a WHERE (x = 1 AND x = 3) OR (x = 10 AND y = 20)
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── fd: ()-->(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── or [type=bool, outer=(1,2), constraints=(/1: [/10 - /10]; /2: [/20 - /20]; tight), fd=()-->(1,2)]
+           ├── and [type=bool]
+           │    ├── eq [type=bool]
+           │    │    ├── variable: x:1 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    └── eq [type=bool]
+           │         ├── variable: x:1 [type=int]
+           │         └── const: 3 [type=int]
+           └── and [type=bool]
+                ├── eq [type=bool]
+                │    ├── variable: x:1 [type=int]
+                │    └── const: 10 [type=int]
+                └── eq [type=bool]
+                     ├── variable: y:2 [type=int]
+                     └── const: 20 [type=int]
+
+# A union constraint set is tight if the right is a contradiction and the left
+# is tight.
+opt
+SELECT * FROM a WHERE (x = 10 AND y = 20) OR (x = 1 AND x = 3) 
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── fd: ()-->(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── or [type=bool, outer=(1,2), constraints=(/1: [/10 - /10]; /2: [/20 - /20]; tight), fd=()-->(1,2)]
+           ├── and [type=bool]
+           │    ├── eq [type=bool]
+           │    │    ├── variable: x:1 [type=int]
+           │    │    └── const: 10 [type=int]
+           │    └── eq [type=bool]
+           │         ├── variable: y:2 [type=int]
+           │         └── const: 20 [type=int]
+           └── and [type=bool]
+                ├── eq [type=bool]
+                │    ├── variable: x:1 [type=int]
+                │    └── const: 1 [type=int]
+                └── eq [type=bool]
+                     ├── variable: x:1 [type=int]
+                     └── const: 3 [type=int]
