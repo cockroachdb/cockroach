@@ -18,10 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -59,7 +62,7 @@ type extendedEvalContext struct {
 	MemMetrics *MemoryMetrics
 
 	// Tables points to the Session's table collection (& cache).
-	Tables *TableCollection
+	Descs *descs.Collection
 
 	ExecCfg *ExecutorConfig
 
@@ -99,8 +102,8 @@ func (ctx *extendedEvalContext) QueueJob(record jobs.Record) (*jobs.Job, error) 
 // schemaInterface provides access to the database and table descriptors.
 // See schema_accessors.go.
 type schemaInterface struct {
-	physical SchemaAccessor
-	logical  SchemaAccessor
+	physical catalog.Accessor
+	logical  catalog.Accessor
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -243,12 +246,9 @@ func newInternalPlanner(
 		},
 	}
 	// The table collection used by the internal planner does not rely on the
-	// databaseCache and there are no subscribers to the databaseCache, so we can
+	// DatabaseCache and there are no subscribers to the DatabaseCache, so we can
 	// leave it uninitialized.
-	tables := &TableCollection{
-		leaseMgr: execCfg.LeaseManager,
-		settings: execCfg.Settings,
-	}
+	tables := descs.NewCollection(execCfg.LeaseManager, execCfg.Settings)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{
@@ -307,7 +307,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.extendedEvalCtx.Tables = tables
+	p.extendedEvalCtx.Descs = tables
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -327,7 +327,7 @@ func internalExtendedEvalCtx(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
 	dataMutator *sessionDataMutator,
-	tables *TableCollection,
+	tables *descs.Collection,
 	txn *kv.Txn,
 	txnTimestamp time.Time,
 	stmtTimestamp time.Time,
@@ -355,18 +355,19 @@ func internalExtendedEvalCtx(
 		VirtualSchemas:  execCfg.VirtualSchemas,
 		Tracing:         &SessionTracing{},
 		StatusServer:    execCfg.StatusServer,
-		Tables:          tables,
+		Descs:           tables,
 		ExecCfg:         execCfg,
 		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
 		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
 
-func (p *planner) PhysicalSchemaAccessor() SchemaAccessor {
+func (p *planner) PhysicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.physical
 }
 
-func (p *planner) LogicalSchemaAccessor() SchemaAccessor {
+// LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
+func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.logical
 }
 
@@ -379,10 +380,12 @@ func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
 	return p.extendedEvalCtx.copy()
 }
 
+// CurrentDatabase is part of the resolver.SchemaResolver interface.
 func (p *planner) CurrentDatabase() string {
 	return p.SessionData().Database
 }
 
+// CurrentSearchPath is part of the resolver.SchemaResolver interface.
 func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
 	return p.SessionData().SearchPath
 }
@@ -392,8 +395,8 @@ func (p *planner) EvalContext() *tree.EvalContext {
 	return &p.extendedEvalCtx.EvalContext
 }
 
-func (p *planner) Tables() *TableCollection {
-	return p.extendedEvalCtx.Tables
+func (p *planner) Tables() *descs.Collection {
+	return p.extendedEvalCtx.Descs
 }
 
 // ExecCfg implements the PlanHookState interface.
@@ -401,8 +404,8 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
-func (p *planner) LeaseMgr() *LeaseManager {
-	return p.Tables().leaseMgr
+func (p *planner) LeaseMgr() *lease.Manager {
+	return p.Tables().LeaseManager()
 }
 
 func (p *planner) Txn() *kv.Txn {
@@ -443,7 +446,7 @@ func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 
 // ResolveTableName implements the tree.EvalDatabase interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
-	desc, err := ResolveExistingTableObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
+	desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveAnyDescType)
 	if err != nil {
 		return 0, err
 	}
@@ -451,21 +454,23 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
-// CommonLookupFlags, it could use or skip the TableCollection cache. See
-// TableCollection.getTableVersionByID for how it's used.
-func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
+// CommonLookupFlags, it could use or skip the Collection cache. See
+// Collection.GetTableVersionByID for how it's used.
+func (p *planner) LookupTableByID(
+	ctx context.Context, tableID sqlbase.ID,
+) (catalog.TableEntry, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
-		return row.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
+		return catalog.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
 	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
-	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
+	table, err := p.Tables().GetTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
-		if errors.Is(err, errTableAdding) {
-			return row.TableEntry{IsAdding: true}, nil
+		if sqlbase.HasAddingTableError(err) {
+			return catalog.TableEntry{IsAdding: true}, nil
 		}
-		return row.TableEntry{}, err
+		return catalog.TableEntry{}, err
 	}
-	return row.TableEntry{Desc: table}, nil
+	return catalog.TableEntry{Desc: table}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a

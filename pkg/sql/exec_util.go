@@ -40,6 +40,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -601,7 +607,7 @@ type ExecutorConfig struct {
 	Gossip            gossip.DeprecatedGossip
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
-	LeaseManager      *LeaseManager
+	LeaseManager      *lease.Manager
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
 	// StatusServer gives access to the Status service.
@@ -762,13 +768,13 @@ var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 
-// databaseCacheHolder is a thread-safe container for a *databaseCache.
+// databaseCacheHolder is a thread-safe container for a *Cache.
 // It also allows clients to block until the cache is updated to a desired
 // state.
 //
 // NOTE(andrei): The way in which we handle the database cache is funky: there's
 // this top-level holder, which gets updated on gossip updates. Then, each
-// session gets its *databaseCache, which is updated from the holder after every
+// session gets its *Cache, which is updated from the holder after every
 // transaction - the SystemConfig is updated and the lazily computer map of db
 // names to ids is wiped. So many session are sharing and contending on a
 // mutable cache, but nobody's sharing this holder. We should make up our mind
@@ -780,26 +786,26 @@ func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 type databaseCacheHolder struct {
 	mu struct {
 		syncutil.Mutex
-		c  *databaseCache
+		c  *database.Cache
 		cv *sync.Cond
 	}
 }
 
-func newDatabaseCacheHolder(c *databaseCache) *databaseCacheHolder {
+func newDatabaseCacheHolder(c *database.Cache) *databaseCacheHolder {
 	dc := &databaseCacheHolder{}
 	dc.mu.c = c
 	dc.mu.cv = sync.NewCond(&dc.mu.Mutex)
 	return dc
 }
 
-func (dc *databaseCacheHolder) getDatabaseCache() *databaseCache {
+func (dc *databaseCacheHolder) getDatabaseCache() *database.Cache {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	return dc.mu.c
 }
 
-// waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) bool) {
+// WaitForCacheState implements the DatabaseCacheSubscriber interface.
+func (dc *databaseCacheHolder) WaitForCacheState(cond func(*database.Cache) bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for done := cond(dc.mu.c); !done; done = cond(dc.mu.c) {
@@ -807,14 +813,14 @@ func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) bool)
 	}
 }
 
-// databaseCacheHolder implements the dbCacheSubscriber interface.
-var _ dbCacheSubscriber = &databaseCacheHolder{}
+// databaseCacheHolder implements the DatabaseCacheSubscriber interface.
+var _ descs.DatabaseCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.
 func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
-	dc.mu.c = newDatabaseCache(dc.mu.c.codec, cfg)
+	dc.mu.c = database.NewCache(dc.mu.c.Codec(), cfg)
 	dc.mu.cv.Broadcast()
 	dc.mu.Unlock()
 }
@@ -1244,17 +1250,11 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
+func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
 	sc := &schemaInterface{
-		physical: &CachedPhysicalAccessor{
-			SchemaAccessor: UncachedPhysicalAccessor{},
-			tc:             tables,
-		},
+		physical: accessors.NewCachedAccessor(catalogkv.UncachedPhysicalAccessor{}, descsCol),
 	}
-	sc.logical = &LogicalSchemaAccessor{
-		SchemaAccessor: sc.physical,
-		vt:             vt,
-	}
+	sc.logical = accessors.NewLogicalAccessor(sc.physical, vs)
 	return sc
 }
 

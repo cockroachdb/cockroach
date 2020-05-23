@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -204,7 +205,7 @@ func createBenchmarkChangefeed(
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(server.DefaultHistogramWindowInterval).(*Metrics)
 	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
+	leaseMgr := s.LeaseManager().(*lease.Manager)
 	mm := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
@@ -231,7 +232,7 @@ func createBenchmarkChangefeed(
 	}
 
 	rowsFn := kvsToRows(s.ExecutorConfig().(sql.ExecutorConfig).Codec,
-		s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
+		s.LeaseManager().(*lease.Manager), details, buf.Get)
 	sf := span.MakeFrontier(spans...)
 	tickFn := emitEntries(s.ClusterSettings(), details, hlc.Timestamp{}, sf,
 		encoder, sink, rowsFn, TestingKnobs{}, metrics)

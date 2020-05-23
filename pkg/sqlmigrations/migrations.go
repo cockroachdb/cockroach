@@ -28,8 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -190,7 +191,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(knz): bake this migration into v19.1.
 		name:             "create default databases",
 		workFn:           createDefaultDbs,
-		newDescriptorIDs: databaseIDs(sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName),
+		newDescriptorIDs: databaseIDs(sqlbase.DefaultDatabaseName, sqlbase.PgDatabaseName),
 	},
 	{
 		// Introduced in v2.1. Baked into 20.1.
@@ -1066,7 +1067,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 	schemaChangeJobsForDesc := make(map[sqlbase.ID][]int64)
 	gcJobsForDesc := make(map[sqlbase.ID][]int64)
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		descs, err := sql.GetAllDescriptors(ctx, txn, r.codec)
+		descs, err := catalogkv.GetAllDescriptors(ctx, txn, r.codec)
 		if err != nil {
 			return err
 		}
@@ -1747,7 +1748,7 @@ func createDefaultDbs(ctx context.Context, r runner) error {
 
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		for _, dbName := range []string{sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName} {
+		for _, dbName := range []string{sqlbase.DefaultDatabaseName, sqlbase.PgDatabaseName} {
 			stmt := fmt.Sprintf(createDbStmt, dbName)
 			err = r.execAsRoot(ctx, "create-default-db", stmt)
 			if err != nil {
@@ -1838,7 +1839,7 @@ func depublicizeSystemComments(ctx context.Context, r runner) error {
 	// the 20.1 job could interfere with. The update to the table descriptor would
 	// cause a 19.2 SchemaChangeManager to attempt a schema change, but it would
 	// be a no-op.
-	ctx = sql.MigrationSchemaChangeRequiredContext(ctx)
+	ctx = descs.MigrationSchemaChangeRequiredContext(ctx)
 
 	for _, priv := range []string{"GRANT", "INSERT", "DELETE", "UPDATE"} {
 		stmt := fmt.Sprintf(`REVOKE %s ON TABLE system.comments FROM public`, priv)

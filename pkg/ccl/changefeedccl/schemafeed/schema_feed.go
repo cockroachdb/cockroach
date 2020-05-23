@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -72,7 +72,7 @@ type Config struct {
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
 	// lease manager?
-	LeaseManager *sql.LeaseManager
+	LeaseManager *lease.Manager
 }
 
 // SchemaFeed tracks changes to a set of tables and exports them as a queue of
@@ -91,7 +91,7 @@ type SchemaFeed struct {
 	clock    *hlc.Clock
 	settings *cluster.Settings
 	targets  jobspb.ChangefeedTargets
-	leaseMgr *sql.LeaseManager
+	leaseMgr *lease.Manager
 	mu       struct {
 		syncutil.Mutex
 

@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -67,7 +69,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	schemas, err := p.Tables().getSchemasForDatabase(ctx, p.txn, dbDesc.ID)
+	schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, dbDesc.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +78,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	schemasToDelete := make([]string, 0, len(schemas))
 	for _, schema := range schemas {
 		schemasToDelete = append(schemasToDelete, schema)
-		toAppend, err := GetObjectNames(
+		toAppend, err := resolver.GetObjectNames(
 			ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true, /*explicitPrefix*/
 		)
 		if err != nil {
@@ -236,7 +238,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 	}
 
-	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, dbDropped)
+	p.Tables().AddUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, descs.DBDropped)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
@@ -295,7 +297,7 @@ func (p *planner) accumulateDependentTables(
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentTables[ref.ID] = true
-		dependentDesc, err := p.Tables().getMutableTableVersionByID(ctx, ref.ID, p.txn)
+		dependentDesc, err := p.Tables().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
 		if err != nil {
 			return err
 		}

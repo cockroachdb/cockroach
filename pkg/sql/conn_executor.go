@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -280,7 +282,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
-		dbCache:       newDatabaseCacheHolder(newDatabaseCache(cfg.Codec, systemCfg)),
+		dbCache:       newDatabaseCacheHolder(database.NewCache(cfg.Codec, systemCfg)),
 		pool:          pool,
 		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
@@ -630,12 +632,8 @@ func (s *Server) newConnExecutor(
 		prepStmts: make(map[string]*PreparedStatement),
 		portals:   make(map[string]*PreparedPortal),
 	}
-	ex.extraTxnState.tables = TableCollection{
-		leaseMgr:          s.cfg.LeaseManager,
-		databaseCache:     s.dbCache.getDatabaseCache(),
-		dbCacheSubscriber: s.dbCache,
-		settings:          s.cfg.Settings,
-	}
+	ex.extraTxnState.descCollection = descs.MakeCollection(s.cfg.LeaseManager,
+		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
@@ -668,7 +666,7 @@ func (s *Server) newConnExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	txn *kv.Txn,
-	tcModifier tableCollectionModifier,
+	tcModifier descs.ModifiedCollectionCopier,
 	appStats *appStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, appStats)
@@ -694,11 +692,11 @@ func (s *Server) newConnExecutorWithTxn(
 		txn,
 		ex.transitionCtx)
 
-	// Modify the TableCollection to match the parent executor's TableCollection.
+	// Modify the Collection to match the parent executor's Collection.
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
 	if tcModifier != nil {
-		tcModifier.copyModifiedSchema(&ex.extraTxnState.tables)
+		tcModifier.CopyModifiedObjects(&ex.extraTxnState.descCollection)
 	}
 	return ex
 }
@@ -918,8 +916,8 @@ type connExecutor struct {
 	// This is only used in the Open state. extraTxnState is reset whenever a
 	// transaction finishes or gets retried.
 	extraTxnState struct {
-		// tables collects descriptors used by the current transaction.
-		tables TableCollection
+		// descCollection collects descriptors used by the current transaction.
+		descCollection descs.Collection
 
 		// jobs accumulates jobs staged for execution inside the transaction.
 		// Staging happens when executing statements that are implemented with a
@@ -1141,9 +1139,9 @@ func (ex *connExecutor) resetExtraTxnState(
 ) error {
 	ex.extraTxnState.jobs = nil
 
-	ex.extraTxnState.tables.releaseTables(ctx)
+	ex.extraTxnState.descCollection.ReleaseAll(ctx)
 
-	ex.extraTxnState.tables.databaseCache = dbCacheHolder.getDatabaseCache()
+	ex.extraTxnState.descCollection.ResetDatabaseCache(dbCacheHolder.getDatabaseCache())
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -1925,7 +1923,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
-	scInterface := newSchemaInterface(&ex.extraTxnState.tables, ex.server.cfg.VirtualSchemas)
+	scInterface := newSchemaInterface(&ex.extraTxnState.descCollection, ex.server.cfg.VirtualSchemas)
 
 	ie := MakeInternalExecutor(
 		ctx,
@@ -1960,7 +1958,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		Tracing:           &ex.sessionTracing,
 		StatusServer:      ex.server.cfg.StatusServer,
 		MemMetrics:        &ex.memMetrics,
-		Tables:            &ex.extraTxnState.tables,
+		Descs:             &ex.extraTxnState.descCollection,
 		ExecCfg:           ex.server.cfg,
 		DistSQLPlanner:    ex.server.cfg.DistSQLPlanner,
 		TxnModesSetter:    ex,
@@ -2142,7 +2140,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		// Wait for the cache to reflect the dropped databases if any.
-		ex.extraTxnState.tables.waitForCacheToDropDatabases(ex.Ctx())
+		ex.extraTxnState.descCollection.WaitForCacheToDropDatabases(ex.Ctx())
 
 		fallthrough
 	case txnRestart, txnRollback:
@@ -2306,7 +2304,7 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 // the stats refresher that new tables exist and should have their stats
 // collected now.
 func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
-	for _, desc := range ex.extraTxnState.tables.getNewTables() {
+	for _, desc := range ex.extraTxnState.descCollection.GetTableDescsWithNewVersion() {
 		// The CREATE STATISTICS run for an async CTAS query is initiated by the
 		// SchemaChanger, so we don't do it here.
 		if desc.IsTable() && !desc.IsAs() {

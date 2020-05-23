@@ -21,13 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -211,7 +211,7 @@ func allocateTableRewrites(
 		}); err != nil {
 			return nil, err
 		}
-		tempSysDBID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		tempSysDBID, err = catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}
@@ -236,14 +236,14 @@ func allocateTableRewrites(
 			var targetDB string
 			if renaming {
 				targetDB = overrideDB
-			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < sql.MaxDefaultDescriptorID {
+			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < sqlbase.MaxDefaultDescriptorID {
 				// This is a table that is in a database that already existed at
 				// cluster creation time.
-				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sessiondata.DefaultDatabaseName)
+				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sqlbase.DefaultDatabaseName)
 				if err != nil {
 					return err
 				}
-				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sessiondata.PgDatabaseName)
+				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sqlbase.PgDatabaseName)
 				if err != nil {
 					return err
 				}
@@ -254,9 +254,9 @@ func allocateTableRewrites(
 					targetDB = restoreTempSystemDB
 					tableRewrites[table.ID] = &jobspb.RestoreDetails_TableRewrite{ParentID: tempSysDBID}
 				} else if table.ParentID == defaultDBID {
-					targetDB = sessiondata.DefaultDatabaseName
+					targetDB = sqlbase.DefaultDatabaseName
 				} else if table.ParentID == postgresDBID {
-					targetDB = sessiondata.PgDatabaseName
+					targetDB = sqlbase.PgDatabaseName
 				}
 			} else {
 				database, ok := databasesByID[table.ParentID]
@@ -335,7 +335,7 @@ func allocateTableRewrites(
 		if descriptorCoverage == tree.AllDescriptors {
 			newID = db.ID
 		} else {
-			newID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+			newID, err = catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
 				return nil, err
 			}
@@ -369,7 +369,7 @@ func allocateTableRewrites(
 
 	// Generate new IDs for the tables that need to be remapped.
 	for _, table := range tablesToRemap {
-		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		newTableID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}
@@ -713,7 +713,7 @@ func doRestorePlan(
 
 	// Ensure that no user table descriptors exist for a full cluster restore.
 	txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
-	descCount, err := sql.CountUserDescriptors(ctx, txn, p.ExecCfg().Codec)
+	descCount, err := catalogkv.CountUserDescriptors(ctx, txn, p.ExecCfg().Codec)
 	if err != nil {
 		return errors.Wrap(err, "looking up user descriptors during restore")
 	}

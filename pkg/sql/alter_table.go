@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -50,12 +51,12 @@ type alterTableNode struct {
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
-		ctx, n.Table, !n.IfExists, ResolveRequireTableDesc,
+		ctx, n.Table, !n.IfExists, resolver.ResolveRequireTableDesc,
 	)
-	if errors.Is(err, errNoPrimaryKey) {
+	if errors.Is(err, resolver.ErrNoPrimaryKey) {
 		if len(n.Cmds) > 0 && isAlterCmdValidWithoutPrimaryKey(n.Cmds[0]) {
 			tableDesc, err = p.ResolveMutableTableDescriptorExAllowNoPrimaryKey(
-				ctx, n.Table, !n.IfExists, ResolveRequireTableDesc,
+				ctx, n.Table, !n.IfExists, resolver.ResolveRequireTableDesc,
 			)
 		}
 	}
@@ -1276,7 +1277,7 @@ func (p *planner) updateFKBackReferenceName(
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
 	} else {
-		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		lookup, err := p.Tables().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
 		}
