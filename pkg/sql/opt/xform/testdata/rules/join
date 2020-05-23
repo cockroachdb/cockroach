@@ -1835,7 +1835,7 @@ inner-join (zigzag pqr@q pqr@r)
  ├── fd: ()-->(2,3)
  └── filters
       ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      └── ((r:3 < 1) AND (r:3 > 1)) OR ((r:3 >= 2) AND (r:3 <= 2)) [outer=(3), constraints=(/3: [/2 - /2]), fd=()-->(3)]
+      └── ((r:3 < 1) AND (r:3 > 1)) OR ((r:3 >= 2) AND (r:3 <= 2)) [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
 # Nested zigzag case - zigzag join needs to be wrapped in a lookup join to
 # satisfy required columns.
