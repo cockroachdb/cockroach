@@ -15,11 +15,12 @@
 package sysutil
 
 import (
-	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+
+	"github.com/cockroachdb/errors"
 )
 
 // Signal is syscall.Signal.
@@ -27,6 +28,12 @@ type Signal = syscall.Signal
 
 // Errno is syscall.Errno.
 type Errno = syscall.Errno
+
+// Exported syscall.Errno constants.
+const (
+	ECONNRESET   = syscall.ECONNRESET
+	ECONNREFUSED = syscall.ECONNREFUSED
+)
 
 // FSInfo describes a filesystem. It is returned by StatFS.
 type FSInfo struct {
@@ -64,10 +71,10 @@ func RefreshSignaledChan() <-chan os.Signal {
 // IsErrConnectionReset returns true if an
 // error is a "connection reset by peer" error.
 func IsErrConnectionReset(err error) bool {
-	if opErr, ok := err.(*net.OpError); ok {
-		if sysErr, ok := opErr.Err.(*os.SyscallError); ok {
-			return sysErr.Err == syscall.ECONNRESET
-		}
-	}
-	return false
+	return errors.Is(err, syscall.ECONNRESET)
+}
+
+// IsErrConnectionRefused returns true if an error is a "connection refused" error.
+func IsErrConnectionRefused(err error) bool {
+	return errors.Is(err, syscall.ECONNREFUSED)
 }
