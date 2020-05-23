@@ -45,7 +45,7 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 			if err != nil {
 				return err
 			}
-			defer session.Close()
+			defer session.Close() // nolint: returnerrcheck
 
 			cmd := c.Env + `env ROACHPROD=true cassandra` +
 				` -Dcassandra.config=file://${PWD}/cassandra.yaml` +
@@ -63,7 +63,7 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 				if err != nil {
 					return false, err
 				}
-				defer session.Close()
+				defer session.Close() // nolint: returnerrcheck
 
 				cmd := `nc -z $(hostname) 9042`
 				if _, err := session.CombinedOutput(cmd); err != nil {

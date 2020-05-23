@@ -82,84 +82,16 @@ Please follow the instructions above on updating the golang version, omitting th
 
 #  Dependencies
 
-A snapshot of CockroachDB's dependencies is maintained at
-https://github.com/cockroachdb/vendored and checked out as a submodule at
-`./vendor`.
+Dependencies are managed using `go mod`. We use `go mod vendor` so that we can import and use non-Go files (e.g. protobuf files).
 
-## Updating Dependencies
+## Installing or updating a dependency
 
-This snapshot was built and is managed using `dep` and we manage `vendor` as a
-submodule.
+Run `go get -u <dependency>`. To get a specific version, run `go get -u <dependency>@<version>`.
 
-Use the version of `dep` in `bin` (may need to `make` first): import your new
-dependency from the Go source you're working on, then run `./bin/dep ensure -v`.
-The tool will add the newly-imported packages into the `vendor` directory; see
-instructions below about how to commit the changes in the `vendor` submodule. To
-update an existing dependency, use `./bin/dep ensure -v -update <pkg import
-path>`.
+You must then run `make vendor/modules.txt` to ensure the modules are installed.
 
-### Working with Submodules
+Programs can then be run using `go build -mod=vendor ...` or `go test -mod=vendor ...`.
 
-To keep the bloat of all the changes in all our dependencies out of our main
-repository, we embed `vendor` as a git submodule, storing its content and
-history in [`vendored`](https://github.com/cockroachdb/vendored) instead.
+## Requiring a new tool
 
-This split across two repositories however means that changes involving
-changed dependencies require a two step process.
-
-- After using dep to add or update dependencies and making related code
-changes, `git status` in `cockroachdb/cockroach` checkout will report that the
-`vendor` submodule has `modified/untracked content`.
-
-- Switch into `vendor` and commit all changes (or use `git -C vendor`), on a
-new named branch.
-
-   + At this point the `git status` in your `cockroachdb/cockroach` checkout
-will report `new commits` for `vendor` instead of `modified content`.
-
-- Commit your code changes and new `vendor` submodule ref.
-
-- Before this commit can be submitted in a pull request to
-`cockroachdb/cockroach`, the submodule commit it references must be available
-on `github.com/cockroachdb/vendored`.
-
-* Organization members can push their named branches there directly.
-
-* Non-members should fork the `vendored` repo and submit a pull request to
-`cockroachdb/vendored`, and need wait for it to merge before they will be able
-to use it in a `cockroachdb/cockroach` PR.
-
-#### `master` Branch Pointer in Vendored Repo
-
-Since the `cockroachdb/cockroach` submodule references individual commit
-hashes in `vendored`, there is little significance to the `master` branch in
-`vendored` -- as outlined above, new commits are always authored with the
-previously referenced commit as their parent, regardless of what `master`
-happens to be.
-
-That said, it is critical that any ref in `vendored` that is referenced from
-`cockroachdb/cockroach` remain available in `vendored` in perpetuity: after a
-PR referencing a ref merges, the `vendored` `master` branch should be updated
-to point to it before the named feature branch can be deleted, to ensure the
-ref remains reachable and thus is never garbage collected.
-
-#### Conflicting Submodule Changes
-
-The canonical linearization of history is always the main repo. In the event
-of concurrent changes to `vendor`, the first should cause the second to see a
-conflict on the `vendor` submodule pointer. When resolving that conflict, it
-is important to re-run dep against the fetched, updated `vendor` ref, thus
-generating a new commit in the submodule that has as its parent the one from
-the earlier change.
-
-## Repository Name
-
-We only want the vendor directory used by builds when it is explicitly checked
-out *and managed* as a submodule at `./vendor`.
-
-If a go build fails to find a dependency in `./vendor`, it will continue
-searching anything named "vendor" in parent directories. Thus the vendor
-repository is _not_ named "vendor", to minimize the risk of it ending up
-somewhere in `GOPATH` with the name `vendor` (e.g. if it is manually cloned),
-where it could end up being unintentionally used by builds and causing
-confusion.
+When installing a tool, you may need to add blank import to `pkg/cmd/import-tools/main.go` so that `go mod tidy` does not clean it up.

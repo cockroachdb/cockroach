@@ -63,7 +63,7 @@ include build/defs.mk
 # `.submodules-initialized` is needed during a fresh build after a
 # checkout.
 .SECONDARY: bin/.submodules-initialized
-bin/.submodules-initialized:
+bin/.submodules-initialized: vendor/modules.txt
 	gitdir=$$(git rev-parse --git-dir 2>/dev/null || true); \
 	if test -n "$$gitdir"; then \
 	   git submodule update --init --recursive; \
@@ -156,7 +156,7 @@ VERBOSE :=
 DESTDIR :=
 
 DUPLFLAGS    := -t 100
-GOFLAGS      :=
+GOFLAGS      := -mod=vendor # we always want to build from the vendor directory
 TAGS         :=
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
@@ -350,27 +350,27 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
+# These should be synced with `./pkg/cmd/import-tools/main.go`.
+bin/.bootstrap: $(GITHOOKS) | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
-		./vendor/github.com/client9/misspell/cmd/misspell \
-		./vendor/github.com/cockroachdb/crlfmt \
-		./vendor/github.com/cockroachdb/gostdlib/cmd/gofmt \
-		./vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
-		./vendor/github.com/cockroachdb/stress \
-		./vendor/github.com/golang/dep/cmd/dep \
-		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
-		./vendor/github.com/kevinburke/go-bindata/go-bindata \
-		./vendor/github.com/kisielk/errcheck \
-		./vendor/github.com/mattn/goveralls \
-		./vendor/github.com/mibk/dupl \
-		./vendor/github.com/mmatczuk/go_generics/cmd/go_generics \
-		./vendor/github.com/wadey/gocovmerge \
-		./vendor/golang.org/x/lint/golint \
-		./vendor/golang.org/x/perf/cmd/benchstat \
-		./vendor/golang.org/x/tools/cmd/goyacc \
-		./vendor/golang.org/x/tools/cmd/stringer \
-		./vendor/golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
-		./vendor/honnef.co/go/tools/cmd/staticcheck
+		github.com/client9/misspell/cmd/misspell \
+		github.com/cockroachdb/crlfmt \
+		github.com/cockroachdb/gostdlib/cmd/gofmt \
+		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		github.com/cockroachdb/stress \
+		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
+		github.com/kevinburke/go-bindata/go-bindata \
+		github.com/kisielk/errcheck \
+		github.com/mattn/goveralls \
+		github.com/mibk/dupl \
+		github.com/mmatczuk/go_generics/cmd/go_generics \
+		github.com/wadey/gocovmerge \
+		golang.org/x/lint/golint \
+		golang.org/x/perf/cmd/benchstat \
+		golang.org/x/tools/cmd/goyacc \
+		golang.org/x/tools/cmd/stringer \
+		golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
+		honnef.co/go/tools/cmd/staticcheck
 	touch $@
 
 IGNORE_GOVERS :=
@@ -1070,8 +1070,8 @@ testslow testraceslow:
 
 .PHONY: upload-coverage
 upload-coverage: bin/.bootstrap
-	$(GO) install ./vendor/github.com/wadey/gocovmerge
-	$(GO) install ./vendor/github.com/mattn/goveralls
+	$(GO) install github.com/wadey/gocovmerge
+	$(GO) install github.com/mattn/goveralls
 	@build/upload-coverage.sh
 
 .PHONY: acceptance
@@ -1631,7 +1631,12 @@ clean: clean-c-deps clean-execgen-files
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
-	rm -rf artifacts bin $(ARCHIVE) pkg/sql/parser/gen
+	rm -rf artifacts bin $(ARCHIVE) pkg/sql/parser/gen vendor
+
+vendor/modules.txt: go.sum
+	$(GO_INSTALL) -v github.com/otan-cockroach/modvendor
+	$(GO) mod vendor
+	./bin/modvendor -copy="**/*.c **/*.h **/*.proto"  -inject 'github.com/grpc-ecosystem/grpc-gateway:github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api,github.com/grpc-ecosystem/grpc-gateway:github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/rpc,github.com/prometheus/client_model:github.com/prometheus/client_model'
 
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
