@@ -1918,3 +1918,33 @@ select
  │                     <--- '2020-02-11 07:25:00+00:00' ------ '2020-03-21 06:45:41+00:00' ------ '2020-04-21 06:25:41+00:00'
  └── filters
       └── created:3 = '2020-04-11 06:25:41+00:00' [type=bool, outer=(3), constraints=(/3: [/'2020-04-11 06:25:41+00:00' - /'2020-04-11 06:25:41+00:00']; tight), fd=()-->(3)]
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2020-05-26 03:02:57.841772+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+# Regression test for #48828. Stats for BETWEEN SYMMETRIC should be based on
+# the tight constraint rather than calculated as 1/3rd of the cardinality.
+norm
+SELECT * FROM a WHERE x BETWEEN SYMMETRIC 25 and 50
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 26]
+ ├── stats: [rows=26, distinct(1)=26, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── ((x:1 >= 25) AND (x:1 <= 50)) OR ((x:1 >= 50) AND (x:1 <= 25)) [type=bool, outer=(1), constraints=(/1: [/25 - /50]; tight)]
