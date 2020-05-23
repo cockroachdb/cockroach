@@ -369,17 +369,6 @@ func (md *Metadata) AllTables() []TableMeta {
 	return md.tables
 }
 
-// TableByStableID looks up the catalog table associated with the given
-// StableID (unique across all tables and stable across queries).
-func (md *Metadata) TableByStableID(id cat.StableID) cat.Table {
-	for _, mdTab := range md.tables {
-		if mdTab.Table.ID() == id {
-			return mdTab.Table
-		}
-	}
-	return nil
-}
-
 // AddColumn assigns a new unique id to a column within the query and records
 // its alias and type. If the alias is empty, a "column<ID>" alias is created.
 func (md *Metadata) AddColumn(alias string, typ *types.T) ColumnID {

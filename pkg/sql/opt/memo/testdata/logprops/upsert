@@ -81,6 +81,7 @@ project
            │    │    │    ├── prune: (10,13)
            │    │    │    ├── reject-nulls: (10-13)
            │    │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
+           │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-zero)
            │    │    │    ├── ensure-upsert-distinct-on
            │    │    │    │    ├── columns: x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null)
            │    │    │    │    ├── grouping columns: y:6(int!null) column9:9(int!null)
@@ -247,6 +248,7 @@ project
            │         │    ├── prune: (18,21)
            │         │    ├── reject-nulls: (18-21)
            │         │    ├── interesting orderings: (+21) (+18) (+19,+20,+21)
+           │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │         │    ├── upsert-distinct-on
            │         │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int)
            │         │    │    ├── grouping columns: x:5(int!null)
@@ -274,6 +276,7 @@ project
            │         │    │    │         │    ├── prune: (15-17)
            │         │    │    │         │    ├── reject-nulls: (14-17)
            │         │    │    │         │    ├── interesting orderings: (+17) (+14) (+15,+16,+17)
+           │         │    │    │         │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-zero)
            │         │    │    │         │    ├── upsert-distinct-on
            │         │    │    │         │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int)
            │         │    │    │         │    │    ├── grouping columns: column8:8(int)
@@ -302,6 +305,7 @@ project
            │         │    │    │         │    │    │         │    ├── prune: (5,6,9-12)
            │         │    │    │         │    │    │         │    ├── reject-nulls: (10-13)
            │         │    │    │         │    │    │         │    ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
+           │         │    │    │         │    │    │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │         │    │    │         │    │    │         │    ├── project
            │         │    │    │         │    │    │         │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
            │         │    │    │         │    │    │         │    │    ├── side-effects
@@ -469,6 +473,7 @@ project
  │         │    │    ├── prune: (9-11)
  │         │    │    ├── reject-nulls: (9-12)
  │         │    │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
+ │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-zero)
  │         │    │    ├── ensure-upsert-distinct-on
  │         │    │    │    ├── columns: column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null)
  │         │    │    │    ├── grouping columns: column7:7(int)
@@ -614,6 +619,7 @@ upsert abc
       │    │    │    ├── prune: (12-14)
       │    │    │    ├── reject-nulls: (11-14)
       │    │    │    ├── interesting orderings: (+14) (+11) (+12,+13,+14)
+      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-zero)
       │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null)
       │    │    │    │    ├── grouping columns: y:6(int!null)
