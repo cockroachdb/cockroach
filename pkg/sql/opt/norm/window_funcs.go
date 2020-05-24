@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -137,4 +137,14 @@ func (c *CustomFuncs) ExtractUndeterminedConditions(
 		}
 	}
 	return newFilters
+}
+
+// OrderingSucceeded returns true if an OrderingChoice is not nil.
+func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
+	return result != nil
+}
+
+// DerefOrderingChoice returns an OrderingChoice from a pointer.
+func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
+	return *result
 }
