@@ -295,9 +295,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 			t.Fatal(err)
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType != backupccl.ZipType {
-			t.Errorf("expect manifest files to be compressed but the format is" + fileType)
-		}
+		require.Equal(t, backupccl.ZipType, fileType, "expect manifest files to be compressed but the format is" + fileType)
 	})
 
 	sqlDB.Exec(t, "CREATE DATABASE data2")
@@ -415,9 +413,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 						t.Fatal(err)
 					}
 					fileType := http.DetectContentType(backupPartitionBytes)
-					if fileType != backupccl.ZipType {
-						t.Errorf("expect partition descriptor files to be compressed but the format is" + fileType)
-					}
+					require.Equal(t, backupccl.ZipType, fileType, "expect partition descriptor files to be compressed but the format is" + fileType)
 				}
 			}
 		}
@@ -1130,10 +1126,11 @@ func TestBackupRestoreResume(t *testing.T) {
 		}
 		// This part relies on the assumption that a manifest, if compressed,
 		// is in the gzip format (and not others).
-		backupManifestBytes, err = backupccl.DecompressAndCheckFile(backupManifestBytes)
-		if err != nil {
-			t.Fatal(err)
+		fileType := http.DetectContentType(backupManifestBytes)
+		if fileType == backupccl.ZipType {
+			backupManifestBytes, err = backupccl.DecompressFile(backupManifestBytes)
 		}
+		require.NoError(t, err, err)
 		var backupManifest backupccl.BackupManifest
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatal(err)
@@ -2591,10 +2588,11 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		backupManifestBytes, err = backupccl.DecompressAndCheckFile(backupManifestBytes)
-		if err != nil {
-			t.Fatalf("%+v", err)
+		fileType := http.DetectContentType(backupManifestBytes)
+		if fileType == backupccl.ZipType {
+			backupManifestBytes, err = backupccl.DecompressFile(backupManifestBytes)
 		}
+		require.NoError(t, err, err)
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatalf("%+v", err)
 		}
