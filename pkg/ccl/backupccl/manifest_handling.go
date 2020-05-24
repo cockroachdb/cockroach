@@ -127,23 +127,19 @@ func compressFile(descBuf []byte) ([]byte, error) {
 	return compressedDescBuf, nil
 }
 
-// DecompressAndCheckFile checks if a file is in gzip format, and decompresses
-// it if this is the case.
-func DecompressAndCheckFile(descBytes []byte) ([]byte, error) {
-	fileType := http.DetectContentType(descBytes)
-	if fileType == ZipType {
-		r, err := gzip.NewReader(bytes.NewBuffer(descBytes))
-		if err != nil {
-			return nil, err
-		}
-		defer r.Close()
-		decompressedDescBytes, err := ioutil.ReadAll(r)
-		if err != nil {
-			return nil, err
-		}
-		return decompressedDescBytes, nil
+// DecompressFile assumes that a file is in GZip format,
+// and decompresses it.
+func DecompressFile(descBytes []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewBuffer(descBytes))
+	if err != nil {
+		return nil, err
 	}
-	return descBytes, nil
+	defer r.Close()
+	decompressedDescBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return decompressedDescBytes, nil
 }
 
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
@@ -170,7 +166,10 @@ func readBackupManifest(
 		}
 	}
 	// This decompresses any backup manifest in gzip format.
-	descBytes, err = DecompressAndCheckFile(descBytes)
+	fileType := http.DetectContentType(descBytes)
+	if fileType == ZipType {
+		descBytes, err = DecompressFile(descBytes)
+	}
 	if err != nil {
 		return BackupManifest{}, errors.Wrap(
 			err, "decompressing backup manifest")
@@ -225,7 +224,10 @@ func readBackupPartitionDescriptor(
 		}
 	}
 	// This decompresses any backup partition descriptor in gzip format.
-	descBytes, err = DecompressAndCheckFile(descBytes)
+	fileType := http.DetectContentType(descBytes)
+	if fileType == ZipType {
+		descBytes, err = DecompressFile(descBytes)
+	}
 	if err != nil {
 		return BackupPartitionDescriptor{}, errors.Wrap(
 			err, "decompressing backup partition descriptor")
