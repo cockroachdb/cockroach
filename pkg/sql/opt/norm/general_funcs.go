@@ -42,23 +42,6 @@ func (c *CustomFuncs) Succeeded(result opt.Expr) bool {
 	return result != nil
 }
 
-// OrderingSucceeded returns true if an OrderingChoice is not nil.
-func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
-	return result != nil
-}
-
-// DerefOrderingChoice returns an OrderingChoice from a pointer.
-func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
-	return *result
-}
-
-// ExprIsNeverNull returns true if we can prove that the given scalar expression
-// is always non-NULL. Any variables that refer to columns in the notNullCols
-// set are assumed to be non-NULL. See memo.ExprIsNeverNull.
-func (c *CustomFuncs) ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
-	return memo.ExprIsNeverNull(e, notNullCols)
-}
-
 // ----------------------------------------------------------------------
 //
 // Typing functions
@@ -497,9 +480,16 @@ func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 // ----------------------------------------------------------------------
 //
 // Property functions
-//   General custom functions related to expression logical properties.
+//   General custom functions related to expression properties.
 //
 // ----------------------------------------------------------------------
+
+// ExprIsNeverNull returns true if we can prove that the given scalar expression
+// is always non-NULL. Any variables that refer to columns in the notNullCols
+// set are assumed to be non-NULL. See memo.ExprIsNeverNull.
+func (c *CustomFuncs) ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
+	return memo.ExprIsNeverNull(e, notNullCols)
+}
 
 // sharedProps returns the shared logical properties for the given expression.
 // Only relational expressions and certain scalar list items (e.g. FiltersItem,
@@ -854,9 +844,9 @@ func (c *CustomFuncs) ExtractGroupingOrdering(
 // ----------------------------------------------------------------------
 
 // IsPositiveInt is true if the given Datum value is greater than zero.
-func (c *CustomFuncs) IsPositiveInt(val tree.Datum) bool {
-	limitVal := int64(*val.(*tree.DInt))
-	return limitVal > 0
+func (c *CustomFuncs) IsPositiveInt(datum tree.Datum) bool {
+	val := int64(*datum.(*tree.DInt))
+	return val > 0
 }
 
 // EqualsString returns true if the given strings are equal. This function is
