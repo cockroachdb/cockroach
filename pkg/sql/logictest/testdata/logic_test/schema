@@ -10,11 +10,20 @@ CREATE SCHEMA IF NOT EXISTS pg_catalog
 statement ok
 CREATE SCHEMA IF NOT EXISTS information_schema
 
-statement error unimplemented: new schemas are unsupported
+statement ok
+CREATE SCHEMA derp
+
+statement error schema \"derp\" already exists
+CREATE SCHEMA derp
+
+statement ok
 CREATE SCHEMA IF NOT EXISTS derp
 
-statement error unimplemented: new schemas are unsupported
-CREATE SCHEMA derp
+statement ok
+CREATE SCHEMA IF NOT EXISTS foo
+
+statement error schema \"foo\" already exists
+CREATE SCHEMA foo
 
 statement error schema .* already exists
 CREATE SCHEMA public
@@ -27,3 +36,15 @@ CREATE SCHEMA pg_catalog
 
 statement error schema .* already exists
 CREATE SCHEMA information_schema
+
+statement ok
+CREATE DATABASE db
+
+statement ok
+CREATE SCHEMA db.foo
+
+statement error schema \"db\.foo\" already exists
+CREATE SCHEMA db.foo
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS db.public

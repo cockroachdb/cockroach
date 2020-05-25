@@ -157,6 +157,9 @@ func (u *sqlSymUnion) nameList() tree.NameList {
 func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
     return u.val.(*tree.UnresolvedName)
 }
+func (u *sqlSymUnion) unresolvedSchemaName() *tree.UnresolvedSchemaName {
+    return u.val.(*tree.UnresolvedSchemaName)
+}
 func (u *sqlSymUnion) unresolvedObjectName() *tree.UnresolvedObjectName {
     return u.val.(*tree.UnresolvedObjectName)
 }
@@ -881,8 +884,8 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedSchemaName> schema_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
-%type <str> schema_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target
@@ -1939,7 +1942,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeSetSchema{
-        Schema: $6,
+        Schema: $6.unresolvedSchemaName(),
       },
     }
   }
@@ -4483,13 +4486,13 @@ create_schema_stmt:
   CREATE SCHEMA schema_name
   {
     $$.val = &tree.CreateSchema{
-      Schema: $3,
+      Schema: $3.unresolvedSchemaName(),
     }
   }
 | CREATE SCHEMA IF NOT EXISTS schema_name
   {
     $$.val = &tree.CreateSchema{
-      Schema: $6,
+      Schema: $6.unresolvedSchemaName(),
       IfNotExists: true,
     }
   }
@@ -9989,8 +9992,6 @@ type_name:             db_object_name
 
 sequence_name:         db_object_name
 
-schema_name:           name
-
 table_name:            db_object_name
 
 standalone_index_name: db_object_name
@@ -10075,6 +10076,26 @@ func_name_no_crdb_extra:
     $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
   }
 | prefixed_column_path
+
+// Names for schemas.
+// Accepted patterns:
+// <schema>
+// <database>.<schema>
+schema_name:
+  name
+  {
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedSchemaName(1, [2]string{$1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
+  }
+| name '.' unrestricted_name
+  {
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedSchemaName(2, [2]string{$3, $1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
+  }
 
 // Names for database objects (tables, sequences, views, stored functions).
 // Accepted patterns:

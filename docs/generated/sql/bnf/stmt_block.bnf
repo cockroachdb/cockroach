@@ -1388,6 +1388,7 @@ opt_add_val_placement ::=
 
 schema_name ::=
 	name
+	| name '.' unrestricted_name
 
 opt_with ::=
 	'WITH'

@@ -1200,7 +1200,7 @@ func (node *CreateTable) HoistConstraints() {
 // CreateSchema represents a CREATE SCHEMA statement.
 type CreateSchema struct {
 	IfNotExists bool
-	Schema      string
+	Schema      *UnresolvedSchemaName
 }
 
 // Format implements the NodeFormatter interface.
@@ -1211,7 +1211,7 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 
-	ctx.WriteString(node.Schema)
+	ctx.WriteString(node.Schema.String())
 }
 
 // CreateSequence represents a CREATE SEQUENCE statement.

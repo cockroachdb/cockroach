@@ -99,11 +99,11 @@ func (node *AlterTypeRename) Format(ctx *FmtCtx) {
 
 // AlterTypeSetSchema represents an ALTER TYPE SET SCHEMA command.
 type AlterTypeSetSchema struct {
-	Schema string
+	Schema *UnresolvedSchemaName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTypeSetSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SET SCHEMA ")
-	ctx.WriteString(node.Schema)
+	ctx.WriteString(node.Schema.String())
 }

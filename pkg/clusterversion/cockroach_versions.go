@@ -64,6 +64,7 @@ const (
 	VersionGeospatialType
 	VersionEnums
 	VersionRangefeedLeases
+	VersionUserDefinedSchemas
 
 	// Add new versions here (step one of two).
 )
@@ -483,7 +484,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 3},
 	},
 	{
-
 		// VersionRangefeedLeases is the enablement of leases uses rangefeeds.
 		// All nodes with this versions will have rangefeeds enabled on all system
 		// ranges. Once this version is finalized, gossip is not needed in the
@@ -491,6 +491,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// will not pass gossip to the SQL layer.
 		Key:     VersionRangefeedLeases,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 4},
+	},
+	{
+		// VersionUserDefinedSchemas enables arbitrary user-defined schemas.
+		Key:     VersionUserDefinedSchemas,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 5},
 	},
 
 	// Add new versions here (step two of two).
