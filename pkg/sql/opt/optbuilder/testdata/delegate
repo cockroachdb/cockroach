@@ -1,17 +1,3 @@
-build
-SHOW DATABASES
-----
-sort
- ├── columns: database_name:2!null
- ├── ordering: +2
- └── distinct-on
-      ├── columns: catalog_name:2!null
-      ├── grouping columns: catalog_name:2!null
-      └── project
-           ├── columns: catalog_name:2!null
-           └── scan "".information_schema.schemata
-                └── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
-
 # Note: t is the default database for the test catalog.
 build
 SHOW SCHEMAS FROM t
