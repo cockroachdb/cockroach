@@ -21,19 +21,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// NullsAreDistinct returns true if the given distinct operator treats NULL
-// values as not equal to one another (i.e. distinct). UpsertDistinctOp treats
-// NULL values as distinct, whereas DistinctOp does not.
-func (c *CustomFuncs) NullsAreDistinct(distinctOp opt.Operator) bool {
-	return distinctOp == opt.UpsertDistinctOnOp
-}
-
-// RaisesErrorOnDup returns true if an UpsertDistinct operator raises an error
-// when duplicate values are detected.
-func (c *CustomFuncs) RaisesErrorOnDup(private *memo.GroupingPrivate) bool {
-	return private.ErrorOnDup
-}
-
 // RemoveGroupingCols returns a new grouping private struct with the given
 // columns removed from the grouping column set.
 func (c *CustomFuncs) RemoveGroupingCols(
