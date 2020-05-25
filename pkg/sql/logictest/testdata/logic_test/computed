@@ -776,3 +776,17 @@ query TT
 SELECT * FROM t34901
 ----
 a  ab
+
+# Regression test for #42418.
+statement ok
+CREATE TABLE t42418 (x INT GENERATED ALWAYS AS (1) STORED);
+ALTER TABLE t42418 ADD COLUMN y INT GENERATED ALWAYS AS (1) STORED
+
+query TT
+SHOW CREATE t42418
+----
+t42418  CREATE TABLE t42418 (
+        x INT8 NULL AS (1) STORED,
+        y INT8 NULL AS (1) STORED,
+        FAMILY "primary" (x, rowid, y)
+)
