@@ -75,6 +75,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
 		sqlbase.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
 		sqlbase.CrdbInternalCreateTypeStmtsTableID:      crdbInternalCreateTypeStmtsTable,
+		sqlbase.CrdbInternalDatabasesTableID:            crdbInternalDatabasesTable,
 		sqlbase.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
 		sqlbase.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
 		sqlbase.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
@@ -197,6 +198,26 @@ CREATE TABLE crdb_internal.node_runtime_info (
 			}
 		}
 		return nil
+	},
+}
+
+var crdbInternalDatabasesTable = virtualSchemaTable{
+	comment: `databases accessible by the current user (KV scan)`,
+	schema: `
+CREATE TABLE crdb_internal.databases (
+	oid OID NOT NULL,
+	id INT NOT NULL,
+	name STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
+			func(db *sqlbase.DatabaseDescriptor) error {
+				return addRow(
+					dbOid(db.ID),                   // oid
+					tree.NewDInt(tree.DInt(db.ID)), // id
+					tree.NewDString(db.Name),       // name
+				)
+			})
 	},
 }
 
