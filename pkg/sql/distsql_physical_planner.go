@@ -1574,9 +1574,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 							// the current aggregation e.
 							argTypes[i] = intermediateTypes[argIdxs[i]]
 						}
-						_, outputType, err := execinfrapb.GetAggregateInfo(
-							finalInfo.Fn, argTypes...,
-						)
+						_, outputType, err := execinfrapb.GetAggregateInfo(finalInfo.Fn, argTypes...)
 						if err != nil {
 							return err
 						}

@@ -2554,3 +2554,18 @@ SELECT percentile_disc(0.50) FROM osagg
 
 statement error ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column
 SELECT percentile_cont(0.50) FROM osagg
+
+# Tests for min/max on collated strings.
+statement ok
+CREATE TABLE t_collate (x STRING COLLATE en_us);
+INSERT INTO t_collate VALUES ('hi' COLLATE en_us), ('hello' COLLATE en_us), ('howdy' COLLATE en_us)
+
+query TT
+SELECT min(x), max(x) FROM t_collate
+----
+hello howdy
+
+query TT
+SELECT min(NULL::STRING COLLATE en_us), max(NULL::STRING COLLATE en_us)
+----
+NULL NULL
