@@ -58,6 +58,7 @@ const (
 	CrdbInternalClusterSettingsTableID
 	CrdbInternalCreateStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
+	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID
 	CrdbInternalForwardDependenciesTableID
 	CrdbInternalGossipNodesTableID

@@ -170,15 +170,13 @@ drop table  ·            ·
 query TTT
 EXPLAIN SHOW DATABASES
 ----
-·                             distributed  false
-·                             vectorized   false
-sort                          ·            ·
- │                            order        +database_name
- └── distinct                 ·            ·
-      │                       distinct on  database_name
-      └── render              ·            ·
-           └── virtual table  ·            ·
-·                             source       schemata@primary
+·                        distributed  false
+·                        vectorized   false
+sort                     ·            ·
+ │                       order        +database_name
+ └── render              ·            ·
+      └── virtual table  ·            ·
+·                        source       databases@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
