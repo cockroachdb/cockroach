@@ -10,10 +10,10 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRRBBTII
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
+query IIIIRRRRRRBBTII
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), var_samp(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -774,7 +774,7 @@ SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 # VARIANCE/STDDEV
 
 query RRR
-SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz
+SELECT var_samp(x), variance(y::decimal), round(var_samp(z), 14) FROM xyz
 ----
 9 4.5 6.33333333333333
 
