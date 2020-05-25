@@ -585,3 +585,8 @@ func (c *CustomFuncs) PruneMutationReturnCols(
 	newPrivate.PassthroughCols = newPassthroughCols
 	return &newPrivate
 }
+
+// MutationTable returns the table upon which the mutation is applied.
+func (c *CustomFuncs) MutationTable(private *memo.MutationPrivate) opt.TableID {
+	return private.Table
+}
