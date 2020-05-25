@@ -2503,6 +2503,7 @@ opt_name_parens ::=
 
 generated_as ::=
 	'AS'
+	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS'
 
 reference_action ::=
 	'NO' 'ACTION'
