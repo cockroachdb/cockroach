@@ -647,8 +647,10 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 // NOT_LA exists so that productions such as NOT LIKE can be given the same
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
 // NOT, at least with respect to their left-hand subexpression. WITH_LA is
-// needed to make the grammar LALR(1).
-%token NOT_LA WITH_LA AS_LA
+// needed to make the grammar LALR(1). GENERATED_ALWAYS is needed to support
+// the Postgres syntax for computed columns along with our family related
+// extensions (CREATE FAMILY/CREATE FAMILY family_name).
+%token NOT_LA WITH_LA AS_LA GENERATED_ALWAYS
 
 %union {
   id    int32
@@ -4987,7 +4989,7 @@ col_qualification_elem:
 // GENERATED ALWAYS is a noise word for compatibility with Postgres.
 generated_as:
   AS {}
-//  GENERATED ALWAYS AS {}
+| GENERATED_ALWAYS ALWAYS AS {}
 
 
 index_def:
