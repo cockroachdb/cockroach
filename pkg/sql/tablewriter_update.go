@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // tableUpdater handles writing kvs and forming table rows for updates.
@@ -41,7 +42,7 @@ func (tu *tableUpdater) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext
 // We don't implement this because tu.ru.UpdateRow wants two slices
 // and it would be a shame to split the incoming slice on every call.
 // Instead provide a separate rowForUpdate() below.
-func (tu *tableUpdater) row(context.Context, tree.Datums, bool) error {
+func (tu *tableUpdater) row(context.Context, tree.Datums, util.FastIntSet, bool) error {
 	panic("unimplemented")
 }
 

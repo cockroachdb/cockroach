@@ -648,7 +648,7 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 		f.WriteByte(')')
 	}
 
-	if desc.Predicate != "" {
+	if desc.IsPartial() {
 		f.WriteString(" WHERE ")
 		f.WriteString(desc.Predicate)
 	}
@@ -677,6 +677,11 @@ func (desc *IndexDescriptor) IsInterleaved() bool {
 // IsSharded returns whether the index is hash sharded or not.
 func (desc *IndexDescriptor) IsSharded() bool {
 	return desc.Sharded.IsSharded
+}
+
+// IsPartial returns true if the index is a partial index.
+func (desc *IndexDescriptor) IsPartial() bool {
+	return desc.Predicate != ""
 }
 
 // SetID implements the DescriptorProto interface.

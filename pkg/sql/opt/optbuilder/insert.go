@@ -632,8 +632,15 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
+	// Disambiguate names so that references in any expressions, such as a
+	// check constraint, refer to the correct columns.
+	mb.disambiguateColumns()
+
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
+
+	// Add any partial index boolean columns to the input.
+	mb.addPartialIndexPredicateCols()
 
 	mb.buildFKChecksForInsert()
 
@@ -920,6 +927,10 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Merge input insert and update columns using CASE expressions.
 	mb.projectUpsertColumns()
+
+	// Disambiguate names so that references in any expressions, such as a
+	// check constraint, refer to the correct columns.
+	mb.disambiguateColumns()
 
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()

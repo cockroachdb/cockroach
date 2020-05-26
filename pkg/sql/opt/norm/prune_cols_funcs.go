@@ -60,6 +60,7 @@ func (c *CustomFuncs) NeededMutationCols(
 	addCols(private.FetchCols)
 	addCols(private.UpdateCols)
 	addCols(private.CheckCols)
+	addCols(private.IndexPredicateCols)
 	addCols(private.ReturnCols)
 	addCols(private.PassthroughCols)
 	if private.CanaryCol != 0 {

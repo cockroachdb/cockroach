@@ -332,10 +332,9 @@ type checkSet = util.FastIntSet
 //
 // It is allowed to check only a subset of the active checks (for some, we could
 // determine that they can't fail because they statically evaluate to true for
-// the entire input); checkSet contains the set of checks for which we have
+// the entire input); checkOrds contains the set of checks for which we have
 // values, as ordinals into ActiveChecks(). There must be exactly one value in
 // checkVals for each element in checkSet.
-//
 func checkMutationInput(
 	tabDesc *sqlbase.ImmutableTableDescriptor, checkOrds checkSet, checkVals tree.Datums,
 ) error {

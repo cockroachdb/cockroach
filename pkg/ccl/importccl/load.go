@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -365,7 +366,10 @@ func insertStmtToKVs(
 		}
 		// TODO(bram): Is the checking of FKs here required? If not, turning them
 		// off may provide a speed boost.
-		if err := ri.InsertRow(ctx, b, insertRow, true, row.CheckFKs, false /* traceKV */); err != nil {
+		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+		// not add entries to.
+		var ignoreIndexes util.FastIntSet
+		if err := ri.InsertRow(ctx, b, insertRow, ignoreIndexes, true, row.CheckFKs, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", insertRow)
 		}
 	}

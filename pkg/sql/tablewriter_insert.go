@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // tableInserter handles writing kvs and forming table rows for inserts.
@@ -38,9 +39,11 @@ func (ti *tableInserter) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContex
 }
 
 // row is part of the tableWriter interface.
-func (ti *tableInserter) row(ctx context.Context, values tree.Datums, traceKV bool) error {
+func (ti *tableInserter) row(
+	ctx context.Context, values tree.Datums, ignoreIndexes util.FastIntSet, traceKV bool,
+) error {
 	ti.batchSize++
-	return ti.ri.InsertRow(ctx, ti.b, values, false /* overwrite */, row.CheckFKs, traceKV)
+	return ti.ri.InsertRow(ctx, ti.b, values, ignoreIndexes, false /* overwrite */, row.CheckFKs, traceKV)
 }
 
 // atBatchEnd is part of the tableWriter interface.
