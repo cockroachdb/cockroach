@@ -244,6 +244,25 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
 }
 
+// TestEmptyFullClusterResotre ensures that we can backup and restore a full
+// cluster backup with only metadata (no user data). Regression test for #49573.
+func TestEmptyFullClusterRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_, _, sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, initNone)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `CREATE USER alice`)
+	sqlDB.Exec(t, `CREATE USER bob`)
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+
+	checkQuery := "SELECT * FROM system.users"
+	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
+}
+
 func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

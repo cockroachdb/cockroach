@@ -97,6 +97,32 @@ func backupRestoreTestSetupEmptyWithParams(
 	return ctx, tc, sqlDB, cleanupFn
 }
 
+func createEmptyCluster(
+	t testing.TB, clusterSize int,
+) (
+	ctx context.Context,
+	tc *testcluster.TestCluster,
+	sqlDB *sqlutils.SQLRunner,
+	tempDir string,
+	cleanup func(),
+) {
+	ctx = context.Background()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	tc = testcluster.StartTestCluster(t, clusterSize, params)
+
+	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	cleanupFn := func() {
+		tc.Stopper().Stop(context.Background()) // cleans up in memory storage's auxiliary dirs
+		dirCleanupFn()                          // cleans up dir, which is the nodelocal:// storage
+	}
+
+	return ctx, tc, sqlDB, dir, cleanupFn
+}
+
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
 	clusterSize int,
