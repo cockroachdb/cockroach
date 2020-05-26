@@ -54,8 +54,8 @@ func interestingGoroutines() map[int64]string {
 			// Ignore HTTP keep alives
 			strings.Contains(stack, ").readLoop(") ||
 			strings.Contains(stack, ").writeLoop(") ||
-			// Ignore the raven client, which is created lazily on first use.
-			strings.Contains(stack, "raven-go.(*Client).Capture") ||
+			// Ignore the Sentry client, which is created lazily on first use.
+			strings.Contains(stack, "sentry-go.(*HTTPTransport).worker") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Below are the stacks ignored by the upstream leaktest code.

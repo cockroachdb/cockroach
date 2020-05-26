@@ -66,10 +66,10 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
 		},
-		// Raven (Sentry) and the errors library use go/build to determine
+		// Sentry and the errors library use go/build to determine
 		// the list of source directories (used to strip the source prefix
 		// in stack trace reports).
-		"github.com/cockroachdb/cockroach/vendor/github.com/getsentry/raven-go",
+		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/sentry-go",
 		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
 	)
 }

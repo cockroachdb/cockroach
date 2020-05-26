@@ -90,36 +90,15 @@ func TestInternalError(t *testing.T) {
 						".*testing.go.*tRunner()"})
 				}},
 
-				// Verify that internal errors carry safe details.
-				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[0].SafeMessage, `.*TestInternalError.*`)
-					m(t, e.SafeDetail[1].SafeMessage, `woo %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 1: <string>`)
-				}},
-
 				// Verify that formatting works.
 				{"format", func(t *testing.T, e *Error) {
 					eq(t, f("%v", e), ie+"woo waa")
 					eq(t, f("%s", e), ie+"woo waa")
 					eq(t, f("%#v", e), "(XX000) "+ie+"woo waa")
-					vErr := f("%+v", e)
-					m(t, vErr,
+					m(t, f("%+v", e),
 						// Heading line: source, code, error message.
 						`.*internal_errors_test.go:\d+ in TestInternalError\(\): \(XX000\) `+
 							ie+"woo waa")
-					// Safe message.
-					m(t, vErr, "woo %s")
-					m(t, vErr, "arg 1: <string>")
-				}},
-			},
-		},
-		{
-			errors.AssertionFailedf("safe %s", errors.Safe("waa")),
-			[]pred{
-				// Verify that safe details are preserved.
-				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[1].SafeMessage, `safe %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 1: waa`)
 				}},
 			},
 		},
@@ -166,7 +145,6 @@ func TestInternalError(t *testing.T) {
 						`stack trace:`,
 						`.*makeBoo.*`,
 					})
-					m(t, e.SafeDetail[0].SafeMessage, pgcode.Syntax)
 				}},
 			},
 		},
@@ -260,10 +238,6 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, pgcode.AdminShutdown)
-					m(t, e.SafeDetail[2].SafeMessage, `wrap %s`)
-					m(t, e.SafeDetail[3].SafeMessage, `arg 1: <string>`)
-					m(t, e.SafeDetail[5].SafeMessage, `boo`)
 				}},
 			},
 		},
@@ -290,9 +264,6 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
-					m(t, e.SafeDetail[1].SafeMessage, `iewrap %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 1: <string>`)
 				}},
 			},
 		},
@@ -323,8 +294,6 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
-					m(t, e.SafeDetail[1].SafeMessage, `iewrap2`)
 				}},
 			},
 		},
