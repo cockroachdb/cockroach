@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -373,6 +374,9 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
 	}
+	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+	// not delete entries from.
+	var ignoreIndexes util.FastIntSet
 	if err := c.ri.InsertRow(
 		ctx,
 		KVInserter(func(kv roachpb.KeyValue) {
@@ -380,6 +384,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
 		}),
 		insertRow,
+		ignoreIndexes,
 		true, /* ignoreConflicts */
 		SkipFKs,
 		false, /* traceKV */

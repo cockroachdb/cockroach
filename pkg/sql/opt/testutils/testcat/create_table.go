@@ -507,6 +507,12 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		}
 	}
 
+	// Count partial indexes.
+	if def.Predicate != nil {
+		idx.predicate = tree.Serialize(def.Predicate)
+		tt.partialIdxCount++
+	}
+
 	idx.ordinal = len(tt.Indexes)
 	tt.Indexes = append(tt.Indexes, idx)
 

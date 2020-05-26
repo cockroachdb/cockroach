@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // optTableUpserter implements the upsert operation when it is planned by the
@@ -247,7 +248,11 @@ func (tu *optTableUpserter) makeResultFromRow(
 func (*optTableUpserter) desc() string { return "opt upserter" }
 
 // row is part of the tableWriter interface.
-func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bool) error {
+// TODO(mgartner): Use ignoreIndexes to avoid writing to partial indexes when
+// the row does not match the partial index predicate.
+func (tu *optTableUpserter) row(
+	ctx context.Context, row tree.Datums, ignoreIndexes util.FastIntSet, traceKV bool,
+) error {
 	tu.batchSize++
 	tu.resultCount++
 
@@ -300,8 +305,10 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 	ctx context.Context, b *kv.Batch, insertRow tree.Datums, overwrite, traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(
-		ctx, b, insertRow, overwrite, row.CheckFKs, traceKV); err != nil {
+	// TODO(mgartner): Pass ignoreIndexes to InsertRow and do not write index
+	// entries for indexes in the set.
+	var ignoreIndexes util.FastIntSet
+	if err := tu.ri.InsertRow(ctx, b, insertRow, ignoreIndexes, overwrite, row.CheckFKs, traceKV); err != nil {
 		return err
 	}
 

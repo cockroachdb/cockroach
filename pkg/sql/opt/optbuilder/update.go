@@ -321,6 +321,10 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
+	// Disambiguate names so that references in the constraint expression refer
+	// to the correct columns.
+	mb.disambiguateColumns()
+
 	mb.addCheckConstraintCols()
 
 	mb.buildFKChecksForUpdate()
