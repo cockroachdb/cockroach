@@ -467,6 +467,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
+			f.formatColList(e, tp, "index partial pred columns:", t.IndexPredicateCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 

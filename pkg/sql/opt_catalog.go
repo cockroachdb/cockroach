@@ -540,6 +540,9 @@ type optTable struct {
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap map[sqlbase.ColumnID]int
+
+	// partialIndexCount is the number of partial indexes defined on the table.
+	partialIndexCount int
 }
 
 var _ cat.Table = &optTable{}
@@ -588,6 +591,10 @@ func newOptTable(
 			}
 		}
 		ot.indexes[i].init(ot, i, idxDesc, idxZone)
+
+		if idxDesc.IsPartial() {
+			ot.partialIndexCount++
+		}
 	}
 
 	for i := range ot.desc.OutboundFKs {
@@ -763,6 +770,11 @@ func (ot *optTable) DeletableIndexCount() int {
 	return 1 + len(ot.desc.DeletableIndexes())
 }
 
+// PartialIndexCount is part of the cat.Table interface.
+func (ot *optTable) PartialIndexCount() int {
+	return ot.partialIndexCount
+}
+
 // Index is part of the cat.Table interface.
 func (ot *optTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ot.indexes[i]
@@ -851,6 +863,8 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	predicate string
 }
 
 var _ cat.Index = &optIndex{}
@@ -939,6 +953,15 @@ func (oi *optIndex) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
+}
+
+// IsPartial is part of the cat.Index interface.
+func (oi *optIndex) IsPartial() bool {
+	return oi.desc.IsPartial()
+}
+
+func (oi *optIndex) Predicate() string {
+	return oi.desc.Predicate
 }
 
 // KeyColumnCount is part of the cat.Index interface.
@@ -1452,6 +1475,11 @@ func (ot *optVirtualTable) DeletableIndexCount() int {
 	return 1 + len(ot.desc.DeletableIndexes())
 }
 
+// PartialIndexCount is part of the cat.Table interface.
+func (ot *optVirtualTable) PartialIndexCount() int {
+	return 0
+}
+
 // Index is part of the cat.Table interface.
 func (ot *optVirtualTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ot.indexes[i]
@@ -1614,6 +1642,16 @@ func (oi *optVirtualIndex) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) ColumnCount() int {
 	return oi.numCols
+}
+
+// IsPartial is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsPartial() bool {
+	return false
+}
+
+// Predicate is part of the cat.Index interface.
+func (oi *optVirtualIndex) Predicate() string {
+	return ""
 }
 
 // KeyColumnCount is part of the cat.Index interface.

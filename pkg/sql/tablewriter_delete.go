@@ -60,7 +60,12 @@ func (td *tableDeleter) finalize(ctx context.Context, _ bool) (*rowcontainer.Row
 // atBatchEnd is part of the tableWriter interface.
 func (td *tableDeleter) atBatchEnd(_ context.Context, _ bool) error { return nil }
 
-func (td *tableDeleter) row(ctx context.Context, values tree.Datums, traceKV bool) error {
+// row is part of the tableWriter interface.
+// TODO(mgartner): Pass ignoreIndexes to DeleteRow and do not delete index
+// entries for indexes in the set.
+func (td *tableDeleter) row(
+	ctx context.Context, values tree.Datums, ignoreIndexes util.FastIntSet, traceKV bool,
+) error {
 	td.batchSize++
 	return td.rd.DeleteRow(ctx, td.b, values, row.CheckFKs, traceKV)
 }
@@ -165,7 +170,10 @@ func (td *tableDeleter) deleteAllRowsScan(
 			resume = roachpb.Span{}
 			break
 		}
-		if err = td.row(ctx, datums, traceKV); err != nil {
+		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+		// not delete entries from.
+		var ignoreIndexes util.FastIntSet
+		if err = td.row(ctx, datums, ignoreIndexes, traceKV); err != nil {
 			return resume, err
 		}
 	}

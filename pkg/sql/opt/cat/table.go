@@ -88,6 +88,11 @@ type Table interface {
 	// >= WritableIndexCount.
 	DeletableIndexCount() int
 
+	// PartialIndexCount() returns the number of public, write-only, and
+	// delete-only indexes defined on the table that are partial indexes,
+	// indicated by a non-zero-value predicate expression.
+	PartialIndexCount() int
+
 	// Index returns the ith index, where i < DeletableIndexCount. Except for
 	// virtual tables, the table's primary index is always the 0th index, and is
 	// always present (use cat.PrimaryIndex to select it). The primary index

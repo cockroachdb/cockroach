@@ -544,6 +544,7 @@ type Table struct {
 	deleteOnlyColCount int
 	writeOnlyIdxCount  int
 	deleteOnlyIdxCount int
+	partialIdxCount    int
 
 	// interleaved is true if the table's rows are interleaved with rows from
 	// other table(s).
@@ -628,6 +629,11 @@ func (tt *Table) WritableIndexCount() int {
 // DeletableIndexCount is part of the cat.Table interface.
 func (tt *Table) DeletableIndexCount() int {
 	return len(tt.Indexes)
+}
+
+// PartialIndexCount is part of the cat.Table interface.
+func (tt *Table) PartialIndexCount() int {
+	return tt.partialIdxCount
 }
 
 // Index is part of the cat.Table interface.
@@ -733,6 +739,9 @@ type Index struct {
 	// partitionBy is the partitioning clause that corresponds to this index. Used
 	// to implement PartitionByListPrefixes.
 	partitionBy *tree.PartitionBy
+
+	// predicate is a the partial index predicate expression, if it exists.
+	predicate string
 }
 
 // ID is part of the cat.Index interface.
@@ -793,6 +802,16 @@ func (ti *Index) Zone() cat.Zone {
 // Span is part of the cat.Index interface.
 func (ti *Index) Span() roachpb.Span {
 	panic("not implemented")
+}
+
+// IsPartial is part of the cat.Index interface.
+func (ti *Index) IsPartial() bool {
+	return ti.predicate != ""
+}
+
+// Predicate is part of the cat.Index interface.
+func (ti *Index) Predicate() string {
+	return ti.predicate
 }
 
 // PartitionByListPrefixes is part of the cat.Index interface.

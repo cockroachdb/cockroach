@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -138,6 +139,37 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		return err
 	}
 
+	// Create a set of index IDs to not write to. Indexes should not be written
+	// to when they are partial indexes and the row does not satisfy the
+	// predicate. This set is passed as a parameter tableInserter.row below.
+	var ignoreIndexes util.FastIntSet
+	indexPredicateVals := rowVals[len(r.insertCols)+r.checkOrds.Len():]
+	colIdx := 0
+	indexes := r.ti.tableDesc().Indexes
+	for i := range indexes {
+		if colIdx >= len(indexPredicateVals) {
+			break
+		}
+
+		index := indexes[i]
+		if index.IsPartial() {
+			val, err := tree.GetBool(indexPredicateVals[colIdx])
+			if err != nil {
+				return err
+			}
+			if !val {
+				// If the value of the column for the index predicate expression
+				// is false, the row should not be added to the partial index.
+				ignoreIndexes.Add(int(index.ID))
+			}
+			colIdx++
+		}
+	}
+
+	// Truncate rowVals so that it no longer includes partial index predicate
+	// values.
+	rowVals = rowVals[:len(r.insertCols)+r.checkOrds.Len()]
+
 	// Verify the CHECK constraint results, if any.
 	if !r.checkOrds.Empty() {
 		checkVals := rowVals[len(r.insertCols):]
@@ -148,7 +180,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, rowVals, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, rowVals, ignoreIndexes, r.traceKV); err != nil {
 		return err
 	}
 

@@ -56,6 +56,15 @@ type Index interface {
 	// clause), as well as implicitly added primary key columns.
 	ColumnCount() int
 
+	// IsPartial returns true if the index is a partial index with a predicate
+	// expression.
+	IsPartial() bool
+
+	// Predicate returns the predicate expression if the index is a
+	// partial index. If it is not a partial index, the empty string is
+	// returned.
+	Predicate() string
+
 	// KeyColumnCount returns the number of columns in the index that are part
 	// of its unique key. No two rows in the index will have the same values for
 	// those columns (where NULL values are treated as equal). Every index has a

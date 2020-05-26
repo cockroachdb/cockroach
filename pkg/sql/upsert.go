@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -168,7 +169,10 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	return n.run.tw.row(params.ctx, rowVals, n.run.traceKV)
+	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+	// not write entries to.
+	var ignoreIndexes util.FastIntSet
+	return n.run.tw.row(params.ctx, rowVals, ignoreIndexes, n.run.traceKV)
 }
 
 // BatchedCount implements the batchedPlanNode interface.
