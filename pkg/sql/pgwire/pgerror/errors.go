@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/util/stacktrace"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -25,7 +24,6 @@ import (
 var _ error = (*Error)(nil)
 var _ errors.ErrorHinter = (*Error)(nil)
 var _ errors.ErrorDetailer = (*Error)(nil)
-var _ errors.SafeDetailer = (*Error)(nil)
 var _ fmt.Formatter = (*Error)(nil)
 
 // Error implements the error interface.
@@ -36,17 +34,6 @@ func (pg *Error) ErrorHint() string { return pg.Hint }
 
 // ErrorDetail implements the hintdetail.ErrorDetailer interface.
 func (pg *Error) ErrorDetail() string { return pg.Detail }
-
-// SafeDetails implements the errbase.SafeDetailer interface.
-// TODO(knz): this is provided for compatibility with 19.1 nodes.
-// Remove in 19.3, together with the "SafeDetail" proto field.
-func (pg *Error) SafeDetails() []string {
-	details := make([]string, len(pg.SafeDetail))
-	for i, d := range pg.SafeDetail {
-		details[i] = d.SafeMessage + d.EncodedStackTrace
-	}
-	return details
-}
 
 // FullError can be used when the hint and/or detail are to be tested.
 func FullError(err error) string {
@@ -134,17 +121,6 @@ func (pg *Error) Format(s fmt.State, verb rune) {
 			fmt.Fprintf(s, "%s:%d in %s(): ", pg.Source.File, pg.Source.Line, pg.Source.Function)
 		}
 		fmt.Fprintf(s, "(%s) %s", pg.Code, pg.Message)
-		for _, d := range pg.SafeDetail {
-			fmt.Fprintf(s, "\n-- detail --\n%s", d.SafeMessage)
-			if d.EncodedStackTrace != "" {
-				st, err := stacktrace.DecodeStackTrace(d.EncodedStackTrace)
-				if err != nil {
-					fmt.Fprintf(s, "unable to encode stack trace: %+v", err)
-				} else {
-					fmt.Fprintf(s, "\n%s", stacktrace.PrintStackTrace(st))
-				}
-			}
-		}
 		return
 	case verb == 'v' && s.Flag('#'):
 		// %#v spells out the code as prefix.

@@ -33,43 +33,13 @@ type Error struct {
 	Hint     string        `protobuf:"bytes,4,opt,name=hint,proto3" json:"hint,omitempty"`
 	Severity string        `protobuf:"bytes,8,opt,name=severity,proto3" json:"severity,omitempty"`
 	Source   *Error_Source `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
-	// a telemetry key, used as telemetry counter name.
-	// Typically of the form [<prefix>.]#issuenum[.details]
-	//
-	// Note: this field is obsolete. It is preserved for compatibility
-	// with nodes running 19.1:
-	//
-	// - when an error with this field populated is received on a
-	//   post-19.1 node, the field is replaced by uses of
-	//   errors.WithTelemetryKey. This data is then subsequently used for
-	//   troubleshooting reports and telemetry.
-	// - Conversely, errors sent towards a 19.1 node will get this field
-	//   populated with the first key found in errors.GetTelemetryKeys().
-	//
-	// TODO(knz): Remove in 19.3.
-	TelemetryKey string `protobuf:"bytes,6,opt,name=telemetry_key,json=telemetryKey,proto3" json:"telemetry_key,omitempty"`
-	// complement to the detail field that can be reported
-	// in sentry reports. This is scrubbed of PII.
-	//
-	// Note: this field is obsolete. It is preserved for compatibility
-	// with nodes running 19.1:
-	//
-	// - when an error with this field populated is received on a
-	//   post-19.1 node, the field is replaced by uses of
-	//   errors.WithSafeDetail. This data is then subsequently used for
-	//   troubleshooting reports.
-	// - Conversely, errors sent towards a 19.1 node will get this field
-	//   populated with the data from errors.GetSafeDetails().
-	//
-	// TODO(knz): Remove in 19.3.
-	SafeDetail []*Error_SafeDetail `protobuf:"bytes,7,rep,name=safe_detail,json=safeDetail,proto3" json:"safe_detail,omitempty"`
 }
 
 func (m *Error) Reset()         { *m = Error{} }
 func (m *Error) String() string { return proto.CompactTextString(m) }
 func (*Error) ProtoMessage()    {}
 func (*Error) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_3035fb2acbd60f3b, []int{0}
+	return fileDescriptor_errors_aa3d3323b1cab3b8, []int{0}
 }
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -104,7 +74,7 @@ func (m *Error_Source) Reset()         { *m = Error_Source{} }
 func (m *Error_Source) String() string { return proto.CompactTextString(m) }
 func (*Error_Source) ProtoMessage()    {}
 func (*Error_Source) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_3035fb2acbd60f3b, []int{0, 0}
+	return fileDescriptor_errors_aa3d3323b1cab3b8, []int{0, 0}
 }
 func (m *Error_Source) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -129,44 +99,9 @@ func (m *Error_Source) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Error_Source proto.InternalMessageInfo
 
-type Error_SafeDetail struct {
-	SafeMessage       string `protobuf:"bytes,1,opt,name=safe_message,json=safeMessage,proto3" json:"safe_message,omitempty"`
-	EncodedStackTrace string `protobuf:"bytes,2,opt,name=encoded_stack_trace,json=encodedStackTrace,proto3" json:"encoded_stack_trace,omitempty"`
-}
-
-func (m *Error_SafeDetail) Reset()         { *m = Error_SafeDetail{} }
-func (m *Error_SafeDetail) String() string { return proto.CompactTextString(m) }
-func (*Error_SafeDetail) ProtoMessage()    {}
-func (*Error_SafeDetail) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_3035fb2acbd60f3b, []int{0, 1}
-}
-func (m *Error_SafeDetail) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *Error_SafeDetail) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
-	if err != nil {
-		return nil, err
-	}
-	return b[:n], nil
-}
-func (dst *Error_SafeDetail) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Error_SafeDetail.Merge(dst, src)
-}
-func (m *Error_SafeDetail) XXX_Size() int {
-	return m.Size()
-}
-func (m *Error_SafeDetail) XXX_DiscardUnknown() {
-	xxx_messageInfo_Error_SafeDetail.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Error_SafeDetail proto.InternalMessageInfo
-
 func init() {
 	proto.RegisterType((*Error)(nil), "cockroach.pgerror.Error")
 	proto.RegisterType((*Error_Source)(nil), "cockroach.pgerror.Error.Source")
-	proto.RegisterType((*Error_SafeDetail)(nil), "cockroach.pgerror.Error.SafeDetail")
 }
 func (m *Error) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -217,24 +152,6 @@ func (m *Error) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n1
 	}
-	if len(m.TelemetryKey) > 0 {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintErrors(dAtA, i, uint64(len(m.TelemetryKey)))
-		i += copy(dAtA[i:], m.TelemetryKey)
-	}
-	if len(m.SafeDetail) > 0 {
-		for _, msg := range m.SafeDetail {
-			dAtA[i] = 0x3a
-			i++
-			i = encodeVarintErrors(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
 	if len(m.Severity) > 0 {
 		dAtA[i] = 0x42
 		i++
@@ -279,36 +196,6 @@ func (m *Error_Source) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Error_SafeDetail) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *Error_SafeDetail) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.SafeMessage) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintErrors(dAtA, i, uint64(len(m.SafeMessage)))
-		i += copy(dAtA[i:], m.SafeMessage)
-	}
-	if len(m.EncodedStackTrace) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintErrors(dAtA, i, uint64(len(m.EncodedStackTrace)))
-		i += copy(dAtA[i:], m.EncodedStackTrace)
-	}
-	return i, nil
-}
-
 func encodeVarintErrors(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -344,16 +231,6 @@ func (m *Error) Size() (n int) {
 		l = m.Source.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	l = len(m.TelemetryKey)
-	if l > 0 {
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	if len(m.SafeDetail) > 0 {
-		for _, e := range m.SafeDetail {
-			l = e.Size()
-			n += 1 + l + sovErrors(uint64(l))
-		}
-	}
 	l = len(m.Severity)
 	if l > 0 {
 		n += 1 + l + sovErrors(uint64(l))
@@ -375,23 +252,6 @@ func (m *Error_Source) Size() (n int) {
 		n += 1 + sovErrors(uint64(m.Line))
 	}
 	l = len(m.Function)
-	if l > 0 {
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	return n
-}
-
-func (m *Error_SafeDetail) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.SafeMessage)
-	if l > 0 {
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	l = len(m.EncodedStackTrace)
 	if l > 0 {
 		n += 1 + l + sovErrors(uint64(l))
 	}
@@ -589,66 +449,6 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TelemetryKey", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.TelemetryKey = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 7:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SafeDetail", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SafeDetail = append(m.SafeDetail, &Error_SafeDetail{})
-			if err := m.SafeDetail[len(m.SafeDetail)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Severity", wireType)
@@ -826,114 +626,6 @@ func (m *Error_Source) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Error_SafeDetail) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowErrors
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: SafeDetail: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SafeDetail: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SafeMessage", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SafeMessage = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EncodedStackTrace", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.EncodedStackTrace = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipErrors(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthErrors
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func skipErrors(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1040,32 +732,27 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_3035fb2acbd60f3b)
+	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_aa3d3323b1cab3b8)
 }
 
-var fileDescriptor_errors_3035fb2acbd60f3b = []byte{
-	// 364 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x52, 0x31, 0x6f, 0xea, 0x30,
-	0x18, 0x4c, 0x1e, 0x10, 0x78, 0x86, 0x37, 0xe0, 0x27, 0x55, 0x16, 0x83, 0xa1, 0x65, 0xa1, 0x4b,
-	0x90, 0xe8, 0xd0, 0xbd, 0xa2, 0x53, 0xdb, 0x25, 0x74, 0xea, 0x12, 0xa5, 0xe6, 0x0b, 0x44, 0x84,
-	0x98, 0xda, 0xa6, 0x55, 0xfe, 0x45, 0x7f, 0x16, 0x23, 0x23, 0x63, 0x1b, 0xfe, 0x48, 0x65, 0xc7,
-	0xa4, 0x43, 0xd5, 0x25, 0xba, 0xfb, 0xee, 0xd3, 0xf9, 0x7c, 0x0e, 0xea, 0xcb, 0x97, 0x74, 0xbc,
-	0x59, 0xbc, 0x25, 0x02, 0xc6, 0x9b, 0x05, 0x08, 0xc1, 0xc5, 0xd8, 0x7c, 0xa5, 0xbf, 0x11, 0x5c,
-	0x71, 0xdc, 0x65, 0x9c, 0xad, 0x04, 0x8f, 0xd8, 0xd2, 0xb7, 0xfa, 0xc5, 0xbe, 0x86, 0x1a, 0xb7,
-	0x1a, 0x61, 0x8c, 0xea, 0x8c, 0xcf, 0x81, 0xb8, 0x03, 0x77, 0xf4, 0x37, 0x30, 0x18, 0x13, 0xd4,
-	0x5c, 0x83, 0x94, 0xd1, 0x02, 0xc8, 0x1f, 0x33, 0x3e, 0x51, 0x7c, 0x86, 0xbc, 0x39, 0xa8, 0x28,
-	0x49, 0x49, 0xcd, 0x08, 0x96, 0x69, 0x97, 0x65, 0x92, 0x29, 0x52, 0x2f, 0x5d, 0x34, 0xc6, 0xd7,
-	0xc8, 0x93, 0x7c, 0x2b, 0x18, 0x90, 0xc6, 0xc0, 0x1d, 0xb5, 0x27, 0x7d, 0xff, 0x47, 0x0e, 0xdf,
-	0x64, 0xf0, 0x67, 0x66, 0x2d, 0xb0, 0xeb, 0x78, 0x88, 0xfe, 0x29, 0x48, 0x61, 0x0d, 0x4a, 0xe4,
-	0xe1, 0x0a, 0x72, 0xe2, 0x19, 0xd7, 0x4e, 0x35, 0xbc, 0x83, 0x1c, 0x4f, 0x51, 0x5b, 0x46, 0x31,
-	0x84, 0x36, 0x4e, 0x73, 0x50, 0x1b, 0xb5, 0x27, 0xc3, 0xdf, 0x8f, 0x88, 0x62, 0x98, 0x9a, 0xd5,
-	0x00, 0xc9, 0x0a, 0xe3, 0x1e, 0x6a, 0x49, 0x78, 0x05, 0x91, 0xa8, 0x9c, 0xb4, 0xcc, 0x29, 0x15,
-	0xef, 0xdd, 0x23, 0xaf, 0x0c, 0xa6, 0x6f, 0x17, 0x27, 0x69, 0xd5, 0x91, 0xc6, 0x7a, 0x96, 0x26,
-	0x59, 0x59, 0x50, 0x23, 0x30, 0x58, 0xbb, 0xc5, 0xdb, 0x8c, 0xa9, 0x84, 0x67, 0xb6, 0x9f, 0x8a,
-	0xf7, 0x42, 0x84, 0xbe, 0x33, 0xe0, 0x73, 0xd4, 0x31, 0xe9, 0x4f, 0x35, 0x97, 0xce, 0xe6, 0x46,
-	0x0f, 0xb6, 0x6a, 0x1f, 0xfd, 0x87, 0x4c, 0x3f, 0xc7, 0x3c, 0x94, 0x2a, 0x62, 0xab, 0x50, 0x89,
-	0x88, 0x9d, 0x1e, 0xa4, 0x6b, 0xa5, 0x99, 0x56, 0x1e, 0xb5, 0x70, 0x73, 0xb9, 0xfb, 0xa4, 0xce,
-	0xae, 0xa0, 0xee, 0xbe, 0xa0, 0xee, 0xa1, 0xa0, 0xee, 0x47, 0x41, 0xdd, 0xf7, 0x23, 0x75, 0xf6,
-	0x47, 0xea, 0x1c, 0x8e, 0xd4, 0x79, 0x6a, 0xda, 0x4a, 0x9e, 0x3d, 0xf3, 0x5f, 0x5c, 0x7d, 0x05,
-	0x00, 0x00, 0xff, 0xff, 0xf5, 0x71, 0x53, 0xb1, 0x3a, 0x02, 0x00, 0x00,
+var fileDescriptor_errors_aa3d3323b1cab3b8 = []byte{
+	// 278 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x90, 0xbf, 0x4e, 0xf3, 0x30,
+	0x14, 0xc5, 0xe3, 0x7e, 0xf9, 0xe3, 0xcf, 0x2c, 0xc5, 0x03, 0xb2, 0x3a, 0xb8, 0x15, 0x53, 0x59,
+	0x1c, 0x09, 0x06, 0x76, 0x24, 0x96, 0x8a, 0x29, 0x6c, 0x6c, 0xc1, 0x75, 0x53, 0x8b, 0x10, 0x07,
+	0xdb, 0x05, 0xf1, 0x16, 0x7d, 0xac, 0x8e, 0x1d, 0x3b, 0x42, 0xf2, 0x22, 0xc8, 0x8e, 0xc9, 0xc2,
+	0x62, 0x9d, 0x73, 0xef, 0xd1, 0xf1, 0x4f, 0x17, 0xcd, 0xcd, 0x5b, 0x9d, 0xb7, 0xd5, 0x87, 0xd4,
+	0x22, 0x6f, 0x2b, 0xa1, 0xb5, 0xd2, 0xb9, 0x7f, 0x0d, 0x6b, 0xb5, 0xb2, 0x0a, 0x9f, 0x73, 0xc5,
+	0x5f, 0xb4, 0x2a, 0xf9, 0x96, 0x85, 0xfd, 0xe5, 0x7e, 0x82, 0x92, 0x7b, 0xa7, 0x30, 0x46, 0x31,
+	0x57, 0x6b, 0x41, 0xc0, 0x02, 0x2c, 0xff, 0x17, 0x5e, 0x63, 0x82, 0xb2, 0x57, 0x61, 0x4c, 0x59,
+	0x09, 0x32, 0xf1, 0xe3, 0x5f, 0x8b, 0x2f, 0x50, 0xba, 0x16, 0xb6, 0x94, 0x35, 0xf9, 0xe7, 0x17,
+	0xc1, 0xb9, 0x96, 0xad, 0x6c, 0x2c, 0x89, 0x87, 0x16, 0xa7, 0xf1, 0x2d, 0x4a, 0x8d, 0xda, 0x69,
+	0x2e, 0x48, 0xb2, 0x00, 0xcb, 0xb3, 0xeb, 0x39, 0xfb, 0xc3, 0xc1, 0x3c, 0x03, 0x7b, 0xf4, 0xb1,
+	0x22, 0xc4, 0xf1, 0x0c, 0x41, 0x23, 0xde, 0x85, 0x96, 0xf6, 0x93, 0x40, 0x5f, 0x38, 0xfa, 0xd9,
+	0x03, 0x4a, 0x87, 0xb4, 0xfb, 0x72, 0x23, 0xeb, 0x11, 0xdc, 0x69, 0x37, 0xab, 0x65, 0x33, 0x50,
+	0x27, 0x85, 0xd7, 0xae, 0x6d, 0xb3, 0x6b, 0xb8, 0x95, 0xaa, 0x09, 0xd0, 0xa3, 0x5f, 0xc5, 0x30,
+	0x9d, 0x66, 0xab, 0x18, 0x66, 0x53, 0x78, 0x77, 0x75, 0xf8, 0xa6, 0xd1, 0xa1, 0xa3, 0xe0, 0xd8,
+	0x51, 0x70, 0xea, 0x28, 0xf8, 0xea, 0x28, 0xd8, 0xf7, 0x34, 0x3a, 0xf6, 0x34, 0x3a, 0xf5, 0x34,
+	0x7a, 0xca, 0x02, 0xf5, 0x73, 0xea, 0xef, 0x7a, 0xf3, 0x13, 0x00, 0x00, 0xff, 0xff, 0x88, 0x15,
+	0xdc, 0x81, 0x7a, 0x01, 0x00, 0x00,
 }

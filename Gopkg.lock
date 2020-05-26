@@ -336,14 +336,6 @@
   version = "v2.1.1"
 
 [[projects]]
-  digest = "1:fed1f537c2f1269fe475a8556c393fe466641682d73ef8fd0491cd3aa1e47bad"
-  name = "github.com/certifi/gocertifi"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "deb3ae2ef2610fde3330947281941c562861188b"
-  version = "2018.01.18"
-
-[[projects]]
   digest = "1:848ef40f818e59905140552cc49ff3dc1a15f955e4b56d1c5c2cc4b54dbadf0c"
   name = "github.com/client9/misspell"
   packages = [
@@ -407,8 +399,8 @@
   revision = "aca09668cb243672cb82f3cbeec73b3871e13cc9"
 
 [[projects]]
-  branch = "v1.2.4-cockroach20.1"
-  digest = "1:9d93287c86a1c5466b903c1c452e5cd395161ad78477b252fd953b53d1fc589c"
+  branch = "master"
+  digest = "1:9fc3ba4d5c7c301cd27944239be4cc8449be51546787e71442d7be9303d8d9dd"
   name = "github.com/cockroachdb/errors"
   packages = [
     ".",
@@ -431,7 +423,7 @@
     "withstack",
   ]
   pruneopts = "UT"
-  revision = "32a264b562e5b80d53e2d08f017cde819321e4fb"
+  revision = "489491acc69206e6ed276646bc0d6215400c0d48"
 
 [[projects]]
   digest = "1:a44e537b3e080ff297315d166956dba9607f070644a89be78b59af6c54876b64"
@@ -501,6 +493,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "e91bb28baf9de4a530d3ae7f041953b23dcce9be"
+
+[[projects]]
+  digest = "1:6db0e7e7c412aa14043b3e19417e58b0564588a687dd9c7557b2ca334a0325f8"
+  name = "github.com/cockroachdb/sentry-go"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "3a03c57765edff71fbf662474edb271744ca966c"
+  version = "v0.6.1-cockroachdb"
 
 [[projects]]
   branch = "master"
@@ -694,15 +694,6 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "600d898af40aa09a7a93ecb9265d87b0504b6f03"
-
-[[projects]]
-  branch = "master"
-  digest = "1:da009be490724f12d2625817b738405854412728031d8997672643e8593791be"
-  name = "github.com/getsentry/raven-go"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "221b2b44fb33f84ed3ea13f3aed62ff48c85636b"
-  source = "https://github.com/cockroachdb/raven-go"
 
 [[projects]]
   branch = "master"
@@ -2168,6 +2159,7 @@
     "github.com/cockroachdb/pebble/tool",
     "github.com/cockroachdb/pebble/vfs",
     "github.com/cockroachdb/returncheck",
+    "github.com/cockroachdb/sentry-go",
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
     "github.com/codahale/hdrhistogram",
@@ -2186,7 +2178,6 @@
     "github.com/elastic/gosigar",
     "github.com/elazarl/go-bindata-assetfs",
     "github.com/facebookgo/clock",
-    "github.com/getsentry/raven-go",
     "github.com/ghemawat/stream",
     "github.com/go-sql-driver/mysql",
     "github.com/gogo/protobuf/jsonpb",
