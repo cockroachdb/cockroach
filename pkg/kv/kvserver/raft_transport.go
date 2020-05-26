@@ -535,8 +535,7 @@ func (t *RaftTransport) getQueue(
 // returns false if the outgoing queue is full. The returned bool may be a false
 // positive but will never be a false negative; if sent is true the message may
 // or may not actually be sent but if it's false the message definitely was not
-// sent. If the method does return true, it is not safe to continue using the
-// reference to the provided request.
+// sent. It is not safe to continue using the reference to the provided request.
 func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionClass) (sent bool) {
 	toNodeID := req.ToReplica.NodeID
 	stats := t.getStats(toNodeID, class)
@@ -576,6 +575,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionC
 		}
 		return true
 	default:
+		req.release()
 		return false
 	}
 }

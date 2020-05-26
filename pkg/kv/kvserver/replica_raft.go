@@ -1186,7 +1186,6 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		RangeStartKey: startKey, // usually nil
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
-		req.release()
 		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
