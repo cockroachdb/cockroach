@@ -105,7 +105,7 @@ var tpchMeta = workload.Meta{
 		g.flags.BoolVar(&g.disableChecks, `disable-checks`, false,
 			"Disable checking the output against the expected rows (default false). "+
 				"Note that the checks are only supported for scale factor 1")
-		g.flags.StringVar(&g.vectorize, `vectorize`, `auto`,
+		g.flags.StringVar(&g.vectorize, `vectorize`, `on`,
 			`Set vectorize session variable`)
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
 			`Prints out the queries being run as well as histograms`)

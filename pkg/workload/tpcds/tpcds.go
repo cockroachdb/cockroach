@@ -66,7 +66,7 @@ var tpcdsMeta = workload.Meta{
 				`Note that --queries-to-omit flag has a higher precedence`)
 		g.flags.DurationVar(&g.queryTimeLimit, `query-time-limit`, 5*time.Minute,
 			`Time limit for a single run of a query`)
-		g.flags.StringVar(&g.vectorize, `vectorize`, `auto`,
+		g.flags.StringVar(&g.vectorize, `vectorize`, `on`,
 			`Set vectorize session variable`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
