@@ -918,6 +918,7 @@ f
 
 ## pg_catalog.pg_enum
 statement ok
+SET experimental_enable_enums=true;
 CREATE TYPE newtype1 AS ENUM ('v1', 'v2');
 CREATE TYPE newtype2 AS ENUM ('v3', 'v4')
 
@@ -1475,7 +1476,7 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
-2310524507  admin     true      true        true           true         false         false        false
+2310524507  admin     true      true        true           true         false         true         false
 1546506610  root      true      false       true           true         false         true         false
 2264919399  testuser  false     false       false          false        false         true         false
 
@@ -1711,6 +1712,7 @@ distsql                                      off                 NULL      NULL 
 enable_implicit_select_for_update            on                  NULL      NULL        NULL        string
 enable_insert_fast_path                      on                  NULL      NULL        NULL        string
 enable_zigzag_join                           on                  NULL      NULL        NULL        string
+experimental_enable_enums                    on                  NULL      NULL        NULL        string
 experimental_enable_hash_sharded_indexes     off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables              off                 NULL      NULL        NULL        string
 experimental_optimizer_foreign_key_cascades  on                  NULL      NULL        NULL        string
@@ -1776,6 +1778,7 @@ distsql                                      off                 NULL  user     
 enable_implicit_select_for_update            on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                      on                  NULL  user     NULL      on                  on
 enable_zigzag_join                           on                  NULL  user     NULL      on                  on
+experimental_enable_enums                    on                  NULL  user     NULL      off                 off
 experimental_enable_hash_sharded_indexes     off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables              off                 NULL  user     NULL      off                 off
 experimental_optimizer_foreign_key_cascades  on                  NULL  user     NULL      on                  on
@@ -1837,6 +1840,7 @@ distsql                                      NULL    NULL     NULL     NULL     
 enable_implicit_select_for_update            NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                      NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                           NULL    NULL     NULL     NULL        NULL
+experimental_enable_enums                    NULL    NULL     NULL     NULL        NULL
 experimental_enable_hash_sharded_indexes     NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables              NULL    NULL     NULL     NULL        NULL
 experimental_optimizer_foreign_key_cascades  NULL    NULL     NULL     NULL        NULL
@@ -2428,3 +2432,18 @@ SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
 88  88    jt
+
+subtest regression_49207
+statement ok
+CREATE ROLE role_test_login with LOGIN;
+CREATE ROLE role_test_nologin;
+
+query B
+SELECT rolcanlogin FROM pg_roles WHERE rolname = 'role_test_login';
+----
+true
+
+query B
+SELECT rolcanlogin FROM pg_roles WHERE rolname = 'role_test_nologin';
+----
+false
