@@ -261,8 +261,8 @@ func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) 
 			log.Fatalf(
 				ctx,
 				"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
-				float64(-interval)/1e9,
-				float64(toleratedForwardClockJump)/1e9,
+				log.Safe(float64(-interval)/1e9),
+				log.Safe(float64(toleratedForwardClockJump)/1e9),
 			)
 		}
 	}
@@ -298,8 +298,8 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 		log.Fatalf(
 			context.TODO(),
 			"wall time %d is not allowed to be greater than upper bound of %d.",
-			c.mu.timestamp.WallTime,
-			c.mu.wallTimeUpperBound,
+			log.Safe(c.mu.timestamp.WallTime),
+			log.Safe(c.mu.wallTimeUpperBound),
 		)
 	}
 }
