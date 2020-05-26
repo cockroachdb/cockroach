@@ -1577,7 +1577,11 @@ CREATE TABLE crdb_internal.table_columns (
 						col := &table.Columns[i]
 						defStr := tree.DNull
 						if col.DefaultExpr != nil {
-							defStr = tree.NewDString(*col.DefaultExpr)
+							def, err := table.SanitizeSerializedExprForDisplay(ctx, &p.semaCtx, *col.DefaultExpr)
+							if err != nil {
+								return err
+							}
+							defStr = tree.NewDString(tree.SerializeForDisplay(def))
 						}
 						row = row[:0]
 						row = append(row,

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -827,6 +828,85 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 		}
 	}
 	return checks
+}
+
+// ReplaceColumnVarsInExprWithDummies replaces the occurrences of column names in an expression with
+// dummies containing their type, so that they may be typechecked. It returns
+// this new expression tree alongside a set containing the ColumnID of each
+// column seen in the expression.
+func (desc *TableDescriptor) ReplaceColumnVarsInExprWithDummies(
+	rootExpr tree.Expr,
+) (tree.Expr, util.FastIntSet, error) {
+	var colIDs util.FastIntSet
+	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return true, expr, nil
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return false, nil, err
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return true, expr, nil
+		}
+
+		col, dropped, err := desc.FindColumnByName(c.ColumnName)
+		if err != nil || dropped {
+			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
+				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
+		}
+		colIDs.Add(int(col.ID))
+		// Convert to a dummy node of the correct type.
+		return false, &dummyColumnItem{typ: col.Type, name: c.ColumnName}, nil
+	})
+	return newExpr, colIDs, err
+}
+
+// TODO (rohany): Update these comments.
+// dummyColumnItem is used in makeCheckConstraint and validateIndexPredicate to
+// construct an expression that can be both type-checked and examined for
+// variable expressions.
+type dummyColumnItem struct {
+	typ  *types.T
+	name tree.Name
+}
+
+// String implements the Stringer interface.
+func (d *dummyColumnItem) String() string {
+	return tree.AsString(d)
+}
+
+// Format implements the NodeFormatter interface.
+// It should be kept in line with ColumnItem.Format.
+func (d *dummyColumnItem) Format(ctx *tree.FmtCtx) {
+	ctx.FormatNode(&d.name)
+}
+
+// Walk implements the Expr interface.
+func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
+	return d
+}
+
+// TypeCheck implements the Expr interface.
+func (d *dummyColumnItem) TypeCheck(
+	_ context.Context, _ *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
+	return d, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (*dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+	panic("dummyColumnItem.Eval() is undefined")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *dummyColumnItem) ResolvedType() *types.T {
+	return d.typ
 }
 
 // GetColumnFamilyForShard returns the column family that a newly added shard column
@@ -3896,6 +3976,68 @@ func (desc *ColumnDescriptor) SQLString() string {
 		f.WriteString(") STORED")
 	}
 	return f.CloseAndGetString()
+}
+
+// FormatForDisplay formats a column descriptor as a SQL string, and displays
+// user defined types in serialized expressions with human friendly formatting.
+// TODO (rohany): This should have a better name?
+func (desc *ColumnDescriptor) FormatForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, tbl *TableDescriptor,
+) (string, error) {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.FormatNameP(&desc.Name)
+	f.WriteByte(' ')
+	f.WriteString(desc.Type.SQLString())
+	if desc.Nullable {
+		f.WriteString(" NULL")
+	} else {
+		f.WriteString(" NOT NULL")
+	}
+	if desc.DefaultExpr != nil {
+		f.WriteString(" DEFAULT ")
+		typed, err := tbl.SanitizeSerializedExprForDisplay(ctx, semaCtx, *desc.DefaultExpr)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(tree.SerializeForDisplay(typed))
+	}
+	if desc.IsComputed() {
+		f.WriteString(" AS (")
+		typed, err := tbl.SanitizeSerializedExprForDisplay(ctx, semaCtx, *desc.ComputeExpr)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(tree.SerializeForDisplay(typed))
+		f.WriteString(") STORED")
+	}
+	return f.CloseAndGetString(), nil
+}
+
+// SanitizeSerializedExprForDisplay takes in a serialized expression, and
+// returns an expression that has all user defined types resolved for
+// formatting. It is intended to be used when displaying a serialized
+// expression within a TableDescriptor. For example, a DEFAULT expression
+// of a table containing a user defined type t with id 50 would have all
+// references to t replaced with the id 50. In order to display this expression
+// back to an end user, the serialized id 50 needs to be replaced back with t.
+// SanitizeSerializedExprForDisplay performs this logic, but only returns a
+// tree.Expr to be clear that these returned expressions are not safe to Eval.
+func (desc *TableDescriptor) SanitizeSerializedExprForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, exprStr string,
+) (tree.Expr, error) {
+	expr, err := parser.ParseExpr(exprStr)
+	if err != nil {
+		return nil, err
+	}
+	expr, _, err = desc.ReplaceColumnVarsInExprWithDummies(expr)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := expr.TypeCheck(ctx, semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	return typed, nil
 }
 
 // ColumnsUsed returns the IDs of the columns used in the check constraint's

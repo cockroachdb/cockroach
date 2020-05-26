@@ -409,6 +409,13 @@ CREATE TABLE pg_catalog.pg_attrdef (
 			if err != nil {
 				defSrc = tree.NewDString(*column.DefaultExpr)
 			} else {
+				// Use type check to resolve types in expr. We don't use
+				// SanitizeSerializedExprForDisplay here because that returns a typed
+				// expression under the hood. Since typed expressions don't contain
+				// type annotations, we wouldn't format some defaults as intended.
+				if _, err := expr.TypeCheck(ctx, &p.semaCtx, types.Any); err != nil {
+					return err
+				}
 				ctx := tree.NewFmtCtx(tree.FmtPGAttrdefAdbin)
 				ctx.FormatNode(expr)
 				defSrc = tree.NewDString(ctx.String())

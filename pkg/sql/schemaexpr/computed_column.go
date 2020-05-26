@@ -48,6 +48,8 @@ func NewComputedColumnValidator(
 //   - It does not have a default value.
 //   - It does not reference other computed columns.
 //
+// It additionally updates the target computed column with the serialized
+// typed expression.
 // TODO(mgartner): Add unit tests for Validate.
 func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	if d.HasDefaultExpr() {
@@ -100,7 +102,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := replaceVars(v.desc, d.Computed.Expr)
+	replacedExpr, _, err := v.desc.ReplaceColumnVarsInExprWithDummies(d.Computed.Expr)
 	if err != nil {
 		return err
 	}
@@ -114,7 +116,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	// Check that the type of the expression is of type defType and that there
 	// are no variable expressions (besides dummyColumnItems) and no impure
 	// functions.
-	_, err = sqlbase.SanitizeVarFreeExpr(
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 		v.ctx,
 		replacedExpr,
 		defType,
@@ -124,6 +126,16 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	if err != nil {
 		return err
 	}
+
+	// Get the column that this definition points to.
+	targetCol, _, err := v.desc.FindColumnByName(d.Name)
+	if err != nil {
+		return err
+	}
+	// In order to safely serialize user defined types and their members, we
+	// need to serialize the typed expression here.
+	s := tree.Serialize(typedExpr)
+	targetCol.ComputeExpr = &s
 
 	return nil
 }

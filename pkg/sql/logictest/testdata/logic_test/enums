@@ -418,7 +418,7 @@ SELECT ARRAY['hello']::_greeting, ARRAY['hello'::greeting]
 {hello} {hello}
 
 # Test that we can't mix enums in an array.
-query error pq: expected 'cockroach'::dbs to be of type greeting, found type dbs
+query error pq: expected 'cockroach'::test.public.dbs to be of type greeting, found type dbs
 SELECT ARRAY['hello'::greeting, 'cockroach'::dbs]
 
 statement ok
@@ -469,3 +469,110 @@ WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
 x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100064 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100063 time_precision_is_set:false udt_metadata:<stable_type_id:63 stable_array_type_id:64 > > TypeMeta:<> > time_precision_is_set:false udt_metadata:<stable_type_id:64 stable_array_type_id:0 >
+
+# Test tables using enums in DEFAULT expressions.
+statement ok
+CREATE TABLE enum_default (
+  x INT,
+  y greeting DEFAULT 'hello',
+  z BOOL DEFAULT ('hello':::greeting IS OF (greeting, greeting)),
+  FAMILY (x, y, z)
+);
+INSERT INTO enum_default VALUES (1), (2)
+
+query ITB rowsort
+SELECT * FROM enum_default
+----
+1 hello true
+2 hello true
+
+# Test that enum default values are formatted in human readable ways.
+query TT
+SHOW CREATE enum_default
+----
+enum_default  CREATE TABLE enum_default (
+              x INT8 NULL,
+              y test.public.greeting NULL DEFAULT 'hello':::test.public.greeting,
+              z BOOL NULL DEFAULT 'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting),
+              FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
+)
+
+# Test crdb_internal.table_columns.
+query TT
+SELECT
+  column_name, default_expr
+FROM
+  crdb_internal.table_columns
+WHERE
+  descriptor_name='enum_default' AND (column_name = 'y' OR column_name = 'z')
+ORDER BY
+  column_name
+----
+y  'hello':::test.public.greeting
+z  'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting)
+
+# Test information_schema.columns.
+query TT
+SELECT
+  column_name, column_default
+FROM
+  information_schema.columns
+WHERE
+  table_name='enum_default' AND (column_name = 'y' OR column_name = 'z')
+ORDER BY
+  column_name
+----
+y  'hello':::test.public.greeting
+z  'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting)
+
+# Test computed columns with enum values.
+statement ok
+CREATE TABLE enum_computed (
+  x INT,
+  y greeting AS ('hello') STORED,
+  z BOOL AS (w = 'hello') STORED,
+  w greeting,
+  FAMILY (x, y, z)
+);
+INSERT INTO enum_computed (x, w) VALUES (1, 'hello'), (2, 'hello')
+
+query ITBT rowsort
+SELECT * FROM enum_computed
+----
+1 hello true hello
+2 hello true hello
+
+query TT
+SHOW CREATE enum_computed
+----
+enum_computed  CREATE TABLE enum_computed (
+               x INT8 NULL,
+               y test.public.greeting NULL AS ('hello':::test.public.greeting) STORED,
+               z BOOL NULL AS (w = 'hello':::test.public.greeting) STORED,
+               w test.public.greeting NULL,
+               FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
+)
+
+# TODO (rohany): Test information_schema table here too.
+
+# Test check constraints with enum values.
+statement ok
+CREATE TABLE enum_checks (
+  x greeting,
+  CHECK (x = 'hello'::greeting),
+  CHECK ('hello':::greeting = 'hello':::greeting)
+);
+INSERT INTO enum_checks VALUES ('hello')
+
+query TT
+SHOW CREATE enum_checks
+----
+enum_checks  CREATE TABLE enum_checks (
+             x test.public.greeting NULL,
+             FAMILY "primary" (x, rowid),
+             CONSTRAINT check_x CHECK (x = 'hello':::test.public.greeting::test.public.greeting),
+             CONSTRAINT "check" CHECK ('hello':::test.public.greeting = 'hello':::test.public.greeting)
+)
+
+# Not sure if there are other VTables where check constraints show up --
+# I audited usages of checkconstraint.expr and didn't find any more.

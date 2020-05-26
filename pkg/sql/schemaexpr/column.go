@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // DequalifyColumnRefs returns an expression with database nad table names
@@ -97,90 +96,4 @@ func iterColDescriptors(
 	})
 
 	return err
-}
-
-// dummyColumn represents a variable column that can type-checked. It is used
-// in validating check constraint and partial index predicate expressions. This
-// validation requires that the expression can be both both typed-checked and
-// examined for variable expressions.
-type dummyColumn struct {
-	typ *types.T
-	// name is only used for error-reporting.
-	name tree.Name
-}
-
-// String implements the Stringer interface.
-func (d *dummyColumn) String() string {
-	return tree.AsString(d)
-}
-
-// Format implements the NodeFormatter interface.
-func (d *dummyColumn) Format(ctx *tree.FmtCtx) {
-	d.name.Format(ctx)
-}
-
-// Walk implements the Expr interface.
-func (d *dummyColumn) Walk(_ tree.Visitor) tree.Expr {
-	return d
-}
-
-// TypeCheck implements the Expr interface.
-func (d *dummyColumn) TypeCheck(
-	_ context.Context, _ *tree.SemaContext, desired *types.T,
-) (tree.TypedExpr, error) {
-	return d, nil
-}
-
-// Eval implements the TypedExpr interface.
-func (*dummyColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic("dummyColumnItem.Eval() is undefined")
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (d *dummyColumn) ResolvedType() *types.T {
-	return d.typ
-}
-
-// replaceVars replaces the occurrences of column names in an expression with
-// dummyColumns containing their type, so that they may be type-checked. It
-// returns this new expression tree alongside a set containing the ColumnID of
-// each column seen in the expression.
-//
-// If the expression references a column that does not exist in the table
-// descriptor, replaceVars errs with pgcode.UndefinedColumn.
-// TODO(mgartner): The set should be a util.FastIntSet.
-func replaceVars(
-	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr,
-) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
-	colIDs := make(map[sqlbase.ColumnID]struct{})
-
-	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		vBase, ok := expr.(tree.VarName)
-		if !ok {
-			// Not a VarName, don't do anything to this node.
-			return true, expr, nil
-		}
-
-		v, err := vBase.NormalizeVarName()
-		if err != nil {
-			return false, nil, err
-		}
-
-		c, ok := v.(*tree.ColumnItem)
-		if !ok {
-			return true, expr, nil
-		}
-
-		col, dropped, err := desc.FindColumnByName(c.ColumnName)
-		if err != nil || dropped {
-			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
-				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
-		}
-		colIDs[col.ID] = struct{}{}
-
-		// Convert to a dummyColumn of the correct type.
-		return false, &dummyColumn{typ: col.Type, name: c.ColumnName}, nil
-	})
-
-	return newExpr, colIDs, err
 }

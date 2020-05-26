@@ -172,20 +172,6 @@ func dNameOrNull(s string) tree.Datum {
 	return tree.NewDName(s)
 }
 
-func dStringPtrOrEmpty(s *string) tree.Datum {
-	if s == nil {
-		return emptyString
-	}
-	return tree.NewDString(*s)
-}
-
-func dStringPtrOrNull(s *string) tree.Datum {
-	if s == nil {
-		return tree.DNull
-	}
-	return tree.NewDString(*s)
-}
-
 func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 	if n, ok := fn(); ok {
 		return tree.NewDInt(tree.DInt(n))
@@ -387,14 +373,30 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					collationSchema = pgCatalogNameDString
 					collationName = tree.NewDString(locale)
 				}
+				colDefault := tree.DNull
+				if column.DefaultExpr != nil {
+					colExpr, err := table.SanitizeSerializedExprForDisplay(ctx, &p.semaCtx, *column.DefaultExpr)
+					if err != nil {
+						return err
+					}
+					colDefault = tree.NewDString(tree.SerializeForDisplay(colExpr))
+				}
+				colComputed := emptyString
+				if column.ComputeExpr != nil {
+					colExpr, err := table.SanitizeSerializedExprForDisplay(ctx, &p.semaCtx, *column.ComputeExpr)
+					if err != nil {
+						return err
+					}
+					colComputed = tree.NewDString(tree.SerializeForDisplay(colExpr))
+				}
 				return addRow(
 					dbNameStr,                    // table_catalog
 					scNameStr,                    // table_schema
 					tree.NewDString(table.Name),  // table_name
 					tree.NewDString(column.Name), // column_name
 					tree.NewDInt(tree.DInt(column.GetLogicalColumnID())), // ordinal_position
-					dStringPtrOrNull(column.DefaultExpr),                 // column_default
-					yesOrNoDatum(column.Nullable),                        // is_nullable
+					colDefault,                    // column_default
+					yesOrNoDatum(column.Nullable), // is_nullable
 					tree.NewDString(column.Type.InformationSchemaName()), // data_type
 					characterMaximumLength(column.Type),                  // character_maximum_length
 					characterOctetLength(column.Type),                    // character_octet_length
@@ -430,7 +432,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					tree.DNull,                                           // identity_minimum
 					tree.DNull,                                           // identity_cycle
 					yesOrNoDatum(column.IsComputed()),                    // is_generated
-					dStringPtrOrEmpty(column.ComputeExpr),                // generation_expression
+					colComputed,                                          // generation_expression
 					yesOrNoDatum(table.IsTable() &&
 						!table.IsVirtualTable() &&
 						!column.IsComputed(),

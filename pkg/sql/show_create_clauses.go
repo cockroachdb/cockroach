@@ -380,7 +380,9 @@ func ShowCreatePartitioning(
 
 // showConstraintClause creates the CONSTRAINT clauses for a CREATE statement,
 // writing them to tree.FmtCtx f
-func showConstraintClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
+func showConstraintClause(
+	ctx context.Context, desc *sqlbase.TableDescriptor, semaCtx *tree.SemaContext, f *tree.FmtCtx,
+) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
 		if e.Hidden {
 			continue
@@ -392,8 +394,13 @@ func showConstraintClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		f.WriteString(e.Expr)
+		typed, err := desc.SanitizeSerializedExprForDisplay(ctx, semaCtx, e.Expr)
+		if err != nil {
+			return err
+		}
+		f.WriteString(tree.SerializeForDisplay(typed))
 		f.WriteString(")")
 	}
 	f.WriteString("\n)")
+	return nil
 }
