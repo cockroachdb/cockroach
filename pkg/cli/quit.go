@@ -84,7 +84,7 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 }
 
 // drainAndShutdown attempts to drain the server and then shut it
-// down. When given an empty onModes slice, it's a hard shutdown.
+// down.
 func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
 	hardError, remainingWork, err := doDrain(ctx, c)
 	if hardError {
@@ -98,10 +98,8 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
 	if err != nil {
 		log.Warningf(ctx, "drain did not complete successfully; hard shutdown may cause disruption")
 	}
-	// We have already performed the drain above. We use a nil array
-	// of drain modes to indicate no further drain needs to be attempted
-	// and go straight to shutdown. We try two times just in case there
-	// is a transient error.
+	// We have already performed the drain above, so now go straight to
+	// shutdown. We try twice just in case there is a transient error.
 	hardErr, err := doShutdown(ctx, c)
 	if err != nil && !hardErr {
 		log.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)

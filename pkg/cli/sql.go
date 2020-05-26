@@ -514,7 +514,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 
 	switch cmd[0] {
 	case "shutdown":
-		if err := demoCtx.transientCluster.DrainNode(roachpb.NodeID(nodeID)); err != nil {
+		if err := demoCtx.transientCluster.DrainAndShutdown(roachpb.NodeID(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been shutdown\n", nodeID)
