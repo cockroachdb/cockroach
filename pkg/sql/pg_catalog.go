@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -405,7 +404,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 				return nil
 			}
 			var defSrc *tree.DString
-			expr, err := parser.ParseExpr(*column.DefaultExpr)
+			expr, err := column.GetTypedDefaultExpr(&p.semaCtx)
 			if err != nil {
 				defSrc = tree.NewDString(*column.DefaultExpr)
 			} else {

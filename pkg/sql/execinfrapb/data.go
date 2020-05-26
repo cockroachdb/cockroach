@@ -140,7 +140,7 @@ func HydrateTypeSlice(evalCtx *tree.EvalContext, typs []*types.T) error {
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
 func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
-	fmtCtx := tree.NewFmtCtx(tree.FmtDistSQLSerialization)
+	fmtCtx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
 	fmtCtx.SetPlaceholderFormat(
 		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
@@ -180,7 +180,7 @@ func (e *Expression) Empty() bool {
 // String implements the Stringer interface.
 func (e Expression) String() string {
 	if e.LocalExpr != nil {
-		ctx := tree.NewFmtCtx(tree.FmtDistSQLSerialization)
+		ctx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
 		ctx.FormatNode(e.LocalExpr)
 		return ctx.CloseAndGetString()
 	}

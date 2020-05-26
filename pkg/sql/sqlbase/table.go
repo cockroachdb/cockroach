@@ -183,6 +183,7 @@ func MakeColumnDefDescs(
 		if typedExpr != tree.DNull {
 			d.DefaultExpr.Expr = typedExpr
 			s := tree.Serialize(d.DefaultExpr.Expr)
+			fmt.Println("serialized expr to", s)
 			col.DefaultExpr = &s
 		}
 	}

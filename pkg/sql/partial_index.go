@@ -39,7 +39,7 @@ func validateIndexPredicate(
 ) (tree.Expr, error) {
 
 	// Replace column variables with dummyColumnItems.
-	expr, _, err := replaceVars(desc, expr)
+	expr, _, err := desc.ReplaceColumnVarsInExprWithDummies(expr)
 	if err != nil {
 		return nil, err
 	}

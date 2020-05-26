@@ -147,28 +147,20 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 	}
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
 	tdesc := desc.(*sqlbase.TypeDescriptor)
-	// Hydrate the types.T from the resolved descriptor. Once we cache
-	// descriptors, this hydration should install pointers to cached data.
-	switch t := tdesc.Kind; t {
-	case sqlbase.TypeDescriptor_ENUM:
-		typ := types.MakeEnum(uint32(tdesc.ID))
-		if err := tdesc.HydrateTypeInfoWithName(typ, &tn); err != nil {
-			return nil, err
-		}
-		return typ, nil
-	case sqlbase.TypeDescriptor_ALIAS:
-		return tdesc.Alias, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
-	}
+	return tdesc.MakeTypesT(&tn)
 }
 
 // ResolveTypeByID implements the tree.TypeResolver interface. We disallow
 // accessing types directly by their ID in standard SQL contexts, so error
 // out nicely here.
-// TODO (rohany): Is there a need to disable this in the general case?
 func (p *planner) ResolveTypeByID(id uint32) (*types.T, error) {
-	return nil, errors.Newf("type id reference @%d not allowed in this context", id)
+	// TODO (rohany): use a real context here.
+	name, desc, err := resolver.ResolveTypeDescByID(
+		p.EvalContext().Context, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return desc.MakeTypesT(name)
 }
 
 // maybeHydrateTypesInDescriptor hydrates any types.T's in the input descriptor.

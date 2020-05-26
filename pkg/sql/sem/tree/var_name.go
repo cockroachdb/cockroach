@@ -131,6 +131,7 @@ type ColumnItem struct {
 }
 
 // Format implements the NodeFormatter interface.
+// If this is updated, then dummyColumnItem.Format should be updated as well.
 func (c *ColumnItem) Format(ctx *FmtCtx) {
 	if c.TableName != nil {
 		c.TableName.Format(ctx)

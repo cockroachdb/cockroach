@@ -130,7 +130,14 @@ const (
 	// If set, user defined types will be printed as '@id', where id is the
 	// stable type ID for the user defined type. This is used in DistSQL flows
 	// where we don't want to perform name resolution of types again.
-	fmtFormatUserDefinedTypesAsIDs
+	// TODO (rohany): Update this, but this is gonna be like "represents user
+	//  defined types in a static way that is resistant to changes in the type.
+	fmtStaticallyFormatUserDefinedTypes
+
+	// fmtFormatByteLiterals instructs bytes to be formatted as byte literals
+	// rather than string literals. For example, the bytes \x40 will be formatted
+	// as b'\x40' rather than '\x40'.
+	fmtFormatByteLiterals
 )
 
 // Composite/derived flag definitions follow.
@@ -141,9 +148,15 @@ const (
 	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lex.EncBareStrings)
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
-	// can be parsed into an equivalent expression (useful for serialization of
-	// expressions).
+	// can be parsed into an equivalent expression.
 	FmtParsable FmtFlags = fmtDisambiguateDatumTypes | FmtParsableNumerics
+
+	// FmtSerializable instructs the pretty-printer to produce a representation
+	// for expressions that can be serialized to disk. It serializes user defined
+	// types using representations that are stable across changes of the type
+	// itself. This should be used when serializing expressions that will be
+	// stored on disk, like DEFAULT expressions of columns.
+	FmtSerializable FmtFlags = FmtParsable | fmtStaticallyFormatUserDefinedTypes
 
 	// FmtCheckEquivalence instructs the pretty-printer to produce a representation
 	// that can be used to check equivalence of expressions. Specifically:
@@ -153,13 +166,13 @@ const (
 	//    annotations. This is necessary because datums of different types
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
-	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes | FmtParsableNumerics
-
-	// FmtDistSQLSerialization is just like FmtCheckEquivalence, but it can be
-	// used to serialize expressions for query distribution. In particular, it
-	// includes the flag fmtFormatUserDefinedTypesAsIDs which serializes user
-	// defined types in a way that avoids name resolution for DistSQL evaluation.
-	FmtDistSQLSerialization FmtFlags = FmtCheckEquivalence | fmtFormatUserDefinedTypesAsIDs
+	//  - user defined types and datums of user defined types are formatted
+	//    using static representations to avoid name resolution and invalidation
+	//    due to changes in the underlying type.
+	FmtCheckEquivalence FmtFlags = fmtSymbolicVars |
+		fmtDisambiguateDatumTypes |
+		FmtParsableNumerics |
+		fmtStaticallyFormatUserDefinedTypes
 
 	// FmtArrayToString is a special composite flag suitable
 	// for the output of array_to_string(). This de-quotes
@@ -412,10 +425,16 @@ func ErrString(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtBareIdentifiers)
 }
 
-// Serialize pretty prints a node to a string using FmtParsable; it is
-// appropriate when we store expressions into strings that are later parsed back
-// into expressions.
+// Serialize pretty prints a node to a string using FmtSerializable; it is
+// appropriate when we store expressions into strings that are stored on disk
+// and may be later parsed back into expressions.
 func Serialize(n NodeFormatter) string {
+	return AsStringWithFlags(n, FmtSerializable)
+}
+
+// SerializeForDisplay pretty prints a node to a string using FmtParsable.
+// It is appropriate when printing expressions that are visible to end users.
+func SerializeForDisplay(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtParsable)
 }
 

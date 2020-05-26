@@ -2025,45 +2025,6 @@ func makeObjectAlreadyExistsError(collidingObject sqlbase.DescriptorProto, name 
 	return nil
 }
 
-// dummyColumnItem is used in makeCheckConstraint and validateIndexPredicate to
-// construct an expression that can be both type-checked and examined for
-// variable expressions.
-type dummyColumnItem struct {
-	typ *types.T
-	// name is only used for error-reporting.
-	name tree.Name
-}
-
-// String implements the Stringer interface.
-func (d *dummyColumnItem) String() string {
-	return tree.AsString(d)
-}
-
-// Format implements the NodeFormatter interface.
-func (d *dummyColumnItem) Format(ctx *tree.FmtCtx) {
-	d.name.Format(ctx)
-}
-
-// Walk implements the Expr interface.
-func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
-	return d
-}
-
-// TypeCheck implements the Expr interface.
-func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
-	return d, nil
-}
-
-// Eval implements the TypedExpr interface.
-func (*dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic("dummyColumnItem.Eval() is undefined")
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (d *dummyColumnItem) ResolvedType() *types.T {
-	return d.typ
-}
-
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
 // based on all the `colNames`.
 func makeShardColumnDesc(colNames []string, buckets int) (*sqlbase.ColumnDescriptor, error) {
@@ -2249,7 +2210,8 @@ func iterColDescriptorsInExpr(
 }
 
 // validateComputedColumn checks that a computed column satisfies a number of
-// validity constraints, for instance, that it typechecks.
+// validity constraints, for instance, that it typechecks. It additionally
+// updates the target computed column with the serialized typed expression.
 func validateComputedColumn(
 	desc *sqlbase.MutableTableDescriptor, d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
 ) error {
@@ -2299,8 +2261,14 @@ func validateComputedColumn(
 		}
 	}
 
+	// Get the column that this definition points to.
+	targetCol, _, err := desc.FindColumnByName(d.Name)
+	if err != nil {
+		return err
+	}
+
 	// Replace column references with typed dummies to allow typechecking.
-	replacedExpr, _, err := replaceVars(desc, d.Computed.Expr)
+	replacedExpr, _, err := desc.ReplaceColumnVarsInExprWithDummies(d.Computed.Expr)
 	if err != nil {
 		return err
 	}
@@ -2309,50 +2277,23 @@ func validateComputedColumn(
 	if err != nil {
 		return err
 	}
-	if _, err := sqlbase.SanitizeVarFreeExpr(
+
+	// TODO (rohany): Is this suspicious to serialize the expression with
+	//  the dummy column items in it? We need the expression to be typed though.
+	//  We already dequalify all the column refs when creating the expression.
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 		replacedExpr, defType, "computed column", semaCtx, false, /* allowImpure */
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
+	// In order to safely serialize user defined types and their members, we
+	// need to serialize the typed expression here.
+	s := tree.Serialize(typedExpr)
+	targetCol.ComputeExpr = &s
+
 	return nil
-}
-
-// replaceVars replaces the occurrences of column names in an expression with
-// dummies containing their type, so that they may be typechecked. It returns
-// this new expression tree alongside a set containing the ColumnID of each
-// column seen in the expression.
-func replaceVars(
-	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr,
-) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
-	colIDs := make(map[sqlbase.ColumnID]struct{})
-	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		vBase, ok := expr.(tree.VarName)
-		if !ok {
-			// Not a VarName, don't do anything to this node.
-			return true, expr, nil
-		}
-
-		v, err := vBase.NormalizeVarName()
-		if err != nil {
-			return false, nil, err
-		}
-
-		c, ok := v.(*tree.ColumnItem)
-		if !ok {
-			return true, expr, nil
-		}
-
-		col, dropped, err := desc.FindColumnByName(c.ColumnName)
-		if err != nil || dropped {
-			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
-				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
-		}
-		colIDs[col.ID] = struct{}{}
-		// Convert to a dummy node of the correct type.
-		return false, &dummyColumnItem{typ: col.Type, name: c.ColumnName}, nil
-	})
-	return newExpr, colIDs, err
 }
 
 // makeCheckConstraint makes a descriptor representation of a check from a def.
@@ -2374,14 +2315,20 @@ func makeCheckConstraint(
 		}
 	}
 
-	expr, colIDsUsed, err := replaceVars(desc, d.Expr)
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
+		tableName, sqlbase.ResultColumnsFromColDescs(
+			desc.GetID(),
+			desc.TableDesc().AllNonDropColumns(),
+		),
+	)
+
+	expr, err := dequalifyColumnRefs(ctx, sourceInfo, d.Expr)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := sqlbase.SanitizeVarFreeExpr(
-		expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
-	); err != nil {
+	expr, colIDsUsed, err := desc.ReplaceColumnVarsInExprWithDummies(expr)
+	if err != nil {
 		return nil, err
 	}
 
@@ -2391,20 +2338,18 @@ func makeCheckConstraint(
 	}
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		tableName, sqlbase.ResultColumnsFromColDescs(
-			desc.GetID(),
-			desc.TableDesc().AllNonDropColumns(),
-		),
+	// TODO (rohany): Is this suspicious to serialize the expression with
+	//  the dummy column items in it? We need the expression to be typed though.
+	//  We already dequalify all the column refs when creating the expression.
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
 	)
-
-	expr, err = dequalifyColumnRefs(ctx, sourceInfo, d.Expr)
 	if err != nil {
 		return nil, err
 	}
 
 	return &sqlbase.TableDescriptor_CheckConstraint{
-		Expr:      tree.Serialize(expr),
+		Expr:      tree.Serialize(typedExpr),
 		Name:      name,
 		ColumnIDs: colIDs,
 		Hidden:    d.Hidden,

@@ -498,6 +498,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 	if ok, c := isCastDeepValid(castFrom, exprType); ok {
 		telemetry.Inc(c)
 		expr.Expr = typedSubExpr
+		expr.Type = exprType
 		expr.typ = exprType
 		return expr, nil
 	}
@@ -543,6 +544,7 @@ func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 	if err != nil {
 		return nil, err
 	}
+	expr.Type = annotateType
 	subExpr, err := typeCheckAndRequire(
 		ctx,
 		expr.Expr,
@@ -1079,6 +1081,7 @@ func (expr *IsOfTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedEx
 		if err != nil {
 			return nil, err
 		}
+		expr.Types[i] = typ
 		expr.resolvedTypes[i] = typ
 	}
 	expr.Expr = exprTyped

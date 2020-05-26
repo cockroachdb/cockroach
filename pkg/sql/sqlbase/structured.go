@@ -829,6 +829,83 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 	return checks
 }
 
+// ReplaceColumnVarsInExprWithDummies replaces the occurrences of column names in an expression with
+// dummies containing their type, so that they may be typechecked. It returns
+// this new expression tree alongside a set containing the ColumnID of each
+// column seen in the expression.
+func (desc *TableDescriptor) ReplaceColumnVarsInExprWithDummies(
+	rootExpr tree.Expr,
+) (tree.Expr, map[ColumnID]struct{}, error) {
+	colIDs := make(map[ColumnID]struct{})
+	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return true, expr, nil
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return false, nil, err
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return true, expr, nil
+		}
+
+		col, dropped, err := desc.FindColumnByName(c.ColumnName)
+		if err != nil || dropped {
+			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
+				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
+		}
+		colIDs[col.ID] = struct{}{}
+		// Convert to a dummy node of the correct type.
+		return false, &dummyColumnItem{typ: col.Type, name: c.ColumnName}, nil
+	})
+	return newExpr, colIDs, err
+}
+
+// dummyColumnItem is used in makeCheckConstraint and validateIndexPredicate to
+// construct an expression that can be both type-checked and examined for
+// variable expressions.
+type dummyColumnItem struct {
+	typ *types.T
+	// name is only used for error-reporting.
+	name tree.Name
+}
+
+// String implements the Stringer interface.
+func (d *dummyColumnItem) String() string {
+	return tree.AsString(d)
+}
+
+// Format implements the NodeFormatter interface.
+// It should be kept in line with ColumnItem.Format.
+func (d *dummyColumnItem) Format(ctx *tree.FmtCtx) {
+	ctx.FormatNode(&d.name)
+}
+
+// Walk implements the Expr interface.
+func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
+	return d
+}
+
+// TypeCheck implements the Expr interface.
+func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
+	return d, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (*dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+	panic("dummyColumnItem.Eval() is undefined")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *dummyColumnItem) ResolvedType() *types.T {
+	return d.typ
+}
+
 // GetColumnFamilyForShard returns the column family that a newly added shard column
 // should be assigned to, given the set of columns it's computed from.
 //
@@ -3893,6 +3970,103 @@ func (desc *ColumnDescriptor) SQLString() string {
 	return f.CloseAndGetString()
 }
 
+// FormatForDisplay formats a column descriptor as a SQL string, and displays
+// user defined types in serialized expressions with human friendly formatting.
+// TODO (rohany): Maybe this should go into a new function?
+// TODO (rohany): This should have a better name?
+func (desc *ColumnDescriptor) FormatForDisplay(
+	semaCtx *tree.SemaContext, tbl *TableDescriptor,
+) (string, error) {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.FormatNameP(&desc.Name)
+	f.WriteByte(' ')
+	f.WriteString(desc.Type.SQLString())
+	if desc.Nullable {
+		f.WriteString(" NULL")
+	} else {
+		f.WriteString(" NOT NULL")
+	}
+	if desc.DefaultExpr != nil {
+		f.WriteString(" DEFAULT ")
+		typed, err := desc.GetTypedDefaultExpr(semaCtx)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(tree.SerializeForDisplay(typed))
+	}
+	if desc.IsComputed() {
+		f.WriteString(" AS (")
+		typed, err := desc.GetTypedComputedExpr(semaCtx, tbl)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(tree.SerializeForDisplay(typed))
+		f.WriteString(") STORED")
+	}
+	return f.CloseAndGetString(), nil
+}
+
+// GetTypedDefaultExpr returns the column's default expression type checked
+// under semaCtx. It is intended to be used when displaying a default
+// expression to a user.
+func (desc *ColumnDescriptor) GetTypedDefaultExpr(
+	semaCtx *tree.SemaContext,
+) (tree.TypedExpr, error) {
+	expr, err := parser.ParseExpr(*desc.DefaultExpr)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := expr.TypeCheck(semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	return typed, nil
+}
+
+// GetTypedComputedExpr returns the column's computed expr type checked
+// under semaCtx and other columns in tbl. It is only intended to be used
+// for displaying computed columns to users, since the column references
+// in the computed expression will be replaced with dummy references.
+func (desc *ColumnDescriptor) GetTypedComputedExpr(
+	semaCtx *tree.SemaContext, tbl *TableDescriptor,
+) (tree.TypedExpr, error) {
+	expr, err := parser.ParseExpr(*desc.ComputeExpr)
+	if err != nil {
+		return nil, err
+	}
+	expr, _, err = tbl.ReplaceColumnVarsInExprWithDummies(expr)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := expr.TypeCheck(semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	return typed, nil
+}
+
+// GetTypedComputedExpr returns the check's expr type checked
+// under semaCtx and other columns in tbl. It is only intended to be used
+// for displaying check expressions to users, since the column references
+// in the expression will be replaced with dummy references.
+func (desc *TableDescriptor_CheckConstraint) GetTypedCheckExpr(
+	semaCtx *tree.SemaContext, tbl *TableDescriptor,
+) (tree.TypedExpr, error) {
+	expr, err := parser.ParseExpr(desc.Expr)
+	if err != nil {
+		return nil, err
+	}
+	expr, _, err = tbl.ReplaceColumnVarsInExprWithDummies(expr)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := expr.TypeCheck(semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	return typed, nil
+}
+
 // ColumnsUsed returns the IDs of the columns used in the check constraint's
 // expression. v2.0 binaries will populate this during table creation, but older
 // binaries will not, in which case this needs to be computed when requested.
@@ -4428,6 +4602,22 @@ func MakeSimpleAliasTypeDescriptor(typ *types.T) *TypeDescriptor {
 		ID:             InvalidID,
 		Kind:           TypeDescriptor_ALIAS,
 		Alias:          typ,
+	}
+}
+
+// MakeTypesT creates a types.T from the input type descriptor.
+func (desc *TypeDescriptor) MakeTypesT(name *tree.TypeName) (*types.T, error) {
+	switch t := desc.Kind; t {
+	case TypeDescriptor_ENUM:
+		typ := types.MakeEnum(uint32(desc.ID))
+		if err := desc.HydrateTypeInfoWithName(typ, name); err != nil {
+			return nil, err
+		}
+		return typ, nil
+	case TypeDescriptor_ALIAS:
+		return desc.Alias, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
 }
 
