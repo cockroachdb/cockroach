@@ -812,6 +812,49 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestTrimFlushedStatements verifies that the conn executor releases statements
+// once the results are returned to the user.
+func TestTrimFlushedStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const expectedMaxLen = int32(4)
+	actualMaxLen := int32(0)
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				AfterExecuteCmd: func(_ context.Context, buf *sql.StmtBuf) {
+					l := int32(buf.Len())
+					maxLen := atomic.LoadInt32(&actualMaxLen)
+					for l > maxLen {
+						if !atomic.CompareAndSwapInt32(&actualMaxLen, maxLen, l) {
+							// Swap failed, update maxLen and try again.
+							maxLen = atomic.LoadInt32(&actualMaxLen)
+						}
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec("CREATE TABLE test (i int)")
+	require.NoError(t, err)
+
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		r, err := tx.Query("SELECT COUNT(*) FROM test")
+		require.NoError(t, err)
+		for r.Next() {
+		}
+		require.NoError(t, r.Close())
+	}
+	require.Equal(t, expectedMaxLen, actualMaxLen, "unexpected maximum length of statement buffer")
+	require.NoError(t, tx.Commit())
+}
+
 // dynamicRequestFilter exposes a filter method which is a
 // kvserverbase.ReplicaRequestFilter but can be set dynamically.
 type dynamicRequestFilter struct {

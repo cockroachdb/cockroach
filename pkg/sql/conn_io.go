@@ -549,6 +549,12 @@ func (buf *StmtBuf) Rewind(ctx context.Context, pos CmdPos) {
 	buf.mu.curPos = pos
 }
 
+func (buf *StmtBuf) Len() int {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	return buf.mu.data.Len()
+}
+
 // RowDescOpt specifies whether a result needs a row description message.
 type RowDescOpt bool
 
