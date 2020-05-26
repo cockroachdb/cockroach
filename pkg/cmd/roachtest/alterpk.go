@@ -179,7 +179,7 @@ func registerAlterPK(r *testRegistry) {
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    makeClusterSpec(4, cpu(32)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
