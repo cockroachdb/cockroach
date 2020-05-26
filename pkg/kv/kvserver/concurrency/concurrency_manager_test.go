@@ -228,21 +228,35 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
-				txn, ok := c.txnsByName[txnName]
-				if !ok {
-					d.Fatalf(t, "unknown txn %s", txnName)
-				}
+				// Each roachpb.Intent is provided on an indented line.
+				var intents []roachpb.Intent
+				singleReqLines := strings.Split(d.Input, "\n")
+				for _, line := range singleReqLines {
+					var err error
+					d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
+					if err != nil {
+						d.Fatalf(t, "error parsing single intent: %v", err)
+					}
+					if d.Cmd != "intent" {
+						d.Fatalf(t, "expected \"intent\", found %s", d.Cmd)
+					}
 
-				var key string
-				d.ScanArgs(t, "key", &key)
+					var txnName string
+					d.ScanArgs(t, "txn", &txnName)
+					txn, ok := c.txnsByName[txnName]
+					if !ok {
+						d.Fatalf(t, "unknown txn %s", txnName)
+					}
+
+					var key string
+					d.ScanArgs(t, "key", &key)
+
+					intents = append(intents, roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)))
+				}
 
 				opName := fmt.Sprintf("handle write intent error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{
-						roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)),
-					}}
+					wiErr := &roachpb.WriteIntentError{Intents: intents}
 					guard, err := m.HandleWriterIntentError(ctx, prev, wiErr)
 					if err != nil {
 						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
@@ -514,22 +528,22 @@ func (c *cluster) makeConfig() concurrency.Config {
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
-) (roachpb.Transaction, *roachpb.Error) {
+) (*roachpb.Transaction, *roachpb.Error) {
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
-		return roachpb.Transaction{}, roachpb.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 	var pusherRecord *txnRecord
 	if h.Txn != nil {
 		pusherID := h.Txn.ID
 		pusherRecord, err = c.getTxnRecord(pusherID)
 		if err != nil {
-			return roachpb.Transaction{}, roachpb.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 
 		push, err := c.registerPush(ctx, pusherID, pushee.ID)
 		if err != nil {
-			return roachpb.Transaction{}, roachpb.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 		defer c.unregisterPush(push)
 	}
@@ -543,7 +557,7 @@ func (c *cluster) PushTransaction(
 		case roachpb.PUSH_ABORT:
 			pushed = pusheeTxn.Status.IsFinalized()
 		default:
-			return roachpb.Transaction{}, roachpb.NewErrorf("unexpected push type: %s", pushType)
+			return nil, roachpb.NewErrorf("unexpected push type: %s", pushType)
 		}
 		if pushed {
 			return pusheeTxn, nil
@@ -551,12 +565,12 @@ func (c *cluster) PushTransaction(
 		// Or the pusher aborted?
 		var pusherRecordSig chan struct{}
 		if pusherRecord != nil {
-			var pusherTxn roachpb.Transaction
+			var pusherTxn *roachpb.Transaction
 			pusherTxn, pusherRecordSig = pusherRecord.asTxn()
 			if pusherTxn.Status == roachpb.ABORTED {
 				log.Eventf(ctx, "detected pusher aborted")
 				err := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED)
-				return roachpb.Transaction{}, roachpb.NewError(err)
+				return nil, roachpb.NewError(err)
 			}
 		}
 		// Wait until either record is updated.
@@ -564,7 +578,7 @@ func (c *cluster) PushTransaction(
 		case <-pusheeRecordSig:
 		case <-pusherRecordSig:
 		case <-ctx.Done():
-			return roachpb.Transaction{}, roachpb.NewError(ctx.Err())
+			return nil, roachpb.NewError(ctx.Err())
 		}
 	}
 }
@@ -575,6 +589,19 @@ func (c *cluster) ResolveIntent(
 ) *roachpb.Error {
 	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID.Short(), intent.Status)
 	c.m.OnLockUpdated(ctx, &intent)
+	return nil
+}
+
+// ResolveIntents implements the concurrency.IntentResolver interface.
+func (c *cluster) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *roachpb.Error {
+	log.Eventf(ctx, "resolving a batch of %d intent(s)", len(intents))
+	for _, intent := range intents {
+		if err := c.ResolveIntent(ctx, intent, opts); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -621,10 +648,10 @@ func (c *cluster) updateTxnRecord(
 	return nil
 }
 
-func (r *txnRecord) asTxn() (roachpb.Transaction, chan struct{}) {
+func (r *txnRecord) asTxn() (*roachpb.Transaction, chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	txn := *r.txn
+	txn := r.txn.Clone()
 	if r.updatedStatus > txn.Status {
 		txn.Status = r.updatedStatus
 	}

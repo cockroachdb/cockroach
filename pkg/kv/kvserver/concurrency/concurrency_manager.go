@@ -72,7 +72,8 @@ func (c *Config) initDefaults() {
 // NewManager creates a new concurrency Manager structure.
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
-	return &managerImpl{
+	m := new(managerImpl)
+	*m = managerImpl{
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
 		// latchManager interface directly, if possible.
@@ -89,6 +90,7 @@ func NewManager(cfg Config) Manager {
 			st:                cfg.Settings,
 			stopper:           cfg.Stopper,
 			ir:                cfg.IntentResolver,
+			lm:                m,
 			disableTxnPushing: cfg.DisableTxnPushing,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
@@ -102,6 +104,7 @@ func NewManager(cfg Config) Manager {
 			Knobs:     cfg.TxnWaitKnobs,
 		}),
 	}
+	return m
 }
 
 // SequenceReq implements the RequestSequencer interface.
@@ -342,6 +345,9 @@ func (m *managerImpl) OnRangeLeaseUpdated(isLeaseholder bool) {
 		const disable = true
 		m.lt.Clear(disable)
 		m.twq.Clear(disable)
+		// Also clear caches, since they won't be needed any time soon and
+		// consume memory.
+		m.ltw.ClearCaches()
 	}
 }
 

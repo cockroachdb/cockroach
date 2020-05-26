@@ -1450,12 +1450,16 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// range which has processed a raft command to remove itself (which is
 				// possible prior to 19.2 or if the DisableEagerReplicaRemoval is
 				// enabled) and has not yet been removed by the replica gc queue.
-				// We treat both cases the same way.
-				//
-				// TODO(ajwerner): Remove this migration in 20.2. It exists in 20.1 to
-				// find and remove any pre-emptive snapshots which may have been sent by
-				// a 19.1 or older node to this node while it was running 19.2.
-				return false /* done */, removePreemptiveSnapshot(ctx, s, &desc)
+				// We treat both cases the same way. These should no longer exist in
+				// 20.2 or after as there was a migration in 20.1 to remove them and
+				// no pre-emptive snapshot should have been sent since 19.2 was
+				// finalized.
+				return false /* done */, errors.AssertionFailedf(
+					"found RangeDescriptor for range %d at generation %d which does not"+
+						" contain this store %d",
+					log.Safe(desc.RangeID),
+					log.Safe(desc.Generation),
+					log.Safe(s.StoreID()))
 			}
 
 			rep, err := newReplica(ctx, &desc, s, replicaDesc.ReplicaID)
