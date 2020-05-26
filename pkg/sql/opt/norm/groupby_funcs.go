@@ -308,3 +308,69 @@ func (c *CustomFuncs) areRowsDistinct(
 
 	return true
 }
+
+// CanMergeAggs returns true if the given inner and outer AggregationsExprs can
+// be replaced with a single equivalent AggregationsExpr.
+func (c *CustomFuncs) CanMergeAggs(innerAggs, outerAggs memo.AggregationsExpr) bool {
+	// Create a mapping from the output ColumnID of each inner aggregate to its
+	// operator type.
+	innerColsToAggOps := map[opt.ColumnID]opt.Operator{}
+	for i := range innerAggs {
+		innerAgg := innerAggs[i].Agg
+		if !opt.IsAggregateOp(innerAgg) {
+			// Aggregate can't be an AggFilter or AggDistinct.
+			return false
+		}
+		innerColsToAggOps[innerAggs[i].Col] = innerAgg.Op()
+	}
+
+	for i := range outerAggs {
+		outerAgg := outerAggs[i].Agg
+		if !opt.IsAggregateOp(outerAgg) {
+			// Aggregate can't be an AggFilter or AggDistinct.
+			return false
+		}
+		if outerAgg.ChildCount() != 1 {
+			// There are no valid inner-outer aggregate pairs for which the ChildCount
+			// of the outer is not equal to one.
+			return false
+		}
+		input, ok := outerAgg.Child(0).(*memo.VariableExpr)
+		if !ok {
+			// The outer aggregate does not directly aggregate on a column.
+			return false
+		}
+		innerOp, ok := innerColsToAggOps[input.Col]
+		if !ok {
+			// This outer aggregate does not reference an inner aggregate.
+			return false
+		}
+		if !opt.AggregatesCanMerge(innerOp, outerAgg.Op()) {
+			// There is no single aggregate that can replace this pair.
+			return false
+		}
+	}
+	return true
+}
+
+// MergeAggs returns an AggregationsExpr that is equivalent to the two given
+// AggregationsExprs.
+func (c *CustomFuncs) MergeAggs(innerAggs, outerAggs memo.AggregationsExpr) memo.AggregationsExpr {
+	// Create a mapping from the output ColumnIDs of the inner aggregates to their
+	// indices in innerAggs.
+	innerColsToAggs := map[opt.ColumnID]int{}
+	for i := range innerAggs {
+		innerColsToAggs[innerAggs[i].Col] = i
+	}
+
+	newAggs := make(memo.AggregationsExpr, len(outerAggs))
+	for i := range outerAggs {
+		// For each outer aggregate, construct a new aggregate that takes the Agg
+		// field of the referenced inner aggregate and the Col field of the outer
+		// aggregate.
+		inputCol := outerAggs[i].Agg.Child(0).(*memo.VariableExpr).Col
+		innerAgg := innerAggs[innerColsToAggs[inputCol]].Agg
+		newAggs[i] = c.f.ConstructAggregationsItem(innerAgg, outerAggs[i].Col)
+	}
+	return newAggs
+}
