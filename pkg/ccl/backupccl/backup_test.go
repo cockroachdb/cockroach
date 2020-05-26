@@ -295,7 +295,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 			t.Fatal(err)
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
-		require.Equal(t, backupccl.ZipType, fileType, "expect manifest files to be compressed but the format is" + fileType)
+		require.Equal(t, backupccl.ZipType, fileType, "expect manifest files to be compressed but the format is"+fileType)
 	})
 
 	sqlDB.Exec(t, "CREATE DATABASE data2")
@@ -413,7 +413,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 						t.Fatal(err)
 					}
 					fileType := http.DetectContentType(backupPartitionBytes)
-					require.Equal(t, backupccl.ZipType, fileType, "expect partition descriptor files to be compressed but the format is" + fileType)
+					require.Equal(t, backupccl.ZipType, fileType, "expect partition descriptor files to be compressed but the format is"+fileType)
 				}
 			}
 		}
@@ -1129,8 +1129,8 @@ func TestBackupRestoreResume(t *testing.T) {
 		fileType := http.DetectContentType(backupManifestBytes)
 		if fileType == backupccl.ZipType {
 			backupManifestBytes, err = backupccl.DecompressFile(backupManifestBytes)
+			require.NoError(t, err, err)
 		}
-		require.NoError(t, err, err)
 		var backupManifest backupccl.BackupManifest
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatal(err)
@@ -2591,8 +2591,8 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		fileType := http.DetectContentType(backupManifestBytes)
 		if fileType == backupccl.ZipType {
 			backupManifestBytes, err = backupccl.DecompressFile(backupManifestBytes)
+			require.NoError(t, err, err)
 		}
-		require.NoError(t, err, err)
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatalf("%+v", err)
 		}

@@ -169,10 +169,10 @@ func readBackupManifest(
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
 		descBytes, err = DecompressFile(descBytes)
-	}
-	if err != nil {
-		return BackupManifest{}, errors.Wrap(
-			err, "decompressing backup manifest")
+		if err != nil {
+			return BackupManifest{}, errors.Wrap(
+				err, "decompressing backup manifest")
+		}
 	}
 	var backupManifest BackupManifest
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
@@ -227,10 +227,10 @@ func readBackupPartitionDescriptor(
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
 		descBytes, err = DecompressFile(descBytes)
-	}
-	if err != nil {
-		return BackupPartitionDescriptor{}, errors.Wrap(
-			err, "decompressing backup partition descriptor")
+		if err != nil {
+			return BackupPartitionDescriptor{}, errors.Wrap(
+				err, "decompressing backup partition descriptor")
+		}
 	}
 	var backupManifest BackupPartitionDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
