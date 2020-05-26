@@ -620,6 +620,7 @@ arr_stats_x      {x}           4          3               1           false
 
 # Test that enum columns always have histograms collected for them.
 statement ok
+SET experimental_enable_enums=true;
 CREATE TYPE e AS ENUM ('hello', 'howdy', 'hi');
 CREATE TABLE et (x e, y e, PRIMARY KEY (x));
 INSERT INTO et VALUES ('hello', 'hello'), ('howdy', 'howdy'), ('hi', 'hi');

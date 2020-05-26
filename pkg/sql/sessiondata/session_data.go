@@ -41,6 +41,8 @@ type SessionData struct {
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
 	DistSQLMode DistSQLExecMode
+	// EnumsEnabled indicates whether use of ENUM types are allowed.
+	EnumsEnabled bool
 	// OptimizerFKChecks indicates whether we should use the new paths to plan foreign
 	// key checks in the optimizer.
 	OptimizerFKChecks bool

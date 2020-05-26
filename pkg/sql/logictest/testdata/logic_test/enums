@@ -1,3 +1,6 @@
+statement ok
+SET experimental_enable_enums=true;
+
 statement error pq: unimplemented: DROP TYPE
 DROP TYPE mytype
 

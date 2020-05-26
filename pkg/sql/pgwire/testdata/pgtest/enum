@@ -1,6 +1,16 @@
 # This test verifies some of the pgwire encoding process for ENUMs.
 
 send
+Query {"String": "SET experimental_enable_enums=true;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
 Query {"String": "CREATE TYPE t AS ENUM ('hi', 'hello')"}
 ----
 
