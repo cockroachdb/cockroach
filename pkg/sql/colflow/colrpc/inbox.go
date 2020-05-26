@@ -317,7 +317,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				return i.zeroBatch
 			}
 			i.errCh <- err
-			execerror.VectorizedInternalPanic(err)
+			execerror.NonVectorizedPanic(err)
 		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
