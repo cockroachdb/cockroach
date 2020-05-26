@@ -28,7 +28,7 @@ interface StdDev {
   stddevPlus2: number;
 }
 
-interface ILegendProps {
+export interface ILatencyProps {
   displayIdentities: Identity[];
   staleIDs: Set<number>;
   multipleHeader: boolean;
@@ -159,20 +159,6 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
       />
     );
   }
-  if (latency === -2) {
-    return (
-      <td
-        className={generateClassName(["latency-table__cell", "latency-table__cell--no-connection"])}
-      >
-        <Tooltip placement="bottom" title="Disconnected">
-          <Chip
-            title="--"
-            type="yellow"
-          />
-        </Tooltip>
-      </td>
-    );
-  }
   if (latency === -1) {
     return (
       <td
@@ -201,17 +187,29 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
       std.stddev > 0 && latency > std.stddevPlus2,
   });
   const type: any = classNames({
+    "yellow":
+      latency === -2,
     "green":
-      std.stddev > 0 && latency < std.stddevMinus2,
+      latency > 0 && std.stddev > 0 && latency < std.stddevMinus2,
     "lightgreen":
-      std.stddev > 0 && latency < std.stddevMinus1 && latency >= std.stddevMinus2,
+      latency > 0 && std.stddev > 0 && latency < std.stddevMinus1 && latency >= std.stddevMinus2,
     "grey":
-      std.stddev > 0 && latency >= std.stddevMinus1 && latency <= std.stddevPlus1,
+      latency > 0 && std.stddev > 0 && latency >= std.stddevMinus1 && latency <= std.stddevPlus1,
     "lightblue":
-      std.stddev > 0 && latency > std.stddevPlus1 && latency <= std.stddevPlus2,
+      latency > 0 && std.stddev > 0 && latency > std.stddevPlus1 && latency <= std.stddevPlus2,
     "blue":
-      std.stddev > 0 && latency > std.stddevPlus2,
+      latency > 0 && std.stddev > 0 && latency > std.stddevPlus2,
   });
+  const renderDescription = (data: string) => {
+    if (!data) {
+      return;
+    }
+    return _.map(data.split(","), (identity, index) => (
+      <p key={index} className="Chip--tooltip__nodes--item-description">
+        {`${identity},`}
+      </p>
+    ));
+  };
   return (
     <td className={className}>
       {collapsed ? (
@@ -225,20 +223,20 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
             <div className="Chip--tooltip__nodes">
               <div className="Chip--tooltip__nodes--item">
                 <p className="Chip--tooltip__nodes--item-title">{`Node ${identityB.nodeID}`}</p>
-                <p className="Chip--tooltip__nodes--item-description">{identityB.locality}</p>
+                {renderDescription(identityB.locality)}
               </div>
               <Divider type="vertical" />
               <div className="Chip--tooltip__nodes--item">
                 <p className="Chip--tooltip__nodes--item-title">{`Node ${identityA.nodeID}`}</p>
-                <p className="Chip--tooltip__nodes--item-description">{identityA.locality}</p>
+                {renderDescription(identityA.locality)}
               </div>
             </div>
-            <p className={`color--${type}`}>{`${latency.toFixed(2)}ms roundtrip`}</p>
+            {latency > 0 && <p className={`color--${type} Chip--tooltip__latency`}>{`${latency.toFixed(2)}ms roundtrip`}</p>}
           </div>
         )}>
           <div>
             <Chip
-              title={`${latency.toFixed(2)}ms`}
+              title={latency > 0 ? latency.toFixed(2) + "ms" : "--"}
               type={type}
             />
           </div>
@@ -249,7 +247,7 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
 };
 
 // tslint:disable-next-line: variable-name
-export const Latency: React.SFC <ILegendProps> = ({
+export const Latency: React.SFC <ILatencyProps> = ({
   displayIdentities,
   staleIDs,
   multipleHeader,

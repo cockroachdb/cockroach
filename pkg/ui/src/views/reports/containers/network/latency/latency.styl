@@ -82,3 +82,50 @@
 
 .latency-table__empty
   padding: 30px;
+
+
+.ant-tooltip.Chip--tooltip
+  min-width 384px
+  .ant-tooltip-inner
+    background-color black
+    padding 12px 18px
+  .ant-tooltip-content
+    width 100%
+  span, p
+    font-family $font-family--base
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    color $table-border-color
+  .Chip--tooltip__latency
+     margin-top 25px
+  .Chip--tooltip__nodes
+    display flex
+    justify-content space-between
+    &--item
+      width 45%
+      &:first-child
+        margin-right 8px
+      &:last-child
+        margin-left 8px
+    .ant-divider
+      background #3b4a60
+      margin 0
+    &--item-title, &--item-description
+      font-family $font-family--base
+      font-size 14px
+      line-height 1.57
+      letter-spacing 0.1px
+      color $table-border-color
+      margin 0
+    &--item-title
+      line-height 1.71
+  .color
+    &--green, &--lightgreen
+      color $colors--primary-green-2
+    &--grey
+      color $colors--neutral-2
+    &--blue, &--lightblue
+      color $colors--primary-blue-2
+    &--yellow
+      color $colors--functional-yellow-3
