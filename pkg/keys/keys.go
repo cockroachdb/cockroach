@@ -390,6 +390,70 @@ func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return MakeRangeKey(rk, LocalTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
 }
 
+// MakeLockTableKey creates a lock table key based on the key being locked,
+// metadata key suffix, and optional detail (always the transaction ID).
+func MakeLockTableKey(key roachpb.Key, suffix, detail roachpb.RKey) roachpb.Key {
+	if len(suffix) != localSuffixLength {
+		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
+	}
+	buf := MakeLockTableKeyPrefix(key)
+	buf = append(buf, suffix...)
+	buf = append(buf, detail...)
+	return buf
+}
+
+// MakeRangeLockTablePrefix creates a key prefix under which all lock table keys
+// for key can be found.
+// For a scan [start, end) the corresponding lock table scan is [MLTKP(start), MLTKP(end)).
+func MakeLockTableKeyPrefix(key roachpb.Key) roachpb.Key {
+	// Don't unwrap any local prefix on key using Addr(key). This allow for
+	// doubly-local lock table keys. For example, local range descriptor keys can
+	// be locked during split and merge transactions.
+	buf := make(roachpb.Key, 0, len(LocalRangeLockTablePrefix)+len(key)+1)
+	buf = append(buf, LocalRangeLockTablePrefix...)
+	buf = encoding.EncodeBytesAscending(buf, key)
+	return buf
+}
+
+// DecodeLockTableKey decodes the range key into locked key,
+// suffix and detail.
+func DecodeLockTableKey(
+	key roachpb.Key,
+) (lockedKey, suffix roachpb.Key, txnID uuid.UUID, err error) {
+	if !bytes.HasPrefix(key, LocalRangeLockTablePrefix) {
+		return nil, nil, uuid.UUID{}, errors.Errorf("key %q does not have %q prefix",
+			key, LocalRangeLockTablePrefix)
+	}
+	// Cut the prefix.
+	b := key[len(LocalRangeLockTablePrefix):]
+	b, lockedKey, err = encoding.DecodeBytesAscending(b, nil)
+	if err != nil {
+		return nil, nil, uuid.UUID{}, err
+	}
+	if len(b) < localSuffixLength {
+		return nil, nil, uuid.UUID{}, errors.Errorf("key %q does not have suffix of length %d",
+			key, localSuffixLength)
+	}
+	// Cut the suffix.
+	suffix = b[:localSuffixLength]
+	detail := b[localSuffixLength:]
+	if len(detail) != uuid.Size {
+		return nil, nil, uuid.UUID{},
+			errors.Errorf("key %q does not have txnID, since length is incorrect %d", len(detail))
+	}
+	copy(txnID[:], detail)
+	return
+}
+
+// LockTableKeyExclusive returns a lock table key for replicated exclusive locks, based on the
+// provided key being locked and transaction ID.
+func LockTableKeyExclusive(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	// Don't unwrap any local prefix on key using Addr(key). This allow for
+	// doubly-local lock table keys. For example, local range descriptor keys can
+	// be locked during split and merge transactions.
+	return MakeLockTableKey(key, LocalRangeLockTableExclusiveTxnSuffix, txnID.GetBytes())
+}
+
 // QueueLastProcessedKey returns a range-local key for last processed
 // timestamps for the named queue. These keys represent per-range last
 // processed times.

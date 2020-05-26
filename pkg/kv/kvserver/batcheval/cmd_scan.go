@@ -15,9 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
@@ -48,23 +51,63 @@ func Scan(
 		Reverse:          false,
 	}
 
-	switch args.ScanFormat {
-	case roachpb.BATCH_RESPONSE:
-		scanRes, err = storage.MVCCScanToBytes(
-			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
-		if err != nil {
-			return result.Result{}, err
+	if h.ReadConsistency != roachpb.CONSISTENT || h.Timestamp == (hlc.Timestamp{}) {
+		switch args.ScanFormat {
+		case roachpb.BATCH_RESPONSE:
+			scanRes, err = storage.MVCCScanToBytes(
+				ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
+			if err != nil {
+				return result.Result{}, err
+			}
+			reply.BatchResponses = scanRes.KVData
+		case roachpb.KEY_VALUES:
+			scanRes, err = storage.MVCCScan(
+				ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
+			if err != nil {
+				return result.Result{}, err
+			}
+			reply.Rows = scanRes.KVs
+		default:
+			panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 		}
-		reply.BatchResponses = scanRes.KVData
-	case roachpb.KEY_VALUES:
-		scanRes, err = storage.MVCCScan(
-			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
-		if err != nil {
-			return result.Result{}, err
+	} else {
+		// TODO: handle READ_UNCOMMITTED.
+		opts2 := mvcc.MVCCScanOptions2{
+			Reverse:          false,
+			FailOnMoreRecent: args.KeyLocking != lock.None,
+			MaxKeys:          h.MaxSpanRequestKeys,
+			TargetBytes:      h.TargetBytes,
 		}
-		reply.Rows = scanRes.KVs
-	default:
-		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
+		rw := concurrency.CreateMVCCReadWriter(
+			reader,
+			nil,
+			storage.IterOptions{
+				LowerBound: args.Key,
+				UpperBound: args.EndKey,
+				Prefix:     false,
+			},
+			h.Txn,
+			nil,
+			h.Timestamp,
+			args.KeyLocking != lock.None,
+		)
+		rw.SeekGE(args.Key)
+		switch args.ScanFormat {
+		case roachpb.BATCH_RESPONSE:
+			scanRes, err = mvcc.MVCCScan2ToBytes(ctx, rw, h.Timestamp, args.EndKey, opts2)
+			if err != nil {
+				return result.Result{}, err
+			}
+			reply.BatchResponses = scanRes.KVData
+		case roachpb.KEY_VALUES:
+			scanRes, err = mvcc.MVCCScan2(ctx, rw, h.Timestamp, args.EndKey, opts2)
+			if err != nil {
+				return result.Result{}, err
+			}
+			reply.Rows = scanRes.KVs
+		default:
+			panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
+		}
 	}
 
 	reply.NumKeys = scanRes.NumKeys

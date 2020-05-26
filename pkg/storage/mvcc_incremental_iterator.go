@@ -11,12 +11,19 @@
 package storage
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+type SimplePlusIterator interface {
+	SimpleIterator
+	Key() MVCCKey
+	Value() []byte
+}
 
 // MVCCIncrementalIterator iterates over the diff of the key range
 // [startKey,endKey) and time range (startTime,endTime]. If a key was added or
@@ -64,11 +71,8 @@ import (
 // Since there is no delete across all sstables that deletes k@t#n1, there is
 // no delete in the subset of sstables used by timeBoundIter that deletes
 // k@t#n1, so the timeBoundIter will see k@t.
-//
-// NOTE: This is not used by CockroachDB and has been preserved to serve as an
-// oracle to prove the correctness of the new export logic.
 type MVCCIncrementalIterator struct {
-	iter Iterator
+	iter SimplePlusIterator
 
 	// A time-bound iterator cannot be used by itself due to a bug in the time-
 	// bound iterator (#28358). This was historically augmented with an iterator
@@ -107,20 +111,38 @@ type MVCCIncrementalIterOptions struct {
 // TODO(pbardea): Add validation here and in C++ implementation that the
 //  timestamp hints are not more restrictive than incremental iterator's
 //  (startTime, endTime] interval.
+//
+// The construction is happening while holding read latches at timestamp
+// t_e for the interval (t_s, t_e]. So no concurrent writes (including intent
+// resolution can occur at <= t_e). Intent resolution without holding
+// latches can be allowed in the future. Say the iterators are constructed as
+// - lockIter at t1
+// - valueIter at t2
+// - timeBoundIter at t3
+// k@t exists at t3. Say it is recently committed:
+// - valueIter sees k@t
+// - lockIter has an intent referring to k@t' where t' <= t. If there is
+//   any intent <= t_e in the lockIter we will report an error.
+//
+// TODO: the intentInterleavingIterator is not how we should really do this.
+// - acquire the latch: new intents cannot be created
+// - create an intentIter and iterate from lower to upper to confirm that
+//   there are no intents in (t_s, t_e]. Fail if they are.
+// - create an
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
-	var iter Iterator
+	var iter SimplePlusIterator
 	var timeBoundIter Iterator
 	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter = reader.NewIterator(IterOptions{
+		iter = newIntentInterleavingIterator(reader, IterOptions{
 			UpperBound: opts.IterOptions.UpperBound,
 		})
 		timeBoundIter = reader.NewIterator(opts.IterOptions)
 	} else {
-		iter = reader.NewIterator(opts.IterOptions)
+		iter = newIntentInterleavingIterator(reader, opts.IterOptions)
 	}
 
 	return &MVCCIncrementalIterator{
@@ -129,6 +151,136 @@ func NewMVCCIncrementalIterator(
 		endTime:       opts.EndTime,
 		timeBoundIter: timeBoundIter,
 	}
+}
+
+func newIntentInterleavingIterator(reader Reader, opts IterOptions) SimplePlusIterator {
+	if opts.UpperBound == nil {
+		panic("TODO")
+	}
+	intentOpts := opts
+	if opts.LowerBound != nil {
+		intentOpts.LowerBound = keys.MakeLockTableKeyPrefix(opts.LowerBound)
+	}
+	intentOpts.UpperBound = keys.MakeLockTableKeyPrefix(opts.UpperBound)
+	intentIter := reader.NewIterator(intentOpts)
+	iter := reader.NewIterator(opts)
+	return &intentInterleavingIter{
+		iter:       iter,
+		intentIter: intentIter,
+	}
+}
+
+type intentInterleavingIter struct {
+	iter       Iterator
+	intentIter Iterator
+	intentKey  roachpb.Key
+	intentCmp  int
+
+	valid bool
+	err   error
+}
+
+// Always has timestamp 0.
+func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
+	intentSeekKey := keys.MakeLockTableKeyPrefix(key.Key)
+	i.intentIter.SeekGE(MVCCKey{Key: intentSeekKey})
+	if err := i.tryDecodeLockedKey(); err != nil {
+		return
+	}
+	i.iter.SeekGE(key)
+	i.extract()
+}
+
+func (i *intentInterleavingIter) extract() {
+	if valid, err := i.iter.Valid(); err != nil || !valid {
+		i.err = err
+		i.valid = valid
+		return
+	}
+	if i.intentKey == nil {
+		i.intentCmp = +1
+	} else {
+		i.intentCmp = i.intentKey.Compare(i.iter.UnsafeKey().Key)
+	}
+}
+
+func (i *intentInterleavingIter) tryDecodeLockedKey() error {
+	valid, err := i.intentIter.Valid()
+	if err != nil {
+		i.err = err
+		i.valid = false
+		return err
+	}
+	if !valid {
+		i.intentKey = nil
+		return nil
+	}
+	i.intentKey, _, _, err = keys.DecodeLockTableKey(i.intentIter.UnsafeKey().Key)
+	if err != nil {
+		i.err = err
+		i.valid = false
+		return err
+	}
+	return nil
+}
+
+func (i *intentInterleavingIter) Valid() (bool, error) {
+	return i.valid, i.err
+}
+
+func (i *intentInterleavingIter) Next() {
+	if i.intentCmp <= 0 {
+		i.intentIter.NextKey()
+		i.tryDecodeLockedKey()
+		i.extract()
+	} else {
+		i.iter.Next()
+		i.extract()
+	}
+}
+
+func (i *intentInterleavingIter) NextKey() {
+	if i.intentCmp <= 0 {
+		i.intentIter.NextKey()
+		i.tryDecodeLockedKey()
+		i.extract()
+	} else {
+		i.iter.NextKey()
+		i.extract()
+	}
+}
+
+func (i *intentInterleavingIter) UnsafeKey() MVCCKey {
+	if i.intentCmp <= 0 {
+		return MVCCKey{Key: i.intentKey}
+	} else {
+		return i.iter.UnsafeKey()
+	}
+}
+
+func (i *intentInterleavingIter) UnsafeValue() []byte {
+	if i.intentCmp <= 0 {
+		return i.intentIter.UnsafeValue()
+	} else {
+		return i.iter.UnsafeValue()
+	}
+}
+
+func (i *intentInterleavingIter) Key() MVCCKey {
+	return MVCCKey{Key: append(roachpb.Key(nil), i.UnsafeKey().Key...), Timestamp: i.UnsafeKey().Timestamp}
+}
+
+func (i *intentInterleavingIter) Value() []byte {
+	if i.intentCmp < 0 {
+		return i.intentIter.Value()
+	} else {
+		return i.iter.Value()
+	}
+}
+
+func (i *intentInterleavingIter) Close() {
+	i.iter.Close()
+	i.intentIter.Close()
 }
 
 // SeekGE advances the iterator to the first key in the engine which is >= the

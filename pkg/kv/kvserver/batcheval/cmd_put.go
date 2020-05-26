@@ -14,6 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -63,7 +65,26 @@ func Put(
 	if args.Blind {
 		err = storage.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
 	} else {
-		err = storage.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+		if ts == (hlc.Timestamp{}) {
+			// Inline value. TODO: simplified put for inline values.
+			err = storage.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+		} else {
+			// TODO: is ms guaranteed to be non-nil here?
+			rw := concurrency.CreateMVCCReadWriter(
+				readWriter,
+				readWriter,
+				storage.IterOptions{
+					LowerBound: args.Key,
+					UpperBound: args.Key.Next(),
+					Prefix:     true,
+				},
+				h.Txn,
+				ms,
+				ts,
+				false,
+			)
+			err = mvcc.MVCCPut2(ctx, rw, args.Key, ts, args.Value.RawBytes, h.Txn)
+		}
 	}
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld

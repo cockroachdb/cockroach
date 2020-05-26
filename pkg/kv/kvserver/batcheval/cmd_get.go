@@ -14,8 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -31,10 +34,31 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	val, intent, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
-		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:          h.Txn,
-	})
+	var val *roachpb.Value
+	var intent *roachpb.Intent
+	var err error
+	if h.ReadConsistency != roachpb.CONSISTENT || h.Timestamp == (hlc.Timestamp{}) {
+		val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
+			Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
+			Txn:          h.Txn,
+		})
+	} else {
+		// TODO: handle READ_UNCOMMITTED.
+		rw := concurrency.CreateMVCCReadWriter(
+			reader,
+			nil,
+			storage.IterOptions{
+				LowerBound: args.Key,
+				UpperBound: args.Key.Next(),
+				Prefix:     true,
+			},
+			h.Txn,
+			nil,
+			h.Timestamp,
+			false,
+		)
+		val, err = mvcc.MVCCGet2(ctx, rw, args.Key)
+	}
 	if err != nil {
 		return result.Result{}, err
 	}

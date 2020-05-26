@@ -997,11 +997,12 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
-	getKeyRanges := func(desc *roachpb.RangeDescriptor) [2]rditer.KeyRange {
-		return [...]rditer.KeyRange{
-			rditer.MakeRangeLocalKeyRange(desc),
-			rditer.MakeUserKeyRange(desc),
-		}
+	getKeyRanges := func(desc *roachpb.RangeDescriptor) []rditer.KeyRange {
+		ranges := make([]rditer.KeyRange, 0, 4)
+		ranges = append(ranges, rditer.MakeRangeLocalKeyRange(desc))
+		ranges = append(ranges, rditer.MakeRangeLockTableKeyRanges(desc)...)
+		ranges = append(ranges, rditer.MakeUserKeyRange(desc))
+		return ranges
 	}
 	keyRanges := getKeyRanges(desc)
 	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)

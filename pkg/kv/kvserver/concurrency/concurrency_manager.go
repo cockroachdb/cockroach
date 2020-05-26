@@ -73,6 +73,9 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
+	lt := &lockTableImpl{
+		maxLocks: cfg.MaxLockTableSize,
+	}
 	*m = managerImpl{
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
@@ -83,14 +86,13 @@ func NewManager(cfg Config) Manager {
 				cfg.SlowLatchGauge,
 			),
 		},
-		lt: &lockTableImpl{
-			maxLocks: cfg.MaxLockTableSize,
-		},
+		lt: lt,
 		ltw: &lockTableWaiterImpl{
 			st:                cfg.Settings,
 			stopper:           cfg.Stopper,
 			ir:                cfg.IntentResolver,
 			lm:                m,
+			lt:                lt,
 			disableTxnPushing: cfg.DisableTxnPushing,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
@@ -345,9 +347,6 @@ func (m *managerImpl) OnRangeLeaseUpdated(isLeaseholder bool) {
 		const disable = true
 		m.lt.Clear(disable)
 		m.twq.Clear(disable)
-		// Also clear caches, since they won't be needed any time soon and
-		// consume memory.
-		m.ltw.ClearCaches()
 	}
 }
 

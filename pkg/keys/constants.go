@@ -155,7 +155,20 @@ var (
 	// (storage/engine/rocksdb/db.cc).
 	LocalTransactionSuffix = roachpb.RKey("txn-")
 
-	// 4. Store local keys
+	// 4. Lock table keys
+	//
+	// LocalRangeLockTablePrefix specifies the key prefix for the lock
+	// table. The additional detail is the transaction id.
+	//
+	// We add the lock strength to the key suffix, since we want the locks for a
+	// particular user key to be contiguous in the key space, and different lock
+	// strengths may use different protos. In particular, only the exclusive
+	// strength will use MVCCMetadata since it has to do double duty as a
+	// reference to a provisional MVCC value.
+	LocalRangeLockTablePrefix             = roachpb.Key(makeKey(localPrefix, roachpb.RKey("l")))
+	LocalRangeLockTableExclusiveTxnSuffix = roachpb.RKey("exc-")
+
+	// 5. Store local keys
 	//
 	// localStorePrefix is the prefix identifying per-store data.
 	localStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
