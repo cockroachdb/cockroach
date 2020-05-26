@@ -1261,9 +1261,9 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 
 	if cfg.useTenant {
 		var err error
-		t.tenantAddr, err = t.cluster.Server(t.nodeIdx).StartTenant()
+		t.tenantAddr, err = t.cluster.Server(t.nodeIdx).StartTenant(roachpb.MakeTenantID(10))
 		if err != nil {
-			t.rootT.Fatal(err)
+			t.rootT.Fatalf("%+v", err)
 		}
 	}
 

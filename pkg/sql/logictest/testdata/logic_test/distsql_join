@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 # LogicTest: 5node-default-configs
 
 # Test that the distSQL MergeJoiner follows SQL NULL semantics for ON predicate

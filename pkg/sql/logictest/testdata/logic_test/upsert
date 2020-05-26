@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 subtest strict
 
 statement ok

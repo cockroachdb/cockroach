@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 query TI colnames
 SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS x(name, i)
 ----
