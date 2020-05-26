@@ -249,29 +249,29 @@ func TestInitResolvedTSScan(t *testing.T) {
 }
 
 type testTxnPusher struct {
-	pushTxnsFn               func([]enginepb.TxnMeta, hlc.Timestamp) ([]roachpb.Transaction, error)
-	cleanupTxnIntentsAsyncFn func([]roachpb.Transaction) error
+	pushTxnsFn               func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
+	cleanupTxnIntentsAsyncFn func([]*roachpb.Transaction) error
 }
 
 func (tp *testTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, error) {
 	return tp.pushTxnsFn(txns, ts)
 }
 
 func (tp *testTxnPusher) CleanupTxnIntentsAsync(
-	ctx context.Context, txns []roachpb.Transaction,
+	ctx context.Context, txns []*roachpb.Transaction,
 ) error {
 	return tp.cleanupTxnIntentsAsyncFn(txns)
 }
 
 func (tp *testTxnPusher) mockPushTxns(
-	fn func([]enginepb.TxnMeta, hlc.Timestamp) ([]roachpb.Transaction, error),
+	fn func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error),
 ) {
 	tp.pushTxnsFn = fn
 }
 
-func (tp *testTxnPusher) mockCleanupTxnIntentsAsync(fn func([]roachpb.Transaction) error) {
+func (tp *testTxnPusher) mockCleanupTxnIntentsAsync(fn func([]*roachpb.Transaction) error) {
 	tp.cleanupTxnIntentsAsyncFn = fn
 }
 
@@ -284,13 +284,13 @@ func TestTxnPushAttempt(t *testing.T) {
 	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts1, MinTimestamp: ts1}
 	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts2, MinTimestamp: ts2}
 	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts3, MinTimestamp: ts3}
-	txn1Proto := roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
-	txn2Proto := roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.COMMITTED}
-	txn3Proto := roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.ABORTED}
+	txn1Proto := &roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
+	txn2Proto := &roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.COMMITTED}
+	txn3Proto := &roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.ABORTED}
 
 	// Run a txnPushAttempt.
 	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]roachpb.Transaction, error) {
+	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
 		require.Equal(t, 3, len(txns))
 		require.Equal(t, txn1Meta, txns[0])
 		require.Equal(t, txn2Meta, txns[1])
@@ -298,11 +298,11 @@ func TestTxnPushAttempt(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{WallTime: 15}, ts)
 
 		// Return all three protos. The PENDING txn is pushed.
-		txn1ProtoPushed := txn1Proto
+		txn1ProtoPushed := txn1Proto.Clone()
 		txn1ProtoPushed.WriteTimestamp = ts
-		return []roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto}, nil
+		return []*roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto}, nil
 	})
-	tp.mockCleanupTxnIntentsAsync(func(txns []roachpb.Transaction) error {
+	tp.mockCleanupTxnIntentsAsync(func(txns []*roachpb.Transaction) error {
 		require.Equal(t, 2, len(txns))
 		require.Equal(t, txn2Proto, txns[0])
 		require.Equal(t, txn3Proto, txns[1])

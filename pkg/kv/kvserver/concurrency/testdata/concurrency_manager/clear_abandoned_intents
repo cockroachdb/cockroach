@@ -1,0 +1,259 @@
+# -------------------------------------------------------------
+# A scan finds 10 abandoned intents from same txn
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1
+  intent txn=txn2 key=a
+  intent txn=txn2 key=b
+  intent txn=txn2 key=c
+  intent txn=txn2 key=d
+  intent txn=txn2 key=e
+  intent txn=txn2 key=f
+  intent txn=txn2 key=g
+  intent txn=txn2 key=h
+  intent txn=txn2 key=i
+  intent txn=txn2 key=j
+----
+[2] handle write intent error req1: handled conflicting intents on "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", released latches
+
+debug-lock-table
+----
+global: num=10
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "h"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "i"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "j"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: pushing timestamp of txn 00000002 above 0.000000010,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=10
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 1, txn: 00000001-0000-0000-0000-000000000000
+   distinguished req: 1
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "h"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "i"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+ lock: "j"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+# txn1 is the distinguished waiter on key "a". It will push txn2, notice that it
+# is aborted, and then resolve key "a". Once txn2 is in the finalizedTxnCache,
+# txn1 will create a batch to resolve all other keys together.
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[3] sequence req1: resolving intent "a" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving a batch of 9 intent(s)
+[3] sequence req1: resolving intent "b" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "c" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "d" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "e" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "f" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "g" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "h" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "i" for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent "j" for txn 00000002 with ABORTED status
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A series of 3 puts find 1 abandoned intent each from same txn
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=a value=v1
+  put key=b value=v2
+  put key=c value=v3
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1
+  intent txn=txn2 key=a
+----
+[2] handle write intent error req1: handled conflicting intents on "a", released latches
+
+debug-lock-table
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: pushing txn 00000002 to abort
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn2 status=committed
+----
+[-] update txn: committing txn2
+[3] sequence req1: resolving intent "a" for txn 00000002 with COMMITTED status
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1
+  intent txn=txn2 key=b
+----
+[4] handle write intent error req1: handled conflicting intents on "b", released latches
+
+debug-lock-table
+----
+global: num=2
+ lock: "a"
+  res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+local: num=0
+
+sequence req=req1
+----
+[5] sequence req1: re-sequencing request
+[5] sequence req1: acquiring latches
+[5] sequence req1: scanning lock table for conflicting locks
+[5] sequence req1: waiting in lock wait-queues
+[5] sequence req1: resolving a batch of 1 intent(s)
+[5] sequence req1: resolving intent "b" for txn 00000002 with COMMITTED status
+[5] sequence req1: acquiring latches
+[5] sequence req1: scanning lock table for conflicting locks
+[5] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1
+  intent txn=txn2 key=c
+----
+[6] handle write intent error req1: handled conflicting intents on "c", released latches
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+ lock: "b"
+  res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+local: num=0
+
+sequence req=req1
+----
+[7] sequence req1: re-sequencing request
+[7] sequence req1: acquiring latches
+[7] sequence req1: scanning lock table for conflicting locks
+[7] sequence req1: waiting in lock wait-queues
+[7] sequence req1: resolving a batch of 1 intent(s)
+[7] sequence req1: resolving intent "c" for txn 00000002 with COMMITTED status
+[7] sequence req1: acquiring latches
+[7] sequence req1: scanning lock table for conflicting locks
+[7] sequence req1: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+ lock: "b"
+  res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+ lock: "c"
+  res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+local: num=0
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
