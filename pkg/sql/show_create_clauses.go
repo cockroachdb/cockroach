@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -380,7 +381,9 @@ func ShowCreatePartitioning(
 
 // showConstraintClause creates the CONSTRAINT clauses for a CREATE statement,
 // writing them to tree.FmtCtx f
-func showConstraintClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
+func showConstraintClause(
+	ctx context.Context, desc *sqlbase.TableDescriptor, semaCtx *tree.SemaContext, f *tree.FmtCtx,
+) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
 		if e.Hidden {
 			continue
@@ -392,8 +395,13 @@ func showConstraintClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		f.WriteString(e.Expr)
+		typed, err := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, desc, e.Expr)
+		if err != nil {
+			return err
+		}
+		f.WriteString(tree.SerializeForDisplay(typed))
 		f.WriteString(")")
 	}
 	f.WriteString("\n)")
+	return nil
 }

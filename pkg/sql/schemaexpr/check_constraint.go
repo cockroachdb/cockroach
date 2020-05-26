@@ -89,34 +89,6 @@ func (b *CheckConstraintBuilder) Build(
 		}
 	}
 
-	// Replace the column variables with dummyColumns so that they can be
-	// type-checked.
-	replacedExpr, colIDsUsed, err := replaceVars(b.desc, c.Expr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Verify that the expression results in a boolean and does not use
-	// invalid functions.
-	_, err = sqlbase.SanitizeVarFreeExpr(
-		b.ctx,
-		replacedExpr,
-		types.Bool,
-		"CHECK",
-		b.semaCtx,
-		true, /* allowImpure */
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Collect and sort the column IDs referenced in the check expression.
-	colIDs := make(sqlbase.ColumnIDs, 0, len(colIDsUsed))
-	for colID := range colIDsUsed {
-		colIDs = append(colIDs, colID)
-	}
-	sort.Sort(colIDs)
-
 	source := sqlbase.NewSourceInfoForSingleTable(
 		b.tableName, sqlbase.ResultColumnsFromColDescs(
 			b.desc.GetID(),
@@ -130,8 +102,36 @@ func (b *CheckConstraintBuilder) Build(
 		return nil, err
 	}
 
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	replacedExpr, colIDsUsed, err := b.desc.ReplaceColumnVarsInExprWithDummies(expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify that the expression results in a boolean and does not use
+	// invalid functions.
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		b.ctx,
+		replacedExpr,
+		types.Bool,
+		"CHECK",
+		b.semaCtx,
+		true, /* allowImpure */
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect and sort the column IDs referenced in the check expression.
+	colIDs := make(sqlbase.ColumnIDs, 0, colIDsUsed.Len())
+	colIDsUsed.ForEach(func(id int) {
+		colIDs = append(colIDs, sqlbase.ColumnID(id))
+	})
+	sort.Sort(colIDs)
+
 	return &sqlbase.TableDescriptor_CheckConstraint{
-		Expr:      tree.Serialize(expr),
+		Expr:      tree.Serialize(typedExpr),
 		Name:      name,
 		ColumnIDs: colIDs,
 		Hidden:    c.Hidden,

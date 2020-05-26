@@ -44,11 +44,11 @@ TABLE abcdef
  ├── a int not null
  ├── b int
  ├── c int default (10:::INT8)
- ├── d int as ((b + c) + 1) stored
+ ├── d int as ((b + c) + 1:::INT8) stored
  ├── e int as (a) stored
  ├── f int not null
  ├── rowid int not null default (unique_rowid()) [hidden]
- ├── CHECK (f > 2)
+ ├── CHECK (f > 2:::INT8)
  └── INDEX primary
       └── rowid int not null default (unique_rowid()) [hidden]
 scan abcdef
