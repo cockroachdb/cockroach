@@ -16,13 +16,15 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/sync/errgroup"
 )
 
 // MultiConnPool maintains a set of pgx ConnPools (to different servers).
 type MultiConnPool struct {
-	Pools []*pgx.ConnPool
+	Pools []*pgxpool.Pool
 	// Atomic counter used by Get().
 	counter uint32
 }
@@ -48,7 +50,9 @@ type MultiConnPoolCfg struct {
 //
 // The pools have approximately the same number of max connections, adding up to
 // MaxTotalConnections.
-func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, error) {
+func NewMultiConnPool(
+	ctx context.Context, cfg MultiConnPoolCfg, urls ...string,
+) (*MultiConnPool, error) {
 	m := &MultiConnPool{}
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
 	maxConnsPerPool := cfg.MaxConnsPerPool
@@ -56,24 +60,23 @@ func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, err
 		maxConnsPerPool = cfg.MaxTotalConnections
 	}
 
-	var warmupConns [][]*pgx.Conn
+	var warmupConns [][]*pgxpool.Conn
 	for i := range urls {
-		connCfg, err := pgx.ParseConnectionString(urls[i])
+		connCfg, err := pgxpool.ParseConfig(urls[i])
 		if err != nil {
 			return nil, err
 		}
 
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
 		for _, numConns := range connsPerPool {
-			p, err := pgx.NewConnPool(pgx.ConnPoolConfig{
-				ConnConfig:     connCfg,
-				MaxConnections: numConns,
-			})
+			cfg := *connCfg
+			cfg.MaxConns = int32(numConns)
+			p, err := pgxpool.ConnectConfig(ctx, &cfg)
 			if err != nil {
 				return nil, err
 			}
 
-			warmupConns = append(warmupConns, make([]*pgx.Conn, numConns))
+			warmupConns = append(warmupConns, make([]*pgxpool.Conn, numConns))
 			m.Pools = append(m.Pools, p)
 		}
 	}
@@ -99,7 +102,7 @@ func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, err
 			sem <- struct{}{}
 			g.Go(func() error {
 				var err error
-				conns[j], err = p.Acquire()
+				conns[j], err = p.Acquire(ctx)
 				<-sem
 				return err
 			})
@@ -108,9 +111,9 @@ func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, err
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	for i, p := range m.Pools {
+	for i := range m.Pools {
 		for _, c := range warmupConns[i] {
-			p.Release(c)
+			c.Release()
 		}
 	}
 
@@ -118,7 +121,7 @@ func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, err
 }
 
 // Get returns one of the pools, in round-robin manner.
-func (m *MultiConnPool) Get() *pgx.ConnPool {
+func (m *MultiConnPool) Get() *pgxpool.Pool {
 	if len(m.Pools) == 1 {
 		return m.Pools[0]
 	}
@@ -128,21 +131,32 @@ func (m *MultiConnPool) Get() *pgx.ConnPool {
 
 // PrepareEx prepares the given statement on all the pools.
 func (m *MultiConnPool) PrepareEx(
-	ctx context.Context, name, sql string, opts *pgx.PrepareExOptions,
-) (*pgx.PreparedStatement, error) {
-	var res *pgx.PreparedStatement
+	ctx context.Context, name, sql string,
+) (*pgconn.StatementDescription, error) {
+	var res *pgconn.StatementDescription
 	var once sync.Once
 	var g errgroup.Group
 	for _, p := range m.Pools {
 		p := p
 		g.Go(func() error {
-			ps, err := p.PrepareEx(ctx, name, sql, opts)
-			if err == nil {
-				// It doesn't matter which PreparedStatement we return, they should
-				// contain the same information.
-				once.Do(func() { res = ps })
+			conns := p.AcquireAllIdle(ctx)
+			defer func() {
+				for i := range conns {
+					conns[i].Release()
+				}
+			}()
+			for _, conn := range conns {
+				desc, err := conn.Conn().Prepare(ctx, name, sql)
+				if err == nil {
+					// It doesn't matter which PreparedStatement we return, they should
+					// contain the same information.
+					once.Do(func() { res = desc })
+				}
+				if err != nil {
+					return err
+				}
 			}
-			return err
+			return nil
 		})
 	}
 	err := g.Wait()
@@ -160,24 +174,32 @@ func (m *MultiConnPool) Close() {
 // transactions to be used with ExecuteInTx. The cockroach-go library has native
 // support for pgx in crdb/pgx, but only for pgx v4. CRDB is stuck for now using
 // pgx v3, as v4 needs Go modules.
-type PgxTx pgx.Tx
+type PgxTx struct {
+	pgx.Tx
+}
+
+// NewPgxTx returns a wrapped pg.Tx that implements the crdb.Tx interface.
+func NewPgxTx(tx pgx.Tx) *PgxTx {
+	return &PgxTx{Tx: tx}
+}
 
 var _ crdb.Tx = &PgxTx{}
 
 // Exec is part of the crdb.Tx interface.
 func (tx *PgxTx) Exec(ctx context.Context, sql string, args ...interface{}) error {
-	_, err := (*pgx.Tx)(tx).ExecEx(ctx, sql, nil /* QueryExOptions */, args...)
+	_, err := tx.Tx.Exec(ctx, sql, args...)
+	// crdb.ExecuteInTx doesn't actually care about the Result, just the error.
 	return err
 }
 
 // Commit is part of the crdb.Tx interface.
-func (tx *PgxTx) Commit(context.Context) error {
-	return (*pgx.Tx)(tx).Commit()
+func (tx *PgxTx) Commit(ctx context.Context) error {
+	return tx.Tx.Commit(ctx)
 }
 
 // Rollback is part of the crdb.Tx interface.
-func (tx *PgxTx) Rollback(context.Context) error {
-	return (*pgx.Tx)(tx).Rollback()
+func (tx *PgxTx) Rollback(ctx context.Context) error {
+	return tx.Tx.Rollback(ctx)
 }
 
 // distribute returns a slice of <num> integers that add up to <total> and are

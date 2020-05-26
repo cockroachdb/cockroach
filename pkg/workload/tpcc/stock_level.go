@@ -99,12 +99,12 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 		dID:       rng.Intn(10) + 1,
 	}
 
-	tx, err := s.mcp.Get().BeginEx(ctx, s.config.txOpts)
+	tx, err := s.mcp.Get().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
+		ctx, workload.NewPgxTx(tx),
 		func() error {
 			var dNextOID int
 			if err := s.selectDNextOID.QueryRowTx(

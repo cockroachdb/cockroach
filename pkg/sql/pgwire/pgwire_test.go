@@ -41,8 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgproto3"
+	"github.com/jackc/chunkreader/v2"
+	"github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 )
 
@@ -1758,13 +1759,11 @@ func TestSessionParameters(t *testing.T) {
 	host, ports, _ := net.SplitHostPort(s.ServingSQLAddr())
 	port, _ := strconv.Atoi(ports)
 
-	connCfg := pgx.ConnConfig{
-		Host:      host,
-		Port:      uint16(port),
-		User:      security.RootUser,
-		TLSConfig: nil, // insecure
-		Logger:    pgxTestLogger{},
+	connCfg, err := pgx.ParseConfig(fmt.Sprintf("postgresql://%s@%s:%d", security.RootUser, host, port))
+	if err != nil {
+		t.Fatal(err)
 	}
+	connCfg.Logger = pgxTestLogger{}
 
 	testData := []struct {
 		varName        string
@@ -1798,7 +1797,7 @@ func TestSessionParameters(t *testing.T) {
 		t.Run(test.varName+"="+test.val, func(t *testing.T) {
 			cfg := connCfg
 			cfg.RuntimeParams = map[string]string{test.varName: test.val}
-			db, err := pgx.Connect(cfg)
+			db, err := pgx.ConnectConfig(ctx, cfg)
 			t.Logf("conn error: %v", err)
 			if !testutils.IsError(err, test.expectedErr) {
 				t.Fatalf("expected %q, got %v", test.expectedErr, err)
@@ -1806,16 +1805,12 @@ func TestSessionParameters(t *testing.T) {
 			if err != nil {
 				return
 			}
-			defer func() { _ = db.Close() }()
-
-			for k, v := range db.RuntimeParams {
-				t.Logf("received runtime param %s = %q", k, v)
-			}
+			defer func() { _ = db.Close(ctx) }()
 
 			// If the session var is also a valid status param, then check
 			// the requested value was processed.
 			if test.expectedStatus {
-				serverVal := db.RuntimeParams[test.varName]
+				serverVal := db.PgConn().ParameterStatus(test.varName)
 				if serverVal != test.val {
 					t.Fatalf("initial server status %v: got %q, expected %q",
 						test.varName, serverVal, test.val)
@@ -1823,7 +1818,7 @@ func TestSessionParameters(t *testing.T) {
 			}
 
 			// Check the value also inside the session.
-			rows, err := db.Query("SHOW " + test.varName)
+			rows, err := db.Query(ctx, "SHOW "+test.varName)
 			if err != nil {
 				// Check that the value was not expected to be settable.
 				// (The set was ignored).
@@ -1857,7 +1852,9 @@ func TestSessionParameters(t *testing.T) {
 
 type pgxTestLogger struct{}
 
-func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
+func (l pgxTestLogger) Log(
+	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
+) {
 	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
 }
 
@@ -1884,15 +1881,8 @@ func TestCancelRequest(t *testing.T) {
 		// Reset telemetry so we get a deterministic count below.
 		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
-		fe, err := pgproto3.NewFrontend(conn, conn)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// versionCancel is the special code sent as header for cancel requests.
-		// See: https://www.postgresql.org/docs/current/protocol-message-formats.html
-		// and the explanation in server.go.
-		const versionCancel = 80877102
-		if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: versionCancel}); err != nil {
+		fe := pgproto3.NewFrontend(chunkreader.New(conn), conn)
+		if err := fe.Send(&pgproto3.CancelRequest{}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := fe.Receive(); err != io.EOF {

@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
-	"github.com/jackc/pgx/pgproto3"
+	"github.com/jackc/pgproto3/v2"
 )
 
 // WalkWithRunningServer walks path for datadriven files and calls RunTest on them.
