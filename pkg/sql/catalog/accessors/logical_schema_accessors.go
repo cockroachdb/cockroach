@@ -95,7 +95,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	codec keys.SQLCodec,
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
-) (catalog.ObjectDescriptor, error) {
+) (catalog.Descriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
 		// TODO(ajwerner): Change this function if we ever expose non-table objects
