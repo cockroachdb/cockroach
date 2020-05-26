@@ -283,6 +283,7 @@ const (
 	SizeOfTime = int(unsafe.Sizeof(time.Time{}))
 	// SizeOfDuration is the size of a single duration.Duration value.
 	SizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
+	sizeOfDatum    = int(unsafe.Sizeof(tree.Datum(nil)))
 )
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
@@ -336,8 +337,12 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 		case types.IntervalFamily:
 			acc += SizeOfDuration
 		case typeconv.DatumVecCanonicalTypeFamily:
-			size, _ := tree.DatumTypeSize(t)
-			acc += int(size)
+			// In datum vec we need to account for memory underlying the struct
+			// that is the implementation of tree.Datum interface (for example,
+			// tree.DBoolFalse) as well as for the overhead of storing that
+			// implementation in the slice of tree.Datums.
+			implementationSize, _ := tree.DatumTypeSize(t)
+			acc += int(implementationSize) + sizeOfDatum
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
 		}
