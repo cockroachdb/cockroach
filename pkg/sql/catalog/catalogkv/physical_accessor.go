@@ -161,7 +161,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	codec keys.SQLCodec,
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
-) (catalog.ObjectDescriptor, error) {
+) (catalog.Descriptor, error) {
 	// Look up the database ID.
 	dbID, err := GetDatabaseID(ctx, txn, codec, db, flags.Required)
 	if err != nil || dbID == sqlbase.InvalidID {
