@@ -1215,3 +1215,37 @@ insert defvals2
       └── projections
            ├── ARRAY[NULL] [as=column5:5]
            └── ARRAY[NULL] [as=column6:6]
+
+# ------------------------------------------------------------------------------
+# Test partial index column values.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE partial_indexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX (b),
+    INDEX (b) WHERE c = 'foo',
+    INDEX (c) WHERE a > b AND c = 'bar'
+)
+----
+
+build
+INSERT INTO partial_indexes VALUES (2, 1, 'bar')
+----
+insert partial_indexes
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => a:1
+ │    ├── column2:5 => b:2
+ │    └── column3:6 => c:3
+ ├── partial index pred columns: indexpred1:7 indexpred2:8
+ └── project
+      ├── columns: indexpred1:7!null indexpred2:8!null column1:4!null column2:5!null column3:6!null
+      ├── values
+      │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │    └── (2, 1, 'bar')
+      └── projections
+           ├── column3:6 = 'foo' [as=indexpred1:7]
+           └── (column1:4 > column2:5) AND (column3:6 = 'bar') [as=indexpred2:8]

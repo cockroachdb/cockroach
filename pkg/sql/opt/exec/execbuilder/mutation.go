@@ -78,9 +78,10 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	}
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.IndexPredicateCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
+	colList = appendColsWhenPresent(colList, ins.IndexPredicateCols)
 	input, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -223,9 +224,10 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		}
 	}
 
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.IndexPredicateCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
+	colList = appendColsWhenPresent(colList, ins.IndexPredicateCols)
 	if !colList.Equals(values.Cols) {
 		// We have a Values input, but the columns are not in the right order. For
 		// example:

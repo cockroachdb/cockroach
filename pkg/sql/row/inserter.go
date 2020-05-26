@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -127,6 +128,7 @@ func (ri *Inserter) InsertRow(
 	ctx context.Context,
 	b putter,
 	values []tree.Datum,
+	ignoreIndexes util.FastIntSet,
 	overwrite bool,
 	checkFKs checkFKConstraints,
 	traceKV bool,
@@ -173,7 +175,7 @@ func (ri *Inserter) InsertRow(
 	// We don't want to insert empty k/v's like this, so we
 	// set includeEmpty to false.
 	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(
-		ri.InsertColIDtoRowIndex, values, false /* includeEmpty */)
+		ri.InsertColIDtoRowIndex, values, ignoreIndexes, false /* includeEmpty */)
 	if err != nil {
 		return err
 	}

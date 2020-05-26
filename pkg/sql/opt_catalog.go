@@ -851,6 +851,8 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	predicate string
 }
 
 var _ cat.Index = &optIndex{}
@@ -939,6 +941,18 @@ func (oi *optIndex) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
+}
+
+// IsPartial is part of the cat.Index interface.
+func (oi *optIndex) IsPartial() bool {
+	return oi.desc.IsPartial()
+}
+
+// Predicate is part of the cat.Index interface. It returns the predicate
+// expression if the index is a partial index. If the index is not partial,
+// the empty string is returned.
+func (oi *optIndex) Predicate() string {
+	return oi.desc.Predicate
 }
 
 // KeyColumnCount is part of the cat.Index interface.
@@ -1614,6 +1628,16 @@ func (oi *optVirtualIndex) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) ColumnCount() int {
 	return oi.numCols
+}
+
+// IsPartial is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsPartial() bool {
+	return false
+}
+
+// Predicate is part of the cat.Index interface.
+func (oi *optVirtualIndex) Predicate() string {
+	return ""
 }
 
 // KeyColumnCount is part of the cat.Index interface.

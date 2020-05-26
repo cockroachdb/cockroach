@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -60,13 +61,16 @@ func newRowHelper(
 // encodeSecondaryIndexes. includeEmpty details whether the results should
 // include empty secondary index k/v pairs.
 func (rh *rowHelper) encodeIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum, includeEmpty bool,
+	colIDtoRowIndex map[sqlbase.ColumnID]int,
+	values []tree.Datum,
+	ignoreIndexes util.FastIntSet,
+	includeEmpty bool,
 ) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(colIDtoRowIndex, values, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(colIDtoRowIndex, values, ignoreIndexes, includeEmpty)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -86,28 +90,40 @@ func (rh *rowHelper) encodePrimaryIndex(
 	return primaryIndexKey, err
 }
 
-// encodeSecondaryIndexes encodes the secondary index keys. The
-// secondaryIndexEntries are only valid until the next call to encodeIndexes or
-// encodeSecondaryIndexes. includeEmpty details whether the results
-// should include empty secondary index k/v pairs.
+// encodeSecondaryIndexes encodes the secondary index keys based on a row's
+// values.
+//
+// The secondaryIndexEntries are only valid until the next call to encodeIndexes
+// or encodeSecondaryIndexes, when they are overwritten.
+//
+// This function will not encode index entries for any index with an ID in
+// ignoreIndexes.
+//
+// includeEmpty details whether the results should include empty secondary index
+// k/v pairs.
 func (rh *rowHelper) encodeSecondaryIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum, includeEmpty bool,
+	colIDtoRowIndex map[sqlbase.ColumnID]int,
+	values []tree.Datum,
+	ignoreIndexes util.FastIntSet,
+	includeEmpty bool,
 ) (secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	if cap(rh.indexEntries) < len(rh.Indexes) {
 		rh.indexEntries = make([]sqlbase.IndexEntry, 0, len(rh.Indexes))
 	}
-	rh.indexEntries, err = sqlbase.EncodeSecondaryIndexes(
-		rh.Codec,
-		rh.TableDesc.TableDesc(),
-		rh.Indexes,
-		colIDtoRowIndex,
-		values,
-		rh.indexEntries[:0],
-		includeEmpty,
-	)
-	if err != nil {
-		return nil, err
+
+	rh.indexEntries = rh.indexEntries[:0]
+
+	for i := range rh.Indexes {
+		index := &rh.Indexes[i]
+		if !ignoreIndexes.Contains(int(index.ID)) {
+			entries, err := sqlbase.EncodeSecondaryIndex(rh.Codec, rh.TableDesc.TableDesc(), index, colIDtoRowIndex, values, includeEmpty)
+			if err != nil {
+				return nil, err
+			}
+			rh.indexEntries = append(rh.indexEntries, entries...)
+		}
 	}
+
 	return rh.indexEntries, nil
 }
 

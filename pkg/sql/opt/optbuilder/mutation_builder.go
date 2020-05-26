@@ -55,9 +55,9 @@ type mutationBuilder struct {
 	// expression is completed, it will be contained in outScope.expr. Columns,
 	// when present, are arranged in this order:
 	//
-	//   +--------+-------+--------+--------+-------+
-	//   | Insert | Fetch | Update | Upsert | Check |
-	//   +--------+-------+--------+--------+-------+
+	//   +--------+-------+--------+--------+-------+------------------+
+	//   | Insert | Fetch | Update | Upsert | Check | Index Predicates |
+	//   +--------+-------+--------+--------+-------+------------------+
 	//
 	// Each column is identified by its ordinal position in outScope, and those
 	// ordinals are stored in the corresponding ScopeOrds fields (see below).
@@ -110,6 +110,16 @@ type mutationBuilder struct {
 	// (see opt.Table.CheckCount).
 	checkOrds []scopeOrdinal
 
+	// indexPredicateOrds lists the outScope columns storing the boolean results
+	// of evaluating partial index predicate expressions defined on the indexes
+	// of the target table. Its length is always equal to the number of partial
+	// indexes on the table.
+	// TODO(mgartner): We will likely need two sets of columns to support
+	// updates for partial indexes; one set to indicate current rows that need
+	// to be removed from the index, and the other to indicate updated rows that
+	// need to be added to the index.
+	indexPredicateOrds []scopeOrdinal
+
 	// canaryColID is the ID of the column that is used to decide whether to
 	// insert or update each row. If the canary column's value is null, then it's
 	// an insert; otherwise it's an update.
@@ -157,7 +167,7 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 
 	// Allocate segmented array of scope column ordinals.
 	n := tab.DeletableColumnCount()
-	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount())
+	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount()+partialIndexCount(tab))
 	for i := range scopeOrds {
 		scopeOrds[i] = -1
 	}
@@ -165,7 +175,8 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.fetchOrds = scopeOrds[n : n*2]
 	mb.updateOrds = scopeOrds[n*2 : n*3]
 	mb.upsertOrds = scopeOrds[n*3 : n*4]
-	mb.checkOrds = scopeOrds[n*4:]
+	mb.checkOrds = scopeOrds[n*4 : n*4+tab.CheckCount()]
+	mb.indexPredicateOrds = scopeOrds[n*4+tab.CheckCount():]
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab, &mb.alias)
@@ -676,10 +687,6 @@ func findRoundingFunction(typ *types.T, precision int) (*tree.FunctionProperties
 // a constraint violation error if the value of the column is false.
 func (mb *mutationBuilder) addCheckConstraintCols() {
 	if mb.tab.CheckCount() != 0 {
-		// Disambiguate names so that references in the constraint expression refer
-		// to the correct columns.
-		mb.disambiguateColumns()
-
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
 
@@ -702,6 +709,40 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+// addPartialIndexPredicateCols synthesizes a boolean output column for each
+// partial index defined on the target table. The execution code uses these
+// booleans to determine whether or not to insert or delete a row in the partial
+// index.
+func (mb *mutationBuilder) addPartialIndexPredicateCols() {
+	projectionsScope := mb.outScope.replace()
+	projectionsScope.appendColumnsFromScope(mb.outScope)
+
+	ord := 0
+	for i, n := 0, mb.tab.IndexCount(); i < n; i++ {
+		index := mb.tab.Index(i)
+		if !index.IsPartial() {
+			continue
+		}
+
+		expr, err := parser.ParseExpr(index.Predicate())
+		if err != nil {
+			panic(err)
+		}
+
+		alias := fmt.Sprintf("indexpred%d", ord+1)
+		texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+		scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
+
+		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
+		mb.indexPredicateOrds[ord] = scopeOrdinal(len(projectionsScope.cols) - 1)
+
+		ord++
+	}
+
+	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+	mb.outScope = projectionsScope
 }
 
 // disambiguateColumns ranges over the scope and ensures that at most one column
@@ -743,14 +784,15 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	private := &memo.MutationPrivate{
-		Table:      mb.tabID,
-		InsertCols: makeColList(mb.insertOrds),
-		FetchCols:  makeColList(mb.fetchOrds),
-		UpdateCols: makeColList(mb.updateOrds),
-		CanaryCol:  mb.canaryColID,
-		CheckCols:  makeColList(mb.checkOrds),
-		FKCascades: mb.cascades,
-		FKFallback: mb.fkFallback,
+		Table:              mb.tabID,
+		InsertCols:         makeColList(mb.insertOrds),
+		FetchCols:          makeColList(mb.fetchOrds),
+		UpdateCols:         makeColList(mb.updateOrds),
+		CanaryCol:          mb.canaryColID,
+		CheckCols:          makeColList(mb.checkOrds),
+		IndexPredicateCols: makeColList(mb.indexPredicateOrds),
+		FKCascades:         mb.cascades,
+		FKFallback:         mb.fkFallback,
 	}
 
 	// If we didn't actually plan any checks or cascades, don't buffer the input.
@@ -964,4 +1006,16 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
 	panic(pgerror.Newf(pgcode.DatatypeMismatch,
 		"value type %s doesn't match type %s of column %q",
 		typ, col.DatumType(), tree.ErrNameString(colName)))
+}
+
+// partialIndexCount returns the number of public, write-only, and delete-only
+// partial indexes defined on the table.
+func partialIndexCount(tab cat.Table) int {
+	count := 0
+	for i, n := 0, tab.DeletableIndexCount(); i < n; i++ {
+		if tab.Index(i).IsPartial() {
+			count++
+		}
+	}
+	return count
 }

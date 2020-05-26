@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -49,13 +50,19 @@ type tableWriter interface {
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
+	//
 	// The passed Datums is not used after `row` returns.
+	//
+	// The ignoreIndexes parameter is a set of IndexIDs to avoid updating when
+	// performing the row modification. It is necessary to avoid writing to
+	// partial indexes when rows do not satisfy the partial index predicate.
+	//
 	// The traceKV parameter determines whether the individual K/V operations
 	// should be logged to the context. We use a separate argument here instead
 	// of a Value field on the context because Value access in context.Context
 	// is rather expensive and the tableWriter interface is used on the
 	// inner loop of table accesses.
-	row(context.Context, tree.Datums, bool /* traceKV */) error
+	row(context.Context, tree.Datums, util.FastIntSet /* ignoreIndexes */, bool /* traceKV */) error
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.  It returns a slice of all Datums not yet returned by calls to `row`.
