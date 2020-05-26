@@ -285,7 +285,7 @@ func sendBatch(
 		0, /* rangeID */
 		makeReplicas(addrs...),
 		nodeDialer,
-		roachpb.ReplicaDescriptor{},
+		leaseholderInfo{},
 		false, /* withCommit */
 	)
 }
