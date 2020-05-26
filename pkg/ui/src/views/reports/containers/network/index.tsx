@@ -41,7 +41,7 @@ interface NetworkOwnProps {
 export interface Identity {
   nodeID: number;
   address: string;
-  locality: string;
+  locality?: string;
   updatedAt: moment.Moment;
 }
 
@@ -76,6 +76,9 @@ function contentAvailable(nodesSummary: NodesSummary) {
 }
 
 export function getValueFromString(key: string, params: string, fullString?: boolean) {
+  if (!params) {
+    return;
+  }
   const result = params.match(new RegExp(key + "=([^,#]*)"));
   if (!result) {
     return;
