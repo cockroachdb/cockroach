@@ -290,6 +290,13 @@ message AllocatorResponse { repeated AllocatorDryRun dry_runs = 1; }
 
 message JSONResponse { bytes data = 1; }
 
+message ResponseError {
+  string error = 1;
+  int32 code = 2;
+  string message = 3;
+  repeated string details = 4;
+}
+
 message LogsRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
