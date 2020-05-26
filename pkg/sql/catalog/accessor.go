@@ -40,5 +40,5 @@ type Accessor interface {
 	// descriptor and that of its parent database. If the object is not
 	// found and flags.required is true, an error is returned, otherwise
 	// a nil reference is returned.
-	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, codec keys.SQLCodec, db, schema, object string, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
+	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, codec keys.SQLCodec, db, schema, object string, flags tree.ObjectLookupFlags) (Descriptor, error)
 }
