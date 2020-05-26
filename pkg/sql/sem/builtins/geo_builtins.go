@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
+	"github.com/twpayne/go-geom"
 )
 
 // libraryUsage is a masked bit indicating which libraries are used by
@@ -272,6 +274,32 @@ var pointCoordsToGeomOverload = tree.Overload{
 	Info:       infoBuilder{info: `Returns a new Point with the given X and Y coordinates.`}.String(),
 	Volatility: tree.VolatilityImmutable,
 }
+
+var numInteriorRingsBuiltin = makeBuiltin(
+	defProps(),
+	geometryOverload1(
+		func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			t, err := g.Geometry.AsGeomT()
+			if err != nil {
+				return nil, err
+			}
+			switch t := t.(type) {
+			case *geom.Polygon:
+				numRings := t.NumLinearRings()
+				if numRings <= 1 {
+					return tree.NewDInt(0), nil
+				}
+				return tree.NewDInt(tree.DInt(numRings - 1)), nil
+			}
+			return tree.DNull, nil
+		},
+		types.Int,
+		infoBuilder{
+			info: "Returns the number of interior rings in a Polygon Geometry. Returns NULL if the shape is not a Polygon.",
+		},
+		tree.VolatilityImmutable,
+	),
+)
 
 var geoBuiltins = map[string]builtinDefinition{
 	//
@@ -554,7 +582,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB())
+				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
@@ -563,13 +591,51 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geography.EWKB())
+				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the WKB representation of a given Geography."},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"xdr_or_ndr", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				text := string(tree.MustBeDString(args[1]))
+
+				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.StringToByteOrder(text))
+				return tree.NewDBytes(tree.DBytes(wkb)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the WKB representation of a given Geometry. " +
+					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"xdr_or_ndr", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				text := string(tree.MustBeDString(args[1]))
+
+				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.StringToByteOrder(text))
+				return tree.NewDBytes(tree.DBytes(wkb)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the WKB representation of a given Geography. " +
+					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_asewkb": makeBuiltin(
 		defProps(),
@@ -676,6 +742,366 @@ var geoBuiltins = map[string]builtinDefinition{
 	//
 	// Unary functions.
 	//
+
+	"st_ndims": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(t.Stride())), nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the number of dimensions of a given Geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_startpoint": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.LineString:
+					if t.Empty() {
+						return tree.DNull, nil
+					}
+					coord := t.Coord(0)
+					retG, err := geo.NewGeometryFromGeom(
+						geom.NewPointFlat(geom.XY, []float64{coord.X(), coord.Y()}).SetSRID(t.SRID()),
+					)
+					if err != nil {
+						return nil, err
+					}
+					return &tree.DGeometry{Geometry: retG}, nil
+				}
+				return tree.DNull, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the first point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_endpoint": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.LineString:
+					if t.Empty() {
+						return tree.DNull, nil
+					}
+					coord := t.Coord(t.NumCoords() - 1)
+					retG, err := geo.NewGeometryFromGeom(
+						geom.NewPointFlat(geom.XY, []float64{coord.X(), coord.Y()}).SetSRID(t.SRID()),
+					)
+					if err != nil {
+						return nil, err
+					}
+					return &tree.DGeometry{Geometry: retG}, nil
+				}
+				return tree.DNull, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_numpoints": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.LineString:
+					return tree.NewDInt(tree.DInt(t.NumCoords())), nil
+				}
+				return tree.DNull, nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the number of points in a LineString. Returns NULL if the Geometry is not a LineString.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_npoints": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(len(t.FlatCoords()) / t.Stride())), nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the number of points in a given Geometry. Works for any shape type.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_exteriorring": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Polygon:
+					var lineString *geom.LineString
+					if t.Empty() {
+						lineString = geom.NewLineString(t.Layout())
+					} else {
+						ring := t.LinearRing(0)
+						lineString = geom.NewLineStringFlat(t.Layout(), ring.FlatCoords())
+					}
+					ret, err := geo.NewGeometryFromGeom(lineString.SetSRID(t.SRID()))
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(ret), nil
+				}
+				return tree.DNull, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the exterior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_interiorringn": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := *args[0].(*tree.DGeometry)
+				n := int(*args[1].(*tree.DInt))
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Polygon:
+					// N is 1-indexed. Ignore the exterior ring and return NULL for that case.
+					if n >= t.NumLinearRings() || n <= 0 {
+						return tree.DNull, nil
+					}
+					ring := t.LinearRing(n)
+					lineString := geom.NewLineStringFlat(t.Layout(), ring.FlatCoords()).SetSRID(t.SRID())
+					ret, err := geo.NewGeometryFromGeom(lineString)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(ret), nil
+				}
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the n-th (1-indexed) interior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon, or the ring does not exist.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_geometryn": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := *args[0].(*tree.DGeometry)
+				n := int(*args[1].(*tree.DInt)) - 1
+				if n < 0 {
+					return tree.DNull, nil
+				}
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point, *geom.Polygon, *geom.LineString:
+					if n > 0 {
+						return tree.DNull, nil
+					}
+					return args[0], nil
+				case *geom.MultiPoint:
+					if n >= t.NumPoints() {
+						return tree.DNull, nil
+					}
+					g, err := geo.NewGeometryFromGeom(t.Point(n).SetSRID(t.SRID()))
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(g), nil
+				case *geom.MultiLineString:
+					if n >= t.NumLineStrings() {
+						return tree.DNull, nil
+					}
+					g, err := geo.NewGeometryFromGeom(t.LineString(n).SetSRID(t.SRID()))
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(g), nil
+				case *geom.MultiPolygon:
+					if n >= t.NumPolygons() {
+						return tree.DNull, nil
+					}
+					g, err := geo.NewGeometryFromGeom(t.Polygon(n).SetSRID(t.SRID()))
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(g), nil
+				case *geom.GeometryCollection:
+					if n >= t.NumGeoms() {
+						return tree.DNull, nil
+					}
+					g, err := geo.NewGeometryFromGeom(t.Geom(n))
+					if err != nil {
+						return nil, err
+					}
+					gWithSRID, err := g.CloneWithSRID(geopb.SRID(t.SRID()))
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(gWithSRID), nil
+				}
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the n-th Geometry (1-indexed). Returns NULL if out of bounds.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_numinteriorring":  numInteriorRingsBuiltin,
+	"st_numinteriorrings": numInteriorRingsBuiltin,
+	"st_numgeometries": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point:
+					if t.Empty() {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(1), nil
+				case *geom.LineString:
+					if t.Empty() {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(1), nil
+				case *geom.Polygon:
+					if t.Empty() {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(1), nil
+				case *geom.MultiPoint:
+					if t.Empty() {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(tree.DInt(t.NumPoints())), nil
+				case *geom.MultiLineString:
+					if t.Empty() {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(tree.DInt(t.NumLineStrings())), nil
+				case *geom.MultiPolygon:
+					if t.Empty() {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(tree.DInt(t.NumPolygons())), nil
+				case *geom.GeometryCollection:
+					if t.Empty() {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(tree.DInt(t.NumGeoms())), nil
+				}
+				return nil, errors.Newf("unknown type: %T", t)
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the number of shapes inside a given Geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_x": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point:
+					if t.Empty() {
+						return tree.DNull, nil
+					}
+					return tree.NewDFloat(tree.DFloat(t.X())), nil
+				}
+				// Ideally we should return NULL here, but following PostGIS on this.
+				return nil, errors.Newf("argument to ST_X() must have shape POINT")
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the X coordinate of a geometry if it is a Point.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_y": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Point:
+					if t.Empty() {
+						return tree.DNull, nil
+					}
+					return tree.NewDFloat(tree.DFloat(t.Y())), nil
+				}
+				// Ideally we should return NULL here, but following PostGIS on this.
+				return nil, errors.Newf("argument to ST_Y() must have shape POINT")
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the Y coordinate of a geometry if it is a Point.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_area": makeBuiltin(
 		defProps(),
 		append(

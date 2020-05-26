@@ -41,7 +41,7 @@ func Length(g *geo.Geometry) (float64, error) {
 			case *geom.Point, *geom.MultiPoint, *geom.Polygon, *geom.MultiPolygon:
 				continue
 			case *geom.LineString, *geom.MultiLineString:
-				subGEWKB, err := ewkb.Marshal(subG, geo.EWKBEncodingFormat)
+				subGEWKB, err := ewkb.Marshal(subG, geo.DefaultEWKBEncodingFormat)
 				if err != nil {
 					return 0, err
 				}
@@ -80,7 +80,7 @@ func Perimeter(g *geo.Geometry) (float64, error) {
 			case *geom.Point, *geom.MultiPoint, *geom.LineString, *geom.MultiLineString:
 				continue
 			case *geom.Polygon, *geom.MultiPolygon:
-				subGEWKB, err := ewkb.Marshal(subG, geo.EWKBEncodingFormat)
+				subGEWKB, err := ewkb.Marshal(subG, geo.DefaultEWKBEncodingFormat)
 				if err != nil {
 					return 0, err
 				}
