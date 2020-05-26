@@ -39,7 +39,7 @@ import (
 
 // mysqldumpReader reads the default output of `mysqldump`, which consists of
 // SQL statements, in MySQL-dialect, namely CREATE TABLE and INSERT statements,
-// with some additional statements that contorl the loading process like LOCK or
+// with some additional statements that control the loading process like LOCK or
 // UNLOCK (which are simply ignored for the purposed of this reader). Data for
 // tables with names that appear in the `tables` map is converted to Cockroach
 // KVs using the mapped converter and sent to kvCh.

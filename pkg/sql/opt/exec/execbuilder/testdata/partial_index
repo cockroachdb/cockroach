@@ -1,0 +1,36 @@
+# LogicTest: local
+
+# TODO(mgartner): remove this once partial indexes are fully supported.
+statement ok
+SET experimental_partial_indexes=on
+
+statement ok
+CREATE TABLE t (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    FAMILY (a, b, c),
+    INDEX (b) WHERE b > 10,
+    INDEX (c) WHERE a > b AND c = 'foo'
+)
+
+# Inserted row matches no partial index.
+query T kvtrace
+INSERT INTO t VALUES(5, 4, 'bar')
+----
+CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
+
+# Inserted row matches the first partial index.
+query T kvtrace
+INSERT INTO t VALUES(6, 11, 'bar')
+----
+CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
+InitPut /Table/53/2/11/6/0 -> /BYTES/
+
+# Inserted row matches both partial indexes.
+query T kvtrace
+INSERT INTO t VALUES(12, 11, 'foo')
+----
+CPut /Table/53/1/12/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
+InitPut /Table/53/2/11/12/0 -> /BYTES/
+InitPut /Table/53/3/"foo"/12/0 -> /BYTES/
