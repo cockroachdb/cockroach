@@ -54,9 +54,9 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 		{"", "a", true, "a", "check_a"},
 		{"", "a", true, "a", "check_a1"},
 		{"", "a", true, "a", "check_a2"},
-		{"", "a AND b = 0", true, "a AND (b = 0)", "check_a_b"},
-		{"", "a AND b = 1", true, "a AND (b = 1)", "check_a_b1"},
-		{"", "a AND b = 1", true, "a AND (b = 1)", "check_a_b2"},
+		{"", "a AND b = 0", true, "a AND (b = 0:::INT8)", "check_a_b"},
+		{"", "a AND b = 1", true, "a AND (b = 1:::INT8)", "check_a_b1"},
+		{"", "a AND b = 1", true, "a AND (b = 1:::INT8)", "check_a_b2"},
 
 		// Respect that "check_a3" has been marked, so the next check constraint
 		// with "a" should be "check_a4".
@@ -65,15 +65,15 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 
 		// Allow expressions that result in a bool.
 		{"ck", "a", true, "a", "ck"},
-		{"ck", "b = 0", true, "b = 0", "ck"},
-		{"ck", "a AND b = 0", true, "a AND (b = 0)", "ck"},
+		{"ck", "b = 0", true, "b = 0:::INT8", "ck"},
+		{"ck", "a AND b = 0", true, "a AND (b = 0:::INT8)", "ck"},
 		{"ck", "a IS NULL", true, "a IS NULL", "ck"},
 		{"ck", "b IN (1, 2)", true, "b IN (1:::INT8, 2:::INT8)", "ck"},
 
 		// Allow immutable functions.
-		{"ck", "abs(b) > 0", true, "abs(b) > 0", "ck"},
-		{"ck", "c || c = 'foofoo'", true, "(c || c) = 'foofoo'", "ck"},
-		{"ck", "lower(c) = 'bar'", true, "lower(c) = 'bar'", "ck"},
+		{"ck", "abs(b) > 0", true, "abs(b) > 0:::INT8", "ck"},
+		{"ck", "c || c = 'foofoo'", true, "(c || c) = 'foofoo':::STRING", "ck"},
+		{"ck", "lower(c) = 'bar'", true, "lower(c) = 'bar':::STRING", "ck"},
 
 		// Allow mutable functions.
 		{"ck", "b > random()", true, "b > random()", "ck"},
@@ -99,9 +99,9 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 		// Dequalify column names.
 		{"ck", "bar.a", true, "a", "ck"},
 		{"ck", "foo.bar.a", true, "a", "ck"},
-		{"ck", "bar.b = 0", true, "b = 0", "ck"},
-		{"ck", "foo.bar.b = 0", true, "b = 0", "ck"},
-		{"ck", "bar.a AND foo.bar.b = 0", true, "a AND (b = 0)", "ck"},
+		{"ck", "bar.b = 0", true, "b = 0:::INT8", "ck"},
+		{"ck", "foo.bar.b = 0", true, "b = 0:::INT8", "ck"},
+		{"ck", "bar.a AND foo.bar.b = 0", true, "a AND (b = 0:::INT8)", "ck"},
 	}
 
 	for _, d := range testData {
