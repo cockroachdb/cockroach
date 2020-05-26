@@ -341,10 +341,6 @@ type cmdRes struct {
 // Also note that if the command exits with an error code, its output is also
 // included in cmdRes.err.
 func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
-	// NB: It is important that this waitgroup Waits after cancel() below.
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
@@ -356,29 +352,75 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 	debugStderrBuffer, _ := circbuf.NewBuffer(1024)
 
 	// Do a dance around https://github.com/golang/go/issues/23019.
-	// Briefly put, passing os.Std{out,err} to subprocesses isn't great for
-	// context cancellation as Run() will wait for any subprocesses to finish.
-	// For example, "roachprod run x -- sleep 20" would wait 20 seconds, even
-	// if the context got canceled right away. Work around the problem by passing
-	// pipes to the command on which we set aggressive deadlines once the context
-	// expires.
+	// When the command we run launches a subprocess, that subprocess receives
+	// a copy of our Command's Stdout/Stderr file descriptor, which effectively
+	// means that the file descriptors close only when that subcommand returns.
+	// However, proactively killing the subcommand is not really possible - we
+	// will only manage to kill the parent process that we launched directly.
+	// In practice this means that if we try to react to context cancellation,
+	// the pipes we read the output from will wait for the *subprocess* to
+	// terminate, leaving us hanging, potentially indefinitely.
+	// To work around it, use pipes and set a read deadline on our (read) end of
+	// the pipes when we detect a context cancellation.
+	//
+	// See TestExecCmd for a test.
+	var closePipes func(ctx context.Context)
+	var wg sync.WaitGroup
 	{
-		rOut, wOut, err := os.Pipe()
-		if err != nil {
-			return cmdRes{err: err}
-		}
-		defer rOut.Close()
-		defer wOut.Close()
 
-		rErr, wErr, err := os.Pipe()
+		var wOut, wErr, rOut, rErr *os.File
+		var cwOnce sync.Once
+		closePipes = func(ctx context.Context) {
+			// Idempotently closes the writing end of the pipes. This is called either
+			// when the process returns or when it was killed due to context
+			// cancellation. In the former case, close the writing ends of the pipe
+			// so that the copy goroutines started below return (without missing any
+			// output). In the context cancellation case, we set a deadline to force
+			// the goroutines to quit eagerly. This is important since the command
+			// may have duplicated wOut and wErr to its possible subprocesses, which
+			// may continue to run for long periods of time, and would otherwise
+			// block this command. In theory this is possible also when the command
+			// returns on its own accord, so we set a (more lenient) deadline in the
+			// first case as well.
+			//
+			// NB: there's also the option (at least on *nix) to use a process group,
+			// but it doesn't look portable:
+			// https://medium.com/@felixge/killing-a-child-process-and-all-of-its-children-in-go-54079af94773
+			cwOnce.Do(func() {
+				if wOut != nil {
+					_ = wOut.Close()
+				}
+				if wErr != nil {
+					_ = wErr.Close()
+				}
+				dur := 10 * time.Second // wait up to 10s for subprocesses
+				if ctx.Err() != nil {
+					dur = 10 * time.Millisecond
+				}
+				deadline := timeutil.Now().Add(dur)
+				if rOut != nil {
+					_ = rOut.SetReadDeadline(deadline)
+				}
+				if rErr != nil {
+					_ = rErr.SetReadDeadline(deadline)
+				}
+			})
+		}
+		defer closePipes(ctx)
+
+		var err error
+		rOut, wOut, err = os.Pipe()
 		if err != nil {
 			return cmdRes{err: err}
 		}
-		defer rErr.Close()
-		defer wErr.Close()
+
+		rErr, wErr, err = os.Pipe()
+		if err != nil {
+			return cmdRes{err: err}
+		}
 
 		cmd.Stdout = wOut
-		wg.Add(3)
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			_, _ = io.Copy(l.stdout, io.TeeReader(rOut, debugStdoutBuffer))
@@ -387,29 +429,21 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 		if l.stderr == l.stdout {
 			// If l.stderr == l.stdout, we use only one pipe to avoid
 			// duplicating everything.
-			wg.Done()
 			cmd.Stderr = wOut
 		} else {
 			cmd.Stderr = wErr
+			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				_, _ = io.Copy(l.stderr, io.TeeReader(rErr, debugStderrBuffer))
 			}()
 		}
-
-		go func() {
-			defer wg.Done()
-			<-ctx.Done()
-			// NB: setting a more aggressive deadline here makes TestClusterMonitor flaky.
-			now := timeutil.Now().Add(3 * time.Second)
-			_ = rOut.SetDeadline(now)
-			_ = wOut.SetDeadline(now)
-			_ = rErr.SetDeadline(now)
-			_ = wErr.SetDeadline(now)
-		}()
 	}
 
 	err := cmd.Run()
+	closePipes(ctx)
+	wg.Wait()
+
 	if err != nil {
 		// Context errors opaquely appear as "signal killed" when manifested.
 		// We surface this error explicitly.
@@ -417,10 +451,6 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 			err = errors.CombineErrors(ctx.Err(), err)
 		}
 
-		// Synchronize access to ring buffers before using them to create an
-		// error to return.
-		cancel()
-		wg.Wait()
 		if err != nil {
 			err = &withCommandDetails{
 				cause:  err,
@@ -430,6 +460,7 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 			}
 		}
 	}
+
 	return cmdRes{
 		err:    err,
 		stdout: debugStdoutBuffer.String(),
