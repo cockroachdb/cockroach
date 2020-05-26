@@ -328,8 +328,9 @@ func (c *transientCluster) cleanup(ctx context.Context) {
 	}
 }
 
-// DrainNode will gracefully attempt to drain a node in the cluster.
-func (c *transientCluster) DrainNode(nodeID roachpb.NodeID) error {
+// DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
+// then shut it down.
+func (c *transientCluster) DrainAndShutdown(nodeID roachpb.NodeID) error {
 	nodeIndex := int(nodeID - 1)
 
 	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
