@@ -4437,7 +4437,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 	}
 	q := fmt.Sprintf("INSERT INTO t.test (k, v) VALUES (%d, -1)", maxValue+10)
 	if _, err := sqlDB.Exec(q); !testutils.IsError(err,
-		`failed to satisfy CHECK constraint \(c >= 4\)`) {
+		`failed to satisfy CHECK constraint \(c >= 4:::INT8\)`) {
 		t.Fatalf("err = %+v", err)
 	}
 
@@ -5404,7 +5404,7 @@ CREATE TABLE t.test (
 	wg.Add(1)
 	go func() {
 		_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN a INT AS (v - 1) STORED, ADD CHECK (a < v AND a > -1000 AND a IS NOT NULL)`)
-		if !testutils.IsError(err, `validation of CHECK "\(\(a < v\) AND \(a > -1000\)\) AND \(a IS NOT NULL\)" failed on row: k=1003, v=-1003, a=-1004`) {
+		if !testutils.IsError(err, `validation of CHECK "\(\(a < v\) AND \(a > \(-1000\):::INT8\)\) AND \(a IS NOT NULL\)" failed on row: k=1003, v=-1003, a=-1004`) {
 			t.Error(err)
 		}
 		wg.Done()

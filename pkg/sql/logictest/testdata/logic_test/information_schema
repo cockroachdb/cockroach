@@ -1050,8 +1050,8 @@ ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
 ----
 constraint_catalog  constraint_schema  constraint_name          check_clause
 constraint_db       public             541687103_59_1_not_null  p IS NOT NULL
-constraint_db       public             c2                       ((a < 99))
-constraint_db       public             check_a                  ((a > 4))
+constraint_db       public             c2                       ((a < 99:::INT8))
+constraint_db       public             check_a                  ((a > 4:::INT8))
 
 query TTTTTTT colnames
 SELECT *
@@ -1077,8 +1077,8 @@ ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
 ----
 table_schema  table_name  constraint_name          check_clause
 public        t1          541687103_59_1_not_null  p IS NOT NULL
-public        t1          c2                       ((a < 99))
-public        t1          check_a                  ((a > 4))
+public        t1          c2                       ((a < 99:::INT8))
+public        t1          check_a                  ((a > 4:::INT8))
 
 statement ok
 DROP DATABASE constraint_db CASCADE
@@ -1391,7 +1391,7 @@ WHERE table_schema = 'public' AND table_name = 'computed'
 ----
 column_name  is_generated  generation_expression  is_updatable
 a            NO            ·                      YES
-b            YES           a + 1                  NO
+b            YES           a + 1:::INT8           NO
 rowid        NO            ·                      YES
 
 statement ok

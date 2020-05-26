@@ -414,7 +414,7 @@ INSERT INTO t35364 (x) VALUES (1.5) ON CONFLICT (x) DO UPDATE SET x=2.5 RETURNIN
 ----
 3  3  9
 
-statement error pq: failed to satisfy CHECK constraint \(z >= 7\)
+statement error pq: failed to satisfy CHECK constraint \(z >= 7:::DECIMAL\)
 UPSERT INTO t35364 (x) VALUES (0)
 
 # ------------------------------------------------------------------------------

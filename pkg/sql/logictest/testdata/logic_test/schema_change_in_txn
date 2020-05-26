@@ -952,9 +952,9 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  c_0      CHECK        CHECK ((c > 0))      false
-check_table  d_0      CHECK        CHECK ((d > 0))      true
-check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+check_table  c_0      CHECK        CHECK ((c > 0:::INT8))  false
+check_table  d_0      CHECK        CHECK ((d > 0:::INT8))  true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)     true
 
 statement ok
 BEGIN
@@ -965,7 +965,7 @@ ALTER TABLE check_table ADD e INT DEFAULT 0
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT e_0 CHECK (e > 0)
 
-statement error pgcode XXA00 validation of CHECK "e > 0" failed on row: k=1, c=NULL, d=1, e=0
+statement error pgcode XXA00 validation of CHECK "e > 0:::INT8" failed on row: k=1, c=NULL, d=1, e=0
 COMMIT
 
 # Test rollbacks after error in expression evaluation
@@ -985,9 +985,9 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  c_0      CHECK        CHECK ((c > 0))      false
-check_table  d_0      CHECK        CHECK ((d > 0))      true
-check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+check_table  c_0      CHECK        CHECK ((c > 0:::INT8))  false
+check_table  d_0      CHECK        CHECK ((d > 0:::INT8))  true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)     true
 
 # Adding column e was rolled back
 query TTBTTTB
@@ -1035,7 +1035,7 @@ ALTER TABLE check_table ADD CHECK (a >= 0)
 statement ok
 ALTER TABLE check_table ADD CHECK (a < 0)
 
-statement error pgcode XXA00 validation of CHECK \"a < 0\" failed on row: k=0, a=0
+statement error pgcode XXA00 validation of CHECK \"a < 0:::INT8\" failed on row: k=0, a=0
 COMMIT
 
 query TTTTB
@@ -1170,8 +1170,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  ck_a  CHECK  CHECK ((a = 0))  true
-check_table  ck_b  CHECK  CHECK ((b > 0))  true
+check_table  ck_a  CHECK  CHECK ((a = 0:::INT8))  true
+check_table  ck_b  CHECK  CHECK ((b > 0:::INT8))  true
 check_table  ck_c  CHECK  CHECK ((c > b))  true
 
 # Also test insert/update to ensure constraint was added in a valid state (with correct column IDs, etc.)
@@ -1197,7 +1197,7 @@ statement ok
 INSERT INTO check_table VALUES (0)
 
 # This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
-statement error validation of CHECK "a > 0" failed on row: a=0
+statement error validation of CHECK "a > 0:::INT8" failed on row: a=0
 ALTER TABLE check_table ADD CONSTRAINT ck CHECK (a > 0)
 
 statement ok
@@ -1216,7 +1216,7 @@ statement ok
 ALTER TABLE check_table ADD COLUMN b INT DEFAULT 0
 
 # This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
-statement error validation of CHECK "b > 0" failed on row: a=0, b=0
+statement error validation of CHECK "b > 0:::INT8" failed on row: a=0, b=0
 ALTER TABLE check_table ADD CONSTRAINT ck CHECK (b > 0)
 
 statement ok
@@ -1232,7 +1232,7 @@ statement ok
 INSERT INTO check_table VALUES (0)
 
 # Test ADD COLUMN and ADD CONSTRAINT in the same ALTER TABLE statement
-statement error validation of CHECK "c > 0" failed on row: a=0, c=0
+statement error validation of CHECK "c > 0:::INT8" failed on row: a=0, c=0
 ALTER TABLE check_table ADD COLUMN c INT DEFAULT 0, ADD CONSTRAINT ck CHECK (c > 0)
 
 statement ok
@@ -1590,7 +1590,7 @@ ALTER TABLE t DROP CONSTRAINT c
 
 # Since the check constraint is dropped in the schema changer after the
 # transaction commits, it's still enforced during the rest of the transaction.
-statement error pq: failed to satisfy CHECK constraint \(a > 0\)
+statement error pq: failed to satisfy CHECK constraint \(a > 0:::INT8\)
 INSERT INTO t VALUES (0)
 
 statement ok

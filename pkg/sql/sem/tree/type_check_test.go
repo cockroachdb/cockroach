@@ -189,8 +189,8 @@ func TestTypeCheck(t *testing.T) {
 		// pre-resolution name is not going to get formatted.
 		{`1:::d.t1`, `1:::INT8`},
 		{`1:::d.s.t3 + 1.4`, `1:::DECIMAL + 1.4:::DECIMAL`},
-		{`1 IS OF (d.t1, t2)`, `1:::INT8 IS OF (d.t1, t2)`},
-		{`1::d.t1`, `1:::INT8::d.t1`},
+		{`1 IS OF (d.t1, t2)`, `1:::INT8 IS OF (INT8, STRING)`},
+		{`1::d.t1`, `1:::INT8::INT8`},
 	}
 	ctx := context.Background()
 	for _, d := range testData {

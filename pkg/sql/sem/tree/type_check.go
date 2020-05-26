@@ -510,6 +510,7 @@ func (expr *CastExpr) TypeCheck(
 	if ok, c := isCastDeepValid(castFrom, exprType); ok {
 		telemetry.Inc(c)
 		expr.Expr = typedSubExpr
+		expr.Type = exprType
 		expr.typ = exprType
 		return expr, nil
 	}
@@ -559,6 +560,7 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
+	expr.Type = annotateType
 	subExpr, err := typeCheckAndRequire(
 		ctx,
 		semaCtx,
@@ -1118,6 +1120,7 @@ func (expr *IsOfTypeExpr) TypeCheck(
 		if err != nil {
 			return nil, err
 		}
+		expr.Types[i] = typ
 		expr.resolvedTypes[i] = typ
 	}
 	expr.Expr = exprTyped

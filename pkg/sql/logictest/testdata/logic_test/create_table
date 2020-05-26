@@ -157,7 +157,7 @@ like_constraints  CREATE TABLE like_constraints (
                   h INT8 NULL,
                   j JSONB NULL,
                   FAMILY "primary" (a, b, c, h, j, rowid),
-                  CONSTRAINT check_a CHECK (a > 3)
+                  CONSTRAINT check_a CHECK (a > 3:::INT8)
 )
 
 statement ok
@@ -189,7 +189,7 @@ SHOW CREATE TABLE like_generated
 like_generated  CREATE TABLE like_generated (
                 a INT8 NOT NULL,
                 b STRING NOT NULL,
-                c DECIMAL NULL AS (a + 3) STORED,
+                c DECIMAL NULL AS (a + 3:::DECIMAL) STORED,
                 h INT8 NULL,
                 j JSONB NULL,
                 FAMILY "primary" (a, b, c, h, j, rowid)
@@ -219,7 +219,7 @@ SHOW CREATE TABLE like_all
 like_all  CREATE TABLE like_all (
           a INT8 NOT NULL,
           b STRING NOT NULL DEFAULT 'foo':::STRING,
-          c DECIMAL NULL AS (a + 3) STORED,
+          c DECIMAL NULL AS (a + 3:::DECIMAL) STORED,
           h INT8 NULL,
           j JSONB NULL,
           CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
@@ -227,7 +227,7 @@ like_all  CREATE TABLE like_all (
           INDEX like_table_c_idx (c ASC) STORING (j),
           INVERTED INDEX like_table_j_idx (j),
           FAMILY "primary" (a, b, c, h, j),
-          CONSTRAINT check_a CHECK (a > 3)
+          CONSTRAINT check_a CHECK (a > 3:::INT8)
 )
 
 statement ok
@@ -241,7 +241,7 @@ SHOW CREATE TABLE like_mixed
 like_mixed  CREATE TABLE like_mixed (
             a INT8 NOT NULL,
             b STRING NOT NULL DEFAULT 'foo':::STRING,
-            c DECIMAL NULL AS (a + 3) STORED,
+            c DECIMAL NULL AS (a + 3:::DECIMAL) STORED,
             h INT8 NULL,
             j JSONB NULL,
             CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),

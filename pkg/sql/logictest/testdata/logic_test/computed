@@ -13,7 +13,7 @@ SHOW CREATE TABLE with_no_column_refs
 with_no_column_refs  CREATE TABLE with_no_column_refs (
                      a INT8 NULL,
                      b INT8 NULL,
-                     c INT8 NULL AS (3) STORED,
+                     c INT8 NULL AS (3:::INT8) STORED,
                      FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -31,7 +31,7 @@ SHOW CREATE TABLE extra_parens
 extra_parens  CREATE TABLE extra_parens (
               a INT8 NULL,
               b INT8 NULL,
-              c INT8 NULL AS ((3)) STORED,
+              c INT8 NULL AS (3:::INT8) STORED,
               FAMILY "primary" (a, b, c, rowid)
 )
 
@@ -654,7 +654,7 @@ SELECT generation_expression FROM information_schema.columns
 WHERE table_name = 'x' and column_name = 'b'
 ----
 generation_expression
-a * 2
+a * 2:::INT8
 
 query I
 SELECT count(*) FROM information_schema.columns
@@ -674,8 +674,8 @@ SHOW CREATE TABLE x
 ----
 x  CREATE TABLE x (
    a INT8 NULL,
-   b INT8 NULL AS (a * 2) STORED,
-   c INT8 NOT NULL AS (a + 4) STORED,
+   b INT8 NULL AS (a * 2:::INT8) STORED,
+   c INT8 NOT NULL AS (a + 4:::INT8) STORED,
    FAMILY "primary" (a, b, rowid, c)
 )
 
@@ -787,7 +787,7 @@ query TT
 SHOW CREATE t42418
 ----
 t42418  CREATE TABLE t42418 (
-        x INT8 NULL AS (1) STORED,
-        y INT8 NULL AS (1) STORED,
+        x INT8 NULL AS (1:::INT8) STORED,
+        y INT8 NULL AS (1:::INT8) STORED,
         FAMILY "primary" (x, rowid, y)
 )
