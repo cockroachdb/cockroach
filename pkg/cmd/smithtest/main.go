@@ -36,9 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/pkg/browser"
+	"github.com/pkg/errors"
 )
 
 var (

@@ -186,12 +186,12 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = p.config.randCustomerID(rng)
 	}
 
-	tx, err := p.mcp.Get().BeginEx(ctx, p.config.txOpts)
+	tx, err := p.mcp.Get().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
+		ctx, workload.NewPgxTx(tx),
 		func() error {
 			var wName, dName string
 			// Update warehouse with payment

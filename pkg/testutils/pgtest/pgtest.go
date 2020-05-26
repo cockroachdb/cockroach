@@ -18,7 +18,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgproto3"
+	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/pgproto3"
+	"github.com/pkg/errors"
 )
 
 // PGTest can be used to send and receive arbitrary pgwire messages on

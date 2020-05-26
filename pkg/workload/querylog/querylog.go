@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq/oid"
 	"github.com/spf13/pflag"
 )
@@ -208,13 +208,13 @@ func (w *querylog) Ops(urls []string, reg *histogram.Registry) (workload.QueryLo
 		return workload.QueryLoad{}, errors.Errorf(
 			"Exactly one connection string is supported at the moment.")
 	}
-	connCfg, err := pgx.ParseConnectionString(urls[0])
+	connCfg, err := pgx.ParseConfig(urls[0])
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	if w.querybenchPath != `` {
-		conn, err := pgx.Connect(connCfg)
+		conn, err := pgx.ConnectConfig(ctx, connCfg)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
@@ -223,7 +223,7 @@ func (w *querylog) Ops(urls []string, reg *histogram.Registry) (workload.QueryLo
 		return ql, nil
 	}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
-		conn, err := pgx.Connect(connCfg)
+		conn, err := pgx.ConnectConfig(ctx, connCfg)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
@@ -271,7 +271,7 @@ func newQuerybenchWorker(q *querylog, reg *histogram.Registry, conn *pgx.Conn, i
 // duration).
 func (w *worker) run(ctx context.Context) error {
 	if w.config.stmtTimeoutSeconds != 0 {
-		if _, err := w.conn.Exec(fmt.Sprintf("SET statement_timeout='%ds'", w.config.stmtTimeoutSeconds)); err != nil {
+		if _, err := w.conn.Exec(ctx, fmt.Sprintf("SET statement_timeout='%ds'", w.config.stmtTimeoutSeconds)); err != nil {
 			return err
 		}
 	}
@@ -298,7 +298,7 @@ func (w *worker) run(ctx context.Context) error {
 		}
 
 		start = timeutil.Now()
-		rows, err := w.conn.Query(chosenQuery, placeholders...)
+		rows, err := w.conn.Query(ctx, chosenQuery, placeholders...)
 		if err != nil {
 			if w.config.verbose {
 				log.Infof(ctx, "Encountered an error %s while executing the query", err.Error())

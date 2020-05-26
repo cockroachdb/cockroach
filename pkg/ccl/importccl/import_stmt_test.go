@@ -57,7 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -4178,12 +4178,10 @@ func TestImportClientDisconnect(t *testing.T) {
 	defer cancel()
 	go func() {
 		defer close(done)
-		connCfg, err := pgx.ParseConnectionString(pgURL.String())
+		db, err := pgx.Connect(ctx, pgURL.String())
 		assert.NoError(t, err)
-		db, err := pgx.Connect(connCfg)
-		assert.NoError(t, err)
-		defer func() { _ = db.Close() }()
-		_, err = db.ExecEx(ctxToCancel, `IMPORT TABLE foo (k INT PRIMARY KEY, v STRING) CSV DATA ($1)`,
+		defer func() { _ = db.Close(ctx) }()
+		_, err = db.Exec(ctxToCancel, `IMPORT TABLE foo (k INT PRIMARY KEY, v STRING) CSV DATA ($1)`,
 			nil /* options */, srv.URL)
 		assert.Equal(t, context.Canceled, err)
 	}()

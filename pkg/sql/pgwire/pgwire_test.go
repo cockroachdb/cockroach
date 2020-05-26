@@ -41,8 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgproto3"
+	"github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 )
 

@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -272,15 +272,13 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// Use pgx so that cancellation does something reasonable.
 		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).ServingSQLAddr(), "", url.User("root"))
 		defer cleanup()
-		conf, err := pgx.ParseConnectionString(url.String())
-		require.NoError(t, err)
-		c, err := pgx.Connect(conf)
+		c, err := pgx.Connect(ctx, url.String())
 		require.NoError(t, err)
 		ctxWithCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
 		upsertErrCh := make(chan error)
 		go func() {
-			_, err := c.ExecEx(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
+			_, err := c.Exec(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
 				nil /* options */, rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 			upsertErrCh <- err
 		}()
