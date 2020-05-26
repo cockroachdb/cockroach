@@ -290,7 +290,7 @@ type virtualSchemaEntry struct {
 	allTableNames   map[string]struct{}
 }
 
-func (v virtualSchemaEntry) Desc() catalog.ObjectDescriptor {
+func (v virtualSchemaEntry) Desc() catalog.Descriptor {
 	return v.desc
 }
 
@@ -322,7 +322,7 @@ type virtualDefEntry struct {
 	validWithNoDatabaseContext bool
 }
 
-func (e virtualDefEntry) Desc() catalog.ObjectDescriptor {
+func (e virtualDefEntry) Desc() catalog.Descriptor {
 	return sqlbase.NewImmutableTableDescriptor(*e.desc)
 }
 

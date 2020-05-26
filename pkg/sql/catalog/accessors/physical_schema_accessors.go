@@ -110,7 +110,7 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 	codec keys.SQLCodec,
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
-) (catalog.ObjectDescriptor, error) {
+) (catalog.Descriptor, error) {
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
 		// TypeObjects are not caches so fall through to the underlying physical

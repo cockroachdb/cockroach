@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// ObjectDescriptor provides table information for results from a name lookup.
-type ObjectDescriptor interface {
+// Descriptor provides table information for results from a name lookup.
+type Descriptor interface {
 	tree.NameResolutionResult
 
 	// DatabaseDesc returns the underlying database descriptor, or nil if the
@@ -43,7 +43,7 @@ type VirtualSchemas interface {
 
 // VirtualSchema represents a collection of VirtualObjects.
 type VirtualSchema interface {
-	Desc() ObjectDescriptor
+	Desc() Descriptor
 	NumTables() int
 	VisitTables(func(object VirtualObject))
 	GetObjectByName(name string) (VirtualObject, error)
@@ -51,7 +51,7 @@ type VirtualSchema interface {
 
 // VirtualObject is a virtual schema object.
 type VirtualObject interface {
-	Desc() ObjectDescriptor
+	Desc() Descriptor
 }
 
 // TableEntry is the value type of FkTableMetadata: An optional table

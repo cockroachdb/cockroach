@@ -144,7 +144,7 @@ func ResolveExistingObject(
 		return nil, prefix, nil
 	}
 
-	obj := descI.(catalog.ObjectDescriptor)
+	obj := descI.(catalog.Descriptor)
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
 		if obj.TypeDesc() == nil {
