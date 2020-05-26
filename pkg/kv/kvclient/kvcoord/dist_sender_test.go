@@ -200,7 +200,8 @@ func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -359,56 +360,57 @@ func TestSendRPCOrder(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 
 	for n, tc := range testCases {
-		log.Infof(context.TODO(), "testcase %d", n)
-		verifyCall = makeVerifier(tc.expReplica)
+		t.Run("", func(t *testing.T) {
+			verifyCall = makeVerifier(tc.expReplica)
 
-		{
-			// The local node needs to get its attributes during sendRPC.
-			nd := &roachpb.NodeDescriptor{
-				NodeID:  6,
-				Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:6")),
-				Locality: roachpb.Locality{
-					Tiers: tc.tiers,
-				},
+			{
+				// The local node needs to get its attributes during sendRPC.
+				nd := &roachpb.NodeDescriptor{
+					NodeID:  6,
+					Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:6")),
+					Locality: roachpb.Locality{
+						Tiers: tc.tiers,
+					},
+				}
+				g.NodeID.Reset(nd.NodeID)
+				if err := g.SetNodeDescriptor(nd); err != nil {
+					t.Fatal(err)
+				}
 			}
-			g.NodeID.Reset(nd.NodeID)
-			if err := g.SetNodeDescriptor(nd); err != nil {
-				t.Fatal(err)
-			}
-		}
 
-		ds.leaseHolderCache.Update(
-			context.TODO(), rangeID, roachpb.StoreID(0),
-		)
-		if tc.leaseHolder > 0 {
 			ds.leaseHolderCache.Update(
-				context.TODO(), rangeID, descriptor.InternalReplicas[tc.leaseHolder-1].StoreID,
+				ctx, rangeID, roachpb.StoreID(0),
 			)
-		}
+			if tc.leaseHolder > 0 {
+				ds.leaseHolderCache.Update(
+					ctx, rangeID, descriptor.InternalReplicas[tc.leaseHolder-1].StoreID,
+				)
+			}
 
-		args := tc.args
-		{
-			header := args.Header()
-			header.Key = roachpb.Key("a")
-			args.SetHeader(header)
-		}
-		if roachpb.IsRange(args) {
-			header := args.Header()
-			header.EndKey = args.Header().Key.Next()
-			args.SetHeader(header)
-		}
-		consistency := roachpb.CONSISTENT
-		if !tc.consistent {
-			consistency = roachpb.INCONSISTENT
-		}
-		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
-		ds.nodeDescriptor = nil
-		if _, err := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
-			RangeID:         rangeID, // Not used in this test, but why not.
-			ReadConsistency: consistency,
-		}, args); err != nil {
-			t.Errorf("%d: %s", n, err)
-		}
+			args := tc.args
+			{
+				header := args.Header()
+				header.Key = roachpb.Key("a")
+				args.SetHeader(header)
+			}
+			if roachpb.IsRange(args) {
+				header := args.Header()
+				header.EndKey = args.Header().Key.Next()
+				args.SetHeader(header)
+			}
+			consistency := roachpb.CONSISTENT
+			if !tc.consistent {
+				consistency = roachpb.INCONSISTENT
+			}
+			// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
+			ds.nodeDescriptor = nil
+			if _, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{
+				RangeID:         rangeID, // Not used in this test, but why not.
+				ReadConsistency: consistency,
+			}, args); err != nil {
+				t.Errorf("%d: %s", n, err)
+			}
+		})
 	}
 }
 
@@ -3054,9 +3056,7 @@ func TestCanSendToFollower(t *testing.T) {
 		args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
 		sentTo = r[0]
-		reply := &roachpb.BatchResponse{}
-		reply.Error = roachpb.NewErrorf("boom")
-		return reply, nil
+		return args.CreateReply(), nil
 	}
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -3108,18 +3108,27 @@ func TestCanSendToFollower(t *testing.T) {
 			2,
 		},
 	} {
-		sentTo = ReplicaInfo{}
-		canSend = c.canSendToFollower
-		ds := NewDistSender(cfg, g)
-		ds.clusterID = &base.ClusterIDContainer{}
-		// set 2 to be the leaseholder
-		ds.LeaseHolderCache().Update(context.TODO(), 2, 2)
-		if _, pErr := kv.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
-			t.Fatalf("%d: unexpected error: %v", i, pErr)
-		}
-		if sentTo.NodeID != c.expectedNode {
-			t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
-		}
+		t.Run("", func(t *testing.T) {
+			sentTo = ReplicaInfo{}
+			canSend = c.canSendToFollower
+			ds := NewDistSender(cfg, g)
+			ds.clusterID = &base.ClusterIDContainer{}
+			// set 2 to be the leaseholder
+			ds.LeaseHolderCache().Update(context.Background(), 2 /* rangeID */, 2 /* storeID */)
+			_, pErr := kv.SendWrappedWith(context.Background(), ds, c.header, c.msg)
+			require.Nil(t, pErr)
+			if sentTo.NodeID != c.expectedNode {
+				t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
+			}
+			// Check that the leaseholder cache doesn't change, even if the request is
+			// served by a follower. This tests a regression for a bug we've had where
+			// we were always updating the leaseholder cache on successful RPCs
+			// because we erroneously assumed that a success must come from the
+			// leaseholder.
+			storeID, ok := ds.LeaseHolderCache().Lookup(context.Background(), 2 /* rangeID */)
+			require.True(t, ok)
+			require.Equal(t, roachpb.StoreID(2), storeID)
+		})
 	}
 }
 
