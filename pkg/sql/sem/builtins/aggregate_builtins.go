@@ -294,14 +294,9 @@ var aggregates = map[string]builtinDefinition{
 		),
 	)),
 
-	"variance": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
-			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
-			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
-			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
-	),
+	// variance is a historical alias for var_samp.
+	"variance": makeVarianceBuiltin(),
+	"var_samp": makeVarianceBuiltin(),
 
 	// stddev is a historical alias for stddev_samp.
 	"stddev":      makeStdDevBuiltin(),
@@ -514,6 +509,17 @@ func makeStdDevBuiltin() builtinDefinition {
 			"Calculates the standard deviation of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values.", tree.VolatilityImmutable),
+	)
+}
+
+func makeVarianceBuiltin() builtinDefinition {
+	return makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
 	)
 }
 
