@@ -141,7 +141,7 @@ func TestLint(t *testing.T) {
 		var names []string
 		for _, name := range builtins.AllBuiltinNames {
 			switch name {
-			case "extract", "trim", "overlay", "position", "substring":
+			case "extract", "trim", "overlay", "position", "substring", "st_x", "st_y":
 				// Exempt special forms: EXTRACT(... FROM ...), etc.
 			default:
 				names = append(names, strings.ToUpper(name))

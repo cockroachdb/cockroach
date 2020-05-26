@@ -12,6 +12,7 @@ package geo
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"strings"
 
@@ -51,12 +52,12 @@ func EWKBToEWKT(b geopb.EWKB) (geopb.EWKT, error) {
 }
 
 // EWKBToWKB transforms a given EWKB to WKB.
-func EWKBToWKB(b geopb.EWKB) (geopb.WKB, error) {
+func EWKBToWKB(b geopb.EWKB, byteOrder binary.ByteOrder) (geopb.WKB, error) {
 	t, err := ewkb.Unmarshal([]byte(b))
 	if err != nil {
 		return nil, err
 	}
-	ret, err := wkb.Marshal(t, EWKBEncodingFormat)
+	ret, err := wkb.Marshal(t, byteOrder)
 	return geopb.WKB(ret), err
 }
 
@@ -79,7 +80,7 @@ func EWKBToWKBHex(b geopb.EWKB) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ret, err := wkbhex.Encode(t, EWKBEncodingFormat)
+	ret, err := wkbhex.Encode(t, DefaultEWKBEncodingFormat)
 	return strings.ToUpper(ret), err
 }
 
@@ -98,4 +99,16 @@ func EWKBToKML(b geopb.EWKB) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// StringToByteOrder returns the byte order of string.
+func StringToByteOrder(s string) binary.ByteOrder {
+	switch strings.ToLower(s) {
+	case "ndr":
+		return binary.LittleEndian
+	case "xdr":
+		return binary.BigEndian
+	default:
+		return DefaultEWKBEncodingFormat
+	}
 }
