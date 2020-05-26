@@ -345,6 +345,22 @@ hello 3 4 1
 howdy 5 6 0
 hi 10 10 10
 
+# Test aggregations on ENUM columns.
+query TT
+SELECT max(x), min(x) FROM enum_agg
+----
+hi hello
+
+# Test that enums without any members can still get an aggregate
+# resolved when distributing a flow.
+statement ok
+CREATE TYPE empty AS ENUM ();
+CREATE TABLE empty_enum (x empty)
+
+query TT
+SELECT max(x), min(x) FROM empty_enum
+----
+NULL NULL
 
 # Regression to ensure that statistics jobs can be run on tables
 # with user defined types.
