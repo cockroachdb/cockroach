@@ -17,6 +17,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
+import {serverToClientErrorMessageMap} from "src/util/constants";
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
 export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;
@@ -124,6 +125,8 @@ export type StatementDiagnosticsResponseMessage = protos.cockroach.server.server
 export const API_PREFIX = "_admin/v1";
 export const STATUS_PREFIX = "_status";
 
+const ResponseError = protos.cockroach.server.serverpb.ResponseError;
+
 // HELPER FUNCTIONS
 
 // Inspired by https://github.com/github/fetch/issues/175
@@ -153,10 +156,11 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
 
 export class RequestError extends Error {
   status: number;
-  constructor(statusText: string, status: number) {
+  constructor(statusText: string, status: number, message?: string) {
     super(statusText);
     this.status = status;
     this.name = "RequestError";
+    this.message = message;
   }
 }
 
@@ -191,7 +195,17 @@ function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends 
 
   return withTimeout(fetch(url, params), timeout).then((res) => {
     if (!res.ok) {
-      throw new RequestError(res.statusText, res.status);
+      return res.arrayBuffer()
+        .then((buffer) => {
+          let respError;
+          try {
+            respError = ResponseError.decode(new Uint8Array(buffer));
+          } catch {
+            respError = new ResponseError({error: res.statusText});
+          }
+          const message = serverToClientErrorMessageMap.get(respError.error) || respError.error;
+          throw new RequestError(res.statusText, res.status, message);
+        });
     }
     return res.arrayBuffer().then((buffer) => builder.decode(new Uint8Array(buffer)));
   });

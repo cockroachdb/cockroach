@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
+import {assert} from "chai";
 import _ from "lodash";
 import moment from "moment";
 import Long from "long";
@@ -16,7 +16,10 @@ import Long from "long";
 import fetchMock from "./fetch-mock";
 
 import * as protos from "src/js/protos";
+import {cockroach} from "src/js/protos";
 import * as api from "./api";
+import {REMOTE_DEBUGGING_ERROR_TEXT} from "src/util/constants";
+import Severity = cockroach.util.log.Severity;
 
 describe("rest api", function() {
   describe("propsToQueryString", function () {
@@ -640,6 +643,84 @@ describe("rest api", function() {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
         done();
       });
+    });
+  });
+
+  describe("logs request", function () {
+    const nodeId = "1";
+    const logsUrl = `${api.STATUS_PREFIX}/logs/${nodeId}`;
+
+    afterEach(fetchMock.restore);
+
+    it("correctly requests log entries", function () {
+      this.timeout(1000);
+      const logEntry = {file: "f", goroutine: Long.fromNumber(1), message: "m", severity: Severity.ERROR};
+      fetchMock.mock({
+        matcher: logsUrl,
+        method: "GET",
+        response: (_url: string, requestObj: RequestInit) => {
+          assert.isUndefined(requestObj.body);
+          const logsResponse = protos.cockroach.server.serverpb.LogEntriesResponse
+            .encode({ entries: [logEntry]}).finish();
+          return {
+            body: api.toArrayBuffer(logsResponse),
+          };
+        },
+      });
+
+      return api.getLogs(new protos.cockroach.server.serverpb.LogsRequest({node_id: nodeId}))
+        .then((result) => {
+          assert.lengthOf(fetchMock.calls(logsUrl), 1);
+          assert.equal(result.entries.length, 1);
+          assert.equal(result.entries[0].message, logEntry.message);
+          assert.equal(result.entries[0].severity, logEntry.severity);
+          assert.equal(result.entries[0].file, logEntry.file);
+        });
+    });
+
+    it("correctly handles restricted permissions for remote debugging", function (done) {
+      this.timeout(1000);
+      fetchMock.mock({
+        matcher: logsUrl,
+        method: "GET",
+        response: (_url: string) => {
+          return {
+            throws: new Error("not allowed (due to the 'server.remote_debugging.mode' setting)"),
+          };
+        },
+      });
+
+      api.getLogs(new protos.cockroach.server.serverpb.LogsRequest({node_id: nodeId}))
+        .then((_result) => {
+          assert.fail("Request unexpectedly succeeded.");
+        })
+        .catch(function (e: Error) {
+          assert(_.isError(e));
+          assert.equal(e.message, REMOTE_DEBUGGING_ERROR_TEXT);
+        })
+        .finally(done);
+    });
+
+    it("correctly times out", function (done) {
+      this.timeout(1000);
+      // Mock out the fetch query, but return a promise that's never resolved to test the timeout
+      fetchMock.mock({
+        matcher: logsUrl,
+        method: "GET",
+        response: (_url: string, requestObj: RequestInit) => {
+          assert.isUndefined(requestObj.body);
+          return new Promise<any>(() => { });
+        },
+      });
+
+      api.getLogs(new protos.cockroach.server.serverpb.LogsRequest({node_id: nodeId}), moment.duration(0))
+        .then((_result) => {
+          assert.fail("Request unexpectedly succeeded.");
+        })
+        .catch(function (e) {
+          assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
+        })
+        .finally(done);
     });
   });
 });
