@@ -100,7 +100,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	}
 	// Avoid creating duplicate check constraints.
 	if _, ok := inuseNames[ckName]; !ok {
-		ck, err := MakeCheckConstraint(ctx, tableDesc, ckDef, inuseNames,
+		ck, err := makeCheckConstraint(ctx, tableDesc, ckDef, inuseNames,
 			&p.semaCtx, p.tableName)
 		if err != nil {
 			return err
@@ -200,9 +200,16 @@ func MakeIndexDescriptor(
 		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 	}
 
-	// TODO(mgartner): remove this once partial indexes are fully supported.
-	if n.Predicate != nil && !params.SessionData().PartialIndexes {
-		return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
+	if n.Predicate != nil {
+		// TODO(mgartner): remove this once partial indexes are fully supported.
+		if !params.SessionData().PartialIndexes {
+			return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
+		}
+
+		_, err := validateIndexPredicate(params.ctx, tableDesc, n.Predicate, &params.p.semaCtx, n.Table)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
