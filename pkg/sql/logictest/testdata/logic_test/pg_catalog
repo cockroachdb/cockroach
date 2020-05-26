@@ -2092,6 +2092,7 @@ JOIN pg_operator c ON c.oprname = '>' AND b.proargtypes[0] = c.oprleft AND b.pro
 WHERE (b.proname = 'max' OR b.proname = 'bool_or') AND c.oid = a.aggsortop;
 ----
 oid         oprname  aggsortop
+1224236426  >        1224236426
 3636536082  >        3636536082
 3636536082  >        3636536082
 2948286002  >        2948286002
@@ -2123,6 +2124,7 @@ JOIN pg_operator c ON c.oprname = '<' AND b.proargtypes[0] = c.oprleft AND b.pro
 WHERE (b.proname = 'min' OR b.proname = 'bool_and' OR b.proname = 'every') AND c.oid = a.aggsortop;
 ----
 oid         oprname  aggsortop
+3859576864  <        3859576864
 2134593616  <        2134593616
 2134593616  <        2134593616
 2134593616  <        2134593616
