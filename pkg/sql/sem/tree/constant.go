@@ -469,7 +469,7 @@ var (
 		types.AnyEnum,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
-	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String}
+	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String, types.AnyEnum}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -521,6 +521,8 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		case types.BytesFamily:
 			expr.resBytes = DBytes(expr.s)
 			return &expr.resBytes, nil
+		case types.EnumFamily:
+			return MakeDEnumFromPhysicalRepresentation(typ, []byte(expr.s))
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:

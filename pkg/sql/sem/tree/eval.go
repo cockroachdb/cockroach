@@ -3489,6 +3489,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		switch v := d.(type) {
 		case *DString:
 			return MakeDEnumFromLogicalRepresentation(t, string(*v))
+		case *DBytes:
+			return MakeDEnumFromPhysicalRepresentation(t, []byte(*v))
 		case *DEnum:
 			return d, nil
 		}

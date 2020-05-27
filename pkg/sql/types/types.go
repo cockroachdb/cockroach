@@ -2149,22 +2149,22 @@ func (t *T) IsAmbiguous() bool {
 
 // EnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
 // enum physical representations that matches the input byte slice.
-func (t *T) EnumGetIdxOfPhysical(phys []byte) int {
+func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 	t.ensureHydratedEnum()
 	// TODO (rohany): We can either use a map or just binary search here
 	//  since the physical representations are sorted.
 	reps := t.TypeMeta.EnumData.PhysicalRepresentations
 	for i := range reps {
 		if bytes.Equal(phys, reps[i]) {
-			return i
+			return i, nil
 		}
 	}
-	err := errors.AssertionFailedf(
+	err := errors.Newf(
 		"could not find %v in enum representation %s",
 		phys,
 		t.TypeMeta.EnumData.debugString(),
 	)
-	panic(err)
+	return 0, err
 }
 
 // EnumGetIdxOfLogical returns the index within the TypeMeta's slice of
