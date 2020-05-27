@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c));
 INSERT INTO abc VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)

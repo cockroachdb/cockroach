@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 statement error temporary tables are only supported experimentally\nHINT:.*46260\n.*\n.*SET experimental_enable_temp_tables = 'on'
 CREATE TEMP TABLE a_temp(a INT PRIMARY KEY)
 
