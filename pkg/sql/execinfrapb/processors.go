@@ -64,6 +64,25 @@ func GetAggregateInfo(
 			}
 
 			colTyp := b.FixedReturnType()
+			// If the output type of the aggregation depends on its inputs, then
+			// the output of FixedReturnType will be ambiguous. In the ambiguous
+			// cases, use the information about the input types to construct the
+			// appropriate output type. The tree.ReturnTyper interface is
+			// []tree.TypedExpr -> *types.T, so construct the []tree.TypedExpr
+			// from the types that we know are the inputs. Note that we don't
+			// try to create datums of each input type, and instead use this
+			// "TypedDummy" construct. This is because some types don't have resident
+			// members (like an ENUM with no values), and we shouldn't error out
+			// trying to pick an aggregate spec for those cases.
+			if colTyp.IsAmbiguous() {
+				args := make([]tree.TypedExpr, len(inputTypes))
+				for i, t := range inputTypes {
+					args[i] = &tree.TypedDummy{Typ: t}
+				}
+				// Evaluate ReturnType with the fake input set of arguments.
+				colTyp = b.ReturnType(args)
+			}
+
 			return constructAgg, colTyp, nil
 		}
 	}

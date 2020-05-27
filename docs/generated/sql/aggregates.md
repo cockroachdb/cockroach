@@ -105,6 +105,8 @@
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
+<tr><td><a name="max"></a><code>max(arg1: collatedstring{*}) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+</span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
@@ -142,6 +144,8 @@
 <tr><td><a name="min"></a><code>min(arg1: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+</span></td></tr>
+<tr><td><a name="min"></a><code>min(arg1: collatedstring{*}) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
