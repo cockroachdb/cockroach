@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
 SELECT 'a' COLLATE bad_locale
 
