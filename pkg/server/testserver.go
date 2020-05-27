@@ -440,6 +440,7 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 
 func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	stopper := ts.Stopper()
+	clusterName := ts.Cfg.ClusterName
 	// If we used a dummy gossip, DistSQL and random other things won't work.
 	// Just use the test server's for now.
 	//
@@ -455,6 +456,12 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		cfg := makeTestConfig(st)
 		sqlConfig = cfg.SQLConfig
 		bothConfig = cfg.BothConfig
+		// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
+		// and this tenant work.
+		//
+		// TODO(tbg): address this when we introduce the real tenant RPCs in:
+		// https://github.com/cockroachdb/cockroach/issues/47898
+		bothConfig.ClusterName = clusterName
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Duration(bothConfig.MaxOffset))
