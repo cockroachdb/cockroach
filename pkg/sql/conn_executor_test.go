@@ -835,13 +835,23 @@ func TestTrimFlushedStatements(t *testing.T) {
 
 					// Set stmtBufMaxLen once.
 					l := buf.Len()
+					set := false
 					if stmtBufMaxLen == -1 {
 						stmtBufMaxLen = l
+						set = true
 					}
 
 					// Verify that the buffer doesn't grow.
+					failed := false
 					if l > stmtBufMaxLen {
 						stmtBufLenOnFailure = l
+						failed = true
+					}
+					if set {
+						t.Log("set stmtBufMaxLen to", stmtBufMaxLen, cmd.String())
+					}
+					if failed {
+						t.Log("failed length check length was", stmtBufLenOnFailure, cmd.String())
 					}
 				},
 			},
