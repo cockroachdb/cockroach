@@ -29,6 +29,7 @@ type DatumAlloc struct {
 	dbitArrayAlloc    []tree.DBitArray
 	ddecimalAlloc     []tree.DDecimal
 	ddateAlloc        []tree.DDate
+	denumAlloc        []tree.DEnum
 	dgeometryAlloc    []tree.DGeometry
 	dgeographyAlloc   []tree.DGeography
 	dtimeAlloc        []tree.DTime
@@ -145,6 +146,18 @@ func (a *DatumAlloc) NewDDate(v tree.DDate) *tree.DDate {
 	buf := &a.ddateAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DDate, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDEnum allocates a DEnum.
+func (a *DatumAlloc) NewDEnum(v tree.DEnum) *tree.DEnum {
+	buf := &a.denumAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DEnum, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

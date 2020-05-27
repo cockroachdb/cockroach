@@ -363,8 +363,11 @@ func DecodeTableKey(
 		if err != nil {
 			return nil, nil, err
 		}
-		enum, err := tree.MakeDEnumFromPhysicalRepresentation(valType, r)
-		return enum, rkey, err
+		phys, log, err := tree.GetEnumComponentsFromPhysicalRep(valType, r)
+		if err != nil {
+			return nil, nil, err
+		}
+		return a.NewDEnum(tree.DEnum{EnumTyp: valType, PhysicalRep: phys, LogicalRep: log}), rkey, nil
 	default:
 		return nil, nil, errors.Errorf("unable to decode table key: %s", valType)
 	}
@@ -595,8 +598,11 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		if err != nil {
 			return nil, b, err
 		}
-		enum, err := tree.MakeDEnumFromPhysicalRepresentation(t, data)
-		return enum, b, err
+		phys, log, err := tree.GetEnumComponentsFromPhysicalRep(t, data)
+		if err != nil {
+			return nil, nil, err
+		}
+		return a.NewDEnum(tree.DEnum{EnumTyp: t, PhysicalRep: phys, LogicalRep: log}), b, nil
 	default:
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}
@@ -916,7 +922,11 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		return tree.MakeDEnumFromPhysicalRepresentation(typ, v)
+		phys, log, err := tree.GetEnumComponentsFromPhysicalRep(typ, v)
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDEnum(tree.DEnum{EnumTyp: typ, PhysicalRep: phys, LogicalRep: log}), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.Family())
 	}

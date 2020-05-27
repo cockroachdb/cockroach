@@ -3781,6 +3781,20 @@ func (d *DEnum) Size() uintptr {
 		unsafe.Sizeof(d.LogicalRep)
 }
 
+// GetEnumComponentsFromPhysicalRep returns the physical and logical components
+// for an enum of the requested type. It returns an error if it cannot find a
+// matching physical representation.
+func GetEnumComponentsFromPhysicalRep(typ *types.T, rep []byte) ([]byte, string, error) {
+	idx, err := typ.EnumGetIdxOfPhysical(rep)
+	if err != nil {
+		return nil, "", err
+	}
+	meta := typ.TypeMeta.EnumData
+	// Take a pointer into the enum metadata rather than holding on
+	// to a pointer to the input bytes.
+	return meta.PhysicalRepresentations[idx], meta.LogicalRepresentations[idx], nil
+}
+
 // MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
 // and the input physical representation.
 func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (*DEnum, error) {
@@ -3788,16 +3802,14 @@ func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (*DEnum, erro
 	if typ.Oid() == oid.T_anyenum {
 		return nil, errors.New("cannot create enum of unspecified type")
 	}
-	// Take a pointer into the enum metadata rather than holding on
-	// to a pointer to the input bytes.
-	idx, err := typ.EnumGetIdxOfPhysical(rep)
+	phys, log, err := GetEnumComponentsFromPhysicalRep(typ, rep)
 	if err != nil {
 		return nil, err
 	}
 	return &DEnum{
 		EnumTyp:     typ,
-		PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[idx],
-		LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[idx],
+		PhysicalRep: phys,
+		LogicalRep:  log,
 	}, nil
 }
 
