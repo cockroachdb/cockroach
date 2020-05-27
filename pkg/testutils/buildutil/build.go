@@ -79,7 +79,10 @@ func VerifyNoImports(
 						return errors.Errorf("%s imports %s, which is forbidden", short(path), short(imp))
 					}
 				}
-				if forbidden == "c-deps" && imp == "C" && strings.HasPrefix(path, "github.com/cockroachdb/cockroach/pkg") {
+				if forbidden == "c-deps" &&
+					imp == "C" &&
+					strings.HasPrefix(path, "github.com/cockroachdb/cockroach/pkg") &&
+					path != "github.com/cockroachdb/cockroach/pkg/geo/geoproj" {
 					for _, name := range pkg.CgoFiles {
 						if strings.Contains(name, "zcgo_flags") {
 							return errors.Errorf("%s imports %s (%s), which is forbidden", short(path), short(imp), name)
