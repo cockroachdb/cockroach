@@ -655,6 +655,8 @@ type DiskBackedIndexedRowContainer struct {
 	// error is encountered.
 	maxCacheSize int
 	cacheMemAcc  mon.BoundAccount
+	hitCount     int
+	missCount    int
 
 	// DisableCache is intended for testing only. It can be set to true to
 	// disable reading and writing from the row cache.
@@ -782,8 +784,10 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 		// cache will contain 4 rows at positions 0, 1, 2, and 3.
 		if pos >= f.firstCachedRowPos && pos < f.nextPosToCache {
 			requestedRowCachePos := pos - f.firstCachedRowPos
+			f.hitCount++
 			return f.indexedRowsCache.Get(requestedRowCachePos).(tree.IndexedRow), nil
 		}
+		f.missCount++
 		if f.diskRowIter == nil {
 			f.diskRowIter = f.DiskBackedRowContainer.drc.NewIterator(ctx)
 			f.diskRowIter.Rewind()
