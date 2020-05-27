@@ -1400,6 +1400,11 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	sc.RaftElectionTimeoutTicks = 1000000
 	// Reduce the max uncommitted entry size.
 	sc.RaftMaxUncommittedEntriesSize = 64 << 10 // 64 KB
+	// RaftProposalQuota cannot exceed RaftMaxUncommittedEntriesSize.
+	sc.RaftProposalQuota = int64(sc.RaftMaxUncommittedEntriesSize)
+	// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
+	sc.RaftMaxInflightMsgs = 16
+	sc.RaftMaxSizePerMsg = 1 << 10
 	// Disable leader transfers during leaseholder changes so that we
 	// can easily create leader-not-leaseholder scenarios.
 	sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
@@ -5169,6 +5174,9 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 				// Set the proposal quota to a tiny amount so that each write will
 				// exceed it.
 				RaftProposalQuota: 512,
+				// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
+				RaftMaxInflightMsgs: 2,
+				RaftMaxSizePerMsg:   256,
 			},
 		},
 		ReplicationMode: base.ReplicationManual,
