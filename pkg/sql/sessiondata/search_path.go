@@ -38,6 +38,7 @@ const PgExtensionSchemaName = "pg_extension"
 type SearchPath struct {
 	paths                []string
 	containsPgCatalog    bool
+	containsPgExtension  bool
 	containsPgTempSchema bool
 	tempSchemaName       string
 }
@@ -46,17 +47,22 @@ type SearchPath struct {
 // must not be modified after hand-off to MakeSearchPath.
 func MakeSearchPath(paths []string) SearchPath {
 	containsPgCatalog := false
+	containsPgExtension := false
 	containsPgTempSchema := false
 	for _, e := range paths {
-		if e == PgCatalogName {
+		switch e {
+		case PgCatalogName:
 			containsPgCatalog = true
-		} else if e == PgTempSchemaName {
+		case PgTempSchemaName:
 			containsPgTempSchema = true
+		case PgExtensionSchemaName:
+			containsPgExtension = true
 		}
 	}
 	return SearchPath{
 		paths:                paths,
 		containsPgCatalog:    containsPgCatalog,
+		containsPgExtension:  containsPgExtension,
 		containsPgTempSchema: containsPgTempSchema,
 	}
 }
@@ -70,6 +76,7 @@ func (s SearchPath) WithTemporarySchemaName(tempSchemaName string) SearchPath {
 		paths:                s.paths,
 		containsPgCatalog:    s.containsPgCatalog,
 		containsPgTempSchema: s.containsPgTempSchema,
+		containsPgExtension:  s.containsPgExtension,
 		tempSchemaName:       tempSchemaName,
 	}
 }
@@ -99,6 +106,8 @@ func (s SearchPath) MaybeResolveTemporarySchema(schemaName string) (string, erro
 // Iter returns an iterator through the search path. We must include the
 // implicit pg_catalog and temporary schema at the beginning of the search path,
 // unless they have been explicitly set later by the user.
+// We also include pg_extension in the path, as this normally be used in place
+// of the public schema. This should be read before "public" is read.
 // "The system catalog schema, pg_catalog, is always searched, whether it is
 // mentioned in the path or not. If it is mentioned in the path then it will be
 // searched in the specified order. If pg_catalog is not in the path then it
@@ -113,6 +122,7 @@ func (s SearchPath) Iter() SearchPathIter {
 	sp := SearchPathIter{
 		paths:                s.paths,
 		implicitPgCatalog:    !s.containsPgCatalog,
+		implicitPgExtension:  !s.containsPgExtension,
 		implicitPgTempSchema: implicitPgTempSchema,
 		tempSchemaName:       s.tempSchemaName,
 	}
@@ -148,6 +158,9 @@ func (s SearchPath) Equals(other *SearchPath) bool {
 	if s.containsPgCatalog != other.containsPgCatalog {
 		return false
 	}
+	if s.containsPgExtension != other.containsPgExtension {
+		return false
+	}
 	if s.containsPgTempSchema != other.containsPgTempSchema {
 		return false
 	}
@@ -180,6 +193,7 @@ func (s SearchPath) String() string {
 type SearchPathIter struct {
 	paths                []string
 	implicitPgCatalog    bool
+	implicitPgExtension  bool
 	implicitPgTempSchema bool
 	tempSchemaName       string
 	i                    int
@@ -210,6 +224,13 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 				return iter.Next()
 			}
 			return iter.tempSchemaName, true
+		}
+		// pg_extension should be read before delving into the schema.
+		if iter.paths[iter.i-1] == "public" && iter.implicitPgExtension {
+			iter.implicitPgExtension = false
+			// Go back one so `public` can be found again next.
+			iter.i--
+			return PgExtensionSchemaName, true
 		}
 		return iter.paths[iter.i-1], true
 	}
