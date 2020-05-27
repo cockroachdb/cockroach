@@ -9,15 +9,62 @@
 package backupccl_test
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
+
+func backupRestoreTestSetupEmptyWithParams(
+	t testing.TB,
+	clusterSize int,
+	dir string,
+	init func(tc *testcluster.TestCluster),
+	params base.TestClusterArgs,
+) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+	ctx = context.Background()
+
+	params.ServerArgs.ExternalIODir = dir
+	tc = testcluster.StartTestCluster(t, clusterSize, params)
+	init(tc)
+
+	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	cleanupFn := func() {
+		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
+	}
+
+	return ctx, tc, sqlDB, cleanupFn
+}
+
+func createEmptyCluster(
+	t testing.TB, clusterSize int,
+) (sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
+	ctx := context.Background()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	tc := testcluster.StartTestCluster(t, clusterSize, params)
+
+	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	cleanupFn := func() {
+		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
+		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
+	}
+
+	return sqlDB, dir, cleanupFn
+}
 
 // Large test to ensure that all of the system table data is being restored in
 // the new cluster. Ensures that all the moving pieces are working together.
@@ -239,6 +286,25 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2`, incrementalBackupLocation, localFoo)
 	sqlDBRestore.Exec(t, `RESTORE FROM $1, $2`, localFoo, incrementalBackupLocation)
+
+	checkQuery := "SELECT * FROM system.users"
+	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
+}
+
+// TestEmptyFullClusterResotre ensures that we can backup and restore a full
+// cluster backup with only metadata (no user data). Regression test for #49573.
+func TestEmptyFullClusterRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, initNone)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `CREATE USER alice`)
+	sqlDB.Exec(t, `CREATE USER bob`)
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
 
 	checkQuery := "SELECT * FROM system.users"
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
