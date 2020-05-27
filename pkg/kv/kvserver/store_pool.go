@@ -186,19 +186,14 @@ const (
 	storeStatusUnknown
 	// The store is alive but it is throttled.
 	storeStatusThrottled
-	// The store is alive but a replica for the same rangeID was recently
-	// discovered to be corrupt.
-	storeStatusReplicaCorrupted
 	// The store is alive and available.
 	storeStatusAvailable
 	// The store is decommissioning.
 	storeStatusDecommissioning
 )
 
-// status returns the current status of the store, including whether
-// any of the replicas for the specified rangeID are corrupted.
 func (sd *storeDetail) status(
-	now time.Time, threshold time.Duration, rangeID roachpb.RangeID, nl NodeLivenessFunc,
+	now time.Time, threshold time.Duration, nl NodeLivenessFunc,
 ) storeStatus {
 	// The store is considered dead if it hasn't been updated via gossip
 	// within the liveness threshold. Note that lastUpdatedTime is set
@@ -318,7 +313,7 @@ func (sp *StorePool) String() string {
 	for _, id := range ids {
 		detail := sp.detailsMu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
-		status := detail.status(now, timeUntilStoreDead, 0, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn)
 		if status != storeStatusAvailable {
 			fmt.Fprintf(&buf, " (status=%d)", status)
 		}
@@ -472,7 +467,7 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreD
 // decommissioningReplicas filters out replicas on decommissioning node/store
 // from the provided repls and returns them in a slice.
 func (sp *StorePool) decommissioningReplicas(
-	rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor,
+	repls []roachpb.ReplicaDescriptor,
 ) (decommissioningReplicas []roachpb.ReplicaDescriptor) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
@@ -484,7 +479,7 @@ func (sp *StorePool) decommissioningReplicas(
 
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
-		switch detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn) {
+		switch detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn) {
 		case storeStatusDecommissioning:
 			decommissioningReplicas = append(decommissioningReplicas, repl)
 		}
@@ -505,7 +500,7 @@ func (sp *StorePool) ClusterNodeCount() int {
 // from the returned slices.  Replicas on decommissioning node/store are
 // considered live.
 func (sp *StorePool) liveAndDeadReplicas(
-	rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor,
+	repls []roachpb.ReplicaDescriptor,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
@@ -516,7 +511,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		status := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn)
 		switch status {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
@@ -646,11 +641,8 @@ type throttledStoreReasons []string
 // getStoreList returns a storeList that contains all active stores that contain
 // the required attributes and their associated stats. The storeList is filtered
 // according to the provided storeFilter. It also returns the total number of
-// alive and throttled stores. The passed in rangeID is used to check for
-// corrupted replicas.
-func (sp *StorePool) getStoreList(
-	rangeID roachpb.RangeID, filter storeFilter,
-) (StoreList, int, throttledStoreReasons) {
+// alive and throttled stores.
+func (sp *StorePool) getStoreList(filter storeFilter) (StoreList, int, throttledStoreReasons) {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
 
@@ -658,23 +650,23 @@ func (sp *StorePool) getStoreList(
 	for storeID := range sp.detailsMu.storeDetails {
 		storeIDs = append(storeIDs, storeID)
 	}
-	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID, filter)
+	return sp.getStoreListFromIDsRLocked(storeIDs, filter)
 }
 
 // getStoreListFromIDs is the same function as getStoreList but only returns stores
 // from the subset of passed in store IDs.
 func (sp *StorePool) getStoreListFromIDs(
-	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID, filter storeFilter,
+	storeIDs roachpb.StoreIDSlice, filter storeFilter,
 ) (StoreList, int, throttledStoreReasons) {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
-	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID, filter)
+	return sp.getStoreListFromIDsRLocked(storeIDs, filter)
 }
 
 // getStoreListFromIDsRLocked is the same function as getStoreList but requires
 // that the detailsMU read lock is held.
 func (sp *StorePool) getStoreListFromIDsRLocked(
-	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID, filter storeFilter,
+	storeIDs roachpb.StoreIDSlice, filter storeFilter,
 ) (StoreList, int, throttledStoreReasons) {
 	if sp.deterministic {
 		sort.Sort(storeIDs)
@@ -695,15 +687,13 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 			// Do nothing; this store is not in the StorePool.
 			continue
 		}
-		switch s := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
+		switch s := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttled = append(throttled, detail.throttledBecause)
 			if filter != storeFilterThrottled {
 				storeDescriptors = append(storeDescriptors, *detail.desc)
 			}
-		case storeStatusReplicaCorrupted:
-			aliveStoreCount++
 		case storeStatusAvailable:
 			aliveStoreCount++
 			storeDescriptors = append(storeDescriptors, *detail.desc)
