@@ -48,6 +48,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/tools/go/packages"
 )
 
 var buildCtx = func() build.Context {
@@ -68,73 +70,81 @@ func collectFiles(path string, includeTest bool) ([]string, error) {
 		return nil, err
 	}
 
-	srcDir := cwd // top-level relative imports are relative to cwd
-	return collectFilesImpl(cwd, path, srcDir, includeTest, map[string]struct{}{})
-}
-
-func collectFilesImpl(
-	cwd, path, srcDir string, includeTest bool, seen map[string]struct{},
-) ([]string, error) {
-	// Skip packages we've seen before.
-	if _, ok := seen[path]; ok {
-		return nil, nil
-	}
-	seen[path] = struct{}{}
-
-	// Skip standard library packages.
-	if isStdlibPackage(path) {
-		return nil, nil
-	}
+	seen := make(map[string]struct{})
 
 	// Import the package.
-	pkg, err := buildCtx.Import(path, srcDir, build.FindOnly)
+	config := &packages.Config{
+		Dir:   cwd,
+		Mode:  packages.NeedName | packages.NeedFiles | packages.NeedDeps | packages.NeedImports,
+		Tests: includeTest}
+	// We turn this off because it's hard to set up test data that works with the
+	// module system. Nevertheless, the tests are quite comprehensive.
+	config.Env = append(os.Environ(), "GO111MODULE=off")
+	if buildCtx.GOPATH != "" {
+		config.Env = append(config.Env, "GOPATH="+buildCtx.GOPATH)
+	}
+	p, err := packages.Load(config, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to import %w", err)
+		return nil, fmt.Errorf("failed to import %s: %w", path, err)
 	}
 
-	sourceFileSets := [][]string{
-		// Include all Go and Cgo source files.
-		pkg.GoFiles, pkg.CgoFiles, pkg.IgnoredGoFiles, pkg.InvalidGoFiles,
-		pkg.CFiles, pkg.CXXFiles, pkg.MFiles, pkg.HFiles, pkg.FFiles, pkg.SFiles,
-		pkg.SwigFiles, pkg.SwigCXXFiles, pkg.SysoFiles,
-
-		// Include the package directory itself so that the target is considered
-		// out-of-date if a new file is added to the directory.
-		{"."},
-	}
-	importSets := [][]string{pkg.Imports}
-	if includeTest {
-		sourceFileSets = append(sourceFileSets, pkg.TestGoFiles, pkg.XTestGoFiles)
-		importSets = append(importSets, pkg.TestImports, pkg.XTestImports)
-	}
-
-	// Collect files recursively from the package and its dependencies.
 	var out []string
-	for _, sourceFiles := range sourceFileSets {
-		for _, sourceFile := range sourceFiles {
-			if isFileAlwaysIgnored(sourceFile) || strings.HasPrefix(sourceFile, "zcgo_flags") {
-				continue
-			}
-			f, err := filepath.Rel(cwd, filepath.Join(pkg.Dir, sourceFile))
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, f)
+	var process func(pkg *packages.Package) error
+	process = func(pkg *packages.Package) error {
+		if len(pkg.Errors) > 0 {
+			return fmt.Errorf("failed to import %s: %s", path, pkg.Errors)
 		}
-	}
-	for _, imports := range importSets {
-		for _, imp := range imports {
+		// Skip packages we've seen before.
+		if _, ok := seen[pkg.PkgPath]; ok {
+			return nil
+		}
+		seen[pkg.PkgPath] = struct{}{}
+
+		// Skip standard library packages.
+		if isStdlibPackage(pkg.PkgPath) {
+			return nil
+		}
+		sourceFileSets := [][]string{
+			// Include all Go and Cgo source files.
+			pkg.GoFiles, pkg.OtherFiles,
+		}
+		if len(pkg.GoFiles) > 0 {
+			sourceFileSets = append(sourceFileSets, []string{
+				// Include the package directory itself so that the target is considered
+				// out-of-date if a new file is added to the directory.
+				filepath.Dir(pkg.GoFiles[0]),
+			})
+		}
+
+		// Collect files recursively from the package and its dependencies.
+		for _, sourceFiles := range sourceFileSets {
+			for _, sourceFile := range sourceFiles {
+				if isFileAlwaysIgnored(sourceFile) || strings.HasPrefix(sourceFile, "zcgo_flags") {
+					continue
+				}
+				f, err := filepath.Rel(cwd, sourceFile)
+				if err != nil {
+					return err
+				}
+				out = append(out, f)
+			}
+		}
+		for _, imp := range pkg.Imports {
 			// Only the root package's tests are included in test binaries, so
 			// unconditionally disable includeTest for imported packages.
-			files, err := collectFilesImpl(cwd, imp, pkg.Dir, false /* includeTest */, seen)
-			if err != nil {
-				return nil, err
+			if err := process(imp); err != nil {
+				return err
 			}
-			out = append(out, files...)
+		}
+		return nil
+	}
+	for _, pkg := range p {
+		if err := process(pkg); err != nil {
+			return nil, err
 		}
 	}
 
-	return out, nil
+	return out, err
 }
 
 func isStdlibPackage(path string) bool {
