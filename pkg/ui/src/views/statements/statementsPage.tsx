@@ -283,7 +283,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
               title: "There are no statements since this page was last cleared.",
               description: "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
               label: "Learn more",
-              onClick: () => window.open(statementsTable),
+              buttonHref: statementsTable,
             }}
             sortSetting={this.state.sortSetting}
             onChangeSortSetting={this.changeSortSetting}

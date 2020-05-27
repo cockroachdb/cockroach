@@ -13,26 +13,35 @@ import React from "react";
 import { Anchor, Button, Text, TextTypes } from "src/components";
 import "./empty.styl";
 
-export interface IEmptyProps {
+interface IMainEmptyProps {
   title?: string;
   description?: string;
   label?: React.ReactNode;
   link?: string;
   anchor?: string;
   backgroundImage?: string;
-  onClick?: () => void;
-  btnType?: "button" | "anchor";
 }
+
+type OnClickXORHref = {
+  onClick?: () => void;
+  buttonHref?: never;
+} | {
+    onClick?: never;
+    buttonHref?: string;
+  };
+
+export type EmptyProps = OnClickXORHref & IMainEmptyProps;
 
 export const Empty = ({
   title,
   description,
   anchor,
   label,
-  onClick,
   link,
   backgroundImage,
-}: IEmptyProps) => (
+  onClick,
+  buttonHref,
+}: EmptyProps) => (
   <div className="cl-empty-view" style={{ backgroundImage: `url(${backgroundImage})` }}>
     <Text
       className="cl-empty-view__title"
@@ -50,19 +59,18 @@ export const Empty = ({
         </Text>
       </main>
       <footer className="cl-empty-view__footer">
-        <Button
-          type="primary"
-          onClick={onClick}
-        >
-          {label}
-        </Button>
+           <Button
+              type="primary"
+              onClick={() => buttonHref ? window.open(buttonHref) :  onClick && onClick()}
+            >
+              {label}
+            </Button>
       </footer>
     </div>
   </div>
 );
 
 Empty.defaultProps = {
-  onClick: () => {},
   backgroundImage: heroBannerLp,
   anchor: "Learn more",
   label: "Learn more",

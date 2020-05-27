@@ -159,7 +159,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
             title: "There are no jobs to display.",
             description: "The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds.",
             label: "Learn more",
-            onClick: () => window.open(jobTable),
+            buttonHref: jobTable,
           }}
           pagination={pagination}
         />
