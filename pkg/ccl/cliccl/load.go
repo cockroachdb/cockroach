@@ -59,7 +59,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	}
 
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(ctx, uri, base.SQLExternalIOConfig{},
+		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
 			cluster.NoSettings, blobs.TestEmptyBlobClientFactory)
 	}
 	// This reads the raw backup descriptor (with table descriptors possibly not
