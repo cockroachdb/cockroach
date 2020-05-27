@@ -1259,26 +1259,98 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
+	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
 	if cfg.useTenant {
 		var err error
-		t.tenantAddr, err = t.cluster.Server(t.nodeIdx).StartTenant(roachpb.MakeTenantID(10))
+		t.tenantAddr, err = t.cluster.Server(t.nodeIdx).StartTenant(base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: true})
 		if err != nil {
 			t.rootT.Fatalf("%+v", err)
 		}
+
+		// Open a connection to this tenant to set any cluster settings specified
+		// by the test config.
+		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddr, "Tenant", url.User(security.RootUser))
+		defer cleanup()
+		if params.ServerArgs.Insecure {
+			pgURL.RawQuery = "sslmode=disable"
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.rootT.Fatal(err)
+		}
+		defer db.Close()
+		connsForClusterSettingChanges = append(connsForClusterSettingChanges, db)
 	}
 
-	if _, err := t.cluster.ServerConn(0).Exec(
-		"SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = $1::int", 5,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.overrideDistSQLMode != "" {
-		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.overrideDistSQLMode,
+	// Set cluster settings.
+	for _, conn := range connsForClusterSettingChanges {
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = $1::int", 5,
 		); err != nil {
 			t.Fatal(err)
 		}
+
+		if cfg.overrideDistSQLMode != "" {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.overrideDistSQLMode,
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if cfg.overrideVectorize != "" {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.overrideVectorize,
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Always override the vectorize row count threshold. This runs all supported
+		// queries (relative to the mode) through the vectorized execution engine.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold = 0",
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := conn.Exec(
+			fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size to %d",
+				t.randomizedVectorizedBatchSize),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if cfg.overrideAutoStats != "" {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
+			); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			// Background stats collection is enabled by default, but we've seen tests
+			// flake with it on. When the issue manifests, it seems to be around a
+			// schema change transaction getting pushed, which causes it to increment a
+			// table ID twice instead of once, causing non-determinism.
+			//
+			// In the short term, we disable auto stats by default to avoid the flakes.
+			//
+			// In the long run, these tests should be running with default settings as
+			// much as possible, so we likely want to address this. Two options are
+			// either making schema changes more resilient to being pushed or possibly
+			// making auto stats avoid pushing schema change transactions. There might
+			// be other better alternatives than these.
+			//
+			// See #37751 for details.
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	if cfg.overrideDistSQLMode != "" {
 		_, ok := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
 		if !ok {
 			t.Fatalf("invalid distsql mode override: %s", cfg.overrideDistSQLMode)
@@ -1301,56 +1373,6 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 			}
 			return nil
 		})
-	}
-	if cfg.overrideVectorize != "" {
-		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.overrideVectorize,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Always override the vectorize row count threshold. This runs all supported
-	// queries (relative to the mode) through the vectorized execution engine.
-	if _, err := t.cluster.ServerConn(0).Exec(
-		"SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold = 0",
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := t.cluster.ServerConn(0).Exec(
-		fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size to %d",
-			t.randomizedVectorizedBatchSize),
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.overrideAutoStats != "" {
-		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
-		); err != nil {
-			t.Fatal(err)
-		}
-	} else {
-		// Background stats collection is enabled by default, but we've seen tests
-		// flake with it on. When the issue manifests, it seems to be around a
-		// schema change transaction getting pushed, which causes it to increment a
-		// table ID twice instead of once, causing non-determinism.
-		//
-		// In the short term, we disable auto stats by default to avoid the flakes.
-		//
-		// In the long run, these tests should be running with default settings as
-		// much as possible, so we likely want to address this. Two options are
-		// either making schema changes more resilient to being pushed or possibly
-		// making auto stats avoid pushing schema change transactions. There might
-		// be other better alternatives than these.
-		//
-		// See #37751 for details.
-		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-		); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	// db may change over the lifetime of this function, with intermediate

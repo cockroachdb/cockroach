@@ -528,17 +528,22 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
-func (ts *TestServer) StartTenant(tenantID roachpb.TenantID) (pgAddr string, _ error) {
+func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ error) {
 	ctx := context.Background()
 
 	if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-		ctx, "testserver-create-tenant", nil /* txn */, fmt.Sprintf("SELECT crdb_internal.create_tenant(%d)", tenantID.ToUint64()),
+		ctx, "testserver-create-tenant", nil /* txn */, fmt.Sprintf("SELECT crdb_internal.create_tenant(%d)", params.TenantID.ToUint64()),
 	); err != nil {
 		return "", err
 	}
 
 	args := testSQLServerArgs(ts)
-	args.tenantID = tenantID
+	args.tenantID = params.TenantID
+	if params.AllowSettingClusterSettings {
+		args.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
+			ClusterSettingsUpdater: args.Settings.MakeUpdater(),
+		}
+	}
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return "", err
