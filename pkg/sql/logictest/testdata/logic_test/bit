@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 query TTT
 SELECT B'1000101'::BIT(4)::STRING,
        B'1000101'::BIT(4),

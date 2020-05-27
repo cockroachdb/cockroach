@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 # Check that the various things in a table definition are properly escaped when
 # printed out.
 statement ok
