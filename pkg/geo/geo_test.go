@@ -421,10 +421,56 @@ func TestGeographyAsS2(t *testing.T) {
 			g, err := ParseGeography(tc.wkt)
 			require.NoError(t, err)
 
-			shapes, err := g.AsS2()
+			shapes, err := g.AsS2(EmptyBehaviorError)
 			require.NoError(t, err)
 
 			require.Equal(t, tc.expected, shapes)
+		})
+	}
+
+	// Test when things are empty.
+	emptyTestCases := []struct {
+		wkt          string
+		expectedOmit []s2.Region
+	}{
+		{
+			"GEOMETRYCOLLECTION ( LINESTRING EMPTY, MULTIPOINT((1.0 5.0), (3.0 4.0)) )",
+			[]s2.Region{
+				s2.PointFromLatLng(s2.LatLngFromDegrees(5.0, 1.0)),
+				s2.PointFromLatLng(s2.LatLngFromDegrees(4.0, 3.0)),
+			},
+		},
+		{
+			"GEOMETRYCOLLECTION EMPTY",
+			nil,
+		},
+		{
+			"MULTILINESTRING (EMPTY, (1.0 2.0, 3.0 4.0))",
+			[]s2.Region{
+				s2.PolylineFromLatLngs([]s2.LatLng{
+					s2.LatLngFromDegrees(2.0, 1.0),
+					s2.LatLngFromDegrees(4.0, 3.0),
+				}),
+			},
+		},
+		{
+			"MULTILINESTRING (EMPTY, EMPTY)",
+			nil,
+		},
+	}
+
+	for _, tc := range emptyTestCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := ParseGeography(tc.wkt)
+			require.NoError(t, err)
+
+			_, err = g.AsS2(EmptyBehaviorError)
+			require.Error(t, err)
+			require.True(t, IsEmptyGeometryError(err))
+
+			shapes, err := g.AsS2(EmptyBehaviorOmit)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOmit, shapes)
 		})
 	}
 }
