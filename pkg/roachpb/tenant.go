@@ -70,3 +70,9 @@ func checkValid(id uint64) {
 		panic("invalid tenant ID 0")
 	}
 }
+
+// IsSystemTenantID returns whether the provided ID corresponds to that of the
+// system tenant.
+func IsSystemTenantID(id uint64) bool {
+	return id == SystemTenantID.ToUint64()
+}

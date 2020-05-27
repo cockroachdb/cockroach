@@ -59,7 +59,16 @@ UPDATE system.tenants SET active = false WHERE id = 10
 statement error pgcode 42501 user root does not have DELETE privilege on relation tenants
 DELETE FROM system.tenants WHERE id = 10
 
+# The system tenant cannot be created or destroyed.
+
+query error pgcode 22023 cannot create tenant "1", ID assigned to system tenant
+SELECT crdb_internal.create_tenant(1)
+
+query error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
+SELECT crdb_internal.destroy_tenant(1)
+
 # Verify that tenants are able to set in-memory cluster settings in logic tests.
+
 statement ok
 SET CLUSTER SETTING sql.defaults.vectorize='off'
 

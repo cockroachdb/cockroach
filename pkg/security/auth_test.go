@@ -200,11 +200,11 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				return
 			}
-			err = hook(tc.username, true /* clientConnection */)
+			_, err = hook(tc.username, true /* clientConnection */)
 			if (err == nil) != tc.publicHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.publicHookSuccess, err)
 			}
-			err = hook(tc.username, false /* clientConnection */)
+			_, err = hook(tc.username, false /* clientConnection */)
 			if (err == nil) != tc.privateHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.privateHookSuccess, err)
 			}
