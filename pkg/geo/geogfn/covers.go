@@ -48,12 +48,17 @@ func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 
 // covers is the internal calculation for Covers.
 func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
-	aRegions, err := a.AsS2()
+	// Ignore EMPTY regions in a.
+	aRegions, err := a.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return false, err
 	}
-	bRegions, err := b.AsS2()
+	// If any of b is empty, we cannot cover it. Error and catch to return false.
+	bRegions, err := b.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
 
