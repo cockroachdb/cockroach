@@ -581,6 +581,21 @@ const (
 	TypeObject
 )
 
+// NewQualifiedObjectName returns an ObjectName of the corresponding kind.
+// It is used mainly for constructing appropriate error messages depending
+// on what kind of object was requested.
+func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKind) ObjectName {
+	switch kind {
+	case TableObject:
+		name := MakeTableNameWithSchema(Name(catalog), Name(schema), Name(object))
+		return &name
+	case TypeObject:
+		name := MakeNewQualifiedTypeName(catalog, schema, object)
+		return &name
+	}
+	return nil
+}
+
 // ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
