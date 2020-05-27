@@ -80,7 +80,7 @@ func aggPropsNullableArgs() tree.FunctionProperties {
 // allMaxMinAggregateTypes contains extra types that aren't in
 // types.Scalar that the max/min aggregate functions are defined on.
 var allMaxMinAggregateTypes = append(
-	[]*types.T{types.AnyCollatedString},
+	[]*types.T{types.AnyCollatedString, types.AnyEnum},
 	types.Scalar...,
 )
 

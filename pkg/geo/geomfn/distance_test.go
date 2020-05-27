@@ -195,6 +195,41 @@ var distanceTestCases = []struct {
 		0,
 		50,
 	},
+	{
+		"GEOMETRYCOLLECTION (POINT, EMPTY) with POINT",
+		"GEOMETRYCOLLECTION ( POINT(1.0 2.0), LINESTRING EMPTY )",
+		"POINT(1.0 2.0)",
+		0,
+		0,
+	},
+	{
+		"GEOMETRYCOLLECTION (POINT, EMPTY) with DIFFERENT POINT",
+		"GEOMETRYCOLLECTION ( POINT(1.0 2.0), LINESTRING EMPTY )",
+		"POINT(1.0 3.0)",
+		1,
+		1,
+	},
+}
+
+// TODO(otan): delete after https://github.com/cockroachdb/cockroach/issues/49209
+var knownGEOSPanics = map[string]struct{}{
+	"GEOMETRYCOLLECTION (POINT, EMPTY) with POINT":           {},
+	"GEOMETRYCOLLECTION (POINT, EMPTY) with DIFFERENT POINT": {},
+}
+
+var falseDWithinTestCases = map[string]struct{}{
+	"GEOMETRYCOLLECTION (POINT, EMPTY) with POINT":           {},
+	"GEOMETRYCOLLECTION (POINT, EMPTY) with DIFFERENT POINT": {},
+}
+
+var emptyDistanceTestCases = []struct {
+	a string
+	b string
+}{
+	{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+	{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION (LINESTRING EMPTY)"},
+	{"GEOMETRYCOLLECTION EMPTY", "POINT(1.0 1.0)"},
+	{"POINT(1.0 1.0)", "GEOMETRYCOLLECTION EMPTY"},
 }
 
 func TestMinDistance(t *testing.T) {
@@ -215,18 +250,34 @@ func TestMinDistance(t *testing.T) {
 			require.Equal(t, tc.expectedMinDistance, ret)
 
 			// Check distance roughly the same as GEOS.
-			ret, err = geos.MinDistance(a.EWKB(), b.EWKB())
-			require.NoError(t, err)
-			require.LessOrEqualf(
-				t,
-				math.Abs(tc.expectedMinDistance-ret),
-				0.0000001, // GEOS and PostGIS/CRDB can return results close by.
-				"expected distance within %f, GEOS returns %f",
-				tc.expectedMinDistance,
-				ret,
-			)
+			if _, panicsInGEOS := knownGEOSPanics[tc.desc]; !panicsInGEOS {
+				ret, err = geos.MinDistance(a.EWKB(), b.EWKB())
+				require.NoError(t, err)
+				require.LessOrEqualf(
+					t,
+					math.Abs(tc.expectedMinDistance-ret),
+					0.0000001, // GEOS and PostGIS/CRDB can return results close by.
+					"expected distance within %f, GEOS returns %f",
+					tc.expectedMinDistance,
+					ret,
+				)
+			}
 		})
 	}
+
+	t.Run("errors for EMPTY geometries", func(t *testing.T) {
+		for _, tc := range emptyDistanceTestCases {
+			t.Run(fmt.Sprintf("%s to %s", tc.a, tc.b), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+				_, err = MinDistance(a, b)
+				require.Error(t, err)
+				require.True(t, geo.IsEmptyGeometryError(err))
+			})
+		}
+	})
 
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := MinDistance(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
@@ -267,6 +318,12 @@ func TestDWithin(t *testing.T) {
 			b, err := geo.ParseGeometry(tc.b)
 			require.NoError(t, err)
 
+			// empty geometries should always return false.
+			expected := true
+			if _, ok := falseDWithinTestCases[tc.desc]; ok {
+				expected = false
+			}
+
 			for _, val := range []float64{
 				tc.expectedMinDistance,
 				tc.expectedMinDistance + 0.1,
@@ -276,11 +333,11 @@ func TestDWithin(t *testing.T) {
 				t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
 					dwithin, err := DWithin(a, b, val)
 					require.NoError(t, err)
-					require.True(t, dwithin)
+					require.Equal(t, expected, dwithin)
 
 					dwithin, err = DWithin(a, b, val)
 					require.NoError(t, err)
-					require.True(t, dwithin)
+					require.Equal(t, expected, dwithin)
 				})
 			}
 
@@ -304,6 +361,20 @@ func TestDWithin(t *testing.T) {
 		})
 	}
 
+	t.Run("returns false for EMPTY geometries", func(t *testing.T) {
+		for _, tc := range emptyDistanceTestCases {
+			t.Run(fmt.Sprintf("%s to %s", tc.a, tc.b), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+				dwithin, err := DWithin(a, b, 0)
+				require.NoError(t, err)
+				require.False(t, dwithin)
+			})
+		}
+	})
+
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := MinDistance(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
 		requireMismatchingSRIDError(t, err)
@@ -323,6 +394,12 @@ func TestDFullyWithin(t *testing.T) {
 			b, err := geo.ParseGeometry(tc.b)
 			require.NoError(t, err)
 
+			// empty geometries should always return false.
+			expected := true
+			if _, ok := falseDWithinTestCases[tc.desc]; ok {
+				expected = false
+			}
+
 			for _, val := range []float64{
 				tc.expectedMaxDistance,
 				tc.expectedMaxDistance + 0.1,
@@ -330,13 +407,13 @@ func TestDFullyWithin(t *testing.T) {
 				tc.expectedMaxDistance * 2,
 			} {
 				t.Run(fmt.Sprintf("dfullywithin:%f", val), func(t *testing.T) {
-					dwithax, err := DFullyWithin(a, b, val)
+					dfullywithin, err := DFullyWithin(a, b, val)
 					require.NoError(t, err)
-					require.True(t, dwithax)
+					require.Equal(t, expected, dfullywithin)
 
-					dwithax, err = DFullyWithin(a, b, val)
+					dfullywithin, err = DFullyWithin(a, b, val)
 					require.NoError(t, err)
-					require.True(t, dwithax)
+					require.Equal(t, expected, dfullywithin)
 				})
 			}
 
@@ -347,13 +424,13 @@ func TestDFullyWithin(t *testing.T) {
 			} {
 				if val > 0 {
 					t.Run(fmt.Sprintf("dfullywithin:%f", val), func(t *testing.T) {
-						dwithin, err := DFullyWithin(a, b, val)
+						dfullywithin, err := DFullyWithin(a, b, val)
 						require.NoError(t, err)
-						require.False(t, dwithin)
+						require.False(t, dfullywithin)
 
-						dwithin, err = DFullyWithin(a, b, val)
+						dfullywithin, err = DFullyWithin(a, b, val)
 						require.NoError(t, err)
-						require.False(t, dwithin)
+						require.False(t, dfullywithin)
 					})
 				}
 			}

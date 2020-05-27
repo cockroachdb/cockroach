@@ -354,6 +354,30 @@ func TestCovers(t *testing.T) {
 			"MULTIPOINT((0.5 0.5), (1.5 0.5))'",
 			true,
 		},
+		{
+			"EMPTY GEOMETRYCOLLECTION does not cover itself",
+			"GEOMETRYCOLLECTION EMPTY",
+			"GEOMETRYCOLLECTION EMPTY",
+			false,
+		},
+		{
+			"nothing covers an empty GEOMETRYCOLLECTION",
+			"POINT(1.0 1.0)",
+			"GEOMETRYCOLLECTION EMPTY",
+			false,
+		},
+		{
+			"nothing covers a GEOMETRYCOLLECTION with an EMPTY element",
+			"POINT(1.0 1.0)",
+			"GEOMETRYCOLLECTION EMPTY",
+			false,
+		},
+		{
+			"empty collection contains point which covers another",
+			"GEOMETRYCOLLECTION(LINESTRING EMPTY, POINT(1.0 2.0))",
+			"POINT(1.0 2.0)",
+			true,
+		},
 	}
 
 	for _, tc := range testCases {

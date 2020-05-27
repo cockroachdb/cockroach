@@ -851,7 +851,17 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(len(t.FlatCoords()) / t.Stride())), nil
+				switch t := t.(type) {
+				case *geom.GeometryCollection:
+					// FlatCoords() does not work on GeometryCollection.
+					numPoints := 0
+					for _, g := range t.Geoms() {
+						numPoints += len(g.FlatCoords()) / g.Stride()
+					}
+					return tree.NewDInt(tree.DInt(numPoints)), nil
+				default:
+					return tree.NewDInt(tree.DInt(len(t.FlatCoords()) / t.Stride())), nil
+				}
 			},
 			types.Int,
 			infoBuilder{
@@ -1241,6 +1251,9 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MinDistance(a.Geometry, b.Geometry)
 				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDFloat(tree.DFloat(ret)), nil
@@ -1255,6 +1268,9 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			func(ctx *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
 				ret, err := geogfn.Distance(a.Geography, b.Geography, geogfn.UseSpheroid)
 				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDFloat(tree.DFloat(ret)), nil
@@ -1281,6 +1297,9 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 
 				ret, err := geogfn.Distance(a.Geography, b.Geography, toUseSphereOrSpheroid(useSpheroid))
 				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDFloat(tree.DFloat(ret)), nil
@@ -1299,6 +1318,9 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MaxDistance(a.Geometry, b.Geometry)
 				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDFloat(tree.DFloat(ret)), nil
