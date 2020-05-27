@@ -30,10 +30,12 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 				t.Fatal(err)
 			}
 			maxOps := 100
+			concurrency := 5
 			if local {
 				maxOps = 10
+				concurrency = 2
 			}
-			runSchemaChangeMixedVersions(ctx, t, c, maxOps, predV)
+			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency, predV)
 		},
 	})
 }
@@ -47,15 +49,14 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 	}
 }
 
-func runSchemaChangeWorkloadStep(maxOps int) versionStep {
+func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep {
 	var numFeatureRuns int
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		numFeatureRuns++
 		t.l.Printf("Workload step run: %d", numFeatureRuns)
-		loadNode := u.c.All().randNode()[0]
 		runCmd := []string{
 			"./workload run",
-			fmt.Sprintf("schemachange --concurrency 2 --max-ops %d --verbose=1", maxOps),
+			fmt.Sprintf("schemachange --concurrency %d --max-ops %d --verbose=1", maxOps, concurrency),
 			fmt.Sprintf("{pgurl:1-%d}", u.c.spec.NodeCount),
 		}
 		u.c.Run(ctx, u.c.Node(loadNode), runCmd...)
@@ -63,12 +64,12 @@ func runSchemaChangeWorkloadStep(maxOps int) versionStep {
 }
 
 func runSchemaChangeMixedVersions(
-	ctx context.Context, t *test, c *cluster, maxOps int, predecessorVersion string,
+	ctx context.Context, t *test, c *cluster, maxOps, concurrency int, predecessorVersion string,
 ) {
 	// An empty string will lead to the cockroach binary specified by flag
 	// `cockroach` to be used.
 	const mainVersion = ""
-	schemaChangeStep := runSchemaChangeWorkloadStep(maxOps)
+	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], maxOps, concurrency)
 
 	u := newVersionUpgradeTest(c,
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),

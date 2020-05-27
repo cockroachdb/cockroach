@@ -95,7 +95,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 	}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
-	schemaChangeStep := runSchemaChangeWorkloadStep(10 /* maxOps */)
+	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], 10 /* maxOps */, 2 /* concurrency */)
 
 	// The steps below start a cluster at predecessorVersion (from a fixture),
 	// then start an upgrade that is rolled back, and finally start and finalize
