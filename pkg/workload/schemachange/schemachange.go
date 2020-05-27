@@ -244,63 +244,106 @@ type schemaChangeWorker struct {
 	seqNum          *int64
 }
 
-func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
+// handleOpError returns an error if the op error is considered serious and
+// we should terminate the workload.
+func handleOpError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if pgErr := (pgx.PgError{}); errors.As(err, &pgErr) {
+		sqlstate := pgErr.SQLState()
+		class := sqlstate[0:2]
+		switch class {
+		case "09":
+			return errors.Wrap(err, "Class 09 - Triggered Action Exception")
+		case "XX":
+			return errors.Wrap(err, "Class XX - Internal Error")
+		}
+	} else {
+		return errors.Wrapf(err, "unexpected error %v", err)
+	}
+	return nil
+}
+
+var (
+	errRunInTxnFatalSentinel = errors.New("fatal error when running txn")
+	errRunInTxnRbkSentinel   = errors.New("txn needs to rollback")
+)
+
+func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
 	var log strings.Builder
-	// Run between 1 and maxOpsPerWorker schema change operations.
-	n := 1 + w.rng.Intn(w.maxOpsPerWorker)
-	for i := 0; i < n; i++ {
+	for i := 0; i < opsNum; i++ {
 		op, noops, err := w.randOp(tx)
 		if err != nil {
-			return noops, errors.Wrap(err, "randOp")
+			return noops, errors.Mark(
+				errors.Wrap(err, "could not generate a random operation"),
+				errRunInTxnFatalSentinel,
+			)
 		}
-		log.WriteString(noops)
+		if w.verbose >= 2 {
+			// Print the failed attempts to produce a random operation.
+			log.WriteString(noops)
+		}
 		log.WriteString(fmt.Sprintf("  %s;\n", op))
 		if !w.dryRun {
-			if _, err := tx.Exec(op); err != nil {
-				return log.String(), errors.Wrapf(err, "%s failed", op)
+			histBin := "opOk"
+			start := timeutil.Now()
+			if _, err = tx.Exec(op); err != nil {
+				histBin = "txnRbk"
+				log.WriteString(fmt.Sprintf("***FAIL: %v\n", err))
+				log.WriteString("ROLLBACK;\n")
+				return log.String(), errors.Mark(err, errRunInTxnRbkSentinel)
 			}
+			elapsed := timeutil.Since(start)
+			w.hists.Get(histBin).Record(elapsed)
 		}
 	}
 	return log.String(), nil
 }
 
 func (w *schemaChangeWorker) run(_ context.Context) error {
-	start := timeutil.Now()
 	tx, err := w.pool.Get().Begin()
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
+	opsNum := 1 + w.rng.Intn(w.maxOpsPerWorker)
 
-	var histBin string
-	log, err := w.runInTxn(tx)
-	elapsed := timeutil.Since(start)
+	// Run between 1 and maxOpsPerWorker schema change operations.
+	start := timeutil.Now()
+	logs, err := w.runInTxn(tx, opsNum)
+	logs = "BEGIN\n" + logs
+	defer func() {
+		if w.verbose >= 1 {
+			fmt.Print(logs)
+		}
+	}()
+
 	if err != nil {
-		rbkErr := tx.Rollback()
-		if rbkErr != nil {
-			w.hists.Get("rbk").Record(elapsed)
-			err = errors.Wrapf(err, "ROLLBACK: %v", rbkErr)
-		}
-		log = log + "ROLLBACK;\n"
-		histBin = "err"
-		// TODO(spaskob): should we log the ROLLBACK error as well?
-	} else {
-		log = log + "COMMIT;\n"
-		if err = tx.Commit(); err != nil {
-			histBin = "cmt_err"
-			err = errors.Wrap(err, "COMMIT")
-		} else {
-			histBin = "ok"
+		switch {
+		case errors.Is(err, errRunInTxnFatalSentinel):
+			return err
+		case errors.Is(err, errRunInTxnRbkSentinel):
+			if seriousErr := handleOpError(err); seriousErr != nil {
+				return seriousErr
+			}
+			if rbkErr := tx.Rollback(); rbkErr != nil {
+				return errors.Wrapf(err, "Could not rollback", rbkErr)
+			}
+			return nil
+		default:
+			return errors.Wrapf(err, "Unexpected error")
 		}
 	}
-	w.hists.Get(histBin).Record(elapsed)
-	if w.verbose >= 1 {
-		fmt.Print("BEGIN\n")
-		fmt.Print(log)
-		if err != nil {
-			fmt.Printf("%v\n", err)
-		}
+
+	// If there were no errors commit the txn.
+	histBin := "txnOk"
+	cmtErrMsg := ""
+	if err = tx.Commit(); err != nil {
+		histBin = "txnCmtErr"
+		cmtErrMsg = fmt.Sprintf("***FAIL: %v", err)
 	}
-	// TODO(spaskob): what to do with the error instead dropping it?
+	w.hists.Get(histBin).Record(timeutil.Since(start))
+	logs = logs + fmt.Sprintf("COMMIT;  %s\n", cmtErrMsg)
 	return nil
 }
 
@@ -391,9 +434,7 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		// TODO(spaskob): use more fine-grained error reporting.
 		if stmt == "" || errors.Is(err, pgx.ErrNoRows) {
-			if w.verbose >= 2 {
-				log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
-			}
+			log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
 			continue
 		}
 		return stmt, log.String(), err
