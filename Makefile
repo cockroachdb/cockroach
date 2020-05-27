@@ -1633,8 +1633,7 @@ clean: clean-c-deps clean-execgen-files
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
 	rm -rf artifacts bin $(ARCHIVE) pkg/sql/parser/gen vendor
 
-vendor/modules.txt: go.sum
-	$(GO_INSTALL) -v github.com/otan-cockroach/modvendor
+vendor/modules.txt: go.sum bin/modvendor
 	$(GO) mod vendor
 	./bin/modvendor -copy="**/*.c **/*.h **/*.proto"  -inject 'github.com/grpc-ecosystem/grpc-gateway:github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api,github.com/grpc-ecosystem/grpc-gateway:github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/rpc,github.com/prometheus/client_model:github.com/prometheus/client_model'
 
