@@ -77,6 +77,28 @@ func TestRangeDescriptorFindReplica(t *testing.T) {
 	}
 }
 
+func TestRangeDescriptorSafeMessage(t *testing.T) {
+	desc := RangeDescriptor{
+		RangeID:  1,
+		StartKey: RKey("c"),
+		EndKey:   RKey("g"),
+		InternalReplicas: []ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2},
+			{NodeID: 3, StoreID: 3},
+		},
+	}
+
+	const expStr = `r1: [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`
+
+	if str := desc.SafeMessage(); str != expStr {
+		t.Errorf(
+			"expected meta: %s\n"+
+				"got:          %s",
+			expStr, str)
+	}
+}
+
 func TestRangeDescriptorMissingReplica(t *testing.T) {
 	desc := RangeDescriptor{}
 	r, ok := desc.GetReplicaDescriptor(0)
