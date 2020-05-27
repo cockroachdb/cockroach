@@ -1140,6 +1140,46 @@ func (t *T) UserDefined() bool {
 	return t.Family() == EnumFamily
 }
 
+var familyNames = map[Family]string{
+	AnyFamily:            "any",
+	ArrayFamily:          "array",
+	BitFamily:            "bit",
+	BoolFamily:           "bool",
+	BytesFamily:          "bytes",
+	CollatedStringFamily: "collatedstring",
+	DateFamily:           "date",
+	DecimalFamily:        "decimal",
+	FloatFamily:          "float",
+	GeographyFamily:      "geography",
+	GeometryFamily:       "geometry",
+	INetFamily:           "inet",
+	IntFamily:            "int",
+	IntervalFamily:       "interval",
+	JsonFamily:           "jsonb",
+	OidFamily:            "oid",
+	StringFamily:         "string",
+	TimeFamily:           "time",
+	TimestampFamily:      "timestamp",
+	TimestampTZFamily:    "timestamptz",
+	TimeTZFamily:         "timetz",
+	TupleFamily:          "tuple",
+	UnknownFamily:        "unknown",
+	UuidFamily:           "uuid",
+	EnumFamily:           "enum",
+}
+
+// Name returns a user-friendly word indicating the family type.
+//
+// TODO(radu): investigate whether anything breaks if we use
+// enumvalue_customname and use String() instead.
+func (f Family) Name() string {
+	ret, ok := familyNames[f]
+	if !ok {
+		panic(errors.AssertionFailedf("unexpected Family: %d", f))
+	}
+	return ret
+}
+
 // Name returns a single word description of the type that describes it
 // succinctly, but without all the details, such as width, locale, etc. The name
 // is sometimes the same as the name returned by SQLStandardName, but is more
@@ -1147,9 +1187,10 @@ func (t *T) UserDefined() bool {
 //
 // TODO(andyk): Should these be changed to be the same as SQLStandardName?
 func (t *T) Name() string {
-	switch t.Family() {
+	switch fam := t.Family(); fam {
 	case AnyFamily:
 		return "anyelement"
+
 	case ArrayFamily:
 		switch t.Oid() {
 		case oid.T_oidvector:
@@ -1158,19 +1199,13 @@ func (t *T) Name() string {
 			return "int2vector"
 		}
 		return t.ArrayContents().Name() + "[]"
+
 	case BitFamily:
 		if t.Oid() == oid.T_varbit {
 			return "varbit"
 		}
 		return "bit"
-	case BoolFamily:
-		return "bool"
-	case BytesFamily:
-		return "bytes"
-	case DateFamily:
-		return "date"
-	case DecimalFamily:
-		return "decimal"
+
 	case FloatFamily:
 		switch t.Width() {
 		case 64:
@@ -1180,12 +1215,7 @@ func (t *T) Name() string {
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
-	case GeographyFamily:
-		return "geography"
-	case GeometryFamily:
-		return "geometry"
-	case INetFamily:
-		return "inet"
+
 	case IntFamily:
 		switch t.Width() {
 		case 64:
@@ -1197,12 +1227,10 @@ func (t *T) Name() string {
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
-	case IntervalFamily:
-		return "interval"
-	case JsonFamily:
-		return "jsonb"
+
 	case OidFamily:
 		return t.SQLStandardName()
+
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
 		case oid.T_text:
@@ -1218,21 +1246,11 @@ func (t *T) Name() string {
 			return "name"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
-	case TimeFamily:
-		return "time"
-	case TimestampFamily:
-		return "timestamp"
-	case TimestampTZFamily:
-		return "timestamptz"
-	case TimeTZFamily:
-		return "timetz"
+
 	case TupleFamily:
 		// Tuple types are currently anonymous, with no name.
 		return ""
-	case UnknownFamily:
-		return "unknown"
-	case UuidFamily:
-		return "uuid"
+
 	case EnumFamily:
 		if t.Oid() == oid.T_anyenum {
 			return "anyenum"
@@ -1242,8 +1260,9 @@ func (t *T) Name() string {
 			return "unknown_enum"
 		}
 		return t.TypeMeta.Name.Basename()
+
 	default:
-		panic(errors.AssertionFailedf("unexpected Family: %s", t.Family()))
+		return fam.Name()
 	}
 }
 
