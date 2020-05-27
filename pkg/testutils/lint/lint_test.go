@@ -1661,6 +1661,7 @@ func TestLint(t *testing.T) {
 			"pgnotice.Newf",
 			"pgnotice.NewWithSeverityf",
 			"errors.Errorf",
+			"errors.New",
 			"errors.Newf",
 			"errors.Wrap",
 			"errors.Wrapf",
