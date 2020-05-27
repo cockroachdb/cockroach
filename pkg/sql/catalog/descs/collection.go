@@ -739,6 +739,50 @@ func (tc *Collection) GetAllDescriptors(
 		if err != nil {
 			return nil, err
 		}
+
+		// There could be tables with user defined types that need hydrating,
+		// so collect the needed information to set up metadata in those types.
+		dbDescs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+		typDescs := make(map[sqlbase.ID]*sqlbase.TypeDescriptor)
+		for i := range descs {
+			desc := descs[i]
+			switch t := desc.(type) {
+			case *sqlbase.DatabaseDescriptor:
+				dbDescs[t.ID] = t
+			case *sqlbase.TypeDescriptor:
+				typDescs[t.ID] = t
+			}
+		}
+		// If we found any type descriptors, that means that some of the tables we
+		// scanned might have types that need hydrating.
+		if len(typDescs) > 0 {
+			// Since we just scanned all the descriptors, we already have everything
+			// we need to hydrate our types. Set up an accessor for the type hydration
+			// method to look into the scanned set of descriptors.
+			typeLookup := func(id sqlbase.ID) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
+				typDesc := typDescs[id]
+				dbDesc := dbDescs[typDesc.ParentID]
+				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.ID, typDesc.ParentSchemaID)
+				if err != nil {
+					return nil, nil, err
+				}
+				name := tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaName, typDesc.Name)
+				return &name, typDesc, nil
+			}
+			// Now hydrate all table descriptors.
+			for i := range descs {
+				desc := descs[i]
+				if tbl, ok := desc.(*sqlbase.TableDescriptor); ok {
+					if err := sqlbase.HydrateTypesInTableDescriptor(tbl, typeLookup); err != nil {
+						// If we ran into an error hydrating the types, that means that we
+						// have some sort of corrupted descriptor state. Rather than disable
+						// uses of GetAllDescriptors, just log the error.
+						log.Errorf(ctx, "%s", err.Error())
+					}
+				}
+			}
+		}
+
 		tc.allDescriptors = descs
 	}
 	return tc.allDescriptors, nil

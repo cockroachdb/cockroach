@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -153,33 +152,15 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 	switch t := tdesc.Kind; t {
 	case sqlbase.TypeDescriptor_ENUM:
 		typ := types.MakeEnum(uint32(tdesc.ID))
-		if err := tdesc.HydrateTypeInfo(typ); err != nil {
+		if err := tdesc.HydrateTypeInfoWithName(typ, &tn); err != nil {
 			return nil, err
 		}
-		// Override the hydrated name with the fully resolved type name.
-		typ.TypeMeta.Name = &tn
 		return typ, nil
 	case sqlbase.TypeDescriptor_ALIAS:
 		return tdesc.Alias, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
-}
-
-// TODO (rohany): Once we start to cache type descriptors, this needs to
-//  look into the set of leased copies.
-// TODO (rohany): Once we lease types, this should be pushed down into the
-//  leased object collection.
-func (p *planner) getTypeDescByID(ctx context.Context, id sqlbase.ID) (*TypeDescriptor, error) {
-	rawDesc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
-	if err != nil {
-		return nil, err
-	}
-	typDesc, ok := rawDesc.(*TypeDescriptor)
-	if !ok {
-		return nil, errors.AssertionFailedf("%s was not a type descriptor", rawDesc)
-	}
-	return typDesc, nil
 }
 
 // ResolveTypeByID implements the tree.TypeResolver interface. We disallow
@@ -196,39 +177,18 @@ func (p *planner) ResolveTypeByID(id uint32) (*types.T, error) {
 func (p *planner) maybeHydrateTypesInDescriptor(
 	ctx context.Context, objDesc tree.NameResolutionResult,
 ) error {
-	// Helper method to hydrate the types within a TableDescriptor.
-	hydrateDesc := func(desc *TableDescriptor) error {
-		for i := range desc.Columns {
-			col := &desc.Columns[i]
-			if col.Type.UserDefined() {
-				// Look up its type descriptor.
-				typDesc, err := p.getTypeDescByID(ctx, sqlbase.ID(col.Type.StableTypeID()))
-				if err != nil {
-					return err
-				}
-				// TODO (rohany): This should be a noop if the hydrated type
-				//  information present in the descriptor has the same version as
-				//  the resolved type descriptor we found here.
-				// TODO (rohany): Once types are leased we need to create a new
-				//  ImmutableTableDescriptor when a type lease expires rather than
-				//  overwriting the types information in the shared descriptor.
-				if err := typDesc.HydrateTypeInfo(col.Type); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+	typeLookup := func(id sqlbase.ID) (*tree.TypeName, *TypeDescriptor, error) {
+		return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
 	}
-
 	// As of now, only {Mutable,Immutable}TableDescriptor have types.T that
 	// need to be hydrated.
 	switch desc := objDesc.(type) {
 	case *sqlbase.MutableTableDescriptor:
-		if err := hydrateDesc(desc.TableDesc()); err != nil {
+		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), typeLookup); err != nil {
 			return err
 		}
 	case *sqlbase.ImmutableTableDescriptor:
-		if err := hydrateDesc(desc.TableDesc()); err != nil {
+		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), typeLookup); err != nil {
 			return err
 		}
 	}

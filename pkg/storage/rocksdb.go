@@ -3274,14 +3274,35 @@ func (r *RocksDB) Remove(filename string) error {
 	return nil
 }
 
-// RemoveDirAndFiles deletes the directory and any files it contains but
-// not subdirectories from this RocksDB's env. If dir does not exist,
-// return os.ErrNotExist.
-func (r *RocksDB) RemoveDirAndFiles(dir string) error {
-	if err := statusToError(C.DBEnvDeleteDirAndFiles(r.rdb, goToCSlice([]byte(dir)))); err != nil {
-		return notFoundErrOrDefault(err)
+// RemoveAll removes path and any children it contains from this RocksDB's
+// env. If the path does not exist, RemoveAll returns nil (no error).
+func (r *RocksDB) RemoveAll(path string) error {
+	// We don't have a reliable way of telling whether a path is a directory
+	// or a file from the RocksDB Env interface. Assume it's a directory,
+	// ignoring any resulting error, and delete any of its children.
+	dirents, listErr := r.List(path)
+	if listErr == nil {
+		for _, dirent := range dirents {
+			err := r.RemoveAll(filepath.Join(path, dirent))
+			if err != nil {
+				return err
+			}
+		}
+
+		// Path should exist, point to a directory and have no children.
+		return r.RemoveDir(path)
 	}
-	return nil
+
+	// Path might be a file, non-existent, or a directory for which List
+	// errored for some other reason.
+	err := r.Remove(path)
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) && os.IsNotExist(listErr) {
+		return nil
+	}
+	return listErr
 }
 
 // Link creates 'newname' as a hard link to 'oldname'. This use the Env
@@ -3356,6 +3377,8 @@ func notFoundErrOrDefault(err error) error {
 	errStr := err.Error()
 	if strings.Contains(errStr, "No such") ||
 		strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "does not exist") ||
+		strings.Contains(errStr, "NotFound:") ||
 		strings.Contains(errStr, "cannot find") {
 		return os.ErrNotExist
 	}
@@ -3509,8 +3532,27 @@ func (r *RocksDB) Rename(oldname, newname string) error {
 }
 
 // MkdirAll implements the FS interface.
-func (r *RocksDB) MkdirAll(name string) error {
-	return statusToError(C.DBEnvCreateDir(r.rdb, goToCSlice([]byte(name))))
+func (r *RocksDB) MkdirAll(path string) error {
+	path = filepath.Clean(path)
+
+	// Skip trailing path separators.
+	for len(path) > 0 && path[len(path)-1] == filepath.Separator {
+		path = path[:len(path)-1]
+	}
+	// The path may be empty after cleaning and trimming tailing path
+	// separators.
+	if path == "" {
+		return nil
+	}
+
+	// Ensure the parent exists first.
+	parent, _ := filepath.Split(path)
+	if parent != "" {
+		if err := r.MkdirAll(parent); err != nil {
+			return err
+		}
+	}
+	return statusToError(C.DBEnvCreateDir(r.rdb, goToCSlice([]byte(path))))
 }
 
 // RemoveDir implements the FS interface.
@@ -3531,11 +3573,24 @@ func (r *RocksDB) List(name string) ([]string, error) {
 		return *(*C.DBString)(unsafe.Pointer(uintptr(unsafe.Pointer(names)) + uintptr(i)*nameSize))
 	}
 	err := statusToError(list.status)
+	if err != nil {
+		err = notFoundErrOrDefault(err)
+	}
+
 	result := make([]string, n)
+	j := 0
 	for i := range result {
-		result[i] = cStringToGoString(nameVal(i))
+		str := cStringToGoString(nameVal(i))
+		if str == "." || str == ".." {
+			continue
+		}
+		result[j] = str
+		j++
 	}
 	C.free(unsafe.Pointer(names))
+
+	result = result[:j]
+	sort.Strings(result)
 	return result, err
 }
 

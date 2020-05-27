@@ -59,10 +59,8 @@ type FS interface {
 	// RemoveDir removes the named dir.
 	RemoveDir(name string) error
 
-	// RemoveDirAndFiles deletes the directory and any files it contains but
-	// not subdirectories. If dir does not exist, RemoveDirAndFiles returns nil
-	// (no error).
-	RemoveDirAndFiles(dir string) error
+	// RemoveAll deletes the path and any children it contains.
+	RemoveAll(dir string) error
 
 	// List returns a listing of the given directory. The names returned are
 	// relative to the directory.

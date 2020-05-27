@@ -413,7 +413,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 	if err := d.CloseRead(); err != nil {
 		return err
 	}
-	if err := d.cfg.FS.RemoveDirAndFiles(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
+	if err := d.cfg.FS.RemoveAll(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
 		return err
 	}
 	totalSize := int64(0)
