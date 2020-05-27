@@ -638,6 +638,7 @@ type ExecutorConfig struct {
 	GCJobTestingKnobs         *GCJobTestingKnobs
 	DistSQLRunTestingKnobs    *execinfra.TestingKnobs
 	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
+	TenantTestingKnobs        *TenantTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
@@ -773,6 +774,25 @@ var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
+
+// TenantTestingKnobs contains knobs for tenant behavior.
+type TenantTestingKnobs struct {
+	// ClusterSettingsUpdater is a field that if set, allows the tenant to set
+	// in-memory cluster settings. SQL tenants are otherwise prohibited from
+	// setting cluster settings.
+	ClusterSettingsUpdater settings.Updater
+}
+
+var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*TenantTestingKnobs) ModuleTestingKnobs() {}
+
+// CanSetClusterSettings is a helper method that returns whether the tenant can
+// set in-memory cluster settings.
+func (k *TenantTestingKnobs) CanSetClusterSettings() bool {
+	return k != nil && k.ClusterSettingsUpdater != nil
+}
 
 // databaseCacheHolder is a thread-safe container for a *Cache.
 // It also allows clients to block until the cache is updated to a desired

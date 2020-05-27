@@ -58,3 +58,20 @@ UPDATE system.tenants SET active = false WHERE id = 10
 
 statement error pgcode 42501 user root does not have DELETE privilege on relation tenants
 DELETE FROM system.tenants WHERE id = 10
+
+# Verify that tenants are able to set in-memory cluster settings in logic tests.
+statement ok
+SET CLUSTER SETTING sql.defaults.vectorize='off'
+
+query T
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+off
+
+statement ok
+RESET CLUSTER SETTING sql.defaults.vectorize
+
+query T
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+on
