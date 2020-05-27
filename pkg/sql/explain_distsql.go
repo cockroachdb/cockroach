@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -227,11 +227,9 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 		diagram.AddSpans(spans)
 	} else {
-		nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
-		if err != nil {
-			return err
-		}
-		flows := plan.GenerateFlowSpecs(nodeID)
+		// TODO(asubiotto): This cast from SQLInstanceID to NodeID is temporary:
+		//  https://github.com/cockroachdb/cockroach/issues/49596
+		flows := plan.GenerateFlowSpecs(roachpb.NodeID(params.extendedEvalCtx.NodeID.SQLInstanceID()))
 		showInputTypes := n.options.Flags[tree.ExplainFlagTypes]
 		diagram, err = execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
 		if err != nil {
