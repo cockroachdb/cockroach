@@ -157,7 +157,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		for _, db := range entry.Database {
 			if !db.IsKeyword("all") {
 				return errors.WithHint(
-					unimplemented.New("hba-per-db", "per-database HBA rules are not supported"),
+					unimplemented.NewWithIssuef(45757, "hba-per-db", "per-database HBA rules are not supported"),
 					"Use the special value 'all' (without quotes) to match all databases.")
 			}
 		}
@@ -176,7 +176,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			}
 			if !addrOk {
 				return errors.WithHint(
-					unimplemented.New("hba-hostnames", "hostname-based HBA rules are not supported"),
+					unimplemented.NewWithIssuef(45757, "hba-hostnames", "hostname-based HBA rules are not supported"),
 					"List the numeric CIDR notation instead, for example: 127.0.0.1/8.\n"+
 						"Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.")
 			}

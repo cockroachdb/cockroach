@@ -12,6 +12,7 @@ package sql
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -41,6 +42,13 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	case tree.UnspecifiedReadWriteMode:
 	default:
 		return nil, fmt.Errorf("unsupported default read write mode: %s", n.Modes.ReadWriteMode)
+	}
+
+	switch n.Modes.UserPriority {
+	case tree.UnspecifiedUserPriority:
+	default:
+		return nil, unimplemented.NewWithIssuef(45756, "default transaction priority",
+			"unsupported session default: transaction priority")
 	}
 	return newZeroNode(nil /* columns */), nil
 }
