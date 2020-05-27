@@ -160,9 +160,13 @@ func loadClusters() error {
 			} else {
 				return newInvalidHostsLineErr(l)
 			}
-			if n == "" {
-				return newInvalidHostsLineErr(l)
-			}
+			// NB: it turns out we do see empty hosts here if we are concurrently
+			// creating clusters and this sync is picking up a cluster that's not
+			// ready yet. See:
+			// https://github.com/cockroachdb/cockroach/issues/49542#issuecomment-634563130
+			// if n == "" {
+			// 	return newInvalidHostsLineErr(l)
+			// }
 
 			var locality string
 			if len(fields) > 0 {
