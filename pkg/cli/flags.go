@@ -324,7 +324,7 @@ func init() {
 		StringFlag(f, &serverSocketDir, cliflags.SocketDir, serverSocketDir)
 		// --socket is deprecated as of 20.1.
 		// TODO(knz): remove in 20.2.
-		StringFlag(f, &serverCfg.SQLSocketFile, cliflags.Socket, serverCfg.SQLSocketFile)
+		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
 		BoolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP, startCtx.unencryptedLocalhostHTTP)
 
@@ -372,10 +372,10 @@ func init() {
 		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, startCtx.serverInsecure)
 
 		// Enable/disable various external storage endpoints.
-		serverCfg.SQLExternalIOConfig = base.SQLExternalIOConfig{}
-		BoolFlag(f, &serverCfg.SQLExternalIOConfig.DisableHTTP,
+		serverCfg.ExternalIODirConfig = base.ExternalIODirConfig{}
+		BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP,
 			cliflags.ExternalIODisableHTTP, false)
-		BoolFlag(f, &serverCfg.SQLExternalIOConfig.DisableImplicitCredentials,
+		BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials,
 			cliflags.ExtenralIODisableImplicitCredentials, false)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
@@ -420,7 +420,7 @@ func init() {
 		StringFlag(f, &startCtx.tempDir, cliflags.TempDir, startCtx.tempDir)
 		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
 
-		VarFlag(f, serverCfg.SQLAuditLogDirName, cliflags.SQLAuditLogDirName)
+		VarFlag(f, serverCfg.AuditLogDirName, cliflags.SQLAuditLogDirName)
 	}
 
 	// Log flags.
@@ -786,16 +786,16 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 
 	// Construct the socket name, if requested.
 	if !fs.Lookup(cliflags.Socket.Name).Changed && fs.Lookup(cliflags.SocketDir.Name).Changed {
-		// If --socket (DEPRECATED) was set, then serverCfg.SQLSocketFile is
+		// If --socket (DEPRECATED) was set, then serverCfg.SocketFile is
 		// already set and we don't want to change it.
 		// However, if --socket-dir is set, then we'll use that.
 		// There are two cases:
 		// --socket-dir is set and is empty; in this case the user is telling us "disable the socket".
 		// is set and non-empty. Then it should be used as specified.
 		if serverSocketDir == "" {
-			serverCfg.SQLSocketFile = ""
+			serverCfg.SocketFile = ""
 		} else {
-			serverCfg.SQLSocketFile = filepath.Join(serverSocketDir, ".s.PGSQL."+serverListenPort)
+			serverCfg.SocketFile = filepath.Join(serverSocketDir, ".s.PGSQL."+serverListenPort)
 		}
 	}
 

@@ -301,7 +301,7 @@ func initMutexProfile() {
 }
 
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
-var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
+var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
@@ -579,7 +579,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 		}
 	}
 
-	if serverCfg.SQLTempStorageConfig, err = initTempStorageConfig(
+	if serverCfg.TempStorageConfig, err = initTempStorageConfig(
 		ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[specIdx],
 	); err != nil {
 		return err
@@ -817,12 +817,12 @@ If problems persist, please see %s.`
 			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
 
 			fmt.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
-			if len(serverCfg.SQLSocketFile) != 0 {
-				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SQLSocketFile)
+			if len(serverCfg.SocketFile) != 0 {
+				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
 			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
-			if serverCfg.SQLAuditLogDirName.IsSet() {
-				fmt.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.SQLAuditLogDirName)
+			if serverCfg.AuditLogDirName.IsSet() {
+				fmt.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.AuditLogDirName)
 			}
 			if serverCfg.Attrs != "" {
 				fmt.Fprintf(tw, "attrs:\t%s\n", serverCfg.Attrs)
@@ -1152,7 +1152,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
-		requestedMem := serverCfg.CacheSize + serverCfg.SQLMemoryPoolSize
+		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Shoutf(ctx, log.Severity_WARNING,
@@ -1259,7 +1259,7 @@ func setupAndInitializeLoggingAndProfiling(
 			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
-	if auditLogDir := serverCfg.SQLAuditLogDirName.String(); auditLogDir != "" && auditLogDir != outputDirectory {
+	if auditLogDir := serverCfg.AuditLogDirName.String(); auditLogDir != "" && auditLogDir != outputDirectory {
 		// Make sure the path for the audit log exists, if it's a different path than
 		// the main log.
 		if err := os.MkdirAll(auditLogDir, 0755); err != nil {
