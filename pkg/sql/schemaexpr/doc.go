@@ -31,5 +31,10 @@ DequalifyColumnRefs
 
   Strips database and table names from qualified columns.
 
+RenameColumn
+
+  Replaces occurrences of a column name in a string expression with a new column
+  name.
+
 */
 package schemaexpr

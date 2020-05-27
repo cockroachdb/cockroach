@@ -60,6 +60,38 @@ func DequalifyColumnRefs(
 	)
 }
 
+// RenameColumn replaces any occurrence of the column from in expr with to, and
+// returns a string representation of the new expression.
+func RenameColumn(expr string, from *tree.Name, to *tree.Name) (string, error) {
+	parsed, err := parser.ParseExpr(expr)
+	if err != nil {
+		return "", err
+	}
+
+	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				if string(c.ColumnName) == string(*from) {
+					c.ColumnName = *to
+				}
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	renamed, err := tree.SimpleVisit(parsed, replaceFn)
+	if err != nil {
+		return "", err
+	}
+
+	return renamed.String(), nil
+}
+
 // iterColDescriptors iterates over the expression's variable columns and
 // calls f on each.
 //
