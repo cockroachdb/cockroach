@@ -1318,11 +1318,13 @@ func TestEngineFS(t *testing.T) {
 	}
 }
 
-// These FS implementations are not in-memory.
-var engineRealFSImpls = []struct {
+type engineImpl struct {
 	name   string
 	create func(*testing.T, string) Engine
-}{
+}
+
+// These FS implementations are not in-memory.
+var engineRealFSImpls = []engineImpl{
 	{"rocksdb", func(t *testing.T, dir string) Engine {
 		db, err := NewRocksDB(
 			RocksDBConfig{
@@ -1375,9 +1377,9 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
-			// Verify RemoveDirAndFiles returns os.ErrNotExist if dir does not exist.
-			if err := db.RemoveDirAndFiles("/non/existent/file"); !os.IsNotExist(err) {
-				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+			// Verify RemoveAll returns nil if path does not exist.
+			if err := db.RemoveAll("/non/existent/file"); err != nil {
+				t.Fatalf("expected nil, but got %v (%T)", err, err)
 			}
 
 			fname := filepath.Join(dir, "random.file")
@@ -1416,6 +1418,89 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			if err := db.Remove(fname); !os.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
+		})
+	}
+}
+
+func TestFS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var engineImpls []engineImpl
+	engineImpls = append(engineImpls, engineRealFSImpls...)
+	engineImpls = append(engineImpls,
+		engineImpl{
+			name: "rocksdb_mem",
+			create: func(_ *testing.T, _ string) Engine {
+				return createTestRocksDBEngine()
+			},
+		},
+		engineImpl{
+			name: "pebble_mem",
+			create: func(_ *testing.T, _ string) Engine {
+				return createTestPebbleEngine()
+			},
+		})
+
+	for _, impl := range engineImpls {
+		t.Run(impl.name, func(t *testing.T) {
+			dir, cleanupDir := testutils.TempDir(t)
+			defer cleanupDir()
+			fs := impl.create(t, dir)
+			defer fs.Close()
+
+			path := func(rel string) string {
+				return filepath.Join(dir, rel)
+			}
+			must := func(err error) {
+				if err != nil {
+					t.Helper()
+					t.Fatal(err)
+				}
+			}
+			expectLS := func(dir string, want []string) {
+				got, err := fs.List(dir)
+				if err != nil {
+					t.Helper()
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Helper()
+					t.Fatalf("fs.List(%q) = %#v, want %#v", dir, got, want)
+				}
+			}
+
+			// Create a/ and assert that it's empty.
+			must(fs.MkdirAll(path("a")))
+			expectLS(path("a"), []string{})
+
+			// Create a/b/ and a/b/c/ in a single MkdirAll call.
+			// Then ensure that a duplicate call returns a nil error.
+			must(fs.MkdirAll(path("a/b/c")))
+			must(fs.MkdirAll(path("a/b/c")))
+			expectLS(path("a"), []string{"b"})
+			expectLS(path("a/b"), []string{"c"})
+			expectLS(path("a/b/c"), []string{})
+
+			// Create a file at a/b/c/foo.
+			f, err := fs.Create(path("a/b/c/foo"))
+			must(err)
+			must(f.Close())
+			expectLS(path("a/b/c"), []string{"foo"})
+
+			// Create a file at a/b/c/bar.
+			f, err = fs.Create(path("a/b/c/bar"))
+			must(err)
+			must(f.Close())
+			expectLS(path("a/b/c"), []string{"bar", "foo"})
+
+			// RemoveAll a file.
+			must(fs.RemoveAll(path("a/b/c/bar")))
+			expectLS(path("a/b/c"), []string{"foo"})
+
+			// RemoveAll a directory that contains subdirectories and
+			// descendant files.
+			must(fs.RemoveAll(path("a/b")))
+			expectLS(path("a"), []string{})
 		})
 	}
 }
