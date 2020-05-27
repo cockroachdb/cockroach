@@ -479,6 +479,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	if pgwireKnobs := cfg.TestingKnobs.PGWireTestingKnobs; pgwireKnobs != nil {
 		execCfg.PGWireTestingKnobs = pgwireKnobs.(*sql.PGWireTestingKnobs)
 	}
+	if tenantKnobs := cfg.TestingKnobs.TenantTestingKnobs; tenantKnobs != nil {
+		execCfg.TenantTestingKnobs = tenantKnobs.(*sql.TenantTestingKnobs)
+	}
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.Settings,
