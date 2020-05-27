@@ -10,8 +10,10 @@ package backupccl
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"path"
 	"sort"
@@ -46,6 +48,8 @@ const (
 	BackupManifestCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
+	// ZipType is the format of a GZipped compressed file.
+	ZipType = "application/x-gzip"
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
@@ -106,6 +110,31 @@ func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (b
 	return true, nil
 }
 
+// compressData compresses data buffer and returns compressed
+// bytes (i.e. gzip format).
+func compressData(descBuf []byte) ([]byte, error) {
+	gzipBuf := bytes.NewBuffer([]byte{})
+	gz := gzip.NewWriter(gzipBuf)
+	if _, err := gz.Write(descBuf); err != nil {
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return gzipBuf.Bytes(), nil
+}
+
+// DecompressData decompresses gzip data buffer and
+// returns decompressed bytes.
+func DecompressData(descBytes []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewBuffer(descBytes))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return ioutil.ReadAll(r)
+}
+
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
 // the provided export store.
 func readBackupManifest(
@@ -127,6 +156,14 @@ func readBackupManifest(
 		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
 		if err != nil {
 			return BackupManifest{}, err
+		}
+	}
+	fileType := http.DetectContentType(descBytes)
+	if fileType == ZipType {
+		descBytes, err = DecompressData(descBytes)
+		if err != nil {
+			return BackupManifest{}, errors.Wrap(
+				err, "decompressing backup manifest")
 		}
 	}
 	var backupManifest BackupManifest
@@ -178,6 +215,14 @@ func readBackupPartitionDescriptor(
 			return BackupPartitionDescriptor{}, err
 		}
 	}
+	fileType := http.DetectContentType(descBytes)
+	if fileType == ZipType {
+		descBytes, err = DecompressData(descBytes)
+		if err != nil {
+			return BackupPartitionDescriptor{}, errors.Wrap(
+				err, "decompressing backup partition descriptor")
+		}
+	}
 	var backupManifest BackupPartitionDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		return BackupPartitionDescriptor{}, err
@@ -199,12 +244,18 @@ func writeBackupManifest(
 	if err != nil {
 		return err
 	}
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup manifest")
+	}
+
 	if encryption != nil {
 		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
 		if err != nil {
 			return err
 		}
 	}
+
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
 
@@ -221,6 +272,10 @@ func writeBackupPartitionDescriptor(
 	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
+	}
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup partition descriptor")
 	}
 	if encryption != nil {
 		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
