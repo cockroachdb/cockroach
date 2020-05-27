@@ -511,7 +511,7 @@ var (
 	// to HEAD; if we were to set binaryMinSupportedVersion to Version19_2,
 	// that wouldn't work since you'd have to go through the final 19.2 binary
 	// before going to HEAD.
-	binaryMinSupportedVersion = VersionByKey(VersionStart19_2)
+	binaryMinSupportedVersion = VersionByKey(Version20_1)
 
 	// binaryVersion is the version of this binary.
 	//
