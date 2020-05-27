@@ -130,7 +130,7 @@ type sqlServerArgs struct {
 	sqlServerOptionalArgs
 
 	*SQLConfig
-	*BothConfig
+	*BaseConfig
 
 	stopper *stop.Stopper
 
@@ -226,7 +226,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		codec,
 		lmKnobs,
 		cfg.stopper,
-		cfg.SQLLeaseManagerConfig,
+		cfg.LeaseManagerConfig,
 	)
 
 	// Set up internal memory metrics for use by internal SQL executors.
@@ -244,7 +244,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		math.MaxInt64, /* noteworthy */
 		cfg.Settings,
 	)
-	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(cfg.SQLMemoryPoolSize))
+	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(cfg.MemoryPoolSize))
 
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
 	// operations (IMPORT, index backfill). It is itself a child of the
@@ -257,8 +257,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 	// Set up the DistSQL temp engine.
 
-	useStoreSpec := cfg.SQLTempStorageConfig.Spec
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.SQLTempStorageConfig, useStoreSpec)
+	useStoreSpec := cfg.TempStorageConfig.Spec
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
@@ -266,12 +266,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
 	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		useStore := cfg.SQLTempStorageConfig.Spec
+		useStore := cfg.TempStorageConfig.Spec
 		var err error
 		if useStore.InMemory {
 			// Used store is in-memory so we remove the temp
 			// directory directly since there is no record file.
-			err = os.RemoveAll(cfg.SQLTempStorageConfig.Path)
+			err = os.RemoveAll(cfg.TempStorageConfig.Path)
 		} else {
 			// If record file exists, we invoke CleanupTempDirs to
 			// also remove the record after the temp directory is
@@ -303,14 +303,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		Stopper:        cfg.stopper,
 
 		TempStorage:     tempEngine,
-		TempStoragePath: cfg.SQLTempStorageConfig.Path,
+		TempStoragePath: cfg.TempStorageConfig.Path,
 		TempFS:          tempFS,
 		// COCKROACH_VEC_MAX_OPEN_FDS specifies the maximum number of open file
 		// descriptors that the vectorized execution engine may have open at any
 		// one time. This limit is implemented as a weighted semaphore acquired
 		// before opening files.
 		VecFDSemaphore: semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
-		DiskMonitor:    cfg.SQLTempStorageConfig.Mon,
+		DiskMonitor:    cfg.TempStorageConfig.Mon,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		BulkAdder: func(
@@ -332,7 +332,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
 	}
-	cfg.SQLTempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
+	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
@@ -404,7 +404,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
-			cfg.SQLTableStatCacheSize,
+			cfg.TableStatCacheSize,
 			cfg.gossip,
 			cfg.db,
 			cfg.circularInternalExecutor,
@@ -435,7 +435,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		// AuditLogger syncs to disk for the same reason as AuthLogger.
 		AuditLogger: log.NewSecondaryLogger(
-			loggerCtx, cfg.SQLAuditLogDirName, "sql-audit",
+			loggerCtx, cfg.AuditLogDirName, "sql-audit",
 			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
@@ -444,7 +444,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			true /*enableGc*/, false /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
-		QueryCache:                 querycache.New(cfg.SQLQueryCacheSize),
+		QueryCache:                 querycache.New(cfg.QueryCacheSize),
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
 	}
 

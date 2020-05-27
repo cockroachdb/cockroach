@@ -149,7 +149,7 @@ func TestPutHttp(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExternalStorage(ctx, conf, base.SQLExternalIOConfig{},
+		s, err := MakeExternalStorage(ctx, conf, base.ExternalIOConfig{},
 			testSettings, blobs.TestEmptyBlobClientFactory)
 		if err != nil {
 			t.Fatal(err)
@@ -288,7 +288,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 }
 
 func TestCanDisableHttp(t *testing.T) {
-	conf := base.SQLExternalIOConfig{
+	conf := base.ExternalIOConfig{
 		DisableHTTP: true,
 	}
 	s, err := MakeExternalStorage(
@@ -320,7 +320,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 	conf, err := ExternalStorageConfFromURI("http://my-server")
 	require.NoError(t, err)
 	s, err := MakeExternalStorage(
-		context.Background(), conf, base.SQLExternalIOConfig{}, testSettings, nil)
+		context.Background(), conf, base.ExternalIOConfig{}, testSettings, nil)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "file")
 	require.NoError(t, err)

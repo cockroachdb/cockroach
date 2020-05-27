@@ -105,13 +105,9 @@ func (mo *MaxOffsetType) String() string {
 	return time.Duration(*mo).String()
 }
 
-// BothConfig holds parameters that are needed to setup either a KV or a SQL
+// BaseConfig holds parameters that are needed to setup either a KV or a SQL
 // server.
-//
-// TODO(tbg): you might almost call it... base.Config. Too many names flying
-// around here. Consider moving the whole Config shebang into `base` and
-// unifying.
-type BothConfig struct {
+type BaseConfig struct {
 	Settings *cluster.Settings
 	*base.Config
 
@@ -144,10 +140,10 @@ type BothConfig struct {
 
 // Config holds parameters needed to setup a (combined KV and SQL) server.
 //
-// TODO(tbg): this should end up being just SQLConfig union KVConfig union BothConfig.
+// TODO(tbg): this should end up being just SQLConfig union KVConfig union BaseConfig.
 type Config struct {
 	// Embed the base context.
-	BothConfig
+	BaseConfig
 	base.RaftConfig
 	SQLConfig
 
@@ -264,33 +260,33 @@ type Config struct {
 // SQLConfig holds the parameters to setup a SQL server.
 type SQLConfig struct {
 	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
-	SQLLeaseManagerConfig *base.LeaseManagerConfig
+	LeaseManagerConfig *base.LeaseManagerConfig
 
-	// SQLSocketFile, if non-empty, sets up a TLS-free local listener using
+	// SocketFile, if non-empty, sets up a TLS-free local listener using
 	// a unix datagram socket at the specified path.
-	SQLSocketFile string
+	SocketFile string
 
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
-	SQLTempStorageConfig base.TempStorageConfig
+	TempStorageConfig base.TempStorageConfig
 
-	// SQLExternalIOConfig is used to configure external storage
+	// ExternalIODirConfig is used to configure external storage
 	// access (http://, nodelocal://, etc)
-	SQLExternalIOConfig base.SQLExternalIOConfig
+	ExternalIODirConfig base.ExternalIOConfig
 
-	// SQLMemoryPoolSize is the amount of memory in bytes that can be
+	// MemoryPoolSize is the amount of memory in bytes that can be
 	// used by SQL clients to store row data in server RAM.
-	SQLMemoryPoolSize int64
+	MemoryPoolSize int64
 
-	// SQLAuditLogDirName is the target directory name for SQL audit logs.
-	SQLAuditLogDirName *log.DirName
+	// AuditLogDirName is the target directory name for SQL audit logs.
+	AuditLogDirName *log.DirName
 
-	// SQLTableStatCacheSize is the size (number of tables) of the table
+	// TableStatCacheSize is the size (number of tables) of the table
 	// statistics cache.
-	SQLTableStatCacheSize int
+	TableStatCacheSize int
 
-	// SQLQueryCacheSize is the memory size (in bytes) of the query plan cache.
-	SQLQueryCacheSize int64
+	// QueryCacheSize is the memory size (in bytes) of the query plan cache.
+	QueryCacheSize int64
 }
 
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
@@ -331,15 +327,15 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 
 	sqlCfg := SQLConfig{
-		SQLMemoryPoolSize:     defaultSQLMemoryPoolSize,
-		SQLTableStatCacheSize: defaultSQLTableStatCacheSize,
-		SQLQueryCacheSize:     defaultSQLQueryCacheSize,
-		SQLTempStorageConfig: base.TempStorageConfigFromEnv(
+		MemoryPoolSize:     defaultSQLMemoryPoolSize,
+		TableStatCacheSize: defaultSQLTableStatCacheSize,
+		QueryCacheSize:     defaultSQLQueryCacheSize,
+		TempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes),
-		SQLLeaseManagerConfig: base.NewLeaseManagerConfig(),
+		LeaseManagerConfig: base.NewLeaseManagerConfig(),
 	}
 
-	bothCfg := BothConfig{
+	bothCfg := BaseConfig{
 		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
@@ -348,7 +344,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	}
 
 	cfg := Config{
-		BothConfig:                     bothCfg,
+		BaseConfig:                     bothCfg,
 		SQLConfig:                      sqlCfg,
 		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
 		CacheSize:                      DefaultCacheSize,
@@ -376,7 +372,7 @@ func (cfg *Config) String() string {
 	w := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 	fmt.Fprintln(w, "max offset\t", cfg.MaxOffset)
 	fmt.Fprintln(w, "cache size\t", humanizeutil.IBytes(cfg.CacheSize))
-	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.SQLMemoryPoolSize))
+	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.MemoryPoolSize))
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
 	fmt.Fprintln(w, "scan min idle time\t", cfg.ScanMinIdleTime)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)

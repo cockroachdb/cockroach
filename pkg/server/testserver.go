@@ -86,7 +86,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
-	cfg.SQLTempStorageConfig = base.DefaultTestTempStorageConfig(st)
+	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
@@ -126,16 +126,16 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RaftConfig = params.RaftConfig
 	cfg.RaftConfig.SetDefaults()
 	if params.LeaseManagerConfig != nil {
-		cfg.SQLLeaseManagerConfig = params.LeaseManagerConfig
+		cfg.LeaseManagerConfig = params.LeaseManagerConfig
 	} else {
-		cfg.SQLLeaseManagerConfig = base.NewLeaseManagerConfig()
+		cfg.LeaseManagerConfig = base.NewLeaseManagerConfig()
 	}
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}
 	}
 	cfg.ClusterName = params.ClusterName
 	cfg.Insecure = params.Insecure
-	cfg.SQLSocketFile = params.SocketFile
+	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
 	if knobs := params.Knobs.Store; knobs != nil {
@@ -173,7 +173,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.EventLogEnabled = false
 	}
 	if params.SQLMemoryPoolSize != 0 {
-		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
+		cfg.MemoryPoolSize = params.SQLMemoryPoolSize
 	}
 	if params.CacheSize != 0 {
 		cfg.CacheSize = params.CacheSize
@@ -244,7 +244,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
 	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
-		cfg.SQLTempStorageConfig = params.TempStorageConfig
+		cfg.TempStorageConfig = params.TempStorageConfig
 	}
 
 	if cfg.TestingKnobs.Store == nil {
@@ -451,11 +451,11 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	st := cluster.MakeTestingClusterSettings()
 
 	var sqlConfig SQLConfig
-	var bothConfig BothConfig
+	var bothConfig BaseConfig
 	{
 		cfg := makeTestConfig(st)
 		sqlConfig = cfg.SQLConfig
-		bothConfig = cfg.BothConfig
+		bothConfig = cfg.BaseConfig
 		// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
 		// and this tenant work.
 		//
@@ -580,7 +580,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 			},
 		},
 		SQLConfig:                &sqlConfig,
-		BothConfig:               &bothConfig,
+		BaseConfig:               &bothConfig,
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),

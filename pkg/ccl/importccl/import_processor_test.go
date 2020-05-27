@@ -797,7 +797,7 @@ func externalStorageFactory(
 	if err != nil {
 		return nil, err
 	}
-	return cloud.MakeExternalStorage(ctx, dest, base.SQLExternalIOConfig{},
+	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIOConfig{},
 		nil, blobs.TestBlobServiceClient(workdir))
 }
 
