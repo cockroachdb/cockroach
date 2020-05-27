@@ -107,12 +107,12 @@ var (
 	// is responsible for ensuring the raft log doesn't grow without bound by
 	// making sure the leader doesn't get too far ahead.
 	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
-		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 4<<20 /* 4 MB */)
+		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 8<<20 /* 8 MB */)
 
 	// defaultRaftMaxSizePerMsg specifies the maximum aggregate byte size of Raft
 	// log entries that a leader will send to followers in a single MsgApp.
 	defaultRaftMaxSizePerMsg = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16<<10 /* 16 KB */)
+		"COCKROACH_RAFT_MAX_SIZE_PER_MSG", 32<<10 /* 32 KB */)
 
 	// defaultRaftMaxSizeCommittedSizePerReady specifies the maximum aggregate
 	// byte size of the committed log entries which a node will receive in a
@@ -120,10 +120,10 @@ var (
 	defaultRaftMaxCommittedSizePerReady = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_MAX_COMMITTED_SIZE_PER_READY", 64<<20 /* 64 MB */)
 
-	// defaultRaftMaxSizePerMsg specifies how many "inflight" messages a leader
-	// will send to a follower without hearing a response.
+	// defaultRaftMaxInflightMsgs specifies how many "inflight" MsgApps a leader
+	// will send to a given follower without hearing a response.
 	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
+		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 128)
 )
 
 type lazyHTTPClient struct {
@@ -493,19 +493,22 @@ type RaftConfig struct {
 	RaftMaxUncommittedEntriesSize uint64
 
 	// RaftMaxSizePerMsg controls the maximum aggregate byte size of Raft log
-	// entries the leader will send to followers in a single MsgApp.
+	// entries the leader will send to followers in a single MsgApp. Smaller
+	// value lowers the raft recovery cost (during initial probing and after
+	// message loss during normal operation). On the other hand, it limits the
+	// throughput during normal replication.
 	RaftMaxSizePerMsg uint64
 
 	// RaftMaxCommittedSizePerReady controls the maximum aggregate byte size of
 	// committed Raft log entries a replica will receive in a single Ready.
 	RaftMaxCommittedSizePerReady uint64
 
-	// RaftMaxInflightMsgs controls how many "inflight" messages Raft will send
+	// RaftMaxInflightMsgs controls how many "inflight" MsgApps Raft will send
 	// to a follower without hearing a response. The total number of Raft log
 	// entries is a combination of this setting and RaftMaxSizePerMsg. The
-	// current default settings provide for up to 1 MB of raft log to be sent
+	// current default settings provide for up to 4 MB of raft log to be sent
 	// without acknowledgement. With an average entry size of 1 KB that
-	// translates to ~1024 commands that might be executed in the handling of a
+	// translates to ~4096 commands that might be executed in the handling of a
 	// single raft.Ready operation.
 	RaftMaxInflightMsgs int
 
@@ -536,7 +539,7 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftProposalQuota == 0 {
 		// By default, set this to a fraction of RaftLogMaxSize. See the comment
 		// on the field for the tradeoffs of setting this higher or lower.
-		cfg.RaftProposalQuota = cfg.RaftLogTruncationThreshold / 4
+		cfg.RaftProposalQuota = cfg.RaftLogTruncationThreshold / 2
 	}
 	if cfg.RaftMaxUncommittedEntriesSize == 0 {
 		// By default, set this to twice the RaftProposalQuota. The logic here
@@ -554,7 +557,6 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftMaxInflightMsgs == 0 {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
 	}
-
 	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
 		// The Raft Ticks interval defaults to 200ms, and an election is 15
 		// ticks. Add a generous amount of ticks to make sure even a backed up
@@ -566,6 +568,14 @@ func (cfg *RaftConfig) SetDefaults() {
 		//
 		// The resulting delay configured here is about 50s.
 		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 200
+	}
+
+	// Minor validation to ensure sane tuning.
+	if cfg.RaftProposalQuota > int64(cfg.RaftMaxUncommittedEntriesSize) {
+		panic("raft proposal quota should not be above max uncommitted entries size")
+	}
+	if cfg.RaftProposalQuota < int64(cfg.RaftMaxSizePerMsg)*int64(cfg.RaftMaxInflightMsgs) {
+		panic("raft proposal quota should not be below per-replica replication window size")
 	}
 }
 
