@@ -196,7 +196,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(roachpb.RangeID(0), storeFilterNone)
+			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterNone)
 			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})

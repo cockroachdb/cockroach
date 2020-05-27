@@ -2134,7 +2134,7 @@ func (s *Store) relocateOne(
 		return nil, nil, err
 	}
 
-	storeList, _, _ := s.allocator.storePool.getStoreList(desc.RangeID, storeFilterNone)
+	storeList, _, _ := s.allocator.storePool.getStoreList(storeFilterNone)
 	storeMap := storeListToMap(storeList)
 
 	// Compute which replica to add and/or remove, respectively. We ask the allocator

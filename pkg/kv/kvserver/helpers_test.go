@@ -375,8 +375,8 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 
 // GetStoreList exposes getStoreList for testing only, but with a hardcoded
 // storeFilter of storeFilterNone.
-func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
-	list, available, throttled := sp.getStoreList(rangeID, storeFilterNone)
+func (sp *StorePool) GetStoreList() (StoreList, int, int) {
+	list, available, throttled := sp.getStoreList(storeFilterNone)
 	return list, available, len(throttled)
 }
 
