@@ -251,19 +251,13 @@ func backup(
 				files = append(files, file)
 				exported.add(file.EntryCounts)
 			}
+
+			// Signal that an ExportRequest finished to update job progress.
+			requestFinishedCh <- struct{}{}
 			var checkpointFiles BackupFileDescriptors
 			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
-				// TODO(pbardea): See if this can be reworked since we don't need to
-				//  worry about contention when checkpointing.
-				// We optimistically assume the checkpoint will succeed to prevent
-				// multiple threads from attempting to checkpoint.
-				lastCheckpoint = timeutil.Now()
 				checkpointFiles = append(checkpointFiles, files...)
-			}
 
-			requestFinishedCh <- struct{}{}
-
-			if checkpointFiles != nil {
 				backupManifest.Files = checkpointFiles
 				err := writeBackupManifest(
 					ctx, settings, defaultStore, BackupManifestCheckpointName, encryption, backupManifest,
@@ -271,6 +265,8 @@ func backup(
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
 				}
+
+				lastCheckpoint = timeutil.Now()
 			}
 		}
 		return nil
