@@ -18,16 +18,26 @@ import (
 )
 
 // flattenGeometry flattens a geo.Geometry object.
-func flattenGeometry(g *geo.Geometry) ([]geom.T, error) {
+func flattenGeometry(g *geo.Geometry, emptyBehavior geo.EmptyBehavior) ([]geom.T, error) {
 	f, err := g.AsGeomT()
 	if err != nil {
 		return nil, err
 	}
-	return flattenGeomT(f)
+	return flattenGeomT(f, emptyBehavior)
 }
 
 // flattenGeomT decomposes geom.T collections to individual geom.T components.
-func flattenGeomT(g geom.T) ([]geom.T, error) {
+func flattenGeomT(g geom.T, emptyBehavior geo.EmptyBehavior) ([]geom.T, error) {
+	if g.Empty() {
+		switch emptyBehavior {
+		case geo.EmptyBehaviorOmit:
+			return nil, nil
+		case geo.EmptyBehaviorError:
+			return nil, geo.NewEmptyGeometryError()
+		default:
+			return nil, errors.Newf("programmer error: unknown behavior")
+		}
+	}
 	switch g := g.(type) {
 	case *geom.Point:
 		return []geom.T{g}, nil
@@ -54,9 +64,19 @@ func flattenGeomT(g geom.T) ([]geom.T, error) {
 		}
 		return ret, nil
 	case *geom.GeometryCollection:
-		ret := make([]geom.T, g.NumGeoms())
-		for i := 0; i < g.NumGeoms(); i++ {
-			ret[i] = g.Geom(i)
+		ret := make([]geom.T, 0, g.NumGeoms())
+		for _, subG := range g.Geoms() {
+			if subG.Empty() {
+				switch emptyBehavior {
+				case geo.EmptyBehaviorOmit:
+					continue
+				case geo.EmptyBehaviorError:
+					return nil, geo.NewEmptyGeometryError()
+				default:
+					return nil, errors.Newf("programmer error: unknown behavior")
+				}
+			}
+			ret = append(ret, subG)
 		}
 		return ret, nil
 	}

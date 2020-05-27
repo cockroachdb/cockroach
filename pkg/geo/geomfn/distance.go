@@ -21,11 +21,12 @@ import (
 )
 
 // MinDistance returns the minimum distance between geometries A and B.
+// This returns a geo.EmptyGeometryError if either A or B is EMPTY.
 func MinDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
 	if a.SRID() != b.SRID() {
 		return 0, geo.NewMismatchingSRIDsError(a, b)
 	}
-	return minDistanceInternal(a, b, 0)
+	return minDistanceInternal(a, b, 0, geo.EmptyBehaviorOmit)
 }
 
 // MaxDistance returns the maximum distance across every pair of points comprising
@@ -34,7 +35,7 @@ func MaxDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
 	if a.SRID() != b.SRID() {
 		return 0, geo.NewMismatchingSRIDsError(a, b)
 	}
-	return maxDistanceInternal(a, b, math.MaxFloat64)
+	return maxDistanceInternal(a, b, math.MaxFloat64, geo.EmptyBehaviorOmit)
 }
 
 // DWithin determines if any part of geometry A is within D units of geometry B.
@@ -45,8 +46,12 @@ func DWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
-	dist, err := minDistanceInternal(a, b, d)
+	dist, err := minDistanceInternal(a, b, d, geo.EmptyBehaviorError)
 	if err != nil {
+		// In case of any empty geometries return false.
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	return dist <= d, nil
@@ -61,8 +66,12 @@ func DFullyWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
-	dist, err := maxDistanceInternal(a, b, d)
+	dist, err := maxDistanceInternal(a, b, d, geo.EmptyBehaviorError)
 	if err != nil {
+		// In case of any empty geometries return false.
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	return dist <= d, nil
@@ -71,33 +80,45 @@ func DFullyWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 // maxDistanceInternal finds the maximum distance between two geometries.
 // We can re-use the same algorithm as min-distance, allowing skips of checks that involve
 // the interiors or intersections as those will always be less then the maximum min-distance.
-func maxDistanceInternal(a *geo.Geometry, b *geo.Geometry, stopAfterGT float64) (float64, error) {
+func maxDistanceInternal(
+	a *geo.Geometry, b *geo.Geometry, stopAfterGT float64, emptyBehavior geo.EmptyBehavior,
+) (float64, error) {
 	u := newGeomMaxDistanceUpdater(stopAfterGT)
 	c := &geomDistanceCalculator{updater: u}
-	return distanceInternal(a, b, c)
+	return distanceInternal(a, b, c, emptyBehavior)
 }
 
 // minDistanceInternal finds the minimum distance between two geometries.
 // This implementation is done in-house, as compared to using GEOS.
-func minDistanceInternal(a *geo.Geometry, b *geo.Geometry, stopAfterLE float64) (float64, error) {
+func minDistanceInternal(
+	a *geo.Geometry, b *geo.Geometry, stopAfterLE float64, emptyBehavior geo.EmptyBehavior,
+) (float64, error) {
 	u := newGeomMinDistanceUpdater(stopAfterLE)
 	c := &geomDistanceCalculator{updater: u}
-	return distanceInternal(a, b, c)
+	return distanceInternal(a, b, c, emptyBehavior)
 }
 
 // distanceInternal calculates the distance between two geometries using
 // the DistanceCalculator operator.
+// If there are any EMPTY Geometry objects, they will be ignored. It will return an
+// EmptyGeometryError if A or B contains only EMPTY geometries, even if emptyBehavior
+// is set to EmptyBehaviorOmit.
 func distanceInternal(
-	a *geo.Geometry, b *geo.Geometry, c geodist.DistanceCalculator,
+	a *geo.Geometry, b *geo.Geometry, c geodist.DistanceCalculator, emptyBehavior geo.EmptyBehavior,
 ) (float64, error) {
-	aGeoms, err := flattenGeometry(a)
+	aGeoms, err := flattenGeometry(a, emptyBehavior)
 	if err != nil {
 		return 0, err
 	}
-	bGeoms, err := flattenGeometry(b)
+	bGeoms, err := flattenGeometry(b, emptyBehavior)
 	if err != nil {
 		return 0, err
 	}
+	// If either side has no geoms, then we error out.
+	if len(aGeoms) == 0 || len(bGeoms) == 0 {
+		return 0, geo.NewEmptyGeometryError()
+	}
+
 	for _, aGeom := range aGeoms {
 		aGeodist, err := geomToGeodist(aGeom)
 		if err != nil {

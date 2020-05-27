@@ -19,6 +19,7 @@ import (
 )
 
 // DWithin returns whether a is within distance d of b, i.e. Distance(a, b) <= d.
+// If A or B contains empty Geography objects, this will return false.
 func DWithin(
 	a *geo.Geography, b *geo.Geography, distance float64, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (bool, error) {
@@ -29,12 +30,18 @@ func DWithin(
 		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
 
-	aRegions, err := a.AsS2()
+	aRegions, err := a.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
-	bRegions, err := b.AsS2()
+	bRegions, err := b.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	spheroid := geographiclib.WGS84Spheroid

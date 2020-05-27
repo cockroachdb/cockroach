@@ -20,7 +20,7 @@ import (
 
 // Area returns the area of a given Geography.
 func Area(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
-	regions, err := g.AsS2()
+	regions, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return 0, err
 	}
@@ -63,7 +63,11 @@ func Perimeter(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float
 	default:
 		return 0, nil
 	}
-	return length(geo.S2RegionsFromGeom(gt), useSphereOrSpheroid)
+	regions, err := geo.S2RegionsFromGeom(gt, geo.EmptyBehaviorOmit)
+	if err != nil {
+		return 0, err
+	}
+	return length(regions, useSphereOrSpheroid)
 }
 
 // Length returns length of a given Geography.
@@ -79,7 +83,11 @@ func Length(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64,
 	default:
 		return 0, nil
 	}
-	return length(geo.S2RegionsFromGeom(gt), useSphereOrSpheroid)
+	regions, err := geo.S2RegionsFromGeom(gt, geo.EmptyBehaviorOmit)
+	if err != nil {
+		return 0, err
+	}
+	return length(regions, useSphereOrSpheroid)
 }
 
 // length returns the sum of the lengtsh and perimeters in the shapes of the Geography.

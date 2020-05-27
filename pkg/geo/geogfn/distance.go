@@ -22,6 +22,7 @@ import (
 )
 
 // Distance returns the distance between geographies a and b on a sphere or spheroid.
+// Returns a geo.EmptyGeometryError if any of the Geographies are EMPTY.
 func Distance(
 	a *geo.Geography, b *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (float64, error) {
@@ -29,11 +30,11 @@ func Distance(
 		return 0, geo.NewMismatchingSRIDsError(a, b)
 	}
 
-	aRegions, err := a.AsS2()
+	aRegions, err := a.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
 		return 0, err
 	}
-	bRegions, err := b.AsS2()
+	bRegions, err := b.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
 		return 0, err
 	}

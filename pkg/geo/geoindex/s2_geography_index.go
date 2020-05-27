@@ -51,7 +51,7 @@ func DefaultGeographyIndexConfig() *Config {
 
 // InvertedIndexKeys implements the GeographyIndex interface.
 func (i *s2GeographyIndex) InvertedIndexKeys(c context.Context, g *geo.Geography) ([]Key, error) {
-	r, err := g.AsS2()
+	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (i *s2GeographyIndex) InvertedIndexKeys(c context.Context, g *geo.Geography
 
 // Covers implements the GeographyIndex interface.
 func (i *s2GeographyIndex) Covers(c context.Context, g *geo.Geography) (UnionKeySpans, error) {
-	r, err := g.AsS2()
+	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (i *s2GeographyIndex) Covers(c context.Context, g *geo.Geography) (UnionKey
 
 // CoveredBy implements the GeographyIndex interface.
 func (i *s2GeographyIndex) CoveredBy(c context.Context, g *geo.Geography) (RPKeyExpr, error) {
-	r, err := g.AsS2()
+	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (i *s2GeographyIndex) CoveredBy(c context.Context, g *geo.Geography) (RPKey
 
 // Intersects implements the GeographyIndex interface.
 func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (UnionKeySpans, error) {
-	r, err := g.AsS2()
+	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (Unio
 }
 
 func (i *s2GeographyIndex) testingInnerCovering(g *geo.Geography) s2.CellUnion {
-	r, _ := g.AsS2()
+	r, _ := g.AsS2(geo.EmptyBehaviorOmit)
 	if r == nil {
 		return nil
 	}
