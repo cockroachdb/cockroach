@@ -3129,7 +3129,7 @@ statement ok
 ALTER TABLE good_users ADD FOREIGN KEY (id2) REFERENCES users(id)
 
 # Updating should no longer work, since we have a restrict.
-statement error value \[2000\] not found in good_users@good_users_id2_key \[id2\]
+statement error update on table "users" violates foreign key constraint "fk_id2_ref_users" on table "good_users"\nDETAIL: Key \(id\)=\(20\) is still referenced from table "good_users"\.
 UPDATE users SET id = id * 100 WHERE id = 20
 
 # Insert some more stuff -- make sure it still behaves as expected.
@@ -3476,7 +3476,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DE
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement error value \[1\] not found in t1@primary \[a\]
+statement error pq: update on table "t2" violates foreign key constraint "fk1"\nDETAIL: Key \(a\)=\(1\) is not present in table "t1"\.
 UPDATE t1 SET a = 2 WHERE a = 123
 
 query I
@@ -3494,7 +3494,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DE
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement error value \[1\] not found in t1@primary \[a\]
+statement error update on table "t2" violates foreign key constraint "fk1"\nDETAIL: Key \(a\)=\(1\) is not present in table "t1"\.
 UPDATE t1 SET a = 2 WHERE a = 123
 
 query I
