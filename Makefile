@@ -1631,7 +1631,7 @@ clean: clean-c-deps clean-execgen-files
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
-	rm -rf artifacts bin $(ARCHIVE) pkg/sql/parser/gen vendor
+	rm -rf artifacts bin $(ARCHIVE) pkg/sql/parser/gen
 
 vendor/modules.txt: go.sum
 	$(GO_INSTALL) -v github.com/otan-cockroach/modvendor
