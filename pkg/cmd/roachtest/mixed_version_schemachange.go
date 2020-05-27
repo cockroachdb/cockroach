@@ -33,7 +33,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 				maxOps = 10
 				concurrency = 2
 			}
-			runSchemaChangeMixedVersions(ctx, t, c, maxOps, r.buildVersion)
+			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency, r.buildVersion)
 		},
 	})
 }
@@ -69,7 +69,12 @@ func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep 
 }
 
 func runSchemaChangeMixedVersions(
-	ctx context.Context, t *test, c *cluster, maxOps int, buildVersion version.Version,
+	ctx context.Context,
+	t *test,
+	c *cluster,
+	maxOps int,
+	concurrency int,
+	buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
