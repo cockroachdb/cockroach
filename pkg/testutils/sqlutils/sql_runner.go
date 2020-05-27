@@ -62,6 +62,16 @@ func (sr *SQLRunner) Exec(t testing.TB, query string, args ...interface{}) gosql
 	return r
 }
 
+// ExecSucceedsSoon is a wrapper around gosql.Exec that wraps
+// the exec in a succeeds soon.
+func (sr *SQLRunner) ExecSucceedsSoon(t testing.TB, query string, args ...interface{}) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		_, err := sr.DB.ExecContext(context.Background(), query, args...)
+		return err
+	})
+}
+
 // ExecRowsAffected executes the statement and verifies that RowsAffected()
 // matches the expected value. It kills the test on errors.
 func (sr *SQLRunner) ExecRowsAffected(
@@ -86,6 +96,20 @@ func (sr *SQLRunner) ExpectErr(t testing.TB, errRE string, query string, args ..
 	if !testutils.IsError(err, errRE) {
 		t.Fatalf("expected error '%s', got: %v", errRE, err)
 	}
+}
+
+// ExpectErrSucceedsSoon wraps ExpectErr with a SucceedsSoon.
+func (sr *SQLRunner) ExpectErrSucceedsSoon(
+	t testing.TB, errRE string, query string, args ...interface{},
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		_, err := sr.DB.ExecContext(context.Background(), query, args...)
+		if !testutils.IsError(err, errRE) {
+			return errors.Newf("expected error '%s', got: %v", errRE, err)
+		}
+		return nil
+	})
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.

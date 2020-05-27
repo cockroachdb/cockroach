@@ -223,6 +223,12 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		if next, err := n.source.Next(params); !next {
 			lastBatch = true
 			if err != nil {
+				// TODO(richardjcai): Don't like this, not sure how to check if the
+				// parse error is specifically from the column undergoing the
+				// alter column type schema change.
+
+				// Intercept parse error due to ALTER COLUMN TYPE schema change.
+				err = interceptAlterColumnTypeParseError(n.run.insertCols, -1, err)
 				return false, err
 			}
 			break

@@ -147,8 +147,10 @@ message ColumnDescriptor {
   // This does not exist in TableDescriptors pre 20.2.
   optional uint32 logical_id = 13 [(gogoproto.nullable) = false,
    (gogoproto.customname) = "LogicalColumnID", (gogoproto.casttype) = "ColumnID"];
+  // Used to indicate column is used and dropped for ALTER COLUMN TYPE mutation.
+  optional bool alter_column_type_in_progress = 14 [(gogoproto.nullable) = false];
 }
-
+  
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
 // For more information, look at `docs/tech-notes/encoding.md#value-encoding`.
 message ColumnFamilyDescriptor {
@@ -514,6 +516,15 @@ message PrimaryKeySwap {
   repeated uint32 new_indexes = 3 [(gogoproto.casttype) = "IndexID"];
 }
 
+// ComputedColumnSwap is a mutation corresponding to the atomic swap phase
+// where Column a' that is computed using Column a is swapped to replace
+// Column a while Column a becomes computed using a'.
+message ComputedColumnSwap {
+  option (gogoproto.equal) = true;
+  optional uint32 new_column_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  optional uint32 old_column_id = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+}
+
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -529,6 +540,7 @@ message DescriptorMutation {
     IndexDescriptor index = 2;
     ConstraintToUpdate constraint = 8;
     PrimaryKeySwap primaryKeySwap = 9;
+    ComputedColumnSwap  computedColumnSwap = 10;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
