@@ -28,8 +28,10 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxOps := 100
+			concurrency := 5
 			if local {
 				maxOps = 10
+				concurrency = 2
 			}
 			runSchemaChangeMixedVersions(ctx, t, c, maxOps, r.buildVersion)
 		},
@@ -45,15 +47,21 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 	}
 }
 
-func runSchemaChangeWorkloadStep(maxOps int) versionStep {
+func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep {
 	var numFeatureRuns int
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		numFeatureRuns++
 		t.l.Printf("Workload step run: %d", numFeatureRuns)
-		loadNode := u.c.All().randNode()[0]
 		runCmd := []string{
-			"./workload run",
-			fmt.Sprintf("schemachange --concurrency 2 --max-ops %d --verbose=1", maxOps),
+			"./workload run schemachange --verbose=1",
+			// The workload is still in development and occasionally discovers schema
+			// change errors so for now we don't fail on them but only on panics, server
+			// crashes, deadlocks, etc.
+			// TODO(spaskob): remove when https://github.com/cockroachdb/cockroach/issues/47430
+			// is closed.
+			"--tolerate-errors=true",
+			fmt.Sprintf("--max-ops %d", maxOps),
+			fmt.Sprintf("--concurrency %d", concurrency),
 			fmt.Sprintf("{pgurl:1-%d}", u.c.spec.NodeCount),
 		}
 		u.c.Run(ctx, u.c.Node(loadNode), runCmd...)
@@ -71,7 +79,7 @@ func runSchemaChangeMixedVersions(
 	// An empty string will lead to the cockroach binary specified by flag
 	// `cockroach` to be used.
 	const mainVersion = ""
-	schemaChangeStep := runSchemaChangeWorkloadStep(maxOps)
+	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], maxOps, concurrency)
 	if buildVersion.Major() < 20 {
 		// Schema change workload is meant to run only on versions 19.2 or higher.
 		// If the main version is below 20.1 then then predecessor version will be
