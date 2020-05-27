@@ -984,15 +984,8 @@ func (p *Pebble) Remove(filename string) error {
 	return p.fs.Remove(filename)
 }
 
-// RemoveDirAndFiles implements the Engine interface.
-func (p *Pebble) RemoveDirAndFiles(dir string) error {
-	// NB RemoveAll does not return an error if dir does not exist, but we want
-	// RemoveDirAndFiles to return an error in that case to match the RocksDB
-	// behavior.
-	_, err := p.fs.Stat(dir)
-	if err != nil {
-		return err
-	}
+// RemoveAll implements the Engine interface.
+func (p *Pebble) RemoveAll(dir string) error {
 	return p.fs.RemoveAll(dir)
 }
 
@@ -1060,7 +1053,9 @@ func (p *Pebble) RemoveDir(name string) error {
 
 // List implements the FS interface.
 func (p *Pebble) List(name string) ([]string, error) {
-	return p.fs.List(name)
+	dirents, err := p.fs.List(name)
+	sort.Strings(dirents)
+	return dirents, err
 }
 
 // CreateCheckpoint implements the Engine interface.

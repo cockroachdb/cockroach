@@ -508,14 +508,14 @@ func (t *TeeEngine) Remove(filename string) error {
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// RemoveDirAndFiles implements the Engine interface.
-func (t *TeeEngine) RemoveDirAndFiles(dir string) error {
-	err := t.eng1.RemoveDirAndFiles(dir)
+// RemoveAll implements the Engine interface.
+func (t *TeeEngine) RemoveAll(dir string) error {
+	err := t.eng1.RemoveAll(dir)
 	dir2, ok := t.remapPath(dir)
 	if !ok {
 		return err
 	}
-	err2 := t.eng2.RemoveDirAndFiles(dir2)
+	err2 := t.eng2.RemoveAll(dir2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
