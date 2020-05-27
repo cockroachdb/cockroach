@@ -812,6 +812,59 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestTrimFlushedStatements verifies that the conn executor trims the
+// statements buffer once the corresponding results are returned to the user.
+func TestTrimFlushedStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// stmtBufMaxLen is set after executing the first SELECT COUNT(*) query. This
+	// test then verifies that the statement buffer does not grow to be larger
+	// than this after each subsequent SELECT COUNT(*) execution.
+	stmtBufMaxLen := -1
+	stmtBufLenOnFailure := 0
+	const countStmt = "SELECT count(*) FROM test"
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				AfterExecCmd: func(_ context.Context, cmd sql.Command, buf *sql.StmtBuf) {
+					if !strings.Contains(cmd.String(), countStmt) {
+						// Only compare statement buffer length on SELECT COUNT(*) queries.
+						return
+					}
+
+					// Set stmtBufMaxLen once.
+					l := buf.Len()
+					if stmtBufMaxLen == -1 {
+						stmtBufMaxLen = l
+					}
+
+					// Verify that the buffer doesn't grow.
+					if l > stmtBufMaxLen {
+						stmtBufLenOnFailure = l
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec("CREATE TABLE test (i int)")
+	require.NoError(t, err)
+
+	tx, err := sqlDB.Begin()
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		_, err := tx.Exec(countStmt)
+		require.NoError(t, err)
+		if stmtBufLenOnFailure != 0 {
+			t.Fatalf("statement buffer grew to %d (> %d) after %dth execution", stmtBufLenOnFailure, stmtBufMaxLen, i)
+		}
+	}
+	require.NoError(t, tx.Commit())
+}
+
 // dynamicRequestFilter exposes a filter method which is a
 // kvserverbase.ReplicaRequestFilter but can be set dynamically.
 type dynamicRequestFilter struct {
