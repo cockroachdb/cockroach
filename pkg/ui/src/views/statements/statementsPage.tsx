@@ -136,7 +136,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
 
   selectApp = (app: DropdownOption) => {
     const { history } = this.props;
-    history.location.pathname = `/statements/${app.value}`;
+    history.location.pathname = `/statements/${encodeURIComponent(app.value)}`;
     history.replace(history.location);
     this.resetPagination();
   }
@@ -253,7 +253,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
             <Dropdown
               title="App"
               options={appOptions}
-              selected={selectedApp}
+              selected={decodeURIComponent(selectedApp)}
               onChange={this.selectApp}
             />
           </PageConfigItem>
@@ -357,7 +357,7 @@ export const selectStatements = createSelector(
     const isInternal = (statement: ExecutionStatistics) => statement.app.startsWith(state.data.internal_app_name_prefix);
 
     if (app) {
-      let criteria = app;
+      let criteria = decodeURIComponent(app);
       let showInternal = false;
       if (criteria === "(unset)") {
         criteria = "";
