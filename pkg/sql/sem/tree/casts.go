@@ -33,102 +33,273 @@ import (
 )
 
 type castInfo struct {
-	fromT   *types.T
+	from       types.Family
+	to         types.Family
+	volatility Volatility
+
+	// Telemetry counter; set by init().
 	counter telemetry.Counter
+
+	// If set, the volatility of this cast is not cross-checked against postgres.
+	// Use this with caution.
+	ignoreVolatilityCheck bool
 }
 
-// annotateCast produces an array of cast types decorated with cast
-// type telemetry counters.
-func annotateCast(toType *types.T, fromTypes []*types.T) []castInfo {
-	ci := make([]castInfo, len(fromTypes))
-	for i, fromType := range fromTypes {
-		ci[i].fromT = fromType
-	}
-	rname := toType.String()
+// validCasts lists all valid explicit casts.
+//
+// This list must be kept in sync with the capabilities of PerformCast.
+//
+// Each cast defines a volatility:
+//
+//  - immutable casts yield the same result on the same arguments in whatever
+//    context they are evaluated.
+//
+//  - stable casts can yield a different result depending on the evaluation context:
+//    - session settings (e.g. bytes encoding format)
+//    - current timezone
+//    - current time (e.g. 'now'::string).
+//
+// TODO(radu): move the PerformCast code for each cast into functions defined
+// within each cast.
+//
+var validCasts = []castInfo{
+	// Casts to BitFamily.
+	{from: types.UnknownFamily, to: types.BitFamily, volatility: VolatilityImmutable},
+	{from: types.BitFamily, to: types.BitFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.BitFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.BitFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.BitFamily, volatility: VolatilityImmutable},
 
-	for i, fromType := range fromTypes {
-		lname := fromType.String()
-		ci[i].counter = sqltelemetry.CastOpCounter(lname, rname)
-	}
-	return ci
+	// Casts to BoolFamily.
+	{from: types.UnknownFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+	{from: types.BoolFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+	{from: types.FloatFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+	{from: types.DecimalFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.BoolFamily, volatility: VolatilityImmutable},
+
+	// Casts to IntFamily.
+	{from: types.UnknownFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.BoolFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.FloatFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.DecimalFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.DateFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.IntervalFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.OidFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.BitFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+
+	// Casts to FloatFamily.
+	{from: types.UnknownFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.BoolFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.FloatFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.DecimalFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.DateFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.IntervalFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+
+	// Casts to GeographyFamily.
+	{from: types.UnknownFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
+	{from: types.GeographyFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
+	{from: types.GeometryFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
+
+	// Casts to GeographyFamily.
+	{from: types.UnknownFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+	{from: types.GeographyFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+	{from: types.GeometryFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+
+	// Casts to DecimalFamily.
+	{from: types.UnknownFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.BoolFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.FloatFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.DecimalFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.DateFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.IntervalFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+
+	// Casts to StringFamily.
+	{from: types.UnknownFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.BoolFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.FloatFamily, to: types.StringFamily, volatility: VolatilityStable},
+	{from: types.DecimalFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.BitFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.ArrayFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.TupleFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.GeometryFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.GeographyFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.StringFamily, volatility: VolatilityStable},
+	{from: types.TimestampFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.StringFamily, volatility: VolatilityStable},
+	{from: types.IntervalFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.UuidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.DateFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.TimeFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.TimeTZFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.OidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.INetFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.EnumFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+
+	// Casts to CollatedStringFamily.
+	{from: types.UnknownFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.BoolFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.FloatFamily, to: types.CollatedStringFamily, volatility: VolatilityStable},
+	{from: types.DecimalFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.BitFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.ArrayFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.TupleFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.GeometryFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.GeographyFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.CollatedStringFamily, volatility: VolatilityStable},
+	{from: types.TimestampFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.CollatedStringFamily, volatility: VolatilityStable},
+	{from: types.IntervalFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.UuidFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.DateFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.TimeFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.TimeTZFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.OidFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.INetFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.EnumFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+
+	// Casts to BytesFamily.
+	{from: types.UnknownFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
+	{from: types.UuidFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
+
+	// Casts to DateFamily.
+	{from: types.UnknownFamily, to: types.DateFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.DateFamily, volatility: VolatilityStable},
+	{from: types.CollatedStringFamily, to: types.DateFamily, volatility: VolatilityStable},
+	{from: types.DateFamily, to: types.DateFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampFamily, to: types.DateFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.DateFamily, volatility: VolatilityStable},
+	{from: types.IntFamily, to: types.DateFamily, volatility: VolatilityImmutable},
+
+	// Casts to TimeFamily.
+	{from: types.UnknownFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.TimeFamily, volatility: VolatilityStable},
+	{from: types.CollatedStringFamily, to: types.TimeFamily, volatility: VolatilityStable},
+	{from: types.TimeFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
+	{from: types.TimeTZFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.TimeFamily, volatility: VolatilityStable},
+	{from: types.IntervalFamily, to: types.TimeFamily, volatility: VolatilityImmutable},
+
+	// Casts to TimeTZFamily.
+	{from: types.UnknownFamily, to: types.TimeTZFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.TimeTZFamily, volatility: VolatilityStable},
+	{from: types.CollatedStringFamily, to: types.TimeTZFamily, volatility: VolatilityStable},
+	{from: types.TimeFamily, to: types.TimeTZFamily, volatility: VolatilityStable},
+	{from: types.TimeTZFamily, to: types.TimeTZFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.TimeTZFamily, volatility: VolatilityStable},
+
+	// Casts to TimestampFamily.
+	{from: types.UnknownFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.TimestampFamily, volatility: VolatilityStable},
+	{from: types.CollatedStringFamily, to: types.TimestampFamily, volatility: VolatilityStable},
+	{from: types.DateFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
+	{from: types.TimestampTZFamily, to: types.TimestampFamily, volatility: VolatilityStable},
+	{from: types.IntFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
+
+	// Casts to TimestampTZFamily.
+	{from: types.UnknownFamily, to: types.TimestampTZFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.TimestampTZFamily, volatility: VolatilityStable},
+	{from: types.CollatedStringFamily, to: types.TimestampTZFamily, volatility: VolatilityStable},
+	{from: types.DateFamily, to: types.TimestampTZFamily, volatility: VolatilityStable},
+	{from: types.TimestampFamily, to: types.TimestampTZFamily, volatility: VolatilityStable},
+	{from: types.TimestampTZFamily, to: types.TimestampTZFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.TimestampTZFamily, volatility: VolatilityImmutable},
+
+	// Casts to IntervalFamily.
+	{from: types.UnknownFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{from: types.IntFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{from: types.TimeFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{from: types.IntervalFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{from: types.FloatFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{from: types.DecimalFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+
+	// Casts to OidFamily.
+	{from: types.UnknownFamily, to: types.OidFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.OidFamily, volatility: VolatilityStable},
+	{from: types.CollatedStringFamily, to: types.OidFamily, volatility: VolatilityStable},
+	{from: types.IntFamily, to: types.OidFamily, volatility: VolatilityStable, ignoreVolatilityCheck: true},
+	{from: types.OidFamily, to: types.OidFamily, volatility: VolatilityStable},
+
+	// Casts to UuidFamily.
+	{from: types.UnknownFamily, to: types.UuidFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.UuidFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.UuidFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.UuidFamily, volatility: VolatilityImmutable},
+	{from: types.UuidFamily, to: types.UuidFamily, volatility: VolatilityImmutable},
+
+	// Casts to INetFamily.
+	{from: types.UnknownFamily, to: types.INetFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.INetFamily, volatility: VolatilityImmutable},
+	{from: types.CollatedStringFamily, to: types.INetFamily, volatility: VolatilityImmutable},
+	{from: types.INetFamily, to: types.INetFamily, volatility: VolatilityImmutable},
+
+	// Casts to ArrayFamily.
+	{from: types.UnknownFamily, to: types.ArrayFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.ArrayFamily, volatility: VolatilityStable},
+
+	// Casts to JsonFamily.
+	{from: types.UnknownFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
+
+	// Casts to EnumFamily.
+	{from: types.UnknownFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
+	{from: types.EnumFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
 }
 
-var (
-	bitArrayCastTypes = annotateCast(types.VarBit, []*types.T{types.Unknown, types.VarBit, types.Int, types.String, types.AnyCollatedString})
-	boolCastTypes     = annotateCast(types.Bool, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString})
-	intCastTypes      = annotateCast(types.Int, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.VarBit})
-	floatCastTypes = annotateCast(types.Float, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
-	geographyCastTypes = annotateCast(types.Geography, []*types.T{types.Unknown, types.String, types.Geography, types.Geometry})
-	geometryCastTypes  = annotateCast(types.Geometry, []*types.T{types.Unknown, types.String, types.Geography, types.Geometry})
-	decimalCastTypes   = annotateCast(types.Decimal, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
-	stringCastTypes = annotateCast(types.String, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.VarBit,
-		types.AnyArray, types.AnyTuple,
-		types.Geometry, types.Geography,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb, types.AnyEnum})
-	bytesCastTypes = annotateCast(types.Bytes, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.AnyEnum, types.Bytes, types.Uuid})
-	dateCastTypes  = annotateCast(types.Date, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	timeCastTypes  = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ,
-		types.Timestamp, types.TimestampTZ, types.Interval})
-	timeTZCastTypes    = annotateCast(types.TimeTZ, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ, types.TimestampTZ})
-	timestampCastTypes = annotateCast(types.Timestamp, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	intervalCastTypes  = annotateCast(types.Interval, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
-	oidCastTypes       = annotateCast(types.Oid, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Oid})
-	uuidCastTypes      = annotateCast(types.Uuid, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
-	inetCastTypes      = annotateCast(types.INet, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.INet})
-	arrayCastTypes     = annotateCast(types.AnyArray, []*types.T{types.Unknown, types.String})
-	jsonCastTypes      = annotateCast(types.Jsonb, []*types.T{types.Unknown, types.String, types.Jsonb})
-	enumCastTypes      = annotateCast(types.AnyEnum, []*types.T{types.Unknown, types.String, types.AnyEnum})
-)
+type castsMapKey struct {
+	from, to types.Family
+}
 
-// validCastTypes returns a set of types that can be cast into the provided type.
-func validCastTypes(t *types.T) []castInfo {
-	switch t.Family() {
-	case types.BitFamily:
-		return bitArrayCastTypes
-	case types.BoolFamily:
-		return boolCastTypes
-	case types.IntFamily:
-		return intCastTypes
-	case types.FloatFamily:
-		return floatCastTypes
-	case types.DecimalFamily:
-		return decimalCastTypes
-	case types.StringFamily, types.CollatedStringFamily:
-		return stringCastTypes
-	case types.BytesFamily:
-		return bytesCastTypes
-	case types.DateFamily:
-		return dateCastTypes
-	case types.GeographyFamily:
-		return geographyCastTypes
-	case types.GeometryFamily:
-		return geometryCastTypes
-	case types.TimeFamily:
-		return timeCastTypes
-	case types.TimeTZFamily:
-		return timeTZCastTypes
-	case types.TimestampFamily, types.TimestampTZFamily:
-		return timestampCastTypes
-	case types.IntervalFamily:
-		return intervalCastTypes
-	case types.JsonFamily:
-		return jsonCastTypes
-	case types.UuidFamily:
-		return uuidCastTypes
-	case types.INetFamily:
-		return inetCastTypes
-	case types.OidFamily:
-		return oidCastTypes
-	case types.ArrayFamily:
-		return arrayCastTypes
-	case types.EnumFamily:
-		return enumCastTypes
-	default:
-		return nil
+var castsMap map[castsMapKey]*castInfo
+
+func init() {
+	castsMap = make(map[castsMapKey]*castInfo, len(validCasts))
+	for i := range validCasts {
+		c := &validCasts[i]
+
+		// Initialize counter.
+		c.counter = sqltelemetry.CastOpCounter(c.from.Name(), c.to.Name())
+
+		key := castsMapKey{from: c.from, to: c.to}
+		castsMap[key] = c
 	}
 }
 
