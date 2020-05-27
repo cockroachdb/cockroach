@@ -27,7 +27,7 @@ import (
 //
 // If the inverted column stores an encoded datum, the encoding is
 // DatumEncoding_ASCENDING_KEY, and is performed using
-// EncodeTableKey(nil /* prefix */, val tree.Datum, DatumEncoding_ASCENDING_KEY).
+// EncodeTableKey(nil /* prefix */, val tree.Datum, encoding.Ascending).
 // It is used to represent spans of the inverted column.
 //
 // It would be ideal if the inverted column only contained Datums, since we
