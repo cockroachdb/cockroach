@@ -1,0 +1,77 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~src/components/core/index'
+
+.bar-chart
+  height 14px
+  position relative
+  display flex
+  align-items center
+  flex-direction row
+  > span
+    width 100%
+    display flex
+    align-items center
+    flex-direction row
+
+  &__multiplebars
+    width calc(100% - 75px)
+    border-radius 3px
+    position relative
+    display flex
+    align-items center
+
+  &__label
+    position relative
+    font-family SourceSansPro-Regular
+    font-size 12px
+    line-height 1.83
+    color $adminui-grey-1
+    width 75px
+
+  &__bar
+    display inline-block
+    height 13px
+    border-radius 3px
+
+    &--dev
+      position absolute
+      height 3px
+
+  .count-first-try, .count-total, .count-retry, .count-max-retries
+    border-radius 3px
+    position absolute
+    left 40px
+
+  .count-first-try, .count-total
+    background-color $grey-light
+  .count-retry, .count-max-retries
+    background-color $alert-color
+
+  .rows
+    background-color $grey-light
+    border-radius 3px
+
+  .rows-dev
+    background-color $colors--primary-blue-3
+
+  .bar-chart
+    &__parse, &__plan, &__run, &__overhead, &__overall
+      background-color $colors--neutral-4
+
+  &-red
+    .bar-chart
+      &__parse, &__plan, &__run, &__overhead, &__overall
+        background-color $colors--functional-red-2
+
+  &__parse-dev, &__plan-dev, &__run-dev, &__overhead-dev, &__overall-dev
+    background-color $colors--primary-blue-3
