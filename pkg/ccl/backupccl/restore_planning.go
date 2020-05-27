@@ -155,7 +155,7 @@ func allocateTableRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
-	maxDescIDInBackup := int64(0)
+	maxDescIDInBackup := int64(keys.MinNonPredefinedUserDescID)
 	for _, table := range tablesByID {
 		if int64(table.ID) > maxDescIDInBackup {
 			maxDescIDInBackup = int64(table.ID)
