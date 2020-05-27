@@ -125,3 +125,46 @@ t6  CREATE TABLE t6 (
     FAMILY "primary" (a, rowid)
 )
 
+#### Renaming a column updates the index predicates.
+
+statement ok
+ALTER TABLE t6 RENAME COLUMN a TO b
+
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE t6 (
+    b INT8 NULL,
+    INDEX t6_a_idx (b ASC) WHERE b > 0,
+    INDEX t6_a_idx1 (b ASC) WHERE b > 1,
+    INDEX t6_a_idx2 (b DESC) WHERE b > 2,
+    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3,
+    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4,
+    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5,
+    INDEX t6i1 (b ASC) WHERE b > 6,
+    INDEX t6i2 (b ASC) WHERE b > 7,
+    INDEX t6i3 (b DESC) WHERE b > 8,
+    FAMILY "primary" (b, rowid)
+)
+
+#### Renaming a table keeps the index predicates intact.
+
+statement ok
+ALTER TABLE t6 RENAME TO t7
+
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE t7 (
+    b INT8 NULL,
+    INDEX t6_a_idx (b ASC) WHERE b > 0,
+    INDEX t6_a_idx1 (b ASC) WHERE b > 1,
+    INDEX t6_a_idx2 (b DESC) WHERE b > 2,
+    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3,
+    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4,
+    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5,
+    INDEX t6i1 (b ASC) WHERE b > 6,
+    INDEX t6i2 (b ASC) WHERE b > 7,
+    INDEX t6i3 (b DESC) WHERE b > 8,
+    FAMILY "primary" (b, rowid)
+)
