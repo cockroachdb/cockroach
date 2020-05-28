@@ -1303,7 +1303,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
 			key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(i))
-			if err := txn.Put(ctx, key, &sqlbase.Descriptor{}); err != nil {
+			if err := txn.Put(ctx, key, sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{})); err != nil {
 				return err
 			}
 		}
@@ -1367,7 +1367,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// This time, only write the last table descriptor. Splits only occur for
 		// the descriptor we add. We don't care about the value, just the key.
 		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(userTableMax))
-		return txn.Put(ctx, k, &sqlbase.Descriptor{})
+		return txn.Put(ctx, k, sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{}))
 	}); err != nil {
 		t.Fatal(err)
 	}

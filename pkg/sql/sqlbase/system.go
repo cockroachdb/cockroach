@@ -24,23 +24,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// ShouldSplitAtID determines whether a specific descriptor ID
-// should be considered for a split at all. If it is a database
-// or a view table descriptor, it should not be considered.
-func ShouldSplitAtID(id uint32, rawDesc *roachpb.Value) bool {
+// ShouldSplitAtDesc determines whether a specific descriptor should be
+// considered for a split. Only plain tables are considered for split.
+func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
 	var desc Descriptor
 	if err := rawDesc.GetProto(&desc); err != nil {
 		return false
 	}
-	if dbDesc := desc.GetDatabase(); dbDesc != nil {
-		return false
-	}
-	if tableDesc := desc.Table(rawDesc.Timestamp); tableDesc != nil {
-		if viewStr := tableDesc.GetViewQuery(); viewStr != "" {
+	switch t := desc.GetUnion().(type) {
+	case *Descriptor_Table:
+		if t.Table.IsView() {
 			return false
 		}
+		return true
+	case *Descriptor_Database:
+		return false
+	case *Descriptor_Type:
+		return false
+	case *Descriptor_Schema:
+		return false
+	default:
+		panic(fmt.Sprintf("unexpected descriptor type %#v", &desc))
 	}
-	return true
 }
 
 // sql CREATE commands and full schema for each system table.
