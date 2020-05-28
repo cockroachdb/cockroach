@@ -548,6 +548,13 @@ func (buf *StmtBuf) Rewind(ctx context.Context, pos CmdPos) {
 	buf.mu.curPos = pos
 }
 
+// Len returns the buffer's length.
+func (buf *StmtBuf) Len() int {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	return len(buf.mu.data)
+}
+
 // RowDescOpt specifies whether a result needs a row description message.
 type RowDescOpt bool
 
@@ -837,6 +844,11 @@ type rewindCapability struct {
 func (rc *rewindCapability) rewindAndUnlock(ctx context.Context) {
 	rc.cl.RTrim(ctx, rc.rewindPos)
 	rc.buf.Rewind(ctx, rc.rewindPos)
+	rc.cl.Close()
+}
+
+// close closes the underlying ClientLock.
+func (rc *rewindCapability) close() {
 	rc.cl.Close()
 }
 
