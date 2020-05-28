@@ -336,10 +336,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
 	rdc.rangeCache.RLock()
-	if desc, _, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
-		rdc.rangeCache.RUnlock()
-		return nil, nil, err
-	} else if desc != nil {
+	if desc, _ := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); desc != nil {
 		rdc.rangeCache.RUnlock()
 		returnToken := rdc.makeEvictionToken(desc, func(ctx context.Context) {
 			rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
@@ -522,20 +519,20 @@ func (rdc *RangeDescriptorCache) Clear() {
 // does in GetCachedRangeDescriptor.
 func (rdc *RangeDescriptorCache) EvictCachedRangeDescriptor(
 	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inverted bool,
-) error {
+) {
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
-	return rdc.evictCachedRangeDescriptorLocked(ctx, descKey, seenDesc, inverted)
+	rdc.evictCachedRangeDescriptorLocked(ctx, descKey, seenDesc, inverted)
 }
 
 // evictCachedRangeDescriptorLocked is like evictCachedRangeDescriptor, but it
 // assumes that the caller holds a write lock on rdc.rangeCache.
 func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inverted bool,
-) error {
-	cachedDesc, entry, err := rdc.getCachedRangeDescriptorLocked(descKey, inverted)
-	if err != nil || cachedDesc == nil {
-		return err
+) {
+	cachedDesc, entry := rdc.getCachedRangeDescriptorLocked(descKey, inverted)
+	if cachedDesc == nil {
+		return
 	}
 
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil, we
@@ -546,7 +543,7 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 	// prompt another expensive lookup).
 	if seenDesc != nil {
 		if seenDesc.Generation != cachedDesc.Generation {
-			return nil
+			return
 		}
 	}
 
@@ -554,7 +551,6 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 		log.Infof(ctx, "evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
 	}
 	rdc.rangeCache.cache.DelEntry(entry)
-	return nil
 }
 
 // GetCachedRangeDescriptor retrieves the descriptor of the range which contains
@@ -565,11 +561,11 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 // is returned instead of the second (which technically contains the given key).
 func (rdc *RangeDescriptorCache) GetCachedRangeDescriptor(
 	key roachpb.RKey, inverted bool,
-) (*roachpb.RangeDescriptor, error) {
+) *roachpb.RangeDescriptor {
 	rdc.rangeCache.RLock()
 	defer rdc.rangeCache.RUnlock()
-	desc, _, err := rdc.getCachedRangeDescriptorLocked(key, inverted)
-	return desc, err
+	desc, _ := rdc.getCachedRangeDescriptorLocked(key, inverted)
+	return desc
 }
 
 // getCachedRangeDescriptorLocked is like GetCachedRangeDescriptor, but it
@@ -579,7 +575,7 @@ func (rdc *RangeDescriptorCache) GetCachedRangeDescriptor(
 // Entry that can be used for descriptor eviction.
 func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 	key roachpb.RKey, inverted bool,
-) (*roachpb.RangeDescriptor, *cache.Entry, error) {
+) (*roachpb.RangeDescriptor, *cache.Entry) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inverted by default.
 	var metaKey roachpb.RKey
@@ -591,7 +587,7 @@ func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 
 	entry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(metaKey))
 	if !ok {
-		return nil, nil, nil
+		return nil, nil
 	}
 	desc := entry.Value.(*roachpb.RangeDescriptor)
 
@@ -602,9 +598,9 @@ func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 
 	// Return nil if the key does not belong to the range.
 	if !containsFn(desc, key) {
-		return nil, nil, nil
+		return nil, nil
 	}
-	return desc, entry, nil
+	return desc, entry
 }
 
 // InsertRangeDescriptors inserts the provided descriptors in the cache.

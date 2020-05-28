@@ -326,10 +326,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas())
 					}
 				}
-				err := ds.rangeCache.EvictCachedRangeDescriptor(ctx, roachpb.RKeyMin, nil, false)
-				if err != nil {
-					log.Warningf(ctx, "failed to evict first range descriptor: %s", err)
-				}
+				ds.rangeCache.EvictCachedRangeDescriptor(ctx, roachpb.RKeyMin, nil, false)
 			})
 	}
 	return ds
