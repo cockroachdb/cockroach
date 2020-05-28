@@ -410,14 +410,11 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 			rdc.rangeCache.Lock()
 			defer rdc.rangeCache.Unlock()
 
-			// These need to be separate because we need to preserve the pointer to rs[0]
-			// so that the compare-and-evict logic works correctly in EvictCachedRangeDescriptor.
-			// An append could cause a copy, which would change the address of rs[0]. We insert
-			// the prefetched descriptors first to avoid any unintended overwriting. We then
-			// only insert the first desired descriptor, since any other descriptor in rs would
-			// overwrite rs[0]. Instead, these are handled with the evictToken.
+			// Insert the descriptor and the prefetched ones. We don't insert rs[1]
+			// (if any), since it overlaps with rs[0]; rs[1] will be handled by
+			// rs[0]'s eviction token.
+			rdc.insertRangeDescriptorsLocked(ctx, rs[0:1:1]... /* this is rs[0], avoiding an allocation */)
 			rdc.insertRangeDescriptorsLocked(ctx, preRs...)
-			rdc.insertRangeDescriptorsLocked(ctx, rs[:1]...)
 			return nil
 		}); err != nil {
 			return nil, err
@@ -633,9 +630,10 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
-		continueWithInsert := rdc.clearOverlappingCachedRangeDescriptors(ctx, &rs[i])
-		if !continueWithInsert {
-			return
+		ok := rdc.clearOlderOverlapping(ctx, &rs[i])
+		if !ok {
+			// The descriptor is already in the cache, or is stale.
+			continue
 		}
 		rangeKey := keys.RangeMetaKey(rs[i].EndKey)
 		if log.V(2) {
@@ -645,22 +643,20 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 	}
 }
 
-// clearOverlappingCachedRangeDescriptors looks up and clears any cache entries
-// which overlap the specified descriptor, unless the descriptor is already in
-// the cache.
+// clearOlderOverlapping clears any stale cache entries which overlap the
+// specified descriptor. Returns false if any any overlapping newer descriptor
+// is found (or if the descriptor we're trying to insert is already in the
+// cache).
 //
-// This method is expected to be used in preparation of inserting a descriptor
-// in the cache; the bool return value specifies if the insertion should go on:
-// if any overlapping descriptor is known to be newer than the one passed in,
-// false is returned, and true otherwise. Note that even if false is returned,
-// stale range descriptors can still be deleted from the cache.
-func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
+// Note that even if false is returned, older descriptors are still cleared from
+// the cache.
+func (rdc *RangeDescriptorCache) clearOlderOverlapping(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
 ) bool {
 	startMeta := keys.RangeMetaKey(desc.StartKey)
 	endMeta := keys.RangeMetaKey(desc.EndKey)
 	var entriesToEvict []*cache.Entry
-	continueWithInsert := true
+	newest := true
 
 	// Try to clear the descriptor that covers the end key of desc, if any. For
 	// example, if we are inserting a [/Min, "m") descriptor, we should check if
@@ -676,9 +672,9 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 		if cached.StartKey.Less(desc.EndKey) && !cached.EndKey.Less(desc.EndKey) {
 			if desc.Generation <= cached.Generation {
 				// A newer descriptor already exists in cache.
-				continueWithInsert = false
+				newest = false
 			}
-			if continueWithInsert {
+			if newest {
 				entriesToEvict = append(entriesToEvict, entry)
 			}
 		}
@@ -697,7 +693,7 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 		descriptor := e.Value.(*roachpb.RangeDescriptor)
 		// Check generations to see if we evict.
 		if desc.Generation <= descriptor.Generation {
-			continueWithInsert = false
+			newest = false
 		} else {
 			entriesToEvict = append(entriesToEvict, e)
 		}
@@ -711,5 +707,5 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 		}
 		rdc.rangeCache.cache.DelEntry(e)
 	}
-	return continueWithInsert
+	return newest
 }
