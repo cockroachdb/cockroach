@@ -510,7 +510,7 @@ func (rdc *RangeDescriptorCache) Clear() {
 // the returned range descriptor is discovered to be stale.
 //
 // seenDesc should always be passed in if available, and is used as the basis of
-// a pointer-based compare-and-evict strategy. This means that if the cache does
+// a compare-and-evict strategy. This means that if the cache does
 // not contain the provided descriptor, no descriptor will be evicted. If
 // seenDesc is nil, eviction is unconditional.
 //
