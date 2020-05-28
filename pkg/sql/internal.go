@@ -392,11 +392,14 @@ func (ie *InternalExecutor) execInternal(
 		// We wrap errors with the opName, but not if they're retriable - in that
 		// case we need to leave the error intact so that it can be retried at a
 		// higher level.
+		//
+		// TODO(knz): track the callers and check whether opName could be turned
+		// into a type safe for reporting.
 		if retErr != nil && !errIsRetriable(retErr) {
-			retErr = errors.Wrapf(retErr, opName)
+			retErr = errors.Wrapf(retErr, "%s", opName)
 		}
 		if retRes.err != nil && !errIsRetriable(retRes.err) {
-			retRes.err = errors.Wrapf(retRes.err, opName)
+			retRes.err = errors.Wrapf(retRes.err, "%s", opName)
 		}
 	}()
 

@@ -363,7 +363,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 			}
 		}
 		if failures := v.Failures(); len(failures) > 0 {
-			return errors.New("validator failures:\n" + strings.Join(failures, "\n"))
+			return errors.Newf("validator failures:\n%s", strings.Join(failures, "\n"))
 		}
 		return nil
 	})

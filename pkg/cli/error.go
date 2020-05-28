@@ -229,7 +229,7 @@ func MaybeDecorateGRPCError(
 		connRefused := func() error {
 			extra := extraInsecureHint()
 			return errors.Errorf("server closed the connection.\n"+
-				"Is this a CockroachDB node?\n"+extra+"\n%v", err)
+				"Is this a CockroachDB node?\n%s\n%v", extra, err)
 		}
 
 		// Is this an "unable to connect" type of error?

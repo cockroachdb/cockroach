@@ -58,7 +58,7 @@ type scriptNemesis string
 func (sn scriptNemesis) exec(arg string) error {
 	b, err := exec.Command(string(sn), arg).CombinedOutput()
 	if err != nil {
-		return errors.Wrap(err, string(b))
+		return errors.WithDetailf(err, "command output:\n%s", string(b))
 	}
 	fmt.Fprintf(stderr, "%s %s: %s", sn, arg, b)
 	return nil

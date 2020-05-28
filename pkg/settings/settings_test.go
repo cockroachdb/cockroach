@@ -44,7 +44,7 @@ func (d *dummy) Unmarshal(data []byte) error {
 
 func (d *dummy) Marshal() ([]byte, error) {
 	if c := d.msg1 + d.growsbyone; strings.Contains(c, ".") {
-		return nil, errors.New("must not contain dots: " + c)
+		return nil, errors.Newf("must not contain dots: %s", c)
 	}
 	return []byte(d.msg1 + "." + d.growsbyone), nil
 }
@@ -715,14 +715,10 @@ func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name stri
 	defer func() {
 		// Catch panic and convert it to an error.
 		if r := recover(); r != nil {
-			// Check exactly what the panic was and create error.
-			switch x := r.(type) {
-			case string:
-				err = errors.New(x)
-			case error:
-				err = x
-			default:
-				err = errors.Errorf("unknown panic: %v", x)
+			if panicErr, ok := r.(error); ok {
+				err = errors.WithStackDepth(panicErr, 1)
+			} else {
+				err = errors.NewWithDepthf(1, "panic: %v", r)
 			}
 		}
 	}()

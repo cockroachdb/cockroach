@@ -57,7 +57,7 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 		}
 		datum, err := typedExpr.Eval(d.evalCtx)
 		if err != nil {
-			return nil, errors.Wrap(err, typedExpr.String())
+			return nil, errors.Wrapf(err, "%s", typedExpr)
 		}
 		rowExprs = append(rowExprs, datum)
 	}

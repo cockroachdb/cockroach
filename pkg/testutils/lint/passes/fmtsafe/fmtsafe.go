@@ -76,6 +76,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	// in functions.go). In non-recognized function, it is set to nil to
 	// indicate there is no known format or message string.
 	var fmtOrMsgStr *types.Var
+	var enclosingFnName string
 
 	// Now traverse the ASTs. The preorder traversal visits each
 	// function declaration node before its body, so we always get to
@@ -95,30 +96,35 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		if fd, ok := n.(*ast.FuncDecl); ok {
 			// This is the function declaration header. Obtain the formal
-			// parameter.
-			fmtOrMsgStr = maybeGetConstStr(pass, fd)
+			// parameter and the name of the function being defined.
+			// We use the name in subsequent error messages to provide
+			// more context, and to facilitate the definition
+			// of precise exceptions in lint_test.go.
+			enclosingFnName, fmtOrMsgStr = maybeGetConstStr(pass, fd)
 			return
 		}
 		// At a call site.
 		call := n.(*ast.CallExpr)
-		checkCallExpr(pass, call, fmtOrMsgStr)
+		checkCallExpr(pass, enclosingFnName, call, fmtOrMsgStr)
 	})
 	return nil, nil
 }
 
-func maybeGetConstStr(pass *analysis.Pass, fd *ast.FuncDecl) (res *types.Var) {
+func maybeGetConstStr(
+	pass *analysis.Pass, fd *ast.FuncDecl,
+) (enclosingFnName string, res *types.Var) {
 	if fd.Body == nil {
 		// No body. Since there won't be any callee, take
 		// an early return.
-		return nil
+		return "", nil
 	}
 
 	// What's the function being defined?
 	fn := pass.TypesInfo.Defs[fd.Name].(*types.Func)
 	if fn == nil {
-		return nil
+		return "", nil
 	}
-	fnName := fn.FullName()
+	fnName := stripVendor(fn.FullName())
 
 	var wantVariadic bool
 	var argIdx int
@@ -135,7 +141,7 @@ func maybeGetConstStr(pass *analysis.Pass, fd *ast.FuncDecl) (res *types.Var) {
 		argIdx = -1
 	} else {
 		// Not a recognized function. Bail.
-		return nil
+		return fn.Name(), nil
 	}
 
 	sig := fn.Type().(*types.Signature)
@@ -152,12 +158,12 @@ func maybeGetConstStr(pass *analysis.Pass, fd *ast.FuncDecl) (res *types.Var) {
 	}
 	if p := params.At(nparams + argIdx); p.Type() == types.Typ[types.String] {
 		// Found it!
-		return p
+		return fn.Name(), p
 	}
-	return nil
+	return fn.Name(), nil
 }
 
-func checkCallExpr(pass *analysis.Pass, call *ast.CallExpr, fv *types.Var) {
+func checkCallExpr(pass *analysis.Pass, enclosingFnName string, call *ast.CallExpr, fv *types.Var) {
 	// What's the function being called?
 	cfn := typeutil.Callee(pass.TypesInfo, call)
 	if cfn == nil {
@@ -173,7 +179,7 @@ func checkCallExpr(pass *analysis.Pass, call *ast.CallExpr, fv *types.Var) {
 
 	// What's the full name of the callee? This includes the package
 	// path and, for methods, the type of the supporting object.
-	fnName := fn.FullName()
+	fnName := stripVendor(fn.FullName())
 
 	var wantVariadic bool
 	var argIdx int
@@ -239,12 +245,13 @@ func checkCallExpr(pass *analysis.Pass, call *ast.CallExpr, fv *types.Var) {
 		return
 	}
 
-	pass.Reportf(call.Lparen, "%s argument is not a constant expression%s", argType, Tip)
+	pass.Reportf(call.Lparen, escNl("%s(): %s argument is not a constant expression"+Tip),
+		enclosingFnName, argType)
 }
 
 // Tip is exported for use in tests.
 var Tip = `
-Tip: use YourFuncf("%s", ...) or list new formatting wrappers in pkg/testutils/lint/passes/fmtsafe/functions.go.`
+Tip: use YourFuncf("descriptive prefix %s", ...) or list new formatting wrappers in pkg/testutils/lint/passes/fmtsafe/functions.go.`
 
 func hasNoLintComment(pass *analysis.Pass, call *ast.CallExpr, idx int) bool {
 	fPos, f := findContainingFile(pass, call)
@@ -280,4 +287,15 @@ func findContainingFile(pass *analysis.Pass, n ast.Node) (*token.File, *ast.File
 		}
 	}
 	panic(fmt.Errorf("cannot file file for %v", n))
+}
+
+func stripVendor(s string) string {
+	if i := strings.Index(s, "/vendor/"); i != -1 {
+		s = s[i+len("/vendor/"):]
+	}
+	return s
+}
+
+func escNl(msg string) string {
+	return strings.ReplaceAll(msg, "\n", "\\n++")
 }

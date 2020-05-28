@@ -13,7 +13,6 @@ package cloud
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"net/url"
 	"path"
@@ -107,7 +106,7 @@ func makeGCSStorage(
 		}
 		decodedKey, err := base64.StdEncoding.DecodeString(conf.Credentials)
 		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("decoding value of %s", CredentialsParam))
+			return nil, errors.Wrapf(err, "decoding value of %s", CredentialsParam)
 		}
 		source, err := google.JWTConfigFromJSON(decodedKey, scope)
 		if err != nil {

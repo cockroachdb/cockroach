@@ -235,7 +235,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				break
 			}
 			if err := writer.Flush(); err != nil {
-				return errors.New(fmt.Sprintf("failed to flush csv writer, error %s", err))
+				return errors.Wrap(err, "failed to flush csv writer")
 			}
 
 			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination)
@@ -259,7 +259,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			// Close writer to ensure buffer and any compression footer is flushed.
 			err = writer.Close()
 			if err != nil {
-				return errors.New(fmt.Sprintf("failed to close exporting writer, error %s", err))
+				return errors.Wrapf(err, "failed to close exporting writer")
 			}
 
 			size := writer.Len()

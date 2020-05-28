@@ -58,7 +58,7 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
 		if sv := settings.TODO(); sv != nil {
-			err := errors.NewWithDepthf(depth+1, "fatal error: "+format, args...)
+			err := errors.NewWithDepthf(depth+1, format, args...)
 			sendCrashReport(ctx, sv, err, ReportTypePanic)
 		}
 	}

@@ -99,26 +99,23 @@ type checkResult struct {
 }
 
 func (cr *checkResult) Error() error {
-	var errs []string
+	var err error
 	if cr.err != nil {
-		errs = append(errs, cr.err.Error())
+		err = cr.err
 	}
 	if !cr.actMS.Equal(enginepb.MVCCStats{}) && !cr.actMS.Equal(cr.claimMS) && cr.claimMS.ContainsEstimates <= 0 {
-		err := fmt.Sprintf("stats inconsistency:\n- stored:\n%+v\n- recomputed:\n%+v\n- diff:\n%s",
+		thisErr := errors.Newf(
+			"stats inconsistency:\n- stored:\n%+v\n- recomputed:\n%+v\n- diff:\n%s",
 			cr.claimMS, cr.actMS, strings.Join(pretty.Diff(cr.claimMS, cr.actMS), ","),
 		)
-		errs = append(errs, err)
+		err = errors.CombineErrors(err, thisErr)
 	}
-	if len(errs) > 0 {
+	if err != nil {
 		if cr.desc != nil {
-			prefix := cr.desc.String() + ": "
-			for i := range errs {
-				errs[i] = prefix + errs[i]
-			}
+			err = errors.Wrapf(err, "%s", cr.desc)
 		}
-		return errors.New(strings.Join(errs, "\n"))
 	}
-	return nil
+	return err
 }
 
 func worker(ctx context.Context, in checkInput) checkResult {

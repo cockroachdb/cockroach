@@ -26,7 +26,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
 	validateFn := func(_ context.Context, desc *sqlbase.TableDescriptor) error {
 		if desc.Name != `` {
-			return errors.New(desc.Name)
+			return errors.Newf("descriptor: %s", desc.Name)
 		}
 		return nil
 	}
@@ -108,11 +108,11 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	// does not validate, high-water does not change
 	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []*sqlbase.TableDescriptor{
 		{ID: 0, Name: `whoops!`},
-	}, validateFn), `whoops!`)
+	}, validateFn), `descriptor: whoops!`)
 	require.Equal(t, ts(7), m.highWater())
 
 	// ts 10 has errored, so validate can return its error without blocking
-	require.EqualError(t, m.waitForTS(ctx, ts(10)), `whoops!`)
+	require.EqualError(t, m.waitForTS(ctx, ts(10)), `descriptor: whoops!`)
 
 	// ts 8 and 9 are still unknown
 	errCh8 = make(chan error, 1)
@@ -125,16 +125,16 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
 	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []*sqlbase.TableDescriptor{
 		{ID: 0, Name: `oh no!`},
-	}, validateFn), `oh no!`)
+	}, validateFn), `descriptor: oh no!`)
 	require.Equal(t, ts(7), m.highWater())
-	require.EqualError(t, <-errCh9, `oh no!`)
+	require.EqualError(t, <-errCh9, `descriptor: oh no!`)
 
 	// ts 8 is still unknown
 	requireChannelEmpty(t, errCh8)
 
 	// always return the earlist error seen (so waiting for ts 10 immediately
 	// returns the 9 error now, it returned the ts 10 error above)
-	require.EqualError(t, m.waitForTS(ctx, ts(9)), `oh no!`)
+	require.EqualError(t, m.waitForTS(ctx, ts(9)), `descriptor: oh no!`)
 
 	// something earlier than ts 10 can still be okay
 	require.NoError(t, m.ingestDescriptors(ctx, ts(7), ts(8), nil, validateFn))

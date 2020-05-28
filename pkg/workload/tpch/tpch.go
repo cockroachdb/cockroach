@@ -173,7 +173,7 @@ func (w *tpch) Hooks() workload.Hooks {
 						// Return the error for any other reason.
 						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
 						if !strings.Contains(err.Error(), duplFKErr) {
-							return errors.Wrap(err, fkStmt)
+							return errors.Wrapf(err, "while executing %s", fkStmt)
 						}
 					}
 				}

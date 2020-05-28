@@ -103,7 +103,7 @@ func valueEncodePartitionTuple(
 		}
 		datum, err := typedExpr.Eval(evalCtx)
 		if err != nil {
-			return nil, errors.Wrap(err, typedExpr.String())
+			return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 		}
 		if err := sqlbase.CheckDatumTypeFitsColumnType(&cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
