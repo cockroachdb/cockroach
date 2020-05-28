@@ -513,4 +513,10 @@ message InternalType {
     // StableTypeID is set only for User Defined Types.
     optional uint32 stable_type_id = 15
       [(gogoproto.nullable) = false, (gogoproto.customname) = "StableTypeID"];
+
+    // StableArrayTypeID is the ID of the TypeDescriptor that defines the backs
+    // the automatically generated array type for this type. StableArrayTypeID
+    // is only set for user defined types that aren't arrays.
+    optional uint32 stable_array_type_id = 16
+      [(gogoproto.nullable) = false, (gogoproto.customname) = "StableArrayTypeID"];
 }
