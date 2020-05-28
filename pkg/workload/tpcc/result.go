@@ -11,7 +11,6 @@
 package tpcc
 
 import (
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -179,10 +178,11 @@ func (r *Result) FailureError() error {
 
 	// Collect all failing criteria errors into errs so that the returned error
 	// contains information about all of the failures.
-	var errs []error
+	var err error
 	if eff := r.Efficiency(); eff < PassingEfficiency {
-		errs = append(errs, errors.Errorf("efficiency value of %v is below "+
-			"passing threshold of %v", eff, PassingEfficiency))
+		err = errors.CombineErrors(err,
+			errors.Errorf("efficiency value of %v is below ppassing threshold of %v",
+				eff, PassingEfficiency))
 	}
 	for query, max90th := range passing90ThPercentile {
 		h, exists := r.Cumulative[query]
@@ -190,22 +190,10 @@ func (r *Result) FailureError() error {
 			return errors.Errorf("no %v data exists", query)
 		}
 		if v := time.Duration(h.ValueAtQuantile(.9)); v > max90th {
-			errs = append(errs, errors.Errorf("90th percentile latency for %v at %v "+
-				"exceeds passing threshold of %v", query, v, max90th))
+			err = errors.CombineErrors(err,
+				errors.Errorf("90th percentile latency for %v at %v exceeds passing threshold of %v",
+					query, v, max90th))
 		}
 	}
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errs[0]
-	default:
-		return errors.New("failed with multiple errors: " +
-			strings.Join(func() (s []string) {
-				for _, e := range errs {
-					s = append(s, e.Error())
-				}
-				return s
-			}(), ", "))
-	}
+	return err
 }

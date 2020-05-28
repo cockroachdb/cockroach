@@ -2594,7 +2594,7 @@ func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Rec
 // power an admin debug endpoint.
 func (s *Store) ManuallyEnqueue(
 	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool,
-) (tracing.Recording, string, error) {
+) (recording tracing.Recording, processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
 	var queue queueImpl
@@ -2606,12 +2606,12 @@ func (s *Store) ManuallyEnqueue(
 		}
 	}
 	if queue == nil {
-		return nil, "", errors.Errorf("unknown queue type %q", queueName)
+		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
 	sysCfg := s.cfg.Gossip.GetSystemConfig()
 	if sysCfg == nil {
-		return nil, "", errors.New("cannot run queue without a valid system config; make sure the cluster " +
+		return nil, nil, errors.New("cannot run queue without a valid system config; make sure the cluster " +
 			"has been initialized and all nodes connected to it")
 	}
 
@@ -2620,10 +2620,10 @@ func (s *Store) ManuallyEnqueue(
 	if needsLease {
 		hasLease, pErr := repl.getLeaseForGossip(ctx)
 		if pErr != nil {
-			return nil, "", pErr.GoError()
+			return nil, nil, pErr.GoError()
 		}
 		if !hasLease {
-			return nil, fmt.Sprintf("replica %v does not have the range lease", repl), nil
+			return nil, errors.Newf("replica %v does not have the range lease", repl), nil
 		}
 	}
 
@@ -2636,16 +2636,16 @@ func (s *Store) ManuallyEnqueue(
 		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.Now(), repl, sysCfg)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
-			return collect(), "", nil
+			return collect(), nil, nil
 		}
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
 	err := queue.process(ctx, repl, sysCfg)
 	if err != nil {
-		return collect(), err.Error(), nil
+		return collect(), err, nil
 	}
-	return collect(), "", nil
+	return collect(), nil, nil
 }
 
 // GetClusterVersion reads the the cluster version from the store-local version

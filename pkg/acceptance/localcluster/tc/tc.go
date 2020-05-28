@@ -98,16 +98,13 @@ func (c *Controller) AddLatency(srcIP, dstIP string, latency time.Duration) erro
 
 // CleanUp resets all interfaces back to their default tc policies.
 func (c *Controller) CleanUp() error {
-	var errs []string
+	var err error
 	for _, ifce := range c.interfaces {
-		out, err := exec.Command("sudo", strings.Split(fmt.Sprintf("tc qdisc del dev %s root", ifce), " ")...).Output()
+		out, thisErr := exec.Command("sudo", strings.Split(fmt.Sprintf("tc qdisc del dev %s root", ifce), " ")...).Output()
 		if err != nil {
-			errs = append(errs, errors.Wrapf(
-				err, "failed to remove tc rules for %q -- you may have to remove them manually: %s", ifce, out).Error())
+			err = errors.CombineErrors(err, errors.Wrapf(
+				thisErr, "failed to remove tc rules for %q -- you may have to remove them manually: %s", ifce, out))
 		}
 	}
-	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, "; "))
-	}
-	return nil
+	return err
 }

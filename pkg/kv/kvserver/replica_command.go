@@ -61,19 +61,27 @@ func (r *Replica) AdminSplit(
 	return reply, err
 }
 
-func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (string, bool) {
+func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, wrap bool, err error) error {
 	if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
 		// Provide a better message in the common case that the range being changed
 		// was already changed by a concurrent transaction.
 		var actualDesc roachpb.RangeDescriptor
 		if !detail.ActualValue.IsPresent() {
-			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
+			if wrap {
+				return errors.Wrapf(err, "descriptor changed: expected %s != [actual] nil (range subsumed)", desc)
+			} else {
+				return errors.Newf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc)
+			}
 		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
 			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc), true
+			if wrap {
+				return errors.Wrapf(err, "descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc)
+			} else {
+				return errors.Newf("descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc)
+			}
 		}
 	}
-	return "", false
+	return nil
 }
 
 func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
@@ -366,10 +374,8 @@ func (r *Replica) adminSplitWithDescriptor(
 			// expected values in the CPuts used to update the range descriptor are
 			// picked outside the transaction. Return ConditionFailedError in the
 			// error detail so that the command can be retried.
-			if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-				// NB: we have to wrap the existing error here as consumers of this code
-				// look at the root cause to sniff out the changed descriptor.
-				err = &benignError{errors.Wrap(err, msg)}
+			if dErr := maybeDescriptorChangedError(desc, true /*wrap*/, err /*cause*/); dErr != nil {
+				err = &benignError{dErr}
 			}
 			return reply, err
 		}
@@ -400,10 +406,8 @@ func (r *Replica) adminSplitWithDescriptor(
 		// range descriptors are picked outside the transaction. Return
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
-		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			// NB: we have to wrap the existing error here as consumers of this
-			// code look at the root cause to sniff out the changed descriptor.
-			err = &benignError{errors.Wrap(err, msg)}
+		if dErr := maybeDescriptorChangedError(desc, true /*wrap*/, err); dErr != nil {
+			err = &benignError{dErr}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -482,10 +486,8 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		// expected values in the CPuts used to update the range descriptor are
 		// picked outside the transaction. Return ConditionFailedError in the error
 		// detail so that the command can be retried.
-		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			// NB: we have to wrap the existing error here as consumers of this code
-			// look at the root cause to sniff out the changed descriptor.
-			err = &benignError{errors.Wrap(err, msg)}
+		if dErr := maybeDescriptorChangedError(desc, true /*wrap*/, err); dErr != nil {
+			err = &benignError{dErr}
 		}
 		return reply, err
 	}
@@ -1642,8 +1644,9 @@ func execChangeReplicasTxn(
 		// NB: desc may not be the descriptor we actually compared against, but
 		// either way this gives a good idea of what happened which is all it's
 		// supposed to do.
-		if msg, ok := maybeDescriptorChangedError(referenceDesc, err); ok {
-			err = &benignError{errors.New(msg)}
+		// We forget about the original error in this case.
+		if dErr := maybeDescriptorChangedError(referenceDesc, false /*wrap*/, err); dErr != nil {
+			err = &benignError{dErr}
 		}
 		return nil, errors.Wrapf(err, "change replicas of r%d failed", referenceDesc.RangeID)
 	}

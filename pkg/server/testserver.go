@@ -1009,7 +1009,7 @@ func (ts *TestServer) SplitRange(
 		return nil
 	}); err != nil {
 		if len(wrappedMsg) > 0 {
-			return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, errors.Wrap(err, wrappedMsg)
+			err = errors.Wrapf(err, "%s", wrappedMsg)
 		}
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}

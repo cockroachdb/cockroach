@@ -336,7 +336,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			selectClause = "*"
 		}
 		if err := dumpTableDataForZip(z, sqlConn, timeout, base, table, selectClause); err != nil {
-			return errors.Wrap(err, table)
+			return errors.Wrapf(err, "fetching %s", table)
 		}
 	}
 
@@ -432,7 +432,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 					selectClause = "*"
 				}
 				if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table, selectClause); err != nil {
-					return errors.Wrap(err, table)
+					return errors.Wrapf(err, "fetching %s", table)
 				}
 			}
 

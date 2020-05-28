@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,7 @@ func (d *dummy) Unmarshal(data []byte) error {
 
 func (d *dummy) Marshal() ([]byte, error) {
 	if c := d.msg1 + d.growsbyone; strings.Contains(c, ".") {
-		return nil, errors.New("must not contain dots: " + c)
+		return nil, errors.Newf("must not contain dots: %s", c)
 	}
 	return []byte(d.msg1 + "." + d.growsbyone), nil
 }
@@ -715,15 +716,7 @@ func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name stri
 	defer func() {
 		// Catch panic and convert it to an error.
 		if r := recover(); r != nil {
-			// Check exactly what the panic was and create error.
-			switch x := r.(type) {
-			case string:
-				err = errors.New(x)
-			case error:
-				err = x
-			default:
-				err = errors.Errorf("unknown panic: %v", x)
-			}
+			err = log.PanicAsError(1, r)
 		}
 	}()
 	for i := 0; i < count; i++ {

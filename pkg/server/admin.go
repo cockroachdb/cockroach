@@ -1021,22 +1021,22 @@ func (s *adminServer) RangeLog(
 		var event kvserverpb.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("Timestamp didn't parse correctly: %s", row[0].String()))
+			return nil, errors.Wrapf(err, "timestamp didn't parse correctly: %s", row[0].String())
 		}
 		event.Timestamp = ts
 		var rangeID int64
 		if err := scanner.ScanIndex(row, 1, &rangeID); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("RangeID didn't parse correctly: %s", row[1].String()))
+			return nil, errors.Wrapf(err, "RangeID didn't parse correctly: %s", row[1].String())
 		}
 		event.RangeID = roachpb.RangeID(rangeID)
 		var storeID int64
 		if err := scanner.ScanIndex(row, 2, &storeID); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("StoreID didn't parse correctly: %s", row[2].String()))
+			return nil, errors.Wrapf(err, "StoreID didn't parse correctly: %s", row[2].String())
 		}
 		event.StoreID = roachpb.StoreID(int32(storeID))
 		var eventTypeString string
 		if err := scanner.ScanIndex(row, 3, &eventTypeString); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("EventType didn't parse correctly: %s", row[3].String()))
+			return nil, errors.Wrapf(err, "EventType didn't parse correctly: %s", row[3].String())
 		}
 		if eventType, ok := kvserverpb.RangeLogEventType_value[eventTypeString]; ok {
 			event.EventType = kvserverpb.RangeLogEventType(eventType)
@@ -1047,7 +1047,7 @@ func (s *adminServer) RangeLog(
 		var otherRangeID int64
 		if row[4].String() != "NULL" {
 			if err := scanner.ScanIndex(row, 4, &otherRangeID); err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("OtherRangeID didn't parse correctly: %s", row[4].String()))
+				return nil, errors.Wrapf(err, "OtherRangeID didn't parse correctly: %s", row[4].String())
 			}
 			event.OtherRangeID = roachpb.RangeID(otherRangeID)
 		}
@@ -1056,10 +1056,10 @@ func (s *adminServer) RangeLog(
 		if row[5].String() != "NULL" {
 			var info string
 			if err := scanner.ScanIndex(row, 5, &info); err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", row[5].String()))
+				return nil, errors.Wrapf(err, "info didn't parse correctly: %s", row[5].String())
 			}
 			if err := json.Unmarshal([]byte(info), &event.Info); err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", info))
+				return nil, errors.Wrapf(err, "info didn't parse correctly: %s", info)
 			}
 			if event.Info.NewDesc != nil {
 				if !includeRawKeys {
@@ -2023,7 +2023,7 @@ func (s *adminServer) enqueueRangeLocal(
 		return response, nil
 	}
 	response.Details[0].Events = recordedSpansToTraceEvents(traceSpans)
-	response.Details[0].Error = processErr
+	response.Details[0].Error = processErr.Error()
 	return response, nil
 }
 

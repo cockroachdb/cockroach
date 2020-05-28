@@ -1113,14 +1113,15 @@ func verifyScansOnNode(
 		}
 	}
 	if len(scansWrongNode) > 0 {
-		var err bytes.Buffer
-		fmt.Fprintf(&err, "expected to scan on %s: %s\n%s\nfull trace:",
-			node, query, strings.Join(scansWrongNode, "\n"))
+		err := errors.Newf("expected to scan on %s: %s", node, query)
+		err = errors.WithDetailf(err, "scans:\n%s", strings.Join(scansWrongNode, "\n"))
+		var trace strings.Builder
 		for _, traceLine := range traceLines {
-			err.WriteString("\n  ")
-			err.WriteString(traceLine)
+			trace.WriteString("\n  ")
+			trace.WriteString(traceLine)
 		}
-		return errors.New(err.String())
+		err = errors.WithDetailf(err, "trace:%s", trace.String())
+		return err
 	}
 	return nil
 }
