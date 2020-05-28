@@ -133,11 +133,6 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructCollate(in, t.Locale)
 
 	case *tree.ArrayFlatten:
-		if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(t)
-			break
-		}
-
 		s := t.Subquery.(*subquery)
 
 		inCol := s.cols[0].id
@@ -426,11 +421,7 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructConstVal(t, t.ResolvedType())
 
 	default:
-		if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(scalar)
-		} else {
-			panic(unimplemented.Newf(fmt.Sprintf("optbuilder.%T", scalar), "not yet implemented: scalar expression: %T", scalar))
-		}
+		panic(unimplemented.Newf(fmt.Sprintf("optbuilder.%T", scalar), "not yet implemented: scalar expression: %T", scalar))
 	}
 
 	return b.finishBuildScalar(scalar, out, inScope, outScope, outCol)

@@ -298,7 +298,6 @@ func buildFilters(
 		return memo.FiltersExpr{}, err
 	}
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	b.AllowUnsupportedExpr = true
 	if err := b.Build(expr); err != nil {
 		return memo.FiltersExpr{}, err
 	}
