@@ -498,11 +498,12 @@ func TestTypes(t *testing.T) {
 		{Uuid, MakeScalar(UuidFamily, oid.T_uuid, 0, 0, emptyLocale)},
 
 		// ENUMs
-		{MakeEnum(15210), &T{InternalType: InternalType{
-			Family:       EnumFamily,
-			Locale:       &emptyLocale,
-			Oid:          StableTypeIDToOID(15210),
-			StableTypeID: 15210,
+		{MakeEnum(15210, 15213), &T{InternalType: InternalType{
+			Family:            EnumFamily,
+			Locale:            &emptyLocale,
+			Oid:               StableTypeIDToOID(15210),
+			StableTypeID:      15210,
+			StableArrayTypeID: 15213,
 		}}},
 	}
 
@@ -607,8 +608,8 @@ func TestEquivalent(t *testing.T) {
 		{MakeTuple([]*T{String, Int}), MakeTuple([]*T{Int, String}), false},
 
 		// ENUM
-		{MakeEnum(15210), MakeEnum(15210), true},
-		{MakeEnum(15210), MakeEnum(15150), false},
+		{MakeEnum(15210, 15213), MakeEnum(15210, 15213), true},
+		{MakeEnum(15210, 15213), MakeEnum(15150, 15213), false},
 
 		// UNKNOWN
 		{Unknown, &T{InternalType: InternalType{

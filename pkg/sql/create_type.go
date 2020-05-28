@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -99,6 +101,91 @@ func getCreateTypeParams(
 	return typeKey, id, nil
 }
 
+// When a type is created in Postgres, Postgres will implicitly create an array
+// type of that user defined type. This array type tracks changes to the
+// original type, and is dropped when the original type is dropped.
+// createArrayType creates the implicit array type for the input TypeDescriptor
+// and returns the ID of the created type.
+func (p *planner) createArrayType(
+	params runParams,
+	n *tree.CreateType,
+	typ *tree.TypeName,
+	typDesc *sqlbase.MutableTypeDescriptor,
+	db *DatabaseDescriptor,
+) (sqlbase.ID, error) {
+	// Postgres starts off trying to create the type as _<typename>. It then
+	// continues adding "_" to the front of the name until it doesn't find
+	// a collision.
+	schemaID := sqlbase.ID(keys.PublicSchemaID)
+	arrayTypeName := "_" + typ.Type()
+	var arrayTypeKey sqlbase.DescriptorKey
+	for {
+		// See if there is a collision with the current name.
+		exists, _, err := sqlbase.LookupObjectID(
+			params.ctx,
+			params.p.txn,
+			params.ExecCfg().Codec,
+			db.ID,
+			schemaID,
+			arrayTypeName,
+		)
+		if err != nil {
+			return 0, err
+		}
+		// If we found an empty spot, then create the namespace key for this entry.
+		if !exists {
+			arrayTypeKey = sqlbase.MakePublicTableNameKey(
+				params.ctx,
+				params.ExecCfg().Settings,
+				db.ID,
+				arrayTypeName,
+			)
+			break
+		}
+		// Otherwise, append another "_" to the front of the name.
+		arrayTypeName = "_" + arrayTypeName
+	}
+
+	// Generate the stable ID for the array type.
+	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
+	if err != nil {
+		return 0, err
+	}
+
+	// Create the element type for the array. Note that it must know about the
+	// ID of the array type in order for the array type to correctly created.
+	var elemTyp *types.T
+	switch t := typDesc.Kind; t {
+	case sqlbase.TypeDescriptor_ENUM:
+		elemTyp = types.MakeEnum(uint32(typDesc.ID), uint32(id))
+	default:
+		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
+	}
+
+	// Construct the descriptor for the array type.
+	arrayTypDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.TypeDescriptor{
+		ParentID:       db.ID,
+		ParentSchemaID: keys.PublicSchemaID,
+		Name:           arrayTypeName,
+		ID:             id,
+		Kind:           sqlbase.TypeDescriptor_ALIAS,
+		Alias:          types.MakeArray(elemTyp),
+	})
+
+	jobStr := fmt.Sprintf("implicit array type creation for %s", tree.AsStringWithFQNames(n, params.Ann()))
+	if err := p.createDescriptorWithID(
+		params.ctx,
+		arrayTypeKey.Key(params.ExecCfg().Codec),
+		id,
+		arrayTypDesc,
+		params.EvalContext().Settings,
+		jobStr,
+	); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	// Make sure that all nodes in the cluster are able to recognize ENUM types.
 	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionEnums) {
@@ -150,15 +237,25 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := &sqlbase.TypeDescriptor{
+	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.TypeDescriptor{
 		ParentID:       db.ID,
 		ParentSchemaID: keys.PublicSchemaID,
 		Name:           typeName.Type(),
 		ID:             id,
 		Kind:           sqlbase.TypeDescriptor_ENUM,
 		EnumMembers:    members,
+	})
+
+	// Create the implicit array type for this type before finishing the type.
+	arrayTypeID, err := p.createArrayType(params, n, typeName, typeDesc, db)
+	if err != nil {
+		return err
 	}
 
+	// Update the typeDesc with the created array type ID.
+	typeDesc.ArrayTypeID = arrayTypeID
+
+	// Now create the type after the implicit array type as been created.
 	return p.createDescriptorWithID(
 		params.ctx,
 		typeKey.Key(params.ExecCfg().Codec),

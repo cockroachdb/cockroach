@@ -1458,8 +1458,8 @@ CREATE TABLE pg_catalog.pg_enum (
 			// Generate a row for each member of the enum. We don't represent enums
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
-			typ := types.MakeEnum(uint32(typDesc.ID))
-			if err := typDesc.HydrateTypeInfo(typ); err != nil {
+			typ := types.MakeEnum(uint32(typDesc.ID), uint32(typDesc.ArrayTypeID))
+			if err := typDesc.HydrateTypeInfo(typ, p.makeTypeLookupFn(ctx)); err != nil {
 				return err
 			}
 			enumData := typ.TypeMeta.EnumData
@@ -2648,6 +2648,7 @@ func addPGTypeRow(
 	case types.EnumFamily:
 		builtinPrefix = "enum_"
 		typType = typTypeEnum
+		fallthrough
 	default:
 		typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
 	}
@@ -2761,8 +2762,11 @@ CREATE TABLE pg_catalog.pg_type (
 					if typDesc.ParentID != db.ID {
 						continue
 					}
-					typ := types.MakeEnum(uint32(typDesc.ID))
-					if err := typDesc.HydrateTypeInfo(typ); err != nil {
+					typ, err := typDesc.MakeTypesT(
+						tree.NewUnqualifiedTypeName(tree.Name(typDesc.Name)),
+						p.makeTypeLookupFn(ctx),
+					)
+					if err != nil {
 						return err
 					}
 					if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {

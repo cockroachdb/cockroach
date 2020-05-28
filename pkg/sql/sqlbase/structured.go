@@ -3732,6 +3732,8 @@ func (desc *Descriptor) GetID() ID {
 		return t.Table.ID
 	case *Descriptor_Database:
 		return t.Database.ID
+	case *Descriptor_Type:
+		return t.Type.ID
 	default:
 		return 0
 	}
@@ -3744,6 +3746,8 @@ func (desc *Descriptor) GetName() string {
 		return t.Table.Name
 	case *Descriptor_Database:
 		return t.Database.Name
+	case *Descriptor_Type:
+		return t.Type.Name
 	default:
 		return ""
 	}
@@ -4397,15 +4401,22 @@ func (desc *TypeDescriptor) SetName(name string) {
 // TODO (rohany): This method should eventually be defined on an
 //  ImmutableTypeDescriptor so that pointers to the cached info
 //  can be shared among callers.
-func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
-	return desc.HydrateTypeInfoWithName(typ, tree.NewUnqualifiedTypeName(tree.Name(desc.Name)))
+// TODO (rohany): Audit all callers.
+func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T, typeLookup TypeLookupFunc) error {
+	return desc.HydrateTypeInfoWithName(typ, tree.NewUnqualifiedTypeName(tree.Name(desc.Name)), typeLookup)
 }
 
 // HydrateTypeInfoWithName fills in user defined type metadata for
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
-func (desc *TypeDescriptor) HydrateTypeInfoWithName(typ *types.T, name *tree.TypeName) error {
-	typ.TypeMeta.Name = name
+func (desc *TypeDescriptor) HydrateTypeInfoWithName(
+	typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc,
+) error {
+	// TODO (rohany): This can probably be removed once #49656 goes in, but
+	//  adding this check to verify that it is the root cause.
+	if desc.ID != InvalidID {
+		typ.TypeMeta.Name = name
+	}
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
@@ -4424,19 +4435,58 @@ func (desc *TypeDescriptor) HydrateTypeInfoWithName(typ *types.T, name *tree.Typ
 		}
 		return nil
 	case TypeDescriptor_ALIAS:
-		// This is a noop until we possibly allow aliases to user defined types.
+		if typ.UserDefined() {
+			switch typ.Family() {
+			case types.ArrayFamily:
+				// Hydrate the element type.
+				elemType := typ.ArrayContents()
+				elemTypName, elemTypDesc, err := typeLookup(ID(elemType.StableTypeID()))
+				if err != nil {
+					return err
+				}
+				if err := elemTypDesc.HydrateTypeInfoWithName(elemType, elemTypName, typeLookup); err != nil {
+					return err
+				}
+				return nil
+			default:
+				return errors.AssertionFailedf("only array types aliases can be user defined")
+			}
+		}
 		return nil
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
 	}
 }
 
+// TypeLookupFunc is a type alias for a function that looks up a type by ID.
+type TypeLookupFunc func(id ID) (*tree.TypeName, *TypeDescriptor, error)
+
+// MakeTypesT creates a types.T from the input type descriptor.
+func (desc *TypeDescriptor) MakeTypesT(
+	name *tree.TypeName, typeLookup TypeLookupFunc,
+) (*types.T, error) {
+	switch t := desc.Kind; t {
+	case TypeDescriptor_ENUM:
+		typ := types.MakeEnum(uint32(desc.ID), uint32(desc.ArrayTypeID))
+		if err := desc.HydrateTypeInfoWithName(typ, name, typeLookup); err != nil {
+			return nil, err
+		}
+		return typ, nil
+	case TypeDescriptor_ALIAS:
+		// Hydrate the alias and return it.
+		if err := desc.HydrateTypeInfoWithName(desc.Alias, name, typeLookup); err != nil {
+			return nil, err
+		}
+		return desc.Alias, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
+	}
+}
+
 // HydrateTypesInTableDescriptor uses typeLookup to install metadata in the
 // types present in a table descriptor. typeLookup retrieves the fully
 // qualified name and descriptor for a particular ID.
-func HydrateTypesInTableDescriptor(
-	desc *TableDescriptor, typeLookup func(id ID) (*tree.TypeName, *TypeDescriptor, error),
-) error {
+func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupFunc) error {
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
 		if col.Type.UserDefined() {
@@ -4448,7 +4498,7 @@ func HydrateTypesInTableDescriptor(
 			// TODO (rohany): This should be a noop if the hydrated type
 			//  information present in the descriptor has the same version as
 			//  the resolved type descriptor we found here.
-			if err := typDesc.HydrateTypeInfoWithName(col.Type, name); err != nil {
+			if err := typDesc.HydrateTypeInfoWithName(col.Type, name, typeLookup); err != nil {
 				return err
 			}
 		}

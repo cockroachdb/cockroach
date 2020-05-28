@@ -201,9 +201,7 @@ func calcArrayOid(elemTyp *T) oid.Oid {
 		return unknownArrayOid
 
 	case EnumFamily:
-		// TODO (rohany): We don't automatically generate an array type for new
-		//  user defined types yet so there isn't an OID to point to yet.
-		return unknownArrayOid
+		return StableTypeIDToOID(elemTyp.StableArrayTypeID())
 	}
 
 	// Map the OID of the array element type to the corresponding array OID.

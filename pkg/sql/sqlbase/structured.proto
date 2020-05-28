@@ -1031,6 +1031,11 @@ message TypeDescriptor {
   // id is the globally unique ID for this type.
   optional uint32 id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
+  // array_type_id is the globally unique ID for the implicitly created array
+  // type for this type.
+  optional uint32 array_type_id = 8
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "ID"];
+
   // Represents the kind of type that this type descriptor represents.
   enum Kind {
     // Represents a user defined enum type.
