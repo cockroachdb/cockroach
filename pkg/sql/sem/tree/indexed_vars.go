@@ -11,6 +11,8 @@
 package tree
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,8 +55,10 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
-	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
+func (v *IndexedVar) TypeCheck(
+	_ context.Context, semaCtx *SemaContext, desired *types.T,
+) (TypedExpr, error) {
+	if semaCtx.IVarContainer == nil || semaCtx.IVarContainer == unboundContainer {
 		// A more technically correct message would be to say that the
 		// reference is unbound and thus cannot be typed. However this is
 		// a tad bit too technical for the average SQL use case and
@@ -64,7 +68,7 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 		return nil, pgerror.Newf(
 			pgcode.UndefinedColumn, "column reference @%d not allowed in this context", v.Idx+1)
 	}
-	v.typ = ctx.IVarContainer.IndexedVarResolvedType(v.Idx)
+	v.typ = semaCtx.IVarContainer.IndexedVarResolvedType(v.Idx)
 	return v, nil
 }
 

@@ -48,7 +48,7 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 	var rowExprs tree.Exprs
 	for i, expr := range n.Row {
 		colTyp := table.Column(i).DatumType()
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, colTyp, "range-for-row", &semaCtx, false)
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(d.ctx, expr, colTyp, "range-for-row", &semaCtx, false)
 		if err != nil {
 			return nil, err
 		}

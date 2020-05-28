@@ -54,7 +54,10 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsStringOrNull, opName)
+	asStringOrNull := func(e tree.Expr, op string) (func() (bool, string, error), error) {
+		return p.TypeAsStringOrNull(ctx, e, op)
+	}
+	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +65,7 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(nameE, opName)
+	ua, err := p.getUserAuthInfo(ctx, nameE, opName)
 	if err != nil {
 		return nil, err
 	}

@@ -31,10 +31,12 @@ func TestCastToCollatedString(t *testing.T) {
 		{types.MakeCollatedString(types.MakeString(4), "en"), "test"},
 		{types.MakeCollatedString(types.MakeString(3), "en"), "tes"},
 	}
+	ctx := context.Background()
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {
 			expr := &CastExpr{Expr: NewDString("test"), Type: cas.typ, SyntaxMode: CastShort}
-			typedexpr, err := expr.TypeCheck(&SemaContext{}, types.Any)
+			semaCtx := MakeSemaContext()
+			typedexpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}

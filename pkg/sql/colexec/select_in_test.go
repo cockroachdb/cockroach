@@ -222,7 +222,9 @@ func TestProjectInInt64(t *testing.T) {
 						return nil, err
 					}
 					p := &mockTypeContext{typs: []*types.T{types.Int, types.MakeTuple([]*types.T{types.Int})}}
-					typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
+					semaCtx := tree.MakeSemaContext()
+					semaCtx.IVarContainer = p
+					typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 					if err != nil {
 						return nil, err
 					}

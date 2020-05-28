@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -34,7 +35,7 @@ var errInvalidExprForAsOf = errors.Errorf("AS OF SYSTEM TIME: only constant expr
 
 // EvalAsOfTimestamp evaluates the timestamp argument to an AS OF SYSTEM TIME query.
 func EvalAsOfTimestamp(
-	asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
+	ctx context.Context, asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
 ) (tsss hlc.Timestamp, err error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -57,12 +58,12 @@ func EvalAsOfTimestamp(
 		if def.Name != FollowerReadTimestampFunctionName {
 			return hlc.Timestamp{}, errInvalidExprForAsOf
 		}
-		if te, err = fe.TypeCheck(semaCtx, types.TimestampTZ); err != nil {
+		if te, err = fe.TypeCheck(ctx, semaCtx, types.TimestampTZ); err != nil {
 			return hlc.Timestamp{}, err
 		}
 	} else {
 		var err error
-		te, err = asOf.Expr.TypeCheck(semaCtx, types.String)
+		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.String)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}

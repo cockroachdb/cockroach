@@ -269,7 +269,7 @@ func setupShardedIndex(
 	for _, c := range *columns {
 		colNames = append(colNames, string(c.Column))
 	}
-	buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, bucketsExpr)
+	buckets, err := sqlbase.EvalShardBucketCount(ctx, semaCtx, evalCtx, bucketsExpr)
 	if err != nil {
 		return nil, false, err
 	}

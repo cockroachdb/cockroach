@@ -142,7 +142,7 @@ func MakeSimpleTableDescriptor(
 	}
 	create.Defs = filteredDefs
 
-	semaCtx := tree.SemaContext{}
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.EvalContext{
 		Context:  ctx,
 		Sequence: &importSequenceOperators{},

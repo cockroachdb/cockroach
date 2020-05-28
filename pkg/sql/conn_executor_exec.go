@@ -332,7 +332,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			typeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
 			for i, t := range s.Types {
-				resolved, err := tree.ResolveType(t, ex.planner.semaCtx.GetTypeResolver())
+				resolved, err := tree.ResolveType(ctx, t, ex.planner.semaCtx.GetTypeResolver())
 				if err != nil {
 					return makeErrEvent(err)
 				}
@@ -373,7 +373,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var err error
-		pinfo, err = fillInPlaceholders(ps, name, s.Params, ex.sessionData.SearchPath)
+		pinfo, err = fillInPlaceholders(ctx, ps, name, s.Params, ex.sessionData.SearchPath)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -395,7 +395,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOfTs, err := p.isAsOf(stmt.AST)
+		asOfTs, err := p.isAsOf(ctx, stmt.AST)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -409,7 +409,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// the transaction's timestamp. This is useful for running AOST statements
 		// using the InternalExecutor inside an external transaction; one might want
 		// to do that to force p.avoidCachedDescriptors to be set below.
-		ts, err := p.isAsOf(stmt.AST)
+		ts, err := p.isAsOf(ctx, stmt.AST)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -948,7 +948,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil /* txn */, now)
-	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
+	ts, err := p.EvalAsOfTimestamp(ctx, s.Modes.AsOf)
 	if err != nil {
 		return 0, time.Time{}, nil, err
 	}

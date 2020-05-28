@@ -192,10 +192,11 @@ type Flags struct {
 // New constructs a new instance of the OptTester for the given SQL statement.
 // Metadata used by the SQL query is accessed via the catalog.
 func New(catalog cat.Catalog, sql string) *OptTester {
+	ctx := context.Background()
 	ot := &OptTester{
 		catalog: catalog,
 		sql:     sql,
-		ctx:     context.Background(),
+		ctx:     ctx,
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}

@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -51,6 +53,7 @@ var alterColTypeInCombinationNotSupportedErr = unimplemented.NewWithIssuef(
 // AlterColumnType takes an AlterTableAlterColumnType, determines
 // which conversion to use and applies the type conversion.
 func AlterColumnType(
+	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	t *tree.AlterTableAlterColumnType,
@@ -58,7 +61,7 @@ func AlterColumnType(
 	cmds tree.AlterTableCmds,
 ) error {
 
-	typ, err := tree.ResolveType(t.ToType, params.p.semaCtx.GetTypeResolver())
+	typ, err := tree.ResolveType(ctx, t.ToType, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
 	}
@@ -95,7 +98,7 @@ func AlterColumnType(
 		return nil
 	}
 
-	kind, err := schemachange.ClassifyConversion(col.Type, typ)
+	kind, err := schemachange.ClassifyConversion(ctx, col.Type, typ)
 	if err != nil {
 		return err
 	}
@@ -111,7 +114,7 @@ func AlterColumnType(
 	case schemachange.ColumnConversionTrivial:
 		col.Type = typ
 	case schemachange.ColumnConversionGeneral:
-		if err := alterColumnTypeGeneral(tableDesc, col, typ, t.Using, params, cmds); err != nil {
+		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds); err != nil {
 			return err
 		}
 		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion.NextMutationID); err != nil {
@@ -129,6 +132,7 @@ func AlterColumnType(
 }
 
 func alterColumnTypeGeneral(
+	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	toType *types.T,
@@ -250,7 +254,7 @@ func alterColumnTypeGeneral(
 			if err != nil {
 				return err
 			}
-			typedExpr, err := expr.TypeCheck(&params.p.semaCtx, toType)
+			typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
 			if err != nil {
 				return err
 			}

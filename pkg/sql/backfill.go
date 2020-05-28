@@ -1657,7 +1657,7 @@ func columnBackfillInTxn(
 		return nil
 	}
 	var backfiller backfill.ColumnBackfiller
-	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
+	if err := backfiller.Init(ctx, evalCtx, tableDesc); err != nil {
 		return err
 	}
 	// otherTableDescs contains any other table descriptors required by the

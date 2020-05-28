@@ -47,7 +47,7 @@ func (p *planner) DropRoleNode(
 		return nil, err
 	}
 
-	names, err := p.TypeAsStringArray(namesE, opName)
+	names, err := p.TypeAsStringArray(ctx, namesE, opName)
 	if err != nil {
 		return nil, err
 	}

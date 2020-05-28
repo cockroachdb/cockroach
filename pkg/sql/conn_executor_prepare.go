@@ -218,7 +218,7 @@ func (ex *connExecutor) populatePrepared(
 	}
 	p.extendedEvalCtx.PrepareOnly = true
 
-	protoTS, err := p.isAsOf(stmt.AST)
+	protoTS, err := p.isAsOf(ctx, stmt.AST)
 	if err != nil {
 		return 0, err
 	}

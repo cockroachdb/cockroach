@@ -134,7 +134,9 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
-func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error) {
+func (p *planner) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: true},
 		DesiredObjectKind: tree.TypeObject,
@@ -142,7 +144,7 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 	}
 	// TODO (rohany): The ResolveAnyDescType argument doesn't do anything here
 	//  if we are looking for a type. This should be cleaned up.
-	desc, prefix, err := resolver.ResolveExistingObject(p.EvalContext().Context, p, name, lookupFlags, resolver.ResolveAnyDescType)
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags, resolver.ResolveAnyDescType)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +170,7 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 // accessing types directly by their ID in standard SQL contexts, so error
 // out nicely here.
 // TODO (rohany): Is there a need to disable this in the general case?
-func (p *planner) ResolveTypeByID(id uint32) (*types.T, error) {
+func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
 	return nil, errors.Newf("type id reference @%d not allowed in this context", id)
 }
 

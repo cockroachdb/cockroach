@@ -124,7 +124,7 @@ func buildOpaque(
 	case *tree.SetVar:
 		plan, err = p.SetVar(ctx, n)
 	case *tree.SetTransaction:
-		plan, err = p.SetTransaction(n)
+		plan, err = p.SetTransaction(ctx, n)
 	case *tree.SetSessionAuthorizationDefault:
 		plan, err = p.SetSessionAuthorizationDefault()
 	case *tree.SetSessionCharacteristics:

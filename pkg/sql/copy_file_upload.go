@@ -76,7 +76,7 @@ func newFileUploadMachine(
 		return nil, err
 	}
 
-	optsFn, err := f.c.p.TypeAsStringOpts(n.Options, copyFileOptionExpectValues)
+	optsFn, err := f.c.p.TypeAsStringOpts(ctx, n.Options, copyFileOptionExpectValues)
 	if err != nil {
 		return nil, err
 	}

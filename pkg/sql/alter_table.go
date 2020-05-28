@@ -146,7 +146,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
 			version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
-			toType, err := tree.ResolveType(d.Type, params.p.semaCtx.GetTypeResolver())
+			toType, err := tree.ResolveType(params.ctx, d.Type, params.p.semaCtx.GetTypeResolver())
 			if err != nil {
 				return err
 			}
@@ -181,7 +181,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			d = newDef
 			incTelemetryForNewColumn(d)
 
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err
 			}
@@ -256,7 +256,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if d.IsComputed() {
-				if err := validateComputedColumn(n.tableDesc, d, &params.p.semaCtx); err != nil {
+				if err := validateComputedColumn(params.ctx, n.tableDesc, d, &params.p.semaCtx); err != nil {
 					return err
 				}
 			}
@@ -704,7 +704,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(n.tableDesc, col, t, params, n.n.Cmds); err != nil {
+			if err := applyColumnMutation(params.ctx, n.tableDesc, col, t, params, n.n.Cmds); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -899,6 +899,7 @@ func addIndexMutationWithSpecificPrimaryKey(
 // columnDescriptor, and saves the containing table descriptor. If the column's
 // dependencies on sequences change, it updates them as well.
 func applyColumnMutation(
+	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
@@ -907,7 +908,7 @@ func applyColumnMutation(
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		return AlterColumnType(tableDesc, col, t, params, cmds)
+		return AlterColumnType(ctx, tableDesc, col, t, params, cmds)
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {
@@ -920,7 +921,7 @@ func applyColumnMutation(
 		} else {
 			colDatumType := col.Type
 			expr, err := sqlbase.SanitizeVarFreeExpr(
-				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, true, /* allowImpure */
+				params.ctx, t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, true, /* allowImpure */
 			)
 			if err != nil {
 				return err

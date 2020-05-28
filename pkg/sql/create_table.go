@@ -1263,7 +1263,7 @@ func MakeTableDesc(
 		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, temporary,
 	)
 
-	if err := checkStorageParameters(semaCtx, n.StorageParams, storageParamExpectedTypes); err != nil {
+	if err := checkStorageParameters(ctx, semaCtx, n.StorageParams, storageParamExpectedTypes); err != nil {
 		return desc, err
 	}
 
@@ -1283,7 +1283,7 @@ func MakeTableDesc(
 			// MakeTableDesc is called sometimes with a nil SemaCtx (for example
 			// during bootstrapping). In order to not panic, pass a nil TypeResolver
 			// when attempting to resolve the columns type.
-			defType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+			defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 			if err != nil {
 				return sqlbase.MutableTableDescriptor{}, err
 			}
@@ -1327,7 +1327,7 @@ func MakeTableDesc(
 				if n.Interleave != nil {
 					return desc, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 				}
-				buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
+				buckets, err := sqlbase.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 				if err != nil {
 					return desc, err
 				}
@@ -1347,7 +1347,7 @@ func MakeTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1421,7 +1421,7 @@ func MakeTableDesc(
 			return err
 		}
 		if newColumn {
-			buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, d.Sharded.ShardBuckets)
+			buckets, err := sqlbase.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
 			if err != nil {
 				return err
 			}
@@ -1721,7 +1721,7 @@ func MakeTableDesc(
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
-				if err := validateComputedColumn(&desc, d, semaCtx); err != nil {
+				if err := validateComputedColumn(ctx, &desc, d, semaCtx); err != nil {
 					return desc, err
 				}
 			}
@@ -1758,7 +1758,10 @@ func MakeTableDesc(
 }
 
 func checkStorageParameters(
-	semaCtx *tree.SemaContext, params tree.StorageParams, expectedTypes map[string]storageParamType,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	params tree.StorageParams,
+	expectedTypes map[string]storageParamType,
 ) error {
 	for _, sp := range params {
 		k := string(sp.Key)
@@ -1780,7 +1783,7 @@ func checkStorageParameters(
 			return unimplemented.NewWithIssuef(43299, "storage parameter %q", k)
 		}
 
-		_, err := tree.TypeCheckAndRequire(sp.Value, semaCtx, expectedType, k)
+		_, err := tree.TypeCheckAndRequire(ctx, sp.Value, semaCtx, expectedType, k)
 		if err != nil {
 			return err
 		}
@@ -2050,7 +2053,9 @@ func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
 }
 
 // TypeCheck implements the Expr interface.
-func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
+func (d *dummyColumnItem) TypeCheck(
+	_ context.Context, _ *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
 	return d, nil
 }
 
@@ -2251,7 +2256,10 @@ func iterColDescriptorsInExpr(
 // validateComputedColumn checks that a computed column satisfies a number of
 // validity constraints, for instance, that it typechecks.
 func validateComputedColumn(
-	desc *sqlbase.MutableTableDescriptor, d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
+	ctx context.Context,
+	desc *sqlbase.MutableTableDescriptor,
+	d *tree.ColumnTableDef,
+	semaCtx *tree.SemaContext,
 ) error {
 	if d.HasDefaultExpr() {
 		return pgerror.New(
@@ -2305,12 +2313,12 @@ func validateComputedColumn(
 		return err
 	}
 
-	defType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
 	}
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, defType, "computed column", semaCtx, false, /* allowImpure */
+		ctx, replacedExpr, defType, "computed column", semaCtx, false, /* allowImpure */
 	); err != nil {
 		return err
 	}
@@ -2380,7 +2388,7 @@ func makeCheckConstraint(
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
+		ctx, expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
 	); err != nil {
 		return nil, err
 	}

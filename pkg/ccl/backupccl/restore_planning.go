@@ -600,7 +600,7 @@ var RestoreHeader = sqlbase.ResultColumns{
 
 // restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
-	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
@@ -609,14 +609,14 @@ func restorePlanHook(
 
 	fromFns := make([]func() ([]string, error), len(restoreStmt.From))
 	for i := range restoreStmt.From {
-		fromFn, err := p.TypeAsStringArray(tree.Exprs(restoreStmt.From[i]), "RESTORE")
+		fromFn, err := p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.From[i]), "RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 		fromFns[i] = fromFn
 	}
 
-	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options, restoreOptionExpectValues)
+	optsFn, err := p.TypeAsStringOpts(ctx, restoreStmt.Options, restoreOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -650,7 +650,7 @@ func restorePlanHook(
 		var endTime hlc.Timestamp
 		if restoreStmt.AsOf.Expr != nil {
 			var err error
-			endTime, err = p.EvalAsOfTimestamp(restoreStmt.AsOf)
+			endTime, err = p.EvalAsOfTimestamp(ctx, restoreStmt.AsOf)
 			if err != nil {
 				return err
 			}
