@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -326,11 +327,14 @@ func parseStats(
 			// collecting the stats. Changes to types are backwards compatible across
 			// versions, so using a newer version of the type metadata here is safe.
 			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				typDesc, err := sqlbase.GetTypeDescFromID(ctx, txn, codec, sqlbase.ID(typ.StableTypeID()))
+				typeLookup := func(id sqlbase.ID) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
+					return resolver.ResolveTypeDescByID(ctx, txn, codec, id)
+				}
+				name, typeDesc, err := typeLookup(sqlbase.ID(typ.StableTypeID()))
 				if err != nil {
 					return err
 				}
-				return typDesc.HydrateTypeInfo(typ)
+				return typeDesc.HydrateTypeInfoWithName(typ, name, typeLookup)
 			})
 			if err != nil {
 				return nil, err
