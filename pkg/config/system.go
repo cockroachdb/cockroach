@@ -533,7 +533,7 @@ func (s *SystemConfig) shouldSplit(ID uint32) bool {
 		shouldSplit = true
 	} else {
 		desc := s.GetDesc(keys.TODOSQLCodec.DescMetadataKey(ID))
-		shouldSplit = desc != nil && sqlbase.ShouldSplitAtID(ID, desc)
+		shouldSplit = desc != nil && sqlbase.ShouldSplitAtDesc(desc)
 	}
 	// Populate the cache.
 	s.mu.Lock()
