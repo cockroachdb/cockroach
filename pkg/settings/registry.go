@@ -62,8 +62,12 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 20.1.
 	"schemachanger.lease.duration":       {},
 	"schemachanger.lease.renew_fraction": {},
-	// removes as of 20.2.
+	// removed as of 20.2.
 	"rocksdb.ingest_backpressure.pending_compaction_threshold": {},
+	"sql.distsql.temp_storage.joins":                           {},
+	"sql.distsql.temp_storage.sorts":                           {},
+	"sql.distsql.distribute_index_joins":                       {},
+	"sql.distsql.merge_joins.enabled":                          {},
 }
 
 // register adds a setting to the registry.
