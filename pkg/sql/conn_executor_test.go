@@ -812,6 +812,52 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestTrimFlushedStatements verifies that the conn executor trims the
+// statements buffer once the corresponding results are returned to the user.
+func TestTrimFlushedStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		countStmt = "SELECT count(*) FROM test"
+		// stmtBufMaxLen is the maximum length the statement buffer should be during
+		// execution of COUNT(*). This includes a SELECT COUNT(*) command as well
+		// as a Sync command.
+		stmtBufMaxLen = 2
+	)
+	// stmtBufLen is set to the length of the statement buffer after each SELECT
+	// COUNT(*) execution.
+	stmtBufLen := 0
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				AfterExecCmd: func(_ context.Context, cmd sql.Command, buf *sql.StmtBuf) {
+					if strings.Contains(cmd.String(), countStmt) {
+						// Only compare statement buffer length on SELECT COUNT(*) queries.
+						stmtBufLen = buf.Len()
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec("CREATE TABLE test (i int)")
+	require.NoError(t, err)
+
+	tx, err := sqlDB.Begin()
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		_, err := tx.Exec(countStmt)
+		require.NoError(t, err)
+		if stmtBufLen > stmtBufMaxLen {
+			t.Fatalf("statement buffer grew to %d (> %d) after %dth execution", stmtBufLen, stmtBufMaxLen, i)
+		}
+	}
+	require.NoError(t, tx.Commit())
+}
+
 // dynamicRequestFilter exposes a filter method which is a
 // kvserverbase.ReplicaRequestFilter but can be set dynamically.
 type dynamicRequestFilter struct {

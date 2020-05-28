@@ -1530,7 +1530,22 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		panic(fmt.Sprintf("unexpected advance code: %s", advInfo.code))
 	}
 
-	return ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo)
+	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
+		return err
+	}
+
+	if rewindCapability, canRewind := ex.getRewindTxnCapability(); !canRewind {
+		// Trim statements that cannot be retried to reclaim memory.
+		ex.stmtBuf.ltrim(ctx, pos)
+	} else {
+		rewindCapability.close()
+	}
+
+	if ex.server.cfg.TestingKnobs.AfterExecCmd != nil {
+		ex.server.cfg.TestingKnobs.AfterExecCmd(ctx, cmd, ex.stmtBuf)
+	}
+
+	return nil
 }
 
 func (ex *connExecutor) idleConn() bool {
