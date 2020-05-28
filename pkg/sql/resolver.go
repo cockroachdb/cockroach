@@ -133,6 +133,12 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	}
 }
 
+func (p *planner) makeTypeLookupFn(ctx context.Context) sqlbase.TypeLookupFunc {
+	return func(id sqlbase.ID) (*tree.TypeName, *TypeDescriptor, error) {
+		return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	}
+}
+
 // ResolveType implements the TypeReferenceResolver interface.
 func (p *planner) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
@@ -150,20 +156,7 @@ func (p *planner) ResolveType(
 	}
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
 	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
-	// Hydrate the types.T from the resolved descriptor. Once we cache
-	// descriptors, this hydration should install pointers to cached data.
-	switch t := tdesc.Kind; t {
-	case sqlbase.TypeDescriptor_ENUM:
-		typ := types.MakeEnum(uint32(tdesc.ID))
-		if err := tdesc.HydrateTypeInfoWithName(typ, &tn); err != nil {
-			return nil, err
-		}
-		return typ, nil
-	case sqlbase.TypeDescriptor_ALIAS:
-		return tdesc.Alias, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
-	}
+	return tdesc.MakeTypesT(&tn, p.makeTypeLookupFn(ctx))
 }
 
 // ResolveTypeByID implements the tree.TypeResolver interface. We disallow
@@ -180,18 +173,15 @@ func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, err
 func (p *planner) maybeHydrateTypesInDescriptor(
 	ctx context.Context, objDesc tree.NameResolutionResult,
 ) error {
-	typeLookup := func(id sqlbase.ID) (*tree.TypeName, *TypeDescriptor, error) {
-		return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
-	}
 	// As of now, only {Mutable,Immutable}TableDescriptor have types.T that
 	// need to be hydrated.
 	switch desc := objDesc.(type) {
 	case *sqlbase.MutableTableDescriptor:
-		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), typeLookup); err != nil {
+		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), p.makeTypeLookupFn(ctx)); err != nil {
 			return err
 		}
 	case *sqlbase.ImmutableTableDescriptor:
-		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), typeLookup); err != nil {
+		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), p.makeTypeLookupFn(ctx)); err != nil {
 			return err
 		}
 	}
