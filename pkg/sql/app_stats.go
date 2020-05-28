@@ -328,35 +328,31 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	return a
 }
 
-func (s *sqlStats) Add(other *sqlStats) {
-	other.Lock()
-	appStatsCopy := make(map[string]*appStats)
-	for k, v := range other.apps {
-		appStatsCopy[k] = v
-	}
-	other.Unlock()
-	for k, v := range appStatsCopy {
-		stats := s.getStatsForApplication(k)
-		// Add manages locks for itself, so we don't need to guard it with locks.
-		stats.Add(v)
-	}
-}
-
-// resetStats clears all the stored per-app and per-statement
-// statistics.
-func (s *sqlStats) resetStats(ctx context.Context) {
+// resetAndMaybeDumpStats clears all the stored per-app and per-statement
+// statistics. If target s not nil, then the stats in s will be flushed
+// into target.
+func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats) {
 	// Note: we do not clear the entire s.apps map here. We would need
 	// to do so to prevent problems with a runaway client running `SET
 	// APPLICATION_NAME=...` with a different name every time.  However,
 	// any ongoing open client session at the time of the reset has
 	// cached a pointer to its appStats struct and would thus continue
-	// to report its stats in an object now invisible to the other tools
+	// to report its stats in an object now invisible to the target tools
 	// (virtual table, marshaling, etc.). It's a judgement call, but
 	// for now we prefer to see more data and thus not clear the map, at
 	// the risk of seeing the map grow unboundedly with the number of
 	// different application_names seen so far.
 
+	// appStatsCopy will hold a snapshot of the stats being cleared
+	// to dump into target.
+	var appStatsCopy map[string]*appStats
+
 	s.Lock()
+
+	if target != nil {
+		appStatsCopy = make(map[string]*appStats, len(s.apps))
+	}
+
 	// Clear the per-apps maps manually,
 	// because any SQL session currently open has cached the
 	// pointer to its appStats object and will continue to
@@ -373,6 +369,12 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 
+		// Only save a copy of a if we need to dump a copy of the stats.
+		if target != nil {
+			aCopy := &appStats{st: a.st, stmts: a.stmts}
+			appStatsCopy[appName] = aCopy
+		}
+
 		// Clear the map, to release the memory; make the new map somewhat already
 		// large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
@@ -380,6 +382,15 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 	}
 	s.lastReset = timeutil.Now()
 	s.Unlock()
+
+	// Dump the copied stats into target.
+	if target != nil {
+		for k, v := range appStatsCopy {
+			stats := target.getStatsForApplication(k)
+			// Add manages locks for itself, so we don't need to guard it with locks.
+			stats.Add(v)
+		}
+	}
 }
 
 func (s *sqlStats) getLastReset() time.Time {
