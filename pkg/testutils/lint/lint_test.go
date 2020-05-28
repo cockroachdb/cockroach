@@ -1652,6 +1652,7 @@ func TestLint(t *testing.T) {
 			"errors.Errorf",
 			"errors.New",
 			"errors.Newf",
+			"errors.NewWithDepthf",
 			"errors.Wrap",
 			"errors.Wrapf",
 			"Unimplemented",
