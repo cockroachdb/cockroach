@@ -51,11 +51,7 @@ func registerAcceptance(r *testRegistry) {
 		{
 			name: "version-upgrade",
 			fn: func(ctx context.Context, t *test, c *cluster) {
-				predV, err := PredecessorVersion(r.buildVersion)
-				if err != nil {
-					t.Fatal(err)
-				}
-				runVersionUpgrade(ctx, t, c, predV)
+				runVersionUpgrade(ctx, t, c, r.buildVersion)
 			},
 			// This test doesn't like running on old versions because it upgrades to
 			// the latest released version and then it tries to "head", where head is
