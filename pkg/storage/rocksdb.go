@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -527,14 +527,10 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 	}
 
 	r := &RocksDB{
-		cfg:   cfg,
-		cache: cache.ref(),
+		cfg:    cfg,
+		cache:  cache.ref(),
+		auxDir: filepath.Join(cfg.Dir, base.AuxiliaryDir),
 	}
-
-	if err := r.setAuxiliaryDir(filepath.Join(cfg.Dir, base.AuxiliaryDir)); err != nil {
-		return nil, err
-	}
-
 	if err := r.open(); err != nil {
 		return nil, err
 	}
@@ -565,25 +561,12 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 			},
 		},
 		// dir: empty dir == "mem" RocksDB instance.
-		cache: cache.ref(),
+		cache:  cache.ref(),
+		auxDir: "cockroach-auxiliary",
 	}
-
-	// TODO(peter): This is bizarre. We're creating on on-disk temporary
-	// directory for an in-memory filesystem. The reason this is done is because
-	// various users of the auxiliary directory use the os.* routines (which is
-	// invalid!). This needs to be cleaned up.
-	auxDir, err := ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
-	if err != nil {
-		return nil, err
-	}
-	if err := r.setAuxiliaryDir(auxDir); err != nil {
-		return nil, err
-	}
-
 	if err := r.open(); err != nil {
 		return nil, err
 	}
-
 	return r, nil
 }
 
@@ -643,7 +626,11 @@ func (r *RocksDB) open() error {
 	if r.cfg.MaxOpenFiles != 0 {
 		maxOpenFiles = r.cfg.MaxOpenFiles
 	}
-
+	if r.cfg.Dir != "" {
+		if err := os.MkdirAll(r.cfg.Dir, os.ModePerm); err != nil {
+			return err
+		}
+	}
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
@@ -666,6 +653,13 @@ func (r *RocksDB) open() error {
 		}
 	}
 
+	// Create the auxiliary directory if necessary.
+	if !r.cfg.ReadOnly {
+		if err := r.MkdirAll(r.auxDir); err != nil {
+			return err
+		}
+	}
+
 	r.commit.cond.L = &r.commit.Mutex
 	r.syncer.cond.L = &r.syncer.Mutex
 	r.iters.m = make(map[*rocksDBIterator][]byte)
@@ -673,6 +667,7 @@ func (r *RocksDB) open() error {
 	// NB: The sync goroutine acts as a check that the RocksDB instance was
 	// properly closed as the goroutine will leak otherwise.
 	go r.syncLoop()
+
 	return nil
 }
 
@@ -737,10 +732,6 @@ func (r *RocksDB) Close() {
 	if len(r.cfg.Dir) == 0 {
 		if log.V(1) {
 			log.Infof(context.TODO(), "closing in-memory rocksdb instance")
-		}
-		// Remove the temporary directory when the engine is in-memory.
-		if err := os.RemoveAll(r.auxDir); err != nil {
-			log.Warningf(context.TODO(), "%v", err)
 		}
 	} else {
 		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.Dir)
@@ -3206,16 +3197,6 @@ func (r *RocksDB) GetAuxiliaryDir() string {
 	return r.auxDir
 }
 
-func (r *RocksDB) setAuxiliaryDir(d string) error {
-	if !r.cfg.ReadOnly {
-		if err := os.MkdirAll(d, 0755); err != nil {
-			return err
-		}
-	}
-	r.auxDir = d
-	return nil
-}
-
 // PreIngestDelay implements the Engine interface.
 func (r *RocksDB) PreIngestDelay(ctx context.Context) {
 	preIngestDelay(ctx, r, r.cfg.Settings)
@@ -3374,6 +3355,9 @@ func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte
 }
 
 func notFoundErrOrDefault(err error) error {
+	if err == nil {
+		return nil
+	}
 	errStr := err.Error()
 	if strings.Contains(errStr, "No such") ||
 		strings.Contains(errStr, "not found") ||
@@ -3456,6 +3440,11 @@ func (f *rocksdbReadableFile) Read(p []byte) (n int, err error) {
 func (f *rocksdbReadableFile) ReadAt(p []byte, off int64) (int, error) {
 	var n C.int
 	err := statusToError(C.DBEnvReadAtFile(f.rdb, f.file, goToCSlice(p), C.int64_t(off), &n))
+	// The io.ReaderAt interface requires implementations to return a non-nil
+	// error if fewer than len(p) bytes are read.
+	if int(n) < len(p) {
+		err = io.EOF
+	}
 	return int(n), err
 }
 
@@ -3557,7 +3546,7 @@ func (r *RocksDB) MkdirAll(path string) error {
 
 // RemoveDir implements the FS interface.
 func (r *RocksDB) RemoveDir(name string) error {
-	return statusToError(C.DBEnvDeleteDir(r.rdb, goToCSlice([]byte(name))))
+	return notFoundErrOrDefault(statusToError(C.DBEnvDeleteDir(r.rdb, goToCSlice([]byte(name)))))
 }
 
 // List implements the FS interface.
@@ -3593,6 +3582,38 @@ func (r *RocksDB) List(name string) ([]string, error) {
 	sort.Strings(result)
 	return result, err
 }
+
+// Stat implements the FS interface.
+func (r *RocksDB) Stat(name string) (os.FileInfo, error) {
+	// The RocksDB Env doesn't expose a Stat equivalent. If we're using an
+	// on-disk filesystem, circumvent the Env and return the os.Stat results.
+	// The file sizes of encrypted files might be off.
+	if r.cfg.Dir != "" {
+		return os.Stat(name)
+	}
+
+	// Otherwise, construct what we can. We don't know whether the path
+	// names a directory or a file, so try both to check for existence.
+	// The code paths that actually hit this today are only checking for
+	// existence, so we return an unimplemented FileInfo implementation.
+	if _, listErr := r.List(name); listErr == nil {
+		return inMemRocksDBFileInfo{}, nil
+	}
+	f, err := r.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return inMemRocksDBFileInfo{}, f.Close()
+}
+
+type inMemRocksDBFileInfo struct{}
+
+func (fi inMemRocksDBFileInfo) Name() string       { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) Size() int64        { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) Mode() os.FileMode  { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) ModTime() time.Time { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) IsDir() bool        { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) Sys() interface{}   { panic("unimplemented") }
 
 // ThreadStacks returns the stacks for all threads. The stacks are raw
 // addresses, and do not contain symbols. Use addr2line (or atos on Darwin) to

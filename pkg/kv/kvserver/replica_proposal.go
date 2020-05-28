@@ -13,8 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -259,7 +257,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 			// in a goroutine that's about to end, simply sleep for a few seconds
 			// and then terminate.
 			auxDir := r.store.engine.GetAuxiliaryDir()
-			_ = os.MkdirAll(auxDir, 0755)
+			_ = r.store.engine.MkdirAll(auxDir)
 			path := base.PreventedStartupFile(auxDir)
 
 			preventStartupMsg := fmt.Sprintf(`ATTENTION:
@@ -276,7 +274,7 @@ A file preventing this node from restarting was placed at:
 %s
 `, r, auxDir, path)
 
-			if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
+			if err := writeFile(r.store.engine, path, preventStartupMsg); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
 
@@ -566,15 +564,15 @@ func addSSTablePreApply(
 
 		// TODO(tschottdorf): remove this once sideloaded storage guarantees its
 		// existence.
-		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		if err := eng.MkdirAll(filepath.Dir(path)); err != nil {
 			panic(err)
 		}
-		if _, err := os.Stat(path); err == nil {
+		if _, err := eng.Stat(path); err == nil {
 			// The file we want to ingest exists. This can happen since the
 			// ingestion may apply twice (we ingest before we mark the Raft
 			// command as committed). Just unlink the file (RocksDB created a
 			// hard link); after that we're free to write it again.
-			if err := os.Remove(path); err != nil {
+			if err := eng.Remove(path); err != nil {
 				log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", path, err)
 			}
 		}

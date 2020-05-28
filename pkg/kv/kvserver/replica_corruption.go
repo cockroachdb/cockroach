@@ -13,11 +13,10 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -57,7 +56,7 @@ func (r *Replica) setCorruptRaftMuLocked(
 	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
 
 	auxDir := r.store.engine.GetAuxiliaryDir()
-	_ = os.MkdirAll(auxDir, 0755)
+	_ = r.store.engine.MkdirAll(auxDir)
 	path := base.PreventedStartupFile(auxDir)
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
@@ -70,10 +69,23 @@ A file preventing this node from restarting was placed at:
 %s
 `, r, path)
 
-	if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
+	if err := writeFile(r.store.engine, path, preventStartupMsg); err != nil {
 		log.Warningf(ctx, "%v", err)
 	}
 
 	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
 	return roachpb.NewError(cErr)
+}
+
+func writeFile(fs fs.FS, path, contents string) error {
+	f, err := fs.Create(path)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write([]byte(contents))
+	if err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
