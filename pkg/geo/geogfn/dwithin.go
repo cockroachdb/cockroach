@@ -14,8 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/errors"
-	"github.com/golang/geo/s1"
-	"github.com/golang/geo/s2"
 )
 
 // DWithin returns whether a is within distance d of b, i.e. Distance(a, b) <= d.
@@ -45,52 +43,9 @@ func DWithin(
 		return false, err
 	}
 	spheroid := geographiclib.WGS84Spheroid
-	if useSphereOrSpheroid == UseSpheroid {
-		maybeClosestDistance, err := distanceSpheroidRegions(spheroid, aRegions, bRegions, distance)
-		if err != nil {
-			return false, err
-		}
-		return maybeClosestDistance <= distance, nil
-	}
-
-	aShapeIndex, aPoints, err := s2RegionsToPointsAndShapeIndexes(aRegions)
+	maybeClosestDistance, err := distanceGeographyRegions(spheroid, useSphereOrSpheroid, aRegions, bRegions, distance)
 	if err != nil {
 		return false, err
 	}
-	bShapeIndex, bPoints, err := s2RegionsToPointsAndShapeIndexes(bRegions)
-	if err != nil {
-		return false, err
-	}
-
-	// Find the successor to the chord angle to signify <= distance when using `IsDistanceLess`.
-	chordAngle := s1.ChordAngleFromAngle(s1.Angle(distance / spheroid.SphereRadius)).Successor()
-	if aShapeIndex.Len() > 0 {
-		aQuery := s2.NewClosestEdgeQuery(aShapeIndex, nil)
-
-		if bShapeIndex.Len() > 0 {
-			if aQuery.IsDistanceLess(s2.NewMinDistanceToShapeIndexTarget(bShapeIndex), chordAngle) {
-				return true, nil
-			}
-		}
-		for _, bPoint := range bPoints {
-			if aQuery.IsDistanceLess(s2.NewMinDistanceToPointTarget(bPoint), chordAngle) {
-				return true, nil
-			}
-		}
-	}
-
-	for _, aPoint := range aPoints {
-		if bShapeIndex.Len() > 0 {
-			bQuery := s2.NewClosestEdgeQuery(bShapeIndex, nil)
-			if bQuery.IsDistanceLess(s2.NewMinDistanceToPointTarget(aPoint), chordAngle) {
-				return true, nil
-			}
-		}
-		for _, bPoint := range bPoints {
-			if s2.ChordAngleBetweenPoints(aPoint, bPoint) <= chordAngle {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
+	return maybeClosestDistance <= distance, nil
 }
