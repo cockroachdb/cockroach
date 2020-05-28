@@ -810,7 +810,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 					// If it isn't, we'll use the gateway.
 					var ok bool
 					if compat, ok = nodeVerCompatMap[nodeID]; !ok {
-						compat = dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion)
+						compat = dsp.nodeVersionIsCompatible(nodeID)
 						nodeVerCompatMap[nodeID] = compat
 					}
 				}
@@ -857,9 +857,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 // nodeVersionIsCompatible decides whether a particular node's DistSQL version
 // is compatible with planVer. It uses gossip to find out the node's version
 // range.
-func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
-	nodeID roachpb.NodeID, planVer execinfrapb.DistSQLVersion,
-) bool {
+func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 	g, ok := dsp.gossip.Optional(distsql.MultiTenancyIssueNo)
 	if !ok {
 		return true // no gossip - always compatible; only a single gateway running in Phase 2
@@ -1063,7 +1061,7 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 
 	if err = dsp.nodeHealth.check(planCtx.ctx, nodeID); err != nil {
 		err = errors.New("unhealthy")
-	} else if !dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion) {
+	} else if !dsp.nodeVersionIsCompatible(nodeID) {
 		err = errors.New("incompatible version")
 	} else {
 		planCtx.NodeAddresses[nodeID] = desc.Address.String()
