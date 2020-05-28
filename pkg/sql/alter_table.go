@@ -20,10 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -256,20 +256,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if d.IsComputed() {
-				if err := validateComputedColumn(n.tableDesc, d, &params.p.semaCtx); err != nil {
+				computedColValidator := schemaexpr.NewComputedColumnValidator(n.tableDesc, &params.p.semaCtx)
+				if err := computedColValidator.Validate(d); err != nil {
 					return err
 				}
 			}
 
 		case *tree.AlterTableAddConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
-			if err != nil {
-				return err
-			}
-			inuseNames := make(map[string]struct{}, len(info))
-			for k := range info {
-				inuseNames[k] = struct{}{}
-			}
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.PrimaryKey {
@@ -322,8 +315,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(params.ctx,
-					n.tableDesc, d, inuseNames, &params.p.semaCtx, *tn)
+				info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
+				if err != nil {
+					return err
+				}
+				ckBuilder := schemaexpr.NewCheckConstraintBuilder(*tn, n.tableDesc, &params.p.semaCtx)
+				for k := range info {
+					ckBuilder.MarkNameInUse(k)
+				}
+				ck, err := ckBuilder.Build(d)
 				if err != nil {
 					return err
 				}
@@ -353,6 +353,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// on tables that were just added. See the comment at the start of
 				// the global-scope resolveFK().
 				// TODO(vivek): check if the cache can be used.
+				var err error
 				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
 					// Check whether the table is empty, and pass the result to resolveFK(). If
 					// the table is empty, then resolveFK will automatically add the necessary
@@ -473,7 +474,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
-			if err := checkColumnHasNoComputedColDependencies(n.tableDesc, colToDrop); err != nil {
+			computedColValidator := schemaexpr.NewComputedColumnValidator(n.tableDesc, &params.p.semaCtx)
+			if err := computedColValidator.ValidateNoDependents(colToDrop); err != nil {
 				return err
 			}
 
@@ -1020,47 +1022,6 @@ func applyColumnMutation(
 				"column %q is not a computed column", col.Name)
 		}
 		col.ComputeExpr = nil
-	}
-	return nil
-}
-
-func checkColumnHasNoComputedColDependencies(
-	desc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor,
-) error {
-	checkComputed := func(c *sqlbase.ColumnDescriptor) error {
-		if !c.IsComputed() {
-			return nil
-		}
-		expr, err := parser.ParseExpr(*c.ComputeExpr)
-		if err != nil {
-			// At this point, we should be able to parse the computed expression.
-			return errors.WithAssertionFailure(err)
-		}
-		return iterColDescriptorsInExpr(desc, expr, func(colVar *sqlbase.ColumnDescriptor) error {
-			if colVar.ID == col.ID {
-				return pgerror.Newf(
-					pgcode.InvalidColumnReference,
-					"column %q is referenced by computed column %q",
-					col.Name,
-					c.Name,
-				)
-			}
-			return nil
-		})
-	}
-	for i := range desc.Columns {
-		if err := checkComputed(&desc.Columns[i]); err != nil {
-			return err
-		}
-	}
-	for i := range desc.Mutations {
-		mut := &desc.Mutations[i]
-		mutCol := mut.GetColumn()
-		if mut.Direction == sqlbase.DescriptorMutation_ADD && mutCol != nil {
-			if err := checkComputed(mutCol); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }

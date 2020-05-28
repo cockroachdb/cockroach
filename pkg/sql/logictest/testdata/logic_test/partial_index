@@ -53,6 +53,18 @@ CREATE TABLE error (a INT, INDEX (a) WHERE generate_series(1, 1))
 statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE error (a INT, INDEX (a) WHERE false - true)
 
+# Don't allow references to other tables.
+statement error no data source matches prefix: t1
+CREATE TABLE error (a INT, INDEX (a) WHERE t1.a > 0)
+
+# Don't allow references to unknown tables.
+statement error no data source matches prefix: unknown
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.a > 0)
+
+# Don't allow reference to unknown databases.
+statement error no data source matches prefix: unknown.error
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.error.a > 9)
+
 #### Validate CREATE TABLE ... UNIQUE INDEX predicate.
 
 statement ok
@@ -65,11 +77,15 @@ CREATE TABLE error (a INT, UNIQUE INDEX (a) WHERE 1)
 #### Validate CREATE INDEX predicate.
 
 statement ok
-CREATE TABLE t (a INT)
+CREATE TABLE t5 (a INT)
 
 statement ok
-CREATE INDEX i1 ON t (a) WHERE a = 0
+CREATE INDEX t5i ON t5 (a) WHERE a = 0
 
 # Don't allow invalid predicates.
 statement error expected index predicate expression to have type bool, but '1' has type int
-CREATE INDEX error ON t (a) WHERE 1
+CREATE INDEX error ON t5 (a) WHERE 1
+
+# Don't allow references to other tables in predicates.
+statement error no data source matches prefix: t4
+CREATE INDEX error ON t5 (a) WHERE t4.a = 1

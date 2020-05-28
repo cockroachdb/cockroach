@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -94,14 +95,15 @@ func (p *planner) setupFamilyAndConstraintForShard(
 		inuseNames[k] = struct{}{}
 	}
 
-	ckName, err := generateMaybeDuplicateNameForCheckConstraint(tableDesc, ckDef.Expr)
+	ckBuilder := schemaexpr.NewCheckConstraintBuilder(p.tableName, tableDesc, &p.semaCtx)
+	ckName, err := ckBuilder.DefaultName(ckDef.Expr)
 	if err != nil {
 		return err
 	}
+
 	// Avoid creating duplicate check constraints.
 	if _, ok := inuseNames[ckName]; !ok {
-		ck, err := makeCheckConstraint(ctx, tableDesc, ckDef, inuseNames,
-			&p.semaCtx, p.tableName)
+		ck, err := ckBuilder.Build(ckDef)
 		if err != nil {
 			return err
 		}
@@ -206,7 +208,8 @@ func MakeIndexDescriptor(
 			return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 		}
 
-		_, err := validateIndexPredicate(params.ctx, tableDesc, n.Predicate, &params.p.semaCtx, n.Table)
+		idxValidator := schemaexpr.NewIndexPredicateValidator(n.Table, tableDesc, &params.p.semaCtx)
+		_, err := idxValidator.Validate(n.Predicate)
 		if err != nil {
 			return nil, err
 		}
