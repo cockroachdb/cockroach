@@ -282,7 +282,6 @@ type nodeDecommissionWaitType int
 
 const (
 	nodeDecommissionWaitAll nodeDecommissionWaitType = iota
-	nodeDecommissionWaitLive
 	nodeDecommissionWaitNone
 )
 
@@ -294,12 +293,11 @@ func (s *nodeDecommissionWaitType) String() string {
 	switch *s {
 	case nodeDecommissionWaitAll:
 		return "all"
-	case nodeDecommissionWaitLive:
-		return "live"
 	case nodeDecommissionWaitNone:
 		return "none"
+	default:
+		panic("unexpected")
 	}
-	return ""
 }
 
 // Set implements the pflag.Value interface.
@@ -307,13 +305,11 @@ func (s *nodeDecommissionWaitType) Set(value string) error {
 	switch value {
 	case "all":
 		*s = nodeDecommissionWaitAll
-	case "live":
-		*s = nodeDecommissionWaitLive
 	case "none":
 		*s = nodeDecommissionWaitNone
 	default:
 		return fmt.Errorf("invalid node decommission parameter: %s "+
-			"(possible values: all, live, none)", value)
+			"(possible values: all, none)", value)
 	}
 	return nil
 }
