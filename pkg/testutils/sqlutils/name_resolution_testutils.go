@@ -167,7 +167,7 @@ func RunResolveColumnItemTest(t *testing.T, ct ColumnItemResolverTester) {
 					return "", fmt.Errorf("var name %s (%T) did not resolve to ColumnItem, found %T instead",
 						v, v, c)
 				}
-				res, err := ci.Resolve(context.Background(), resolver)
+				res, err := ci.Resolve(resolver)
 				if err != nil {
 					return "", err
 				}

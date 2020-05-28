@@ -139,7 +139,7 @@ type ColumnItemResolver interface {
 	// than one data source matching tn. The srcMeta is subsequently
 	// passed to Resolve() if resolution succeeds. The prefix will not be
 	// modified.
-	FindSourceMatchingName(ctx context.Context, tn TableName) (res NumResolutionResults, prefix *TableName, srcMeta ColumnSourceMeta, err error)
+	FindSourceMatchingName(tn TableName) (res NumResolutionResults, prefix *TableName, srcMeta ColumnSourceMeta, err error)
 
 	// FindSourceProvidingColumn searches for a data source providing
 	// a column with the name given.
@@ -149,10 +149,10 @@ type ColumnItemResolver interface {
 	// none. The srcMeta and colHints are subsequently passed to
 	// Resolve() if resolution succeeds. The prefix will not be
 	// modified.
-	FindSourceProvidingColumn(ctx context.Context, col Name) (prefix *TableName, srcMeta ColumnSourceMeta, colHint int, err error)
+	FindSourceProvidingColumn(col Name) (prefix *TableName, srcMeta ColumnSourceMeta, colHint int, err error)
 
 	// Resolve() is called if resolution succeeds.
-	Resolve(ctx context.Context, prefix *TableName, srcMeta ColumnSourceMeta, colHint int, col Name) (ColumnResolutionResult, error)
+	Resolve(prefix *TableName, srcMeta ColumnSourceMeta, colHint int, col Name) (ColumnResolutionResult, error)
 }
 
 // ColumnSourceMeta is an opaque reference passed through column item resolution.
@@ -175,7 +175,7 @@ func (a *AllColumnsSelector) Resolve(
 
 	// Is there a data source with this prefix?
 	var res NumResolutionResults
-	res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
+	res, srcName, srcMeta, err = r.FindSourceMatchingName(prefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -186,7 +186,7 @@ func (a *AllColumnsSelector) Resolve(
 		prefix.ExplicitCatalog = true
 		prefix.CatalogName = prefix.SchemaName
 		prefix.SchemaName = PublicSchemaName
-		res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
+		res, srcName, srcMeta, err = r.FindSourceMatchingName(prefix)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -198,24 +198,22 @@ func (a *AllColumnsSelector) Resolve(
 }
 
 // Resolve performs name resolution for a column item using a resolver.
-func (c *ColumnItem) Resolve(
-	ctx context.Context, r ColumnItemResolver,
-) (ColumnResolutionResult, error) {
+func (c *ColumnItem) Resolve(r ColumnItemResolver) (ColumnResolutionResult, error) {
 	colName := c.ColumnName
 	if c.TableName == nil {
 		// Naked column name: simple case.
-		srcName, srcMeta, cHint, err := r.FindSourceProvidingColumn(ctx, colName)
+		srcName, srcMeta, cHint, err := r.FindSourceProvidingColumn(colName)
 		if err != nil {
 			return nil, err
 		}
-		return r.Resolve(ctx, srcName, srcMeta, cHint, colName)
+		return r.Resolve(srcName, srcMeta, cHint, colName)
 	}
 
 	// There is a prefix. We need to search for it.
 	prefix := c.TableName.ToTableName()
 
 	// Is there a data source with this prefix?
-	res, srcName, srcMeta, err := r.FindSourceMatchingName(ctx, prefix)
+	res, srcName, srcMeta, err := r.FindSourceMatchingName(prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +224,7 @@ func (c *ColumnItem) Resolve(
 		prefix.ExplicitCatalog = true
 		prefix.CatalogName = prefix.SchemaName
 		prefix.SchemaName = PublicSchemaName
-		res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
+		res, srcName, srcMeta, err = r.FindSourceMatchingName(prefix)
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +232,7 @@ func (c *ColumnItem) Resolve(
 	if res == NoResults {
 		return nil, newSourceNotFoundError("no data source matches prefix: %s", c.TableName)
 	}
-	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
+	return r.Resolve(srcName, srcMeta, -1, colName)
 }
 
 // ObjectNameTargetResolver is the helper interface to resolve object

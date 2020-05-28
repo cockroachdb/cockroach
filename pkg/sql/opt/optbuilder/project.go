@@ -182,7 +182,7 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 	unresolved, ok := e.(*tree.UnresolvedName)
 	if ok && !unresolved.Star && unresolved.NumParts == 1 {
 		colName := unresolved.Parts[0]
-		_, srcMeta, _, err := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
+		_, srcMeta, _, err := inScope.FindSourceProvidingColumn(tree.Name(colName))
 		if err != nil {
 			panic(err)
 		}

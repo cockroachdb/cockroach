@@ -12,7 +12,6 @@ package sqlbase
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -103,7 +102,7 @@ type ColumnResolver struct {
 
 // FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceMatchingName(
-	ctx context.Context, tn tree.TableName,
+	tn tree.TableName,
 ) (
 	res tree.NumResolutionResults,
 	prefix *tree.TableName,
@@ -121,7 +120,7 @@ const invalidColIdx = -1
 
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceProvidingColumn(
-	ctx context.Context, col tree.Name,
+	col tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
 	colIdx := invalidColIdx
 	colName := string(col)
@@ -146,11 +145,7 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 
 // Resolve is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) Resolve(
-	ctx context.Context,
-	prefix *tree.TableName,
-	srcMeta tree.ColumnSourceMeta,
-	colHint int,
-	col tree.Name,
+	prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, col tree.Name,
 ) (tree.ColumnResolutionResult, error) {
 	if colHint != -1 {
 		// (*ColumnItem).Resolve() is telling us that we found the source

@@ -14,8 +14,6 @@
 package sqlbase
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -57,7 +55,7 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		return v.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		_, err := t.Resolve(context.TODO(), &v.resolver)
+		_, err := t.Resolve(&v.resolver)
 		if err != nil {
 			v.err = err
 			return false, expr

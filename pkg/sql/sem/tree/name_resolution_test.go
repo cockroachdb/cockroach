@@ -307,11 +307,7 @@ func (c colRes) ColumnResolutionResult() {}
 
 // Resolve is part of the ColumnItemResolver interface.
 func (f *fakeSource) Resolve(
-	_ context.Context,
-	prefix *tree.TableName,
-	srcMeta tree.ColumnSourceMeta,
-	colHint int,
-	col tree.Name,
+	prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, col tree.Name,
 ) (tree.ColumnResolutionResult, error) {
 	f.t.Logf("in Resolve: prefix %s meta %v colHint %d col %s",
 		prefix, srcMeta, colHint, col)
