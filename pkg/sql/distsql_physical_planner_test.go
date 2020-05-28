@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // SplitTable splits a range in the table, creates a replica for the right
@@ -260,10 +261,12 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 		context.Background(), nil /* resultWriter */, tree.Rows,
 		rangeCache, leaseCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
 
+	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
+
 	descs := []roachpb.RangeDescriptor{
-		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
-		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
-		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
+		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c"), InternalReplicas: replicas},
+		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e"), InternalReplicas: replicas},
+		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z"), InternalReplicas: replicas},
 	}
 
 	// Push some metadata and check that the caches are updated with it.
@@ -296,13 +299,9 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	for i := range descs {
-		desc := rangeCache.GetCachedRangeDescriptor(descs[i].StartKey, false /* inclusive */)
-		if desc == nil {
-			t.Fatalf("failed to find range for key: %s", descs[i].StartKey)
-		}
-		if !desc.Equal(descs[i]) {
-			t.Fatalf("expected: %+v, got: %+v", descs[i], desc)
-		}
+		ri := rangeCache.GetCached(descs[i].StartKey, false /* inclusive */)
+		require.NotNilf(t, ri, "failed to find range for key: %s", descs[i].StartKey)
+		require.Equal(t, descs[i], ri.Desc)
 
 		_, ok := leaseCache.Lookup(context.Background(), descs[i].RangeID)
 		if !ok {
