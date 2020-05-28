@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type ProcessorTestConfig struct {
@@ -71,7 +72,14 @@ func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 			panic(fmt.Sprintf("type %T not supported yet", concreteType))
 		}
 	}()
-	return sqlbase.DatumToEncDatum(datumType, d)
+	// Initialize both EncDatum.Datum, and EncDatum.encoded.
+	encoded, err := sqlbase.EncodeTableKey(nil, d, encoding.Ascending)
+	if err != nil {
+		panic(err)
+	}
+	encodedDatum := sqlbase.EncDatumFromEncoded(sqlbase.DatumEncoding_ASCENDING_KEY, encoded)
+	encodedDatum.Datum = d
+	return encodedDatum
 }
 
 func (r ProcessorTestCaseRows) toEncDatumRows() sqlbase.EncDatumRows {
