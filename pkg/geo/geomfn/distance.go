@@ -415,9 +415,7 @@ const (
 // findPointSide finds which side a point is relative to the infinite line
 // given by the edge.
 // Note this side is relative to the orientation of the line.
-func (c *geomDistanceCalculator) findPointSide(
-	p geom.Coord, eV0 geom.Coord, eV1 geom.Coord,
-) pointSide {
+func findPointSide(p geom.Coord, eV0 geom.Coord, eV1 geom.Coord) pointSide {
 	// This is the equivalent of using the point-gradient formula
 	// and determining the sign, i.e. the sign of
 	// d = (x-x1)(y2-y1) - (y-y1)(x2-x1)
@@ -449,13 +447,17 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 		e := polygon.Edge(edgeIdx)
 		eV0 := e.V0.(*geomGeodistPoint).Coord
 		eV1 := e.V1.(*geomGeodistPoint).Coord
+		// Same vertex; none of these checks will pass.
+		if coordEqual(eV0, eV1) {
+			continue
+		}
 		yMin := math.Min(eV0.Y(), eV1.Y())
 		yMax := math.Max(eV0.Y(), eV1.Y())
 		// If the edge isn't on the same level as Y, this edge isn't worth considering.
 		if p.Y() > yMax || p.Y() < yMin {
 			continue
 		}
-		side := c.findPointSide(p, eV0, eV1)
+		side := findPointSide(p, eV0, eV1)
 		// If the point is on the line if the edge was infinite, and the point is within the bounds
 		// of the line segment denoted by the edge, there is a covering.
 		if side == pointSideOn &&
@@ -488,6 +490,11 @@ func (c *geomDistanceCalculator) ClosestPointToEdge(
 	eV0 := edge.V0.(*geomGeodistPoint).Coord
 	eV1 := edge.V1.(*geomGeodistPoint).Coord
 	p := pointInterface.(*geomGeodistPoint).Coord
+
+	// Edge is a single point. Closest point must be any edge vertex.
+	if coordEqual(eV0, eV1) {
+		return edge.V0, coordEqual(eV0, p)
+	}
 
 	// From http://www.faqs.org/faqs/graphics/algorithms-faq/, section 1.02
 	//
