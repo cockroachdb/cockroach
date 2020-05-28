@@ -163,12 +163,12 @@ func setConfigDefaults(c *Config) {
 
 type nopRangeDescriptorCache struct{}
 
-var zeroRangeDescriptor = &roachpb.RangeDescriptor{}
+var zeroCacheEntry = kvbase.RangeCacheEntry{}
 
-func (nrdc nopRangeDescriptorCache) LookupRangeDescriptor(
+func (nrdc nopRangeDescriptorCache) Lookup(
 	ctx context.Context, key roachpb.RKey,
-) (*roachpb.RangeDescriptor, error) {
-	return zeroRangeDescriptor, nil
+) (*kvbase.RangeCacheEntry, error) {
+	return &zeroCacheEntry, nil
 }
 
 // New creates an new IntentResolver.
@@ -767,14 +767,14 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 		}
 		return 0
 	}
-	rDesc, err := ir.rdc.LookupRangeDescriptor(ctx, rKey)
+	rInfo, err := ir.rdc.Lookup(ctx, rKey)
 	if err != nil {
 		if ir.every.ShouldLog() {
 			log.Warningf(ctx, "failed to look up range descriptor for key %q: %+v", key, err)
 		}
 		return 0
 	}
-	return rDesc.RangeID
+	return rInfo.Desc.RangeID
 }
 
 // ResolveIntent synchronously resolves an intent according to opts.

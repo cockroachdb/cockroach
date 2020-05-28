@@ -1072,7 +1072,7 @@ func TestRangesResponse(t *testing.T) {
 		if len(ri.State.Desc.InternalReplicas) != 1 || ri.State.Desc.InternalReplicas[0] != expReplica {
 			t.Errorf("unexpected replica list %+v", ri.State.Desc.InternalReplicas)
 		}
-		if ri.State.Lease == nil || *ri.State.Lease == (roachpb.Lease{}) {
+		if ri.State.Lease == nil || ri.State.Lease.Empty() {
 			t.Error("expected a nontrivial Lease")
 		}
 		if ri.State.LastIndex == 0 {
@@ -1352,7 +1352,7 @@ func TestRangeResponse(t *testing.T) {
 		t.Errorf("unexpected replica list %+v", info.State.Desc.InternalReplicas)
 	}
 
-	if info.State.Lease == nil || *info.State.Lease == (roachpb.Lease{}) {
+	if info.State.Lease == nil || info.State.Lease.Empty() {
 		t.Error("expected a nontrivial Lease")
 	}
 

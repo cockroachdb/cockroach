@@ -167,12 +167,18 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, _, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(
+			tok, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupWithEvictionToken(
 				ctx, addr, kvcoord.EvictionToken{}, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			mockCache.InsertRangeDescriptors(ctx, *r)
+			r := roachpb.RangeInfo{
+				Desc: *tok.Desc(),
+			}
+			if l := tok.Lease(); l != nil {
+				r.Lease = *l
+			}
+			mockCache.Insert(ctx, r)
 
 			ts := hlc.Timestamp{WallTime: 100}
 			b, err := bulk.MakeBulkAdder(
