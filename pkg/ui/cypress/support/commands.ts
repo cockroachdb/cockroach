@@ -12,6 +12,7 @@ import { TIME_UNTIL_NODE_DEAD } from "./constants";
 import Loggable = Cypress.Loggable;
 import Timeoutable = Cypress.Timeoutable;
 import Withinable = Cypress.Withinable;
+import { addMatchImageSnapshotCommand } from "cypress-image-snapshot/command";
 
 Cypress.Commands.add("decommissionNode", (nodeId: number, wait: boolean = false) => {
   Cypress.log({
@@ -68,6 +69,10 @@ Cypress.Commands.overwrite("get", (originalFn: typeof cy.get, selector: string, 
   return originalFn(selector, { log: false });
 });
 
+addMatchImageSnapshotCommand("matchImageSnapshot", {
+  capture: "viewport",
+});
+
 declare global {
   namespace Cypress {
     interface Chainable<Subject> {
@@ -75,6 +80,7 @@ declare global {
       decommissionNode: (nodeId: number, wait?: boolean) => Chainable<Subject>;
       startCluster: () => Chainable<Subject>;
       teardown: () => Chainable<Subject>;
+      matchImageSnapshot: () => Chainable<Subject>;
     }
 
     interface Loggable {

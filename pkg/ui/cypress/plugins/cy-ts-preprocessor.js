@@ -7,12 +7,19 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-const wp = require('@cypress/webpack-preprocessor');
+const path = require('path');
+const requireOpt = require("./requireOptModule");
+const wp = requireOpt("@cypress/webpack-preprocessor");
 
 const webpackOptions = {
   resolve: {
-    extensions: ['.ts', '.js']
+    extensions: ['.ts', '.js'],
+    modules: [
+      requireOpt.OPT_NODE_MODULES_PATH,
+    ],
+    alias: {
+      "src": path.resolve('src/')
+    }
   },
   module: {
     rules: [
