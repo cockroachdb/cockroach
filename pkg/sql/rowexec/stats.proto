@@ -83,3 +83,11 @@ message WindowerStats {
   int64 max_allocated_mem = 2;
   int64 max_allocated_disk = 3;
 }
+
+// InvertedFiltererStats are the stats collected during an inverted
+// filterer run.
+message InvertedFiltererStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+  int64 max_allocated_disk = 3;
+}

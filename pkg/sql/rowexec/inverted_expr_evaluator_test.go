@@ -221,10 +221,10 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 			"span: [k, m)  indexes (expr, set): (0, 4) (0, 1) \n" +
 			"span: [m, n)  indexes (expr, set): (0, 1) \n"
 
-	require.Equal(t, expectedSpans, spansToString(batchEvalUnion.getSpans()))
+	require.Equal(t, expectedSpans, spansToString(batchEvalUnion.init()))
 	require.Equal(t, expectedFragmentedSpans,
 		fragmentedSpansToString(batchEvalUnion.fragmentedSpans))
-	require.Equal(t, expectedSpans, spansToString(batchEvalIntersection.getSpans()))
+	require.Equal(t, expectedSpans, spansToString(batchEvalIntersection.init()))
 	require.Equal(t, expectedFragmentedSpans,
 		fragmentedSpansToString(batchEvalIntersection.fragmentedSpans))
 
@@ -248,8 +248,8 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 		indexRows[i], indexRows[j] = indexRows[j], indexRows[i]
 	})
 	for _, elem := range indexRows {
-		batchEvalUnion.addIndexRow(invertedexpr.EncInvertedVal(elem.key), KeyIndex(elem.index))
-		batchEvalIntersection.addIndexRow(invertedexpr.EncInvertedVal(elem.key), KeyIndex(elem.index))
+		batchEvalUnion.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
+		batchEvalIntersection.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
 	}
 	require.Equal(t, expectedUnion, keyIndexesToString(batchEvalUnion.evaluate()))
 	require.Equal(t, expectedIntersection, keyIndexesToString(batchEvalIntersection.evaluate()))
@@ -258,9 +258,9 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	batchBoth := batchEvalUnion
 	batchBoth.reset()
 	batchBoth.exprs = append(batchBoth.exprs, &protoUnion, &protoIntersection)
-	batchBoth.getSpans()
+	batchBoth.init()
 	for _, elem := range indexRows {
-		batchBoth.addIndexRow(invertedexpr.EncInvertedVal(elem.key), KeyIndex(elem.index))
+		batchBoth.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
 	}
 	require.Equal(t, "0: 0 3 4 5 6 7 8 \n1: 0 4 6 8 \n",
 		keyIndexesToString(batchBoth.evaluate()))
@@ -268,7 +268,7 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	// Reset and evaluate nil expressions.
 	batchBoth.reset()
 	batchBoth.exprs = append(batchBoth.exprs, nil, nil)
-	require.Equal(t, 0, len(batchBoth.getSpans()))
+	require.Equal(t, 0, len(batchBoth.init()))
 	require.Equal(t, "0: \n1: \n", keyIndexesToString(batchBoth.evaluate()))
 }
 
@@ -300,7 +300,7 @@ func TestFragmentedSpans(t *testing.T) {
 	batchEval := &batchedInvertedExprEvaluator{
 		exprs: []*invertedexpr.SpanExpressionProto{&expr1, &expr2, &expr3},
 	}
-	require.Equal(t, "[a, l) [o, p) ", spansToString(batchEval.getSpans()))
+	require.Equal(t, "[a, l) [o, p) ", spansToString(batchEval.init()))
 	require.Equal(t,
 		"span: [a, d)  indexes (expr, set): (0, 0) \n"+
 			"span: [d, e)  indexes (expr, set): (0, 0) (1, 0) \n"+
