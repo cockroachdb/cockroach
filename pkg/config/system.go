@@ -152,10 +152,8 @@ func (s *SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
 // get searches the kv list for 'key' and returns its roachpb.KeyValue
 // if found.
 func (s *SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
-	if index, found := s.GetIndex(key); found {
-		// TODO(marc): I'm pretty sure a Value returned by MVCCScan can
-		// never be nil. Should check.
-		return &s.Values[index]
+	if i, ok := s.GetIndex(key); ok {
+		return &s.Values[i]
 	}
 	return nil
 }
@@ -163,13 +161,13 @@ func (s *SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
 // GetIndex searches the kv list for 'key' and returns its index if found.
 func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 	l := len(s.Values)
-	index := sort.Search(l, func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, key) >= 0
+	i := sort.Search(l, func(i int) bool {
+		return key.Compare(s.Values[i].Key) <= 0
 	})
-	if index == l || !key.Equal(s.Values[index].Key) {
+	if i == l || !key.Equal(s.Values[i].Key) {
 		return 0, false
 	}
-	return index, true
+	return i, true
 }
 
 // GetLargestObjectID returns the largest object ID found in the config which is
@@ -207,7 +205,7 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 		return uint32(id), nil
 	}
 
-	// Maximum specified: need to search the descriptor table.  Binary search
+	// Maximum specified: need to search the descriptor table. Binary search
 	// through all descriptor table values to find the first descriptor with ID
 	// >= maxID.
 	searchSlice := s.Values[lowIndex:highIndex]
