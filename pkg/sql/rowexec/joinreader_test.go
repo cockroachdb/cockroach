@@ -839,94 +839,112 @@ func BenchmarkJoinReader(b *testing.B) {
 	for _, reqOrdering := range []bool{true, false} {
 		for columnIdx, columnDef := range rightSideColumnDefs {
 			for _, numLookupRows := range []int{1, 1 << 4 /* 16 */, 1 << 8 /* 256 */, 1 << 10 /* 1024 */, 1 << 12 /* 4096 */, 1 << 13 /* 8192 */, 1 << 14 /* 16384 */, 1 << 15 /* 32768 */, 1 << 16 /* 65,536 */, 1 << 19 /* 524,288 */} {
-				if rightSz/columnDef.matchesPerLookupRow < numLookupRows {
-					// This case does not make sense since we won't have distinct lookup
-					// rows. We don't currently merge spans which could make this an
-					// interesting case to benchmark, but we probably should.
-					continue
-				}
-
-				eqColsAreKey := []bool{false}
-				if numLookupRows == 1 {
-					// For this case, execute the parallel lookup case as well.
-					eqColsAreKey = []bool{true, false}
-				}
-				for _, parallel := range eqColsAreKey {
-					benchmarkName := fmt.Sprintf("reqOrdering=%t/matchratio=oneto%s/lookuprows=%d", reqOrdering, columnDef.name, numLookupRows)
-					if parallel {
-						benchmarkName += "/parallel=true"
+				for _, memoryLimit := range []int64{100 << 10, math.MaxInt64} {
+					memoryLimitStr := "mem=unlimited"
+					if memoryLimit != math.MaxInt64 {
+						if !reqOrdering {
+							// Smaller memory limit is not relevant when there is no ordering
+							continue
+						}
+						memoryLimitStr = fmt.Sprintf("mem=%dKB", memoryLimit/(1<<10))
+						// The benchmark workloads are such that each right row never joins
+						// with more than one left row. And the access pattern of right rows
+						// accessed across all the left rows is monotonically incresing. So
+						// once spilled to disk, the reads will always need to get from disk
+						// (caching cannot improve performance).
+						//
+						// TODO(sumeer): add workload that can benefit from caching.
 					}
-					b.Run(benchmarkName, func(b *testing.B) {
-						tableName := tableSizeToName(rightSz)
+					if rightSz/columnDef.matchesPerLookupRow < numLookupRows {
+						// This case does not make sense since we won't have distinct lookup
+						// rows. We don't currently merge spans which could make this an
+						// interesting case to benchmark, but we probably should.
+						continue
+					}
 
-						// Get the table descriptor and find the index that will provide us with
-						// the expected match ratio.
-						tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
-						indexIdx := uint32(0)
-						for i := range tableDesc.Indexes {
-							require.Equal(b, 1, len(tableDesc.Indexes[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
-							if tableDesc.Indexes[i].ColumnNames[0] == columnDef.name {
-								// Found indexIdx.
-								indexIdx = uint32(i + 1)
-								break
-							}
+					eqColsAreKey := []bool{false}
+					if numLookupRows == 1 {
+						// For this case, execute the parallel lookup case as well.
+						eqColsAreKey = []bool{true, false}
+					}
+					for _, parallel := range eqColsAreKey {
+						benchmarkName := fmt.Sprintf("reqOrdering=%t/matchratio=oneto%s/lookuprows=%d/%s",
+							reqOrdering, columnDef.name, numLookupRows, memoryLimitStr)
+						if parallel {
+							benchmarkName += "/parallel=true"
 						}
-						if indexIdx == 0 {
-							b.Fatalf("failed to find secondary index for column %s", columnDef.name)
-						}
-						input := newRowGeneratingSource(sqlbase.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
-							// Convert to 0-based.
-							return tree.NewDInt(tree.DInt(rowIdx - 1))
-						}), numLookupRows)
-						output := rowDisposer{}
+						b.Run(benchmarkName, func(b *testing.B) {
+							tableName := tableSizeToName(rightSz)
 
-						spec := execinfrapb.JoinReaderSpec{
-							Table:               *tableDesc,
-							LookupColumns:       []uint32{0},
-							LookupColumnsAreKey: parallel,
-							IndexIdx:            indexIdx,
-							MaintainOrdering:    reqOrdering,
-						}
-						// Post specifies that only the columns contained in the secondary index
-						// need to be output.
-						post := execinfrapb.PostProcessSpec{
-							Projection:    true,
-							OutputColumns: []uint32{uint32(columnIdx + 1)},
-						}
+							// Get the table descriptor and find the index that will provide us with
+							// the expected match ratio.
+							tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+							indexIdx := uint32(0)
+							for i := range tableDesc.Indexes {
+								require.Equal(b, 1, len(tableDesc.Indexes[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
+								if tableDesc.Indexes[i].ColumnNames[0] == columnDef.name {
+									// Found indexIdx.
+									indexIdx = uint32(i + 1)
+									break
+								}
+							}
+							if indexIdx == 0 {
+								b.Fatalf("failed to find secondary index for column %s", columnDef.name)
+							}
+							input := newRowGeneratingSource(sqlbase.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
+								// Convert to 0-based.
+								return tree.NewDInt(tree.DInt(rowIdx - 1))
+							}), numLookupRows)
+							output := rowDisposer{}
 
-						expectedNumOutputRows := numLookupRows * columnDef.matchesPerLookupRow
-						b.ResetTimer()
-						// The number of bytes processed in this benchmark is the number of
-						// lookup bytes processed + the number of result bytes. We only look
-						// up using a single int column and the request only a single int column
-						// contained in the index.
-						b.SetBytes(int64((numLookupRows * 8) + (expectedNumOutputRows * 8)))
+							spec := execinfrapb.JoinReaderSpec{
+								Table:               *tableDesc,
+								LookupColumns:       []uint32{0},
+								LookupColumnsAreKey: parallel,
+								IndexIdx:            indexIdx,
+								MaintainOrdering:    reqOrdering,
+							}
+							// Post specifies that only the columns contained in the secondary index
+							// need to be output.
+							post := execinfrapb.PostProcessSpec{
+								Projection:    true,
+								OutputColumns: []uint32{uint32(columnIdx + 1)},
+							}
 
-						spilled := false
-						for i := 0; i < b.N; i++ {
-							jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
-							if err != nil {
-								b.Fatal(err)
-							}
-							jr.Run(ctx)
-							if !spilled && jr.(*joinReader).Spilled() {
-								spilled = true
-							}
-							meta := output.DrainMeta(ctx)
-							if meta != nil {
-								b.Fatalf("unexpected metadata: %v", meta)
-							}
-							if output.NumRowsDisposed() != expectedNumOutputRows {
-								b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), expectedNumOutputRows)
-							}
-							output.ResetNumRowsDisposed()
-							input.Reset()
-						}
+							expectedNumOutputRows := numLookupRows * columnDef.matchesPerLookupRow
+							b.ResetTimer()
+							// The number of bytes processed in this benchmark is the number of
+							// lookup bytes processed + the number of result bytes. We only look
+							// up using a single int column and the request only a single int column
+							// contained in the index.
+							b.SetBytes(int64((numLookupRows * 8) + (expectedNumOutputRows * 8)))
 
-						if spilled {
-							b.Log("joinReader spilled to disk in at least one of the benchmark iterations")
-						}
-					})
+							spilled := false
+							for i := 0; i < b.N; i++ {
+								flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+								jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+								if err != nil {
+									b.Fatal(err)
+								}
+								jr.Run(ctx)
+								if !spilled && jr.(*joinReader).Spilled() {
+									spilled = true
+								}
+								meta := output.DrainMeta(ctx)
+								if meta != nil {
+									b.Fatalf("unexpected metadata: %v", meta)
+								}
+								if output.NumRowsDisposed() != expectedNumOutputRows {
+									b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), expectedNumOutputRows)
+								}
+								output.ResetNumRowsDisposed()
+								input.Reset()
+							}
+							if spilled {
+								b.Log("joinReader spilled to disk in at least one of the benchmark iterations")
+							}
+						})
+					}
 				}
 			}
 		}

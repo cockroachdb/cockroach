@@ -95,6 +95,12 @@ func (d *DiskBackedNumberedRowContainer) UsingDisk() bool {
 	return d.rc.UsingDisk()
 }
 
+// Spilled returns whether or not the primary container spilled to disk in its
+// lifetime.
+func (d *DiskBackedNumberedRowContainer) Spilled() bool {
+	return d.rc.Spilled()
+}
+
 // testingSpillToDisk is for tests to spill the container(s)
 // to disk.
 func (d *DiskBackedNumberedRowContainer) testingSpillToDisk(ctx context.Context) error {
@@ -261,7 +267,6 @@ func (d *DiskBackedNumberedRowContainer) Close(ctx context.Context) {
 // cost of a cache miss is high.
 //
 // TODO(sumeer):
-// - Before integrating with joinReader, try some realistic benchmarks.
 // - Use some realistic inverted index workloads (including geospatial) to
 //   measure the effect of this cache.
 type numberedDiskRowIterator struct {
@@ -305,6 +310,9 @@ type cacheElement struct {
 	row sqlbase.EncDatumRow
 	// When row is non-nil, this is the element in the heap.
 	heapElement cacheRowHeapElement
+	// Used only when initializing accesses, so that we can allocate a single
+	// shared slice for accesses across all cacheElements.
+	numAccesses int
 }
 
 type cacheRowHeapElement struct {
@@ -358,7 +366,7 @@ func newNumberedDiskRowIterator(
 		memAcc:             memAcc,
 		cache:              make(map[int]*cacheElement, maxCacheSize),
 	}
-	var accessIdx int
+	var numAccesses int
 	for _, accSlice := range accesses {
 		for _, rowIdx := range accSlice {
 			elem := n.cache[rowIdx]
@@ -367,8 +375,26 @@ func newNumberedDiskRowIterator(
 				elem.heapElement.rowIdx = rowIdx
 				n.cache[rowIdx] = elem
 			}
-			elem.accesses = append(elem.accesses, accessIdx)
+			elem.numAccesses++
+			numAccesses++
+		}
+	}
+	allAccesses := make([]int, numAccesses)
+	claimedCount := 0
+	accessIdx := 0
+	for _, accSlice := range accesses {
+		for _, rowIdx := range accSlice {
+			elem := n.cache[rowIdx]
+			if elem.accesses == nil {
+				nextClaimedCount := claimedCount + elem.numAccesses
+				elem.accesses = allAccesses[claimedCount:nextClaimedCount]
+				claimedCount = nextClaimedCount
+				// Reuse numAccesses to function as an index.
+				elem.numAccesses = 0
+			}
+			elem.accesses[elem.numAccesses] = accessIdx
 			accessIdx++
+			elem.numAccesses++
 		}
 	}
 	return n
@@ -493,6 +519,9 @@ func (n *numberedDiskRowIterator) tryAddCacheAndReturnRow(
 	if err != nil {
 		return nil, err
 	}
+	if len(elem.accesses) == 0 {
+		return row, nil
+	}
 	return row, n.tryAddCacheHelper(ctx, elem, row, true)
 }
 
@@ -516,9 +545,6 @@ func (n *numberedDiskRowIterator) tryAddCache(ctx context.Context, elem *cacheEl
 func (n *numberedDiskRowIterator) tryAddCacheHelper(
 	ctx context.Context, elem *cacheElement, row sqlbase.EncDatumRow, alreadyDecodedAndCopied bool,
 ) error {
-	if len(elem.accesses) == 0 {
-		return nil
-	}
 	if elem.row != nil {
 		log.Fatalf(ctx, "adding row to cache when it is already in cache")
 	}

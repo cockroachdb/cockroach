@@ -61,17 +61,15 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 		st,
 	)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 
 	memoryBudget := math.MaxInt64
 	if rng.Intn(2) == 0 {
 		fmt.Printf("using smallMemoryBudget to spill to disk\n")
 		memoryBudget = smallMemoryBudget
 	}
-
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(int64(memoryBudget)))
 	defer memoryMonitor.Stop(ctx)
-	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	defer diskMonitor.Stop(ctx)
 
 	// Use random types and random rows.
 	types := sqlbase.RandSortingTypes(rng, numCols)
@@ -149,17 +147,15 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 		st,
 	)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
 	const numCols = 2
 	// This memory budget allows for some caching, but typically cannot
 	// cache all the rows.
 	const memoryBudget = 12000
-
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(memoryBudget))
 	defer memoryMonitor.Stop(ctx)
-	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	defer diskMonitor.Stop(ctx)
 
 	// Use random types and random rows.
 	rng, _ := randutil.NewPseudoRand()
@@ -223,12 +219,123 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 }
 
+// Tests that the DiskBackedNumberedRowContainer and
+// DiskBackedIndexedRowContainer return the same results.
+func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, _ := randutil.NewPseudoRand()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
+
+	numRows := 200
+	const numCols = 2
+	// This memory budget allows for some caching, but typically cannot
+	// cache all the rows.
+	var memoryBudget int64
+	memoryBudget = 12000
+	if rng.Intn(2) == 0 {
+		memoryBudget = math.MaxInt64
+	}
+
+	// Use random types and random rows.
+	types := sqlbase.RandSortingTypes(rng, numCols)
+	ordering := sqlbase.ColumnOrdering{
+		sqlbase.ColumnOrderInfo{
+			ColIdx:    0,
+			Direction: encoding.Ascending,
+		},
+		sqlbase.ColumnOrderInfo{
+			ColIdx:    1,
+			Direction: encoding.Descending,
+		},
+	}
+	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
+
+	var containers [2]numberedContainer
+	containers[0] = makeNumberedContainerUsingIRC(
+		ctx, t, types, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+	containers[1] = makeNumberedContainerUsingNRC(
+		ctx, t, types, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+	defer func() {
+		for _, rc := range containers {
+			rc.close(ctx)
+		}
+	}()
+
+	// Each pass does an UnsafeReset at the end.
+	for passWithReset := 0; passWithReset < 2; passWithReset++ {
+		// Insert rows.
+		for i := 0; i < numRows; i++ {
+			for _, rc := range containers {
+				err := rc.addRow(ctx, rows[i])
+				require.NoError(t, err)
+			}
+		}
+		// We want all the memory to be usable by the cache, so spill to disk.
+		if memoryBudget != math.MaxInt64 {
+			for _, rc := range containers {
+				rc.spillToDisk(ctx)
+			}
+		}
+
+		// Random access of the inserted rows.
+		var accesses [][]int
+		for i := 0; i < 2*numRows; i++ {
+			var access []int
+			for j := 0; j < 4; j++ {
+				access = append(access, rng.Intn(numRows))
+			}
+			accesses = append(accesses, access)
+		}
+		for _, rc := range containers {
+			rc.setupForRead(ctx, accesses)
+		}
+		for _, access := range accesses {
+			for _, index := range access {
+				skip := rng.Intn(10) == 0
+				var rows [2]sqlbase.EncDatumRow
+				for i, rc := range containers {
+					row, err := rc.getRow(ctx, index, skip)
+					require.NoError(t, err)
+					rows[i] = row
+				}
+				if skip {
+					continue
+				}
+				for i := 1; i < len(rows); i++ {
+					require.Equal(t, rows[0].String(types), rows[i].String(types))
+				}
+			}
+		}
+		// Reset and reorder the rows for the next pass.
+		rand.Shuffle(numRows, func(i, j int) {
+			rows[i], rows[j] = rows[j], rows[i]
+		})
+		for _, rc := range containers {
+			require.NoError(t, rc.unsafeReset(ctx))
+		}
+	}
+}
+
 // Adapter interface that can be implemented using both DiskBackedNumberedRowContainer
 // and DiskBackedIndexedRowContainer.
 type numberedContainer interface {
 	addRow(context.Context, sqlbase.EncDatumRow) error
 	setupForRead(ctx context.Context, accesses [][]int)
-	getRow(ctx context.Context, idx int) (sqlbase.EncDatumRow, error)
+	getRow(ctx context.Context, idx int, skip bool) (sqlbase.EncDatumRow, error)
+	spillToDisk(context.Context) error
+	unsafeReset(context.Context) error
 	close(context.Context)
 }
 
@@ -245,9 +352,15 @@ func (d numberedContainerUsingNRC) setupForRead(ctx context.Context, accesses []
 	d.rc.SetupForRead(ctx, accesses)
 }
 func (d numberedContainerUsingNRC) getRow(
-	ctx context.Context, idx int,
+	ctx context.Context, idx int, skip bool,
 ) (sqlbase.EncDatumRow, error) {
 	return d.rc.GetRow(ctx, idx, false)
+}
+func (d numberedContainerUsingNRC) spillToDisk(ctx context.Context) error {
+	return d.rc.testingSpillToDisk(ctx)
+}
+func (d numberedContainerUsingNRC) unsafeReset(ctx context.Context) error {
+	return d.rc.UnsafeReset(ctx)
 }
 func (d numberedContainerUsingNRC) close(ctx context.Context) {
 	d.rc.Close(ctx)
@@ -255,7 +368,7 @@ func (d numberedContainerUsingNRC) close(ctx context.Context) {
 }
 func makeNumberedContainerUsingNRC(
 	ctx context.Context,
-	b *testing.B,
+	t require.TestingT,
 	types []*types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
@@ -266,7 +379,7 @@ func makeNumberedContainerUsingNRC(
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
 	rc := NewDiskBackedNumberedRowContainer(
 		false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor, 0 /* rowCapacity */)
-	require.NoError(b, rc.testingSpillToDisk(ctx))
+	require.NoError(t, rc.testingSpillToDisk(ctx))
 	return numberedContainerUsingNRC{rc: rc, memoryMonitor: memoryMonitor}
 }
 
@@ -280,13 +393,22 @@ func (d numberedContainerUsingIRC) addRow(ctx context.Context, row sqlbase.EncDa
 }
 func (d numberedContainerUsingIRC) setupForRead(context.Context, [][]int) {}
 func (d numberedContainerUsingIRC) getRow(
-	ctx context.Context, idx int,
+	ctx context.Context, idx int, skip bool,
 ) (sqlbase.EncDatumRow, error) {
+	if skip {
+		return nil, nil
+	}
 	row, err := d.rc.GetRow(ctx, idx)
 	if err != nil {
 		return nil, err
 	}
 	return row.(IndexedRow).Row, nil
+}
+func (d numberedContainerUsingIRC) spillToDisk(ctx context.Context) error {
+	return d.rc.SpillToDisk(ctx)
+}
+func (d numberedContainerUsingIRC) unsafeReset(ctx context.Context) error {
+	return d.rc.UnsafeReset(ctx)
 }
 func (d numberedContainerUsingIRC) close(ctx context.Context) {
 	d.rc.Close(ctx)
@@ -294,7 +416,7 @@ func (d numberedContainerUsingIRC) close(ctx context.Context) {
 }
 func makeNumberedContainerUsingIRC(
 	ctx context.Context,
-	b *testing.B,
+	t require.TestingT,
 	types []*types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
@@ -305,7 +427,7 @@ func makeNumberedContainerUsingIRC(
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
 	rc := NewDiskBackedIndexedRowContainer(
 		nil /* ordering */, types, evalCtx, engine, memoryMonitor, diskMonitor, 0 /* rowCapacity */)
-	require.NoError(b, rc.SpillToDisk(ctx))
+	require.NoError(t, rc.SpillToDisk(ctx))
 	return numberedContainerUsingIRC{rc: rc, memoryMonitor: memoryMonitor}
 }
 
@@ -518,7 +640,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 					nc.setupForRead(ctx, accesses)
 					for i := 0; i < len(accesses); i++ {
 						for j := 0; j < len(accesses[i]); j++ {
-							if _, err := nc.getRow(ctx, accesses[i][j]); err != nil {
+							if _, err := nc.getRow(ctx, accesses[i][j], false /* skip */); err != nil {
 								b.Fatal(err)
 							}
 						}
@@ -547,8 +669,5 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 }
 
 // TODO(sumeer):
-// - Randomized correctness test comparing the rows returned by
-//   DiskBacked{Numbered,Indexed}RowContainer.
 // - Benchmarks:
 //   - de-duping with and without spilling.
-//   - different batch sizes for the left side.
