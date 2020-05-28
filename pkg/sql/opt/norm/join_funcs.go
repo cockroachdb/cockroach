@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -630,7 +631,13 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 
 			// Not every fk column needs to be in the equality conditions.
 			if !remainingLeftColIDs.Contains(indexLeftCol) {
-				continue
+				if fkRef.MatchMethod() == tree.MatchFull {
+					// Not every fk column needs to be guaranteed not-null.
+					continue
+				}
+				// The match method is not match full, so no fk column can be nullable.
+				fkMatch = false
+				break
 			}
 
 			indexRightCol := rightTab.ColumnID(fkRef.ReferencedColumnOrdinal(fkTable, j))
