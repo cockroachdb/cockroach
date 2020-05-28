@@ -1,17 +1,28 @@
 # This test verifies some of the pgwire encoding process for ENUMs.
 
-send
+# Prepare the environment.
+send noncrdb_only
+Query {"String": "DROP TYPE IF EXISTS te"}
+----
+
+until noncrdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
 Query {"String": "SET experimental_enable_enums=true;"}
 ----
 
-until
+until crdb_only
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TYPE t AS ENUM ('hi', 'hello')"}
+Query {"String": "CREATE TYPE te AS ENUM ('hi', 'hello')"}
 ----
 
 until
@@ -22,17 +33,27 @@ ReadyForQuery
 
 # Use the enum now.
 send
-Query {"String": "SELECT 'hi'::t"}
+Query {"String": "SELECT 'hi'::te"}
 ----
+
+# PostgreSQL uses float4 under the hood.
+until ignore_type_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"te","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
 
 # Note that this is slightly different than Postgres -- in Postgres the
 # DataTypeSize for an enum is 4, as floats are used to represent enums
 # internally (4 bytes). Since our encodings are variable size, we report
 # the DataTypeSize to be -1, which is the variable length size.
+until ignore_type_oids crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"te","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"t","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"hi"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

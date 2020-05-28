@@ -1,3 +1,17 @@
+# Prepare the environment.
+
+send
+Query {"String": "DROP TABLE IF EXISTS a"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Start of test.
+
 send
 Query {"String": "CREATE TABLE a (a INT PRIMARY KEY)"}
 ----

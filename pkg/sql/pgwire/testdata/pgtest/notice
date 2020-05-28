@@ -1,65 +1,92 @@
 # Test notices work as expected by creating a VIEW on a TEMP TABLE.
 
+
+# Prepare the environment.
+
 send
-Parse {"Query": "CREATE TABLE t(x INT, y INT, INDEX (x), INDEX (y))"}
-Bind
-Execute
-Sync
+Query {"String": "DROP TABLE IF EXISTS t CASCADE"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Start of test.
+
+send
+Query {"String": "CREATE TABLE t(x INT, y INT)"}
 ----
 
 until
 ReadyForQuery
 ----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-
-
 send
-Parse {"Query": "DROP INDEX t@t_x_idx"}
-Bind
-Execute
-Sync
+Query {"String": "CREATE INDEX t_x_idx ON t(x)"}
 ----
 
 until
 ReadyForQuery
 ----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE INDEX"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE INDEX t_y_idx ON t(y)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE INDEX"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Check that crdb reports a notice upon drop index.
+
+send
+Query {"String": "DROP INDEX t_x_idx"}
+----
+
+until crdb_only
+CommandComplete
+----
 {"Severity":"NOTICE","Code":"00000","Message":"the data for dropped indexes is reclaimed asynchronously","Detail":"","Hint":"The reclamation delay can be customized in the zone configuration for the table.","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"drop_index.go","Line":500,"Routine":"dropIndexByName","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"DROP INDEX"}
+
+until noncrdb_only
+CommandComplete
+----
+{"Type":"CommandComplete","CommandTag":"DROP INDEX"}
+
+until
+ReadyForQuery
+----
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Disable notices and assert now it is not sent.
-send
-Parse {"Query": "SET CLUSTER SETTING sql.notices.enabled = false"}
-Bind
-Execute
-Sync
+send crdb_only
+Query {"String": "SET CLUSTER SETTING sql.notices.enabled = false"}
 ----
 
-until
+until crdb_only
 ReadyForQuery
 ----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Check that the notice is not printed any more.
+
 send
-Parse {"Query": "DROP INDEX t@t_y_idx"}
-Bind
-Execute
-Sync
+Query {"String": "DROP INDEX t_y_idx"}
 ----
 
 until
 ReadyForQuery
 ----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"DROP INDEX"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
