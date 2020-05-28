@@ -15,10 +15,15 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func TestMakeTableDescColumns(t *testing.T) {
@@ -308,4 +313,34 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestCanCloneTableWithUDT(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	if _, err := sqlDB.Exec(`
+SET experimental_enable_enums=true;
+CREATE DATABASE test;
+CREATE TYPE test.t AS ENUM ('hello');
+CREATE TABLE test.tt (x test.t);
+`); err != nil {
+		t.Fatal(err)
+	}
+	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
+	typLookup := func(id sqlbase.ID) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
+		typDesc, err := sqlbase.GetTypeDescFromID(ctx, kvDB, keys.SystemSQLCodec, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		return &tree.TypeName{}, typDesc, nil
+	}
+	if err := sqlbase.HydrateTypesInTableDescriptor(desc, typLookup); err != nil {
+		t.Fatal(err)
+	}
+	// Ensure that we can clone this table.
+	_ = protoutil.Clone(desc).(*TableDescriptor)
 }
