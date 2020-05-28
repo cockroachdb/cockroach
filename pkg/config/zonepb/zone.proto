@@ -26,11 +26,11 @@ message GCPolicy {
 
   // TTLSeconds specifies the maximum age of a value before it's
   // garbage collected. Only older versions of values are garbage
-  // collected. Specifying <=0 mean older versions are never GC'd.
+  // collected. Specifying <= 0 mean older versions are never GC'd.
   optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
 }
 
-// Constraint constrains the stores a replica can be stored on.
+// Constraint constrains the stores that a replica can be stored on.
 message Constraint {
   option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
@@ -82,7 +82,7 @@ message LeasePreference {
 
 // ZoneConfig holds configuration that applies to one or more ranges.
 //
-// Note: when adding.removing fields here, be sure to update
+// Note: when adding/removing fields here, be sure to update
 // supportedZoneConfigOptions in the sql package, to synchronize
 // with the code for ALTER ... CONFIGURE ZONE.
 message ZoneConfig {
@@ -92,11 +92,14 @@ message ZoneConfig {
   reserved 1;
   optional int64 range_min_bytes = 2 [(gogoproto.moretags) = "yaml:\"range_min_bytes\""];
   optional int64 range_max_bytes = 3 [(gogoproto.moretags) = "yaml:\"range_max_bytes\""];
+
   // If GC policy is not set, uses the next highest, non-null policy
   // in the zone config hierarchy, up to the default policy if necessary.
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC"];
+
   // NumReplicas specifies the desired number of replicas
   optional int32 num_replicas = 5 [(gogoproto.moretags) = "yaml:\"num_replicas\""];
+
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system

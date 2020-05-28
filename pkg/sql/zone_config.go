@@ -49,7 +49,7 @@ var zoneConfigCodec = keys.TODOSQLCodec
 //
 // This function must be kept in sync with ascendZoneSpecifier.
 //
-// if getInheritedDefault is true, the direct zone configuration, if it exists, is
+// If getInheritedDefault is true, the direct zone configuration, if it exists, is
 // ignored, and the default that would apply if it did not exist is returned instead.
 func getZoneConfig(
 	id uint32, getKey func(roachpb.Key) (*roachpb.Value, error), getInheritedDefault bool,
@@ -151,10 +151,13 @@ func completeZoneConfig(
 	return nil
 }
 
-// ZoneConfigHook returns the zone config for the object with id using the
-// cached system config. If keySuffix is within a subzone, the subzone's config
-// is returned instead. The bool is set to true when the value returned is
-// cached.
+// ZoneConfigHook returns the zone config and optional placeholder config for
+// the object with id using the cached system config. The returned boolean is
+// set to true when the zone config returned can be cached.
+//
+// ZoneConfigHook is a pure function whose only inputs are a system config and
+// an object ID. It does not make any external KV calls to look up additional
+// state.
 func ZoneConfigHook(
 	cfg *config.SystemConfig, id uint32,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
@@ -174,8 +177,13 @@ func ZoneConfigHook(
 	return zone, placeholder, true, nil
 }
 
-// GetZoneConfigInTxn looks up the zone and subzone for the specified
-// object ID, index, and partition.
+// GetZoneConfigInTxn looks up the zone and subzone for the specified object ID,
+// index, and partition. See the documentation on getZoneConfig for information
+// about the getInheritedDefault parameter.
+//
+// Unlike ZoneConfigHook, GetZoneConfigInTxn does not used a cached system
+// config. Instead, it uses the provided txn to make transactionally consistent
+// KV lookups.
 func GetZoneConfigInTxn(
 	ctx context.Context,
 	txn *kv.Txn,

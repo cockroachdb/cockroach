@@ -516,11 +516,11 @@ func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 // shouldSplit checks if the ID is eligible for a split at all.
 // It uses the internal cache to find a value, and tries to find
 // it using the hook if ID isn't found in the cache.
-func (s *SystemConfig) shouldSplit(ID uint32) bool {
+func (s *SystemConfig) shouldSplit(id uint32) bool {
 	// Check the cache.
 	{
 		s.mu.RLock()
-		shouldSplit, ok := s.mu.shouldSplitCache[ID]
+		shouldSplit, ok := s.mu.shouldSplitCache[id]
 		s.mu.RUnlock()
 		if ok {
 			return shouldSplit
@@ -528,17 +528,17 @@ func (s *SystemConfig) shouldSplit(ID uint32) bool {
 	}
 
 	var shouldSplit bool
-	if ID < keys.MinUserDescID {
+	if id < keys.MinUserDescID {
 		// The ID might be one of the reserved IDs that refer to ranges but not any
 		// actual descriptors.
 		shouldSplit = true
 	} else {
-		desc := s.GetDesc(keys.TODOSQLCodec.DescMetadataKey(ID))
+		desc := s.GetDesc(keys.TODOSQLCodec.DescMetadataKey(id))
 		shouldSplit = desc != nil && sqlbase.ShouldSplitAtDesc(desc)
 	}
 	// Populate the cache.
 	s.mu.Lock()
-	s.mu.shouldSplitCache[ID] = shouldSplit
+	s.mu.shouldSplitCache[id] = shouldSplit
 	s.mu.Unlock()
 	return shouldSplit
 }
