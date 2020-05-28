@@ -1199,7 +1199,7 @@ func (r *RocksDB) GetUserProperties() (enginepb.SSTUserPropertiesCollection, err
 		return enginepb.SSTUserPropertiesCollection{}, err
 	}
 	if ssts.Error != "" {
-		return enginepb.SSTUserPropertiesCollection{}, errors.New(ssts.Error)
+		return enginepb.SSTUserPropertiesCollection{}, errors.Newf("%s", ssts.Error)
 	}
 	return ssts, nil
 }

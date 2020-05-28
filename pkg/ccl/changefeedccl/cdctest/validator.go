@@ -216,13 +216,14 @@ func (v *beforeAfterValidator) checkRowAt(
 	}
 
 	var valid bool
-	if err := v.sqlDB.QueryRow(stmtBuf.String(), args...).Scan(&valid); err != nil {
-		return errors.Wrap(err, stmtBuf.String())
+	stmt := stmtBuf.String()
+	if err := v.sqlDB.QueryRow(stmt, args...).Scan(&valid); err != nil {
+		return errors.Wrapf(err, "while executing %s", stmt)
 	}
 	if !valid {
 		v.failures = append(v.failures, fmt.Sprintf(
 			"%q field did not agree with row at %s: %s %v",
-			field, ts.AsOfSystemTime(), stmtBuf.String(), args))
+			field, ts.AsOfSystemTime(), stmt, args))
 	}
 	return nil
 }

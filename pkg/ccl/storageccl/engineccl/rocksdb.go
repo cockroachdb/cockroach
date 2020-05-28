@@ -139,7 +139,7 @@ func statusToError(s C.DBStatus) error {
 	if s.data == nil {
 		return nil
 	}
-	return errors.New(cStringToGoString(s))
+	return errors.Newf("%s", cStringToGoString(s))
 }
 
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {

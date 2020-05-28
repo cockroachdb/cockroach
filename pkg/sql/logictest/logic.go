@@ -2498,7 +2498,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
 			fmt.Fprintf(&buf, "    %s\n", line)
 		}
-		return errors.New(buf.String())
+		return errors.Newf("%s", buf.String())
 	}
 
 	if query.label != "" {

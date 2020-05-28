@@ -2111,9 +2111,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(
 				26687,
-				"programming error: non-error event "+
-					advInfo.txnEvent.String()+ //the event is included like this so that it doesn't get sanitized
-					" generated even though res.Err() has been set to: %s",
+				"programming error: non-error event %s generated even though res.Err() has been set to: %s",
+				errors.Safe(advInfo.txnEvent.String()),
 				res.Err())
 			log.Errorf(ex.Ctx(), "%v", err)
 			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)

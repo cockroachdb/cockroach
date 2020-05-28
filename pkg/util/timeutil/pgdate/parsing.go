@@ -145,19 +145,20 @@ func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) 
 
 // badFieldPrefixError constructs an error with pg code InvalidDatetimeFormat.
 func badFieldPrefixError(field field, prefix rune) error {
-	return inputErrorf("unexpected separator '%s' for field %s", string(prefix), errors.Safe(field.Pretty()))
+	return inputErrorf("unexpected separator '%s' for field %s",
+		string(prefix), errors.Safe(field.Pretty()))
 }
 
 // inputErrorf returns an error with pg code InvalidDatetimeFormat.
 func inputErrorf(format string, args ...interface{}) error {
-	return pgerror.WithCandidateCode(errors.Newf(format, args...), pgcode.InvalidDatetimeFormat)
+	err := errors.Newf(format, args...)
+	return pgerror.WithCandidateCode(err, pgcode.InvalidDatetimeFormat)
 }
 
 // outOfRangeError returns an error with pg code DatetimeFieldOverflow.
 func outOfRangeError(field string, val int) error {
-	return pgerror.WithCandidateCode(
-		errors.Newf("field %s value %d is out of range", errors.Safe(field), errors.Safe(val)),
-		pgcode.DatetimeFieldOverflow)
+	err := errors.Newf("field %s value %d is out of range", errors.Safe(field), errors.Safe(val))
+	return pgerror.WithCandidateCode(err, pgcode.DatetimeFieldOverflow)
 }
 
 // parseError ensures that any error we return to the client will

@@ -109,7 +109,7 @@ func checkStatsForTable(
 	// returned stats match the expected values.
 	statsList, err := sc.GetTableStats(ctx, tableID)
 	if err != nil {
-		return errors.Errorf(err.Error())
+		return errors.Wrap(err, "retrieving stats")
 	}
 	if !checkStats(statsList, expected) {
 		return errors.Errorf("for lookup of key %d, expected stats %s, got %s", tableID, expected, statsList)

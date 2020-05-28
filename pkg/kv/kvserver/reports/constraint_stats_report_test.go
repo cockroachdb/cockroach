@@ -450,7 +450,7 @@ func (c constraintEntry) toReportEntry(
 	zk, ok := objects[c.object]
 	if !ok {
 		return ConstraintStatusKey{}, ConstraintStatus{},
-			errors.AssertionFailedf("missing object: " + c.object)
+			errors.AssertionFailedf("missing object: %s", c.object)
 	}
 	k := ConstraintStatusKey{
 		ZoneKey:       zk,

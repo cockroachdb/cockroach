@@ -191,7 +191,7 @@ func (l *lexer) setErr(err error) {
 
 func (l *lexer) Error(e string) {
 	e = strings.TrimPrefix(e, "syntax error: ") // we'll add it again below.
-	l.lastError = pgerror.WithCandidateCode(errors.New(e), pgcode.Syntax)
+	l.lastError = pgerror.WithCandidateCode(errors.Newf("%s", e), pgcode.Syntax)
 	l.populateErrorDetails()
 }
 

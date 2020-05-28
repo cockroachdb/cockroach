@@ -1570,7 +1570,7 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 			hint = ""
 		}
 		// In any case report that there was an error while parsing.
-		err := errors.New(message)
+		err := errors.Newf("%s", message)
 		err = pgerror.WithCandidateCode(err, code)
 		if hint != "" {
 			err = errors.WithHint(err, hint)

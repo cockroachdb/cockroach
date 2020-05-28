@@ -23,12 +23,12 @@ import (
 // implemented as no-op or no-value. All other operations will
 // return the provided error.
 func New(delegate vm.Provider, unimplemented string) vm.Provider {
-	return &provider{delegate: delegate, unimplemented: errors.New(unimplemented)}
+	return &provider{delegate: delegate, unimplemented: unimplemented}
 }
 
 type provider struct {
 	delegate      vm.Provider
-	unimplemented error
+	unimplemented string
 }
 
 // CleanSSH implements vm.Provider and is a no-op.
@@ -43,17 +43,17 @@ func (p *provider) ConfigSSH() error {
 
 // Create implements vm.Provider and returns Unimplemented.
 func (p *provider) Create(names []string, opts vm.CreateOpts) error {
-	return p.unimplemented
+	return errors.Newf("%s", p.unimplemented)
 }
 
 // Delete implements vm.Provider and returns Unimplemented.
 func (p *provider) Delete(vms vm.List) error {
-	return p.unimplemented
+	return errors.Newf("%s", p.unimplemented)
 }
 
 // Extend implements vm.Provider and returns Unimplemented.
 func (p *provider) Extend(vms vm.List, lifetime time.Duration) error {
-	return p.unimplemented
+	return errors.Newf("%s", p.unimplemented)
 }
 
 // FindActiveAccount implements vm.Provider and returns an empty account.

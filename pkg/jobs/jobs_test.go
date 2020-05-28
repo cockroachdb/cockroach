@@ -1047,8 +1047,9 @@ func TestJobLifecycle(t *testing.T) {
 
 		t.Run("non-nil error marks job as failed", func(t *testing.T) {
 			job, exp := createDefaultJob()
-			exp.Error = "boom"
-			if err := job.Failed(ctx, errors.New(exp.Error)); err != nil {
+			boom := errors.New("boom")
+			exp.Error = boom.Error()
+			if err := job.Failed(ctx, boom); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusFailed); err != nil {

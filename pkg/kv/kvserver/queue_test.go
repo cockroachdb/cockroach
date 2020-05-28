@@ -322,7 +322,7 @@ func TestBaseQueueSamePriorityFIFO(t *testing.T) {
 	for _, repl := range repls {
 		added, err := bq.testingAdd(ctx, repl, 0.0)
 		if err != nil {
-			t.Fatal(errors.Wrap(err, repl.String()))
+			t.Fatalf("%s: %v", repl, err)
 		}
 		if !added {
 			t.Fatalf("%v not added", repl)

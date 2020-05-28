@@ -61,19 +61,40 @@ func (r *Replica) AdminSplit(
 	return reply, err
 }
 
-func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (string, bool) {
+func maybeDescriptorChangedError(
+	desc *roachpb.RangeDescriptor, err error,
+) (ok bool, expectedDesc *roachpb.RangeDescriptor) {
 	if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
 		// Provide a better message in the common case that the range being changed
 		// was already changed by a concurrent transaction.
 		var actualDesc roachpb.RangeDescriptor
 		if !detail.ActualValue.IsPresent() {
-			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
+			return true, nil
 		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
 			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc), true
+			return true, &actualDesc
 		}
 	}
-	return "", false
+	return false, nil
+}
+
+const (
+	descChangedRangeSubsumedErrorFmt = "descriptor changed: expected %s != [actual] nil (range subsumed)"
+	descChangedErrorFmt              = "descriptor changed: [expected] %s != [actual] %s"
+)
+
+func newDescChangedError(desc, actualDesc *roachpb.RangeDescriptor) error {
+	if actualDesc == nil {
+		return errors.Newf(descChangedRangeSubsumedErrorFmt, desc)
+	}
+	return errors.Newf(descChangedErrorFmt, desc, actualDesc)
+}
+
+func wrapDescChangedError(err error, desc, actualDesc *roachpb.RangeDescriptor) error {
+	if actualDesc == nil {
+		return errors.Wrapf(err, descChangedRangeSubsumedErrorFmt, desc)
+	}
+	return errors.Wrapf(err, descChangedErrorFmt, desc, actualDesc)
 }
 
 func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
@@ -366,10 +387,10 @@ func (r *Replica) adminSplitWithDescriptor(
 			// expected values in the CPuts used to update the range descriptor are
 			// picked outside the transaction. Return ConditionFailedError in the
 			// error detail so that the command can be retried.
-			if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+			if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 				// NB: we have to wrap the existing error here as consumers of this code
 				// look at the root cause to sniff out the changed descriptor.
-				err = &benignError{errors.Wrap(err, msg)}
+				err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
 			}
 			return reply, err
 		}
@@ -400,10 +421,10 @@ func (r *Replica) adminSplitWithDescriptor(
 		// range descriptors are picked outside the transaction. Return
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
-		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			// NB: we have to wrap the existing error here as consumers of this
-			// code look at the root cause to sniff out the changed descriptor.
-			err = &benignError{errors.Wrap(err, msg)}
+		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
+			// NB: we have to wrap the existing error here as consumers of this code
+			// look at the root cause to sniff out the changed descriptor.
+			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -482,10 +503,10 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		// expected values in the CPuts used to update the range descriptor are
 		// picked outside the transaction. Return ConditionFailedError in the error
 		// detail so that the command can be retried.
-		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 			// NB: we have to wrap the existing error here as consumers of this code
 			// look at the root cause to sniff out the changed descriptor.
-			err = &benignError{errors.Wrap(err, msg)}
+			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
 		}
 		return reply, err
 	}
@@ -1642,8 +1663,13 @@ func execChangeReplicasTxn(
 		// NB: desc may not be the descriptor we actually compared against, but
 		// either way this gives a good idea of what happened which is all it's
 		// supposed to do.
-		if msg, ok := maybeDescriptorChangedError(referenceDesc, err); ok {
-			err = &benignError{errors.New(msg)}
+		if ok, actualDesc := maybeDescriptorChangedError(referenceDesc, err); ok {
+			// We do not include the original error as cause in this case -
+			// the caller should not observe the cause. We still include it
+			// as "secondary payload", in case the error object makes it way
+			// to logs or telemetry during a crash.
+			err = errors.WithSecondaryError(newDescChangedError(referenceDesc, actualDesc), err)
+			err = &benignError{err}
 		}
 		return nil, errors.Wrapf(err, "change replicas of r%d failed", referenceDesc.RangeID)
 	}
