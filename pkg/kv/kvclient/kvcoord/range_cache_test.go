@@ -274,6 +274,12 @@ func doLookup(
 	return doLookupWithToken(ctx, rc, key, nil, false)
 }
 
+func evict(ctx context.Context, rc *RangeDescriptorCache, desc *roachpb.RangeDescriptor) bool {
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
+	return rc.evictCachedRangeDescriptorLocked(ctx, desc)
+}
+
 func doLookupWithToken(
 	ctx context.Context,
 	rc *RangeDescriptorCache,
@@ -377,7 +383,7 @@ func TestRangeCache(t *testing.T) {
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
 	//  Retrieves [d,e).
 	//  Prefetches [e,f) and [f,g).
-	doLookup(ctx, db.cache, "d")
+	de, _ := doLookup(ctx, db.cache, "d")
 	db.assertLookupCountEq(t, 1, "d")
 	doLookup(ctx, db.cache, "fa")
 	db.assertLookupCountEq(t, 0, "fa")
@@ -407,9 +413,9 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 1, "vu")
 
 	// Evicts [d,e).
-	db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("da"), nil, false)
+	require.True(t, evict(ctx, db.cache, de))
 	// Evicts [meta(min),meta(g)).
-	db.cache.EvictCachedRangeDescriptor(ctx, keys.RangeMetaKey(roachpb.RKey("da")), nil, false)
+	require.True(t, db.cache.EvictByKey(ctx, keys.RangeMetaKey(roachpb.RKey("da"))))
 	doLookup(ctx, db.cache, "fa")
 	db.assertLookupCountEq(t, 0, "fa")
 	// Totally uncached range.
@@ -425,7 +431,10 @@ func TestRangeCache(t *testing.T) {
 
 	// Attempt to compare-and-evict with a descriptor that is not equal to the
 	// cached one; it should not alter the cache.
-	db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("cz"), &roachpb.RangeDescriptor{}, false)
+	desc, _ := doLookup(ctx, db.cache, "cz")
+	descCpy := *desc
+	descCpy.IncrementGeneration()
+	require.False(t, evict(ctx, db.cache, &descCpy))
 	_, evictToken := doLookup(ctx, db.cache, "cz")
 	db.assertLookupCountEq(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
