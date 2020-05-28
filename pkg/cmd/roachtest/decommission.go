@@ -170,7 +170,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		decom := func(id string) error {
 			port := fmt.Sprintf("{pgport:%d}", nodes) // always use last node
 			t.Status("decommissioning node", id)
-			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=live --host=:"+port+" "+id)
+			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=all --host=:"+port+" "+id)
 		}
 
 		for tBegin, whileDown, node := timeutil.Now(), true, 1; timeutil.Since(tBegin) <= duration; whileDown, node = !whileDown, (node%numDecom)+1 {
@@ -374,8 +374,6 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		return res
 	}
 
-	waitLiveDeprecated := "--wait=live is deprecated and is treated as --wait=all"
-
 	t.l.Printf("decommissioning first node from the second, polling the status manually\n")
 	retryOpts := retry.Options{
 		InitialBackoff: time.Second,
@@ -520,26 +518,16 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	c.Stop(ctx, c.Node(1))
 	t.l.Printf("decommission first node, starting with it down but restarting it for verification\n")
 	{
-		o, err := decommission(ctx, 2, c.Node(1),
-			"decommission", "--wait=live")
+		_, err := decommission(ctx, 2, c.Node(1), "decommission", "--wait=all")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
-		hasDeprecation := false
-		for _, s := range strings.Split(o, "\n") {
-			if s == waitLiveDeprecated {
-				hasDeprecation = true
-				break
-			}
-		}
-		if !hasDeprecation {
-			t.Fatal("missing deprecate message for --wait=live")
-		}
 		c.Start(ctx, t, c.Node(1), args)
+
 		// Run a second time to wait until the replicas have all been GC'ed.
 		// Note that we specify "all" because even though the first node is
 		// now running, it may not be live by the time the command runs.
-		o, err = decommission(ctx, 2, c.Node(1),
+		o, err := decommission(ctx, 2, c.Node(1),
 			"decommission", "--wait=all", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
@@ -574,20 +562,17 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	// being removed due to deadness. We can't see that reflected in the output
 	// since the current mechanism gets its replica counts from what the node
 	// reports about itself, so our assertion here is somewhat weak.
-	t.l.Printf("decommission first node in absentia using --wait=live\n")
+	t.l.Printf("decommission first node in absentia using --wait=all\n")
 	{
-		o, err := decommission(ctx, 3, c.Node(1),
-			"decommission", "--wait=live", "--format=csv")
+		o, err := decommission(ctx, 3, c.Node(1), "decommission", "--wait=all", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
 
 		// Note we don't check precisely zero replicas (which the node would write
-		// itself, but it's dead). We do check that the node isn't live, though, which
-		// is essentially what `--wait=live` waits for.
-		// Note that the target node may still be "live" when it's marked as
-		// decommissioned, as its replica count may drop to zero faster than
-		// liveness times out.
+		// itself, but it's dead). Also note that the target node may still be
+		// "live" when it's marked as decommissioned, as its replica count may
+		// drop to zero faster than liveness times out.
 		exp := [][]string{
 			decommissionHeader,
 			{"1", `true|false`, "0", `true`, `false`},
@@ -595,16 +580,6 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
-		}
-		hasDeprecation := false
-		for _, s := range strings.Split(o, "\n") {
-			if s == waitLiveDeprecated {
-				hasDeprecation = true
-				break
-			}
-		}
-		if !hasDeprecation {
-			t.Fatal("missing deprecate message for --wait=live")
 		}
 	}
 
