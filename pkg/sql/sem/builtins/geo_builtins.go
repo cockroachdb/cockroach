@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom/encoding/ewkb"
 )
 
 // libraryUsage is a masked bit indicating which libraries are used by
@@ -695,6 +696,72 @@ var geoBuiltins = map[string]builtinDefinition{
 			infoBuilder{info: "Returns the EWKB representation in hex of a given Geography."},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"xdr_or_ndr", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				text := string(tree.MustBeDString(args[1]))
+
+				byteOrder := geo.StringToByteOrder(text)
+				if byteOrder == geo.DefaultEWKBEncodingFormat {
+					return tree.NewDString(fmt.Sprintf("%X", g.EWKB())), nil
+				}
+
+				geomT, err := g.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				b, err := ewkb.Marshal(geomT, byteOrder)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDString(fmt.Sprintf("%X", b)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the EWKB representation in hex of a given Geometry. " +
+					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"xdr_or_ndr", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				text := string(tree.MustBeDString(args[1]))
+
+				byteOrder := geo.StringToByteOrder(text)
+				if byteOrder == geo.DefaultEWKBEncodingFormat {
+					return tree.NewDString(fmt.Sprintf("%X", g.EWKB())), nil
+				}
+
+				geomT, err := g.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				b, err := ewkb.Marshal(geomT, byteOrder)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDString(fmt.Sprintf("%X", b)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the EWKB representation in hex of a given Geography. " +
+					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_askml": makeBuiltin(
 		defProps(),
