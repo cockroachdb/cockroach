@@ -1297,34 +1297,31 @@ const MaxSQLBytes = 1000
 
 type jobsCollection []int64
 
-const panicLogOutputCutoffChars = 10000
+// truncateStatementStringForTelemetry truncates the string
+// representation of a statement to a maximum length, so as to not
+// create unduly large logging and error payloads.
+func truncateStatementStringForTelemetry(stmt string) string {
+	// panicLogOutputCutoiffChars is the maximum length of the copy of the
+	// current statement embedded in telemetry reports and panic errors in
+	// logs.
+	const panicLogOutputCutoffChars = 10000
+	if len(stmt) > panicLogOutputCutoffChars {
+		stmt = stmt[:len(stmt)-6] + " [...]"
+	}
+	return stmt
+}
 
 func anonymizeStmtAndConstants(stmt tree.Statement) string {
 	return tree.AsStringWithFlags(stmt, tree.FmtAnonymize|tree.FmtHideConstants)
 }
 
-// AnonymizeStatementsForReporting transforms an action, SQL statements, and a value
-// (usually a recovered panic) into an error that will be useful when passed to
-// our error reporting as it exposes a scrubbed version of the statements.
-func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) error {
-	var anonymized []string
-	{
-		stmts, err := parser.Parse(sqlStmts)
-		if err == nil {
-			for i := range stmts {
-				anonymized = append(anonymized, anonymizeStmtAndConstants(stmts[i].AST))
-			}
-		}
-	}
-	anonStmtsStr := strings.Join(anonymized, "; ")
-	if len(anonStmtsStr) > panicLogOutputCutoffChars {
-		anonStmtsStr = anonStmtsStr[:panicLogOutputCutoffChars] + " [...]"
-	}
-
-	panicErr := log.PanicAsError(1, r)
-	return errors.WithSafeDetails(panicErr,
-		"panic while %s %d statements: %s",
-		errors.Safe(action), errors.Safe(len(anonymized)), errors.Safe(anonStmtsStr))
+// WithAnonymizedStatement attaches the anonymized form of a statement
+// to an error object.
+func WithAnonymizedStatement(err error, stmt tree.Statement) error {
+	anonStmtStr := anonymizeStmtAndConstants(stmt)
+	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
+	return errors.WithSafeDetails(err,
+		"while executing: %s", errors.Safe(anonStmtStr))
 }
 
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
