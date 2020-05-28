@@ -1093,3 +1093,22 @@ CREATE TABLE t44746_1(c1 INT)
 # Note: an "error parsing regexp" would also be acceptable here.
 statement ok
 SELECT * FROM t44746_0 FULL JOIN t44746_1 ON (SUBSTRING('', ')') = '') = (c1 > 0)
+
+# Regression test for #49630.
+statement ok
+DROP TABLE empty;
+CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+CREATE TABLE fk_ref (r INT NOT NULL REFERENCES xy (x));
+CREATE TABLE empty (v INT);
+INSERT INTO xy (VALUES (1, 1));
+INSERT INTO fk_ref (VALUES (1));
+
+query IIII
+SELECT * FROM fk_ref LEFT JOIN (SELECT * FROM xy INNER JOIN empty ON True) ON r = x
+----
+1  NULL  NULL  NULL
+
+statement ok
+DROP TABLE empty;
+DROP TABLE fk_ref;
+DROP TABLE xy;

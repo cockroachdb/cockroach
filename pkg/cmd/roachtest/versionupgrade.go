@@ -72,7 +72,11 @@ DROP TABLE test.t;
 	`),
 }
 
-func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVersion string) {
+func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion version.Version) {
+	predecessorVersion, err := PredecessorVersion(buildVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// This test uses fixtures and we do not have encrypted fixtures right now.
 	c.encryptDefault = false
 
@@ -159,8 +163,9 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 	}()
 
 	for _, step := range u.steps {
-		step(ctx, t, u)
-
+		if step != nil {
+			step(ctx, t, u)
+		}
 	}
 }
 
