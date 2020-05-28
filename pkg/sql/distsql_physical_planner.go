@@ -790,11 +790,8 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 				// its health.
 				addr, inAddrMap := planCtx.NodeAddresses[nodeID]
 				if !inAddrMap {
-					addr = replInfo.NodeDesc.Address.String()
-					if err := dsp.nodeHealth.check(ctx, nodeID); err != nil {
-						addr = ""
-					}
-					if err == nil && addr != "" {
+					if err := dsp.nodeHealth.check(ctx, nodeID); err == nil {
+						addr = replInfo.NodeDesc.Address.String()
 						planCtx.NodeAddresses[nodeID] = addr
 					}
 				}
