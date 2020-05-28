@@ -339,7 +339,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	if desc, _ := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); desc != nil {
 		rdc.rangeCache.RUnlock()
 		returnToken := rdc.makeEvictionToken(desc, func(ctx context.Context) {
-			rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
+			rdc.evictCachedRangeDescriptorLocked(ctx, desc)
 		})
 		return desc, returnToken, nil
 	}
@@ -384,7 +384,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 				lookupRes = lookupResult{
 					desc: desc,
 					evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) {
-						rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
+						rdc.evictCachedRangeDescriptorLocked(ctx, desc)
 					}),
 				}
 			case 2:
@@ -504,52 +504,47 @@ func (rdc *RangeDescriptorCache) Clear() {
 	rdc.rangeCache.cache.Clear()
 }
 
-// EvictCachedRangeDescriptor will evict any cached user-space and meta range
-// descriptors for the given key. It is intended that this method be called from
-// a consumer of rangeDescriptorCache through the EvictionToken abstraction if
-// the returned range descriptor is discovered to be stale.
+// EvictForKey evicts the descriptor containing the given key, if any.
 //
-// seenDesc should always be passed in if available, and is used as the basis of
-// a compare-and-evict strategy. This means that if the cache does
-// not contain the provided descriptor, no descriptor will be evicted. If
-// seenDesc is nil, eviction is unconditional.
-//
-// `inverted` determines the behavior at the range boundary, similar to how it
-// does in GetCachedRangeDescriptor.
-func (rdc *RangeDescriptorCache) EvictCachedRangeDescriptor(
-	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inverted bool,
-) {
+// Returns true if a descriptor was evicted.
+func (rdc *RangeDescriptorCache) EvictForKey(ctx context.Context, descKey roachpb.RKey) bool {
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
-	rdc.evictCachedRangeDescriptorLocked(ctx, descKey, seenDesc, inverted)
+
+	cachedDesc, entry := rdc.getCachedRangeDescriptorLocked(descKey, false /* inverted */)
+	if cachedDesc == nil {
+		return false
+	}
+	log.VEventf(ctx, 2, "evict cached descriptor: %s", cachedDesc)
+	rdc.rangeCache.cache.DelEntry(entry)
+	return true
 }
 
-// evictCachedRangeDescriptorLocked is like evictCachedRangeDescriptor, but it
-// assumes that the caller holds a write lock on rdc.rangeCache.
+// evictCachedRangeDescriptorLocked evicts desc from the cache. If desc is not
+// in the cache, it's a no-op. The caller needs to holds a write lock on
+// rdc.rangeCache.
+//
+// Returns true if the descriptor was evicted from the cache.
 func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
-	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inverted bool,
-) {
-	cachedDesc, entry := rdc.getCachedRangeDescriptorLocked(descKey, inverted)
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) bool {
+	cachedDesc, entry := rdc.getCachedRangeDescriptorLocked(desc.StartKey, false /* inverted */)
 	if cachedDesc == nil {
-		return
+		return false
 	}
 
-	// Note that we're doing a "compare-and-erase": If seenDesc is not nil, we
-	// want to clean the cache only if it equals the cached range descriptor. We
-	// use Generation to determine if the range descriptors are equal. If the
-	// range descriptors are not equal, then likely some other caller already
-	// evicted previously, and we can save work by not doing it again (which would
-	// prompt another expensive lookup).
-	if seenDesc != nil {
-		if seenDesc.Generation != cachedDesc.Generation {
-			return
-		}
+	// Note that we're doing a "compare-and-erase": we want to clean the cache
+	// only if it equals the passed-in descriptor. We use Generation to determine
+	// if the range descriptors are equal. If the range descriptors are not equal,
+	// then likely some other caller already evicted previously, and we can save
+	// work by not doing it again (which would prompt another expensive lookup).
+	if desc.Generation != cachedDesc.Generation {
+		return false
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
-	}
+	log.VEventf(ctx, 2, "evict cached descriptor: desc=%s", cachedDesc)
 	rdc.rangeCache.cache.DelEntry(entry)
+	return true
 }
 
 // GetCachedRangeDescriptor retrieves the descriptor of the range which contains
