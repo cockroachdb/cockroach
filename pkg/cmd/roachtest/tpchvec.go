@@ -267,15 +267,20 @@ func (p *tpchVecPerfTest) postTestRunHook(t *test, conn *gosql.DB, version crdbV
 				}
 				for i := 0; i < tpchPerfTestNumRunsPerQuery; i++ {
 					rows, err := conn.Query(fmt.Sprintf(
-						"SELECT url FROM [EXPLAIN ANALYZE %s];", tpch.QueriesByNumber[queryNum],
+						"EXPLAIN ANALYZE %s;", tpch.QueriesByNumber[queryNum],
 					))
 					if err != nil {
 						t.Fatal(err)
 					}
-					defer rows.Close()
-					var url string
+					var (
+						automatic bool
+						url       string
+					)
 					rows.Next()
-					if err = rows.Scan(&url); err != nil {
+					if err = rows.Scan(&automatic, &url); err != nil {
+						t.Fatal(err)
+					}
+					if err = rows.Close(); err != nil {
 						t.Fatal(err)
 					}
 					t.Status(fmt.Sprintf("EXPLAIN ANALYZE with vectorize=%s url:\n%s", vectorizeSetting, url))
