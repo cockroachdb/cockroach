@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -98,7 +97,7 @@ func TestAdaptiveThrottling(t *testing.T) {
 
 		// Sleep for 2 * DefaultMetricsSampleInterval, to make sure the runtime
 		// stats reflect the load we want.
-		sleep := 2 * server.DefaultMetricsSampleInterval
+		sleep := 2 * base.DefaultMetricsSampleInterval
 		fmt.Printf("Sleeping for %s\n", sleep)
 		time.Sleep(sleep)
 		step("Create stats", func() {

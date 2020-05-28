@@ -120,7 +120,7 @@ func Load(
 	if err != nil {
 		return backupccl.BackupManifest{}, err
 	}
-	dir, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIOConfig{},
+	dir, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobClientFactory)
 	if err != nil {
 		return backupccl.BackupManifest{}, errors.Wrap(err, "export storage from URI")
