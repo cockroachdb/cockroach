@@ -86,7 +86,9 @@ func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 // specified in any part of the query, then it must be consistent with
 // what is known to the Executor. If the AsOfClause contains a
 // timestamp, then true will be returned.
-func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error) {
+func (p *planner) getTimestamp(
+	ctx context.Context, asOf tree.AsOfClause,
+) (hlc.Timestamp, bool, error) {
 	if asOf.Expr != nil {
 		// At this point, the executor only knows how to recognize AS OF
 		// SYSTEM TIME at the top level. When it finds it there,
@@ -106,7 +108,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
 		// subqueries or view queries) but they must all point to the same
 		// timestamp.
-		ts, err := p.EvalAsOfTimestamp(asOf)
+		ts, err := p.EvalAsOfTimestamp(ctx, asOf)
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}

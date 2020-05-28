@@ -357,12 +357,12 @@ func makeIntervalTestDatum(count int) []tree.Datum {
 
 func TestArrayAggNameOverload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testArrayAggAliasedTypeOverload(t, types.Name)
+	testArrayAggAliasedTypeOverload(context.Background(), t, types.Name)
 }
 
 func TestArrayAggOidOverload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testArrayAggAliasedTypeOverload(t, types.Oid)
+	testArrayAggAliasedTypeOverload(context.Background(), t, types.Oid)
 }
 
 // testAliasedTypeOverload is a helper function for testing ARRAY_AGG's
@@ -370,7 +370,7 @@ func TestArrayAggOidOverload(t *testing.T) {
 // These tests are necessary because some ORMs (e.g., sequelize) require
 // ARRAY_AGG to work on these aliased types and produce a result with the
 // correct type.
-func testArrayAggAliasedTypeOverload(t *testing.T, expected *types.T) {
+func testArrayAggAliasedTypeOverload(ctx context.Context, t *testing.T, expected *types.T) {
 	defer tree.MockNameTypes(map[string]*types.T{
 		"a": expected,
 	})()
@@ -380,7 +380,7 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected *types.T) {
 		t.Fatalf("%s: %v", exprStr, err)
 	}
 	typ := types.MakeArray(expected)
-	typedExpr, err := tree.TypeCheck(expr, nil, typ)
+	typedExpr, err := tree.TypeCheck(ctx, expr, nil, typ)
 	if err != nil {
 		t.Fatalf("%s: %v", expr, err)
 	}

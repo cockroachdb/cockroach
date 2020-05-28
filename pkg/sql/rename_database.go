@@ -131,6 +131,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				}
 
 				isAllowed, referencedCol, err := isAllowedDependentDescInRenameDatabase(
+					ctx,
 					dependedOn,
 					tbDesc,
 					dependentDesc,
@@ -211,6 +212,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 // found to contain the database (if it exists), and an error if any.
 // This is a workaround for #45411 until #34416 is resolved.
 func isAllowedDependentDescInRenameDatabase(
+	ctx context.Context,
 	dependedOn sqlbase.TableDescriptor_Reference,
 	tbDesc *sqlbase.TableDescriptor,
 	dependentDesc *sqlbase.TableDescriptor,
@@ -245,7 +247,7 @@ func isAllowedDependentDescInRenameDatabase(
 		if err != nil {
 			return false, "", err
 		}
-		typedExpr, err := tree.TypeCheck(parsedExpr, nil, column.Type)
+		typedExpr, err := tree.TypeCheck(ctx, parsedExpr, nil, column.Type)
 		if err != nil {
 			return false, "", err
 		}

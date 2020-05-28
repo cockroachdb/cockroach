@@ -61,8 +61,10 @@ func TestIndexedVars(t *testing.T) {
 	expr := binary(Plus, v0, binary(Mult, v1, v2))
 
 	// Verify the expression evaluates correctly.
-	semaContext := &SemaContext{IVarContainer: c}
-	typedExpr, err := expr.TypeCheck(semaContext, types.Any)
+	ctx := context.Background()
+	semaContext := MakeSemaContext()
+	semaContext.IVarContainer = c
+	typedExpr, err := expr.TypeCheck(ctx, &semaContext, types.Any)
 	if err != nil {
 		t.Fatal(err)
 	}

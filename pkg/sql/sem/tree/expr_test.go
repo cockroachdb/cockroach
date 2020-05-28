@@ -109,12 +109,13 @@ func TestExprString(t *testing.T) {
 		`(1 >= 2) = (2 IS OF (BOOL))`,
 		`count(1) FILTER (WHERE true)`,
 	}
+	ctx := context.Background()
 	for _, exprStr := range testExprs {
 		expr, err := parser.ParseExpr(exprStr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
+		typedExpr, err := tree.TypeCheck(ctx, expr, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -124,7 +125,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := tree.TypeCheck(expr2, nil, types.Any)
+		typedExpr2, err := tree.TypeCheck(ctx, expr2, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}

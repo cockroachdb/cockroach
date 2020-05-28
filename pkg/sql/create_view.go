@@ -134,6 +134,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			return err
 		}
 		desc, err := makeViewTableDesc(
+			params.ctx,
 			viewName,
 			n.viewQuery,
 			n.dbDesc.ID,
@@ -233,6 +234,7 @@ func (n *createViewNode) Close(ctx context.Context)  {}
 // doesn't matter if reads/writes use a cached descriptor that doesn't
 // include the back-references.
 func makeViewTableDesc(
+	ctx context.Context,
 	viewName string,
 	viewQuery string,
 	parentID sqlbase.ID,
@@ -255,7 +257,7 @@ func makeViewTableDesc(
 		temporary,
 	)
 	desc.ViewQuery = viewQuery
-	if err := addResultColumns(semaCtx, evalCtx, &desc, resultColumns); err != nil {
+	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
 		return sqlbase.MutableTableDescriptor{}, err
 	}
 	return desc, nil
@@ -277,7 +279,7 @@ func (p *planner) replaceViewDesc(
 	// Reset the columns to add the new result columns onto.
 	toReplace.Columns = make([]sqlbase.ColumnDescriptor, 0, len(n.columns))
 	toReplace.NextColumnID = 0
-	if err := addResultColumns(&p.semaCtx, p.EvalContext(), toReplace, n.columns); err != nil {
+	if err := addResultColumns(ctx, &p.semaCtx, p.EvalContext(), toReplace, n.columns); err != nil {
 		return nil, err
 	}
 
@@ -337,6 +339,7 @@ func (p *planner) replaceViewDesc(
 // addResultColumns adds the resultColumns as actual column
 // descriptors onto desc.
 func addResultColumns(
+	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	desc *sqlbase.MutableTableDescriptor,
@@ -346,7 +349,7 @@ func addResultColumns(
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
+		col, _, _, err := sqlbase.MakeColumnDefDescs(ctx, &columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return err
 		}

@@ -177,7 +177,7 @@ func TestColumnConversions(t *testing.T) {
 	t.Run("columnConversionInfo sanity", func(t *testing.T) {
 		for from, mid := range columnConversionInfo {
 			for to, expected := range mid {
-				actual, err := ClassifyConversion(columnType(from), columnType(to))
+				actual, err := ClassifyConversion(context.Background(), columnType(from), columnType(to))
 
 				// Verify that we only return cannot-coerce errors.
 				if err != nil {

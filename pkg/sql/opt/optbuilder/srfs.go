@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,7 +40,9 @@ func (s *srf) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (s *srf) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
+func (s *srf) TypeCheck(
+	_ context.Context, ctx *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
 	if ctx.Properties.Derived.SeenGenerator {
 		// This error happens if this srf struct is nested inside a raw srf that
 		// has not yet been replaced. This is possible since scope.replaceSRF first

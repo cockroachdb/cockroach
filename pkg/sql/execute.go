@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,7 +26,11 @@ import (
 // the referenced prepared statement and correctly updated placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
 func fillInPlaceholders(
-	ps *PreparedStatement, name string, params tree.Exprs, searchPath sessiondata.SearchPath,
+	ctx context.Context,
+	ps *PreparedStatement,
+	name string,
+	params tree.Exprs,
+	searchPath sessiondata.SearchPath,
 ) (*tree.PlaceholderInfo, error) {
 	if len(ps.Types) != len(params) {
 		return nil, pgerror.Newf(pgcode.Syntax,
@@ -42,7 +48,7 @@ func fillInPlaceholders(
 			return nil, errors.AssertionFailedf("no type for placeholder %s", idx)
 		}
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-			e, typ, "EXECUTE parameter", /* context */
+			ctx, e, typ, "EXECUTE parameter", /* context */
 			&semaCtx, true /* allowImpure */)
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.WrongObjectType)

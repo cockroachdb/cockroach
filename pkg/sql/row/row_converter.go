@@ -269,7 +269,7 @@ func NewDatumRowConverter(
 	// columns. All non-target columns must be nullable and will be set to NULL
 	// during import. We do however support DEFAULT on hidden columns (which is
 	// only the default _rowid one). This allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(targetColDescriptors, immutDesc, &txCtx, c.EvalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(ctx, targetColDescriptors, immutDesc, &txCtx, c.EvalCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}

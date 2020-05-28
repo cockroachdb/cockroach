@@ -57,12 +57,14 @@ func isConstant(expr Expr) bool {
 	return ok
 }
 
-func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret TypedExpr, err error) {
+func typeCheckConstant(
+	c Constant, semaCtx *SemaContext, desired *types.T,
+) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
 	if desired.Family() != types.AnyFamily {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
-				return c.ResolveAsType(ctx, desired)
+				return c.ResolveAsType(semaCtx, desired)
 			}
 		}
 	}
@@ -84,7 +86,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret Type
 	}
 
 	natural := avail[0]
-	return c.ResolveAsType(ctx, natural)
+	return c.ResolveAsType(semaCtx, natural)
 }
 
 func naturalConstantType(c Constant) *types.T {
