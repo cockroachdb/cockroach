@@ -150,7 +150,7 @@ func MakeComputedExprs(
 			}
 			continue
 		}
-		expr, _, err := ResolveNames(
+		expr, err := ResolveNames(
 			exprs[compExprIdx], source, ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
 			return nil, err

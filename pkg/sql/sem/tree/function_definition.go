@@ -57,12 +57,6 @@ type FunctionProperties struct {
 	// be NULL and should act accordingly.
 	NullableArgs bool
 
-	// NeedsRepeatedEvaluation is set to true when a function may change
-	// at every row whether or not it is applied to an expression that
-	// contains row-dependent variables. Used e.g. by `random` and
-	// aggregate functions.
-	NeedsRepeatedEvaluation bool
-
 	// Impure is set to true when a function potentially returns a
 	// different value when called in the same statement with the same
 	// parameters. e.g.: random(), clock_timestamp(). Some functions

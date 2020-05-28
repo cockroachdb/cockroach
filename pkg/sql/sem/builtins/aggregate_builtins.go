@@ -56,13 +56,6 @@ func initAggregateBuiltins() {
 			}
 		}
 
-		// The aggregate functions are considered "row dependent". This is
-		// because each aggregate function application receives the set of
-		// grouped rows as implicit parameter. It may have a different
-		// value in every group, so it cannot be considered constant in
-		// the context of a data source.
-		v.props.NeedsRepeatedEvaluation = true
-
 		builtins[k] = v
 	}
 }
