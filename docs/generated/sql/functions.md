@@ -723,7 +723,11 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography.</p>
 </span></td></tr>
+<tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography, xdr_or_ndr: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography. This variant has a second argument denoting the encoding - <code>xdr</code> for big endian and <code>ndr</code> for little endian.</p>
+</span></td></tr>
 <tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geometry: geometry, xdr_or_ndr: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geometry. This variant has a second argument denoting the encoding - <code>xdr</code> for big endian and <code>ndr</code> for little endian.</p>
 </span></td></tr>
 <tr><td><a name="st_ashexwkb"></a><code>st_ashexwkb(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation in hex of a given Geography.</p>
 </span></td></tr>
