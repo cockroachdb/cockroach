@@ -280,7 +280,6 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, err
 	var o xform.Optimizer
 	o.Init(evalCtx, nil /* catalog */)
 	b := optbuilder.NewScalar(context.Background(), &tree.SemaContext{}, evalCtx, o.Factory())
-	b.AllowUnsupportedExpr = true
 	if err := b.Build(e); err != nil {
 		return nil, err
 	}

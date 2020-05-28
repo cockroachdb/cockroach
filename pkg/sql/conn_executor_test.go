@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -39,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
@@ -51,30 +51,27 @@ import (
 func TestAnonymizeStatementsForReporting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const stmt = `
-INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see');
-
-select * from crdb_internal.node_runtime_info;
+	const stmt1s = `
+INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 `
+	stmt1, err := parser.ParseOne(stmt1s)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	t.Run("unsafe", func(t *testing.T) {
-		rUnsafe := "i'm not safe"
-		safeErr := sql.AnonymizeStatementsForReporting("testing", stmt, rUnsafe)
+	rUnsafe := errors.New("panic: i'm not safe")
+	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST)
 
-		const expMessage = "panic: i'm not safe"
-		actMessage := safeErr.Error()
-		if actMessage != expMessage {
-			t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
-		}
+	const expMessage = "panic: i'm not safe"
+	actMessage := safeErr.Error()
+	if actMessage != expMessage {
+		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
+	}
 
-		const expSafeRedactedMessage = `...conn_executor_test.go:NN: <*errors.errorString>
-wrapper: <*safedetails.withSafeDetails>
-(more details:)
-panic: %v
--- arg 1: <string>
+	const expSafeRedactedMessage = `...conn_executor_test.go:NN: <*errors.errorString>
 wrapper: <*withstack.withStack>
 (more details:)
-github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting.func1
+github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
 	...conn_executor_test.go:NN
 testing.tRunner
 	...testing.go:NN
@@ -82,69 +79,25 @@ runtime.goexit
 	...asm_amd64.s:NN
 wrapper: <*safedetails.withSafeDetails>
 (more details:)
-panic while %s %d statements: %s
--- arg 1: testing
--- arg 2: 2
--- arg 3: INSERT INTO _(_, _) VALUES (_, _, __more2__); SELECT * FROM _._`
-		actSafeRedactedMessage := fileref.ReplaceAllString(errors.Redact(safeErr), "...$2:NN")
-		if actSafeRedactedMessage != expSafeRedactedMessage {
-			diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-				A:        difflib.SplitLines(expSafeRedactedMessage),
-				B:        difflib.SplitLines(actSafeRedactedMessage),
-				FromFile: "Expected",
-				FromDate: "",
-				ToFile:   "Actual",
-				ToDate:   "",
-				Context:  1,
-			})
-			t.Errorf("Diff:\n%s", diff)
-		}
+while executing: %s
+-- arg 1: INSERT INTO _(_, _) VALUES (_, _, __more2__)`
 
-	})
+	// Edit non-determinstic stack trace filenames from the message.
+	actSafeRedactedMessage := fileref.ReplaceAllString(
+		errors.Redact(safeErr), "...$2:NN")
 
-	t.Run("safe", func(t *testing.T) {
-		rSafe := log.Safe("something safe")
-		safeErr := sql.AnonymizeStatementsForReporting("testing", stmt, rSafe)
-
-		const expMessage = "panic: something safe"
-		actMessage := safeErr.Error()
-		if actMessage != expMessage {
-			t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
-		}
-
-		const expSafeSafeMessage = `...conn_executor_test.go:NN: <*errors.errorString>
-wrapper: <*safedetails.withSafeDetails>
-(more details:)
-panic: %v
--- arg 1: something safe
-wrapper: <*withstack.withStack>
-(more details:)
-github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting.func2
-	...conn_executor_test.go:NN
-testing.tRunner
-	...testing.go:NN
-runtime.goexit
-	...asm_amd64.s:NN
-wrapper: <*safedetails.withSafeDetails>
-(more details:)
-panic while %s %d statements: %s
--- arg 1: testing
--- arg 2: 2
--- arg 3: INSERT INTO _(_, _) VALUES (_, _, __more2__); SELECT * FROM _._`
-		actSafeSafeMessage := fileref.ReplaceAllString(errors.Redact(safeErr), "...$2:NN")
-		if actSafeSafeMessage != expSafeSafeMessage {
-			diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-				A:        difflib.SplitLines(expSafeSafeMessage),
-				B:        difflib.SplitLines(actSafeSafeMessage),
-				FromFile: "Expected",
-				FromDate: "",
-				ToFile:   "Actual",
-				ToDate:   "",
-				Context:  1,
-			})
-			t.Errorf("Diff:\n%s", diff)
-		}
-	})
+	if actSafeRedactedMessage != expSafeRedactedMessage {
+		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+			A:        difflib.SplitLines(expSafeRedactedMessage),
+			B:        difflib.SplitLines(actSafeRedactedMessage),
+			FromFile: "Expected",
+			FromDate: "",
+			ToFile:   "Actual",
+			ToDate:   "",
+			Context:  1,
+		})
+		t.Errorf("Diff:\n%s", diff)
+	}
 }
 
 var fileref = regexp.MustCompile(`((?:[a-zA-Z0-9\._@-]*/)*)([a-zA-Z0-9._@-]*\.(?:go|s)):\d+`)
