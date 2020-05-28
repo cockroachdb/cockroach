@@ -2,8 +2,24 @@
 # RowDescription message of the wire protocol. The IDs should remain consistent
 # even when joining tables or when using views.
 
+# Prepare the environment.
 send
-Query {"String": "CREATE TABLE tab1 (a int primary key, b int)"}
+Query {"String": "DROP VIEW IF EXISTS v; DROP TABLE IF EXISTS tab3; DROP TABLE IF EXISTS tab2; DROP TABLE IF EXISTS tab1"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP VIEW"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Start of test.
+
+send
+Query {"String": "CREATE TABLE tab1 (a INT8 PRIMARY KEY, b INT8)"}
 ----
 
 until
@@ -13,7 +29,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TABLE tab2 (c int primary key, tab1_a int REFERENCES tab1(a))"}
+Query {"String": "CREATE TABLE tab2 (c INT8 PRIMARY KEY, tab1_a INT8 REFERENCES tab1(a))"}
 ----
 
 until
@@ -56,10 +72,10 @@ send
 Query {"String": "SELECT a FROM tab1"}
 ----
 
-until
+until ignore_table_oids
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -68,10 +84,10 @@ send
 Query {"String": "SELECT tab1.a, tab2.c FROM tab1 JOIN tab2 ON tab1.a = tab2.tab1_a"}
 ----
 
-until
+until ignore_table_oids
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":53,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"4"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -80,16 +96,16 @@ send
 Query {"String": "SELECT * FROM v WHERE v1 = 1"}
 ----
 
-until
+until ignore_table_oids
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":53,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TABLE tab3 (a int primary key, b char(8))"}
+Query {"String": "CREATE TABLE tab3 (a INT8 PRIMARY KEY, b CHAR(8))"}
 ----
 
 until
@@ -112,11 +128,27 @@ send
 Query {"String": "SELECT b FROM tab3"}
 ----
 
+until ignore_table_oids
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+
+# The following discrepancy is a bug.
+# See: https://github.com/cockroachdb/cockroach/issues/49639
+
+until noncrdb_only
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"hello   "}]}
+
+until crdb_only
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"hello"}]}
+
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
-{"Type":"DataRow","Values":[{"text":"hello"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -130,11 +162,38 @@ Sync
 ----
 
 until
-ReadyForQuery
+BindComplete
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
+
+# The following discrepancy is another bug.
+# See: https://github.com/cockroachdb/cockroach/issues/49640
+until noncrdb_only ignore_table_oids
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+
+until crdb_only ignore_table_oids
+RowDescription
+----
 {"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+
+# The following discrepancy is the first bug above.
+# See: https://github.com/cockroachdb/cockroach/issues/49639
+
+until noncrdb_only
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"hello   "}]}
+
+until crdb_only
+DataRow
+----
 {"Type":"DataRow","Values":[{"text":"hello"}]}
+
+until
+ReadyForQuery
+----
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

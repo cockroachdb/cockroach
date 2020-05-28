@@ -2,6 +2,9 @@
 # handling. That is, the -rewrite flag, when used with Postgres, will
 # produce different results than Cockroach.
 
+only crdb
+----
+
 # More behavior that differs from postgres. Try executing a new query
 # when a portal is suspended. Cockroach errors.
 
