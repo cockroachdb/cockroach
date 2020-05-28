@@ -180,6 +180,11 @@ func (a *Allocator) maybeAppendColumn(b coldata.Batch, t coltypes.T, colIdx int)
 		switch presentType := b.ColVec(colIdx).Type(); presentType {
 		case t:
 			// We already have the vector of the desired type in place.
+			if presentType == coltypes.Bytes {
+				// Flat bytes vector needs to be reset before the vector can be
+				// reused.
+				b.ColVec(colIdx).Bytes().Reset()
+			}
 			return
 		default:
 			// We have a vector with an unexpected type, so we panic.
