@@ -701,10 +701,6 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 	// Descriptors could be cleared from the cache in the event of a merge or a
 	// lot of concurrency. For example, if ranges ["a", "b") and ["b", "c") are
 	// merged, we should clear both of these if we are inserting ["a", "c").
-	//
-	// We can usually tell which descriptor is older based on the Generation, but
-	// in the legacy case in which we can't, we clear the descriptors in the
-	// cache unconditionally.
 	rdc.rangeCache.cache.DoRangeEntry(func(e *cache.Entry) bool {
 		descriptor := e.Value.(*roachpb.RangeDescriptor)
 		// Check generations to see if we evict.
