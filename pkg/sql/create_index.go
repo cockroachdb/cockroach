@@ -209,10 +209,13 @@ func MakeIndexDescriptor(
 		}
 
 		idxValidator := schemaexpr.NewIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
-		_, err := idxValidator.Validate(n.Predicate)
+		expr, err := idxValidator.Validate(n.Predicate)
 		if err != nil {
 			return nil, err
 		}
+
+		// Store the serialized predicate expression in the IndexDescriptor.
+		indexDesc.Predicate = tree.Serialize(expr)
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
