@@ -14,3 +14,7 @@ query O
 SELECT pg_my_temp_schema()
 ----
 0
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/49072.
+statement ok
+SELECT has_table_privilege('root'::NAME, 0, 'select')
