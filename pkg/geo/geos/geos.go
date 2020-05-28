@@ -254,6 +254,19 @@ func Length(ewkb geopb.EWKB) (float64, error) {
 	return float64(length), nil
 }
 
+// Centroid returns the centroid of an EWKB.
+func Centroid(ewkb geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Centroid(g, goToCSlice(ewkb), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // MinDistance returns the minimum distance between two EWKBs.
 func MinDistance(a geopb.EWKB, b geopb.EWKB) (float64, error) {
 	g, err := ensureInitInternal()
