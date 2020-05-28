@@ -104,6 +104,9 @@ type joinReaderStrategy interface {
 	// unsupported, but if an error is returned, the joinReader will transition
 	// to draining.
 	processLookedUpRow(ctx context.Context, row sqlbase.EncDatumRow, key roachpb.Key) (joinReaderState, error)
+	// prepareToEmit informs the strategy implementation that all looked up rows
+	// have been read, and that it should prepare for calls to nextRowToEmit.
+	prepareToEmit(ctx context.Context)
 	// nextRowToEmit gets the next row to emit from the strategy. An accompanying
 	// joinReaderState is also returned, indicating a state to transition to after
 	// emitting this row. A transition to jrStateUnknown is unsupported, but if an
@@ -192,6 +195,8 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 	s.emitState.matchingInputRowIndicesCursor = 0
 	return jrEmittingRows, nil
 }
+
+func (s *joinReaderNoOrderingStrategy) prepareToEmit(ctx context.Context) {}
 
 func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 	_ context.Context,
@@ -291,7 +296,7 @@ type joinReaderOrderingStrategy struct {
 	inputRowIdxToLookedUpRowIndices [][]int
 
 	lookedUpRowIdx int
-	lookedUpRows   rowcontainer.IndexedRowContainer
+	lookedUpRows   *rowcontainer.DiskBackedNumberedRowContainer
 
 	// emitCursor contains information about where the next row to emit is within
 	// inputRowIdxToLookedUpRowIndices.
@@ -345,7 +350,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 				row[i].Datum = tree.DNull
 			}
 		}
-		if err := s.lookedUpRows.AddRow(ctx, row); err != nil {
+		if _, err := s.lookedUpRows.AddRow(ctx, row); err != nil {
 			return jrStateUnknown, err
 		}
 	}
@@ -377,6 +382,12 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	s.lookedUpRowIdx++
 
 	return jrPerformingLookup, nil
+}
+
+func (s *joinReaderOrderingStrategy) prepareToEmit(ctx context.Context) {
+	if !s.isPartialJoin {
+		s.lookedUpRows.SetupForRead(ctx, s.inputRowIdxToLookedUpRowIndices)
+	}
 }
 
 func (s *joinReaderOrderingStrategy) nextRowToEmit(
@@ -433,11 +444,11 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 		return nil, jrEmittingRows, nil
 	}
 
-	lookedUpRow, err := s.lookedUpRows.GetRow(s.Ctx, lookedUpRowIdx)
+	lookedUpRow, err := s.lookedUpRows.GetRow(s.Ctx, lookedUpRowIdx, false /* skip */)
 	if err != nil {
 		return nil, jrStateUnknown, err
 	}
-	outputRow, err := s.render(inputRow, lookedUpRow.(rowcontainer.IndexedRow).Row)
+	outputRow, err := s.render(inputRow, lookedUpRow)
 	if err != nil {
 		return nil, jrStateUnknown, err
 	}
@@ -448,7 +459,7 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 }
 
 func (s *joinReaderOrderingStrategy) spilled() bool {
-	return s.lookedUpRows.(*rowcontainer.DiskBackedIndexedRowContainer).Spilled()
+	return s.lookedUpRows.Spilled()
 }
 
 func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
