@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // SplitTable splits a range in the table, creates a replica for the right
@@ -296,13 +297,9 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	for i := range descs {
-		desc := rangeCache.GetCachedRangeDescriptor(descs[i].StartKey, false /* inclusive */)
-		if desc == nil {
-			t.Fatalf("failed to find range for key: %s", descs[i].StartKey)
-		}
-		if !desc.Equal(descs[i]) {
-			t.Fatalf("expected: %+v, got: %+v", descs[i], desc)
-		}
+		ri := rangeCache.GetCached(descs[i].StartKey, false /* inclusive */)
+		require.NotNilf(t, ri, "failed to find range for key: %s", descs[i].StartKey)
+		require.Equal(t, descs[i], ri.Desc)
 
 		_, ok := leaseCache.Lookup(context.Background(), descs[i].RangeID)
 		if !ok {

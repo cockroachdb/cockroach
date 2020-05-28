@@ -22,6 +22,7 @@ import (
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -157,10 +158,11 @@ func (db *testDescriptorDB) simulateLookupScan(
 ) error {
 	metaKey := keys.RangeMetaKey(key)
 	for {
-		desc, _, err := db.cache.LookupRangeDescriptorWithEvictionToken(ctx, metaKey, nil, useReverseScan)
+		ri, _, err := db.cache.LookupWithEvictionToken(ctx, metaKey, nil, useReverseScan)
 		if err != nil {
 			return err
 		}
+		desc := &ri.Desc
 		// If the descriptor for metaKey does not contain the EndKey of the
 		// descriptor we're going to return, simulate a scan continuation.
 		// This can happen in the case of meta2 splits.
@@ -277,7 +279,7 @@ func doLookup(
 func evict(ctx context.Context, rc *RangeDescriptorCache, desc *roachpb.RangeDescriptor) bool {
 	rc.rangeCache.Lock()
 	defer rc.rangeCache.Unlock()
-	return rc.evictCachedRangeDescriptorLocked(ctx, desc)
+	return rc.evictLocked(ctx, &kvbase.RangeCacheEntry{Desc: *desc})
 }
 
 func doLookupWithToken(
@@ -290,19 +292,22 @@ func doLookupWithToken(
 	// NOTE: This function panics on errors because it is often called from other
 	// goroutines than the test's main one.
 
-	r, returnToken, err := rc.lookupRangeDescriptorInternal(
+	returnToken, err := rc.lookupInternal(
 		ctx, roachpb.RKey(key), evictToken, useReverseScan)
 	if err != nil {
-		panic(fmt.Sprintf("unexpected error from LookupRangeDescriptor: %s", err))
+		panic(fmt.Sprintf("unexpected error from Lookup: %s", err))
 	}
+	desc := &returnToken.entry.Desc
 	keyAddr, err := keys.Addr(roachpb.Key(key))
 	if err != nil {
 		panic(err)
 	}
-	if (useReverseScan && !r.ContainsKeyInverted(keyAddr)) || (!useReverseScan && !r.ContainsKey(keyAddr)) {
-		panic(fmt.Sprintf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key))
+	if (useReverseScan && !desc.ContainsKeyInverted(keyAddr)) ||
+		(!useReverseScan && !desc.ContainsKey(keyAddr)) {
+		panic(fmt.Sprintf("Returned range did not contain key: %s-%s, %s",
+			desc.StartKey, desc.EndKey, key))
 	}
-	return r, returnToken
+	return desc, returnToken
 }
 
 // TestDescriptorDBGetDescriptors verifies that getDescriptors returns correct descriptors.
@@ -504,7 +509,7 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 // RangeDescriptor lookup, if the context passed in gets canceled the lookup
 // returns with an error indicating so. Canceling the ctx does not stop the
 // in-flight lookup though (even though the requester has returned from
-// lookupRangeDescriptorInternal()) - other requesters that joined the same
+// lookupInternal()) - other requesters that joined the same
 // flight are unaffected by the ctx cancelation.
 func TestRangeCacheContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -525,7 +530,7 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 			blocked = ch
 		}
 		go func() {
-			_, _, err := db.cache.lookupRangeDescriptorInternal(ctx, key, nil, false)
+			_, err := db.cache.lookupInternal(ctx, key, nil, false)
 			errC <- err
 		}()
 		<-blocked
@@ -628,7 +633,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
-	evictToken.EvictAndReplace(ctx, mismatchErrRange)
+	evictToken.EvictAndReplace(ctx, &kvbase.RangeCacheEntry{Desc: mismatchErrRange})
 	pauseLookupResumeAndAssert("az", 1, evictToken)
 
 	// Both sides of the split are now correctly cached.
@@ -665,7 +670,7 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
 	// Evict the cached descriptor ["a", "b") and insert ["a"-"an")
-	evictToken.EvictAndReplace(ctx, mismatchErrRange)
+	evictToken.EvictAndReplace(ctx, &kvbase.RangeCacheEntry{Desc: mismatchErrRange})
 
 	// Create two lookup requests with key "a" and "az". The lookup on "az" uses
 	// the evictToken returned by the previous lookup.
@@ -795,7 +800,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 			mismatchErrRange := ranges[0]
 			// The stale descriptor is evicted, the new descriptor from the error is
 			// replaced, and a new lookup is initialized.
-			evictToken.EvictAndReplace(ctx, mismatchErrRange)
+			evictToken.EvictAndReplace(ctx, &kvbase.RangeCacheEntry{Desc: mismatchErrRange})
 
 			// wg will be used to wait for all the lookups to complete.
 			wg := sync.WaitGroup{}
@@ -829,10 +834,11 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					var err error
 					ctx, getRecording, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
 					defer cancel()
-					desc, _, err = db.cache.lookupRangeDescriptorInternal(
+					tok, err := db.cache.lookupInternal(
 						ctx, key, evictToken,
 						tc.reverseScan)
 					require.NoError(t, err)
+					desc = &tok.entry.Desc
 					if tc.reverseScan {
 						if !desc.ContainsKeyInverted(key) {
 							t.Errorf("desc %s does not contain exclusive end key %s", desc, key)
@@ -936,7 +942,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
+	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &kvbase.RangeCacheEntry{Desc: *defDesc})
 
 	// Now, add a new, overlapping set of descriptors.
 	minToBDesc := &roachpb.RangeDescriptor{
@@ -950,27 +956,29 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		Generation: 1,
 	}
 	curGeneration := int64(1)
-	require.True(t, cache.clearOlderOverlapping(ctx, minToBDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), minToBDesc)
-	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); desc != nil {
+	ri := &kvbase.RangeCacheEntry{Desc: *minToBDesc}
+	require.True(t, cache.clearOlderOverlapping(ctx, ri))
+	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), ri)
+	if desc := cache.GetCached(roachpb.RKey("b"), false); desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	require.True(t, cache.clearOlderOverlapping(ctx, bToMaxDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), bToMaxDesc)
-	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); desc != bToMaxDesc {
-		t.Errorf("expected descriptor %s; got %s", bToMaxDesc, desc)
-	}
+
+	ri = &kvbase.RangeCacheEntry{Desc: *bToMaxDesc}
+	require.True(t, cache.clearOlderOverlapping(ctx, ri))
+	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), ri)
+	ri = cache.GetCached(roachpb.RKey("b"), false)
+	require.Equal(t, *bToMaxDesc, ri.Desc)
 
 	// Add default descriptor back which should remove two split descriptors.
 	defDescCpy := *defDesc
 	curGeneration++
 	defDescCpy.Generation = curGeneration
-	require.True(t, cache.clearOlderOverlapping(ctx, &defDescCpy))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
+	ri = &kvbase.RangeCacheEntry{Desc: defDescCpy}
+	require.True(t, cache.clearOlderOverlapping(ctx, ri))
+	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), ri)
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
-		if desc := cache.GetCachedRangeDescriptor(key, false); desc != defDesc {
-			t.Errorf("expected descriptor %s for key %s; got %s", defDesc, key, desc)
-		}
+		ri := cache.GetCached(key, false)
+		require.Equal(t, defDescCpy, ri.Desc)
 	}
 
 	// Insert ["b", "c") and then insert ["a", b"). Verify that the former is not evicted by the latter.
@@ -980,11 +988,11 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:     roachpb.RKey("c"),
 		Generation: curGeneration,
 	}
-	require.True(t, cache.clearOlderOverlapping(ctx, bToCDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))), bToCDesc)
-	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); desc != bToCDesc {
-		t.Errorf("expected descriptor %s; got %s", bToCDesc, desc)
-	}
+	ri = &kvbase.RangeCacheEntry{Desc: *bToCDesc}
+	require.True(t, cache.clearOlderOverlapping(ctx, ri))
+	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))), ri)
+	ri = cache.GetCached(roachpb.RKey("c"), true)
+	require.Equal(t, *bToCDesc, ri.Desc)
 
 	curGeneration++
 	aToBDesc := &roachpb.RangeDescriptor{
@@ -992,11 +1000,11 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:     roachpb.RKey("b"),
 		Generation: curGeneration,
 	}
-	require.True(t, cache.clearOlderOverlapping(ctx, aToBDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), aToBDesc)
-	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); desc != bToCDesc {
-		t.Errorf("expected descriptor %s; got %s", bToCDesc, desc)
-	}
+	ri = &kvbase.RangeCacheEntry{Desc: *aToBDesc}
+	require.True(t, cache.clearOlderOverlapping(ctx, ri))
+	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), ri)
+	ri = cache.GetCached(roachpb.RKey("c"), true)
+	require.Equal(t, *bToCDesc, ri.Desc)
 }
 
 // TestRangeCacheClearOverlappingMeta prevents regression of a bug which caused
@@ -1023,10 +1031,12 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
-	cache.InsertRangeDescriptors(ctx, firstDesc, restDesc)
+	cache.Insert(ctx,
+		&kvbase.RangeCacheEntry{Desc: firstDesc},
+		&kvbase.RangeCacheEntry{Desc: restDesc})
 
 	// Add new range, corresponding to splitting the first range at a meta key.
-	metaSplitDesc := &roachpb.RangeDescriptor{
+	metaSplitDesc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   keys.RangeMetaKey(roachpb.RKey("foo")),
 	}
@@ -1036,7 +1046,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 				t.Fatalf("invocation of clearOlderOverlapping panicked: %v", r)
 			}
 		}()
-		cache.clearOlderOverlapping(ctx, metaSplitDesc)
+		cache.clearOlderOverlapping(ctx, &kvbase.RangeCacheEntry{Desc: metaSplitDesc})
 	}()
 }
 
@@ -1045,7 +1055,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testData := []*roachpb.RangeDescriptor{
+	testData := []roachpb.RangeDescriptor{
 		{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
 		{StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
 		{StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
@@ -1054,7 +1064,8 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
 	for _, rd := range testData {
-		cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), rd)
+		cache.rangeCache.cache.Add(
+			rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), &kvbase.RangeCacheEntry{Desc: rd})
 	}
 
 	testCases := []struct {
@@ -1096,10 +1107,14 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 
 	for _, test := range testCases {
 		cache.rangeCache.RLock()
-		targetRange, entry := cache.getCachedRangeDescriptorLocked(test.queryKey, true /* inverted */)
+		targetRange, entry := cache.getCachedLocked(test.queryKey, true /* inverted */)
 		cache.rangeCache.RUnlock()
-		if !reflect.DeepEqual(targetRange, test.rng) {
-			t.Fatalf("expect range %v, actual get %v", test.rng, targetRange)
+
+		if test.rng == nil {
+			require.Nil(t, targetRange)
+		} else {
+			require.NotNil(t, targetRange)
+			require.Equal(t, *test.rng, targetRange.Desc)
 		}
 		var cacheKey rangeCacheKey
 		if entry != nil {
@@ -1178,11 +1193,19 @@ func TestRangeCacheGeneration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
-			cache.InsertRangeDescriptors(ctx, *descAM1, *descMZ3, *tc.insertDesc)
+			cache.Insert(ctx,
+				&kvbase.RangeCacheEntry{Desc: *descAM1},
+				&kvbase.RangeCacheEntry{Desc: *descMZ3},
+				&kvbase.RangeCacheEntry{Desc: *tc.insertDesc})
 
 			for index, queryKey := range tc.queryKeys {
-				if actualDesc := cache.GetCachedRangeDescriptor(queryKey, false); !tc.expectedDesc[index].Equal(actualDesc) {
-					t.Errorf("expected descriptor %s; got %s", tc.expectedDesc[index], actualDesc)
+				ri := cache.GetCached(queryKey, false)
+				exp := tc.expectedDesc[index]
+				if exp == nil {
+					require.Nil(t, ri)
+				} else {
+					require.NotNil(t, ri)
+					require.NotNil(t, *exp, ri.Desc)
 				}
 			}
 		})

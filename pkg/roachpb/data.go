@@ -1706,6 +1706,11 @@ func BootstrapLease() Lease {
 	}
 }
 
+// Empty returns true for the Lease zero-value.
+func (l *Lease) Empty() bool {
+	return *l == (Lease{})
+}
+
 // OwnedBy returns whether the given store is the lease owner.
 func (l Lease) OwnedBy(storeID StoreID) bool {
 	return l.Replica.StoreID == storeID

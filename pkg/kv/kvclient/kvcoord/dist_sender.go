@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -466,12 +467,13 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 func (ds *DistSender) getDescriptor(
 	ctx context.Context, descKey roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
-	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptorWithEvictionToken(
+	rInfo, returnToken, err := ds.rangeCache.LookupWithEvictionToken(
 		ctx, descKey, evictToken, useReverseScan,
 	)
 	if err != nil {
 		return nil, returnToken, err
 	}
+	desc := &rInfo.Desc
 
 	// Sanity check: the descriptor we're about to return must include the key
 	// we're interested in.
@@ -1417,16 +1419,16 @@ func (ds *DistSender) sendPartialBatch(
 			// likely the result of a range split. If we have new range
 			// descriptors, insert them instead as long as they are different
 			// from the last descriptor to avoid endless loops.
-			var replacements []roachpb.RangeDescriptor
+			var replacements []*kvbase.RangeCacheEntry
 			different := func(rd *roachpb.RangeDescriptor) bool {
 				return !desc.RSpan().Equal(rd.RSpan())
 			}
 			if different(&tErr.MismatchedRange) {
-				replacements = append(replacements, tErr.MismatchedRange)
+				replacements = append(replacements, &kvbase.RangeCacheEntry{Desc: tErr.MismatchedRange})
 			}
 			if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
 				if includesFrontOfCurSpan(isReverse, tErr.SuggestedRange, rs) {
-					replacements = append(replacements, *tErr.SuggestedRange)
+					replacements = append(replacements, &kvbase.RangeCacheEntry{Desc: *tErr.SuggestedRange})
 				}
 			}
 			// Same as Evict() if replacements is empty.

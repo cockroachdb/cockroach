@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -799,11 +800,14 @@ func (r *DistSQLReceiver) Types() []*types.T {
 // the ids of the ranges that we get are different than the ids in that cache.
 func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) {
 	// Update the RangeDescriptorCache.
-	rngDescs := make([]roachpb.RangeDescriptor, len(ranges))
+	rngDescs := make([]*kvbase.RangeCacheEntry, len(ranges))
 	for i, ri := range ranges {
-		rngDescs[i] = ri.Desc
+		rngDescs[i] = &kvbase.RangeCacheEntry{
+			Desc:  ri.Desc,
+			Lease: ri.Lease,
+		}
 	}
-	r.rangeCache.InsertRangeDescriptors(ctx, rngDescs...)
+	r.rangeCache.Insert(ctx, rngDescs...)
 
 	// Update the LeaseHolderCache.
 	for _, ri := range ranges {

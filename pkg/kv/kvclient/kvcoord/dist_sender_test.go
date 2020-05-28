@@ -447,7 +447,7 @@ func (mdb MockRangeDescriptorDB) withMetaRecursion(
 	return func(key roachpb.RKey, useReverseScan bool) (rs, preRs []roachpb.RangeDescriptor, err error) {
 		metaKey := keys.RangeMetaKey(key)
 		if !metaKey.Equal(roachpb.RKeyMin) {
-			_, _, err := rdc.LookupRangeDescriptorWithEvictionToken(context.Background(), metaKey, nil, useReverseScan)
+			_, _, err := rdc.LookupWithEvictionToken(context.Background(), metaKey, nil, useReverseScan)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -901,7 +901,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	rAnyKey := keys.MustAddr(anyKey)
 
 	call := func() {
-		if _, _, err := ds.rangeCache.LookupRangeDescriptorWithEvictionToken(
+		if _, _, err := ds.rangeCache.LookupWithEvictionToken(
 			context.Background(), rAnyKey, nil, false,
 		); err != nil {
 			t.Fatal(err)
@@ -1029,7 +1029,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if _, ok := ds.leaseHolderCache.Lookup(context.Background(), 1); ok != !tc.shouldClearLeaseHolder {
 			t.Errorf("%d: lease holder cache eviction: shouldClearLeaseHolder=%t, but value is %t", i, tc.shouldClearLeaseHolder, ok)
 		}
-		cachedDesc := ds.rangeCache.GetCachedRangeDescriptor(roachpb.RKey(key), false /* inverted */)
+		cachedDesc := ds.rangeCache.GetCached(roachpb.RKey(key), false /* inverted */)
 		if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behavior: wanted=%t", i, tc.shouldClearReplica)
 		}
@@ -3301,10 +3301,10 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 
 		// Verify that there is one meta2 cached range.
-		cachedRange := ds.rangeCache.GetCachedRangeDescriptor(keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.EndKey.Equal(testMetaEndKey) {
+		cachedRange := ds.rangeCache.GetCached(keys.RangeMetaKey(roachpb.RKey("a")), false)
+		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, testMetaEndKey, cachedRange.StartKey, cachedRange.EndKey)
+				keys.Meta2Prefix, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
 
 		// Simulate a split on the meta2 range and mark it as stale.
@@ -3316,15 +3316,15 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 
 		// Verify that there are two meta2 cached ranges.
-		cachedRange = ds.rangeCache.GetCachedRangeDescriptor(keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.EndKey.Equal(splitKey) {
+		cachedRange = ds.rangeCache.GetCached(keys.RangeMetaKey(roachpb.RKey("a")), false)
+		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(splitKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, splitKey, cachedRange.StartKey, cachedRange.EndKey)
+				keys.Meta2Prefix, splitKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
-		cachedRange = ds.rangeCache.GetCachedRangeDescriptor(keys.RangeMetaKey(roachpb.RKey("b")), false)
-		if !cachedRange.StartKey.Equal(splitKey) || !cachedRange.EndKey.Equal(testMetaEndKey) {
+		cachedRange = ds.rangeCache.GetCached(keys.RangeMetaKey(roachpb.RKey("b")), false)
+		if !cachedRange.Desc.StartKey.Equal(splitKey) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				splitKey, testMetaEndKey, cachedRange.StartKey, cachedRange.EndKey)
+				splitKey, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
 	})
 }
