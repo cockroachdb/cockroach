@@ -3309,7 +3309,7 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 	}
 
 	// Set up the endpoints for p.streams.
-	plan.PopulateEndpoints(planCtx.NodeAddresses)
+	plan.PopulateEndpoints()
 
 	// Set up the endpoint for the final result.
 	finalOut := &plan.Processors[plan.ResultRouters[0]].Spec.Output[0]
