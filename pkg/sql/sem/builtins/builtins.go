@@ -1697,8 +1697,7 @@ CockroachDB supports the following flags:
 
 	"random": makeBuiltin(
 		tree.FunctionProperties{
-			Impure:                  true,
-			NeedsRepeatedEvaluation: true,
+			Impure: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
