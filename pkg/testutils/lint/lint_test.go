@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build lint
+// +biiuild lint
 
 package lint
 
@@ -29,7 +29,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
-	"golang.org/x/tools/go/buildutil"
+	"golang.org/x/tools/go/packages"
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
@@ -1220,27 +1220,16 @@ func TestLint(t *testing.T) {
 				buildContext := build.Default
 				buildContext.CgoEnabled = true
 				buildContext.UseAllFiles = useAllFiles
-			outer:
-				for path := range buildutil.ExpandPatterns(&buildContext, []string{filepath.Join(cockroachDB, pkgScope)}) {
-					importPkg, err := buildContext.Import(path, crdb.Dir, 0)
-					switch err.(type) {
-					case nil:
-						for _, s := range importPkg.Imports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-						for _, s := range importPkg.TestImports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-						for _, s := range importPkg.XTestImports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-					case *build.NoGoError:
-					case *build.MultiplePackageError:
-						if useAllFiles {
-							continue outer
-						}
-					default:
-						return errors.Wrapf(err, "error loading package %s", path)
+				load, err := packages.Load(&packages.Config{
+					Mode: packages.NeedImports | packages.NeedName,
+				}, filepath.Join(cockroachDB, pkgScope))
+				if err != nil {
+					return errors.Wrap(err, "Failed to load packages")
+				}
+				for _, pkg := range load {
+					fmt.Println(pkg.Name)
+					for _, s := range pkg.Imports {
+						arg.Out <- pkg.PkgPath + ": " + s.PkgPath
 					}
 				}
 			}
