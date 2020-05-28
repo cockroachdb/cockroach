@@ -467,16 +467,15 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	// the descriptor it's looking for in the cache if it was pre-fetched by the
 	// original lookup.
 	lookupRes := res.Val.(lookupResult)
-	if desc := lookupRes.desc; desc != nil {
-		containsFn := (*roachpb.RangeDescriptor).ContainsKey
-		if useReverseScan {
-			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
-		}
-		if !containsFn(desc, key) {
-			return nil, nil, newLookupCoalescingError(key, desc)
-		}
+	desc := lookupRes.desc
+	containsFn := (*roachpb.RangeDescriptor).ContainsKey
+	if useReverseScan {
+		containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 	}
-	return lookupRes.desc, lookupRes.evictToken, nil
+	if !containsFn(desc, key) {
+		return nil, nil, newLookupCoalescingError(key, desc)
+	}
+	return desc, lookupRes.evictToken, nil
 }
 
 // performRangeLookup handles delegating the range lookup to the cache's
