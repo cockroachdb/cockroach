@@ -437,9 +437,7 @@ func TestRangeCache(t *testing.T) {
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor.
 	//  Evicts [c,d).
-	if err := evictToken.Evict(ctx); err != nil {
-		t.Fatal(err)
-	}
+	evictToken.Evict(ctx)
 	// Meta2 range is cached.
 	//  Retrieves [c,d).
 	//  Prefetches [c,e) and [e,f).
@@ -627,9 +625,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
-	if err := evictToken.EvictAndReplace(ctx, mismatchErrRange); err != nil {
-		t.Fatal(err)
-	}
+	evictToken.EvictAndReplace(ctx, mismatchErrRange)
 	pauseLookupResumeAndAssert("az", 1, evictToken)
 
 	// Both sides of the split are now correctly cached.
@@ -665,10 +661,8 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
-	if err := evictToken.EvictAndReplace(ctx, mismatchErrRange); err != nil {
-		// Evict the cached descriptor ["a", "b") and insert ["a"-"an")
-		t.Fatal(err)
-	}
+	// Evict the cached descriptor ["a", "b") and insert ["a"-"an")
+	evictToken.EvictAndReplace(ctx, mismatchErrRange)
 
 	// Create two lookup requests with key "a" and "az". The lookup on "az" uses
 	// the evictToken returned by the previous lookup.
@@ -798,9 +792,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 			mismatchErrRange := ranges[0]
 			// The stale descriptor is evicted, the new descriptor from the error is
 			// replaced, and a new lookup is initialized.
-			if err := evictToken.EvictAndReplace(ctx, mismatchErrRange); err != nil {
-				t.Fatal(err)
-			}
+			evictToken.EvictAndReplace(ctx, mismatchErrRange)
 
 			// wg will be used to wait for all the lookups to complete.
 			wg := sync.WaitGroup{}
@@ -917,9 +909,7 @@ func TestRangeCacheUseIntents(t *testing.T) {
 	// The current descriptor is found to be stale, so it is evicted. The next cache
 	// lookup should return the descriptor from the intents, without performing another
 	// db lookup.
-	if err := evictToken.Evict(ctx); err != nil {
-		t.Fatal(err)
-	}
+	evictToken.Evict(ctx)
 	abDescIntent, _ := doLookup(ctx, db.cache, "aa")
 	db.assertLookupCountEq(t, 0, "aa")
 
@@ -957,18 +947,14 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		Generation: 1,
 	}
 	curGeneration := int64(1)
-	ok, err := cache.clearOverlappingCachedRangeDescriptors(ctx, minToBDesc)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, minToBDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), minToBDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
 		t.Fatal(err)
 	} else if desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, bToMaxDesc)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, bToMaxDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), bToMaxDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
 		t.Fatal(err)
@@ -980,9 +966,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	defDescCpy := *defDesc
 	curGeneration++
 	defDescCpy.Generation = curGeneration
-	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, &defDescCpy)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, &defDescCpy))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
 		if desc, err := cache.GetCachedRangeDescriptor(key, false); err != nil {
@@ -999,9 +983,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:     roachpb.RKey("c"),
 		Generation: curGeneration,
 	}
-	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, bToCDesc)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, bToCDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))), bToCDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
 		t.Fatal(err)
@@ -1015,9 +997,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:     roachpb.RKey("b"),
 		Generation: curGeneration,
 	}
-	ok, err = cache.clearOverlappingCachedRangeDescriptors(ctx, aToBDesc)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, aToBDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), aToBDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
 		t.Fatal(err)
@@ -1050,9 +1030,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
-	if err := cache.InsertRangeDescriptors(ctx, firstDesc, restDesc); err != nil {
-		t.Fatal(err)
-	}
+	cache.InsertRangeDescriptors(ctx, firstDesc, restDesc)
 
 	// Add new range, corresponding to splitting the first range at a meta key.
 	metaSplitDesc := &roachpb.RangeDescriptor{
@@ -1065,9 +1043,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 				t.Fatalf("invocation of clearOverlappingCachedRangeDescriptors panicked: %v", r)
 			}
 		}()
-		if _, err := cache.clearOverlappingCachedRangeDescriptors(ctx, metaSplitDesc); err != nil {
-			t.Fatal(err)
-		}
+		cache.clearOverlappingCachedRangeDescriptors(ctx, metaSplitDesc)
 	}()
 }
 
@@ -1213,10 +1189,7 @@ func TestRangeCacheGeneration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
-			err := cache.InsertRangeDescriptors(ctx, *descAM1, *descMZ3, *tc.insertDesc)
-			if err != nil {
-				t.Fatal(err)
-			}
+			cache.InsertRangeDescriptors(ctx, *descAM1, *descMZ3, *tc.insertDesc)
 
 			for index, queryKey := range tc.queryKeys {
 				if actualDesc, err := cache.GetCachedRangeDescriptor(queryKey, false); err != nil {

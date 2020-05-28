@@ -165,16 +165,12 @@ func (ds *DistSender) partialRangeFeed(
 				// retry.
 			case *roachpb.SendError, *roachpb.RangeNotFoundError:
 				// Evict the decriptor from the cache and reload on next attempt.
-				if err := rangeInfo.token.Evict(ctx); err != nil {
-					return err
-				}
+				rangeInfo.token.Evict(ctx)
 				rangeInfo.desc = nil
 				continue
 			case *roachpb.RangeKeyMismatchError:
 				// Evict the decriptor from the cache.
-				if err := rangeInfo.token.Evict(ctx); err != nil {
-					return err
-				}
+				rangeInfo.token.Evict(ctx)
 				return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
 			case *roachpb.RangeFeedRetryError:
 				switch t.Reason {
@@ -188,9 +184,7 @@ func (ds *DistSender) partialRangeFeed(
 				case roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED:
 					// Evict the decriptor from the cache.
-					if err := rangeInfo.token.Evict(ctx); err != nil {
-						return err
-					}
+					rangeInfo.token.Evict(ctx)
 					return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
 				default:
 					log.Fatalf(ctx, "unexpected RangeFeedRetryError reason %v", t.Reason)

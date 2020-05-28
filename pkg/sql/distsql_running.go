@@ -669,9 +669,7 @@ func (r *DistSQLReceiver) Push(
 			}
 		}
 		if len(meta.Ranges) > 0 {
-			if err := r.updateCaches(r.ctx, meta.Ranges); err != nil && r.resultWriter.Err() == nil {
-				r.resultWriter.SetError(err)
-			}
+			r.updateCaches(r.ctx, meta.Ranges)
 		}
 		if len(meta.TraceData) > 0 {
 			span := opentracing.SpanFromContext(r.ctx)
@@ -804,21 +802,18 @@ func (r *DistSQLReceiver) Types() []*types.T {
 // information that someone else has populated because there's no timing info
 // anywhere. We also may fail to remove stale info from the LeaseHolderCache if
 // the ids of the ranges that we get are different than the ids in that cache.
-func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) error {
+func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) {
 	// Update the RangeDescriptorCache.
 	rngDescs := make([]roachpb.RangeDescriptor, len(ranges))
 	for i, ri := range ranges {
 		rngDescs[i] = ri.Desc
 	}
-	if err := r.rangeCache.InsertRangeDescriptors(ctx, rngDescs...); err != nil {
-		return err
-	}
+	r.rangeCache.InsertRangeDescriptors(ctx, rngDescs...)
 
 	// Update the LeaseHolderCache.
 	for _, ri := range ranges {
 		r.leaseCache.Update(ctx, ri.Desc.RangeID, ri.Lease.Replica.StoreID)
 	}
-	return nil
 }
 
 // PlanAndRunSubqueries returns false if an error was encountered and sets that
