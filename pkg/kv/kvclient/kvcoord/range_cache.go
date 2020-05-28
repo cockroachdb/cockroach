@@ -211,14 +211,14 @@ func (rdc *RangeDescriptorCache) stringLocked() string {
 type EvictionToken struct {
 	prevDesc *roachpb.RangeDescriptor
 
-	doOnce    sync.Once                                               // assures that do and doReplace are run up to once.
-	doLocker  sync.Locker                                             // protects do and doReplace.
-	do        func(context.Context) error                             // called on eviction.
-	doReplace func(context.Context, ...roachpb.RangeDescriptor) error // called after eviction on EvictAndReplace.
+	doOnce    sync.Once                                         // assures that do and doReplace are run up to once.
+	doLocker  sync.Locker                                       // protects do and doReplace.
+	do        func(context.Context)                             // called on eviction.
+	doReplace func(context.Context, ...roachpb.RangeDescriptor) // called after eviction on EvictAndReplace.
 }
 
 func (rdc *RangeDescriptorCache) makeEvictionToken(
-	prevDesc *roachpb.RangeDescriptor, evict func(ctx context.Context) error,
+	prevDesc *roachpb.RangeDescriptor, evict func(ctx context.Context),
 ) *EvictionToken {
 	return &EvictionToken{
 		prevDesc:  prevDesc,
@@ -230,32 +230,26 @@ func (rdc *RangeDescriptorCache) makeEvictionToken(
 
 // Evict instructs the EvictionToken to evict the RangeDescriptor it was created
 // with from the rangeDescriptorCache.
-func (et *EvictionToken) Evict(ctx context.Context) error {
-	return et.EvictAndReplace(ctx)
+func (et *EvictionToken) Evict(ctx context.Context) {
+	et.EvictAndReplace(ctx)
 }
 
 // EvictAndReplace instructs the EvictionToken to evict the RangeDescriptor it was
 // created with from the rangeDescriptorCache. It also allows the user to provide
 // new RangeDescriptors to insert into the cache, all atomically. When called without
 // arguments, EvictAndReplace will behave the same as Evict.
-func (et *EvictionToken) EvictAndReplace(
-	ctx context.Context, newDescs ...roachpb.RangeDescriptor,
-) error {
-	var err error
+func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachpb.RangeDescriptor) {
 	et.doOnce.Do(func() {
 		et.doLocker.Lock()
 		defer et.doLocker.Unlock()
-		err = et.do(ctx)
-		if err == nil {
-			if len(newDescs) > 0 {
-				err = et.doReplace(ctx, newDescs...)
-				log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
-			} else {
-				log.Event(ctx, "evicting cached range descriptor")
-			}
+		et.do(ctx)
+		if len(newDescs) > 0 {
+			et.doReplace(ctx, newDescs...)
+			log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
+		} else {
+			log.Event(ctx, "evicting cached range descriptor")
 		}
 	})
-	return err
 }
 
 // LookupRangeDescriptorWithEvictionToken attempts to locate a descriptor for the range
@@ -347,8 +341,8 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 		return nil, nil, err
 	} else if desc != nil {
 		rdc.rangeCache.RUnlock()
-		returnToken := rdc.makeEvictionToken(desc, func(ctx context.Context) error {
-			return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
+		returnToken := rdc.makeEvictionToken(desc, func(ctx context.Context) {
+			rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
 		})
 		return desc, returnToken, nil
 	}
@@ -392,8 +386,8 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 				desc := &rs[0]
 				lookupRes = lookupResult{
 					desc: desc,
-					evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
-						return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
+					evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) {
+						rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
 					}),
 				}
 			case 2:
@@ -401,8 +395,8 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 				nextDesc := rs[1]
 				lookupRes = lookupResult{
 					desc: desc,
-					evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
-						return rdc.insertRangeDescriptorsLocked(ctx, nextDesc)
+					evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) {
+						rdc.insertRangeDescriptorsLocked(ctx, nextDesc)
 					}),
 				}
 			default:
@@ -422,10 +416,9 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 			// the prefetched descriptors first to avoid any unintended overwriting. We then
 			// only insert the first desired descriptor, since any other descriptor in rs would
 			// overwrite rs[0]. Instead, these are handled with the evictToken.
-			if err := rdc.insertRangeDescriptorsLocked(ctx, preRs...); err != nil {
-				log.Warningf(ctx, "range cache inserting prefetched descriptors failed: %v", err)
-			}
-			return rdc.insertRangeDescriptorsLocked(ctx, rs[:1]...)
+			rdc.insertRangeDescriptorsLocked(ctx, preRs...)
+			rdc.insertRangeDescriptorsLocked(ctx, rs[:1]...)
+			return nil
 		}); err != nil {
 			return nil, err
 		}
@@ -621,17 +614,17 @@ func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 // This is a no-op for the descriptors that are already present in the cache.
 func (rdc *RangeDescriptorCache) InsertRangeDescriptors(
 	ctx context.Context, rs ...roachpb.RangeDescriptor,
-) error {
+) {
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
-	return rdc.insertRangeDescriptorsLocked(ctx, rs...)
+	rdc.insertRangeDescriptorsLocked(ctx, rs...)
 }
 
 // insertRangeDescriptorsLocked is like InsertRangeDescriptors, but it assumes
 // that the caller holds a write lock on rdc.rangeCache.
 func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 	ctx context.Context, rs ...roachpb.RangeDescriptor,
-) error {
+) {
 	for i := range rs {
 		// Note: we append the end key of each range to meta records
 		// so that calls to rdc.rangeCache.cache.Ceil() for a key will return
@@ -640,9 +633,9 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
-		continueWithInsert, err := rdc.clearOverlappingCachedRangeDescriptors(ctx, &rs[i])
-		if err != nil || !continueWithInsert {
-			return err
+		continueWithInsert := rdc.clearOverlappingCachedRangeDescriptors(ctx, &rs[i])
+		if !continueWithInsert {
+			return
 		}
 		rangeKey := keys.RangeMetaKey(rs[i].EndKey)
 		if log.V(2) {
@@ -650,7 +643,6 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 		}
 		rdc.rangeCache.cache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
-	return nil
 }
 
 // clearOverlappingCachedRangeDescriptors looks up and clears any cache entries
@@ -664,7 +656,7 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 // stale range descriptors can still be deleted from the cache.
 func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
-) (bool, error) {
+) bool {
 	startMeta := keys.RangeMetaKey(desc.StartKey)
 	endMeta := keys.RangeMetaKey(desc.EndKey)
 	var entriesToEvict []*cache.Entry
@@ -719,5 +711,5 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 		}
 		rdc.rangeCache.cache.DelEntry(e)
 	}
-	return continueWithInsert, nil
+	return continueWithInsert
 }

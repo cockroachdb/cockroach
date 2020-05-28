@@ -1498,9 +1498,7 @@ func (ds *DistSender) sendPartialBatch(
 			// though it might have succeeded the first time around because of
 			// idempotency.
 			log.VEventf(ctx, 1, "evicting range descriptor on %T and backoff for re-lookup: %+v", tErr, desc)
-			if err := evictToken.Evict(ctx); err != nil {
-				return response{pErr: roachpb.NewError(err)}
-			}
+			evictToken.Evict(ctx)
 			// Clear the descriptor to reload on the next attempt.
 			desc = nil
 			continue
@@ -1522,9 +1520,7 @@ func (ds *DistSender) sendPartialBatch(
 				}
 			}
 			// Same as Evict() if replacements is empty.
-			if err := evictToken.EvictAndReplace(ctx, replacements...); err != nil {
-				return response{pErr: roachpb.NewError(err)}
-			}
+			evictToken.EvictAndReplace(ctx, replacements...)
 			// On addressing errors (likely a split), we need to re-invoke
 			// the range descriptor lookup machinery, so we recurse by
 			// sending batch to just the partial span this descriptor was
