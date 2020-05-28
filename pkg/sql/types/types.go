@@ -974,24 +974,35 @@ func MakeTimestampTZ(precision int32) *T {
 
 // MakeEnum constructs a new instance of an EnumFamily type with the given
 // stable type ID. Note that it does not hydrate cached fields on the type.
-func MakeEnum(typeID uint32) *T {
+func MakeEnum(typeID, arrayTypeID uint32) *T {
 	return &T{InternalType: InternalType{
-		Family:       EnumFamily,
-		Oid:          StableTypeIDToOID(typeID),
-		StableTypeID: typeID,
-		Locale:       &emptyLocale,
+		Family: EnumFamily,
+		Oid:    StableTypeIDToOID(typeID),
+		Locale: &emptyLocale,
+		UDTMetadata: &SerializedUserDefinedTypeMetadata{
+			StableTypeID:      typeID,
+			StableArrayTypeID: arrayTypeID,
+		},
 	}}
 }
 
 // MakeArray constructs a new instance of an ArrayFamily type with the given
 // element type (which may itself be an ArrayFamily type).
 func MakeArray(typ *T) *T {
-	return &T{InternalType: InternalType{
+	arr := &T{InternalType: InternalType{
 		Family:        ArrayFamily,
 		Oid:           calcArrayOid(typ),
 		ArrayContents: typ,
 		Locale:        &emptyLocale,
 	}}
+	if typ.UserDefined() {
+		// If the element type is user defined, then the array type is user
+		// defined as well, with a stable ID equal to the element's array type ID.
+		arr.InternalType.UDTMetadata = &SerializedUserDefinedTypeMetadata{
+			StableTypeID: typ.StableArrayTypeID(),
+		}
+	}
+	return arr
 }
 
 // MakeTuple constructs a new instance of a TupleFamily type with the given
@@ -1160,12 +1171,19 @@ func (t *T) TupleLabels() []string {
 // StableTypeID returns the stable ID of the TypeDescriptor that backs this
 // type. This function only returns non-zero data for user defined types.
 func (t *T) StableTypeID() uint32 {
-	return t.InternalType.StableTypeID
+	return t.InternalType.UDTMetadata.StableTypeID
+}
+
+// StableArrayTypeID returns the stable ID of the TypeDescriptor that backs
+// the implicit array type for the type. This function only returns non-zero
+// data for user defined types that aren't array types.
+func (t *T) StableArrayTypeID() uint32 {
+	return t.InternalType.UDTMetadata.StableArrayTypeID
 }
 
 // UserDefined returns whether or not t is a user defined type.
 func (t *T) UserDefined() bool {
-	return t.Family() == EnumFamily
+	return t.InternalType.UDTMetadata != nil
 }
 
 var familyNames = map[Family]string{
@@ -1794,7 +1812,16 @@ func (t *InternalType) Identical(other *InternalType) bool {
 			return false
 		}
 	}
-	if t.StableTypeID != other.StableTypeID {
+	if t.UDTMetadata != nil && other.UDTMetadata != nil {
+		if t.UDTMetadata.StableTypeID != other.UDTMetadata.StableTypeID {
+			return false
+		}
+		if t.UDTMetadata.StableArrayTypeID != other.UDTMetadata.StableArrayTypeID {
+			return false
+		}
+	} else if t.UDTMetadata != nil {
+		return false
+	} else if other.UDTMetadata != nil {
 		return false
 	}
 	return t.Oid == other.Oid
