@@ -61,8 +61,8 @@ func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
 	)
 }
 
-func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
+func exists(eng storage.Engine, path string) (bool, error) {
+	_, err := eng.Stat(path)
 	if err == nil {
 		return true, nil
 	}
@@ -96,15 +96,15 @@ func newDiskSideloadStorage(
 	// ns on my laptop, but only around 2.2k ns on the gceworker. Still,
 	// even on the laptop, 50k replicas would only add 1.2s which is also
 	// acceptable given that it'll happen only once.
-	exists, err := exists(path)
+	exists, err := exists(eng, path)
 	if err != nil {
 		return nil, errors.Wrap(err, "checking pre-migration sideloaded directory")
 	}
 	if exists {
-		if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
+		if err := eng.MkdirAll(filepath.Dir(newPath)); err != nil {
 			return nil, errors.Wrap(err, "creating migrated sideloaded directory")
 		}
-		if err := os.Rename(path, newPath); err != nil {
+		if err := eng.Rename(path, newPath); err != nil {
 			return nil, errors.Wrap(err, "while migrating sideloaded directory")
 		}
 	}
@@ -120,7 +120,7 @@ func newDiskSideloadStorage(
 }
 
 func (ss *diskSideloadStorage) createDir() error {
-	err := os.MkdirAll(ss.dir, 0755)
+	err := ss.eng.MkdirAll(ss.dir)
 	ss.dirCreated = ss.dirCreated || err == nil
 	return err
 }
@@ -177,12 +177,7 @@ func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) (i
 }
 
 func (ss *diskSideloadStorage) fileSize(filename string) (int64, error) {
-	// TODO(tschottdorf): this should all be done through the env. As written,
-	// the sizes returned here will be wrong if encryption is on. We want the
-	// size of the unencrypted payload.
-	//
-	// See #31913.
-	info, err := os.Stat(filename)
+	info, err := ss.eng.Stat(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, errSideloadedFileNotFound
@@ -208,9 +203,7 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 
 // Clear implements SideloadStorage.
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
-	// TODO(jackson): Update this and the rest of `os.` filesystem calls in
-	// this impl to use ss.eng.
-	err := os.RemoveAll(ss.dir)
+	err := ss.eng.RemoveAll(ss.dir)
 	ss.dirCreated = ss.dirCreated && err != nil
 	return err
 }
@@ -243,8 +236,8 @@ func (ss *diskSideloadStorage) TruncateTo(
 	if deletedAll {
 		// The directory may not exist, or it may exist and have been empty.
 		// Not worth trying to figure out which one, just try to delete.
-		err := os.Remove(ss.dir)
-		if !os.IsNotExist(err) {
+		err := ss.eng.RemoveDir(ss.dir)
+		if err != nil && !os.IsNotExist(err) {
 			return bytesFreed, 0, errors.Wrapf(err, "while purging %q", ss.dir)
 		}
 	}

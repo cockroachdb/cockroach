@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -99,6 +99,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		eng := mtc.engines[1]
 
 		// Put some bogus sideloaded data on the replica which we're about to
 		// remove. Then, at the end of the test, check that that sideloaded
@@ -111,10 +112,10 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if dir == "" {
 			t.Fatal("no sideloaded directory")
 		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := eng.MkdirAll(dir); err != nil {
 			t.Fatal(err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dir, "i1000000.t100000"), []byte("foo"), 0644); err != nil {
+		if err := writeFile(eng, filepath.Join(dir, "i1000000.t100000"), "foo"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -125,9 +126,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					repl1.RaftLock()
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					repl1.RaftUnlock()
-					_, err := os.Stat(dir)
-
-					if os.IsNotExist(err) {
+					if _, err := eng.Stat(dir); os.IsNotExist(err) {
 						return nil
 					}
 					return errors.Errorf("replica still has sideloaded files despite GC: %v", err)
@@ -145,6 +144,19 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func writeFile(fs fs.FS, path, contents string) error {
+	f, err := fs.Create(path)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write([]byte(contents))
+	if err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // TestReplicaGCQueueDropReplicaOnScan verifies that the range GC queue

@@ -472,24 +472,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		}
 	}
 
-	var auxDir string
-	if cfg.Dir == "" {
-		// TODO(peter): This is horribly hacky but matches what RocksDB does. For
-		// in-memory instances, we create an on-disk auxiliary directory. This is
-		// necessary because various tests expect the auxiliary directory to
-		// actually exist on disk even though they don't actually write files to
-		// the directory. See SSTSnapshotStorage for one example of this bad
-		// behavior.
-		var err error
-		auxDir, err = ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		auxDir = cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
-		if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
-			return nil, err
-		}
+	auxDir := cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
+	if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
+		return nil, err
 	}
 
 	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
@@ -580,18 +565,6 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
-
-	if p.path == "" {
-		// Remove the temporary directory when the engine is in-memory. This
-		// matches the RocksDB behavior.
-		//
-		// TODO(peter): The aux-dir shouldn't be on-disk for in-memory
-		// engines. This is just a wart that needs to be removed.
-		if err := os.RemoveAll(p.auxDir); err != nil {
-			p.logger.Infof("%v", err)
-		}
-	}
-
 	_ = p.db.Close()
 }
 
@@ -986,7 +959,13 @@ func (p *Pebble) Remove(filename string) error {
 
 // RemoveAll implements the Engine interface.
 func (p *Pebble) RemoveAll(dir string) error {
-	return p.fs.RemoveAll(dir)
+	err := p.fs.RemoveAll(dir)
+	// TODO(jackson): remove this once the vfs.MemFS RemoveAll impl is fixed
+	// (before this PR lands).
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 // Link implements the FS interface.
@@ -1056,6 +1035,11 @@ func (p *Pebble) List(name string) ([]string, error) {
 	dirents, err := p.fs.List(name)
 	sort.Strings(dirents)
 	return dirents, err
+}
+
+// Stat implements the FS interface.
+func (p *Pebble) Stat(name string) (os.FileInfo, error) {
+	return p.fs.Stat(name)
 }
 
 // CreateCheckpoint implements the Engine interface.
