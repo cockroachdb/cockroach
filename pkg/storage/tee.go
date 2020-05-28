@@ -580,6 +580,23 @@ func (t *TeeEngine) List(name string) ([]string, error) {
 	return list1, nil
 }
 
+// Stat implements the FS interface.
+func (t *TeeEngine) Stat(name string) (os.FileInfo, error) {
+	info1, err := t.eng1.Stat(name)
+	name2, ok := t.remapPath(name)
+	if !ok {
+		return info1, err
+	}
+	info2, err2 := t.eng2.Stat(name2)
+	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return nil, err
+	}
+	if info1.Size() != info2.Size() {
+		log.Fatalf(t.ctx, "mismatching file sizes from stat: %d != %d", info1.Size(), info2.Size())
+	}
+	return info1, err
+}
+
 // CreateCheckpoint implements the Engine interface.
 func (t *TeeEngine) CreateCheckpoint(dir string) error {
 	path1 := filepath.Join(dir, "eng1")

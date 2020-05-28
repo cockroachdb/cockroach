@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
 	"reflect"
 	"regexp"
 	"sort"
@@ -6327,7 +6326,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Should have laid down marker file to prevent startup.
-	_, err := os.Stat(base.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
+	_, err := tc.engine.Stat(base.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
 	require.NoError(t, err)
 
 	// Should have triggered fatal error.

@@ -364,8 +364,12 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.Contains(t, resp.Result[0].Detail, `stats`)
 
 	// A death rattle should have been written on s2 (store index 1).
-	b, err := ioutil.ReadFile(base.PreventedStartupFile(mtc.stores[1].Engine().GetAuxiliaryDir()))
+	eng := mtc.stores[1].Engine()
+	f, err := eng.Open(base.PreventedStartupFile(eng.GetAuxiliaryDir()))
 	require.NoError(t, err)
+	b, err := ioutil.ReadAll(f)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 	require.NotEmpty(t, b)
 }
 

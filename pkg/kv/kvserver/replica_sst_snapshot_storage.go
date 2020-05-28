@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 
@@ -57,7 +56,7 @@ func (s *SSTSnapshotStorage) NewScratchSpace(
 
 // Clear removes all created directories and SSTs.
 func (s *SSTSnapshotStorage) Clear() error {
-	return os.RemoveAll(s.dir)
+	return s.engine.RemoveAll(s.dir)
 }
 
 // SSTSnapshotStorageScratch keeps track of the SST files incrementally created
@@ -75,12 +74,7 @@ func (s *SSTSnapshotStorageScratch) filename(id int) string {
 }
 
 func (s *SSTSnapshotStorageScratch) createDir() error {
-	// TODO(peter): The directory creation needs to be plumbed through the Engine
-	// interface. Right now, this is creating a directory on disk even when the
-	// Engine has an in-memory filesystem. The only reason everything still works
-	// is because RocksDB MemEnvs allow the creation of files when the parent
-	// directory doesn't exist.
-	err := os.MkdirAll(s.snapDir, 0755)
+	err := s.storage.engine.MkdirAll(s.snapDir)
 	s.dirCreated = s.dirCreated || err == nil
 	return err
 }
@@ -132,7 +126,7 @@ func (s *SSTSnapshotStorageScratch) SSTs() []string {
 
 // Clear removes the directory and SSTs created for a particular snapshot.
 func (s *SSTSnapshotStorageScratch) Clear() error {
-	return os.RemoveAll(s.snapDir)
+	return s.storage.engine.RemoveAll(s.snapDir)
 }
 
 // SSTSnapshotStorageFile is an SST file managed by a
