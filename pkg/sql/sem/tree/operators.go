@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // This file implements the generation of unique names for every
@@ -89,20 +88,4 @@ func init() {
 			o.counter = sqltelemetry.BinOpCounter(opName, lname, rname)
 		}
 	}
-}
-
-// annotateCast produces an array of cast types decorated with cast
-// type telemetry counters.
-func annotateCast(toType *types.T, fromTypes []*types.T) []castInfo {
-	ci := make([]castInfo, len(fromTypes))
-	for i, fromType := range fromTypes {
-		ci[i].fromT = fromType
-	}
-	rname := toType.String()
-
-	for i, fromType := range fromTypes {
-		lname := fromType.String()
-		ci[i].counter = sqltelemetry.CastOpCounter(lname, rname)
-	}
-	return ci
 }

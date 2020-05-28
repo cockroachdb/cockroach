@@ -419,24 +419,26 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 }
 
 func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
+	toFamily := castTo.Family()
+	fromFamily := castFrom.Family()
 	switch {
-	case castTo.Family() == types.ArrayFamily && castFrom.Family() == types.ArrayFamily:
+	case toFamily == types.ArrayFamily && fromFamily == types.ArrayFamily:
 		ok, c := isCastDeepValid(castFrom.ArrayContents(), castTo.ArrayContents())
 		if ok {
 			telemetry.Inc(sqltelemetry.ArrayCastCounter)
 		}
 		return ok, c
-	case castTo.Family() == types.EnumFamily && castFrom.Family() == types.EnumFamily:
+	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
 		// Casts from ENUM to ENUM type can only succeed if the two enums
 		// types are equivalent.
 		return castFrom.Equivalent(castTo), sqltelemetry.EnumCastCounter
 	}
-	for _, t := range validCastTypes(castTo) {
-		if castFrom.Family() == t.fromT.Family() {
-			return true, t.counter
-		}
+
+	cast, ok := castsMap[castsMapKey{from: fromFamily, to: toFamily}]
+	if !ok {
+		return false, nil
 	}
-	return false, nil
+	return true, cast.counter
 }
 
 func isEmptyArray(expr Expr) bool {

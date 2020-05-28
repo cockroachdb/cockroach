@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1606,90 +1605,6 @@ func NewTypedCastExpr(expr TypedExpr, typ *types.T) *CastExpr {
 	node := &CastExpr{Expr: expr, Type: typ, SyntaxMode: CastShort}
 	node.typ = typ
 	return node
-}
-
-type castInfo struct {
-	fromT   *types.T
-	counter telemetry.Counter
-}
-
-var (
-	bitArrayCastTypes = annotateCast(types.VarBit, []*types.T{types.Unknown, types.VarBit, types.Int, types.String, types.AnyCollatedString})
-	boolCastTypes     = annotateCast(types.Bool, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString})
-	intCastTypes      = annotateCast(types.Int, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.VarBit})
-	floatCastTypes = annotateCast(types.Float, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
-	geographyCastTypes = annotateCast(types.Geography, []*types.T{types.Unknown, types.String, types.Geography, types.Geometry})
-	geometryCastTypes  = annotateCast(types.Geometry, []*types.T{types.Unknown, types.String, types.Geography, types.Geometry})
-	decimalCastTypes   = annotateCast(types.Decimal, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
-	stringCastTypes = annotateCast(types.String, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.VarBit,
-		types.AnyArray, types.AnyTuple,
-		types.Geometry, types.Geography,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb, types.AnyEnum})
-	bytesCastTypes = annotateCast(types.Bytes, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.AnyEnum, types.Bytes, types.Uuid})
-	dateCastTypes  = annotateCast(types.Date, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	timeCastTypes  = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ,
-		types.Timestamp, types.TimestampTZ, types.Interval})
-	timeTZCastTypes    = annotateCast(types.TimeTZ, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ, types.TimestampTZ})
-	timestampCastTypes = annotateCast(types.Timestamp, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	intervalCastTypes  = annotateCast(types.Interval, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
-	oidCastTypes       = annotateCast(types.Oid, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Oid})
-	uuidCastTypes      = annotateCast(types.Uuid, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
-	inetCastTypes      = annotateCast(types.INet, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.INet})
-	arrayCastTypes     = annotateCast(types.AnyArray, []*types.T{types.Unknown, types.String})
-	jsonCastTypes      = annotateCast(types.Jsonb, []*types.T{types.Unknown, types.String, types.Jsonb})
-	enumCastTypes      = annotateCast(types.AnyEnum, []*types.T{types.Unknown, types.String, types.AnyEnum})
-)
-
-// validCastTypes returns a set of types that can be cast into the provided type.
-func validCastTypes(t *types.T) []castInfo {
-	switch t.Family() {
-	case types.BitFamily:
-		return bitArrayCastTypes
-	case types.BoolFamily:
-		return boolCastTypes
-	case types.IntFamily:
-		return intCastTypes
-	case types.FloatFamily:
-		return floatCastTypes
-	case types.DecimalFamily:
-		return decimalCastTypes
-	case types.StringFamily, types.CollatedStringFamily:
-		return stringCastTypes
-	case types.BytesFamily:
-		return bytesCastTypes
-	case types.DateFamily:
-		return dateCastTypes
-	case types.GeographyFamily:
-		return geographyCastTypes
-	case types.GeometryFamily:
-		return geometryCastTypes
-	case types.TimeFamily:
-		return timeCastTypes
-	case types.TimeTZFamily:
-		return timeTZCastTypes
-	case types.TimestampFamily, types.TimestampTZFamily:
-		return timestampCastTypes
-	case types.IntervalFamily:
-		return intervalCastTypes
-	case types.JsonFamily:
-		return jsonCastTypes
-	case types.UuidFamily:
-		return uuidCastTypes
-	case types.INetFamily:
-		return inetCastTypes
-	case types.OidFamily:
-		return oidCastTypes
-	case types.ArrayFamily:
-		return arrayCastTypes
-	case types.EnumFamily:
-		return enumCastTypes
-	default:
-		return nil
-	}
 }
 
 // ArraySubscripts represents a sequence of one or more array subscripts.
