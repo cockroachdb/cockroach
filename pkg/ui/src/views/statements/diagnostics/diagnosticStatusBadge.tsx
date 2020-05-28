@@ -37,34 +37,35 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
   switch (diagnosticsStatus) {
     case "READY":
       return (
-        <div>
-          {`Go to the detail page for this statement and click the ‘diagnostics’ tab.
-           The statement diagnostics download will include EXPLAIN plans, table statistics, and traces. `}
-          <Anchor
-            href={statementDiagnostics}
-            target="_blank"
-          >
-            Learn more
-          </Anchor>
-        </div>
-      );
-    case "WAITING FOR QUERY":
-      return (
-        <div>
-          <span>
-            CockroachDB is waiting for the next query that matches this statement fingerprint.
-          </span>
-          <p/>
-          <span>
-            {`A download button will appear on the statement list and detail pages when the query is ready.
-            The download will include EXPLAIN plans, table statistics, and traces. `}
+        <div className="tooltip__table--title">
+          <p>
+            {"The most recent "}
             <Anchor
               href={statementDiagnostics}
               target="_blank"
             >
-              Learn more
+              diagnostics
             </Anchor>
-          </span>
+            {" for this SQL statement fingerprint are ready to download. Access the full history of diagnostics for the fingerprint in the Statement Details page."}
+          </p>
+        </div>
+      );
+    case "WAITING FOR QUERY":
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            CockroachDB is waiting for the next SQL statement that matches this fingerprint.
+          </p>
+          <p>
+            {"When the most recent "}
+            <Anchor
+              href={statementDiagnostics}
+              target="_blank"
+            >
+              diagnostics
+            </Anchor>
+            {" are ready to download, a link will appear in this row."}
+          </p>
         </div>
       );
     case "ERROR":
