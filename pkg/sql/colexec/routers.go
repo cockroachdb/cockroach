@@ -406,6 +406,9 @@ type HashRouter struct {
 
 	// One output for each stream.
 	outputs []routerOutput
+	// closers is a slice of IdempotentClosers that need to be closed when the
+	// hash router terminates.
+	closers []IdempotentCloser
 
 	// unblockedEventsChan is a channel shared between the HashRouter and its
 	// outputs. outputs send events on this channel when they are unblocked by a
@@ -442,6 +445,7 @@ func NewHashRouter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
+	toClose []IdempotentCloser,
 ) (*HashRouter, []Operator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		execerror.VectorizedInternalPanic(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -462,7 +466,7 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	router := newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs)
+	router := newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs, toClose)
 	for i := range outputs {
 		outputs[i].(*routerOutputOp).input = router
 	}
@@ -475,12 +479,14 @@ func newHashRouterWithOutputs(
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
+	toClose []IdempotentCloser,
 ) *HashRouter {
 	r := &HashRouter{
 		OneInputNode:        NewOneInputNode(input),
 		types:               types,
 		hashCols:            hashCols,
 		outputs:             outputs,
+		closers:             toClose,
 		unblockedEventsChan: unblockEventsChan,
 		tupleDistributor:    newTupleHashDistributor(defaultInitHashValue, len(outputs)),
 	}
@@ -496,6 +502,15 @@ func (r *HashRouter) Run(ctx context.Context) {
 		r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
 		r.mu.Unlock()
 	}
+	defer func() {
+		for _, closer := range r.closers {
+			if err := closer.IdempotentClose(ctx); err != nil {
+				if log.V(1) {
+					log.Infof(ctx, "error closing IdempotentCloser: %v", err)
+				}
+			}
+		}
+	}()
 	// Since HashRouter runs in a separate goroutine, we want to be safe and
 	// make sure that we catch errors in all code paths, so we wrap the whole
 	// method with a catcher. Note that we also have "internal" catchers as
