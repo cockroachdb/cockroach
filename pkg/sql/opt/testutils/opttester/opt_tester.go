@@ -607,6 +607,9 @@ func fillInLazyProps(e opt.Expr) {
 
 		// Make sure the interesting orderings are calculated.
 		xform.DeriveInterestingOrderings(rel)
+
+		// Make sure the multiplicity is populated.
+		memo.DeriveJoinMultiplicity(rel)
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
