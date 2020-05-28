@@ -27,6 +27,11 @@ import (
 
 // EWKBToWKT transforms a given EWKB to WKT.
 func EWKBToWKT(b geopb.EWKB) (geopb.WKT, error) {
+	// twpayne/go-geom doesn't seem to handle POINT EMPTY just yet. Add this hack in.
+	// Remove after #49209 is resolved.
+	if bytes.Equal(b, []byte{0x01, 0x01, 0x00, 0x00, 0x00}) {
+		return geopb.WKT("POINT EMPTY"), nil
+	}
 	t, err := ewkb.Unmarshal([]byte(b))
 	if err != nil {
 		return "", err
@@ -37,6 +42,11 @@ func EWKBToWKT(b geopb.EWKB) (geopb.WKT, error) {
 
 // EWKBToEWKT transforms a given EWKB to EWKT.
 func EWKBToEWKT(b geopb.EWKB) (geopb.EWKT, error) {
+	// twpayne/go-geom doesn't seem to handle POINT EMPTY just yet. Add this hack in.
+	// Remove after #49209 is resolved.
+	if bytes.Equal(b, []byte{0x01, 0x01, 0x00, 0x00, 0x00}) {
+		return geopb.EWKT("POINT EMPTY"), nil
+	}
 	t, err := ewkb.Unmarshal([]byte(b))
 	if err != nil {
 		return "", err

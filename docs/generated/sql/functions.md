@@ -737,6 +737,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry.</p>
 </span></td></tr>
+<tr><td><a name="st_centroid"></a><code>st_centroid(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given geometry.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_centroid"></a><code>st_centroid(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given string, which will be parsed as a geometry object.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_contains"></a><code>st_contains(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no points of geometry_b lie in the exterior of geometry_a, and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function will automatically use any available index.</p>

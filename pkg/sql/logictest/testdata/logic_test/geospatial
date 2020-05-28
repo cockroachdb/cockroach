@@ -325,6 +325,43 @@ Square (left)                             1     0     4
 Square (right)                            1     0     4
 Square overlapping left and right square  1.1   0     4.2
 
+query TT
+SELECT
+  a.dsc,
+  ST_AsEWKT(ST_Centroid(a.geom))
+FROM geom_operators_test a
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  POINT EMPTY
+Empty LineString                          POINT EMPTY
+Faraway point                             POINT (5 5)
+Line going through left and right square  POINT (0 0.5)
+NULL                                      NULL
+Point middle of Left Square               POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)
+Square (left)                             POINT (-0.5 0.5)
+Square (right)                            POINT (0.5 0.5)
+Square overlapping left and right square  POINT (0.4499999999999999 0.5)
+
+# Functions which take in strings as input as well.
+query TT
+SELECT
+  dsc,
+  ST_AsEWKT(ST_Centroid(ewkt))
+FROM [SELECT dsc, ST_AsEWKT(a.geom) ewkt FROM geom_operators_test a]
+ORDER BY dsc ASC
+----
+Empty GeometryCollection                  POINT EMPTY
+Empty LineString                          POINT EMPTY
+Faraway point                             POINT (5 5)
+Line going through left and right square  POINT (0 0.5)
+NULL                                      NULL
+Point middle of Left Square               POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)
+Square (left)                             POINT (-0.5 0.5)
+Square (right)                            POINT (0.5 0.5)
+Square overlapping left and right square  POINT (0.4499999999999999 0.5)
+
 # Binary operators
 query TTRR
 SELECT
