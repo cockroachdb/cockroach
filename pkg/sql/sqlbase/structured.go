@@ -4309,6 +4309,45 @@ func (desc *ImmutableTableDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
 
+// MutableTypeDescriptor is a custom type for TypeDescriptors undergoing
+// any types of modifications.
+type MutableTypeDescriptor struct {
+	TypeDescriptor
+
+	// ClusterVersion represents the version of the type descriptor read
+	// from the store.
+	ClusterVersion TypeDescriptor
+}
+
+// ImmutableTypeDescriptor is a custom type for wrapping TypeDescriptors
+// when used in a read only way.
+type ImmutableTypeDescriptor struct {
+	TypeDescriptor
+}
+
+// Avoid linter unused warnings.
+var _ = NewMutableCreatedTypeDescriptor
+
+// NewMutableCreatedTypeDescriptor returns a MutableTypeDescriptor from the
+// given type descriptor with the cluster version being the zero type. This
+// is for a type that is created in the same transaction.
+func NewMutableCreatedTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor {
+	return &MutableTypeDescriptor{TypeDescriptor: desc}
+}
+
+// NewMutableExistingTypeDescriptor returns a MutableTypeDescriptor from the
+// given type descriptor with the cluster version also set to the descriptor.
+// This is for types that already exist.
+func NewMutableExistingTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor {
+	return &MutableTypeDescriptor{TypeDescriptor: desc, ClusterVersion: desc}
+}
+
+// NewImmutableTypeDescriptor returns an ImmutableTypeDescriptor from the
+// given TypeDescriptor.
+func NewImmutableTypeDescriptor(desc TypeDescriptor) *ImmutableTypeDescriptor {
+	return &ImmutableTypeDescriptor{TypeDescriptor: desc}
+}
+
 // DatabaseDesc implements the ObjectDescriptor interface.
 func (desc *TypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
 	return nil

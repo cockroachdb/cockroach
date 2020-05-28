@@ -151,7 +151,10 @@ func ResolveExistingObject(
 		if obj.TypeDesc() == nil {
 			return nil, prefix, sqlbase.NewUndefinedTypeError(&resolvedTn)
 		}
-		return obj.TypeDesc(), prefix, nil
+		if lookupFlags.RequireMutable {
+			return obj.(*sqlbase.MutableTypeDescriptor), prefix, nil
+		}
+		return obj.(*sqlbase.ImmutableTypeDescriptor), prefix, nil
 	case tree.TableObject:
 		if obj.TableDesc() == nil {
 			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
