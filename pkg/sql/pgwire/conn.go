@@ -514,6 +514,7 @@ func (c *conn) processCommandsAsync(
 		var retErr error
 		var connHandler sql.ConnectionHandler
 		var authOK bool
+		var connCloseAuthHandler func()
 		defer func() {
 			// Release resources, if we still own them.
 			if reservedOwned {
@@ -552,6 +553,9 @@ func (c *conn) processCommandsAsync(
 			if !authOK {
 				ac.AuthFail(retErr)
 			}
+			if connCloseAuthHandler != nil {
+				connCloseAuthHandler()
+			}
 			// Inform the connection goroutine of success or failure.
 			retCh <- retErr
 		}()
@@ -563,7 +567,7 @@ func (c *conn) processCommandsAsync(
 					return
 				}
 			} else {
-				if retErr = c.handleAuthentication(
+				if connCloseAuthHandler, retErr = c.handleAuthentication(
 					ctx, ac, authOpt.insecure, authOpt.ie, authOpt.auth,
 					sqlServer.GetExecutorConfig(),
 				); retErr != nil {
@@ -1473,7 +1477,7 @@ func (c *conn) handleAuthentication(
 	ie *sql.InternalExecutor,
 	auth *hba.Conf,
 	execCfg *sql.ExecutorConfig,
-) error {
+) (connClose func(), _ error) {
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
 		return err
@@ -1485,10 +1489,10 @@ func (c *conn) handleAuthentication(
 		ctx, ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
-		return sendError(err)
+		return nil, sendError(err)
 	}
 	if !exists {
-		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
+		return nil, sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
 	}
 
 	if tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn); ok {
@@ -1507,7 +1511,7 @@ func (c *conn) handleAuthentication(
 		} else {
 			addr, _, err := net.SplitHostPort(c.conn.RemoteAddr().String())
 			if err != nil {
-				return sendError(err)
+				return nil, sendError(err)
 			}
 			ip := net.ParseIP(addr)
 			for _, entry := range auth.Entries {
@@ -1518,10 +1522,10 @@ func (c *conn) handleAuthentication(
 					}
 				case hba.String:
 					if !a.IsSpecial("all") {
-						return sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
+						return nil, sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
 					}
 				default:
-					return sendError(errors.Errorf("unexpected address type %T", a))
+					return nil, sendError(errors.Errorf("unexpected address type %T", a))
 				}
 				match := false
 				for _, u := range entry.User {
@@ -1539,28 +1543,28 @@ func (c *conn) handleAuthentication(
 				}
 				methodFn = hbaAuthMethods[entry.Method]
 				if methodFn == nil {
-					return sendError(errors.Errorf("unknown auth method %s", entry.Method))
+					return nil, sendError(errors.Errorf("unknown auth method %s", entry.Method))
 				}
 				hbaEntry = &entry
 				break
 			}
 			if methodFn == nil {
-				return sendError(errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, addr, c.sessionArgs.User))
+				return nil, sendError(errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, addr, c.sessionArgs.User))
 			}
 		}
 
 		authenticationHook, err := methodFn(ac, tlsState, insecure, hashedPassword, execCfg, hbaEntry)
 		if err != nil {
-			return sendError(err)
+			return nil, sendError(err)
 		}
-		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
-			return sendError(err)
+		if connClose, err = authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
+			return connClose, sendError(err)
 		}
 	}
 
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
-	return c.msgBuilder.finishMsg(c.conn)
+	return connClose, c.msgBuilder.finishMsg(c.conn)
 }
 
 const serverHBAConfSetting = "server.host_based_authentication.configuration"
