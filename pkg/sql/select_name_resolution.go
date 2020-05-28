@@ -20,15 +20,11 @@ import (
 
 // resolveNames walks the provided expression and resolves all names
 // using the tableInfo and iVarHelper.
-// If anything that looks like a column reference (indexed vars, star,
-// etc) is encountered, or a function that may change value for every
-// row in a table, the 2nd return value is true.
-// If any star is expanded, the 3rd return value is true.
 func (p *planner) resolveNames(
 	expr tree.Expr, source *sqlbase.DataSourceInfo, ivarHelper tree.IndexedVarHelper,
-) (tree.Expr, bool, error) {
+) (tree.Expr, error) {
 	if expr == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 	return sqlbase.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, source, ivarHelper, p.SessionData().SearchPath)
 }
