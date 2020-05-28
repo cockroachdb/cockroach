@@ -731,6 +731,9 @@ type ExecutorTestingKnobs struct {
 	// statement.
 	AfterExecute func(ctx context.Context, stmt string, err error)
 
+	// AfterExecCmd is called after successful execution of any command.
+	AfterExecCmd func(ctx context.Context, cmd Command, buf *StmtBuf)
+
 	// DisableAutoCommit, if set, disables the auto-commit functionality of some
 	// SQL statements. That functionality allows some statements to commit
 	// directly when they're executed in an implicit SQL txn, without waiting for
