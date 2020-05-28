@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 #### Partial Indexes
 
 # TODO(mgartner): remove this once partial indexes are fully supported.
@@ -53,6 +54,18 @@ CREATE TABLE error (a INT, INDEX (a) WHERE generate_series(1, 1))
 statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE error (a INT, INDEX (a) WHERE false - true)
 
+# Don't allow references to other tables.
+statement error no data source matches prefix: t1
+CREATE TABLE error (a INT, INDEX (a) WHERE t1.a > 0)
+
+# Don't allow references to unknown tables.
+statement error no data source matches prefix: unknown
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.a > 0)
+
+# Don't allow reference to unknown databases.
+statement error no data source matches prefix: unknown.error
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.error.a > 9)
+
 #### Validate CREATE TABLE ... UNIQUE INDEX predicate.
 
 statement ok
@@ -65,11 +78,51 @@ CREATE TABLE error (a INT, UNIQUE INDEX (a) WHERE 1)
 #### Validate CREATE INDEX predicate.
 
 statement ok
-CREATE TABLE t (a INT)
+CREATE TABLE t5 (a INT)
 
 statement ok
-CREATE INDEX i1 ON t (a) WHERE a = 0
+CREATE INDEX t5i ON t5 (a) WHERE a = 0
 
 # Don't allow invalid predicates.
 statement error expected index predicate expression to have type bool, but '1' has type int
-CREATE INDEX error ON t (a) WHERE 1
+CREATE INDEX error ON t5 (a) WHERE 1
+
+# Don't allow references to other tables in predicates.
+statement error no data source matches prefix: t4
+CREATE INDEX error ON t5 (a) WHERE t4.a = 1
+
+#### Dequalify table references.
+
+statement ok
+CREATE TABLE t6 (
+    a INT,
+    INDEX (a) WHERE a > 0,
+    INDEX (a) WHERE t6.a > 1,
+    INDEX (a DESC) WHERE test.t6.a > 2,
+    UNIQUE INDEX (a) WHERE a > 3,
+    UNIQUE INDEX (a) WHERE t6.a > 4,
+    UNIQUE INDEX (a DESC) WHERE test.t6.a > 5
+)
+
+statement ok
+CREATE INDEX t6i1 ON t6 (a) WHERE a > 6;
+CREATE INDEX t6i2 ON t6 (a) WHERE t6.a > 7;
+CREATE INDEX t6i3 ON t6 (a DESC) WHERE test.t6.a > 8;
+
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE t6 (
+    a INT8 NULL,
+    INDEX t6_a_idx (a ASC) WHERE a > 0,
+    INDEX t6_a_idx1 (a ASC) WHERE a > 1,
+    INDEX t6_a_idx2 (a DESC) WHERE a > 2,
+    UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3,
+    UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4,
+    UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5,
+    INDEX t6i1 (a ASC) WHERE a > 6,
+    INDEX t6i2 (a ASC) WHERE a > 7,
+    INDEX t6i3 (a DESC) WHERE a > 8,
+    FAMILY "primary" (a, rowid)
+)
+

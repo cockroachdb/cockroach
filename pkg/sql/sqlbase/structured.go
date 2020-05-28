@@ -647,6 +647,12 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 		}
 		f.WriteByte(')')
 	}
+
+	if desc.Predicate != "" {
+		f.WriteString(" WHERE ")
+		f.WriteString(desc.Predicate)
+	}
+
 	return f.CloseAndGetString()
 }
 
