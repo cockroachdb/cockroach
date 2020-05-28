@@ -118,12 +118,6 @@ type Flags struct {
 	// MemoFormat controls the output detail of memo command directives.
 	MemoFormat xform.FmtFlags
 
-	// AllowUnsupportedExpr if set: when building a scalar, the optbuilder takes
-	// any TypedExpr node that it doesn't recognize and wraps that expression in
-	// an UnsupportedExpr node. This is temporary; it is used for interfacing with
-	// the old planning code.
-	AllowUnsupportedExpr bool
-
 	// FullyQualifyNames if set: when building a query, the optbuilder fully
 	// qualifies all column names before adding them to the metadata. This flag
 	// allows us to test that name resolution works correctly, and avoids
@@ -313,8 +307,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //      (show|hide)-(all|miscprops|constraints|scalars|types|...)
 //    See formatFlags for all flags. Multiple flags can be specified; each flag
 //    modifies the existing set of the flags.
-//
-//  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
 //
@@ -656,9 +648,6 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 				f.ExprFormat &= ^formatFlags[parts[1]]
 			}
 		}
-
-	case "allow-unsupported":
-		f.AllowUnsupportedExpr = true
 
 	case "fully-qualify-names":
 		f.FullyQualifyNames = true
@@ -1412,7 +1401,6 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	}
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
-	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
 	return b.Build()
 }
 

@@ -137,7 +137,7 @@ project
  └── projections
       └── (a:1 + b:2) + c:3 [as=foo:4]
 
-build allow-unsupported
+build
 SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
 ----
 project
@@ -575,7 +575,7 @@ project
  └── scan boolean_table
       └── columns: id:1!null value:2
 
-build allow-unsupported
+build
 SELECT CASE WHEN NULL THEN 1 ELSE 2 END
 ----
 project

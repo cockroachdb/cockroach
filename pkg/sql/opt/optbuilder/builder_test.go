@@ -114,7 +114,6 @@ func TestBuilder(t *testing.T) {
 				// of the build process.
 				o.DisableOptimizations()
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
-				b.AllowUnsupportedExpr = tester.Flags.AllowUnsupportedExpr
 				err = b.Build(expr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))

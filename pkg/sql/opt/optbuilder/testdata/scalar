@@ -788,7 +788,7 @@ concat [type=jsonb]
  ├── variable: "@1":1 [type=jsonb]
  └── variable: "@2":2 [type=jsonb]
 
-build-scalar allow-unsupported
+build-scalar
 'hello' COLLATE en
 ----
 collate [type=collatedstring{en}]
