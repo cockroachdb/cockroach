@@ -407,13 +407,9 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 1, "vu")
 
 	// Evicts [d,e).
-	if err := db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("da"), nil, false); err != nil {
-		t.Fatal(err)
-	}
+	db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("da"), nil, false)
 	// Evicts [meta(min),meta(g)).
-	if err := db.cache.EvictCachedRangeDescriptor(ctx, keys.RangeMetaKey(roachpb.RKey("da")), nil, false); err != nil {
-		t.Fatal(err)
-	}
+	db.cache.EvictCachedRangeDescriptor(ctx, keys.RangeMetaKey(roachpb.RKey("da")), nil, false)
 	doLookup(ctx, db.cache, "fa")
 	db.assertLookupCountEq(t, 0, "fa")
 	// Totally uncached range.
@@ -429,9 +425,7 @@ func TestRangeCache(t *testing.T) {
 
 	// Attempt to compare-and-evict with a descriptor that is not equal to the
 	// cached one; it should not alter the cache.
-	if err := db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("cz"), &roachpb.RangeDescriptor{}, false); err != nil {
-		t.Fatal(err)
-	}
+	db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("cz"), &roachpb.RangeDescriptor{}, false)
 	_, evictToken := doLookup(ctx, db.cache, "cz")
 	db.assertLookupCountEq(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
@@ -949,16 +943,12 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	curGeneration := int64(1)
 	require.True(t, cache.clearOlderOverlapping(ctx, minToBDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), minToBDesc)
-	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
-		t.Fatal(err)
-	} else if desc != nil {
+	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
 	require.True(t, cache.clearOlderOverlapping(ctx, bToMaxDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), bToMaxDesc)
-	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
-		t.Fatal(err)
-	} else if desc != bToMaxDesc {
+	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); desc != bToMaxDesc {
 		t.Errorf("expected descriptor %s; got %s", bToMaxDesc, desc)
 	}
 
@@ -969,9 +959,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	require.True(t, cache.clearOlderOverlapping(ctx, &defDescCpy))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
-		if desc, err := cache.GetCachedRangeDescriptor(key, false); err != nil {
-			t.Fatal(err)
-		} else if desc != defDesc {
+		if desc := cache.GetCachedRangeDescriptor(key, false); desc != defDesc {
 			t.Errorf("expected descriptor %s for key %s; got %s", defDesc, key, desc)
 		}
 	}
@@ -985,9 +973,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	require.True(t, cache.clearOlderOverlapping(ctx, bToCDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))), bToCDesc)
-	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
-		t.Fatal(err)
-	} else if desc != bToCDesc {
+	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); desc != bToCDesc {
 		t.Errorf("expected descriptor %s; got %s", bToCDesc, desc)
 	}
 
@@ -999,9 +985,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	require.True(t, cache.clearOlderOverlapping(ctx, aToBDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), aToBDesc)
-	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
-		t.Fatal(err)
-	} else if desc != bToCDesc {
+	if desc := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); desc != bToCDesc {
 		t.Errorf("expected descriptor %s; got %s", bToCDesc, desc)
 	}
 }
@@ -1103,12 +1087,8 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 
 	for _, test := range testCases {
 		cache.rangeCache.RLock()
-		targetRange, entry, err := cache.getCachedRangeDescriptorLocked(
-			test.queryKey, true /* inverted */)
+		targetRange, entry := cache.getCachedRangeDescriptorLocked(test.queryKey, true /* inverted */)
 		cache.rangeCache.RUnlock()
-		if err != nil {
-			t.Error(err)
-		}
 		if !reflect.DeepEqual(targetRange, test.rng) {
 			t.Fatalf("expect range %v, actual get %v", test.rng, targetRange)
 		}
@@ -1192,9 +1172,7 @@ func TestRangeCacheGeneration(t *testing.T) {
 			cache.InsertRangeDescriptors(ctx, *descAM1, *descMZ3, *tc.insertDesc)
 
 			for index, queryKey := range tc.queryKeys {
-				if actualDesc, err := cache.GetCachedRangeDescriptor(queryKey, false); err != nil {
-					t.Fatal(err)
-				} else if !tc.expectedDesc[index].Equal(actualDesc) {
+				if actualDesc := cache.GetCachedRangeDescriptor(queryKey, false); !tc.expectedDesc[index].Equal(actualDesc) {
 					t.Errorf("expected descriptor %s; got %s", tc.expectedDesc[index], actualDesc)
 				}
 			}

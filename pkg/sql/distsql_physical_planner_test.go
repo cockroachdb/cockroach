@@ -296,10 +296,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	for i := range descs {
-		desc, err := rangeCache.GetCachedRangeDescriptor(descs[i].StartKey, false /* inclusive */)
-		if err != nil {
-			t.Fatal(err)
-		}
+		desc := rangeCache.GetCachedRangeDescriptor(descs[i].StartKey, false /* inclusive */)
 		if desc == nil {
 			t.Fatalf("failed to find range for key: %s", descs[i].StartKey)
 		}
