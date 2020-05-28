@@ -13,6 +13,7 @@ package tracing
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // LogMessageField is the field name used for the opentracing.Span.LogFields()
@@ -21,9 +22,9 @@ const LogMessageField = "event"
 
 func (s *RecordedSpan) String() string {
 	sb := strings.Builder{}
+	sb.WriteString(fmt.Sprintf("=== %s (id: %d parent: %d)\n", s.Operation, s.SpanID, s.ParentSpanID))
 	for _, ev := range s.Logs {
-		sb.WriteString(ev.String())
-		sb.WriteRune('\n')
+		sb.WriteString(fmt.Sprintf("%s %s\n", ev.Time.UTC().Format(time.RFC3339Nano), ev.Msg()))
 	}
 	return sb.String()
 }
