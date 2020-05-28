@@ -1312,6 +1312,18 @@ SELECT * FROM pg_extension.geometry_columns WHERE f_table_name = 'pg_extension_t
 test  public  pg_extension_test  b  2  3857  LINESTRING
 test  public  pg_extension_test  c  2  0     GEOMETRY
 
+query TTTTIIT rowsort
+SELECT * FROM geography_columns WHERE f_table_name = 'pg_extension_test'
+----
+test  public  pg_extension_test  a  2     4326  POINT
+test  public  pg_extension_test  d  NULL  0     GEOMETRY
+
+query TTTTIIT rowsort
+SELECT * FROM geometry_columns WHERE f_table_name = 'pg_extension_test'
+----
+test  public  pg_extension_test  b  2  3857  LINESTRING
+test  public  pg_extension_test  c  2  0     GEOMETRY
+
 statement error not yet implemented
 SELECT * FROM pg_extension.spatial_ref_sys ORDER BY srid ASC
 

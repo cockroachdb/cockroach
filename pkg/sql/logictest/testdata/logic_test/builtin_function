@@ -1565,7 +1565,7 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT current_schemas(true)
 ----
-{pg_catalog,public}
+{pg_catalog,pg_extension,public}
 
 query T
 SELECT current_schemas(false)
@@ -1577,7 +1577,7 @@ SELECT current_schemas(false)
 query T
 SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
-{pg_catalog,public}
+{pg_catalog,pg_extension,public}
 {public}
 
 statement ok
