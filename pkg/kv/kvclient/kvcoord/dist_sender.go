@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -477,14 +478,14 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 	return count, ri.Error()
 }
 
-// getDescriptor looks up the range descriptor to use for a query of
-// the key descKey with the given options. The lookup takes into
-// consideration the last range descriptor that the caller had used
-// for this key span, if any, and if the last range descriptor has
-// been evicted because it was found to be stale, which is all managed
-// through the EvictionToken. The function should be provided with an
-// EvictionToken if one was acquired from this function on a previous
-// call. If not, an empty EvictionToken can be provided.
+// getDescriptor looks up the range information (descriptor, lease) to use for a
+// query of the key descKey with the given options. The lookup takes into
+// consideration the last range descriptor that the caller had used for this key
+// span, if any, and if the last range descriptor has been evicted because it
+// was found to be stale, which is all managed through the EvictionToken. The
+// function should be provided with an EvictionToken if one was acquired from
+// this function on a previous call. If not, an empty EvictionToken can be
+// provided.
 //
 // The range descriptor which contains the range in which the request should
 // start its query is returned first. Next returned is an EvictionToken. In
@@ -497,8 +498,8 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 // with their exclusive EndKey.
 func (ds *DistSender) getDescriptor(
 	ctx context.Context, descKey roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, EvictionToken, error) {
-	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptorWithEvictionToken(
+) (*kvbase.RangeCacheEntry, EvictionToken, error) {
+	returnToken, err := ds.rangeCache.LookupWithEvictionToken(
 		ctx, descKey, evictToken, useReverseScan,
 	)
 	if err != nil {
@@ -512,13 +513,13 @@ func (ds *DistSender) getDescriptor(
 		if useReverseScan {
 			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 		}
-		if !containsFn(desc, descKey) {
+		if !containsFn(returnToken.Desc(), descKey) {
 			log.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
-				"desc: %s, key: %s, reverse: %t", desc, descKey, log.Safe(useReverseScan))
+				"desc: %s, key: %s, reverse: %t", returnToken.Desc(), descKey, log.Safe(useReverseScan))
 		}
 	}
 
-	return desc, returnToken, nil
+	return returnToken.entry, returnToken, nil
 }
 
 // initAndVerifyBatch initializes timestamp-related information and
@@ -1374,7 +1375,8 @@ func (ds *DistSender) sendPartialBatch(
 			} else {
 				descKey = rs.Key
 			}
-			desc, evictToken, err = ds.getDescriptor(ctx, descKey, evictToken, isReverse)
+			var rInfo *kvbase.RangeCacheEntry
+			rInfo, evictToken, err = ds.getDescriptor(ctx, descKey, evictToken, isReverse)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				// We set pErr if we encountered an error getting the descriptor in
@@ -1382,6 +1384,7 @@ func (ds *DistSender) sendPartialBatch(
 				pErr = roachpb.NewError(err)
 				continue
 			}
+			desc = &rInfo.Desc
 		}
 
 		reply, err = ds.sendToReplicas(ctx, ba, desc, withCommit)
@@ -1449,16 +1452,16 @@ func (ds *DistSender) sendPartialBatch(
 			// likely the result of a range split. If we have new range
 			// descriptors, insert them instead as long as they are different
 			// from the last descriptor to avoid endless loops.
-			var replacements []roachpb.RangeDescriptor
+			var replacements []roachpb.RangeInfo
 			different := func(rd *roachpb.RangeDescriptor) bool {
 				return !desc.RSpan().Equal(rd.RSpan())
 			}
 			if different(&tErr.MismatchedRange) {
-				replacements = append(replacements, tErr.MismatchedRange)
+				replacements = append(replacements, roachpb.RangeInfo{Desc: tErr.MismatchedRange})
 			}
 			if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
 				if includesFrontOfCurSpan(isReverse, tErr.SuggestedRange, rs) {
-					replacements = append(replacements, *tErr.SuggestedRange)
+					replacements = append(replacements, roachpb.RangeInfo{Desc: *tErr.SuggestedRange})
 				}
 			}
 			// Same as Evict() if replacements is empty.

@@ -809,11 +809,7 @@ func (r *DistSQLReceiver) Types() []*types.T {
 // the ids of the ranges that we get are different than the ids in that cache.
 func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) {
 	// Update the RangeDescriptorCache.
-	rngDescs := make([]roachpb.RangeDescriptor, len(ranges))
-	for i, ri := range ranges {
-		rngDescs[i] = ri.Desc
-	}
-	r.rangeCache.InsertRangeDescriptors(ctx, rngDescs...)
+	r.rangeCache.Insert(ctx, ranges...)
 
 	// Update the LeaseHolderCache.
 	for _, ri := range ranges {
