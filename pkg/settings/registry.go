@@ -62,6 +62,9 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 20.1.
 	"schemachanger.lease.duration":       {},
 	"schemachanger.lease.renew_fraction": {},
+	// removed as of 20.2
+	"sql.distsql.distribute_index_joins": {},
+	"sql.distsql.merge_joins.enabled":    {},
 }
 
 // register adds a setting to the registry.
