@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -533,7 +534,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			rpcContext:             rpcContext,
 			distSender:             distSender,
 			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
-			nodeLiveness:           nodeLiveness,
+			nodeLiveness:           sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
 			gossip:                 gossip.MakeExposedGossip(g),
 			nodeDialer:             nodeDialer,
 			grpcServer:             grpcServer.Server,
