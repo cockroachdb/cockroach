@@ -141,11 +141,13 @@ func (ds *DistSender) partialRangeFeed(
 		// If we've cleared the descriptor on a send failure, re-lookup.
 		if rangeInfo.desc == nil {
 			var err error
-			rangeInfo.desc, rangeInfo.token, err = ds.getDescriptor(ctx, rangeInfo.rs.Key, EvictionToken{}, false)
+			ri, tok, err := ds.getDescriptor(ctx, rangeInfo.rs.Key, EvictionToken{}, false)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				continue
 			}
+			rangeInfo.desc = &ri.Desc
+			rangeInfo.token = tok
 		}
 
 		// Establish a RangeFeed for a single Range.

@@ -1714,6 +1714,9 @@ func (s LeaseSequence) String() string {
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
+	if l.Empty() {
+		return "<empty>"
+	}
 	var proposedSuffix string
 	if l.ProposedTS != nil {
 		proposedSuffix = fmt.Sprintf(" pro=%s", l.ProposedTS)
@@ -1722,6 +1725,11 @@ func (l Lease) String() string {
 		return fmt.Sprintf("repl=%s seq=%s start=%s exp=%s%s", l.Replica, l.Sequence, l.Start, l.Expiration, proposedSuffix)
 	}
 	return fmt.Sprintf("repl=%s seq=%s start=%s epo=%d%s", l.Replica, l.Sequence, l.Start, l.Epoch, proposedSuffix)
+}
+
+// Empty returns true for the Lease zero-value.
+func (l *Lease) Empty() bool {
+	return *l == (Lease{})
 }
 
 // OwnedBy returns whether the given store is the lease owner.

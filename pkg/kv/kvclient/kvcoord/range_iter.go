@@ -28,10 +28,10 @@ type RangeIterator struct {
 	ds      *DistSender
 	scanDir ScanDirection
 	key     roachpb.RKey
-	desc    *roachpb.RangeDescriptor
-	token   EvictionToken
-	init    bool
-	err     error
+	// token represents the results of the latest cache lookup.
+	token EvictionToken
+	init  bool
+	err   error
 }
 
 // NewRangeIterator creates a new RangeIterator.
@@ -62,11 +62,27 @@ func (ri *RangeIterator) Key() roachpb.RKey {
 
 // Desc returns the descriptor of the range at which the iterator is
 // currently positioned. The iterator must be valid.
+//
+// The returned descriptor is immutable.
 func (ri *RangeIterator) Desc() *roachpb.RangeDescriptor {
 	if !ri.Valid() {
 		panic(ri.Error())
 	}
-	return ri.desc
+	return ri.token.Desc()
+}
+
+// Lease returns information about the lease of the range at which the iterator
+// is currently positioned. The iterator must be valid.
+//
+// The lease information comes from a cache, and so it can be stale. Returns nil
+// if no lease information is known.
+//
+// The returned lease is immutable.
+func (ri *RangeIterator) Lease() *roachpb.Lease {
+	if !ri.Valid() {
+		panic(ri.Error())
+	}
+	return ri.token.Lease()
 }
 
 // Token returns the eviction token corresponding to the range
@@ -89,9 +105,9 @@ func (ri *RangeIterator) NeedAnother(rs roachpb.RSpan) bool {
 		panic("NeedAnother() undefined for spans representing a single key")
 	}
 	if ri.scanDir == Ascending {
-		return ri.desc.EndKey.Less(rs.EndKey)
+		return ri.Desc().EndKey.Less(rs.EndKey)
 	}
-	return rs.Key.Less(ri.desc.StartKey)
+	return rs.Key.Less(ri.Desc().StartKey)
 }
 
 // Valid returns whether the iterator is valid. To be valid, the
@@ -127,9 +143,9 @@ func (ri *RangeIterator) Next(ctx context.Context) {
 	}
 	// Determine next span when the current range is subtracted.
 	if ri.scanDir == Ascending {
-		ri.Seek(ctx, ri.desc.EndKey, ri.scanDir)
+		ri.Seek(ctx, ri.Desc().EndKey, ri.scanDir)
 	} else {
-		ri.Seek(ctx, ri.desc.StartKey, ri.scanDir)
+		ri.Seek(ctx, ri.Desc().StartKey, ri.scanDir)
 	}
 }
 
@@ -156,12 +172,10 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	// Retry loop for looking up next range in the span. The retry loop
 	// deals with retryable range descriptor lookups.
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
-		var err error
-		ri.desc, ri.token, err = ri.ds.getDescriptor(
-			ctx, ri.key, ri.token, ri.scanDir == Descending)
+		_, tok, err := ri.ds.getDescriptor(ctx, ri.key, ri.token, ri.scanDir == Descending)
 
 		if log.V(2) {
-			log.Infof(ctx, "key: %s, desc: %s err: %v", ri.key, ri.desc, err)
+			log.Infof(ctx, "key: %s, desc: %s err: %v", ri.key, ri.Desc(), err)
 		}
 
 		// getDescriptor may fail retryably if, for example, the first
@@ -174,8 +188,9 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			continue
 		}
 
+		ri.token = tok
 		if log.V(2) {
-			log.Infof(ctx, "returning; key: %s, desc: %s", ri.key, ri.desc)
+			log.Infof(ctx, "returning; key: %s, desc: %s", ri.key, ri.Desc())
 		}
 		return
 	}
