@@ -98,8 +98,7 @@ func registerSQLAlchemy(r *testRegistry) {
 			c,
 			node,
 			"install pytest",
-			// Unpin pytest once sqlalchemy rel_1_3_16 is released (https://github.com/sqlalchemy/sqlalchemy/issues/5201)
-			`sudo pip3 install --upgrade --force-reinstall setuptools pytest==5.3.5 pytest-xdist psycopg2`,
+			`sudo pip3 install --upgrade --force-reinstall setuptools pytest pytest-xdist psycopg2`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -167,6 +166,7 @@ func registerSQLAlchemy(r *testRegistry) {
 		// will fail. And it is safe to swallow it here.
 		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
 			`cd /mnt/data1/sqlalchemy/ && pytest -s --maxfail=0 `+
+				`--requirements=cockroachdb.sqlalchemy.test_requirements:Requirements `+
 				`--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable `+
 				`test/dialect/test_suite.py`)
 
