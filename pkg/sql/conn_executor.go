@@ -758,32 +758,30 @@ const (
 
 func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{}) {
 	if recovered != nil {
-		// A warning header guaranteed to go to stderr. This is unanonymized.
-		var cutStmt string
-		var stmt string
+		panicErr := log.PanicAsError(1, recovered)
+
+		// If there's a statement currently being executed, we'll report
+		// on it.
 		if ex.curStmt != nil {
-			stmt = ex.curStmt.String()
-			cutStmt = stmt
-		}
-		if len(cutStmt) > panicLogOutputCutoffChars {
-			cutStmt = cutStmt[:panicLogOutputCutoffChars] + " [...]"
+			// A warning header guaranteed to go to stderr.
+			log.Shoutf(ctx, log.Severity_ERROR,
+				"a SQL panic has occurred while executing the following statement:\n%s",
+				// For the log message, the statement is not anonymized.
+				truncateStatementStringForTelemetry(ex.curStmt.String()))
+
+			// Embed the statement in the error object for the telemetry
+			// report below. The statement gets anonymized.
+			panicErr = WithAnonymizedStatement(panicErr, ex.curStmt)
 		}
 
-		log.Shoutf(ctx, log.Severity_ERROR,
-			"a SQL panic has occurred while executing %q: %s", cutStmt, recovered)
+		// Report the panic to telemetry in any case.
+		log.ReportPanic(ctx, &ex.server.cfg.Settings.SV, panicErr, 1 /* depth */)
 
+		// Close the executor before propagating the panic further.
 		ex.close(ctx, panicClose)
 
-		safeErr := AnonymizeStatementsForReporting("executing", stmt, recovered)
-
-		log.ReportPanic(ctx, &ex.server.cfg.Settings.SV, safeErr, 1 /* depth */)
-
-		// Propagate the (sanitized) panic further.
-		// NOTE(andrei): It used to be that we sanitized the panic and then a higher
-		// layer was in charge of doing the log.ReportPanic() call. Now that the
-		// call is above, it's unclear whether we should propagate the original
-		// panic or safeErr. I'm propagating safeErr to be on the safe side.
-		panic(safeErr)
+		// Propagate - this may be meant to stop the process.
+		panic(panicErr)
 	}
 	// Closing is not cancelable.
 	closeCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
