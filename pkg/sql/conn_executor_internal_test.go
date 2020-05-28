@@ -223,14 +223,6 @@ func mustParseOne(s string) parser.Statement {
 	return stmts[0]
 }
 
-type dummyLivenessProvider struct {
-}
-
-// IsLive implements the livenessProvider interface.
-func (l dummyLivenessProvider) IsLive(roachpb.NodeID) (bool, error) {
-	return true, nil
-}
-
 // startConnExecutor start a goroutine running a connExecutor. This connExecutor
 // is using a mocked KV that can't really do anything, so it can't run
 // statements that need to "access the database". It can only execute things
@@ -282,8 +274,8 @@ func startConnExecutor(
 			nil, /* distSender */
 			gw,
 			stopper,
-			dummyLivenessProvider{}, /* liveness */
-			nil,                     /* nodeDialer */
+			func(roachpb.NodeID) (bool, error) { return true, nil }, // everybody is live
+			nil, /* nodeDialer */
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
