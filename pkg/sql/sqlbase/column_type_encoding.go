@@ -146,6 +146,14 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		}
 		return encoding.EncodeBytesDescending(b, data), nil
 	case *tree.DTuple:
+		// TODO(mjibson): tuples have no corresponding decoding
+		// and we do not have high confidence that this encoding is
+		// correct. Consider correctly implementing this encoding and
+		// adding decoding. We cannot simply remove it because the hash
+		// row container depends on key encoding for hashing, and many
+		// queries need tuples.
+		// Remove the exceptions in TestConsistentValueEncodings once
+		// this is fixed.
 		for _, datum := range t.D {
 			var err error
 			b, err = EncodeTableKey(b, datum, dir)
@@ -273,8 +281,6 @@ func DecodeTableKey(
 		}
 		d, err := tree.NewDCollatedString(r, valType.Locale(), &a.env)
 		return d, rkey, err
-	case types.JsonFamily:
-		return tree.DNull, []byte{}, nil
 	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {
@@ -395,9 +401,8 @@ func DecodeTableKey(
 			return nil, nil, err
 		}
 		return a.NewDEnum(tree.DEnum{EnumTyp: valType, PhysicalRep: phys, LogicalRep: log}), rkey, nil
-	default:
-		return nil, nil, errors.Errorf("unable to decode table key: %s", valType)
 	}
+	return nil, nil, errors.Errorf("unable to decode table key: %s", valType)
 }
 
 // EncodeTableValue encodes `val` into `appendTo` using DatumEncoding_VALUE

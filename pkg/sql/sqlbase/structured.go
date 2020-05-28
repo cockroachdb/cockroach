@@ -1344,7 +1344,7 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		default:
 			return MustBeValueEncoded(semanticType.ArrayContents())
 		}
-	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
+	case types.JsonFamily, types.TupleFamily:
 		return true
 	}
 	return false

@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/prop"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -336,5 +338,105 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, d, decoded)
 		})
+	}
+}
+
+var testEncodeKeyTypes = func() []*types.T {
+	typs := make([]*types.T, 0, len(types.OidToType))
+	for _, typ := range types.OidToType {
+		typs = append(typs, typ)
+	}
+	typs = append(typs,
+		types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"a", "b"}),
+	)
+	return typs
+}()
+
+// TestMustBeValueEncoded verifies that types for which MustBeValueEncoded
+// returns false can be round-tripped through EncodeTableKey and DecodeTableKey.
+func TestMustBeValueEncoded(t *testing.T) {
+	var a DatumAlloc
+	rng, _ := randutil.NewPseudoRand()
+	evalCtx := tree.MakeTestingEvalContext(nil /* cluster.Settings */)
+	for _, typ := range testEncodeKeyTypes {
+		if typ.IsAmbiguous() || MustBeValueEncoded(typ) {
+			continue
+		}
+		// DArray.Append complains when creating multi-dimensional
+		// arrays, which RandDatum does, so ignore those.
+		if arr := typ.ArrayContents(); arr != nil && arr.Family() == types.ArrayFamily {
+			continue
+		}
+		d := RandDatumWithNullChance(rng, typ, 0)
+		if d == tree.DNull {
+			t.Fatalf("%s: cannot make non-null datum", typ)
+		}
+		encoded, err := EncodeTableKey(nil, d, encoding.Ascending)
+		if err != nil {
+			t.Fatalf("%s: %s: could not encode: %v", typ, d, err)
+		}
+		decoded, _, err := DecodeTableKey(&a, typ, encoded, encoding.Ascending)
+		if err != nil {
+			t.Fatalf("%s: %s: could not decode: %v", typ, d, err)
+		}
+		if d.Compare(&evalCtx, decoded) != 0 {
+			t.Fatalf("%s: %s != %s", typ, d, decoded)
+		}
+	}
+}
+
+// TestConsistentValueEncodings tests that MustBeValueEncoded, EncodeTableKey,
+// and DecodeTableKey all agree on which types can be key encoded.
+func TestConsistentValueEncodings(t *testing.T) {
+	var a DatumAlloc
+	rng, _ := randutil.NewPseudoRand()
+	evalCtx := tree.MakeTestingEvalContext(nil /* cluster.Settings */)
+	for _, typ := range testEncodeKeyTypes {
+		if typ.IsAmbiguous() {
+			continue
+		}
+		// Tuples have a key encoding, no decoding, but
+		// MustBeValueEncoded. See comment in EncodeTableKey describing
+		// why. Remove this continue once they are fixed.
+		if typ.Family() == types.TupleFamily {
+			continue
+		}
+		// Array OID types (int2vector, oidvector) aren't created
+		// correctly by RandDatum, so skip them here.
+		if typ.ArrayContents() == types.Oid || typ.Oid() == oid.T_int2vector {
+			continue
+		}
+		// DArray.Append complains when creating multi-dimensional
+		// arrays, which RandDatum does, so ignore those.
+		if arr := typ.ArrayContents(); arr != nil && arr.Family() == types.ArrayFamily {
+			continue
+		}
+		d := RandDatumWithNullChance(rng, typ, 0)
+		if d == tree.DNull {
+			continue
+		}
+		if arr, ok := d.(*tree.DArray); ok && len(arr.Array) == 0 {
+			// We get false positives from empty arrays of
+			// non-key-encodable datums, so skip those.
+			continue
+		}
+		mustValue := MustBeValueEncoded(typ)
+		encoded, err := EncodeTableKey(nil, d, encoding.Ascending)
+		canEncode := err == nil
+		decoded, _, err := DecodeTableKey(&a, typ, encoded, encoding.Ascending)
+		canDecode := err == nil
+
+		if mustValue == canEncode {
+			t.Fatalf("%s: mustValue (%v) == canEncode (%v) for %s", typ, mustValue, canEncode, d)
+		}
+		if mustValue == canDecode {
+			t.Fatalf("%s: mustValue (%v) == canDecode (%v) for %s", typ, mustValue, canDecode, d)
+		}
+		if canEncode != canDecode {
+			t.Fatalf("%s: canEncode (%v) != canDecode (%v) for %s", typ, canEncode, canDecode, d)
+		}
+		if canEncode && canDecode && d.Compare(&evalCtx, decoded) != 0 {
+			t.Fatalf("%s: %s != %s", typ, d, decoded)
+		}
 	}
 }
