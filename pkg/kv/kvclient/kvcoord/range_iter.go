@@ -29,9 +29,13 @@ type RangeIterator struct {
 	scanDir ScanDirection
 	key     roachpb.RKey
 	desc    *roachpb.RangeDescriptor
-	token   *EvictionToken
-	init    bool
-	err     error
+	// lease is the current lease for desc. The lease information
+	// comes from a cache, and so it can be stale. Nil if no lease
+	// information is known.
+	lease *roachpb.Lease
+	token *EvictionToken
+	init  bool
+	err   error
 }
 
 // NewRangeIterator creates a new RangeIterator.
@@ -67,6 +71,18 @@ func (ri *RangeIterator) Desc() *roachpb.RangeDescriptor {
 		panic(ri.Error())
 	}
 	return ri.desc
+}
+
+// Lease returns information about the lease of the range at which the iterator
+// is currently positioned. The iterator must be valid.
+//
+// The lease information comes from a cache, and so it can be stale. Returns nil
+// if no lease information is known.
+func (ri *RangeIterator) Lease() *roachpb.Lease {
+	if !ri.Valid() {
+		panic(ri.Error())
+	}
+	return ri.lease
 }
 
 // Token returns the eviction token corresponding to the range
@@ -156,9 +172,7 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	// Retry loop for looking up next range in the span. The retry loop
 	// deals with retryable range descriptor lookups.
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
-		var err error
-		ri.desc, ri.token, err = ri.ds.getDescriptor(
-			ctx, ri.key, ri.token, ri.scanDir == Descending)
+		rngInfo, tok, err := ri.ds.getDescriptor(ctx, ri.key, ri.token, ri.scanDir == Descending)
 
 		if log.V(2) {
 			log.Infof(ctx, "key: %s, desc: %s err: %v", ri.key, ri.desc, err)
@@ -173,6 +187,14 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			log.VEventf(ctx, 1, "range descriptor lookup failed: %s", err)
 			continue
 		}
+
+		ri.desc = &rngInfo.Desc
+		if !rngInfo.Lease.Empty() {
+			ri.lease = &rngInfo.Lease
+		} else {
+			ri.lease = nil
+		}
+		ri.token = tok
 
 		if log.V(2) {
 			log.Infof(ctx, "returning; key: %s, desc: %s", ri.key, ri.desc)

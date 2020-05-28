@@ -446,14 +446,14 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 	return count, ri.Error()
 }
 
-// getDescriptor looks up the range descriptor to use for a query of
-// the key descKey with the given options. The lookup takes into
-// consideration the last range descriptor that the caller had used
-// for this key span, if any, and if the last range descriptor has
-// been evicted because it was found to be stale, which is all managed
-// through the EvictionToken. The function should be provided with an
-// EvictionToken if one was acquired from this function on a previous
-// call. If not, an empty EvictionToken can be provided.
+// getDescriptor looks up the range information (descriptor, lease) to use for a
+// query of the key descKey with the given options. The lookup takes into
+// consideration the last range descriptor that the caller had used for this key
+// span, if any, and if the last range descriptor has been evicted because it
+// was found to be stale, which is all managed through the EvictionToken. The
+// function should be provided with an EvictionToken if one was acquired from
+// this function on a previous call. If not, an empty EvictionToken can be
+// provided.
 //
 // The range descriptor which contains the range in which the request should
 // start its query is returned first. Next returned is an EvictionToken. In
@@ -466,14 +466,13 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 // with their exclusive EndKey.
 func (ds *DistSender) getDescriptor(
 	ctx context.Context, descKey roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+) (*kvbase.RangeCacheEntry, *EvictionToken, error) {
 	rInfo, returnToken, err := ds.rangeCache.LookupWithEvictionToken(
 		ctx, descKey, evictToken, useReverseScan,
 	)
 	if err != nil {
 		return nil, returnToken, err
 	}
-	desc := &rInfo.Desc
 
 	// Sanity check: the descriptor we're about to return must include the key
 	// we're interested in.
@@ -482,13 +481,13 @@ func (ds *DistSender) getDescriptor(
 		if useReverseScan {
 			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 		}
-		if !containsFn(desc, descKey) {
+		if !containsFn(&rInfo.Desc, descKey) {
 			log.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
-				"desc: %s, key: %s, reverse: %t", desc, descKey, log.Safe(useReverseScan))
+				"desc: %s, key: %s, reverse: %t", rInfo.Desc, descKey, log.Safe(useReverseScan))
 		}
 	}
 
-	return desc, returnToken, nil
+	return rInfo, returnToken, nil
 }
 
 // initAndVerifyBatch initializes timestamp-related information and
@@ -1344,7 +1343,8 @@ func (ds *DistSender) sendPartialBatch(
 			} else {
 				descKey = rs.Key
 			}
-			desc, evictToken, err = ds.getDescriptor(ctx, descKey, evictToken, isReverse)
+			var rInfo *kvbase.RangeCacheEntry
+			rInfo, evictToken, err = ds.getDescriptor(ctx, descKey, evictToken, isReverse)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				// We set pErr if we encountered an error getting the descriptor in
@@ -1352,6 +1352,7 @@ func (ds *DistSender) sendPartialBatch(
 				pErr = roachpb.NewError(err)
 				continue
 			}
+			desc = &rInfo.Desc
 		}
 
 		reply, err = ds.sendToReplicas(ctx, ba, desc, withCommit)
