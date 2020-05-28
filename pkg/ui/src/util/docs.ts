@@ -38,6 +38,9 @@ export const databaseTable = docsURL("admin-ui-databases-page.html");
 export const jobTable = docsURL("admin-ui-jobs-page.html");
 export const statementsTable = docsURL("admin-ui-statements-page.html");
 
+export const statementsSql = docsURL("admin-ui-statements-page.html#sql-statement-fingerprints");
+export const statementsRetries = docsURL("transactions.html#transaction-retries");
+export const statementsTimeInterval = docsURL("admin-ui-statements-page.html#time-interval");
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion = "https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html";
