@@ -39,7 +39,7 @@ var serverCfg = func() server.Config {
 	settings.SetCanonicalValuesContainer(&st.SV)
 
 	s := server.MakeConfig(context.Background(), st)
-	s.SQLAuditLogDirName = &sqlAuditLogDir
+	s.AuditLogDirName = &sqlAuditLogDir
 	return s
 }()
 
@@ -117,9 +117,9 @@ func initCLIDefaults() {
 	serverCfg.JoinPreferSRVRecords = false
 	serverCfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	serverCfg.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
-	// Attempt to default serverCfg.SQLMemoryPoolSize to 25% if possible.
+	// Attempt to default serverCfg.MemoryPoolSize to 25% if possible.
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
-		serverCfg.SQLMemoryPoolSize = bytes
+		serverCfg.MemoryPoolSize = bytes
 	}
 
 	startCtx.serverInsecure = baseCfg.Insecure

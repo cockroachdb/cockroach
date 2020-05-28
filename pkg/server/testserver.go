@@ -173,7 +173,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.EventLogEnabled = false
 	}
 	if params.SQLMemoryPoolSize != 0 {
-		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
+		cfg.MemoryPoolSize = params.SQLMemoryPoolSize
 	}
 	if params.CacheSize != 0 {
 		cfg.CacheSize = params.CacheSize
@@ -243,7 +243,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
-	if params.TempStorageConfig != (base.TempStorageConfig{}) {
+	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
 		cfg.TempStorageConfig = params.TempStorageConfig
 	}
 
@@ -439,17 +439,92 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 }
 
 func testSQLServerArgs(ts *TestServer) sqlServerArgs {
-	st := cluster.MakeTestingClusterSettings()
 	stopper := ts.Stopper()
+	clusterName := ts.Cfg.ClusterName
+	// If we used a dummy gossip, DistSQL and random other things won't work.
+	// Just use the test server's for now.
+	//
+	// TODO(tbg): drop the Gossip dependency.
+	g := ts.Gossip()
+	ts = nil // prevent usage below
 
-	cfg := makeTestConfig(st)
+	st := cluster.MakeTestingClusterSettings()
 
-	clock := hlc.NewClock(hlc.UnixNano, 1)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	var sqlConfig SQLConfig
+	var baseConfig BaseConfig
+	{
+		cfg := makeTestConfig(st)
+		sqlConfig = cfg.SQLConfig
+		baseConfig = cfg.BaseConfig
+		// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
+		// and this tenant work.
+		//
+		// TODO(tbg): address this when we introduce the real tenant RPCs in:
+		// https://github.com/cockroachdb/cockroach/issues/47898
+		baseConfig.ClusterName = clusterName
+	}
 
-	nl := allErrorsFakeLiveness{}
+	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseConfig.MaxOffset))
 
-	ds := ts.DistSender()
+	var rpcTestingKnobs rpc.ContextTestingKnobs
+	if p, ok := baseConfig.TestingKnobs.Server.(*TestingKnobs); ok {
+		rpcTestingKnobs = p.ContextTestingKnobs
+	}
+	rpcContext := rpc.NewContextWithTestingKnobs(
+		baseConfig.AmbientCtx,
+		baseConfig.Config,
+		clock,
+		stopper,
+		st,
+		rpcTestingKnobs,
+	)
+
+	var dsKnobs kvcoord.ClientTestingKnobs
+	if dsKnobsP, ok := baseConfig.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
+		dsKnobs = *dsKnobsP
+	}
+	rpcRetryOptions := base.DefaultRetryOptions()
+	resolver := gossip.AddressResolver(g) // TODO(tbg): break gossip dep
+	nodeDialer := nodedialer.New(rpcContext, resolver)
+	dsCfg := kvcoord.DistSenderConfig{
+		AmbientCtx:        baseConfig.AmbientCtx,
+		Settings:          st,
+		Clock:             clock,
+		RPCRetryOptions:   &rpcRetryOptions,
+		RPCContext:        rpcContext,
+		RangeDescriptorDB: nil, // use DistSender itself
+		NodeDialer:        nodeDialer,
+		TestingKnobs:      dsKnobs,
+	}
+	ds := kvcoord.NewDistSender(dsCfg, g)
+
+	var clientKnobs kvcoord.ClientTestingKnobs
+	if p, ok := baseConfig.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
+		clientKnobs = *p
+	}
+	// TODO(tbg): expose this registry via prometheus. See:
+	// https://github.com/cockroachdb/cockroach/issues/47905
+	registry := metric.NewRegistry()
+	txnMetrics := kvcoord.MakeTxnMetrics(baseConfig.HistogramWindowInterval())
+	registry.AddMetricStruct(txnMetrics)
+	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx:        baseConfig.AmbientCtx,
+			Settings:          st,
+			Clock:             clock,
+			Stopper:           stopper,
+			HeartbeatInterval: base.DefaultTxnHeartbeatInterval,
+			Linearizable:      false,
+			Metrics:           txnMetrics,
+			TestingKnobs:      clientKnobs,
+		},
+		ds,
+	)
+	db := kv.NewDB(
+		baseConfig.AmbientCtx,
+		tcsFactory,
+		clock,
+	)
 
 	circularInternalExecutor := &sql.InternalExecutor{}
 	// Protected timestamps won't be available (at first) in multi-tenant
@@ -457,7 +532,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	var protectedTSProvider protectedts.Provider
 	{
 		pp, err := ptprovider.New(ptprovider.Config{
-			DB:               ts.DB(),
+			DB:               db,
 			InternalExecutor: circularInternalExecutor,
 			Settings:         st,
 		})
@@ -466,15 +541,6 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		}
 		protectedTSProvider = dummyProtectedTSProvider{pp}
 	}
-
-	registry := metric.NewRegistry()
-
-	// If we used a dummy gossip, DistSQL and random other things won't work.
-	// Just use the test server's for now.
-	// g := gossip.NewTest(nodeID, nil, nil, stopper, registry, nil)
-	g := ts.Gossip()
-
-	nd := nodedialer.New(rpcContext, gossip.AddressResolver(ts.Gossip()))
 
 	dummyRecorder := &status.MetricsRecorder{}
 
@@ -497,9 +563,9 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 			rpcContext:   rpcContext,
 			distSender:   ds,
 			statusServer: noStatusServer,
-			nodeLiveness: nl,
+			nodeLiveness: allErrorsFakeLiveness{},
 			gossip:       gossip.MakeUnexposedGossip(g),
-			nodeDialer:   nd,
+			nodeDialer:   nodeDialer,
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
 			isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
@@ -513,12 +579,13 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 				return nil, errors.New("fake external uri storage")
 			},
 		},
-		Config:                   &cfg,
+		SQLConfig:                &sqlConfig,
+		BaseConfig:               &baseConfig,
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		tenantID:                 roachpb.SystemTenantID,
-		db:                       ts.DB(),
+		db:                       db,
 		registry:                 registry,
 		sessionRegistry:          sql.NewSessionRegistry(),
 		circularInternalExecutor: circularInternalExecutor,
@@ -544,6 +611,8 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 			ClusterSettingsUpdater: args.Settings.MakeUpdater(),
 		}
 	}
+	ts = nil // proves we're not using it below
+
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return "", err
@@ -565,8 +634,8 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 	if err != nil {
 		return "", err
 	}
-	ts.Stopper().RunWorker(ctx, func(ctx context.Context) {
-		<-ts.Stopper().ShouldQuiesce()
+	args.stopper.RunWorker(ctx, func(ctx context.Context) {
+		<-args.stopper.ShouldQuiesce()
 		// NB: we can't do this as a Closer because (*Server).ServeWith is
 		// running in a worker and usually sits on accept(pgL) which unblocks
 		// only when pgL closes. In other words, pgL needs to close when
@@ -581,7 +650,7 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 
 	if err := s.start(ctx,
 		args.stopper,
-		args.Config.TestingKnobs,
+		args.TestingKnobs,
 		connManager,
 		pgL,
 		socketFile,

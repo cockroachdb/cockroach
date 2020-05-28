@@ -129,7 +129,9 @@ type sqlServerOptionalArgs struct {
 type sqlServerArgs struct {
 	sqlServerOptionalArgs
 
-	*Config
+	*SQLConfig
+	*BaseConfig
+
 	stopper *stop.Stopper
 
 	// SQL uses the clock to assign timestamps to transactions, among many
@@ -161,7 +163,8 @@ type sqlServerArgs struct {
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
-	jobRegistry *jobs.Registry
+	jobRegistry         *jobs.Registry
+	jobAdoptionStopFile string
 
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
@@ -170,14 +173,6 @@ type sqlServerArgs struct {
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	execCfg := &sql.ExecutorConfig{}
 	codec := keys.MakeSQLCodec(cfg.tenantID)
-
-	var jobAdoptionStopFile string
-	for _, spec := range cfg.Stores.Specs {
-		if !spec.InMemory && spec.Path != "" {
-			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
-			break
-		}
-	}
 
 	// Create blob service for inter-node file sharing.
 	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
@@ -208,7 +203,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 				// in sql/jobs/registry.go on planHookMaker.
 				return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, execCfg)
 			},
-			jobAdoptionStopFile,
+			cfg.jobAdoptionStopFile,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
@@ -249,7 +244,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		math.MaxInt64, /* noteworthy */
 		cfg.Settings,
 	)
-	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(cfg.SQLMemoryPoolSize))
+	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(cfg.MemoryPoolSize))
 
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
 	// operations (IMPORT, index backfill). It is itself a child of the
@@ -262,7 +257,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 	// Set up the DistSQL temp engine.
 
-	useStoreSpec := cfg.Stores.Specs[cfg.TempStorageConfig.SpecIdx]
+	useStoreSpec := cfg.TempStorageConfig.Spec
 	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
@@ -271,17 +266,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
 	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		firstStore := cfg.Stores.Specs[cfg.TempStorageConfig.SpecIdx]
+		useStore := cfg.TempStorageConfig.Spec
 		var err error
-		if firstStore.InMemory {
-			// First store is in-memory so we remove the temp
+		if useStore.InMemory {
+			// Used store is in-memory so we remove the temp
 			// directory directly since there is no record file.
 			err = os.RemoveAll(cfg.TempStorageConfig.Path)
 		} else {
 			// If record file exists, we invoke CleanupTempDirs to
 			// also remove the record after the temp directory is
 			// removed.
-			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
+			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
 			err = storage.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
@@ -409,7 +404,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
-			cfg.SQLTableStatCacheSize,
+			cfg.TableStatCacheSize,
 			cfg.gossip,
 			cfg.db,
 			cfg.circularInternalExecutor,
@@ -440,7 +435,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		// AuditLogger syncs to disk for the same reason as AuthLogger.
 		AuditLogger: log.NewSecondaryLogger(
-			loggerCtx, cfg.SQLAuditLogDirName, "sql-audit",
+			loggerCtx, cfg.AuditLogDirName, "sql-audit",
 			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
@@ -449,7 +444,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			true /*enableGc*/, false /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
-		QueryCache:                 querycache.New(cfg.SQLQueryCacheSize),
+		QueryCache:                 querycache.New(cfg.QueryCacheSize),
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
 	}
 
@@ -496,7 +491,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
 	pgServer := pgwire.MakeServer(
 		cfg.AmbientCtx,
-		cfg.Config.Config,
+		cfg.Config,
 		cfg.Settings,
 		sqlMemMetrics,
 		&rootSQLMemoryMonitor,

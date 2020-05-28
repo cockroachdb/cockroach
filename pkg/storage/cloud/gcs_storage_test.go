@@ -102,7 +102,7 @@ func TestAntagonisticRead(t *testing.T) {
 	require.NoError(t, err)
 
 	s, err := MakeExternalStorage(
-		context.Background(), conf, base.ExternalIOConfig{}, testSettings, nil)
+		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "")
 	require.NoError(t, err)
