@@ -275,8 +275,13 @@ type traceLogData struct {
 
 // String formats the given spans for human consumption, showing the
 // relationship using nesting and times as both relative to the previous event
-// and cumulative. The order in which log lines are displayed is similar to the
-// one in generateSessionTraceVTable().
+// and cumulative. Logs from the same span are kept together, before logs from
+// children spans. Each log line show the time since the beginning of the trace
+// and since the previous log line. Span starts are shown with special "===
+// <operation>" lines. For a span start, the time since the relative log line
+// can be negative when the span start follows a message from the parent that
+// was generated after the child span started (or even after the child
+// finished).
 //
 // TODO(andrei): this should be unified with
 // SessionTracing.GenerateSessionTraceVTable.
@@ -325,6 +330,9 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 }
 
 // visitSpan returns the log messages for sp, and all of sp's children.
+//
+// All messages from a span are kept together. Sibling spans are ordered within
+// the parent in their start order.
 func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
 
