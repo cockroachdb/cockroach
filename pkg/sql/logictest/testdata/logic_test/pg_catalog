@@ -1404,7 +1404,7 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
-2310524507  admin     true      true        true           true         false         false        false
+2310524507  admin     true      true        true           true         false         true         false
 1546506610  root      true      false       true           true         false         true         false
 2264919399  testuser  false     false       false          false        false         true         false
 

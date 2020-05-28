@@ -540,9 +540,10 @@ CREATE TABLE pg_catalog.pg_authid (
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRole(ctx, p, func(username string, isRole bool) error {
+		return forEachRole(ctx, p, func(username string, isRole bool, noLogin bool) error {
 			isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
 			isRoleDBool := tree.DBool(isRole)
+			roleCanLogin := tree.DBool(!noLogin)
 			return addRow(
 				h.UserOid(username),          // oid
 				tree.NewDName(username),      // rolname
@@ -550,7 +551,7 @@ CREATE TABLE pg_catalog.pg_authid (
 				tree.MakeDBool(isRoleDBool),  // rolinherit. Roles inherit by default.
 				tree.MakeDBool(isRoot),       // rolcreaterole
 				tree.MakeDBool(isRoot),       // rolcreatedb
-				tree.MakeDBool(!isRoleDBool), // rolcanlogin. Only users can login.
+				tree.MakeDBool(roleCanLogin), // rolcanlogin.
 				tree.DBoolFalse,              // rolreplication
 				tree.DBoolFalse,              // rolbypassrls
 				negOneVal,                    // rolconnlimit
@@ -2148,9 +2149,10 @@ CREATE TABLE pg_catalog.pg_roles (
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username string, isRole bool) error {
+			func(username string, isRole bool, noLogin bool) error {
 				isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
 				isRoleDBool := tree.DBool(isRole)
+				roleCanLogin := tree.DBool(!noLogin)
 				return addRow(
 					h.UserOid(username),          // oid
 					tree.NewDName(username),      // rolname
@@ -2159,7 +2161,7 @@ CREATE TABLE pg_catalog.pg_roles (
 					tree.MakeDBool(isRoot),       // rolcreaterole
 					tree.MakeDBool(isRoot),       // rolcreatedb
 					tree.DBoolFalse,              // rolcatupdate
-					tree.MakeDBool(!isRoleDBool), // rolcanlogin. Only users can login.
+					tree.MakeDBool(roleCanLogin), // rolcanlogin.
 					tree.DBoolFalse,              // rolreplication
 					negOneVal,                    // rolconnlimit
 					passwdStarString,             // rolpassword
@@ -2591,7 +2593,7 @@ CREATE TABLE pg_catalog.pg_user (
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username string, isRole bool) error {
+			func(username string, isRole bool, noLogin bool) error {
 				if isRole {
 					return nil
 				}
