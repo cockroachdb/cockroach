@@ -13,6 +13,8 @@ package main
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func registerSchemaChangeMixedVersions(r *testRegistry) {
@@ -25,15 +27,11 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			predV, err := PredecessorVersion(r.buildVersion)
-			if err != nil {
-				t.Fatal(err)
-			}
 			maxOps := 100
 			if local {
 				maxOps = 10
 			}
-			runSchemaChangeMixedVersions(ctx, t, c, maxOps, predV)
+			runSchemaChangeMixedVersions(ctx, t, c, maxOps, r.buildVersion)
 		},
 	})
 }
@@ -63,12 +61,23 @@ func runSchemaChangeWorkloadStep(maxOps int) versionStep {
 }
 
 func runSchemaChangeMixedVersions(
-	ctx context.Context, t *test, c *cluster, maxOps int, predecessorVersion string,
+	ctx context.Context, t *test, c *cluster, maxOps int, buildVersion version.Version,
 ) {
+	predecessorVersion, err := PredecessorVersion(buildVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// An empty string will lead to the cockroach binary specified by flag
 	// `cockroach` to be used.
 	const mainVersion = ""
 	schemaChangeStep := runSchemaChangeWorkloadStep(maxOps)
+	if buildVersion.Major() < 20 {
+		// Schema change workload is meant to run only on versions 19.x or higher.
+		// If the main version is below 20.0 then then predecessor version is
+		// below 19.0.
+		schemaChangeStep = nil
+	}
 
 	u := newVersionUpgradeTest(c,
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
