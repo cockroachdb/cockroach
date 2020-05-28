@@ -345,7 +345,10 @@ func (v virtualSchemaEntry) GetObjectByName(
 		if !ok {
 			return nil, nil
 		}
-		return virtualTypeEntry{desc: sqlbase.MakeSimpleAliasTypeDescriptor(typ)}, nil
+		return virtualTypeEntry{
+			desc:    sqlbase.MakeSimpleAliasTypeDescriptor(typ),
+			mutable: flags.RequireMutable,
+		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}
@@ -371,11 +374,15 @@ func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc *sqlbase.TypeDescriptor
+	desc    *sqlbase.TypeDescriptor
+	mutable bool
 }
 
 func (e virtualTypeEntry) Desc() catalog.Descriptor {
-	return e.desc
+	if e.mutable {
+		return sqlbase.NewMutableExistingTypeDescriptor(*e.desc)
+	}
+	return sqlbase.NewImmutableTypeDescriptor(*e.desc)
 }
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)

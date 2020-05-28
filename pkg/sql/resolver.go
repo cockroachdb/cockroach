@@ -138,6 +138,7 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: true},
 		DesiredObjectKind: tree.TypeObject,
+		RequireMutable:    false,
 	}
 	// TODO (rohany): The ResolveAnyDescType argument doesn't do anything here
 	//  if we are looking for a type. This should be cleaned up.
@@ -146,7 +147,7 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 		return nil, err
 	}
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
-	tdesc := desc.(*sqlbase.TypeDescriptor)
+	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
 	// Hydrate the types.T from the resolved descriptor. Once we cache
 	// descriptors, this hydration should install pointers to cached data.
 	switch t := tdesc.Kind; t {
