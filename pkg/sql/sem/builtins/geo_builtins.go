@@ -301,6 +301,22 @@ var numInteriorRingsBuiltin = makeBuiltin(
 	),
 )
 
+var areaOverloadGeometry1 = geometryOverload1(
+	func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+		ret, err := geomfn.Area(g.Geometry)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDFloat(tree.DFloat(ret)), nil
+	},
+	types.Float,
+	infoBuilder{
+		info:         "Returns the area of the given geometry.",
+		libraryUsage: usesGEOS,
+	},
+	tree.VolatilityImmutable,
+)
+
 var geoBuiltins = map[string]builtinDefinition{
 	//
 	// Input (Geometry)
@@ -936,6 +952,40 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_pointn": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := *args[0].(*tree.DGeometry)
+				n := int(*args[1].(*tree.DInt)) - 1
+				if n < 0 {
+					return tree.DNull, nil
+				}
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.LineString:
+					if n >= t.NumCoords() {
+						return tree.DNull, nil
+					}
+					g, err := geo.NewGeometryFromGeom(geom.NewPointFlat(t.Layout(), t.Coord(n)).SetSRID(t.SRID()))
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(g), nil
+				}
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the n-th Point of a LineString (1-indexed). Returns NULL if out of bounds or not a LineString.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_geometryn": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -1008,6 +1058,27 @@ var geoBuiltins = map[string]builtinDefinition{
 	),
 	"st_numinteriorring":  numInteriorRingsBuiltin,
 	"st_numinteriorrings": numInteriorRingsBuiltin,
+	"st_nrings": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Polygon:
+					return tree.NewDInt(tree.DInt(t.NumLinearRings())), nil
+				}
+				return tree.NewDInt(0), nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the number of rings in a Polygon Geometry. Returns 0 if the shape is not a Polygon.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_numgeometries": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -1129,22 +1200,12 @@ var geoBuiltins = map[string]builtinDefinition{
 				},
 				tree.VolatilityImmutable,
 			),
-			geometryOverload1(
-				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-					ret, err := geomfn.Area(g.Geometry)
-					if err != nil {
-						return nil, err
-					}
-					return tree.NewDFloat(tree.DFloat(ret)), nil
-				},
-				types.Float,
-				infoBuilder{
-					info:         "Returns the area of the given geometry.",
-					libraryUsage: usesGEOS,
-				},
-				tree.VolatilityImmutable,
-			),
+			areaOverloadGeometry1,
 		)...,
+	),
+	"st_area2d": makeBuiltin(
+		defProps(),
+		areaOverloadGeometry1,
 	),
 	"st_length": makeBuiltin(
 		defProps(),
@@ -1275,6 +1336,20 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 				info:         "Returns the centroid of the given string, which will be parsed as a geometry object.",
 				libraryUsage: usesGEOS,
 			}.String(),
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_geometrytype": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				return tree.NewDString(fmt.Sprintf("ST_%s", g.Shape().String())), nil
+			},
+			types.String,
+			infoBuilder{
+				info:         "Returns the type of geometry as a string.",
+				libraryUsage: usesGEOS,
+			},
 			tree.VolatilityImmutable,
 		),
 	),
