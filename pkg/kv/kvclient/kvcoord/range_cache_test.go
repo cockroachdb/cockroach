@@ -947,14 +947,14 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		Generation: 1,
 	}
 	curGeneration := int64(1)
-	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, minToBDesc))
+	require.True(t, cache.clearOlderOverlapping(ctx, minToBDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), minToBDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
 		t.Fatal(err)
 	} else if desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, bToMaxDesc))
+	require.True(t, cache.clearOlderOverlapping(ctx, bToMaxDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), bToMaxDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
 		t.Fatal(err)
@@ -966,7 +966,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	defDescCpy := *defDesc
 	curGeneration++
 	defDescCpy.Generation = curGeneration
-	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, &defDescCpy))
+	require.True(t, cache.clearOlderOverlapping(ctx, &defDescCpy))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
 		if desc, err := cache.GetCachedRangeDescriptor(key, false); err != nil {
@@ -983,7 +983,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:     roachpb.RKey("c"),
 		Generation: curGeneration,
 	}
-	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, bToCDesc))
+	require.True(t, cache.clearOlderOverlapping(ctx, bToCDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))), bToCDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
 		t.Fatal(err)
@@ -997,7 +997,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:     roachpb.RKey("b"),
 		Generation: curGeneration,
 	}
-	require.True(t, cache.clearOverlappingCachedRangeDescriptors(ctx, aToBDesc))
+	require.True(t, cache.clearOlderOverlapping(ctx, aToBDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), aToBDesc)
 	if desc, err := cache.GetCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
 		t.Fatal(err)
@@ -1040,10 +1040,10 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Fatalf("invocation of clearOverlappingCachedRangeDescriptors panicked: %v", r)
+				t.Fatalf("invocation of clearOlderOverlapping panicked: %v", r)
 			}
 		}()
-		cache.clearOverlappingCachedRangeDescriptors(ctx, metaSplitDesc)
+		cache.clearOlderOverlapping(ctx, metaSplitDesc)
 	}()
 }
 
