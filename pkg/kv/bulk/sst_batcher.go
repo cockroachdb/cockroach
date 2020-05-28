@@ -213,10 +213,8 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if k, err := keys.Addr(nextKey); err != nil {
 			log.Warningf(ctx, "failed to get RKey for flush key lookup")
 		} else {
-			r, err := b.rc.GetCachedRangeDescriptor(k, false /* inverted */)
-			if err != nil {
-				log.Warningf(ctx, "failed to determine where to split SST: %+v", err)
-			} else if r != nil {
+			r := b.rc.GetCachedRangeDescriptor(k, false /* inverted */)
+			if r != nil {
 				b.flushKey = r.EndKey.AsRawKey()
 				log.VEventf(ctx, 3, "building sstable that will flush before %v", b.flushKey)
 			} else {
