@@ -56,8 +56,18 @@ func TestRegistryCancelation(t *testing.T) {
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	registry := MakeRegistry(
-		log.AmbientContext{}, stopper, clock, nodeLiveness, db, nil /* ex */, base.TestingIDContainer, cluster.NoSettings,
-		histogramWindowInterval, FakePHS, "")
+		log.AmbientContext{},
+		stopper,
+		clock,
+		sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
+		db,
+		nil, /* ex */
+		base.TestingIDContainer,
+		cluster.NoSettings,
+		histogramWindowInterval,
+		FakePHS,
+		"",
+	)
 
 	const cancelInterval = time.Nanosecond
 	const adoptInterval = time.Duration(math.MaxInt64)

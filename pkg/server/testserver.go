@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
@@ -414,22 +413,6 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	return ts.Server.Start(ctx)
 }
 
-type allErrorsFakeLiveness struct{}
-
-var _ jobs.NodeLiveness = (*allErrorsFakeLiveness)(nil)
-
-func (allErrorsFakeLiveness) Self() (kvserverpb.Liveness, error) {
-	return kvserverpb.Liveness{}, errors.New("fake liveness")
-
-}
-func (allErrorsFakeLiveness) GetLivenesses() []kvserverpb.Liveness {
-	return nil
-}
-
-func (allErrorsFakeLiveness) IsLive(roachpb.NodeID) (bool, error) {
-	return false, errors.New("fake liveness")
-}
-
 type dummyProtectedTSProvider struct {
 	protectedts.Provider
 }
@@ -437,6 +420,11 @@ type dummyProtectedTSProvider struct {
 func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record) error {
 	return errors.New("fake protectedts.Provider")
 }
+
+// TODO(asubiotto): Jobs don't play well with a weird node ID in a multitenant
+//  environment, so a node ID of 1 is used here to get tests to pass. Fixing
+//  this is tracked in https://github.com/cockroachdb/cockroach/issues/47892.
+const fakeNodeID = roachpb.NodeID(1)
 
 func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	stopper := ts.Stopper()
@@ -544,10 +532,6 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 
 	dummyRecorder := &status.MetricsRecorder{}
 
-	// TODO(asubiotto): Jobs don't play well with a weird node ID in a multitenant
-	//  environment, so a node ID of 1 is used here to get tests to pass. Fixing
-	//  this is tracked in https://github.com/cockroachdb/cockroach/issues/47892.
-	const fakeNodeID = roachpb.NodeID(1)
 	var c base.NodeIDContainer
 	c.Set(context.Background(), fakeNodeID)
 	const sqlInstanceID = base.SQLInstanceID(10001)
@@ -563,7 +547,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 			rpcContext:   rpcContext,
 			distSender:   ds,
 			statusServer: noStatusServer,
-			nodeLiveness: allErrorsFakeLiveness{},
+			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
 			gossip:       gossip.MakeUnexposedGossip(g),
 			nodeDialer:   nodeDialer,
 			grpcServer:   dummyRPCServer,
@@ -620,7 +604,9 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 
 	// NB: this should no longer be necessary after #47902. Right now it keeps
 	// the tenant from crashing.
-	s.execCfg.DistSQLPlanner.SetNodeDesc(roachpb.NodeDescriptor{NodeID: -1})
+	//
+	// NB: this NodeID is actually used by the DistSQL planner.
+	s.execCfg.DistSQLPlanner.SetNodeDesc(roachpb.NodeDescriptor{NodeID: fakeNodeID})
 
 	connManager := netutil.MakeServer(
 		args.stopper,

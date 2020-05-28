@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -101,11 +102,8 @@ type sqlServerOptionalArgs struct {
 	distSender *kvcoord.DistSender
 	// statusServer gives access to the Status service.
 	statusServer serverpb.OptionalStatusServer
-	// Narrowed down version of *NodeLiveness.
-	nodeLiveness interface {
-		jobs.NodeLiveness                    // jobs uses this
-		IsLive(roachpb.NodeID) (bool, error) // DistSQLPlanner wants this
-	}
+	// Narrowed down version of *NodeLiveness. Used by jobs and DistSQLPlanner
+	nodeLiveness sqlbase.OptionalNodeLiveness
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
 	// diagnostics registry, and the lease manager.
@@ -184,9 +182,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	jobRegistry := cfg.jobRegistry
 
 	{
-		regLiveness := jobs.NodeLiveness(cfg.nodeLiveness)
+		regLiveness := cfg.nodeLiveness
 		if testingLiveness := cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
-			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
+			regLiveness = sqlbase.MakeOptionalNodeLiveness(testingLiveness.(*jobs.FakeNodeLiveness))
 		}
 		*jobRegistry = *jobs.MakeRegistry(
 			cfg.AmbientCtx,
@@ -363,6 +361,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		NodeID:    cfg.nodeIDContainer,
 	}
 
+	var isLive func(roachpb.NodeID) (bool, error)
+	if nl, ok := cfg.nodeLiveness.Optional(47900); ok {
+		isLive = nl.IsLive
+	} else {
+		// We're on a SQL tenant, so this is the only node DistSQL will ever
+		// schedule on - always returning true is fine.
+		isLive = func(roachpb.NodeID) (bool, error) {
+			return true, nil
+		}
+	}
+
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -399,7 +408,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.distSender,
 			cfg.gossip,
 			cfg.stopper,
-			cfg.nodeLiveness,
+			isLive,
 			cfg.nodeDialer,
 		),
 

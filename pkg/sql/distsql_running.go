@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -215,6 +216,12 @@ func (dsp *DistSQLPlanner) setupFlows(
 		if nodeID == thisNodeID {
 			// Skip this node.
 			continue
+		}
+		if !evalCtx.Codec.ForSystemTenant() {
+			// A tenant server should never find itself distributing flows.
+			// NB: we wouldn't hit this in practice but if we did the actual
+			// error would be opaque.
+			return nil, nil, errorutil.UnsupportedWithMultiTenancy(47900)
 		}
 		req := setupReq
 		req.Flow = *flowSpec
