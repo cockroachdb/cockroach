@@ -39,7 +39,7 @@ func (p *planner) analyzeExpr(
 	resolved := raw
 	if source != nil {
 		var err error
-		resolved, _, err = p.resolveNames(raw, source, iVarHelper)
+		resolved, err = p.resolveNames(raw, source, iVarHelper)
 		if err != nil {
 			return nil, err
 		}
