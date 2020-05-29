@@ -424,7 +424,7 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 // TODO(asubiotto): Jobs don't play well with a weird node ID in a multitenant
 //  environment, so a node ID of 1 is used here to get tests to pass. Fixing
 //  this is tracked in https://github.com/cockroachdb/cockroach/issues/47892.
-const fakeNodeID = roachpb.NodeID(1)
+const fakeNodeID = roachpb.NodeID(123456789)
 
 func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	stopper := ts.Stopper()
