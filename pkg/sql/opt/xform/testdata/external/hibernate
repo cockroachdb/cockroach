@@ -2549,22 +2549,10 @@ project
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2), (2)-->(6)
- ├── inner-join (merge)
- │    ├── columns: this_.id:1!null this_.c_name:2 t_name.id:3!null
- │    ├── left ordering: +1
- │    ├── right ordering: +3
- │    ├── key: (3)
- │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
- │    ├── scan this_
- │    │    ├── columns: this_.id:1!null this_.c_name:2
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2)
- │    │    └── ordering: +1
- │    ├── scan t_name
- │    │    ├── columns: t_name.id:3!null
- │    │    ├── key: (3)
- │    │    └── ordering: +3
- │    └── filters (true)
+ ├── scan this_
+ │    ├── columns: this_.id:1!null this_.c_name:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  └── projections
       └── length(this_.c_name:2) [as=formula0_0_:6, outer=(2), immutable]
 
