@@ -1493,7 +1493,7 @@ WHERE EXISTS(
     )=i
 )
 ----
-semi-join-apply
+select
  ├── columns: v1:1!null
  ├── cardinality: [0 - 2]
  ├── values
@@ -1501,43 +1501,30 @@ semi-join-apply
  │    ├── cardinality: [2 - 2]
  │    ├── (1,)
  │    └── (2,)
- ├── left-join (hash)
- │    ├── columns: k:2!null i:3!null x:7!null y:8!null v1:11
- │    ├── outer: (1)
- │    ├── key: (7)
- │    ├── fd: (2)-->(3), (7)-->(8,11), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
- │    ├── inner-join (hash)
- │    │    ├── columns: k:2!null i:3!null x:7!null y:8!null
- │    │    ├── key: (7)
- │    │    ├── fd: (2)-->(3), (7)-->(8), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
- │    │    ├── scan a
- │    │    │    ├── columns: k:2!null i:3
- │    │    │    ├── key: (2)
- │    │    │    └── fd: (2)-->(3)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:7!null y:8
- │    │    │    ├── key: (7)
- │    │    │    └── fd: (7)-->(8)
- │    │    └── filters
- │    │         ├── x:7 = k:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │    │         └── i:3 = y:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │    ├── project
- │    │    ├── columns: v1:11
- │    │    ├── outer: (1)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(11)
- │    │    ├── limit
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── scan uv
- │    │    │    │    └── limit hint: 1.00
- │    │    │    └── 1
- │    │    └── projections
- │    │         └── column1:1 [as=v1:11, outer=(1)]
- │    └── filters
- │         └── x:7 = v1:11 [outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ]), fd=(7)==(11), (11)==(7)]
- └── filters (true)
+ └── filters
+      └── exists [subquery]
+           └── limit
+                ├── columns: k:2!null i:3!null x:7!null y:8!null
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(2,3,7,8)
+                ├── inner-join (hash)
+                │    ├── columns: k:2!null i:3!null x:7!null y:8!null
+                │    ├── key: (7)
+                │    ├── fd: (2)-->(3), (7)-->(8), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+                │    ├── limit hint: 1.00
+                │    ├── scan a
+                │    │    ├── columns: k:2!null i:3
+                │    │    ├── key: (2)
+                │    │    └── fd: (2)-->(3)
+                │    ├── scan xy
+                │    │    ├── columns: x:7!null y:8
+                │    │    ├── key: (7)
+                │    │    └── fd: (7)-->(8)
+                │    └── filters
+                │         ├── x:7 = k:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+                │         └── i:3 = y:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+                └── 1
 
 norm expect=TryDecorrelateInnerLeftJoin
 SELECT *

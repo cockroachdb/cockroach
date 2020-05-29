@@ -158,7 +158,10 @@ NULL       /1       {1}       1
 /9         NULL     {5}       5
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
+EXPLAIN (VERBOSE)
+SELECT *
+FROM (SELECT * FROM data WHERE c = 1) AS l
+NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
 ·                 distributed            true                         ·                         ·
 ·                 vectorized             true                         ·                         ·
@@ -173,15 +176,19 @@ render            ·                      ·                            (a, b, c
       │           equality               (a, b, c, d) = (a, b, c, d)  ·                         ·
       │           equality cols are key  ·                            ·                         ·
       │           parallel               ·                            ·                         ·
+      │           pred                   @7 > 0                       ·                         ·
       └── scan    ·                      ·                            (a, b, c, d)              ·
 ·                 table                  data@primary                 ·                         ·
 ·                 spans                  FULL SCAN                    ·                         ·
 ·                 filter                 c = 1                        ·                         ·
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r]
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT *
+FROM (SELECT * FROM data WHERE c = 1) AS l
+NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzElNFq2zAUhu_3FIdz1Q4ZR7bTpoKBw5Yyl8zp4owNii-8-NB5cy1PlmEj5N2H40KTkMqGhOxSyvn5v3zHaIXV7xwFRpPp5P0CapXD7Xz2CR4m3-6n4yCEiw9BtIg-Ty_heeRtO3Cxe0wTncDXj5P5BJbwDvgljCPIIRwvvszHU7ibBWE7M45AxciwkCmFyRNVKB6QI0MHGbrI0EOGQ4wZlkouqaqkakZWm0CQ_kExYJgVZa2b65jhUipCsUKd6ZxQ4CL5ntOckpSUPUCGKekkyzc1pcqeEvXXb0CQYVQmRSXAsjkkRQocpP5BChneZrkmJcB3m78ihAjCxQjjNUNZ65fmSiePhIKvWX-6O5kVz3BDI9xUyl91CT9lVoAsBPic-Q7zXeY3gma13r16Dc55Fe6FqS6kSklRugMUrw_gh9KSpc0He5OHu92dbt5_bbzP2mxu2c4JF9fBt7W4q_Mvzukvz-klz7Fs94TyOvi25F2fX57bX57bS55r2d4J5XXwbckbnV-e11-e10ueZ9nDE8rr4NuSd_N_39sDcHOqSllU1Os1HTTvMaWP1D7elazVku6VXG5q2uNsk9tcpFTp9lfeHoKi_akB3A5zY9jZCfP9sGNu7qh2jWnPHPaO4R4aw1fm5qtjmq-N4ZG5eXRM8415V4OOz8T8ke13x-s3_wIAAP__KNhJ9Q==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMldFvmzAQxt_3V5zuqZ2MwEDa1NIkoi3VUmWkSzJtUscDC6eOjWJmjLQpyv8-Ad2aRK1BSh7yePg-vs-_s-w1lr8yFLgYT8dvl1CpDK7nsw9wN_5yOx1NQjh7N1ksFx-n5_DY8rptONstk1jH8Pn9eD6GFbwBfg6jBWQQjpaf5qMp3MzqXxkkXyvH8QicRqciZJjLhML4gUoUd8iRoYsMPWToI8MBRgwLJVdUllLVLetGMEl-o3AYpnlR6fpzxHAlFaFYo051RihwGX_LaE5xQsp2kGFCOk6zxqZQ6UOs_gR1NGS4KOK8FGDZHOI8AQ5SfyeFDK_TTJMSEHj1XoUQk3A5xGjDUFb6ybnU8T2h4BvWP92NTPPHcANjuKmUP6sCfsg0B5kLCDgLXBZ4LKgBzUIILv9T_ZeQ4azSu60vhXZfDP2UtcqlSkhRshM02jyzrVBasrC5s9f5vLe34837j5P3GafNLds94kA78m0N9OJ0Bur2h-r2gupatndEqB35tqBeng5Urz9UrxdUz7L9I0LtyLcFdXg6UP3-UP1eUH3LHhwRake-LahXpwO14xGaU1nIvKRet7VT3_eU3FP7OJSyUiu6VXLV2LTlrNE1HxIqdbvK22KSt0t1wG0xN4rdHTHfF7tm5w5rz6j2zWL_kNwDo_jC7HxxiPOlUTw0Ow8Pcb4yz8rpOCbmQ7bvHW1e_Q0AAP__Xs1ugQ==
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))

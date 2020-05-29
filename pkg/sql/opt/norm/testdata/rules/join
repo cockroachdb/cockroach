@@ -2230,29 +2230,39 @@ values
 # EliminateJoinNoColsLeft
 # --------------------------------------------------
 norm expect=EliminateJoinNoColsLeft
-SELECT s FROM (VALUES (1, 2)) INNER JOIN a ON s='foo'
+SELECT unnest(ARRAY[[1,2,3],[4,5]])
 ----
-select
- ├── columns: s:6!null
- ├── fd: ()-->(6)
- ├── scan a
- │    └── columns: s:6
- └── filters
-      └── s:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
+values
+ ├── columns: unnest:1!null
+ ├── cardinality: [2 - 2]
+ ├── (ARRAY[1,2,3],)
+ └── (ARRAY[4,5],)
 
 # --------------------------------------------------
 # EliminateJoinNoColsRight
 # --------------------------------------------------
 norm expect=EliminateJoinNoColsRight
-SELECT s FROM a INNER JOIN (SELECT count(*) FROM b) ON s='foo'
+SELECT * FROM xy WHERE EXISTS(SELECT generate_series(x, 10))
 ----
-select
- ├── columns: s:4!null
- ├── fd: ()-->(4)
- ├── scan a
- │    └── columns: s:4
- └── filters
-      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+group-by
+ ├── columns: x:1!null y:2
+ ├── grouping columns: x:1!null
+ ├── immutable, side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── project-set
+ │    ├── columns: x:1!null y:2 generate_series:3
+ │    ├── immutable, side-effects
+ │    ├── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── zip
+ │         └── generate_series(x:1, 10) [outer=(1), immutable, side-effects]
+ └── aggregations
+      └── const-agg [as=y:2, outer=(2)]
+           └── y:2
 
 # --------------------------------------------------
 # HoistJoinProjectRight

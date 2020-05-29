@@ -1205,89 +1205,95 @@ render           ·               ·                  (x, y, u, v)        ·
 # join.
 
 statement ok
-CREATE TABLE l (a INT PRIMARY KEY)
+CREATE TABLE l (a INT PRIMARY KEY, b1 INT)
 
 statement ok
-CREATE TABLE r (a INT PRIMARY KEY)
+CREATE TABLE r (a INT PRIMARY KEY, b2 INT)
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-·                distributed         false       ·       ·
-·                vectorized          true        ·       ·
-render           ·                   ·           (a)     ·
- │               render 0            a           ·       ·
- └── merge-join  ·                   ·           (a, a)  ·
-      │          type                left outer  ·       ·
-      │          equality            (a) = (a)   ·       ·
-      │          left cols are key   ·           ·       ·
-      │          right cols are key  ·           ·       ·
-      │          mergeJoinOrder      +"(a=a)"    ·       ·
-      ├── scan   ·                   ·           (a)     ·
-      │          table               l@primary   ·       ·
-      │          spans               /3-/3/#     ·       ·
-      └── scan   ·                   ·           (a)     ·
-·                table               r@primary   ·       ·
-·                spans               /3-/3/#     ·       ·
+·                distributed         false       ·               ·
+·                vectorized          true        ·               ·
+render           ·                   ·           (a, b1, b2)     ·
+ │               render 0            a           ·               ·
+ │               render 1            b1          ·               ·
+ │               render 2            b2          ·               ·
+ └── merge-join  ·                   ·           (a, b1, a, b2)  ·
+      │          type                left outer  ·               ·
+      │          equality            (a) = (a)   ·               ·
+      │          left cols are key   ·           ·               ·
+      │          right cols are key  ·           ·               ·
+      │          mergeJoinOrder      +"(a=a)"    ·               ·
+      ├── scan   ·                   ·           (a, b1)         ·
+      │          table               l@primary   ·               ·
+      │          spans               /3-/3/#     ·               ·
+      └── scan   ·                   ·           (a, b2)         ·
+·                table               r@primary   ·               ·
+·                spans               /3-/3/#     ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
-·           distributed         false       ·       ·
-·           vectorized          true        ·       ·
-merge-join  ·                   ·           (a, a)  ·
- │          type                left outer  ·       ·
- │          equality            (a) = (a)   ·       ·
- │          left cols are key   ·           ·       ·
- │          right cols are key  ·           ·       ·
- │          mergeJoinOrder      +"(a=a)"    ·       ·
- ├── scan   ·                   ·           (a)     ·
- │          table               l@primary   ·       ·
- │          spans               /3-/3/#     ·       ·
- └── scan   ·                   ·           (a)     ·
-·           table               r@primary   ·       ·
-·           spans               /3-/3/#     ·       ·
+·           distributed         false       ·               ·
+·           vectorized          true        ·               ·
+merge-join  ·                   ·           (a, b1, a, b2)  ·
+ │          type                left outer  ·               ·
+ │          equality            (a) = (a)   ·               ·
+ │          left cols are key   ·           ·               ·
+ │          right cols are key  ·           ·               ·
+ │          mergeJoinOrder      +"(a=a)"    ·               ·
+ ├── scan   ·                   ·           (a, b1)         ·
+ │          table               l@primary   ·               ·
+ │          spans               /3-/3/#     ·               ·
+ └── scan   ·                   ·           (a, b2)         ·
+·           table               r@primary   ·               ·
+·           spans               /3-/3/#     ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-·                distributed         false       ·       ·
-·                vectorized          true        ·       ·
-render           ·                   ·           (a)     ·
- │               render 0            a           ·       ·
- └── merge-join  ·                   ·           (a, a)  ·
-      │          type                left outer  ·       ·
-      │          equality            (a) = (a)   ·       ·
-      │          left cols are key   ·           ·       ·
-      │          right cols are key  ·           ·       ·
-      │          mergeJoinOrder      +"(a=a)"    ·       ·
-      ├── scan   ·                   ·           (a)     ·
-      │          table               r@primary   ·       ·
-      │          spans               /3-/3/#     ·       ·
-      └── scan   ·                   ·           (a)     ·
-·                table               l@primary   ·       ·
-·                spans               /3-/3/#     ·       ·
+·                distributed         false       ·               ·
+·                vectorized          true        ·               ·
+render           ·                   ·           (a, b1, b2)     ·
+ │               render 0            a           ·               ·
+ │               render 1            b1          ·               ·
+ │               render 2            b2          ·               ·
+ └── merge-join  ·                   ·           (a, b2, a, b1)  ·
+      │          type                left outer  ·               ·
+      │          equality            (a) = (a)   ·               ·
+      │          left cols are key   ·           ·               ·
+      │          right cols are key  ·           ·               ·
+      │          mergeJoinOrder      +"(a=a)"    ·               ·
+      ├── scan   ·                   ·           (a, b2)         ·
+      │          table               r@primary   ·               ·
+      │          spans               /3-/3/#     ·               ·
+      └── scan   ·                   ·           (a, b1)         ·
+·                table               l@primary   ·               ·
+·                spans               /3-/3/#     ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-·                distributed         false       ·       ·
-·                vectorized          true        ·       ·
-render           ·                   ·           (a, a)  ·
- │               render 0            a           ·       ·
- │               render 1            a           ·       ·
- └── merge-join  ·                   ·           (a, a)  ·
-      │          type                left outer  ·       ·
-      │          equality            (a) = (a)   ·       ·
-      │          left cols are key   ·           ·       ·
-      │          right cols are key  ·           ·       ·
-      │          mergeJoinOrder      +"(a=a)"    ·       ·
-      ├── scan   ·                   ·           (a)     ·
-      │          table               r@primary   ·       ·
-      │          spans               /3-/3/#     ·       ·
-      └── scan   ·                   ·           (a)     ·
-·                table               l@primary   ·       ·
-·                spans               /3-/3/#     ·       ·
+·                distributed         false       ·               ·
+·                vectorized          true        ·               ·
+render           ·                   ·           (a, b1, a, b2)  ·
+ │               render 0            a           ·               ·
+ │               render 1            b1          ·               ·
+ │               render 2            a           ·               ·
+ │               render 3            b2          ·               ·
+ └── merge-join  ·                   ·           (a, b2, a, b1)  ·
+      │          type                left outer  ·               ·
+      │          equality            (a) = (a)   ·               ·
+      │          left cols are key   ·           ·               ·
+      │          right cols are key  ·           ·               ·
+      │          mergeJoinOrder      +"(a=a)"    ·               ·
+      ├── scan   ·                   ·           (a, b2)         ·
+      │          table               r@primary   ·               ·
+      │          spans               /3-/3/#     ·               ·
+      └── scan   ·                   ·           (a, b1)         ·
+·                table               l@primary   ·               ·
+·                spans               /3-/3/#     ·               ·
 
 # Regression tests for #21243
 statement ok

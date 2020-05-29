@@ -6,6 +6,244 @@ exec-ddl
 CREATE TABLE b (x INT PRIMARY KEY, z INT)
 ----
 
+exec-ddl
+CREATE TABLE xy (x INT, y INT, PRIMARY KEY (x, y))
+----
+
+exec-ddl
+CREATE TABLE fks
+(
+    k INT PRIMARY KEY,
+    v INT,
+    v2 INT,
+    r1 INT NOT NULL REFERENCES a (x),
+    r2 INT REFERENCES a (x),
+    UNIQUE INDEX (v, v2)
+)
+----
+
+# --------------------------------------------------
+# EliminateJoinUnderProjectLeft
+# --------------------------------------------------
+
+# LeftJoin case with equality of primary keys.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT b.x, b.z FROM b LEFT JOIN a ON b.x = a.x
+----
+scan b
+ ├── columns: x:1!null z:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# LeftJoin case with not-null foreign key.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT k, v FROM fks LEFT JOIN a ON r1 = x
+----
+scan fks
+ ├── columns: k:1!null v:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# LeftJoin case with nullable foreign key.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT k, v FROM fks LEFT JOIN a ON r2 = x
+----
+scan fks
+ ├── columns: k:1!null v:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# InnerJoin case with not-null foreign key (nullable is no-op below).
+norm expect=EliminateJoinUnderProjectLeft
+SELECT k, v FROM fks INNER JOIN a ON r1 = x
+----
+scan fks
+ ├── columns: k:1!null v:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# InnerJoin case with self join.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT b.x, b.z FROM b INNER JOIN b AS b1 ON b.x = b1.x
+----
+scan b
+ ├── columns: x:1!null z:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# Case with equality between multicolumn keys.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT k, v FROM fks LEFT JOIN xy ON v2 = x AND v = y
+----
+scan fks
+ ├── columns: k:1!null v:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# Case with no passthrough columns.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT 1+b.x FROM b LEFT JOIN a ON b.x = a.x
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan b
+ │    ├── columns: b.x:1!null
+ │    └── key: (1)
+ └── projections
+      └── b.x:1 + 1 [as="?column?":7, outer=(1)]
+
+# Case with no references to the left side.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT 1 FROM b LEFT JOIN a ON b.x = a.x
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── scan b
+ └── projections
+      └── 1 [as="?column?":7]
+
+# No-op case because the cross join may duplicate left rows.
+norm expect-not=EliminateJoinUnderProjectLeft
+SELECT 1 FROM b LEFT JOIN a ON True
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── left-join (cross)
+ │    ├── scan b
+ │    ├── scan a
+ │    └── filters (true)
+ └── projections
+      └── 1 [as="?column?":7]
+
+# No-op case with a projection that references the right input.
+norm expect-not=EliminateJoinUnderProjectLeft
+SELECT b.x, b.z, 1+a.x FROM b LEFT JOIN a ON b.x = a.x
+----
+project
+ ├── columns: x:1!null z:2 "?column?":7
+ ├── key: (1)
+ ├── fd: (1)-->(2,7)
+ ├── left-join (hash)
+ │    ├── columns: b.x:1!null z:2 a.x:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── scan b
+ │    │    ├── columns: b.x:1!null z:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan a
+ │    │    ├── columns: a.x:3!null
+ │    │    └── key: (3)
+ │    └── filters
+ │         └── b.x:1 = a.x:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── projections
+      └── a.x:3 + 1 [as="?column?":7, outer=(3)]
+
+# No-op case because r2 is nullable, and therefore rows may not match despite
+# the fact that it is a foreign key.
+norm expect-not=EliminateJoinUnderProjectLeft
+SELECT k, v FROM fks INNER JOIN a ON r2 = x
+----
+project
+ ├── columns: k:1!null v:2
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join (hash)
+      ├── columns: k:1!null v:2 r2:5!null x:6!null
+      ├── key: (1)
+      ├── fd: (1)-->(2,5), (5)==(6), (6)==(5)
+      ├── scan fks
+      │    ├── columns: k:1!null v:2 r2:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,5)
+      ├── scan a
+      │    ├── columns: x:6!null
+      │    └── key: (6)
+      └── filters
+           └── r2:5 = x:6 [outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
+
+# No-op case because r1 is not unique.
+# InnerJoin case with not-null foreign key.
+norm expect-not=EliminateJoinUnderProjectLeft
+SELECT x, y FROM a INNER JOIN fks ON x = r1
+----
+project
+ ├── columns: x:1!null y:2
+ ├── fd: (1)-->(2)
+ └── inner-join (hash)
+      ├── columns: x:1!null y:2 r1:8!null
+      ├── fd: (1)-->(2), (1)==(8), (8)==(1)
+      ├── scan a
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── scan fks
+      │    └── columns: r1:8!null
+      └── filters
+           └── x:1 = r1:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# No-op case because r1 is not unique.
+# LeftJoin case with not-null foreign key.
+norm expect-not=EliminateJoinUnderProjectLeft
+SELECT x, y FROM a LEFT JOIN fks ON x = r1
+----
+project
+ ├── columns: x:1!null y:2
+ ├── fd: (1)-->(2)
+ └── left-join (hash)
+      ├── columns: x:1!null y:2 r1:8
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── scan fks
+      │    └── columns: r1:8!null
+      └── filters
+           └── x:1 = r1:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# --------------------------------------------------
+# EliminateJoinUnderProjectRight
+# --------------------------------------------------
+
+# InnerJoin case with self join.
+norm expect=EliminateJoinUnderProjectRight
+SELECT b1.x, b1.z FROM b INNER JOIN b AS b1 ON b.x = b1.x
+----
+scan b1
+ ├── columns: x:3!null z:4
+ ├── key: (3)
+ └── fd: (3)-->(4)
+
+# InnerJoin case with not-null foreign key.
+norm expect=EliminateJoinUnderProjectRight
+SELECT k, v FROM a INNER JOIN fks ON r1 = x
+----
+scan fks
+ ├── columns: k:5!null v:6
+ ├── key: (5)
+ └── fd: (5)-->(6)
+
+# No-op case because columns from the right side of a LeftJoin are being
+# projected.
+norm expect-not=EliminateJoinUnderProjectRight
+SELECT b.x, b1.x FROM b LEFT JOIN b AS b1 ON b.x = b1.x
+----
+inner-join (hash)
+ ├── columns: x:1!null x:3!null
+ ├── key: (3)
+ ├── fd: (1)==(3), (3)==(1)
+ ├── scan b
+ │    ├── columns: b.x:1!null
+ │    └── key: (1)
+ ├── scan b1
+ │    ├── columns: b1.x:3!null
+ │    └── key: (3)
+ └── filters
+      └── b.x:1 = b1.x:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+
 # --------------------------------------------------
 # EliminateProject
 # --------------------------------------------------
