@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -124,28 +123,6 @@ type scanNode struct {
 	lockingWaitPolicy sqlbase.ScanLockingWaitPolicy
 }
 
-// scanVisibility represents which table columns should be included in a scan.
-type scanVisibility int8
-
-const (
-	publicColumns scanVisibility = 0
-	// Use this to request mutation columns that are currently being
-	// backfilled. These columns are needed to correctly update/delete
-	// a row by correctly constructing ColumnFamilies and Indexes.
-	publicAndNonPublicColumns scanVisibility = 1
-)
-
-func (s scanVisibility) toDistSQLScanVisibility() execinfrapb.ScanVisibility {
-	switch s {
-	case publicColumns:
-		return execinfrapb.ScanVisibility_PUBLIC
-	case publicAndNonPublicColumns:
-		return execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-	default:
-		panic(fmt.Sprintf("Unknown visibility %+v", s))
-	}
-}
-
 // scanColumnsConfig controls the "schema" of a scan node. The zero value is the
 // default: all "public" columns.
 // Note that not all columns in the schema are read and decoded; that is further
@@ -167,7 +144,7 @@ type scanColumnsConfig struct {
 
 	// If visibility is set to publicAndNonPublicColumns, then mutation columns
 	// can be added to the list of columns.
-	visibility scanVisibility
+	visibility execinfrapb.ScanVisibility
 }
 
 var publicColumnsCfg = scanColumnsConfig{}
@@ -322,7 +299,7 @@ func (n *scanNode) initCols() error {
 
 	if n.colCfg.wantedColumns == nil {
 		// Add all active and maybe mutation columns.
-		if n.colCfg.visibility == publicColumns {
+		if n.colCfg.visibility == execinfra.ScanVisibilityPublic {
 			n.cols = n.desc.Columns
 		} else {
 			n.cols = n.desc.ReadableColumns
@@ -336,7 +313,7 @@ func (n *scanNode) initCols() error {
 		var c *sqlbase.ColumnDescriptor
 		var err error
 		isBackfillCol := false
-		if id := sqlbase.ColumnID(wc); n.colCfg.visibility == publicColumns {
+		if id := sqlbase.ColumnID(wc); n.colCfg.visibility == execinfra.ScanVisibilityPublic {
 			c, err = n.desc.FindActiveColumnByID(id)
 		} else {
 			c, isBackfillCol, err = n.desc.FindReadableColumnByID(id)

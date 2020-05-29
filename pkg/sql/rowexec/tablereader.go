@@ -89,7 +89,7 @@ func newTableReader(
 	tr.maxResults = spec.MaxResults
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
