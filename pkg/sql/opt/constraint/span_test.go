@@ -15,10 +15,12 @@ package constraint
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestSpanSet(t *testing.T) {
@@ -660,6 +662,196 @@ func TestSpanPreferInclusive(t *testing.T) {
 			sp.PreferInclusive(keyCtx)
 			if sp.String() != tc.expected {
 				t.Errorf("expected: %s, actual: %s", tc.expected, sp.String())
+			}
+		})
+	}
+}
+
+func TestSpan_KeyCount(t *testing.T) {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx   *KeyContext
+		span     Span
+		expected string
+	}{
+		{ // 0
+			// Single key span with DString datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST - /US_WEST]"),
+			expected: "1",
+		},
+		{ // 1
+			// Multiple key span with DInt datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-5 - /5]"),
+			expected: "11",
+		},
+		{ // 2
+			// Multiple key span with DOid datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-5 - /5]", types.OidFamily),
+			expected: "11",
+		},
+		{ // 3
+			// Multiple key span with DDate datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/2000-1-1 - /2000-1-2]", types.DateFamily),
+			expected: "2",
+		},
+		{ // 4
+			// Single-key span with multiple-column key.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/item]"),
+			expected: "1",
+		},
+		{ // 5
+			// Fails because the span is multiple-key and the type is not enumerable.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/object]"),
+			expected: "FAIL",
+		},
+		{ // 6
+			// Descending multiple-key span.
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/5 - /-5]"),
+			expected: "11",
+		},
+		{ // 7
+			// Descending multiple-key span with multiple-column keys.
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/5 - /US_WEST/-5]"),
+			expected: "11",
+		},
+		{ // 8
+			// Fails because the keys can only differ in the last column.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/1 - /US_EAST/1]"),
+			expected: "FAIL",
+		},
+		{ // 9
+			// Fails because the keys must have the same length.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1/1 - /1]"),
+			expected: "FAIL",
+		},
+		{ // 10
+			// Fails because the keys must have the same length.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1 - /1/1]"),
+			expected: "FAIL",
+		},
+		{ // 11
+			// Fails because the keys must have the same length.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1 - ]"),
+			expected: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(dist uint, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return strconv.Itoa(int(dist))
+			}
+
+			if res := toStr(tc.span.KeyCount(tc.keyCtx)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
+			}
+		})
+	}
+}
+
+func TestSpan_SplitSpan(t *testing.T) {
+	const keyCountLimit = 10
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx   *KeyContext
+		span     Span
+		expected string
+	}{
+		{ // 0
+			// Single-key span with multiple-column key.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/item]"),
+			expected: "[/'US_WEST'/'item' - /'US_WEST'/'item']",
+		},
+		{ // 1
+			// Fails because the datum type is not enumerable.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/object]"),
+			expected: "FAIL",
+		},
+		{ // 2
+			// Fails because only the last datums can differ, and only if they are
+			// enumerable.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_EAST/item - /US_WEST/item]"),
+			expected: "FAIL",
+		},
+		{ // 3
+			// Ascending multiple-key span.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-1 - /1]"),
+			expected: "[/-1 - /-1] [/0 - /0] [/1 - /1]",
+		},
+		{ // 4
+			// Descending multiple-key span.
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/1 - /-1]"),
+			expected: "[/1 - /1] [/0 - /0] [/-1 - /-1]",
+		},
+		{ // 5
+			// Ascending multiple-key span with multiple-column keys.
+			keyCtx: kcAscAsc,
+			span:   ParseSpan(&evalCtx, "[/US_WEST/-1 - /US_WEST/1]"),
+			expected: "[/'US_WEST'/-1 - /'US_WEST'/-1] [/'US_WEST'/0 - /'US_WEST'/0] " +
+				"[/'US_WEST'/1 - /'US_WEST'/1]",
+		},
+		{ // 6
+			// Fails because the keys are different lengths.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[ - /'US_WEST']"),
+			expected: "FAIL",
+		},
+		{ // 7
+			// Single span with 9 keys (equal to maxKeyCount).
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/0 - /9]",
+			),
+			expected: "[/0 - /0] [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6] [/7 - /7] " +
+				"[/8 - /8] [/9 - /9]",
+		},
+		{ // 8
+			// Fails because the number of keys exceeds maxKeyCount.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-1 - /10]"),
+			expected: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(spans *Spans, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return spans.String()
+			}
+
+			if res := toStr(tc.span.Split(tc.keyCtx, keyCountLimit)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
 			}
 		})
 	}

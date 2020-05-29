@@ -51,14 +51,17 @@ func parseSpans(evalCtx *tree.EvalContext, str string) Spans {
 	}
 	var result Spans
 	for i := 0; i < len(s)/3; i++ {
-		sp := ParseSpan(evalCtx, strings.Join(s[i*3:i*3+3], " "), types.IntFamily)
+		sp := ParseSpan(evalCtx, strings.Join(s[i*3:i*3+3], " "))
 		result.Append(&sp)
 	}
 	return result
 }
 
 // ParseSpan parses a span in the format of Span.String, e.g: [/1 - /2].
-func ParseSpan(evalCtx *tree.EvalContext, str string, typ types.Family) Span {
+// If no types are passed in, the type is inferred as being an int if possible;
+// otherwise a string. If any types are specified, they must be specified for
+// every datum.
+func ParseSpan(evalCtx *tree.EvalContext, str string, typs ...types.Family) Span {
 	if len(str) < len("[ - ]") {
 		panic(str)
 	}
@@ -76,9 +79,35 @@ func ParseSpan(evalCtx *tree.EvalContext, str string, typ types.Family) Span {
 	if len(keys) != 2 {
 		panic(str)
 	}
+
+	// If the typs slice is empty, we infer the type of each datum.
+	startDatums := strings.Split(keys[0], "/")
+	endDatums := strings.Split(keys[1], "/")
+	longerKey := startDatums
+
+	// Subtract 1 from the length because the first element will be empty:
+	// '/1/2' -> '', '1', '2'
+	keyLength := len(startDatums) - 1
+	if keyLength < len(endDatums)-1 {
+		keyLength = len(endDatums) - 1
+		longerKey = endDatums
+	}
+	if keyLength > 0 && len(typs) == 0 {
+		// Infer the datum types and populate typs accordingly.
+		typs = make([]types.Family, keyLength)
+		for i := 0; i < keyLength; i++ {
+			typ := types.IntFamily
+			_, err := tree.ParseDInt(longerKey[i+1])
+			if err != nil {
+				typ = types.StringFamily
+			}
+			typs[i] = typ
+		}
+	}
+
 	var sp Span
-	startVals := parseDatumPath(evalCtx, keys[0], typ)
-	endVals := parseDatumPath(evalCtx, keys[1], typ)
+	startVals := parseDatumPath(evalCtx, keys[0], typs)
+	endVals := parseDatumPath(evalCtx, keys[1], typs)
 	sp.Init(
 		MakeCompositeKey(startVals...), boundary[s],
 		MakeCompositeKey(endVals...), boundary[e],
@@ -101,16 +130,20 @@ func parseIntPath(str string) []int {
 
 // parseDatumPath parses a span key string like "/1/2/3".
 // Only NULL and a subset of types are currently supported.
-func parseDatumPath(evalCtx *tree.EvalContext, str string, typ types.Family) []tree.Datum {
+func parseDatumPath(evalCtx *tree.EvalContext, str string, typs []types.Family) []tree.Datum {
 	var res []tree.Datum
-	for _, valStr := range parsePath(str) {
+	for i, valStr := range parsePath(str) {
+		if i >= len(typs) {
+			panic(errors.AssertionFailedf("invalid types"))
+		}
+
 		if valStr == "NULL" {
 			res = append(res, tree.DNull)
 			continue
 		}
 		var val tree.Datum
 		var err error
-		switch typ {
+		switch typs[i] {
 		case types.BoolFamily:
 			val, err = tree.ParseDBool(valStr)
 		case types.IntFamily:
@@ -127,8 +160,13 @@ func parseDatumPath(evalCtx *tree.EvalContext, str string, typ types.Family) []t
 			val, err = tree.ParseDTimestampTZ(evalCtx, valStr, time.Microsecond)
 		case types.StringFamily:
 			val = tree.NewDString(valStr)
+		case types.OidFamily:
+			dInt, err := tree.ParseDInt(valStr)
+			if err == nil {
+				val = tree.NewDOid(*dInt)
+			}
 		default:
-			panic(errors.AssertionFailedf("type %s not supported", typ.String()))
+			panic(errors.AssertionFailedf("type %s not supported", typs[i].String()))
 		}
 		if err != nil {
 			panic(err)

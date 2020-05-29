@@ -13,8 +13,10 @@
 package constraint
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -105,5 +107,103 @@ func TestSpansSortAndMerge(t *testing.T) {
 		if actual := spans.String(); actual != expected {
 			t.Fatalf("%s : expected  %s  got  %s", origStr, expected, actual)
 		}
+	}
+}
+
+func TestSpans_ExtractSingleKeySpans(t *testing.T) {
+	const maxKeyCount = 10
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		s        Spans
+		keyCtx   *KeyContext
+		expected string
+	}{
+		{ // 0
+			// Single span with single key; no-op.
+			s:        parseSpans(&evalCtx, "[/1/0 - /1/0]"),
+			keyCtx:   kcAscAsc,
+			expected: "[/1/0 - /1/0]",
+		},
+		{ // 1
+			// Two spans each with single key; no-op.
+			s:        parseSpans(&evalCtx, "[/1/0 - /1/0] [/1/2 - /1/2]"),
+			keyCtx:   kcAscAsc,
+			expected: "[/1/0 - /1/0] [/1/2 - /1/2]",
+		},
+		{ // 2
+			// One span with four keys.
+			s:        parseSpans(&evalCtx, "[/1/1 - /1/4]"),
+			keyCtx:   kcAscAsc,
+			expected: "[/1/1 - /1/1] [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]",
+		},
+		{ // 3
+			// Descending span.
+			s:        parseSpans(&evalCtx, "[/1/1 - /1/-1]"),
+			keyCtx:   kcDescDesc,
+			expected: "[/1/1 - /1/1] [/1/0 - /1/0] [/1/-1 - /1/-1]",
+		},
+		{ // 4
+			// Descending span with ascending columns.
+			s:        parseSpans(&evalCtx, "[/1/1 - /1/-1]"),
+			keyCtx:   kcAscAsc,
+			expected: "FAIL",
+		},
+		{ // 5
+			// One descending span and one single-key span. Spans are out of order.
+			s:        parseSpans(&evalCtx, "[/1/1 - /1/-1] [/1/2 - /1/2]"),
+			keyCtx:   kcDescDesc,
+			expected: "[/1/1 - /1/1] [/1/0 - /1/0] [/1/-1 - /1/-1] [/1/2 - /1/2]",
+		},
+		{ // 6
+			// Fails because the keys are not all the same length.
+			s:        parseSpans(&evalCtx, "[/1/0 - /1/0] [/2 - /2]"),
+			keyCtx:   kcAscAsc,
+			expected: "FAIL",
+		},
+		{ // 7
+			// Fails because the keys are not all the same length.
+			s:        parseSpans(&evalCtx, "[/2 - /2] [/1/0 - /1/0]"),
+			keyCtx:   kcDescDesc,
+			expected: "FAIL",
+		},
+		{ // 8
+			// Fails because the span has 16 keys, which is greater than maxKeyCount.
+			s:        parseSpans(&evalCtx, "[/1/0 - /1/15]"),
+			keyCtx:   kcAscAsc,
+			expected: "FAIL",
+		},
+		{ // 9
+			// Fails because 3 spans with 4 keys each exceeds maxKeyCount.
+			s:        parseSpans(&evalCtx, "[/1/1 - /1/4] [/2/1 - /2/4] [/3/1 - /3/4]"),
+			keyCtx:   kcAscAsc,
+			expected: "FAIL",
+		},
+		{ // 10
+			// Fails because 11 spans exceed maxKeyCount.
+			s: parseSpans(&evalCtx, ""+
+				"[/0 - /0] [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] "+
+				"[/6 - /6] [/7 - /7] [/8 - /8] [/9 - /9] [/10 - /10]"),
+			keyCtx:   kcAscAsc,
+			expected: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(spans *Spans, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return spans.String()
+			}
+
+			if res := toStr(tc.s.ExtractSingleKeySpans(tc.keyCtx, maxKeyCount)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
+			}
+		})
 	}
 }

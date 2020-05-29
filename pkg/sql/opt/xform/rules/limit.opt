@@ -48,3 +48,30 @@
     (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
     $indexJoinPrivate
 )
+
+# SplitScanIntoUnionScans splits a scan under a limit into a union of limited
+# scans when:
+# 1. The limit orders on a single column.
+# 2. The scan is constrained.
+# 3. The number of keys within the scan's spans is statically known and is less
+#    than maxScanCount (defined in SplitScanIntoUnionScans).
+# 4. The scan's index includes the limit's ordering column at ordinal position
+#    one or greater.
+[SplitScanIntoUnionScans, Explore]
+(Limit
+    $scan:(Scan $scanPrivate:*) &
+        (ScanIsConstrained $scanPrivate) &
+        ^(ScanIsLimited $scanPrivate)
+    $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
+    $ordering:* &
+        (Succeeded
+            $unionScans:(SplitScanIntoUnionScans
+                $ordering
+                $scan
+                $scanPrivate
+                $limit
+            )
+        )
+)
+=>
+(Limit $unionScans $limitExpr $ordering)
