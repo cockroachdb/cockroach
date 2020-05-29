@@ -48,7 +48,13 @@ func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
 }
 
 func descriptor(descriptorID uint64) roachpb.KeyValue {
-	return kv(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(descriptorID)), nil)
+	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(descriptorID))
+	v := sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{})
+	kv := roachpb.KeyValue{Key: k}
+	if err := kv.Value.SetProto(v); err != nil {
+		panic(err)
+	}
+	return kv
 }
 
 func zoneConfig(descriptorID uint32, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
