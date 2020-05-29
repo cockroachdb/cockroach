@@ -138,6 +138,20 @@ type BaseConfig struct {
 	TestingKnobs base.TestingKnobs
 }
 
+// MakeBaseConfig returns a BaseConfig with default values.
+func MakeBaseConfig(st *cluster.Settings) BaseConfig {
+	baseCfg := BaseConfig{
+		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
+		Config:            new(base.Config),
+		Settings:          st,
+		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
+		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
+		StorageEngine:     storage.DefaultStorageEngine,
+	}
+	baseCfg.InitDefaults()
+	return baseCfg
+}
+
 // Config holds parameters needed to setup a (combined KV and SQL) server.
 //
 // TODO(tbg): this should end up being just SQLConfig union KVConfig union BaseConfig.
@@ -289,6 +303,21 @@ type SQLConfig struct {
 	QueryCacheSize int64
 }
 
+// MakeSQLConfig returns a SQLConfig with default values.
+func MakeSQLConfig(
+	tenID roachpb.TenantID, // NB: unused, but used soon
+	tempStorageCfg base.TempStorageConfig,
+) SQLConfig {
+	sqlCfg := SQLConfig{
+		MemoryPoolSize:     defaultSQLMemoryPoolSize,
+		TableStatCacheSize: defaultSQLTableStatCacheSize,
+		QueryCacheSize:     defaultSQLQueryCacheSize,
+		TempStorageConfig:  tempStorageCfg,
+		LeaseManagerConfig: base.NewLeaseManagerConfig(),
+	}
+	return sqlCfg
+}
+
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
@@ -317,34 +346,22 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 	return setOpenFileLimit(1)
 }
 
-// MakeConfig returns a Config with default values.
+// MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
 	if err != nil {
 		panic(err)
 	}
+	tempStorageCfg := base.TempStorageConfigFromEnv(
+		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
+
+	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
+	baseCfg := MakeBaseConfig(st)
 
 	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 
-	sqlCfg := SQLConfig{
-		MemoryPoolSize:     defaultSQLMemoryPoolSize,
-		TableStatCacheSize: defaultSQLTableStatCacheSize,
-		QueryCacheSize:     defaultSQLQueryCacheSize,
-		TempStorageConfig: base.TempStorageConfigFromEnv(
-			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes),
-		LeaseManagerConfig: base.NewLeaseManagerConfig(),
-	}
-
-	bothCfg := BaseConfig{
-		Config:            new(base.Config),
-		Settings:          st,
-		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
-		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
-		StorageEngine:     storage.DefaultStorageEngine,
-	}
-
 	cfg := Config{
-		BaseConfig:                     bothCfg,
+		BaseConfig:                     baseCfg,
 		SQLConfig:                      sqlCfg,
 		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
 		CacheSize:                      DefaultCacheSize,
@@ -357,9 +374,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 			Specs: []base.StoreSpec{storeSpec},
 		},
 	}
-	cfg.AmbientCtx.Tracer = st.Tracer
 
-	cfg.Config.InitDefaults()
 	cfg.RaftConfig.SetDefaults()
 
 	return cfg
