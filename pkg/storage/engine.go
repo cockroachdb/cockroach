@@ -696,12 +696,6 @@ var ingestDelayL0Threshold = settings.RegisterIntSetting(
 	20,
 )
 
-var ingestDelayPendingLimit = settings.RegisterByteSizeSetting(
-	"rocksdb.ingest_backpressure.pending_compaction_threshold",
-	"pending compaction estimate above which to backpressure SST ingestions",
-	2<<30, /* 2 GiB */
-)
-
 var ingestDelayTime = settings.RegisterDurationSetting(
 	"rocksdb.ingest_backpressure.max_delay",
 	"maximum amount of time to backpressure a single SST ingestion",
@@ -731,7 +725,7 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	if targetDelay == 0 {
 		return
 	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %db pending compaction", targetDelay, stats.L0FileCount, stats.PendingCompactionBytesEstimate)
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files", targetDelay, stats.L0FileCount)
 
 	select {
 	case <-time.After(targetDelay):
@@ -742,11 +736,7 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Duration {
 	maxDelay := ingestDelayTime.Get(&settings.SV)
 	l0Filelimit := ingestDelayL0Threshold.Get(&settings.SV)
-	compactionLimit := ingestDelayPendingLimit.Get(&settings.SV)
 
-	if stats.PendingCompactionBytesEstimate >= compactionLimit {
-		return maxDelay
-	}
 	const ramp = 10
 	if stats.L0FileCount > l0Filelimit {
 		delayPerFile := maxDelay / time.Duration(ramp)
