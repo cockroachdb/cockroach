@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -982,4 +983,86 @@ func runBatchApplyBatchRepr(
 	}
 
 	b.StopTimer()
+}
+
+func runExportToSst(
+	ctx context.Context,
+	b *testing.B,
+	emk engineMaker,
+	numKeys int,
+	numRevisions int,
+	exportAllRevisions bool,
+	contention bool,
+) {
+	dir, cleanup := testutils.TempDir(b)
+	defer cleanup()
+	engine := emk(b, dir)
+	defer engine.Close()
+
+	batch := engine.NewWriteOnlyBatch()
+	for i := 0; i < numKeys; i++ {
+		key := make([]byte, 16)
+		key = append(key, 'a', 'a', 'a')
+		key = encoding.EncodeUint32Ascending(key, uint32(i))
+
+		for j := 0; j < numRevisions; j++ {
+			err := batch.Put(MVCCKey{key, hlc.Timestamp{int64(j + 1), 0}}, []byte("foobar"))
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+	if err := batch.Commit(true); err != nil {
+		b.Fatal(err)
+	}
+	batch.Close()
+	if err := engine.Flush(); err != nil {
+		b.Fatal(err)
+	}
+	closeCh := make(chan struct{})
+	var wg sync.WaitGroup
+	if contention {
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				key := make([]byte, 16)
+				for {
+					for j := numRevisions / 2; j < 2*numRevisions; j++ {
+						for i := 0; i < numKeys; i++ {
+							key = key[:0]
+							key = append(key, 'a', 'a', 'a')
+							key = encoding.EncodeUint32Ascending(key, uint32(i))
+
+							_ = engine.Put(MVCCKey{key, hlc.Timestamp{WallTime: int64(j + 1)}}, []byte{'x', byte(i)})
+
+							select {
+							case <-closeCh:
+								return
+							default:
+							}
+						}
+					}
+				}
+			}()
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
+		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
+		_, _, _, err := engine.ExportToSst(roachpb.KeyMin, roachpb.KeyMax, startTS, endTS, exportAllRevisions, 0, 0, IterOptions{
+			LowerBound: roachpb.KeyMin,
+			UpperBound: roachpb.KeyMax,
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	if contention {
+		close(closeCh)
+		wg.Wait()
+	}
 }

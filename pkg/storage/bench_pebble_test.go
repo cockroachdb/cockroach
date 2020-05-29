@@ -91,6 +91,42 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 	}
 }
 
+func BenchmarkExportToSst(b *testing.B) {
+	numKeys := []int{64, 512, 1024, 8192, 65536}
+	numRevisions := []int{1, 10, 100}
+	exportAllRevisions := []bool{false, true}
+	contention := []bool{false, true}
+	engineMakers := []struct {
+		name   string
+		create engineMaker
+	}{
+		{"rocksdb", setupMVCCRocksDB},
+		{"pebble", setupMVCCPebble},
+	}
+
+	for _, engineImpl := range engineMakers {
+		b.Run(engineImpl.name, func(b *testing.B) {
+			for _, numKey := range numKeys {
+				b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
+					for _, numRevision := range numRevisions {
+						b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
+							for _, exportAllRevisionsVal := range exportAllRevisions {
+								b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisions), func(b *testing.B) {
+									for _, contentionVal := range contention {
+										b.Run(fmt.Sprintf("contention=%t", contentionVal), func(b *testing.B) {
+											runExportToSst(context.Background(), b, engineImpl.create, numKey, numRevision, exportAllRevisionsVal, contentionVal)
+										})
+									}
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
 	if testing.Short() {
 		b.Skip("TODO: fix benchmark")
