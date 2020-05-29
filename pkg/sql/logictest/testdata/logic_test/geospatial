@@ -334,6 +334,26 @@ INSERT INTO geom_operators_test VALUES
   ('Empty GeometryCollection', 'GEOMETRYCOLLECTION EMPTY')
   -- ('Partially Empty GeometryCollection', 'GEOMETRYCOLLECTION ( LINESTRING EMPTY, POINT (0.0 0.0) )'): omitted, see: #49209
 
+# GROUP BY
+query TR
+SELECT
+  a.dsc,
+  ST_Area(a.geom)
+FROM geom_operators_test a
+GROUP BY a.dsc, a.geom
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  0
+Empty LineString                          0
+Faraway point                             0
+Line going through left and right square  0
+NULL                                      NULL
+Point middle of Left Square               0
+Point middle of Right Square              0
+Square (left)                             1
+Square (right)                            1
+Square overlapping left and right square  1.1
+
 # Unary operators
 query TRRRR
 SELECT
@@ -978,6 +998,26 @@ subtest geog_operators
 
 statement ok
 CREATE TABLE geog_operators_test AS SELECT dsc, geom::geography AS geog FROM geom_operators_test
+
+# GROUP BY
+query TR
+SELECT
+  a.dsc,
+  ST_Area(a.geog)
+FROM geog_operators_test a
+GROUP BY a.dsc, a.geog
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  0
+Empty LineString                          0
+Faraway point                             0
+Line going through left and right square  0
+NULL                                      NULL
+Point middle of Left Square               0
+Point middle of Right Square              0
+Square (left)                             1.23087783614695e+10
+Square (right)                            1.23087783614695e+10
+Square overlapping left and right square  1.35397288423019e+10
 
 # Unary operators
 query TRRRRRRRRR
