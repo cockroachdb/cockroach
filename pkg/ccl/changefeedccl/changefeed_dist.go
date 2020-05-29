@@ -113,7 +113,7 @@ func distChangefeedFlow(
 	}
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, noTxn)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, noTxn, true /* distribute */)
 
 	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {
