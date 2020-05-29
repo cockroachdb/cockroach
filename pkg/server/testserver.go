@@ -568,7 +568,6 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
-		tenantID:                 roachpb.SystemTenantID,
 		db:                       db,
 		registry:                 registry,
 		sessionRegistry:          sql.NewSessionRegistry(),
@@ -589,7 +588,6 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 	}
 
 	args := testSQLServerArgs(ts)
-	args.tenantID = params.TenantID
 	if params.AllowSettingClusterSettings {
 		args.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
 			ClusterSettingsUpdater: args.Settings.MakeUpdater(),
