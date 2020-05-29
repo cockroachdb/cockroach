@@ -111,7 +111,7 @@ type SpanResolverIterator interface {
 	// the current range.
 	// A RangeUnavailableError is returned if there's no information in gossip
 	// about any of the replicas.
-	ReplicaInfo(ctx context.Context) (kvcoord.ReplicaInfo, error)
+	ReplicaInfo(ctx context.Context) (roachpb.ReplicaDescriptor, error)
 }
 
 // spanResolver implements SpanResolver.
@@ -257,7 +257,9 @@ func (it *spanResolverIterator) Desc() roachpb.RangeDescriptor {
 }
 
 // ReplicaInfo is part of the SpanResolverIterator interface.
-func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kvcoord.ReplicaInfo, error) {
+func (it *spanResolverIterator) ReplicaInfo(
+	ctx context.Context,
+) (roachpb.ReplicaDescriptor, error) {
 	if !it.Valid() {
 		panic(it.Error())
 	}
@@ -265,7 +267,7 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kvcoord.Replic
 	repl, err := it.oracle.ChoosePreferredReplica(
 		ctx, *it.it.Desc(), it.queryState)
 	if err != nil {
-		return kvcoord.ReplicaInfo{}, err
+		return roachpb.ReplicaDescriptor{}, err
 	}
 	it.queryState.RangesPerNode[repl.NodeID]++
 	it.queryState.AssignedRanges[it.it.Desc().RangeID] = repl
