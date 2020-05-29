@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func TestOrdering(t *testing.T) {
@@ -127,4 +129,44 @@ func TestOrderingSet(t *testing.T) {
 	s2 = s.Copy()
 	s2.RestrictToCols(opt.MakeColSet(2, 3))
 	expect(s2, "")
+}
+
+func TestOrderingColumn_RemapColumn(t *testing.T) {
+	var md opt.Metadata
+	catalog := testcat.New()
+	_, err := catalog.ExecuteDDL("CREATE TABLE tab (a INT PRIMARY KEY, b INT, c INT, d INT);")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tn := tree.NewUnqualifiedTableName("tab")
+	tab := catalog.Table(tn)
+
+	from := md.AddTable(tab, &tree.TableName{})
+	to := md.AddTable(tab, &tree.TableName{})
+
+	col1 := opt.MakeOrderingColumn(from.ColumnID(0), false)
+	col2 := opt.MakeOrderingColumn(from.ColumnID(3), true)
+
+	remappedCol1 := col1.RemapColumn(from, to)
+	remappedCol2 := col2.RemapColumn(from, to)
+
+	expected := "+1"
+	if col1.String() != expected {
+		t.Errorf("\ncol1 was changed: %s\n", col1.String())
+	}
+
+	expected = "-4"
+	if col2.String() != expected {
+		t.Errorf("\ncol2 was changed: %s\n", col2.String())
+	}
+
+	expected = "+5"
+	if remappedCol1.String() != expected {
+		t.Errorf("\nexpected: %s\nactual: %s\n", expected, remappedCol1.String())
+	}
+
+	expected = "-8"
+	if remappedCol2.String() != expected {
+		t.Errorf("\nexpected: %s\nactual: %s\n", expected, remappedCol2.String())
+	}
 }
