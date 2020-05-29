@@ -53,10 +53,9 @@ RUN mkdir crosstool-ng \
  && cd .. \
  && rm -rf crosstool-ng
 
-COPY x86_64-unknown-linux-gnu.defconfig x86_64-unknown-linux-musl.defconfig x86_64-w64-mingw.defconfig aarch64-unknown-linux-gnueabi.defconfig ./
+COPY x86_64-unknown-linux-gnu.defconfig x86_64-w64-mingw.defconfig aarch64-unknown-linux-gnueabi.defconfig ./
 RUN mkdir src \
  && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-gnu.defconfig      /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
- && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-musl.defconfig     /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && mkdir build && (cd build && DEFCONFIG=../x86_64-w64-mingw.defconfig              /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && mkdir build && (cd build && DEFCONFIG=../aarch64-unknown-linux-gnueabi.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && rm -rf src
@@ -64,14 +63,12 @@ RUN mkdir src \
 RUN mkdir -p /usr/local/lib/ccache \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-gnu-cc \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-gnu-c++ \
- && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-musl-cc \
- && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-musl-c++ \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-cc \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-c++ \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-cc \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-c++
 
-ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-unknown-linux-musl/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin
+ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin
 
 # Build & install the terminfo lib (incl. in ncurses) for the linux targets (x86 and arm).
 # (on BSD or BSD-derived like macOS it's already built-in; on windows we don't need it.)
@@ -96,14 +93,6 @@ RUN mkdir ncurses \
  && patch -p0 <../ncurses.patch \
  && export cf_cv_type_of_bool='unsigned char' \
  && export cf_cv_working_poll=yes \
- && mkdir build-x86_64-unknown-linux-musl \
- && (cd build-x86_64-unknown-linux-musl \
-    && CC=/x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-cc \
-       CXX=/x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-c++ \
-       ../configure --prefix=/x-tools/x86_64-unknown-linux-musl/x86_64-unknown-linux-musl/sysroot/usr \
-         --host=x86_64-unknown-linux-musl \
-         $(cat /ncurses.conf) \
-    && make install.libs) \
  && mkdir build-x86_64-unknown-linux-gnu \
  && (cd build-x86_64-unknown-linux-gnu \
     && CC=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-cc \
