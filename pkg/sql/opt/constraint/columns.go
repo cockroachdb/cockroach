@@ -111,6 +111,19 @@ func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
 	return true
 }
 
+// RemapColumns returns a new Columns object with all ColumnIDs remapped to
+// ones that come from the 'to' table. The old ColumnIDs must come from the
+// 'from' table.
+func (c *Columns) RemapColumns(from, to opt.TableID) Columns {
+	var newColumns Columns
+	newColumns.firstCol = c.firstCol.RemapColumn(from, to)
+	newColumns.otherCols = make([]opt.OrderingColumn, len(c.otherCols))
+	for i := range c.otherCols {
+		newColumns.otherCols[i] = c.otherCols[i].RemapColumn(from, to)
+	}
+	return newColumns
+}
+
 // ColSet returns the columns as a ColSet.
 func (c *Columns) ColSet() opt.ColSet {
 	var r opt.ColSet
