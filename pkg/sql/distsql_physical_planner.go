@@ -501,16 +501,32 @@ func checkSupportForNode(node planNode) (distRecommendation, error) {
 	}
 }
 
+//go:generate stringer -type=NodeStatus
+
+// NodeStatus represents a node's health and compatibility in the context of
+// physical planning for a query.
+type NodeStatus int
+
+const (
+	// NodeOK means that the node can be used for planning.
+	NodeOK NodeStatus = iota
+	// NodeUnhealthy means that the node should be avoided because
+	// it's not healthy.
+	NodeUnhealthy
+	// NodeDistSQLVersionIncompatible means that the node should be avoided
+	// because it's DistSQL version is not compatible.
+	NodeDistSQLVersionIncompatible
+)
+
 // PlanningCtx contains data used and updated throughout the planning process of
 // a single query.
 type PlanningCtx struct {
 	ctx             context.Context
 	ExtendedEvalCtx *extendedEvalContext
 	spanIter        physicalplan.SpanResolverIterator
-	// NodeAddresses contains addresses for all NodeIDs that are referenced by any
+	// NodesStatuses contains info for all NodeIDs that are referenced by any
 	// PhysicalPlan we generate with this context.
-	// Nodes that fail a health check have empty addresses.
-	NodeAddresses map[roachpb.NodeID]string
+	NodeStatuses map[roachpb.NodeID]NodeStatus
 
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal bool
@@ -560,20 +576,6 @@ func (p *PlanningCtx) IsLocal() bool {
 // will run, without actually running it.
 func (p *PlanningCtx) EvaluateSubqueries() bool {
 	return !p.noEvalSubqueries
-}
-
-// sanityCheckAddresses returns an error if the same address is used by two
-// nodes.
-func (p *PlanningCtx) sanityCheckAddresses() error {
-	inverted := make(map[string]roachpb.NodeID)
-	for nodeID, addr := range p.NodeAddresses {
-		if otherNodeID, ok := inverted[addr]; ok {
-			return errors.Errorf(
-				"different nodes %d and %d with the same address '%s'", nodeID, otherNodeID, addr)
-		}
-		inverted[addr] = nodeID
-	}
-	return nil
 }
 
 // PhysicalPlan is a partial physical plan which corresponds to a planNode
@@ -731,9 +733,6 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	}
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
-	// nodeVerCompatMap maintains info about which nodes advertise DistSQL
-	// versions compatible with this plan and which ones don't.
-	nodeVerCompatMap := make(map[roachpb.NodeID]bool)
 	it := planCtx.spanIter
 	for _, span := range spans {
 		// rspan is the span we are currently partitioning.
@@ -759,7 +758,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 			if !it.Valid() {
 				return nil, it.Error()
 			}
-			replInfo, err := it.ReplicaInfo(ctx)
+			replDesc, err := it.ReplicaInfo(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -783,34 +782,17 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 				endKey = rspan.EndKey
 			}
 
-			nodeID := replInfo.NodeDesc.NodeID
+			nodeID := replDesc.NodeID
 			partitionIdx, inNodeMap := nodeMap[nodeID]
 			if !inNodeMap {
 				// This is the first time we are seeing nodeID for these spans. Check
 				// its health.
-				addr, inAddrMap := planCtx.NodeAddresses[nodeID]
-				if !inAddrMap {
-					if err := dsp.nodeHealth.check(ctx, nodeID); err == nil {
-						addr = replInfo.NodeDesc.Address.String()
-						planCtx.NodeAddresses[nodeID] = addr
-					}
-				}
-				compat := true
-				if addr != "" {
-					// Check if the node's DistSQL version is compatible with this plan.
-					// If it isn't, we'll use the gateway.
-					var ok bool
-					if compat, ok = nodeVerCompatMap[nodeID]; !ok {
-						compat = dsp.nodeVersionIsCompatible(nodeID)
-						nodeVerCompatMap[nodeID] = compat
-					}
-				}
+				status := dsp.CheckNodeHealthAndVersion(planCtx, nodeID)
 				// If the node is unhealthy or its DistSQL version is incompatible, use
 				// the gateway to process this span instead of the unhealthy host.
 				// An empty address indicates an unhealthy host.
-				if addr == "" || !compat {
-					log.Eventf(ctx, "not planning on node %d. unhealthy: %t, incompatible version: %t",
-						nodeID, addr == "", !compat)
+				if status != NodeOK {
+					log.Eventf(ctx, "not planning on node %d: %s", nodeID, status)
 					nodeID = dsp.nodeDesc.NodeID
 					partitionIdx, inNodeMap = nodeMap[nodeID]
 				}
@@ -1029,35 +1011,39 @@ func (dsp *DistSQLPlanner) getNodeIDForScan(
 	if !it.Valid() {
 		return 0, it.Error()
 	}
-	replInfo, err := it.ReplicaInfo(planCtx.ctx)
+	replDesc, err := it.ReplicaInfo(planCtx.ctx)
 	if err != nil {
 		return 0, err
 	}
 
-	nodeID := replInfo.NodeDesc.NodeID
-	if err := dsp.CheckNodeHealthAndVersion(planCtx, replInfo.NodeDesc); err != nil {
-		log.Eventf(planCtx.ctx, "not planning on node %d. %v", nodeID, err)
+	nodeID := replDesc.NodeID
+	status := dsp.CheckNodeHealthAndVersion(planCtx, nodeID)
+	if status != NodeOK {
+		log.Eventf(planCtx.ctx, "not planning on node %d: %s", nodeID, status)
 		return dsp.nodeDesc.NodeID, nil
 	}
 	return nodeID, nil
 }
 
-// CheckNodeHealthAndVersion adds the node to planCtx if it is healthy and
-// has a compatible version. An error is returned otherwise.
+// CheckNodeHealthAndVersion returns a information about a node's health and
+// compatibility. The info is also recorded in planCtx.Nodes.
 func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
-	planCtx *PlanningCtx, desc *roachpb.NodeDescriptor,
-) error {
-	nodeID := desc.NodeID
-	var err error
-
-	if err = dsp.nodeHealth.check(planCtx.ctx, nodeID); err != nil {
-		err = errors.New("unhealthy")
-	} else if !dsp.nodeVersionIsCompatible(nodeID) {
-		err = errors.New("incompatible version")
-	} else {
-		planCtx.NodeAddresses[nodeID] = desc.Address.String()
+	planCtx *PlanningCtx, nodeID roachpb.NodeID,
+) NodeStatus {
+	if status, ok := planCtx.NodeStatuses[nodeID]; ok {
+		return status
 	}
-	return err
+
+	var status NodeStatus
+	if err := dsp.nodeHealth.check(planCtx.ctx, nodeID); err != nil {
+		status = NodeUnhealthy
+	} else if !dsp.nodeVersionIsCompatible(nodeID) {
+		status = NodeDistSQLVersionIncompatible
+	} else {
+		status = NodeOK
+	}
+	planCtx.NodeStatuses[nodeID] = status
+	return status
 }
 
 // createTableReaders generates a plan consisting of table reader processors,
@@ -3247,8 +3233,8 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 ) *PlanningCtx {
 	planCtx := dsp.newLocalPlanningCtx(ctx, evalCtx)
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
-	planCtx.NodeAddresses = make(map[roachpb.NodeID]string)
-	planCtx.NodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
+	planCtx.NodeStatuses = make(map[roachpb.NodeID]NodeStatus)
+	planCtx.NodeStatuses[dsp.nodeDesc.NodeID] = NodeOK
 	return planCtx
 }
 
