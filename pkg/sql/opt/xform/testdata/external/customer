@@ -182,7 +182,7 @@ limit
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
  │    │    ├── ordering: +1 opt(9) [actual: +1]
- │    │    └── limit hint: 10.10
+ │    │    └── limit hint: 5.27
  │    └── filters
  │         └── NOT read:9 [outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
  └── 5

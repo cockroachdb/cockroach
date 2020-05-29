@@ -528,42 +528,43 @@ EXPLAIN (VERBOSE)
 INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
 ON CONFLICT (b, c) DO UPDATE SET b=5
 ----
-·                                   distributed            false                                  ·                                ·
-·                                   vectorized             false                                  ·                                ·
-count                               ·                      ·                                      ()                               ·
- └── upsert                         ·                      ·                                      ()                               ·
-      │                             into                   target(a, b, c)                        ·                                ·
-      │                             strategy               opt upserter                           ·                                ·
-      │                             auto commit            ·                                      ·                                ·
-      └── render                    ·                      ·                                      (x, y, z, a, b, c, upsert_b, a)  ·
-           │                        render 0               x                                      ·                                ·
-           │                        render 1               y                                      ·                                ·
-           │                        render 2               z                                      ·                                ·
-           │                        render 3               a                                      ·                                ·
-           │                        render 4               b                                      ·                                ·
-           │                        render 5               c                                      ·                                ·
-           │                        render 6               upsert_b                               ·                                ·
-           │                        render 7               a                                      ·                                ·
-           └── render               ·                      ·                                      (upsert_b, x, y, z, a, b, c)     ·
-                │                   render 0               CASE WHEN a IS NULL THEN y ELSE 5 END  ·                                ·
-                │                   render 1               x                                      ·                                ·
-                │                   render 2               y                                      ·                                ·
-                │                   render 3               z                                      ·                                ·
-                │                   render 4               a                                      ·                                ·
-                │                   render 5               b                                      ·                                ·
-                │                   render 6               c                                      ·                                ·
-                └── lookup-join     ·                      ·                                      (x, y, z, a, b, c)               ·
-                     │              table                  target@target_b_c_key                  ·                                ·
-                     │              type                   left outer                             ·                                ·
-                     │              equality               (y, z) = (b, c)                        ·                                ·
-                     │              equality cols are key  ·                                      ·                                ·
-                     │              parallel               ·                                      ·                                ·
-                     └── distinct   ·                      ·                                      (x, y, z)                        ·
-                          │         distinct on            y, z                                   ·                                ·
-                          │         nulls are distinct     ·                                      ·                                ·
-                          │         error on duplicate     ·                                      ·                                ·
-                          │         order key              y, z                                   ·                                ·
-                          └── scan  ·                      ·                                      (x, y, z)                        +y,+z
-·                                   table                  source@source_y_z_idx                  ·                                ·
-·                                   spans                  /NULL-/!NULL /1-                       ·                                ·
-·                                   filter                 x != 1                                 ·                                ·
+·                                   distributed         false                                  ·                                ·
+·                                   vectorized          false                                  ·                                ·
+count                               ·                   ·                                      ()                               ·
+ └── upsert                         ·                   ·                                      ()                               ·
+      │                             into                target(a, b, c)                        ·                                ·
+      │                             strategy            opt upserter                           ·                                ·
+      │                             auto commit         ·                                      ·                                ·
+      └── render                    ·                   ·                                      (x, y, z, a, b, c, upsert_b, a)  ·
+           │                        render 0            x                                      ·                                ·
+           │                        render 1            y                                      ·                                ·
+           │                        render 2            z                                      ·                                ·
+           │                        render 3            a                                      ·                                ·
+           │                        render 4            b                                      ·                                ·
+           │                        render 5            c                                      ·                                ·
+           │                        render 6            upsert_b                               ·                                ·
+           │                        render 7            a                                      ·                                ·
+           └── render               ·                   ·                                      (upsert_b, x, y, z, a, b, c)     ·
+                │                   render 0            CASE WHEN a IS NULL THEN y ELSE 5 END  ·                                ·
+                │                   render 1            x                                      ·                                ·
+                │                   render 2            y                                      ·                                ·
+                │                   render 3            z                                      ·                                ·
+                │                   render 4            a                                      ·                                ·
+                │                   render 5            b                                      ·                                ·
+                │                   render 6            c                                      ·                                ·
+                └── merge-join      ·                   ·                                      (a, b, c, x, y, z)               ·
+                     │              type                right outer                            ·                                ·
+                     │              equality            (b, c) = (y, z)                        ·                                ·
+                     │              mergeJoinOrder      +"(b=y)",+"(c=z)"                      ·                                ·
+                     ├── scan       ·                   ·                                      (a, b, c)                        +b,+c
+                     │              table               target@target_b_c_key                  ·                                ·
+                     │              spans               FULL SCAN                              ·                                ·
+                     └── distinct   ·                   ·                                      (x, y, z)                        +y,+z
+                          │         distinct on         y, z                                   ·                                ·
+                          │         nulls are distinct  ·                                      ·                                ·
+                          │         error on duplicate  ·                                      ·                                ·
+                          │         order key           y, z                                   ·                                ·
+                          └── scan  ·                   ·                                      (x, y, z)                        +y,+z
+·                                   table               source@source_y_z_idx                  ·                                ·
+·                                   spans               /NULL-/!NULL /1-                       ·                                ·
+·                                   filter              x != 1                                 ·                                ·

@@ -4,12 +4,12 @@ SELECT * FROM (VALUES (1, 2), (1, 2), (1, 3), (2, 3)) AS q(x, y) WHERE x = 5 AND
 select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=1.3, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
  ├── fd: ()-->(1,2)
  ├── values
  │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── cardinality: [4 - 4]
- │    ├── stats: [rows=4, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+ │    ├── stats: [rows=4, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0, distinct(1,2)=3, null(1,2)=0]
  │    ├── (1, 2) [type=tuple{int, int}]
  │    ├── (1, 2) [type=tuple{int, int}]
  │    ├── (1, 3) [type=tuple{int, int}]
