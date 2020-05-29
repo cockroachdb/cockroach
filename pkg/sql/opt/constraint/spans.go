@@ -149,6 +149,34 @@ func (s *Spans) SortAndMerge(keyCtx *KeyContext) {
 	s.Truncate(n + 1)
 }
 
+// ExtractSingleKeySpans returns a new Spans struct containing a span for each
+// key in the given spans. Returns nil and false if one of the following is
+// true:
+//   1. The start and end keys don't have the same values for each column other
+//      than the last.
+//   2. The start and end keys aren't the same length.
+//   3. The last columns aren't the same type, or they aren't countable.
+//   4. The number of new spans exceeds the given limit value.
+// SortAndMerge is called on the resulting Spans.
+func (s *Spans) ExtractSingleKeySpans(keyCtx *KeyContext, limit int) (*Spans, bool) {
+	if s.Count() > limit {
+		// The number of new spans would exceed the limit value.
+		return nil, false
+	}
+	newSpans := Spans{}
+	for i, spanCnt := 0, s.Count(); i < spanCnt; i++ {
+		splitSpans, ok := s.Get(i).SplitSpan(keyCtx, limit-newSpans.Count())
+		if !ok {
+			return nil, false
+		}
+		for i, cnt := 0, splitSpans.Count(); i < cnt; i++ {
+			newSpans.Append(splitSpans.Get(i))
+		}
+	}
+	newSpans.SortAndMerge(keyCtx)
+	return &newSpans, true
+}
+
 type spanSorter struct {
 	keyCtx KeyContext
 	spans  *Spans

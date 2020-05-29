@@ -13,6 +13,7 @@
 package constraint
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -105,5 +106,163 @@ func TestSpansSortAndMerge(t *testing.T) {
 		if actual := spans.String(); actual != expected {
 			t.Fatalf("%s : expected  %s  got  %s", origStr, expected, actual)
 		}
+	}
+}
+
+func TestSpans_ExtractSingleKeySpans(t *testing.T) {
+	const maxKeyCount = 10
+
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	ascSpan := Span{
+		start:         MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+		end:           MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(4)),
+		startBoundary: false,
+		endBoundary:   false,
+	}
+	descSpan := Span{
+		start:         MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+		end:           MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(-1)),
+		startBoundary: false,
+		endBoundary:   false,
+	}
+	singleKeySpan0 := Span{
+		start:         MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+		end:           MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+		startBoundary: false,
+		endBoundary:   false,
+	}
+	singleKeySpan1 := Span{
+		start:         MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(2)),
+		end:           MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(2)),
+		startBoundary: false,
+		endBoundary:   false,
+	}
+	singleColSingleKeySpan := Span{
+		start:         MakeKey(tree.NewDString("US_EAST")),
+		end:           MakeKey(tree.NewDString("US_EAST")),
+		startBoundary: false,
+		endBoundary:   false,
+	}
+	largeSpan := Span{
+		start:         MakeCompositeKey(tree.NewDString("US_EAST"), tree.NewDInt(0)),
+		end:           MakeCompositeKey(tree.NewDString("US_EAST"), tree.NewDInt(100)),
+		startBoundary: false,
+		endBoundary:   false,
+	}
+
+	testCases := []struct {
+		s        Spans
+		keyCtx   *KeyContext
+		expected string
+	}{
+		{ // 0
+			Spans{
+				firstSpan:  singleKeySpan0,
+				otherSpans: nil,
+				numSpans:   1,
+			},
+			kcAscAsc,
+			"[/'US_WEST'/0 - /'US_WEST'/0]",
+		},
+		{ // 1
+			Spans{
+				firstSpan:  singleKeySpan0,
+				otherSpans: []Span{singleKeySpan1},
+				numSpans:   2,
+			},
+			kcAscAsc,
+			"[/'US_WEST'/0 - /'US_WEST'/0] [/'US_WEST'/2 - /'US_WEST'/2]",
+		},
+		{ // 2
+			Spans{
+				firstSpan:  ascSpan,
+				otherSpans: nil,
+				numSpans:   1,
+			},
+			kcAscAsc,
+			"[/'US_WEST'/1 - /'US_WEST'/1] [/'US_WEST'/2 - /'US_WEST'/2] [/'US_WEST'/3 - /'US_WEST'/3] [/'US_WEST'/4 - /'US_WEST'/4]",
+		},
+		{ // 3
+			Spans{
+				firstSpan:  descSpan,
+				otherSpans: nil,
+				numSpans:   1,
+			},
+			kcDescDesc,
+			"[/'US_WEST'/1 - /'US_WEST'/1] [/'US_WEST'/0 - /'US_WEST'/0] [/'US_WEST'/-1 - /'US_WEST'/-1]",
+		},
+		{ // 4
+			Spans{
+				firstSpan:  descSpan,
+				otherSpans: nil,
+				numSpans:   1,
+			},
+			kcAscAsc,
+			"FAIL",
+		},
+		{ // 5
+			Spans{
+				firstSpan:  descSpan,
+				otherSpans: []Span{singleKeySpan1},
+				numSpans:   2,
+			},
+			kcDescDesc,
+			"[/'US_WEST'/2 - /'US_WEST'/2] [/'US_WEST'/1 - /'US_WEST'/1] [/'US_WEST'/0 - /'US_WEST'/0] [/'US_WEST'/-1 - /'US_WEST'/-1]",
+		},
+		{ // 6
+			Spans{
+				firstSpan:  singleKeySpan0,
+				otherSpans: []Span{singleKeySpan0},
+				numSpans:   2,
+			},
+			kcDescDesc,
+			"[/'US_WEST'/0 - /'US_WEST'/0]",
+		},
+		{ // 7
+			Spans{
+				firstSpan:  singleKeySpan0,
+				otherSpans: []Span{singleColSingleKeySpan},
+				numSpans:   2,
+			},
+			kcDescDesc,
+			"[/'US_WEST'/0 - /'US_WEST'/0] [/'US_EAST' - /'US_EAST']",
+		},
+		{ // 8
+			// Fails because the span has 15 keys, which is greater than maxKeyCount.
+			Spans{
+				firstSpan:  largeSpan,
+				otherSpans: nil,
+				numSpans:   1,
+			},
+			kcDescDesc,
+			"FAIL",
+		},
+		{ // 9
+			// Fails because 3 spans with 4 keys each exceeds maxKeyCount.
+			Spans{
+				firstSpan:  ascSpan,
+				otherSpans: []Span{ascSpan, ascSpan},
+				numSpans:   3,
+			},
+			kcAscAsc,
+			"FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(spans *Spans, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return spans.String()
+			}
+
+			if res := toStr(tc.s.ExtractSingleKeySpans(tc.keyCtx, maxKeyCount)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
+			}
+		})
 	}
 }

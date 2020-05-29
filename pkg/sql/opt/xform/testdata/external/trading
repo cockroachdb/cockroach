@@ -596,13 +596,72 @@ project
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(30)
- │    ├── scan cardsinfo@cardsinfoversionindex
+ │    ├── limit
  │    │    ├── columns: dealerid:7!null version:15!null
- │    │    ├── constraint: /7/15: [/1 - /4]
- │    │    ├── stats: [rows=233333.333, distinct(7)=4, null(7)=0]
- │    │    └── key: (7,15)
+ │    │    ├── internal-ordering: -15
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(7,15)
+ │    │    ├── sort
+ │    │    │    ├── columns: dealerid:7!null version:15!null
+ │    │    │    ├── cardinality: [0 - 4]
+ │    │    │    ├── stats: [rows=4, distinct(7,15)=4, null(7,15)=0]
+ │    │    │    ├── key: (7,15)
+ │    │    │    ├── ordering: -15
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── union
+ │    │    │         ├── columns: dealerid:7!null version:15!null
+ │    │    │         ├── left columns: dealerid:7!null version:15!null
+ │    │    │         ├── right columns: dealerid:50 version:58
+ │    │    │         ├── cardinality: [0 - 4]
+ │    │    │         ├── stats: [rows=4, distinct(7,15)=4, null(7,15)=0]
+ │    │    │         ├── key: (7,15)
+ │    │    │         ├── union
+ │    │    │         │    ├── columns: dealerid:7!null version:15!null
+ │    │    │         │    ├── left columns: dealerid:7!null version:15!null
+ │    │    │         │    ├── right columns: dealerid:41 version:49
+ │    │    │         │    ├── cardinality: [0 - 3]
+ │    │    │         │    ├── stats: [rows=3, distinct(7,15)=3, null(7,15)=0]
+ │    │    │         │    ├── key: (7,15)
+ │    │    │         │    ├── union
+ │    │    │         │    │    ├── columns: dealerid:7!null version:15!null
+ │    │    │         │    │    ├── left columns: dealerid:7!null version:15!null
+ │    │    │         │    │    ├── right columns: dealerid:32 version:40
+ │    │    │         │    │    ├── cardinality: [0 - 2]
+ │    │    │         │    │    ├── stats: [rows=2, distinct(7,15)=2, null(7,15)=0]
+ │    │    │         │    │    ├── key: (7,15)
+ │    │    │         │    │    ├── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │         │    │    │    ├── columns: dealerid:7!null version:15!null
+ │    │    │         │    │    │    ├── constraint: /7/15: [/1 - /1]
+ │    │    │         │    │    │    ├── limit: 1(rev)
+ │    │    │         │    │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(7,15)=1, null(7,15)=0]
+ │    │    │         │    │    │    ├── key: ()
+ │    │    │         │    │    │    └── fd: ()-->(7,15)
+ │    │    │         │    │    └── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │         │    │         ├── columns: dealerid:32!null version:40!null
+ │    │    │         │    │         ├── constraint: /32/40: [/2 - /2]
+ │    │    │         │    │         ├── limit: 1(rev)
+ │    │    │         │    │         ├── stats: [rows=1, distinct(32)=1, null(32)=0, distinct(32,40)=1, null(32,40)=0]
+ │    │    │         │    │         ├── key: ()
+ │    │    │         │    │         └── fd: ()-->(32,40)
+ │    │    │         │    └── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │         │         ├── columns: dealerid:41!null version:49!null
+ │    │    │         │         ├── constraint: /41/49: [/3 - /3]
+ │    │    │         │         ├── limit: 1(rev)
+ │    │    │         │         ├── stats: [rows=1, distinct(41)=1, null(41)=0, distinct(41,49)=1, null(41,49)=0]
+ │    │    │         │         ├── key: ()
+ │    │    │         │         └── fd: ()-->(41,49)
+ │    │    │         └── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │              ├── columns: dealerid:50!null version:58!null
+ │    │    │              ├── constraint: /50/58: [/4 - /4]
+ │    │    │              ├── limit: 1(rev)
+ │    │    │              ├── stats: [rows=1, distinct(50)=1, null(50)=0, distinct(50,58)=1, null(50,58)=0]
+ │    │    │              ├── key: ()
+ │    │    │              └── fd: ()-->(50,58)
+ │    │    └── 1
  │    └── aggregations
- │         └── max [as=max:30, outer=(15)]
+ │         └── const-agg [as=max:30, outer=(15)]
  │              └── version:15
  └── projections
       └── COALESCE(max:30, 0) [as=coalesce:31, outer=(30)]
