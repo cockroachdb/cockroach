@@ -871,7 +871,7 @@ func (sc *SchemaChanger) distBackfill(
 			)
 			defer recv.Release()
 
-			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, txn)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, txn, true /* distribute */)
 			plan, err := sc.distSQLPlanner.createBackfiller(
 				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, otherTableDescs, readAsOf,
 			)
