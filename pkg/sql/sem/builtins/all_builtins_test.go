@@ -85,6 +85,8 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 		proname := line[0]
 		provolatile := line[3]
 		require.Len(t, provolatile, 1)
+		proleakproof := line[4]
+		require.Len(t, proleakproof, 1)
 		proargs := line[1]
 		families := []types.Family{}
 		// Remove start and end '{' and '}' characters.
@@ -100,10 +102,12 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 		if badType {
 			continue
 		}
+		v, err := tree.VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		require.NoError(t, err)
 		foundVolatilities[proname] = append(
 			foundVolatilities[proname],
 			pgOverload{
-				volatility: tree.Volatility(provolatile[0]),
+				volatility: v,
 				families:   families,
 			},
 		)
@@ -148,7 +152,7 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 				t,
 				postgresVolatility,
 				overload.Volatility,
-				`overload %s at idx %d has volatility %c not which does not match postgres %c`,
+				`overload %s at idx %d has volatility %s not which does not match postgres %s`,
 				name,
 				idx,
 				overload.Volatility,

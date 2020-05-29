@@ -31,7 +31,8 @@ import (
 //
 // Dump command below:
 // COPY (
-//   SELECT c.castsource, c.casttarget, p.provolatile FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
+//   SELECT c.castsource, c.casttarget, p.provolatile, p.proleakproof
+//   FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
 // ) TO STDOUT WITH CSV DELIMITER '|' HEADER;
 func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -49,8 +50,8 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	require.NoError(t, err)
 
 	type pgCast struct {
-		from, to    oid.Oid
-		provolatile byte
+		from, to   oid.Oid
+		volatility Volatility
 	}
 	var pgCasts []pgCast
 
@@ -59,8 +60,8 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		if err == io.EOF {
 			break
 		}
-		require.Len(t, line, 3)
 		require.NoError(t, err)
+		require.Len(t, line, 4)
 
 		fromOid, err := strconv.Atoi(line[0])
 		require.NoError(t, err)
@@ -70,10 +71,16 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 
 		provolatile := line[2]
 		require.Len(t, provolatile, 1)
+		proleakproof := line[3]
+		require.Len(t, proleakproof, 1)
+
+		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		require.NoError(t, err)
+
 		pgCasts = append(pgCasts, pgCast{
-			from:        oid.Oid(fromOid),
-			to:          oid.Oid(toOid),
-			provolatile: provolatile[0],
+			from:       oid.Oid(fromOid),
+			to:         oid.Oid(toOid),
+			volatility: v,
 		})
 	}
 
@@ -106,10 +113,10 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 			toFamily, toOk := oidToFamily(pgCasts[i].to)
 			if fromOk && toOk && fromFamily == c.from && toFamily == c.to {
 				found = true
-				if c.volatility != Volatility(pgCasts[i].provolatile) {
-					t.Errorf("cast %s::%s has volatility '%c'; corresponding pg cast %s::%s has volatility '%c'",
+				if c.volatility != pgCasts[i].volatility {
+					t.Errorf("cast %s::%s has volatility %s; corresponding pg cast %s::%s has volatility %s",
 						c.from.Name(), c.to.Name(), c.volatility,
-						oidStr(pgCasts[i].from), oidStr(pgCasts[i].to), pgCasts[i].provolatile,
+						oidStr(pgCasts[i].from), oidStr(pgCasts[i].to), pgCasts[i].volatility,
 					)
 				}
 			}
