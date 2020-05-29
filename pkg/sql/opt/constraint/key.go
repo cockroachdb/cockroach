@@ -260,6 +260,87 @@ func (k Key) Prev(keyCtx *KeyContext) (_ Key, ok bool) {
 	return Key{firstVal: k.firstVal, otherVals: vals}, true
 }
 
+// DistinctCount returns an integer value describing the number of distinct keys
+// (inclusive) in between the two given keys, as well as a boolean describing
+// whether the operation was successful. Requirements:
+// 1. Keys must be of the same length.
+// 2. Keys must have the same values for all but the last column.
+// 3. The last columns are of the same type and either:
+//    a. Are countable.
+//    b. Have the same value (in which case the distinct count is 1).
+func (k Key) DistinctCount(keyCtx *KeyContext, other Key) (distinctCount uint, ok bool) {
+	// Keys must be same length.
+	n := k.Length()
+	if n != other.Length() {
+		return 0, false
+	}
+
+	// All the datums up to the last one must be equal.
+	for i := 0; i < n-1; i++ {
+		if k.Value(i).ResolvedType() != other.Value(i).ResolvedType() {
+			// The values must be of the same type.
+			return 0, false
+		}
+		if keyCtx.Compare(i, k.Value(i), other.Value(i)) != 0 {
+			// The values must be equal.
+			return 0, false
+		}
+	}
+
+	thisVal := k.Value(k.Length() - 1)
+	otherVal := other.Value(other.Length() - 1)
+
+	if thisVal.ResolvedType() != otherVal.ResolvedType() {
+		// The last values must be of the same type.
+		return 0, false
+	}
+	if keyCtx.Compare(n-1, thisVal, otherVal) == 0 {
+		// If the last datums are equal, the distinct count is 1.
+		return 1, true
+	}
+
+	// If the last columns are countable, return the distinct count between them.
+	desc := keyCtx.Columns.Get(k.Length() - 1).Descending()
+	val := 0
+
+	switch t := thisVal.(type) {
+	case *tree.DInt:
+		otherDInt, otherOk := tree.AsDInt(otherVal)
+		if otherOk {
+			val = int(otherDInt - *t)
+		}
+
+	case *tree.DOid:
+		otherDOid, otherOk := tree.AsDOid(otherVal)
+		if otherOk {
+			val = int(otherDOid.DInt - (*t).DInt)
+		}
+
+	case *tree.DDate:
+		otherDDate, otherOk := otherVal.(*tree.DDate)
+		if otherOk {
+			if !t.IsFinite() || !otherDDate.IsFinite() {
+				// One of the DDates isn't finite, so we can't extract a distinct count.
+				return 0, false
+			}
+			val = int(otherDDate.PGEpochDays() - (*t).PGEpochDays())
+		}
+
+	default:
+		// Uncountable type.
+		return 0, false
+	}
+	if (val < 0 && !desc) || (val > 0 && desc) {
+		// The order of the keys is wrong.
+		return 0, false
+	}
+	if val < 0 {
+		val *= -1
+	}
+	// Add one because the distinct count is inclusive.
+	return uint(val) + 1, true
+}
+
 // String formats a key like this:
 //  EmptyKey         : empty string
 //  Key with 1 value : /2

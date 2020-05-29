@@ -15,6 +15,7 @@ package constraint
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -660,6 +661,198 @@ func TestSpanPreferInclusive(t *testing.T) {
 			sp.PreferInclusive(keyCtx)
 			if sp.String() != tc.expected {
 				t.Errorf("expected: %s, actual: %s", tc.expected, sp.String())
+			}
+		})
+	}
+}
+
+func TestSpan_KeyCount(t *testing.T) {
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx        *KeyContext
+		start         Key
+		startBoundary SpanBoundary
+		end           Key
+		endBoundary   SpanBoundary
+		expected      string
+	}{
+		{ // 0
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("item")),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("item")),
+			IncludeBoundary,
+			"1",
+		},
+		{ // 1
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("item")),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("object")),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 2
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(-5)),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(5)),
+			IncludeBoundary,
+			"11",
+		},
+		{ // 3
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+			ExcludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			"1",
+		},
+		{ // 4
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_EAST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 5
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDInt(1), tree.NewDInt(1)),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDInt(2), tree.NewDInt(1)),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 6
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_EAST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 7
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+			ExcludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 8
+			kcDescDesc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+			ExcludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 9
+			kcDescDesc,
+			MakeCompositeKey(tree.NewDString("US_WEST")),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+			IncludeBoundary,
+			"FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(dist uint, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return strconv.Itoa(int(dist))
+			}
+
+			var sp Span
+			sp.Init(tc.start, tc.startBoundary, tc.end, tc.endBoundary)
+			if res := toStr(sp.KeyCount(tc.keyCtx)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
+			}
+		})
+	}
+}
+
+func TestSpan_SplitSpan(t *testing.T) {
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx        *KeyContext
+		start         Key
+		startBoundary SpanBoundary
+		end           Key
+		endBoundary   SpanBoundary
+		expected      string
+	}{
+		{ // 0
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("item")),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("item")),
+			IncludeBoundary,
+			"[/'US_WEST'/'item' - /'US_WEST'/'item']",
+		},
+		{ // 1
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("item")),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("object")),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 2
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("item")),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_EAST"), tree.NewDString("item")),
+			IncludeBoundary,
+			"FAIL",
+		},
+		{ // 3
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(-1)),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			"[/'US_WEST'/-1 - /'US_WEST'/-1] [/'US_WEST'/0 - /'US_WEST'/0] [/'US_WEST'/1 - /'US_WEST'/1]",
+		},
+		{ // 4
+			kcAscAsc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(0)),
+			ExcludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			"[/'US_WEST'/1 - /'US_WEST'/1]",
+		},
+		{ // 5
+			kcDescDesc,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(1)),
+			IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(-1)),
+			IncludeBoundary,
+			"[/'US_WEST'/1 - /'US_WEST'/1] [/'US_WEST'/0 - /'US_WEST'/0] [/'US_WEST'/-1 - /'US_WEST'/-1]",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(spans *Spans, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return spans.String()
+			}
+
+			var sp Span
+			sp.Init(tc.start, tc.startBoundary, tc.end, tc.endBoundary)
+			if res := toStr(sp.SplitSpan(tc.keyCtx)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
 			}
 		})
 	}
