@@ -399,7 +399,7 @@ func resolveSpans(
 				return nil, err
 			}
 			repls = append(repls, rngInfo{
-				ReplicaDescriptor: repl.ReplicaDescriptor,
+				ReplicaDescriptor: repl,
 				rngDesc:           it.Desc(),
 			})
 			if !it.NeedAnother() {

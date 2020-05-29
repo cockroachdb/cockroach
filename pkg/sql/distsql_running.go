@@ -316,11 +316,6 @@ func (dsp *DistSQLPlanner) Run(
 		leafInputState = &tis
 	}
 
-	if err := planCtx.sanityCheckAddresses(); err != nil {
-		recv.SetError(err)
-		return func() {}
-	}
-
 	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
 	if _, ok := flows[dsp.nodeDesc.NodeID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
