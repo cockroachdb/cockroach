@@ -438,15 +438,10 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 //  this is tracked in https://github.com/cockroachdb/cockroach/issues/47892.
 const fakeNodeID = roachpb.NodeID(1)
 
-func testSQLServerArgs(
-	stopper *stop.Stopper, kvClusterName string, tenID roachpb.TenantID,
+func makeSQLServerArgs(
+	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) sqlServerArgs {
-
-	st := cluster.MakeTestingClusterSettings()
-
-	sqlCfg := makeTestSQLConfig(st, tenID)
-
-	baseCfg := makeTestBaseConfig(st)
+	st := baseCfg.Settings
 	baseCfg.AmbientCtx.AddLogTag("sql", nil)
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
 	// and this tenant work.
@@ -582,14 +577,14 @@ func testSQLServerArgs(
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
 			isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
-				return false, errors.New("fake isMeta1Leaseholder")
+				return false, errors.New("isMeta1Leaseholder is not available to tenants")
 			},
 			nodeIDContainer: idContainer,
 			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-				return nil, errors.New("fake external storage")
+				return nil, errors.New("external storage is not available to tenants")
 			},
 			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-				return nil, errors.New("fake external uri storage")
+				return nil, errors.New("external uri storage is not available to tenants")
 			},
 		},
 		SQLConfig:                &sqlCfg,
@@ -601,7 +596,7 @@ func testSQLServerArgs(
 		registry:                 registry,
 		sessionRegistry:          sql.NewSessionRegistry(),
 		circularInternalExecutor: circularInternalExecutor,
-		jobRegistry:              &jobs.Registry{},
+		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
 	}
 }
@@ -616,25 +611,32 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 		return "", err
 	}
 
-	return startTenant(ts.Stopper(), ts.Cfg.ClusterName, ts.RPCAddr(), params.TenantID, params.AllowSettingClusterSettings)
+	st := cluster.MakeTestingClusterSettings()
+	sqlCfg := makeTestSQLConfig(st, params.TenantID)
+	baseCfg := makeTestBaseConfig(st)
+	if params.AllowSettingClusterSettings {
+		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
+			ClusterSettingsUpdater: st.MakeUpdater(),
+		}
+	}
+	return startTenant(
+		ts.Stopper(),
+		ts.Cfg.ClusterName,
+		ts.RPCAddr(),
+		baseCfg,
+		sqlCfg,
+	)
 }
 
 func startTenant(
 	stopper *stop.Stopper,
-	kvClusterName string,
+	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	tsRPCAddr string,
-	tenID roachpb.TenantID,
-	allowSetClusterSetting bool,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
 ) (pgAddr string, _ error) {
-	args := testSQLServerArgs(stopper, kvClusterName, tenID)
-	// TODO(tbg): clean this up.
-	if allowSetClusterSetting {
-		args.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
-			ClusterSettingsUpdater: args.Settings.MakeUpdater(),
-		}
-	}
+	args := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	ctx := context.Background()
-
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return "", err
