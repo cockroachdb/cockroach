@@ -291,42 +291,12 @@
     $private
 )
 
-# SimplifyLeftJoinWithoutFilters reduces a LeftJoin operator to an InnerJoin
-# operator (or a FullJoin to a RightJoin) when it's known that the join's right
-# input never returns zero rows and when there's no join condition. The outer
-# join only populates the right side with NULL values when it would otherwise
-# not be present.
-[SimplifyLeftJoinWithoutFilters, Normalize]
-(LeftJoin | LeftJoinApply | FullJoin
-    $left:*
-    $right:* & ^(CanHaveZeroRows $right)
-    $on:[]
-    $private:*
-)
-=>
-(ConstructNonLeftJoin (OpName) $left $right $on $private)
-
-# SimplifyRightJoinWithoutFilters reduces a FullJoin operator to a LeftJoin
-# operator when it's known that the join's left input never returns zero rows
-# and when there's no join condition. The outer join only populates the left
-# side with NULL values when it would otherwise not be present.
-[SimplifyRightJoinWithoutFilters, Normalize]
-(FullJoin
-    $left:* & ^(CanHaveZeroRows $left)
-    $right:*
-    $on:[]
-    $private:*
-)
-=>
-(LeftJoin $left $right $on $private)
-
-# SimplifyLeftJoinWithFilters reduces a LeftJoin operator to an InnerJoin
-# operator (or a FullJoin to a RightJoin) when it's known that every row in the
-# join's left input will match at least one row in the right input. Since every
-# row matches, NULL-extended rows will never be added by the outer join, and
-# therefore can be mapped to an InnerJoin (or RightJoin in case of FullJoin).
-# See JoinConditionMatchesAllLeftRows comment for conditions in which this rule
-# can match.
+# SimplifyLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
+# FullJoin to a RightJoin) when it's known that every row in the join's left
+# input will match at least one row in the right input. Since every row matches,
+# NULL-extended rows will never be added by the outer join, and therefore can be
+# mapped to an InnerJoin (or RightJoin in case of FullJoin). See
+# filtersMatchAllLeftRows comment for conditions in which this rule can match.
 #
 # Self-join example:
 #   SELECT * FROM xy LEFT JOIN xy AS xy2 ON xy.y = xy2.y
@@ -337,7 +307,7 @@
 #   SELECT * FROM orders o LEFT JOIN customers c ON o.customer_id = c.id
 #   =>
 #   SELECT * FROM orders o INNER JOIN customers c ON o.customer_id = c.id
-[SimplifyLeftJoinWithFilters, Normalize]
+[SimplifyLeftJoin, Normalize]
 (LeftJoin | LeftJoinApply | FullJoin
     $left:*
     $right:*
@@ -347,11 +317,11 @@
 =>
 (ConstructNonLeftJoin (OpName) $left $right $on $private)
 
-# SimplifyRightJoinWithFilters reduces a FullJoin operator to a LeftJoin
-# operator when it's known that every row in the join's right input will match
-# at least one row in the left input. This rule is symmetric with
-# SimplifyLeftJoinWithFilters; see that rule for more details and examples.
-[SimplifyRightJoinWithFilters, Normalize]
+# SimplifyRightJoin reduces a FullJoin operator to a LeftJoin operator when it's
+# known that every row in the join's right input will match at least one row in
+# the left input. This rule is symmetric with SimplifyLeftJoin; see that rule
+# for more details and examples.
+[SimplifyRightJoin, Normalize]
 (FullJoin
     $left:*
     $right:*
