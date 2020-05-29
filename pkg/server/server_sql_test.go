@@ -49,6 +49,8 @@ func TestSQLServer(t *testing.T) {
 	r.Exec(t, `CREATE DATABASE foo`)
 	r.Exec(t, `CREATE TABLE foo.kv (k STRING PRIMARY KEY, v STRING)`)
 	r.Exec(t, `INSERT INTO foo.kv VALUES('foo', 'bar')`)
+	// Cause an index backfill operation.
+	r.Exec(t, `CREATE INDEX ON foo.kv (v)`)
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=off; SELECT * FROM foo.kv`)))
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=auto; SELECT * FROM foo.kv`)))
 }
