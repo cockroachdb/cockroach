@@ -24,8 +24,7 @@ import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
 import "./cluster.styl";
-import { Tooltip, Anchor } from "src/components";
-import { clusterStore, nodeLivenessIssues, clusterGlossary, reviewOfCockroachTerminology } from "src/util/docs";
+import { UsedCapacityTooltip, UsableCapacityTooltip, LiveNodesTooltip, SuspectNodesTooltip, DeadNodesTooltip, TotalRangesTooltip, UnderReplicatedRangesTooltip, UnavailableRangesTooltip } from "./tooltips";
 
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
@@ -48,45 +47,15 @@ function renderCapacityUsage(props: CapacityUsageProps) {
       <CapacityChart used={usedCapacity} usable={usableCapacity} />
     </div>,
     <div className="capacity-usage cluster-summary__label storage-used">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-              Total disk space in use by CockroachDB data across all nodes.
-            </p>
-            <p>
-              This excludes the Cockroach binary, operating system, and other system files.
-            </p>
-          </div>
-        }
-      >
+      <UsedCapacityTooltip>
         Used<br />Capacity
-      </Tooltip>
+      </UsedCapacityTooltip>
     </div>,
     <div className="capacity-usage cluster-summary__metric storage-used">{ formatBytes(usedCapacity) }</div>,
     <div className="capacity-usage cluster-summary__label storage-usable">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-              Total disk space usable by CockroachDB data across all nodes.
-            </p>
-            <p>
-              {"This cannot exceed the store size, if one has been set using "}
-              <Anchor
-                href={clusterStore}
-                target="_blank"
-              >
-                --store
-              </Anchor>.
-            </p>
-          </div>
-        }
-      >
+      <UsableCapacityTooltip>
         Usable<br />Capacity
-      </Tooltip>
+      </UsableCapacityTooltip>
     </div>,
     <div className="capacity-usage cluster-summary__metric storage-usable">{ formatBytes(usableCapacity) }</div>,
   ];
@@ -133,57 +102,21 @@ function renderNodeLiveness(props: NodeLivenessProps) {
     <h3 className="node-liveness cluster-summary__title">Node Status</h3>,
     <div className="node-liveness cluster-summary__metric live-nodes">{ liveNodes }</div>,
     <div className="node-liveness cluster-summary__label live-nodes">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-              Node is online and responding.
-            </p>
-          </div>
-        }
-      >
+      <LiveNodesTooltip>
         Live<br />Nodes
-      </Tooltip>
+      </LiveNodesTooltip>
     </div>,
     <div className={suspectClasses}>{ suspectNodes }</div>,
     <div className="node-liveness cluster-summary__label suspect-nodes">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-            Node is online and responding.
-            </p>
-            <p>
-              {"Node has an "}
-              <Anchor
-                href={nodeLivenessIssues}
-                target="_blank"
-              >
-                unavailable liveness status
-              </Anchor>.
-            </p>
-          </div>
-        }
-      >
+      <SuspectNodesTooltip>
         Suspect<br />Nodes
-      </Tooltip>
+      </SuspectNodesTooltip>
     </div>,
     <div className={deadClasses}>{ deadNodes }</div>,
     <div className="node-liveness cluster-summary__label dead-nodes">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-              Node has not responded for 5 minutes. CockroachDB automatically rebalances replicas from dead nodes to live nodes.
-            </p>
-          </div>
-        }
-      >
+      <DeadNodesTooltip>
         Dead<br />Nodes
-      </Tooltip>
+      </DeadNodesTooltip>
     </div>,
   ];
 }
@@ -230,69 +163,21 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
     <h3 className="replication-status cluster-summary__title">Replication Status</h3>,
     <div className="replication-status cluster-summary__metric total-ranges">{ totalRanges }</div>,
     <div className="replication-status cluster-summary__label total-ranges">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-              {"Total number of "}
-              <Anchor
-                href={clusterGlossary}
-                target="_blank"
-              >
-                ranges
-              </Anchor>
-              {" in the cluster."}
-            </p>
-          </div>
-        }
-      >
+      <TotalRangesTooltip>
         Total<br />Ranges
-      </Tooltip>
+      </TotalRangesTooltip>
     </div>,
     <div className={underReplicatedClasses}>{ underReplicatedRanges }</div>,
     <div className="replication-status cluster-summary__label under-replicated-ranges">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-              {"Number of "}
-              <Anchor
-                href={reviewOfCockroachTerminology}
-                target="_blank"
-              >
-                under-replicated ranges
-              </Anchor>
-              {" in the cluster. A non-zero number indicates an unstable cluster."}
-            </p>
-          </div>
-        }
-      >
+      <UnderReplicatedRangesTooltip>
         Under-replicated<br />Ranges
-      </Tooltip>
+      </UnderReplicatedRangesTooltip>
     </div>,
     <div className={unavailableClasses}>{ unavailableRanges }</div>,
     <div className="replication-status cluster-summary__label unavailable-ranges">
-      <Tooltip
-        placement="bottom"
-        title={
-          <div className="tooltip__table--title">
-            <p>
-              {"Number of "}
-              <Anchor
-                href={reviewOfCockroachTerminology}
-                target="_blank"
-              >
-                unavailable ranges
-              </Anchor>
-              {" in the cluster. A non-zero number indicates an unstable cluster."}
-            </p>
-          </div>
-        }
-      >
+      <UnavailableRangesTooltip>
         Unavailable<br />Ranges
-      </Tooltip>
+      </UnavailableRangesTooltip>
     </div>,
   ];
 }
