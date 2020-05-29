@@ -101,17 +101,6 @@ func TestMain(t *testing.T) {
 		},
 		{
 			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=cockroach.linux-musl-amd64." + shaStub,
-			Key:                "/cockroach/cockroach.linux-musl-amd64." + shaStub,
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/cockroach.linux-musl-amd64.LATEST",
-			WebsiteRedirectLocation: "/cockroach/cockroach.linux-musl-amd64." + shaStub,
-		},
-		{
-			Bucket:             "cockroach",
 			ContentDisposition: "attachment; filename=cockroach.windows-amd64." + shaStub + ".exe",
 			Key:                "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
 		},
@@ -158,15 +147,6 @@ func TestMain(t *testing.T) {
 			Bucket:       "binaries.cockroachdb.com",
 			CacheControl: "no-cache",
 			Key:          "cockroach-latest.linux-amd64.tgz",
-		},
-		{
-			Bucket: "binaries.cockroachdb.com",
-			Key:    "cockroach-v42.42.42.linux-musl-amd64.tgz",
-		},
-		{
-			Bucket:       "binaries.cockroachdb.com",
-			CacheControl: "no-cache",
-			Key:          "cockroach-latest.linux-musl-amd64.tgz",
 		},
 		{
 			Bucket: "binaries.cockroachdb.com",

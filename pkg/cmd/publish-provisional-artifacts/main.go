@@ -207,7 +207,6 @@ func run(svc s3I, execFn execRunner, flags runFlags) {
 		// of a given triple.
 		{buildType: "darwin", suffix: ".darwin-10.9-amd64"},
 		{buildType: "linux-gnu", suffix: ".linux-2.6.32-gnu-amd64"},
-		{buildType: "linux-musl", suffix: ".linux-2.6.32-musl-amd64"},
 		{buildType: "windows", suffix: ".windows-6.2-amd64.exe"},
 	} {
 		for i, extraArgs := range []struct {
@@ -239,12 +238,6 @@ func run(svc s3I, execFn execRunner, flags runFlags) {
 			// TODO(tamird): build deadlock,race binaries for all targets?
 			if i > 0 && (flags.isRelease || !strings.HasSuffix(o.BuildType, "linux-gnu")) {
 				log.Printf("skipping auxiliary build: %s", pretty.Sprint(o))
-				continue
-			}
-			// race doesn't work without glibc on Linux. See
-			// https://github.com/golang/go/issues/14481.
-			if strings.HasSuffix(o.BuildType, "linux-musl") && strings.Contains(o.GoFlags, "-race") {
-				log.Printf("skipping race build for this configuration")
 				continue
 			}
 
@@ -369,28 +362,21 @@ func buildCockroach(svc s3I, execFn execRunner, flags runFlags, o opts) {
 			log.Fatalf("%s %s: %s\n\n%s", cmd.Env, cmd.Args, err, out)
 		}
 
-		// ldd only works on binaries built for the host. "linux-musl"
-		// produces fully static binaries, which cause ldd to exit
-		// non-zero.
-		//
-		// TODO(tamird): implement this for all targets.
-		if !strings.HasSuffix(o.BuildType, "linux-musl") {
-			cmd := exec.Command("ldd", binaryName)
-			cmd.Dir = o.PkgDir
-			log.Printf("%s %s", cmd.Env, cmd.Args)
-			out, err := execFn(cmd)
-			if err != nil {
-				log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
+		cmd = exec.Command("ldd", binaryName)
+		cmd.Dir = o.PkgDir
+		log.Printf("%s %s", cmd.Env, cmd.Args)
+		out, err := execFn(cmd)
+		if err != nil {
+			log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
+		}
+		scanner := bufio.NewScanner(bytes.NewReader(out))
+		for scanner.Scan() {
+			if line := scanner.Text(); !libsRe.MatchString(line) {
+				log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
 			}
-			scanner := bufio.NewScanner(bytes.NewReader(out))
-			for scanner.Scan() {
-				if line := scanner.Text(); !libsRe.MatchString(line) {
-					log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
-				}
-			}
-			if err := scanner.Err(); err != nil {
-				log.Fatal(err)
-			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Fatal(err)
 		}
 	}
 }
