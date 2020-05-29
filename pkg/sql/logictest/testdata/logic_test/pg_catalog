@@ -1379,14 +1379,14 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    protransform  proisagg  proiswindow  prosecdef  proleakproof
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
 
 query TBBTT colnames
 SELECT proname, proisstrict, proretset, provolatile, proparallel
