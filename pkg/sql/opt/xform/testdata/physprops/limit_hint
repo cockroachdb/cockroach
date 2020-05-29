@@ -387,11 +387,11 @@ SELECT *, generate_series(1, t.x) FROM t LIMIT 10
 limit
  ├── columns: x:1!null y:2 z:3 generate_series:4
  ├── cardinality: [0 - 10]
- ├── side-effects
+ ├── immutable, side-effects
  ├── fd: (1)-->(2,3)
  ├── project-set
  │    ├── columns: x:1!null y:2 z:3 generate_series:4
- │    ├── side-effects
+ │    ├── immutable, side-effects
  │    ├── fd: (1)-->(2,3)
  │    ├── limit hint: 10.00
  │    ├── scan t
@@ -400,7 +400,7 @@ limit
  │    │    ├── fd: (1)-->(2,3)
  │    │    └── limit hint: 10.00
  │    └── zip
- │         └── generate_series(1, x:1) [outer=(1), side-effects]
+ │         └── generate_series(1, x:1) [outer=(1), immutable, side-effects]
  └── 10
 
 # --------------------------------------------------
@@ -507,25 +507,25 @@ SELECT DISTINCT t44683.c0 FROM t44683, v44683 LIMIT -1;
 limit
  ├── columns: c0:1
  ├── cardinality: [0 - 0]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(1)
  ├── distinct-on
  │    ├── columns: c0:1
  │    ├── grouping columns: c0:1
  │    ├── cardinality: [0 - 0]
- │    ├── side-effects
+ │    ├── immutable, side-effects
  │    ├── key: (1)
  │    ├── limit hint: 1.00
  │    └── inner-join (cross)
  │         ├── columns: c0:1
  │         ├── cardinality: [0 - 0]
- │         ├── side-effects
+ │         ├── immutable, side-effects
  │         ├── scan t44683
  │         │    └── columns: c0:1
  │         ├── limit
  │         │    ├── cardinality: [0 - 0]
- │         │    ├── side-effects
+ │         │    ├── immutable, side-effects
  │         │    ├── key: ()
  │         │    ├── scan t44683
  │         │    │    └── limit hint: 1.00
@@ -553,13 +553,13 @@ SELECT * FROM v0, t0 NATURAL JOIN t1 LIMIT -1
 project
  ├── columns: c0:3!null c0:4!null
  ├── cardinality: [0 - 0]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(3,4)
  └── limit
       ├── columns: "?column?":3!null t0.c0:4!null t1.c0:6!null
       ├── cardinality: [0 - 0]
-      ├── side-effects
+      ├── immutable, side-effects
       ├── key: ()
       ├── fd: ()-->(3,4,6)
       ├── inner-join (lookup t0@t0_c0_key)
@@ -567,25 +567,25 @@ project
       │    ├── key columns: [6] = [4]
       │    ├── lookup columns are key
       │    ├── cardinality: [0 - 0]
-      │    ├── side-effects
+      │    ├── immutable, side-effects
       │    ├── fd: ()-->(3), (4)==(6), (6)==(4)
       │    ├── limit hint: 1.00
       │    ├── inner-join (cross)
       │    │    ├── columns: "?column?":3!null t1.c0:6
       │    │    ├── cardinality: [0 - 0]
-      │    │    ├── side-effects
+      │    │    ├── immutable, side-effects
       │    │    ├── fd: ()-->(3)
       │    │    ├── scan t1
       │    │    │    └── columns: t1.c0:6
       │    │    ├── project
       │    │    │    ├── columns: "?column?":3!null
       │    │    │    ├── cardinality: [0 - 0]
-      │    │    │    ├── side-effects
+      │    │    │    ├── immutable, side-effects
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(3)
       │    │    │    ├── limit
       │    │    │    │    ├── cardinality: [0 - 0]
-      │    │    │    │    ├── side-effects
+      │    │    │    │    ├── immutable, side-effects
       │    │    │    │    ├── key: ()
       │    │    │    │    ├── scan t1
       │    │    │    │    │    └── limit hint: 1.00

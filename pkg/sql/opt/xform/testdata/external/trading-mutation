@@ -932,6 +932,7 @@ ORDER BY extract(day from d.TransactionDate)
 ----
 sort
  ├── columns: extract:45 totalsell:40!null totalbuy:42!null totalprofit:44!null
+ ├── stable
  ├── stats: [rows=1171234.57, distinct(45)=1171234.57, null(45)=0]
  ├── key: (45)
  ├── fd: (45)-->(40,42,44)
@@ -939,11 +940,13 @@ sort
  └── group-by
       ├── columns: sum:40!null sum:42!null sum:44!null column45:45
       ├── grouping columns: column45:45
+      ├── stable
       ├── stats: [rows=1171234.57, distinct(45)=1171234.57, null(45)=0]
       ├── key: (45)
       ├── fd: (45)-->(40,42,44)
       ├── project
       │    ├── columns: column39:39!null column41:41!null column43:43!null column45:45
+      │    ├── stable
       │    ├── stats: [rows=1198631.87, distinct(45)=1171234.57, null(45)=0]
       │    ├── inner-join (hash)
       │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null id:20!null cardsinfo.dealerid:26!null cardsinfo.cardid:27!null
@@ -1000,7 +1003,7 @@ sort
       │         ├── transactiondetails.sellprice:6 * quantity:5 [as=column39:39, outer=(5,6)]
       │         ├── transactiondetails.buyprice:7 * quantity:5 [as=column41:41, outer=(5,7)]
       │         ├── quantity:5 * (transactiondetails.sellprice:6 - transactiondetails.buyprice:7) [as=column43:43, outer=(5-7)]
-      │         └── extract('day', transactiondate:3) [as=column45:45, outer=(3)]
+      │         └── extract('day', transactiondate:3) [as=column45:45, outer=(3), stable]
       └── aggregations
            ├── sum [as=sum:40, outer=(39)]
            │    └── column39:39
@@ -1219,11 +1222,11 @@ insert transactions
  │    ├── column16:16 => version:7
  │    └── column17:17 => olddate:8
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── values
       ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column16:16 column17:17!null
       ├── cardinality: [1 - 1]
-      ├── side-effects
+      ├── volatile, side-effects
       ├── key: ()
       ├── fd: ()-->(10-17)
       └── (1, false, '2020-03-01 00:00:00+00:00', 'the-account', 'the-customer', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', cluster_logical_timestamp(), '0001-01-01 00:00:00+00:00')
@@ -1252,17 +1255,17 @@ upsert transactions
  │    ├── column6:15 => operationid:6
  │    └── column17:17 => olddate:8
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── left-join (cross)
       ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column16:16 column17:17!null dealerid:18 isbuy:19 date:20 accountname:21 customername:22 operationid:23 version:24 olddate:25 extra:26
       ├── cardinality: [1 - 1]
-      ├── side-effects
+      ├── volatile, side-effects
       ├── key: ()
       ├── fd: ()-->(10-26)
       ├── values
       │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column16:16 column17:17!null
       │    ├── cardinality: [1 - 1]
-      │    ├── side-effects
+      │    ├── volatile, side-effects
       │    ├── key: ()
       │    ├── fd: ()-->(10-17)
       │    └── (1, false, '2020-03-01 00:00:00+00:00', 'the-account', 'the-customer', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', cluster_logical_timestamp(), '0001-01-01 00:00:00+00:00')
@@ -1309,11 +1312,11 @@ upsert transactiondetails
  │    └── upsert_discount:44 => transactiondetails.discount:10
  ├── input binding: &2
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── stable+volatile, side-effects, mutations
  ├── project
  │    ├── columns: upsert_dealerid:38 upsert_isbuy:39 upsert_transactiondate:40 upsert_cardid:41 upsert_discount:44 sellprice:35 buyprice:36 "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 discount:24!null transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondate:27 cardid:28 quantity:29 transactiondetails.sellprice:30 transactiondetails.buyprice:31 transactiondetails.version:32 transactiondetails.discount:33 transactiondetails.extra:34
  │    ├── cardinality: [1 - ]
- │    ├── side-effects
+ │    ├── stable+volatile, side-effects
  │    ├── lax-key: (15-17,25-29)
  │    ├── fd: ()-->(13,14,24), (15-17)~~>(20), (25-29)-->(30-34), (25)-->(38), (25,26)-->(39), (15,25,27)-->(40), (16,25,28)-->(41), (15-17,25-29)~~>(20,35,36,44)
  │    ├── left-join (lookup transactiondetails)
@@ -1321,7 +1324,7 @@ upsert transactiondetails
  │    │    ├── key columns: [13 14 15 16 17] = [25 26 27 28 29]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [1 - ]
- │    │    ├── side-effects
+ │    │    ├── stable+volatile, side-effects
  │    │    ├── lax-key: (15-17,25-29)
  │    │    ├── fd: ()-->(13,14,24), (15-17)~~>(20,22,23), (25-29)-->(30-34)
  │    │    ├── ensure-upsert-distinct-on
@@ -1329,13 +1332,13 @@ upsert transactiondetails
  │    │    │    ├── grouping columns: current_timestamp:15 int8:16 int8:17
  │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │    │    │    ├── cardinality: [1 - 2]
- │    │    │    ├── side-effects
+ │    │    │    ├── stable+volatile, side-effects
  │    │    │    ├── lax-key: (15-17)
  │    │    │    ├── fd: ()-->(13,14,24), (15-17)~~>(13,14,20,22-24)
  │    │    │    ├── project
  │    │    │    │    ├── columns: sellprice:22 buyprice:23 discount:24!null column20:20 "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17
  │    │    │    │    ├── cardinality: [2 - 2]
- │    │    │    │    ├── side-effects
+ │    │    │    │    ├── stable+volatile, side-effects
  │    │    │    │    ├── fd: ()-->(13,14,24)
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: detail:12!null
@@ -1343,13 +1346,13 @@ upsert transactiondetails
  │    │    │    │    │    ├── ('{"b": 2.29, "c": 49833, "q": 4, "s": 2.89}',)
  │    │    │    │    │    └── ('{"b": 17.59, "c": 29483, "q": 2, "s": 18.93}',)
  │    │    │    │    └── projections
- │    │    │    │         ├── crdb_internal.round_decimal_values((detail:12->'s')::STRING::DECIMAL(10,4), 4) [as=sellprice:22, outer=(12)]
- │    │    │    │         ├── crdb_internal.round_decimal_values((detail:12->'b')::STRING::DECIMAL(10,4), 4) [as=buyprice:23, outer=(12)]
+ │    │    │    │         ├── crdb_internal.round_decimal_values((detail:12->'s')::STRING::DECIMAL(10,4), 4) [as=sellprice:22, outer=(12), immutable]
+ │    │    │    │         ├── crdb_internal.round_decimal_values((detail:12->'b')::STRING::DECIMAL(10,4), 4) [as=buyprice:23, outer=(12), immutable]
  │    │    │    │         ├── 0.0000 [as=discount:24]
- │    │    │    │         ├── cluster_logical_timestamp() [as=column20:20, side-effects]
+ │    │    │    │         ├── cluster_logical_timestamp() [as=column20:20, volatile, side-effects]
  │    │    │    │         ├── 1 [as="?column?":13]
  │    │    │    │         ├── false [as=bool:14]
- │    │    │    │         ├── current_timestamp() [as=current_timestamp:15, side-effects]
+ │    │    │    │         ├── current_timestamp() [as=current_timestamp:15, stable, side-effects]
  │    │    │    │         ├── (detail:12->'c')::STRING::INT8 [as=int8:16, outer=(12)]
  │    │    │    │         └── (detail:12->'q')::STRING::INT8 [as=int8:17, outer=(12)]
  │    │    │    └── aggregations
@@ -1371,9 +1374,9 @@ upsert transactiondetails
  │         ├── CASE WHEN transactiondetails.dealerid:25 IS NULL THEN bool:14 ELSE transactiondetails.isbuy:26 END [as=upsert_isbuy:39, outer=(14,25,26)]
  │         ├── CASE WHEN transactiondetails.dealerid:25 IS NULL THEN current_timestamp:15 ELSE transactiondate:27 END [as=upsert_transactiondate:40, outer=(15,25,27)]
  │         ├── CASE WHEN transactiondetails.dealerid:25 IS NULL THEN int8:16 ELSE cardid:28 END [as=upsert_cardid:41, outer=(16,25,28)]
- │         ├── CASE WHEN transactiondetails.dealerid:25 IS NULL THEN discount:24 ELSE crdb_internal.round_decimal_values(discount:24, 4) END [as=upsert_discount:44, outer=(24,25)]
- │         ├── crdb_internal.round_decimal_values(sellprice:22, 4) [as=sellprice:35, outer=(22)]
- │         └── crdb_internal.round_decimal_values(buyprice:23, 4) [as=buyprice:36, outer=(23)]
+ │         ├── CASE WHEN transactiondetails.dealerid:25 IS NULL THEN discount:24 ELSE crdb_internal.round_decimal_values(discount:24, 4) END [as=upsert_discount:44, outer=(24,25), immutable]
+ │         ├── crdb_internal.round_decimal_values(sellprice:22, 4) [as=sellprice:35, outer=(22), immutable]
+ │         └── crdb_internal.round_decimal_values(buyprice:23, 4) [as=buyprice:36, outer=(23), immutable]
  └── f-k-checks
       ├── f-k-checks-item: transactiondetails(dealerid,isbuy,transactiondate) -> transactions(dealerid,isbuy,date)
       │    └── anti-join (lookup transactions)
@@ -1409,7 +1412,7 @@ delete inventorydetails
  ├── columns: <none>
  ├── fetch columns: dealerid:8 cardid:9 accountname:10
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── scan inventorydetails@inventorydetails_auto_index_inventorydetailscardidkey
       ├── columns: dealerid:8!null cardid:9!null accountname:10!null
       ├── constraint: /9/8/10
@@ -1444,9 +1447,10 @@ update ci
  │    ├── column44:44 => notes:16
  │    └── column45:45 => oldinventory:17
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: discountbuyprice:47 column44:44 column45:45!null actualinventory_new:43 ci.dealerid:19!null ci.cardid:20!null buyprice:21!null sellprice:22!null discount:23!null desiredinventory:24!null actualinventory:25!null maxinventory:26!null ci.version:27!null ci.discountbuyprice:28 notes:29 oldinventory:30 ci.extra:31 c:32!null q:33!null
+      ├── immutable
       ├── key: (20)
       ├── fd: ()-->(19,44,45), (20)-->(21-33,43,47), (27)-->(20-26,28-31), (20)==(32), (32)==(20)
       ├── group-by
@@ -1548,7 +1552,7 @@ update ci
       │         └── const-agg [as=q:33, outer=(33)]
       │              └── q:33
       └── projections
-           ├── crdb_internal.round_decimal_values(buyprice:21 - discount:23, 4) [as=discountbuyprice:47, outer=(21,23)]
+           ├── crdb_internal.round_decimal_values(buyprice:21 - discount:23, 4) [as=discountbuyprice:47, outer=(21,23), immutable]
            ├── CAST(NULL AS STRING) [as=column44:44]
            ├── 0 [as=column45:45]
            └── COALESCE(sum_int:41, 0) [as=actualinventory_new:43, outer=(41)]

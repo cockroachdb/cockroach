@@ -40,7 +40,7 @@ WHERE z > 1.0
 ----
 with &1
  ├── columns: x:8(string!null) y:9(int!null) z:10(float!null)
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── stats: [rows=69.4736842, distinct(10)=6.66666667, null(10)=0]
  ├── fd: ()-->(8)
  ├── insert xyz
@@ -49,7 +49,7 @@ with &1
  │    │    ├── b:5 => xyz.x:1
  │    │    ├── a:4 => xyz.y:2
  │    │    └── c:6 => xyz.z:3
- │    ├── side-effects, mutations
+ │    ├── volatile, side-effects, mutations
  │    ├── stats: [rows=200]
  │    ├── fd: ()-->(1)
  │    └── project
@@ -97,7 +97,7 @@ insert xyz
  │    ├── a:4 => y:2
  │    └── c:6 => z:3
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── stats: [rows=0]
  └── project
       ├── columns: a:4(int!null) b:5(string) c:6(float)

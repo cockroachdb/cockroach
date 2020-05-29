@@ -40,7 +40,7 @@ WHERE x > 'foo'
 ----
 with &1
  ├── columns: x:8(string!null) y:9(int!null) z:10(float!null)
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0]
  ├── key: (8)
  ├── fd: ()-->(9,10)
@@ -49,7 +49,7 @@ with &1
  │    ├── fetch columns: xyz.x:4(string) xyz.y:5(int) xyz.z:6(float)
  │    ├── update-mapping:
  │    │    └── y_new:7 => xyz.y:2
- │    ├── side-effects, mutations
+ │    ├── volatile, side-effects, mutations
  │    ├── stats: [rows=10]
  │    ├── key: (1)
  │    ├── fd: ()-->(2,3)
@@ -99,7 +99,7 @@ update xyz
  ├── update-mapping:
  │    └── x_new:7 => x:1
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── stats: [rows=0]
  ├── fd: ()-->(1)
  └── project

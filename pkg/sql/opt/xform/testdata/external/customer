@@ -542,6 +542,7 @@ WHERE
 ----
 project
  ├── columns: secondary_id:6 "?column?":7
+ ├── stable
  ├── inner-join (lookup idtable)
  │    ├── columns: primary_id:1!null idtable.secondary_id:2!null data:3!null value:4!null column5:5!null
  │    ├── key columns: [1] = [1]
@@ -566,4 +567,4 @@ project
  │    └── filters (true)
  └── projections
       ├── value:4->>'secondary_id' [as=secondary_id:6, outer=(4)]
-      └── data:3 || jsonb_build_object('primary_id', primary_id:1) [as="?column?":7, outer=(1,3)]
+      └── data:3 || jsonb_build_object('primary_id', primary_id:1) [as="?column?":7, outer=(1,3), stable]

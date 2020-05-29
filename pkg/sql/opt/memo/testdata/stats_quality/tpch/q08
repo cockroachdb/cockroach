@@ -62,7 +62,7 @@ ORDER BY
 sort
  ├── save-table-name: q8_sort_1
  ├── columns: o_year:61(float) mkt_share:66(float!null)
- ├── side-effects
+ ├── immutable, side-effects
  ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(66)=717.329701, null(66)=0]
  ├── key: (61)
  ├── fd: (61)-->(66)
@@ -70,7 +70,7 @@ sort
  └── project
       ├── save-table-name: q8_project_2
       ├── columns: mkt_share:66(float!null) o_year:61(float)
-      ├── side-effects
+      ├── immutable, side-effects
       ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(66)=717.329701, null(66)=0]
       ├── key: (61)
       ├── fd: (61)-->(66)
@@ -78,16 +78,19 @@ sort
       │    ├── save-table-name: q8_group_by_3
       │    ├── columns: o_year:61(float) sum:64(float!null) sum:65(float!null)
       │    ├── grouping columns: o_year:61(float)
+      │    ├── immutable
       │    ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(64)=717.329701, null(64)=0, distinct(65)=717.329701, null(65)=0, distinct(64,65)=717.329701, null(64,65)=0]
       │    ├── key: (61)
       │    ├── fd: (61)-->(64,65)
       │    ├── project
       │    │    ├── save-table-name: q8_project_4
       │    │    ├── columns: column63:63(float!null) o_year:61(float) volume:62(float!null)
+      │    │    ├── immutable
       │    │    ├── stats: [rows=2908.77768, distinct(61)=717.329701, null(61)=0, distinct(62)=2896.77415, null(62)=0, distinct(63)=2896.99622, null(63)=0]
       │    │    ├── project
       │    │    │    ├── save-table-name: q8_project_5
       │    │    │    ├── columns: o_year:61(float) volume:62(float!null) n2.n_name:55(char!null)
+      │    │    │    ├── immutable
       │    │    │    ├── stats: [rows=2908.77768, distinct(55)=24.9055527, null(55)=0, distinct(61)=717.329701, null(61)=0, distinct(62)=2896.77415, null(62)=0, distinct(55,62)=2896.99622, null(55,62)=0]
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q8_inner_join_6
@@ -239,7 +242,7 @@ sort
       │    │    │    │    └── filters
       │    │    │    │         └── p_partkey:1 = l_partkey:18 [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │    │    │    └── projections
-      │    │    │         ├── extract('year', o_orderdate:37) [as=o_year:61, type=float, outer=(37)]
+      │    │    │         ├── extract('year', o_orderdate:37) [as=o_year:61, type=float, outer=(37), immutable]
       │    │    │         └── l_extendedprice:22 * (1.0 - l_discount:23) [as=volume:62, type=float, outer=(22,23)]
       │    │    └── projections
       │    │         └── CASE WHEN n2.n_name:55 = 'BRAZIL' THEN volume:62 ELSE 0.0 END [as=column63:63, type=float, outer=(55,62)]
@@ -249,7 +252,7 @@ sort
       │         └── sum [as=sum:65, type=float, outer=(62)]
       │              └── volume:62 [type=float]
       └── projections
-           └── sum:64 / sum:65 [as=mkt_share:66, type=float, outer=(64,65), side-effects]
+           └── sum:64 / sum:65 [as=mkt_share:66, type=float, outer=(64,65), immutable, side-effects]
 
 
 stats table=q8_sort_1

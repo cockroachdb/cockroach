@@ -114,11 +114,13 @@ ORDER BY a.attnum
 ----
 sort
  ├── columns: attname:2!null format_type:65 pg_get_expr:66 attnotnull:13!null atttypid:3!null atttypmod:9!null collname:67 comment:68  [hidden: attnum:6!null]
+ ├── stable
  ├── key: (6)
  ├── fd: (6)-->(2,3,9,13,65-68), (2)-->(3,6,9,13,65-68), (3,9)-->(65), (6)-->(68)
  ├── ordering: +6
  └── project
       ├── columns: format_type:65 pg_get_expr:66 collname:67 comment:68 attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null
+      ├── stable
       ├── key: (6)
       ├── fd: (6)-->(2,3,9,13,65-68), (2)-->(3,6,9,13,65-68), (3,9)-->(65), (6)-->(68)
       ├── right-join (hash)
@@ -174,7 +176,7 @@ sort
       │         ├── c.oid:27 = attcollation:18 [outer=(18,27), constraints=(/18: (/NULL - ]; /27: (/NULL - ]), fd=(18)==(27), (27)==(18)]
       │         └── t.oid:34 = atttypid:3 [outer=(3,34), constraints=(/3: (/NULL - ]; /34: (/NULL - ]), fd=(3)==(34), (34)==(3)]
       └── projections
-           ├── format_type(atttypid:3, atttypmod:9) [as=format_type:65, outer=(3,9)]
-           ├── pg_get_expr(adbin:25, adrelid:23) [as=pg_get_expr:66, outer=(23,25)]
+           ├── format_type(atttypid:3, atttypmod:9) [as=format_type:65, outer=(3,9), stable]
+           ├── pg_get_expr(adbin:25, adrelid:23) [as=pg_get_expr:66, outer=(23,25), stable]
            ├── c.collname:28 [as=collname:67, outer=(28)]
-           └── col_description(attrelid:1, attnum:6) [as=comment:68, outer=(1,6)]
+           └── col_description(attrelid:1, attnum:6) [as=comment:68, outer=(1,6), stable]

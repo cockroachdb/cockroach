@@ -67,6 +67,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// A Locking option is a side-effect (we don't want to elide this scan).
 	if scan.Locking != nil {
 		rel.CanHaveSideEffects = true
+		rel.VolatilitySet.AddVolatile()
 	}
 
 	// Output Columns
@@ -911,6 +912,7 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 	// Negative limits can trigger a runtime error.
 	if constLimit < 0 || !haveConstLimit {
 		rel.CanHaveSideEffects = true
+		rel.VolatilitySet.AddImmutable()
 	}
 
 	// Output Columns
@@ -1383,6 +1385,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 		}
 		if !nonZero {
 			shared.CanHaveSideEffects = true
+			shared.VolatilitySet.AddImmutable()
 		}
 
 	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
@@ -1399,11 +1402,13 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 			// Impure functions can return different value on each call.
 			shared.CanHaveSideEffects = true
 		}
+		shared.VolatilitySet.Add(t.Overload.Volatility)
 
 	default:
 		if opt.IsMutationOp(e) {
 			shared.CanHaveSideEffects = true
 			shared.CanMutate = true
+			shared.VolatilitySet.AddVolatile()
 		}
 	}
 
@@ -1426,6 +1431,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 			if cached.HasPlaceholder {
 				shared.HasPlaceholder = true
 			}
+			shared.VolatilitySet.UnionWith(cached.VolatilitySet)
 			if cached.CanHaveSideEffects {
 				shared.CanHaveSideEffects = true
 			}

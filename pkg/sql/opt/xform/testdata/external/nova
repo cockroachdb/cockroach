@@ -159,7 +159,7 @@ order by anon_1.flavors_id asc
 ----
 project
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11 anon_1_flavors_is_public:12 flavor_extra_specs_1_created_at:29 flavor_extra_specs_1_updated_at:30 flavor_extra_specs_1_id:25 flavor_extra_specs_1_key:26 flavor_extra_specs_1_value:27 flavor_extra_specs_1_flavor_id:28
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── ordering: +1
@@ -167,14 +167,14 @@ project
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
       ├── left ordering: +1
       ├── right ordering: +28
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── ordering: +1
       ├── limit
       │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23
       │    ├── internal-ordering: +1
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │    ├── ordering: +1
@@ -338,18 +338,18 @@ order by anon_1.flavors_flavorid asc, anon_1.flavors_id asc
 ----
 sort
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11!null anon_1_flavors_is_public:12 flavor_extra_specs_1_created_at:38 flavor_extra_specs_1_updated_at:39 flavor_extra_specs_1_id:34 flavor_extra_specs_1_key:35 flavor_extra_specs_1_value:36 flavor_extra_specs_1_flavor_id:37
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,34)
  ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (34)-->(35-39), (35,37)-->(34,36,38,39)
  ├── ordering: +7 opt(11) [actual: +7]
  └── project
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_extra_specs_1.id:34 key:35 value:36 flavor_extra_specs_1.flavor_id:37 flavor_extra_specs_1.created_at:38 flavor_extra_specs_1.updated_at:39
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,34)
       ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (34)-->(35-39), (35,37)-->(34,36,38,39)
       └── right-join (hash)
            ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:32 flavor_extra_specs_1.id:34 key:35 value:36 flavor_extra_specs_1.flavor_id:37 flavor_extra_specs_1.created_at:38 flavor_extra_specs_1.updated_at:39
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,34)
            ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (34)-->(35-39), (35,37)-->(34,36,38,39)
            ├── scan flavor_extra_specs_1
@@ -359,7 +359,7 @@ sort
            ├── limit
            │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:32
            │    ├── internal-ordering: +7 opt(11)
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
            │    ├── offset
@@ -593,18 +593,18 @@ order by anon_1.instance_types_flavorid asc,
 ----
 sort
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2 anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7 anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11 anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:34 instance_type_extra_specs_1_updated_at:35 instance_type_extra_specs_1_deleted_at:33 instance_type_extra_specs_1_deleted:32 instance_type_extra_specs_1_id:28 instance_type_extra_specs_1_key:29 instance_type_extra_specs_1_value:30 instance_type_extra_specs_1_instance_type_id:31
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +7,+1
  └── project
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       └── right-join (hash)
            ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,28)
            ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
            ├── select
@@ -621,7 +621,7 @@ sort
            ├── limit
            │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26
            │    ├── internal-ordering: +7,+1
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
            │    ├── offset
@@ -944,12 +944,12 @@ from (select instance_types.created_at as instance_types_created_at,
 ----
 project
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2!null anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7 anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11 anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:34 instance_type_extra_specs_1_updated_at:35 instance_type_extra_specs_1_deleted_at:33 instance_type_extra_specs_1_deleted:32 instance_type_extra_specs_1_id:28 instance_type_extra_specs_1_key:29 instance_type_extra_specs_1_value:30 instance_type_extra_specs_1_instance_type_id:31
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  └── right-join (hash)
       ├── columns: instance_types.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       ├── select
@@ -965,7 +965,7 @@ project
       │         └── instance_type_extra_specs_1.deleted:32 = $7 [outer=(32), constraints=(/32: (/NULL - ])]
       ├── limit
       │    ├── columns: instance_types.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
       │    ├── offset
@@ -1125,12 +1125,12 @@ from (select instance_types.created_at as instance_types_created_at,
 ----
 project
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2 anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7 anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11 anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:34 instance_type_extra_specs_1_updated_at:35 instance_type_extra_specs_1_deleted_at:33 instance_type_extra_specs_1_deleted:32 instance_type_extra_specs_1_id:28 instance_type_extra_specs_1_key:29 instance_type_extra_specs_1_value:30 instance_type_extra_specs_1_instance_type_id:31
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  └── right-join (hash)
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       ├── select
@@ -1146,7 +1146,7 @@ project
       │         └── instance_type_extra_specs_1.deleted:32 = $7 [outer=(32), constraints=(/32: (/NULL - ])]
       ├── limit
       │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │    ├── offset
@@ -1298,12 +1298,12 @@ from (select flavors.created_at as flavors_created_at,
 ----
 project
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11 anon_1_flavors_is_public:12 flavor_extra_specs_1_created_at:29 flavor_extra_specs_1_updated_at:30 flavor_extra_specs_1_id:25 flavor_extra_specs_1_key:26 flavor_extra_specs_1_value:27 flavor_extra_specs_1_flavor_id:28
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  └── right-join (hash)
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── scan flavor_extra_specs_1
@@ -1312,7 +1312,7 @@ project
       │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── limit
       │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │    ├── offset
@@ -1457,12 +1457,12 @@ from (select flavors.created_at as flavors_created_at,
 ----
 project
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11 anon_1_flavors_is_public:12 flavor_extra_specs_1_created_at:29 flavor_extra_specs_1_updated_at:30 flavor_extra_specs_1_id:25 flavor_extra_specs_1_key:26 flavor_extra_specs_1_value:27 flavor_extra_specs_1_flavor_id:28
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  └── right-join (hash)
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── scan flavor_extra_specs_1
@@ -1471,7 +1471,7 @@ project
       │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── limit
       │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │    ├── offset
@@ -1620,18 +1620,18 @@ order by anon_1.flavors_flavorid asc, anon_1.flavors_id asc
 ----
 sort
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11 anon_1_flavors_is_public:12 flavor_extra_specs_1_created_at:29 flavor_extra_specs_1_updated_at:30 flavor_extra_specs_1_id:25 flavor_extra_specs_1_key:26 flavor_extra_specs_1_value:27 flavor_extra_specs_1_flavor_id:28
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── ordering: +7
  └── project
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
       └── right-join (hash)
            ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,25)
            ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
            ├── scan flavor_extra_specs_1
@@ -1641,7 +1641,7 @@ sort
            ├── limit
            │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23
            │    ├── internal-ordering: +7
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
            │    ├── offset
@@ -1805,18 +1805,18 @@ order by anon_1.instance_types_flavorid asc,
 ----
 sort
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2 anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7 anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11 anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:34 instance_type_extra_specs_1_updated_at:35 instance_type_extra_specs_1_deleted_at:33 instance_type_extra_specs_1_deleted:32 instance_type_extra_specs_1_id:28 instance_type_extra_specs_1_key:29 instance_type_extra_specs_1_value:30 instance_type_extra_specs_1_instance_type_id:31
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +7,+1
  └── project
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       └── right-join (hash)
            ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,28)
            ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
            ├── select
@@ -1833,7 +1833,7 @@ sort
            ├── limit
            │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26
            │    ├── internal-ordering: +7,+1
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
            │    ├── offset
@@ -2000,12 +2000,12 @@ from (select instance_types.created_at as instance_types_created_at,
 ----
 project
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2 anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7!null anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11 anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:34 instance_type_extra_specs_1_updated_at:35 instance_type_extra_specs_1_deleted_at:33 instance_type_extra_specs_1_deleted:32 instance_type_extra_specs_1_id:28 instance_type_extra_specs_1_key:29 instance_type_extra_specs_1_value:30 instance_type_extra_specs_1_instance_type_id:31
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  └── right-join (hash)
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       ├── select
@@ -2021,7 +2021,7 @@ project
       │         └── instance_type_extra_specs_1.deleted:32 = $7 [outer=(32), constraints=(/32: (/NULL - ])]
       ├── limit
       │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │    ├── offset
@@ -2314,18 +2314,18 @@ order by anon_1.instance_types_flavorid asc,
 ----
 sort
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2 anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7!null anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11 anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:34 instance_type_extra_specs_1_updated_at:35 instance_type_extra_specs_1_deleted_at:33 instance_type_extra_specs_1_deleted:32 instance_type_extra_specs_1_id:28 instance_type_extra_specs_1_key:29 instance_type_extra_specs_1_value:30 instance_type_extra_specs_1_instance_type_id:31
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +7,+1
  └── project
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       └── right-join (hash)
            ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,28)
            ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
            ├── select
@@ -2342,7 +2342,7 @@ sort
            ├── limit
            │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26
            │    ├── internal-ordering: +7,+1
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
            │    ├── offset
@@ -2502,18 +2502,18 @@ order by anon_1.flavors_flavorid asc, anon_1.flavors_id asc
 ----
 sort
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11 anon_1_flavors_is_public:12 flavor_extra_specs_1_created_at:29 flavor_extra_specs_1_updated_at:30 flavor_extra_specs_1_id:25 flavor_extra_specs_1_key:26 flavor_extra_specs_1_value:27 flavor_extra_specs_1_flavor_id:28
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── ordering: +7
  └── project
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
       └── right-join (hash)
            ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,25)
            ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
            ├── scan flavor_extra_specs_1
@@ -2523,7 +2523,7 @@ sort
            ├── limit
            │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23
            │    ├── internal-ordering: +7
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
            │    ├── offset
@@ -2687,7 +2687,7 @@ order by anon_1.instance_types_flavorid asc,
 ----
 project
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2 anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7 anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11!null anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:45 instance_type_extra_specs_1_updated_at:46 instance_type_extra_specs_1_deleted_at:44 instance_type_extra_specs_1_deleted:43 instance_type_extra_specs_1_id:39 instance_type_extra_specs_1_key:40 instance_type_extra_specs_1_value:41 instance_type_extra_specs_1_instance_type_id:42
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,39)
  ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (39)-->(40-46), (40,42,43)~~>(39,41,44-46)
  ├── ordering: +7,+1 opt(11) [actual: +7,+1]
@@ -2695,21 +2695,21 @@ project
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:37 instance_type_extra_specs_1.id:39 key:40 value:41 instance_type_extra_specs_1.instance_type_id:42 instance_type_extra_specs_1.deleted:43 instance_type_extra_specs_1.deleted_at:44 instance_type_extra_specs_1.created_at:45 instance_type_extra_specs_1.updated_at:46
       ├── key columns: [39] = [39]
       ├── lookup columns are key
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,39)
       ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (39)-->(40-46), (40,42,43)~~>(39,41,44-46)
       ├── ordering: +7,+1 opt(11) [actual: +7,+1]
       ├── left-join (lookup instance_type_extra_specs@secondary)
       │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:37 instance_type_extra_specs_1.id:39 key:40 instance_type_extra_specs_1.instance_type_id:42 instance_type_extra_specs_1.deleted:43
       │    ├── key columns: [1] = [42]
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1,39)
       │    ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (39)-->(40,42,43), (40,42,43)~~>(39)
       │    ├── ordering: +7,+1 opt(11) [actual: +7,+1]
       │    ├── limit
       │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:37
       │    │    ├── internal-ordering: +7,+1 opt(11)
-      │    │    ├── side-effects, has-placeholder
+      │    │    ├── immutable, side-effects, has-placeholder
       │    │    ├── key: (1)
       │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │    │    ├── ordering: +7,+1 opt(11) [actual: +7,+1]
@@ -2958,18 +2958,18 @@ order by anon_1.instance_types_deleted asc,
 ----
 sort
  ├── columns: anon_1_instance_types_created_at:15 anon_1_instance_types_updated_at:16 anon_1_instance_types_deleted_at:14 anon_1_instance_types_deleted:13!null anon_1_instance_types_id:1!null anon_1_instance_types_name:2 anon_1_instance_types_memory_mb:3!null anon_1_instance_types_vcpus:4!null anon_1_instance_types_root_gb:5 anon_1_instance_types_ephemeral_gb:6 anon_1_instance_types_flavorid:7!null anon_1_instance_types_swap:8!null anon_1_instance_types_rxtx_factor:9 anon_1_instance_types_vcpu_weight:10 anon_1_instance_types_disabled:11 anon_1_instance_types_is_public:12 instance_type_extra_specs_1_created_at:34 instance_type_extra_specs_1_updated_at:35 instance_type_extra_specs_1_deleted_at:33 instance_type_extra_specs_1_deleted:32 instance_type_extra_specs_1_id:28 instance_type_extra_specs_1_key:29 instance_type_extra_specs_1_value:30 instance_type_extra_specs_1_instance_type_id:31
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,28)
  ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
  ├── ordering: +13,+1
  └── project
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
       └── right-join (hash)
            ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26 instance_type_extra_specs_1.id:28 key:29 value:30 instance_type_extra_specs_1.instance_type_id:31 instance_type_extra_specs_1.deleted:32 instance_type_extra_specs_1.deleted_at:33 instance_type_extra_specs_1.created_at:34 instance_type_extra_specs_1.updated_at:35
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,28)
            ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
            ├── select
@@ -2986,7 +2986,7 @@ sort
            ├── limit
            │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:26
            │    ├── internal-ordering: +13,+1
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
            │    ├── offset
@@ -3145,12 +3145,12 @@ from (select flavors.created_at as flavors_created_at,
 ----
 project
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11 anon_1_flavors_is_public:12 flavor_extra_specs_1_created_at:29 flavor_extra_specs_1_updated_at:30 flavor_extra_specs_1_id:25 flavor_extra_specs_1_key:26 flavor_extra_specs_1_value:27 flavor_extra_specs_1_flavor_id:28
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  └── right-join (hash)
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── scan flavor_extra_specs_1
@@ -3159,7 +3159,7 @@ project
       │    └── fd: (25)-->(26-30), (26,28)-->(25,27,29,30)
       ├── limit
       │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 true_agg:23
-      │    ├── side-effects, has-placeholder
+      │    ├── immutable, side-effects, has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │    ├── offset
@@ -3307,18 +3307,18 @@ order by anon_1.flavors_flavorid asc, anon_1.flavors_id asc
 ----
 sort
  ├── columns: anon_1_flavors_created_at:14 anon_1_flavors_updated_at:15 anon_1_flavors_id:1!null anon_1_flavors_name:2!null anon_1_flavors_memory_mb:3!null anon_1_flavors_vcpus:4!null anon_1_flavors_root_gb:5 anon_1_flavors_ephemeral_gb:6 anon_1_flavors_flavorid:7!null anon_1_flavors_swap:8!null anon_1_flavors_rxtx_factor:9 anon_1_flavors_vcpu_weight:10 anon_1_flavors_disabled:11 anon_1_flavors_is_public:12 anon_1_flavors_description:13 flavor_extra_specs_1_created_at:29 flavor_extra_specs_1_updated_at:30 flavor_extra_specs_1_id:25 flavor_extra_specs_1_key:26 flavor_extra_specs_1_value:27 flavor_extra_specs_1_flavor_id:28
- ├── side-effects, has-placeholder
+ ├── immutable, side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-15), (7)-->(1-6,8-15), (2)-->(1,3-15), (25)-->(26-30), (26,28)-->(25,27,29,30)
  ├── ordering: +7
  └── project
       ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 description:13 flavors.created_at:14 flavors.updated_at:15 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-      ├── side-effects, has-placeholder
+      ├── immutable, side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-15), (7)-->(1-6,8-15), (2)-->(1,3-15), (25)-->(26-30), (26,28)-->(25,27,29,30)
       └── right-join (hash)
            ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 description:13 flavors.created_at:14 flavors.updated_at:15 true_agg:23 flavor_extra_specs_1.id:25 key:26 value:27 flavor_extra_specs_1.flavor_id:28 flavor_extra_specs_1.created_at:29 flavor_extra_specs_1.updated_at:30
-           ├── side-effects, has-placeholder
+           ├── immutable, side-effects, has-placeholder
            ├── key: (1,25)
            ├── fd: (1)-->(2-15,23), (7)-->(1-6,8-15), (2)-->(1,3-15), (25)-->(26-30), (26,28)-->(25,27,29,30)
            ├── scan flavor_extra_specs_1
@@ -3328,7 +3328,7 @@ sort
            ├── limit
            │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 description:13 flavors.created_at:14 flavors.updated_at:15 true_agg:23
            │    ├── internal-ordering: +7
-           │    ├── side-effects, has-placeholder
+           │    ├── immutable, side-effects, has-placeholder
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-15,23), (7)-->(1-6,8-15), (2)-->(1,3-15)
            │    ├── sort
