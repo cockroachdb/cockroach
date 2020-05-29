@@ -34,7 +34,7 @@ var (
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
 	Distribution = "OSS"
-	typ          string // Type of this build: <empty>, "development", or "release[-gnu|-musl]"
+	typ          string // Type of this build: <empty>, "development", or "release"
 	channel      = "unknown"
 	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 )

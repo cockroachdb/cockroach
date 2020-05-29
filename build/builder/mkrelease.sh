@@ -9,7 +9,6 @@
 # Possible configurations:
 #
 #   - amd64-linux-gnu:      amd64, Linux 2.6.32, dynamically link glibc 2.12.2
-#   - amd64-linux-musl:     amd64, Linux 2.6.32, statically link musl 1.1.16
 #   - amd64-linux-msan:     amd64, recent Linux, enable Clang's memory sanitizer
 #   - arm64-linux-gnueabi:  arm64, Linux 3.7.10, dynamically link glibc 2.12.2
 #   - amd64-darwin:         amd64, macOS 10.9
@@ -43,16 +42,6 @@ case "${1-}" in
       # If we update to a newer glibc, the -lrt can be removed.
       LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
       SUFFIX=-linux-2.6.32-gnu-amd64
-    ) ;;
-
-  ?(amd64-)linux-musl)
-    args=(
-      XGOOS=linux
-      XGOARCH=amd64
-      XCMAKE_SYSTEM_NAME=Linux
-      TARGET_TRIPLE=x86_64-unknown-linux-musl
-      LDFLAGS=-static
-      SUFFIX=-linux-2.6.32-musl-amd64
     ) ;;
 
   ?(arm64-)linux?(-gnueabi))

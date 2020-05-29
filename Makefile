@@ -609,10 +609,7 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/con
 	mkdir -p $(JEMALLOC_DIR)
 	@# NOTE: If you change the configure flags below, bump the version in
 	@# $(C_DEPS_DIR)/jemalloc-rebuild. See above for rationale.
-	@#
-	@# jemalloc profiling deadlocks when built against musl. See
-	@# https://github.com/jemalloc/jemalloc/issues/585.
-	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(xconfigure-flags) $(if $(findstring musl,$(TARGET_TRIPLE)),,--enable-prof)
+	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(xconfigure-flags) --enable-prof
 
 $(KRB5_SRC_DIR)/src/configure.in: | bin/.submodules-initialized
 
