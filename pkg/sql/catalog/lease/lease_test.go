@@ -2253,8 +2253,8 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	unblockAll := make(chan struct{})
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				BootstrapVersionOverride: clusterversion.VersionByKey(clusterversion.VersionRangefeedLeases),
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				AlwaysUseRangefeeds: true,
 			},
 		},
 	}
