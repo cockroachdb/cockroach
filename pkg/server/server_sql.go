@@ -158,7 +158,7 @@ type sqlServerArgs struct {
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
-	jobRegistry         *jobs.Registry
+	circularJobRegistry *jobs.Registry
 	jobAdoptionStopFile string
 
 	// The executorConfig uses the provider.
@@ -176,7 +176,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}
 	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
 
-	jobRegistry := cfg.jobRegistry
+	jobRegistry := cfg.circularJobRegistry
 
 	{
 		regLiveness := cfg.nodeLiveness
