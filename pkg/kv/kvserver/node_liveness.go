@@ -262,7 +262,7 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter fu
 
 // SetDecommissioning runs a best-effort attempt of marking the the liveness
 // record as decommissioning. It returns whether the function committed a
-// transaction that updated the liveness record.
+// transaction that updated the liveness record. // XXX: When does it not?
 func (nl *NodeLiveness) SetDecommissioning(
 	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
 ) (changeCommitted bool, err error) {
@@ -1049,12 +1049,17 @@ func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
 
 // livenessGossipUpdate is the gossip callback used to keep the
 // in-memory liveness info up to date.
-func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) {
+func (nl *NodeLiveness) livenessGossipUpdate(_ string, content roachpb.Value) {
 	var liveness kvserverpb.Liveness
 	if err := content.GetProto(&liveness); err != nil {
 		log.Errorf(context.TODO(), "%v", err)
 		return
 	}
+
+	// We may be in a mixed version cluster with v20.1 nodes, and thus be
+	// receiving liveness gossip with the old proto representation. We have to
+	// reconcile it with the new proto representation, if so.
+	liveness = reconcileMixedVersionLiveness(liveness)
 
 	nl.maybeUpdate(LivenessRecord{Liveness: liveness, raw: &content})
 }
@@ -1130,4 +1135,38 @@ func (nl *NodeLiveness) GetNodeCount() int {
 		}
 	}
 	return count
+}
+
+// reconcileMixedVersionLiveness converts kvserverpb.Liveness updates from the
+// v20.1 representation (using the deprecated decommissioning bool) into the
+// v20.2 representation (using the commissioning status enum instead).
+//
+// TODO(irfansharif): Remove this once v20.2 is cut.
+func reconcileMixedVersionLiveness(old kvserverpb.Liveness) (new kvserverpb.Liveness) {
+	new = old
+	if old.Status != kvserverpb.CommissionStatus_UNKNOWN_ {
+		// Liveness is from node running v20.2, we fill in the deprecated
+		// decommissioning state.
+		new.DeprecatedDecommissioning = !(old.Status == kvserverpb.CommissionStatus_COMMISSIONED_)
+		return new
+	}
+
+	// Liveness is from node running v20.1, we fill in the appropriate
+	// commission state.
+	if old.DeprecatedDecommissioning {
+		// We take the conservative opinion and assume the node to be
+		// decommissioning, not fully decommissioned (after all, that's all
+		// one can infer from a boolean decommissioning state). If operators
+		// decommissioned nodes in a cluster running v20.1 and v20.2 nodes,
+		// they may have to decommission the nodes again once fully onto
+		// v20.2 in order to durably mark said nodes as decommissioned.
+		new.Status = kvserverpb.CommissionStatus_DECOMMISSIONING_
+	} else {
+		// We take the optimistic route here and assume the node is fully
+		// commissioned (we don't have a way of representing a node in the
+		// 'recommissioning' state, see comment on CommissionStatus for why
+		// that is).
+		new.Status = kvserverpb.CommissionStatus_COMMISSIONED_
+	}
+	return new
 }
