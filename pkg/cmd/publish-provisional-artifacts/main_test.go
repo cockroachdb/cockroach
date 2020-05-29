@@ -119,7 +119,6 @@ func TestProvisional(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=[mkrelease darwin GOFLAGS= SUFFIX=.darwin-10.9-amd64 TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
 				"env=[] args=[mkrelease linux-gnu GOFLAGS= SUFFIX=.linux-2.6.32-gnu-amd64 TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
-				"env=[] args=[mkrelease linux-musl GOFLAGS= SUFFIX=.linux-2.6.32-musl-amd64 TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
 				"env=[] args=[mkrelease windows GOFLAGS= SUFFIX=.windows-6.2-amd64.exe TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
 				"env=[] args=[make archive ARCHIVE_BASE=cockroach-v0.0.1-alpha ARCHIVE=cockroach-v0.0.1-alpha.src.tgz BUILDINFO_TAG=v0.0.1-alpha]",
 			},
@@ -128,8 +127,6 @@ func TestProvisional(t *testing.T) {
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz " +
 					"CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.linux-amd64.tgz " +
-					"CONTENTS <binary stuff>",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.linux-musl-amd64.tgz " +
 					"CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip " +
 					"CONTENTS <binary stuff>",
@@ -148,7 +145,6 @@ func TestProvisional(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=[mkrelease darwin GOFLAGS= SUFFIX=.darwin-10.9-amd64 TAGS= BUILDCHANNEL=official-binary]",
 				"env=[] args=[mkrelease linux-gnu GOFLAGS= SUFFIX=.linux-2.6.32-gnu-amd64 TAGS= BUILDCHANNEL=official-binary]",
-				"env=[] args=[mkrelease linux-musl GOFLAGS= SUFFIX=.linux-2.6.32-musl-amd64 TAGS= BUILDCHANNEL=official-binary]",
 				"env=[] args=[mkrelease windows GOFLAGS= SUFFIX=.windows-6.2-amd64.exe TAGS= BUILDCHANNEL=official-binary]",
 			},
 			expectedGets: nil,
@@ -161,10 +157,6 @@ func TestProvisional(t *testing.T) {
 					"CONTENTS env=[] args=[mkrelease linux-gnu GOFLAGS= SUFFIX=.linux-2.6.32-gnu-amd64 TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache " +
 					"REDIRECT /cockroach/cockroach.linux-gnu-amd64.00SHA00",
-				"s3://cockroach//cockroach/cockroach.linux-musl-amd64.00SHA00 " +
-					"CONTENTS env=[] args=[mkrelease linux-musl GOFLAGS= SUFFIX=.linux-2.6.32-musl-amd64 TAGS= BUILDCHANNEL=official-binary]",
-				"s3://cockroach/cockroach/cockroach.linux-musl-amd64.LATEST/no-cache " +
-					"REDIRECT /cockroach/cockroach.linux-musl-amd64.00SHA00",
 				"s3://cockroach//cockroach/cockroach.windows-amd64.00SHA00.exe " +
 					"CONTENTS env=[] args=[mkrelease windows GOFLAGS= SUFFIX=.windows-6.2-amd64.exe TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/cockroach.windows-amd64.LATEST/no-cache " +
@@ -216,7 +208,6 @@ func TestBless(t *testing.T) {
 			expectedGets: []string{
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.linux-amd64.tgz",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.linux-musl-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.windows-6.2-amd64.zip",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.src.tgz",
 			},
@@ -225,8 +216,6 @@ func TestBless(t *testing.T) {
 					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.linux-amd64.tgz/no-cache " +
 					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.linux-amd64.tgz",
-				"s3://binaries.cockroachdb.com/cockroach-latest.linux-musl-amd64.tgz/no-cache " +
-					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.linux-musl-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.windows-6.2-amd64.zip/no-cache " +
 					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.windows-6.2-amd64.zip",
 				"s3://binaries.cockroachdb.com/cockroach-latest.src.tgz/no-cache " +
