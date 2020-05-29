@@ -861,13 +861,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
-	var planCtx *PlanningCtx
-	if distribute {
-		planCtx = ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner.txn)
-	} else {
-		planCtx = ex.server.cfg.DistSQLPlanner.newLocalPlanningCtx(ctx, evalCtx)
-	}
-	planCtx.isLocal = !distribute
+	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner.txn, distribute)
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
 	if planner.collectBundle {

@@ -875,20 +875,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
 	defer subqueryMemAccount.Close(ctx)
 
-	var subqueryPlanCtx *PlanningCtx
 	var distributeSubquery bool
 	if maybeDistribute {
 		distributeSubquery = willDistributePlan(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
 		)
 	}
-	if distributeSubquery {
-		subqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
-	} else {
-		subqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
-	}
-
-	subqueryPlanCtx.isLocal = !distributeSubquery
+	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributeSubquery)
 	subqueryPlanCtx.planner = planner
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.collectBundle {
@@ -1186,20 +1179,13 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
 	defer postqueryMemAccount.Close(ctx)
 
-	var postqueryPlanCtx *PlanningCtx
 	var distributePostquery bool
 	if maybeDistribute {
 		distributePostquery = willDistributePlan(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
 		)
 	}
-	if distributePostquery {
-		postqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
-	} else {
-		postqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
-	}
-
-	postqueryPlanCtx.isLocal = !distributePostquery
+	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributePostquery)
 	postqueryPlanCtx.planner = planner
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
