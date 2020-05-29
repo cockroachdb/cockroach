@@ -48,3 +48,42 @@
     (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
     $indexJoinPrivate
 )
+
+# SplitScanIntoUnionScans splits a scan under a limit into a union of limited
+# scans. Example:
+#
+#    CREATE TABLE tab (region STRING, data INT NOT NULL, INDEX (region, data));
+#
+#    SELECT data
+#    FROM tab
+#    WHERE region='ASIA' OR region='EUROPE'
+#    ORDER BY data DESC
+#    LIMIT 1;
+#
+#    =>
+#
+#    SELECT data
+#    FROM (SELECT * FROM tab WHERE region='ASIA' ORDER BY data LIMIT 1)
+#    UNION ALL (SELECT * FROM tab WHERE region='EUROPE' ORDER BY data LIMIT 1)
+#    ORDER BY data
+#    LIMIT 1;
+#
+# See the SplitScanIntoUnionScans comment in xform/custom_funcs for details.
+[SplitScanIntoUnionScans, Explore]
+(Limit
+    $scan:(Scan $scanPrivate:*) &
+        (ScanIsConstrained $scanPrivate) &
+        ^(ScanIsLimited $scanPrivate)
+    $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
+    $ordering:* &
+        (Succeeded
+            $unionScans:(SplitScanIntoUnionScans
+                $ordering
+                $scan
+                $scanPrivate
+                $limit
+            )
+        )
+)
+=>
+(Limit $unionScans $limitExpr $ordering)
