@@ -1648,16 +1648,18 @@ GROUP BY n.name, n.geom
 ----
 project
  ├── columns: name:13!null popn_per_sqkm:16
- ├── side-effects
+ ├── immutable, side-effects
  ├── group-by
  │    ├── columns: name:13!null n.geom:14 sum:15
  │    ├── grouping columns: name:13!null n.geom:14
+ │    ├── immutable
  │    ├── key: (13,14)
  │    ├── fd: (13,14)-->(15)
  │    ├── inner-join (lookup nyc_census_blocks)
  │    │    ├── columns: popn_total:3 c.boroname:9!null c.geom:10 n.boroname:12!null name:13!null n.geom:14
  │    │    ├── key columns: [1] = [1]
  │    │    ├── lookup columns are key
+ │    │    ├── immutable
  │    │    ├── fd: (9)==(12), (12)==(9)
  │    │    ├── inner-join (geo-lookup nyc_census_blocks@nyc_census_blocks_geo_idx)
  │    │    │    ├── columns: c.gid:1!null n.boroname:12 name:13!null n.geom:14
@@ -1670,13 +1672,13 @@ project
  │    │    │    │         └── (name:13 = 'Upper West Side') OR (name:13 = 'Upper East Side') [outer=(13), constraints=(/13: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         ├── st_intersects(c.geom:10, n.geom:14) [outer=(10,14)]
+ │    │         ├── st_intersects(c.geom:10, n.geom:14) [outer=(10,14), immutable]
  │    │         └── c.boroname:9 = n.boroname:12 [outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
  │    └── aggregations
  │         └── sum [as=sum:15, outer=(3)]
  │              └── popn_total:3
  └── projections
-      └── sum:15 / (st_area(n.geom:14) / 1e+06) [as=popn_per_sqkm:16, outer=(14,15), side-effects]
+      └── sum:15 / (st_area(n.geom:14) / 1e+06) [as=popn_per_sqkm:16, outer=(14,15), immutable, side-effects]
 
 memo expect=GenerateGeoLookupJoins
 SELECT
@@ -2227,17 +2229,17 @@ SELECT q,r FROM pqr WHERE q = 1 AND r = 2 FOR UPDATE
 ----
 select
  ├── columns: q:2!null r:3!null
- ├── side-effects
+ ├── volatile, side-effects
  ├── fd: ()-->(2,3)
  ├── index-join pqr
  │    ├── columns: q:2 r:3
- │    ├── side-effects
+ │    ├── volatile, side-effects
  │    ├── fd: ()-->(2)
  │    └── scan pqr@q
  │         ├── columns: p:1!null q:2!null
  │         ├── constraint: /2/1: [/1 - /1]
  │         ├── locking: for-update
- │         ├── side-effects
+ │         ├── volatile, side-effects
  │         ├── key: (1)
  │         └── fd: ()-->(2)
  └── filters
@@ -2462,12 +2464,12 @@ FROM
 with &1
  ├── columns: bool:22!null
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── key: ()
  ├── fd: ()-->(22)
  ├── project
  │    ├── columns: "?column?":16!null
- │    ├── side-effects, mutations
+ │    ├── volatile, side-effects, mutations
  │    ├── fd: ()-->(16)
  │    ├── insert abc
  │    │    ├── columns: abc.rowid:8!null
@@ -2476,15 +2478,15 @@ with &1
  │    │    │    ├── column14:14 => abc.b:6
  │    │    │    ├── column14:14 => abc.c:7
  │    │    │    └── column15:15 => abc.rowid:8
- │    │    ├── side-effects, mutations
+ │    │    ├── volatile, side-effects, mutations
  │    │    └── project
  │    │         ├── columns: column14:14 column15:15 "?column?":13!null
- │    │         ├── side-effects
+ │    │         ├── volatile, side-effects
  │    │         ├── fd: ()-->(13,14)
  │    │         ├── scan abc
  │    │         └── projections
  │    │              ├── CAST(NULL AS INT8) [as=column14:14]
- │    │              ├── unique_rowid() [as=column15:15, side-effects]
+ │    │              ├── unique_rowid() [as=column15:15, volatile, side-effects]
  │    │              └── 1 [as="?column?":13]
  │    └── projections
  │         └── 1 [as="?column?":16]
@@ -2569,54 +2571,54 @@ union-all
  ├── left columns: "?column?":3
  ├── right columns: "?column?":6
  ├── cardinality: [4 - 12]
- ├── side-effects
+ ├── volatile, side-effects
  ├── project
  │    ├── columns: "?column?":3!null
  │    ├── cardinality: [2 - 6]
- │    ├── side-effects
+ │    ├── volatile, side-effects
  │    ├── fd: ()-->(3)
  │    ├── left-join (cross)
  │    │    ├── cardinality: [2 - 6]
- │    │    ├── side-effects
+ │    │    ├── volatile, side-effects
  │    │    ├── values
  │    │    │    ├── cardinality: [2 - 2]
  │    │    │    ├── ()
  │    │    │    └── ()
  │    │    ├── select
  │    │    │    ├── cardinality: [0 - 3]
- │    │    │    ├── side-effects
+ │    │    │    ├── volatile, side-effects
  │    │    │    ├── values
  │    │    │    │    ├── cardinality: [3 - 3]
  │    │    │    │    ├── ()
  │    │    │    │    ├── ()
  │    │    │    │    └── ()
  │    │    │    └── filters
- │    │    │         └── random() = 0.0 [side-effects]
+ │    │    │         └── random() = 0.0 [volatile, side-effects]
  │    │    └── filters (true)
  │    └── projections
  │         └── 1 [as="?column?":3]
  └── project
       ├── columns: "?column?":6!null
       ├── cardinality: [2 - 6]
-      ├── side-effects
+      ├── volatile, side-effects
       ├── fd: ()-->(6)
       ├── left-join (cross)
       │    ├── cardinality: [2 - 6]
-      │    ├── side-effects
+      │    ├── volatile, side-effects
       │    ├── values
       │    │    ├── cardinality: [2 - 2]
       │    │    ├── ()
       │    │    └── ()
       │    ├── select
       │    │    ├── cardinality: [0 - 3]
-      │    │    ├── side-effects
+      │    │    ├── volatile, side-effects
       │    │    ├── values
       │    │    │    ├── cardinality: [3 - 3]
       │    │    │    ├── ()
       │    │    │    ├── ()
       │    │    │    └── ()
       │    │    └── filters
-      │    │         └── random() = 0.0 [side-effects]
+      │    │         └── random() = 0.0 [volatile, side-effects]
       │    └── filters (true)
       └── projections
            └── 1 [as="?column?":6]
@@ -2844,19 +2846,19 @@ SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}' FOR UPDATE
 ----
 select
  ├── columns: b:2 a:1!null
- ├── side-effects
+ ├── volatile, side-effects
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t5
  │    ├── columns: a:1!null b:2
- │    ├── side-effects
+ │    ├── volatile, side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t5@b_idx
  │         ├── columns: a:1!null
  │         ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
  │         ├── locking: for-update
- │         ├── side-effects
+ │         ├── volatile, side-effects
  │         └── key: (1)
  └── filters
       └── b:2 @> '{"a": 1, "c": 2}' [outer=(2)]

@@ -1439,13 +1439,13 @@ SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z LIMIT 2 RETURNING
 sort
  ├── columns: a:7!null b:8!null c:9!null
  ├── cardinality: [0 - 2]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── key: (7-9)
  ├── ordering: +8
  └── with &1
       ├── columns: a:7!null b:8!null c:9!null
       ├── cardinality: [0 - 2]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── key: (7-9)
       ├── insert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
@@ -1454,7 +1454,7 @@ sort
       │    │    ├── y:5 => abc.b:2
       │    │    └── z:6 => abc.c:3
       │    ├── cardinality: [0 - 2]
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    ├── key: (1-3)
       │    └── limit
       │         ├── columns: x:4!null y:5!null z:6!null
@@ -1488,12 +1488,12 @@ ORDER BY y
 sort
  ├── columns: x:9!null y:10!null z:11!null
  ├── cardinality: [0 - 2]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── ordering: +10
  └── with &1
       ├── columns: x:9!null y:10!null z:11!null
       ├── cardinality: [0 - 2]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── insert xyz
       │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
       │    ├── insert-mapping:
@@ -1501,7 +1501,7 @@ sort
       │    │    ├── c:6 => xyz.y:2
       │    │    └── d:7 => xyz.z:3
       │    ├── cardinality: [0 - 2]
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── scan abcd@cd
       │         ├── columns: b:5 c:6 d:7
       │         └── limit: 2
@@ -1524,13 +1524,13 @@ ORDER BY y
 sort
  ├── columns: x:9!null y:10!null z:11!null
  ├── cardinality: [0 - 2]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── fd: (9)==(10), (10)==(9)
  ├── ordering: +(9|10) [actual: +9]
  └── with &1
       ├── columns: x:9!null y:10!null z:11!null
       ├── cardinality: [0 - 2]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── fd: (9)==(10), (10)==(9)
       ├── insert xyz
       │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
@@ -1539,7 +1539,7 @@ sort
       │    │    ├── c:6 => xyz.y:2
       │    │    └── d:7 => xyz.z:3
       │    ├── cardinality: [0 - 2]
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── scan abcd@cd
       │         ├── columns: b:5 c:6 d:7
       │         └── limit: 2
@@ -1563,7 +1563,7 @@ SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *]
 ----
 with &1
  ├── columns: a:7!null b:8!null c:9!null
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── key: (7-9)
  ├── insert abc
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
@@ -1571,7 +1571,7 @@ with &1
  │    │    ├── x:4 => abc.a:1
  │    │    ├── y:5 => abc.b:2
  │    │    └── z:6 => abc.c:3
- │    ├── side-effects, mutations
+ │    ├── volatile, side-effects, mutations
  │    ├── key: (1-3)
  │    └── scan xyz
  │         ├── columns: x:4!null y:5!null z:6!null
@@ -1594,16 +1594,16 @@ SELECT * FROM [UPDATE abcd SET (a, b)=(1, 2) RETURNING *] ORDER BY c
 ----
 sort
  ├── columns: a:13!null b:14!null c:15 d:16
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── fd: ()-->(13,14)
  ├── ordering: +15 opt(13,14) [actual: +15]
  └── with &1
       ├── columns: a:13!null b:14!null c:15 d:16
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── fd: ()-->(13,14)
       ├── project
       │    ├── columns: abcd.a:1!null abcd.b:2!null abcd.c:3 abcd.d:4
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    ├── fd: ()-->(1,2)
       │    └── update abcd
       │         ├── columns: abcd.a:1!null abcd.b:2!null abcd.c:3 abcd.d:4 rowid:5!null
@@ -1611,7 +1611,7 @@ sort
       │         ├── update-mapping:
       │         │    ├── a_new:11 => abcd.a:1
       │         │    └── b_new:12 => abcd.b:2
-      │         ├── side-effects, mutations
+      │         ├── volatile, side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: ()-->(1,2), (5)-->(3,4)
       │         └── project
@@ -1643,23 +1643,23 @@ ORDER BY c, d
 sort
  ├── columns: a:12 b:13 c:14 d:15
  ├── cardinality: [0 - 10]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── ordering: +14,+15
  └── with &1
       ├── columns: a:12 b:13 c:14 d:15
       ├── cardinality: [0 - 10]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── project
       │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
       │    ├── cardinality: [0 - 10]
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── update abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
       │         ├── update-mapping:
       │         │    └── b_new:11 => abcd.b:2
       │         ├── cardinality: [0 - 10]
-      │         ├── side-effects, mutations
+      │         ├── volatile, side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
       │         └── project
@@ -1694,25 +1694,25 @@ ORDER BY b, d
 sort
  ├── columns: a:12 b:13!null c:14!null d:15
  ├── cardinality: [0 - 10]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── fd: (13)==(14), (14)==(13)
  ├── ordering: +(13|14),+15 [actual: +13,+15]
  └── with &1
       ├── columns: a:12 b:13!null c:14!null d:15
       ├── cardinality: [0 - 10]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── fd: (13)==(14), (14)==(13)
       ├── project
       │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
       │    ├── cardinality: [0 - 10]
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── update abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
       │         ├── update-mapping:
       │         │    └── b_new:11 => abcd.b:2
       │         ├── cardinality: [0 - 10]
-      │         ├── side-effects, mutations
+      │         ├── volatile, side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
       │         └── project
@@ -1761,11 +1761,11 @@ ORDER BY b
 ----
 sort
  ├── columns: a:14!null b:15!null c:16!null
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── ordering: +15
  └── with &1
       ├── columns: a:14!null b:15!null c:16!null
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── upsert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
       │    ├── canary column: 7
@@ -1780,7 +1780,7 @@ sort
       │    │    ├── upsert_a:11 => abc.a:1
       │    │    ├── upsert_b:12 => abc.b:2
       │    │    └── upsert_c:13 => abc.c:3
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── project
       │         ├── columns: upsert_a:11!null upsert_b:12 upsert_c:13 x:4!null y:5!null z:6!null abc.a:7 abc.b:8 abc.c:9
       │         ├── key: (4-6)
@@ -1835,18 +1835,18 @@ SELECT * FROM [DELETE FROM abcd RETURNING *] ORDER BY c
 ----
 sort
  ├── columns: a:11 b:12 c:13 d:14
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── ordering: +13
  └── with &1
       ├── columns: a:11 b:12 c:13 d:14
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── project
       │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── delete abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
-      │         ├── side-effects, mutations
+      │         ├── volatile, side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
       │         └── scan abcd
@@ -1870,21 +1870,21 @@ ORDER BY c, d
 sort
  ├── columns: a:11 b:12 c:13 d:14
  ├── cardinality: [0 - 10]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── ordering: +13,+14
  └── with &1
       ├── columns: a:11 b:12 c:13 d:14
       ├── cardinality: [0 - 10]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── project
       │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
       │    ├── cardinality: [0 - 10]
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── delete abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
       │         ├── cardinality: [0 - 10]
-      │         ├── side-effects, mutations
+      │         ├── volatile, side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
       │         └── scan abcd@cd
@@ -1912,23 +1912,23 @@ ORDER BY b, d
 sort
  ├── columns: a:11 b:12!null c:13!null d:14
  ├── cardinality: [0 - 10]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── fd: (12)==(13), (13)==(12)
  ├── ordering: +(12|13),+14 [actual: +12,+14]
  └── with &1
       ├── columns: a:11 b:12!null c:13!null d:14
       ├── cardinality: [0 - 10]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── fd: (12)==(13), (13)==(12)
       ├── project
       │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
       │    ├── cardinality: [0 - 10]
-      │    ├── side-effects, mutations
+      │    ├── volatile, side-effects, mutations
       │    └── delete abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:6 abcd.b:7 abcd.c:8 abcd.d:9 rowid:10
       │         ├── cardinality: [0 - 10]
-      │         ├── side-effects, mutations
+      │         ├── volatile, side-effects, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
       │         └── scan abcd@cd

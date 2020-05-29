@@ -66,7 +66,7 @@ SELECT * FROM a WHERE random()::int>a.i+a.i
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
- ├── side-effects
+ ├── volatile, side-effects
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -74,7 +74,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── random()::INT8 > (i:2 + i:2) [outer=(2), side-effects]
+      └── random()::INT8 > (i:2 + i:2) [outer=(2), volatile, side-effects]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst
@@ -647,10 +647,11 @@ SELECT timezone('America/Denver', ts) >= tz FROM t
 ----
 project
  ├── columns: "?column?":4
+ ├── immutable
  ├── scan t
  │    └── columns: ts:1 tz:2
  └── projections
-      └── tz:2 <= timezone('America/Denver', ts:1) [as="?column?":4, outer=(1,2)]
+      └── tz:2 <= timezone('America/Denver', ts:1) [as="?column?":4, outer=(1,2), immutable]
 
 # Don't normalize when the timezone() arguments are constants.
 norm expect-not=NormalizeCmpTimeZoneFunction
@@ -693,10 +694,11 @@ SELECT timezone('America/Denver', tz) >= ts FROM t
 ----
 project
  ├── columns: "?column?":4
+ ├── immutable
  ├── scan t
  │    └── columns: ts:1 tz:2
  └── projections
-      └── ts:1 <= timezone('America/Denver', tz:2) [as="?column?":4, outer=(1,2)]
+      └── ts:1 <= timezone('America/Denver', tz:2) [as="?column?":4, outer=(1,2), immutable]
 
 # Don't normalize when the timezone() arguments are constants.
 norm expect-not=NormalizeCmpTimeZoneFunctionTZ

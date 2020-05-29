@@ -206,7 +206,7 @@ SELECT * FROM a FOR UPDATE
 scan a
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── locking: for-update
- ├── side-effects
+ ├── volatile, side-effects
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)

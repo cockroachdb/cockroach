@@ -81,18 +81,22 @@ WHERE
 ----
 project
  ├── columns: PID:3 User:5 Database:2 "Backend start":10 Client:37 Application:6 Query:19 "Query start":12 "Xact start":11
+ ├── stable
  ├── select
  │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":36!null
+ │    ├── stable
  │    ├── key: (20)
  │    ├── fd: ()-->(36), (20)-->(2,3,5-12,19)
  │    ├── ensure-distinct-on
  │    │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":36
  │    │    ├── grouping columns: sa.rowid:20!null
  │    │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    │    ├── stable
  │    │    ├── key: (20)
  │    │    ├── fd: (20)-->(2,3,5-12,19,36)
  │    │    ├── left-join-apply
  │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":36
+ │    │    │    ├── stable
  │    │    │    ├── fd: (20)-->(2-12,19)
  │    │    │    ├── scan sa
  │    │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null
@@ -101,12 +105,14 @@ project
  │    │    │    ├── project
  │    │    │    │    ├── columns: "?column?":36
  │    │    │    │    ├── outer: (4)
+ │    │    │    │    ├── stable
  │    │    │    │    ├── select
  │    │    │    │    │    ├── columns: oid:21 rolname:22!null rolsuper:23
+ │    │    │    │    │    ├── stable
  │    │    │    │    │    ├── scan r
  │    │    │    │    │    │    └── columns: oid:21 rolname:22 rolsuper:23
  │    │    │    │    │    └── filters
- │    │    │    │    │         └── rolname:22 = current_user() [outer=(22), constraints=(/22: (/NULL - ])]
+ │    │    │    │    │         └── rolname:22 = current_user() [outer=(22), stable, constraints=(/22: (/NULL - ])]
  │    │    │    │    └── projections
  │    │    │    │         └── rolsuper:23 OR (oid:21 = usesysid:4) [as="?column?":36, outer=(4,21,23)]
  │    │    │    └── filters (true)
