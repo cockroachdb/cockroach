@@ -825,17 +825,19 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
-func getIndexIdx(n *scanNode) (uint32, error) {
-	if n.index.ID == n.desc.PrimaryIndex.ID {
+func getIndexIdx(
+	index *sqlbase.IndexDescriptor, desc *sqlbase.ImmutableTableDescriptor,
+) (uint32, error) {
+	if index.ID == desc.PrimaryIndex.ID {
 		return 0, nil
 	}
-	for i := range n.desc.Indexes {
-		if n.index.ID == n.desc.Indexes[i].ID {
+	for i := range desc.Indexes {
+		if index.ID == desc.Indexes[i].ID {
 			// IndexIdx is 1 based (0 means primary index).
 			return uint32(i + 1), nil
 		}
 	}
-	return 0, errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
+	return 0, errors.Errorf("invalid index %v (table %s)", index, desc.Name)
 }
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
@@ -855,7 +857,7 @@ func initTableReaderSpec(
 		// Retain the capacity of the spans slice.
 		Spans: s.Spans[:0],
 	}
-	indexIdx, err := getIndexIdx(n)
+	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
 	}
@@ -933,16 +935,17 @@ func getScanNodeToTableOrdinalMap(n *scanNode) []int {
 // returned by a scanNode.
 // If remap is not nil, the column ordinals are remapped accordingly.
 func getOutputColumnsFromScanNode(n *scanNode, remap []int) []uint32 {
-	outputColumns := make([]uint32, 0, n.valNeededForCol.Len())
-	// TODO(radu): if we have a scan with a filter, valNeededForCol will include
-	// the columns needed for the filter, even if they aren't needed for the
-	// next stage.
-	n.valNeededForCol.ForEach(func(i int) {
+	outputColumns := make([]uint32, 0, len(n.cols))
+	// TODO(radu): if we have a scan with a filter, cols will include the
+	// columns needed for the filter, even if they aren't needed for the next
+	// stage.
+	for i := 0; i < len(n.cols); i++ {
+		colIdx := i
 		if remap != nil {
-			i = remap[i]
+			colIdx = remap[i]
 		}
-		outputColumns = append(outputColumns, uint32(i))
-	})
+		outputColumns = append(outputColumns, uint32(colIdx))
+	}
 	return outputColumns
 }
 
@@ -1035,9 +1038,8 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 // one for each node that has spans that we are reading.
 // overridesResultColumns is optional.
 func (dsp *DistSQLPlanner) createTableReaders(
-	planCtx *PlanningCtx, n *scanNode, overrideResultColumns []sqlbase.ColumnID,
+	planCtx *PlanningCtx, n *scanNode,
 ) (PhysicalPlan, error) {
-
 	scanNodeToTableOrdinalMap := getScanNodeToTableOrdinalMap(n)
 	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
 	if err != nil {
@@ -1139,15 +1141,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	}
 	p.SetLastStagePost(post, typs)
 
-	var outCols []uint32
-	if overrideResultColumns == nil {
-		outCols = getOutputColumnsFromScanNode(n, scanNodeToTableOrdinalMap)
-	} else {
-		outCols = make([]uint32, len(overrideResultColumns))
-		for i, id := range overrideResultColumns {
-			outCols[i] = uint32(tableOrdinal(n.desc, id, n.colCfg.visibility))
-		}
-	}
+	outCols := getOutputColumnsFromScanNode(n, scanNodeToTableOrdinalMap)
 	planToStreamColMap := make([]int, len(n.cols))
 	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
 	for i := range n.desc.Columns {
@@ -1866,7 +1860,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
 	}
-	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table)
+	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -1958,7 +1952,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	numStreamCols := 0
 	for i, side := range n.sides {
 		tables[i] = *side.scan.desc.TableDesc()
-		indexOrdinals[i], err = getIndexIdx(side.scan)
+		indexOrdinals[i], err = getIndexIdx(side.scan.index, side.scan.desc)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -2320,7 +2314,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		}
 
 	case *scanNode:
-		plan, err = dsp.createTableReaders(planCtx, n, nil)
+		plan, err = dsp.createTableReaders(planCtx, n)
 
 	case *sortNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)
@@ -2641,8 +2635,8 @@ func createDistinctSpec(n *distinctNode, cols []int) *execinfrapb.DistinctSpec {
 		}
 	} else {
 		// If no distinct columns were specified, run distinct on the entire row.
-		for planCol := range planColumns(n) {
-			if streamCol := cols[planCol]; streamCol != -1 {
+		for _, streamCol := range cols {
+			if streamCol != -1 {
 				distinctColumns = append(distinctColumns, uint32(streamCol))
 			}
 		}

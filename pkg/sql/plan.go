@@ -290,13 +290,6 @@ type planTop struct {
 	mem     *memo.Memo
 	catalog *optCatalog
 
-	// deps, if non-nil, collects the table/view dependencies for this query.
-	// Any planNode constructors that resolves a table name or reference in the query
-	// to a descriptor must register this descriptor into planDeps.
-	// This is (currently) used by CREATE VIEW.
-	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
-	deps planDependencies
-
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent

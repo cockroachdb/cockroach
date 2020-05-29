@@ -27,7 +27,7 @@ func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 	p := planner{alloc: &sqlbase.DatumAlloc{}}
 	scan := p.Scan()
 	scan.desc = desc
-	err := scan.initDescDefaults(p.curPlan.deps, publicColumnsCfg)
+	err := scan.initDescDefaults(publicColumnsCfg)
 	if err != nil {
 		return nil, err
 	}
