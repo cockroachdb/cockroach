@@ -313,6 +313,124 @@ func (sp *Span) CutFront(numCols int) {
 	sp.end = sp.end.CutFront(numCols)
 }
 
+// KeyCount returns the number of distinct keys contained in this span. Returns
+// zero and false if the operation is not possible. The boundaries are assumed
+// to be inclusive. Requirements:
+//   1. The span must have a start and end key.
+//   2. Keys must be of the same length.
+//   3. Keys must have equivalent datums for all but the last column.
+//   4. The last columns are of the same type and either:
+//      a. Are countable.
+//      b. Have the same value (in which case the distinct count is 1).
+func (sp *Span) KeyCount(keyCtx *KeyContext) (uint, bool) {
+	startKey := sp.start
+	endKey := sp.end
+	if startKey.IsEmpty() || endKey.IsEmpty() {
+		// The span must have both start and end keys.
+		return 0, false
+	}
+
+	// Keys must be same length.
+	n := startKey.Length()
+	if n != endKey.Length() {
+		return 0, false
+	}
+
+	// All the datums up to the last one must be equal.
+	for i := 0; i < n-1; i++ {
+		if startKey.Value(i).ResolvedType() != endKey.Value(i).ResolvedType() {
+			// The datums must be of the same type.
+			return 0, false
+		}
+		if keyCtx.Compare(i, startKey.Value(i), endKey.Value(i)) != 0 {
+			// The datums must be equal.
+			return 0, false
+		}
+	}
+
+	thisVal := startKey.Value(startKey.Length() - 1)
+	otherVal := endKey.Value(endKey.Length() - 1)
+
+	if thisVal.ResolvedType() != otherVal.ResolvedType() {
+		// The last datums must be of the same type.
+		return 0, false
+	}
+	if keyCtx.Compare(n-1, thisVal, otherVal) == 0 {
+		// If the last datums are equal, the distinct count is 1.
+		return 1, true
+	}
+
+	// If the last columns are countable, return the distinct count between them.
+	desc := keyCtx.Columns.Get(startKey.Length() - 1).Descending()
+	val := 0
+
+	switch t := thisVal.(type) {
+	case *tree.DInt:
+		otherDInt, otherOk := tree.AsDInt(otherVal)
+		if otherOk {
+			val = int(otherDInt - *t)
+		}
+
+	case *tree.DOid:
+		otherDOid, otherOk := tree.AsDOid(otherVal)
+		if otherOk {
+			val = int(otherDOid.DInt - (*t).DInt)
+		}
+
+	case *tree.DDate:
+		otherDDate, otherOk := otherVal.(*tree.DDate)
+		if otherOk {
+			if !t.IsFinite() || !otherDDate.IsFinite() {
+				// One of the DDates isn't finite, so we can't extract a distinct count.
+				return 0, false
+			}
+			val = int(otherDDate.PGEpochDays() - (*t).PGEpochDays())
+		}
+
+	default:
+		// Uncountable type.
+		return 0, false
+	}
+	if (val < 0 && !desc) || (val > 0 && desc) {
+		// The order of the keys is wrong.
+		return 0, false
+	}
+	if val < 0 {
+		val *= -1
+	}
+	// Add one because the distinct count is inclusive.
+	return uint(val) + 1, true
+}
+
+// Split returns a list of spans, with each span containing one key from this
+// span. Returns nil and false if unsuccessful. The operation is unsuccessful if
+// the number of distinct keys in the span cannot be obtained or the number of
+// keys exceeds the limit. The boundaries are assumed to be inclusive.
+func (sp *Span) Split(keyCtx *KeyContext, limit int) (spans *Spans, ok bool) {
+	currKey := sp.start
+	keyCount, ok := sp.KeyCount(keyCtx)
+	if !ok || int(keyCount) > limit {
+		// The key count could not be determined, or the key count exceeds the
+		// limit.
+		return nil, false
+	}
+	spans = &Spans{}
+	ok = true
+	for i := 0; i < int(keyCount); i++ {
+		if !ok {
+			return nil, false
+		}
+		spans.Append(&Span{
+			start:         currKey,
+			end:           currKey,
+			startBoundary: IncludeBoundary,
+			endBoundary:   IncludeBoundary,
+		})
+		currKey, ok = currKey.Next(keyCtx)
+	}
+	return spans, true
+}
+
 func (sp *Span) startExt() KeyExtension {
 	// Trivial cast of start boundary value:
 	//   IncludeBoundary (false) = ExtendLow (false)

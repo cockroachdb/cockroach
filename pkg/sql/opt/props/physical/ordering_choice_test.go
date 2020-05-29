@@ -334,11 +334,23 @@ func TestOrderingChoice_MatchesAt(t *testing.T) {
 	}
 }
 
+func TestOrderingChoice_AddOptionalCols(t *testing.T) {
+	ordering := physical.ParseOrderingChoice("+1,-(2|3),-4,+(5|6|7),+8 opt(9)")
+	optionalCols := opt.MakeColSet(3, 4, 7, 9)
+	ordering.AddOptionalCols(optionalCols)
+
+	expected := "+1,-2,+(5|6),+8 opt(3,4,7,9)"
+	if ordering.String() != expected {
+		t.Errorf("\nexpected: %s\nactual: %s\n", expected, ordering.String())
+	}
+}
+
 func TestOrderingChoice_Copy(t *testing.T) {
-	ordering := physical.ParseOrderingChoice("+1,-(2|3) opt(4,5)")
+	ordering := physical.ParseOrderingChoice("+1,-(2|3) opt(4,5,100)")
 	copied := ordering.Copy()
 	col := physical.OrderingColumnChoice{Group: opt.MakeColSet(6, 7), Descending: true}
 	copied.Columns = append(copied.Columns, col)
+	copied.Optional.Remove(opt.ColumnID(100))
 
 	// ()-->(8)
 	// (3)==(9)
@@ -348,7 +360,7 @@ func TestOrderingChoice_Copy(t *testing.T) {
 	fd.AddEquivalency(3, 9)
 	copied.Simplify(&fd)
 
-	if ordering.String() != "+1,-(2|3) opt(4,5)" {
+	if ordering.String() != "+1,-(2|3) opt(4,5,100)" {
 		t.Errorf("original was modified: %s", ordering.String())
 	}
 

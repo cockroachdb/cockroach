@@ -1465,6 +1465,181 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	}
 }
 
+// ScanIsConstrained returns true if the scan operator with the given
+// ScanPrivate is constrained.
+func (c *CustomFuncs) ScanIsConstrained(sp *memo.ScanPrivate) bool {
+	return sp.Constraint != nil
+}
+
+// ScanIsLimited returns true if the scan operator with the given ScanPrivate is
+// limited.
+func (c *CustomFuncs) ScanIsLimited(sp *memo.ScanPrivate) bool {
+	return sp.HardLimit != 0
+}
+
+// SplitScanIntoUnionScans returns a Union of Scan operators with hard limits
+// that each scan over a single key from the original scan's constraints. This
+// is beneficial in cases where the original scan had to scan over many rows but
+// had relatively few keys to scan over.
+func (c *CustomFuncs) SplitScanIntoUnionScans(
+	limitOrdering physical.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
+) memo.RelExpr {
+	const maxScanCount = 16
+	const threshold = 4
+
+	keyCtx := constraint.MakeKeyContext(&sp.Constraint.Columns, c.e.evalCtx)
+	limitVal := int(*limit.(*tree.DInt))
+	spans := sp.Constraint.Spans
+
+	// Retrieve the number of keys in the spans.
+	keyCount, ok := spans.KeyCount(&keyCtx)
+	if !ok {
+		return nil
+	}
+	if keyCount <= 1 {
+		// We need more than one key in order to split the existing Scan into
+		// multiple Scans.
+		return nil
+	}
+	if int(keyCount) > maxScanCount {
+		// The number of new Scans created would exceed maxScanCount.
+		return nil
+	}
+
+	// Check that the number of rows scanned by the new plan will be smaller than
+	// the number scanned by the old plan by at least a factor of "threshold".
+	if float64(int(keyCount)*limitVal*threshold) >= scan.Relational().Stats.RowCount {
+		// Splitting the scan may not be worth the overhead; creating a sequence of
+		// scans unioned together is expensive, so we don't want to create the plan
+		// only for the optimizer to use something else. We only want to create the
+		// plan if it is likely to be used.
+		return nil
+	}
+
+	// Retrieve the length of the keys. All keys are required to be the same
+	// length (this will be checked later) so we can simply use the length of the
+	// first key.
+	keyLength := spans.Get(0).StartKey().Length()
+
+	// If the index ordering has a prefix of columns of length keyLength followed
+	// by the limitOrdering columns, the scan can be split. Otherwise, return nil.
+	hasLimitOrderingSeq, reverse := indexHasOrderingSequence(
+		c.e.mem.Metadata(), sp, limitOrdering, keyLength)
+	if !hasLimitOrderingSeq {
+		return nil
+	}
+
+	// Construct a hard limit for the new scans using the result of
+	// hasLimitOrderingSeq.
+	newHardLimit := memo.MakeScanLimit(int64(limitVal), reverse)
+
+	// Construct a new Spans object containing a new Span for each key in the
+	// original Scan's spans.
+	newSpans, ok := spans.ExtractSingleKeySpans(&keyCtx, maxScanCount)
+	if !ok {
+		// Single key spans could not be created.
+		return nil
+	}
+
+	// Construct a new ScanExpr for each span and union them all together. We
+	// output the old ColumnIDs from each union.
+	oldColList := opt.ColSetToList(scan.Relational().OutputCols)
+	last := c.makeNewScan(sp, newHardLimit, newSpans.Get(0))
+	for i, cnt := 1, newSpans.Count(); i < cnt; i++ {
+		newScan := c.makeNewScan(sp, newHardLimit, newSpans.Get(i))
+		last = c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
+			LeftCols:  opt.ColSetToList(last.Relational().OutputCols),
+			RightCols: opt.ColSetToList(newScan.Relational().OutputCols),
+			OutCols:   oldColList,
+		})
+	}
+	return last
+}
+
+// indexHasOrderingSequence returns two booleans; the first describes whether
+// the given ScanPrivate returns rows that are ordered by a prefix of length
+// keyLength followed by the ordering columns of limitOrdering. The second
+// describes whether the scan has to be reversed in order to satisfy
+// limitOrdering. For example:
+//
+// index: +1/-2/+3,
+// limitOrdering: -2/+3,
+// keyLength: 1,
+// =>
+// return True, False
+//
+// index: +1/-2/+3,
+// limitOrdering: +2/-3,
+// keyLength: 1,
+// =>
+// return True, True
+//
+// index: +1/-2/+3,
+// limitOrdering: -2/+3,
+// keyLength: 2,
+// =>
+// return False, False
+//
+func indexHasOrderingSequence(
+	md *opt.Metadata, sp *memo.ScanPrivate, limitOrdering physical.OrderingChoice, keyLength int,
+) (hasSequence, reverse bool) {
+	tableMeta := md.TableMeta(sp.Table)
+	index := tableMeta.Table.Index(sp.Index)
+
+	if keyLength > index.ColumnCount() {
+		// The key contains more columns than the index. The limit ordering sequence
+		// cannot be part of the index ordering.
+		return false, false
+	}
+
+	// Create a copy of the limit ordering, and add the first 'keyCount' columns
+	// from the index as optional columns.
+	// Example:
+	//   keyCount: 1
+	//   index: +1/-2/+3,
+	//   limitOrdering: -2/+3
+	//   =>
+	//   requiredOrdering: -2/+3 opt(1)
+	requiredOrdering := limitOrdering.Copy()
+	prefixCols := opt.ColSet{}
+	for i := 0; i < keyLength; i++ {
+		col := sp.Table.ColumnID(index.Column(i).Ordinal)
+		prefixCols.Add(col)
+	}
+	requiredOrdering.AddOptionalCols(prefixCols)
+
+	// If the ScanPrivate can satisfy requiredOrdering, it must return columns
+	// ordered by a prefix of length keyLength, followed by the columns of
+	// limitOrdering.
+	return ordering.ScanPrivateCanProvide(md, sp, &requiredOrdering)
+}
+
+// makeNewScan constructs a new Scan operator with a new TableID and the given
+// limit and span. All ColumnIDs and references to those ColumnIDs are
+// replaced with new ones from the new TableID. All other fields are simply
+// copied from the old ScanPrivate.
+func (c *CustomFuncs) makeNewScan(
+	sp *memo.ScanPrivate, newHardLimit memo.ScanLimit, span *constraint.Span,
+) memo.RelExpr {
+	newScanPrivate := c.DuplicateScanPrivate(sp)
+
+	// duplicateScanPrivate does not initialize the Constraint or HardLimit
+	// fields, so we do that now.
+	newScanPrivate.HardLimit = newHardLimit
+
+	// Construct the new Constraint field with the given span and remapped
+	// ordering columns.
+	var newSpans constraint.Spans
+	newSpans.InitSingleSpan(span)
+	newConstraint := &constraint.Constraint{
+		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
+		Spans:   newSpans,
+	}
+	newScanPrivate.Constraint = newConstraint
+
+	return c.e.f.ConstructScan(newScanPrivate)
+}
+
 // ----------------------------------------------------------------------
 //
 // Join Rules
@@ -2981,31 +3156,27 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 	return false
 }
 
-// DuplicateScanPrivate constructs a new ScanPrivate that is identical to the
-// input, but has new table and column IDs.
-//
-// DuplicateScanPrivate can only be called on canonical ScanPrivates because not
-// all scan properties are copied to the new ScanPrivate, e.g. constraints.
+// DuplicateScanPrivate constructs a new ScanPrivate with new table and column
+// IDs. Only the Index, Flags and Locking fields are copied from the old
+// ScanPrivate, so the new ScanPrivate will not have constraints even if the old
+// one did.
 func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
-	if !c.IsCanonicalScan(sp) {
-		panic(errors.AssertionFailedf("input ScanPrivate must be canonical: %v", sp))
-	}
-
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(sp.Table)
-	dupTabID := md.AddTable(tabMeta.Table, &tabMeta.Alias)
+	newTableID := md.AddTable(tabMeta.Table, &tabMeta.Alias)
 
-	var dupTabColIDs opt.ColSet
+	var newColIDs opt.ColSet
 	cols := sp.Cols
-	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
-		ord := tabMeta.MetaID.ColumnOrdinal(i)
-		dupColID := dupTabID.ColumnID(ord)
-		dupTabColIDs.Add(dupColID)
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		ord := tabMeta.MetaID.ColumnOrdinal(col)
+		newColID := newTableID.ColumnID(ord)
+		newColIDs.Add(newColID)
 	}
 
 	return &memo.ScanPrivate{
-		Table:   dupTabID,
-		Cols:    dupTabColIDs,
+		Table:   newTableID,
+		Index:   sp.Index,
+		Cols:    newColIDs,
 		Flags:   sp.Flags,
 		Locking: sp.Locking,
 	}

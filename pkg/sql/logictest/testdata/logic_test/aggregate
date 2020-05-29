@@ -1195,6 +1195,40 @@ SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y
 5  NULL  5  4
 3  4     3  2
 
+# Test max and min when agg column is the second column in an index.
+statement ok
+CREATE TABLE index_tab (
+  region STRING,
+  data INT NOT NULL,
+  INDEX (region, data)
+)
+
+statement ok
+INSERT INTO index_tab
+(VALUES
+  ('US_WEST', 3),
+  ('US_EAST', 23),
+  ('US_EAST', -14),
+  ('ASIA', 3294),
+  ('ASIA', -3),
+  ('US_WEST', 31),
+  ('EUROPE', 123),
+  ('US_EAST', -3000)
+)
+
+query I
+SELECT max(data) FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
+----
+31
+
+query I
+SELECT min(data) FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
+----
+-3000
+
+statement ok
+DROP TABLE index_tab
+
 # Regression test for #23798 until #10495 is fixed.
 statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) FROM kv

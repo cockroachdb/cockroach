@@ -476,11 +476,24 @@ func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 	oc.Columns = append(oc.Columns, ordCol)
 }
 
+// AddOptionalCols unions the given ColSet with the optional ColSet and removes
+// any references to columns in the given ColSet from the Columns field.
+func (oc *OrderingChoice) AddOptionalCols(cols opt.ColSet) {
+	oc.Optional.UnionWith(cols)
+	for i := 0; i < len(oc.Columns); i++ {
+		oc.Columns[i].Group.DifferenceWith(cols)
+		if oc.Columns[i].Group.Empty() {
+			oc.Columns = append(oc.Columns[:i], oc.Columns[i+1:]...)
+			i--
+		}
+	}
+}
+
 // Copy returns a complete copy of this instance, with a private version of the
 // ordering column array.
 func (oc *OrderingChoice) Copy() OrderingChoice {
 	var other OrderingChoice
-	other.Optional = oc.Optional
+	other.Optional = oc.Optional.Copy()
 	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
 	copy(other.Columns, oc.Columns)
 	return other
