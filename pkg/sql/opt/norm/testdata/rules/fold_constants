@@ -308,7 +308,7 @@ SELECT 1::INT / 0::INT
 values
  ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(1)
  └── (1 / 0,)
@@ -820,7 +820,7 @@ SELECT now(), current_user(), current_database()
 values
  ├── columns: now:1 current_user:2 current_database:3
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── stable, side-effects
  ├── key: ()
  ├── fd: ()-->(1-3)
  └── (now(), current_user(), current_database())
