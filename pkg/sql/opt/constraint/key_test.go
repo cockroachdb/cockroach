@@ -15,11 +15,13 @@ package constraint
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
 func TestKey(t *testing.T) {
@@ -219,6 +221,142 @@ func TestKeyNextPrev(t *testing.T) {
 		})
 	}
 
+}
+
+func TestKey_DistinctCount(t *testing.T) {
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescAsc := testKeyContext(-1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	date1, _ := pgdate.MakeDateFromPGEpoch(1)
+	date2, _ := pgdate.MakeDateFromPGEpoch(4)
+	dateInf, _ := pgdate.MakeDateFromPGEpoch(math.MaxInt32)
+
+	testCases := []struct {
+		first   Key
+		second  Key
+		keyCtx  *KeyContext
+		expDist string
+	}{
+		{ // 0
+			first:   MakeKey(tree.NewDInt(1)),
+			second:  MakeKey(tree.NewDInt(4)),
+			keyCtx:  kcAscAsc,
+			expDist: "4",
+		},
+		{ // 1
+			first:   MakeKey(tree.NewDInt(1)),
+			second:  MakeKey(tree.NewDInt(1)),
+			keyCtx:  kcAscAsc,
+			expDist: "1",
+		},
+		{ // 2
+			first:   MakeKey(tree.NewDInt(4)),
+			second:  MakeKey(tree.NewDInt(-3)),
+			keyCtx:  kcDescAsc,
+			expDist: "8",
+		},
+		{ // 3
+			first:   MakeKey(tree.NewDInt(4)),
+			second:  MakeKey(tree.NewDInt(1)),
+			keyCtx:  kcAscAsc,
+			expDist: "FAIL",
+		},
+		{ // 4
+			first:   MakeKey(tree.NewDString("US_WEST")),
+			second:  MakeKey(tree.NewDString("US_EAST")),
+			keyCtx:  kcAscAsc,
+			expDist: "FAIL",
+		},
+		{ // 5
+			first:   MakeKey(tree.NewDString("US_WEST")),
+			second:  MakeKey(tree.NewDString("US_WEST")),
+			keyCtx:  kcAscAsc,
+			expDist: "1",
+		},
+		{ // 6
+			first:   MakeKey(tree.NewDString("US_WEST")),
+			second:  MakeKey(tree.NewDString("US_WEST")),
+			keyCtx:  kcDescAsc,
+			expDist: "1",
+		},
+		{ // 7
+			first:   MakeKey(tree.NewDOid(1)),
+			second:  MakeKey(tree.NewDOid(2)),
+			keyCtx:  kcAscAsc,
+			expDist: "2",
+		},
+		{ // 8
+			first:   MakeKey(tree.NewDDate(date1)),
+			second:  MakeKey(tree.NewDDate(date2)),
+			keyCtx:  kcAscAsc,
+			expDist: "4",
+		},
+		{ // 9
+			first:   MakeKey(tree.NewDDate(date1)),
+			second:  MakeKey(tree.NewDDate(dateInf)),
+			keyCtx:  kcAscAsc,
+			expDist: "FAIL",
+		},
+		{ // 10
+			first:   MakeKey(tree.NewDInt(1)),
+			second:  MakeKey(tree.NewDOid(2)),
+			keyCtx:  kcAscAsc,
+			expDist: "FAIL",
+		},
+		{ // 11
+			first:   MakeKey(tree.DNull),
+			second:  MakeKey(tree.DNull),
+			keyCtx:  kcAscAsc,
+			expDist: "1",
+		},
+		{ // 12
+			first:   MakeKey(tree.NewDInt(1)),
+			second:  MakeCompositeKey(tree.NewDOid(1), tree.NewDInt(1)),
+			keyCtx:  kcAscAsc,
+			expDist: "FAIL",
+		},
+		{ // 13
+			first:   MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(5)),
+			second:  MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(-5)),
+			keyCtx:  kcDescDesc,
+			expDist: "11",
+		},
+		{ // 14
+			first:   MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDInt(5)),
+			second:  MakeCompositeKey(tree.NewDString("US_EAST"), tree.NewDInt(-5)),
+			keyCtx:  kcDescDesc,
+			expDist: "FAIL",
+		},
+		{ // 15
+			first:   MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("car")),
+			second:  MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("car")),
+			keyCtx:  kcDescAsc,
+			expDist: "1",
+		},
+		{ // 16
+			first:   MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("car")),
+			second:  MakeCompositeKey(tree.NewDString("US_WEST"), tree.NewDString("bike")),
+			keyCtx:  kcDescAsc,
+			expDist: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(dist uint, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return strconv.Itoa(int(dist))
+			}
+
+			dist, ok := tc.first.DistinctCount(tc.keyCtx, tc.second)
+			if res := toStr(dist, ok); res != tc.expDist {
+				t.Errorf("'%s'.DistinctCount('%s') = %s, expected %s", tc.first, tc.second, res, tc.expDist)
+			}
+		})
+	}
 }
 
 func testKey(t *testing.T, k Key, expected string) {

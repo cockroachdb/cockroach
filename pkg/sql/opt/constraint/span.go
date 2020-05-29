@@ -313,6 +313,50 @@ func (sp *Span) CutFront(numCols int) {
 	sp.end = sp.end.CutFront(numCols)
 }
 
+// KeyCount returns the number of distinct keys contained in this span. Returns
+// zero and false if the operation is not possible. The key count cannot be
+// determined when the span does not have a start and end key. In addition, all
+// restrictions outlined in key.DistinctCount apply. The boundaries are assumed
+// to be inclusive.
+func (sp *Span) KeyCount(keyCtx *KeyContext) (uint, bool) {
+	startKey := sp.start
+	endKey := sp.end
+	if startKey.IsEmpty() || endKey.IsEmpty() {
+		// The span must have both start and end keys.
+		return 0, false
+	}
+	return startKey.DistinctCount(keyCtx, endKey)
+}
+
+// Split returns a list of spans, with each span containing one key from this
+// span. Returns nil and false if unsuccessful. The operation is unsuccessful if
+// the number of distinct keys in the span cannot be obtained or the number of
+// keys exceeds the limit. The boundaries are assumed to be inclusive.
+func (sp *Span) Split(keyCtx *KeyContext, limit int) (spans *Spans, ok bool) {
+	currKey := sp.start
+	keyCount, ok := sp.KeyCount(keyCtx)
+	if !ok || int(keyCount) > limit {
+		// The key count could not be determined, or the key count exceeds the
+		// limit.
+		return nil, false
+	}
+	spans = &Spans{}
+	ok = true
+	for i := 0; i < int(keyCount); i++ {
+		if !ok {
+			return nil, false
+		}
+		spans.Append(&Span{
+			start:         currKey,
+			end:           currKey,
+			startBoundary: IncludeBoundary,
+			endBoundary:   IncludeBoundary,
+		})
+		currKey, ok = currKey.Next(keyCtx)
+	}
+	return spans, true
+}
+
 func (sp *Span) startExt() KeyExtension {
 	// Trivial cast of start boundary value:
 	//   IncludeBoundary (false) = ExtendLow (false)

@@ -15,10 +15,12 @@ package constraint
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestSpanSet(t *testing.T) {
@@ -660,6 +662,192 @@ func TestSpanPreferInclusive(t *testing.T) {
 			sp.PreferInclusive(keyCtx)
 			if sp.String() != tc.expected {
 				t.Errorf("expected: %s, actual: %s", tc.expected, sp.String())
+			}
+		})
+	}
+}
+
+func TestSpan_KeyCount(t *testing.T) {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx   *KeyContext
+		span     Span
+		expected string
+	}{
+		{ // 0
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/item]", types.StringFamily),
+			expected: "1",
+		},
+		{ // 1
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/object]", types.StringFamily),
+			expected: "FAIL",
+		},
+		{ // 2
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-5 - /5]", types.IntFamily),
+			expected: "11",
+		},
+		{ // 3
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/5 - /-5]", types.IntFamily),
+			expected: "11",
+		},
+		{ // 4
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/1/5 - /1/-5]", types.IntFamily),
+			expected: "11",
+		},
+		{ // 5
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST - /US_WEST]", types.StringFamily),
+			expected: "1",
+		},
+		{ // 6
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_EAST/item]", types.StringFamily),
+			expected: "FAIL",
+		},
+		{ // 7
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1/1 - /2/1]", types.IntFamily),
+			expected: "FAIL",
+		},
+		{ // 8
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1/1 - /1]", types.IntFamily),
+			expected: "FAIL",
+		},
+		{ // 9
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1 - /1/1]", types.IntFamily),
+			expected: "FAIL",
+		},
+		{ // 10
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1 - ]", types.IntFamily),
+			expected: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(dist uint, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return strconv.Itoa(int(dist))
+			}
+
+			if res := toStr(tc.span.KeyCount(tc.keyCtx)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
+			}
+		})
+	}
+}
+
+func TestSpan_SplitSpan(t *testing.T) {
+	const keyCountLimit = 10
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx   *KeyContext
+		span     Span
+		expected string
+	}{
+		{ // 0
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/US_WEST/item - /US_WEST/item]",
+				types.StringFamily,
+			),
+			expected: "[/'US_WEST'/'item' - /'US_WEST'/'item']",
+		},
+		{ // 1
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/US_WEST/item - /US_WEST/object]",
+				types.StringFamily,
+			),
+			expected: "FAIL",
+		},
+		{ // 2
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/US_EAST/item - /US_WEST/item]",
+				types.StringFamily,
+			),
+			expected: "FAIL",
+		},
+		{ // 3
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/-1 - /1]",
+				types.IntFamily,
+			),
+			expected: "[/-1 - /-1] [/0 - /0] [/1 - /1]",
+		},
+		{ // 4
+			keyCtx: kcDescDesc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/1 - /-1]",
+				types.IntFamily,
+			),
+			expected: "[/1 - /1] [/0 - /0] [/-1 - /-1]",
+		},
+		{ // 5
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[ - /'US_WEST']",
+				types.StringFamily,
+			),
+			expected: "FAIL",
+		},
+		{ // 6
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/0 - /9]",
+				types.IntFamily,
+			),
+			expected: "[/0 - /0] [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6] [/7 - /7] [/8 - /8] [/9 - /9]",
+		},
+		{ // 7
+			// Fails because the number of keys exceeds maxKeyCount.
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/-1 - /15]",
+				types.IntFamily,
+			),
+			expected: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(spans *Spans, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return spans.String()
+			}
+
+			if res := toStr(tc.span.Split(tc.keyCtx, keyCountLimit)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
 			}
 		})
 	}

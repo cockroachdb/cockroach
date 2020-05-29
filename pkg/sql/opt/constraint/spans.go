@@ -149,6 +149,42 @@ func (s *Spans) SortAndMerge(keyCtx *KeyContext) {
 	s.Truncate(n + 1)
 }
 
+// ExtractSingleKeySpans returns a new Spans struct containing a span for each
+// key in the given spans. Returns nil and false if one of the following is
+// true:
+//   1. The number of new spans exceeds the given limit value.
+//   2. The spans don't all have the same key length (length as in
+//      length(/3/'two'/1) == 3).
+//   3. span.Split is unsuccessful for any of the spans.
+func (s *Spans) ExtractSingleKeySpans(keyCtx *KeyContext, limit int) (*Spans, bool) {
+	if s.Count() > limit {
+		// The number of new spans would exceed the limit value.
+		return nil, false
+	}
+	keyLength := -1
+	newSpans := Spans{}
+	for i, spanCnt := 0, s.Count(); i < spanCnt; i++ {
+		span := s.Get(i)
+		if keyLength == -1 {
+			// Initialize keyLength.
+			keyLength = span.StartKey().Length()
+		}
+		if span.StartKey().Length() != keyLength {
+			// The spans don't all have the same key length.
+			return nil, false
+		}
+		splitSpans, ok := s.Get(i).Split(keyCtx, limit-newSpans.Count())
+		if !ok {
+			// The span could not be split into single key spans.
+			return nil, false
+		}
+		for i, cnt := 0, splitSpans.Count(); i < cnt; i++ {
+			newSpans.Append(splitSpans.Get(i))
+		}
+	}
+	return &newSpans, true
+}
+
 type spanSorter struct {
 	keyCtx KeyContext
 	spans  *Spans
