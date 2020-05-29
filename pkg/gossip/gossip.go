@@ -1659,6 +1659,12 @@ type DeprecatedGossip struct {
 	w errorutil.TenantSQLDeprecatedWrapper
 }
 
+// Start calls .Start() on the underlying Gossip instance, which is assumed to
+// be non-nil.
+func (dg DeprecatedGossip) Start(advertAddr net.Addr, resolvers []resolver.Resolver) {
+	dg.w.Deprecated(0).(*Gossip).Start(advertAddr, resolvers)
+}
+
 // deprecated trades a Github issue tracking the removal of the call for the
 // wrapped Gossip instance.
 func (dg DeprecatedGossip) deprecated(issueNo int) *Gossip {

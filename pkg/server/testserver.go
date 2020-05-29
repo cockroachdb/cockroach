@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -437,27 +438,22 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 //  this is tracked in https://github.com/cockroachdb/cockroach/issues/47892.
 const fakeNodeID = roachpb.NodeID(1)
 
-func testSQLServerArgs(ts *TestServer, tenID roachpb.TenantID) sqlServerArgs {
-	stopper := ts.Stopper()
-	clusterName := ts.Cfg.ClusterName
-	// If we used a dummy gossip, DistSQL and random other things won't work.
-	// Just use the test server's for now.
-	//
-	// TODO(tbg): drop the Gossip dependency.
-	g := ts.Gossip()
-	ts = nil // prevent usage below
+func testSQLServerArgs(
+	stopper *stop.Stopper, kvClusterName string, tenID roachpb.TenantID,
+) sqlServerArgs {
 
 	st := cluster.MakeTestingClusterSettings()
 
 	sqlCfg := makeTestSQLConfig(st, tenID)
 
 	baseCfg := makeTestBaseConfig(st)
+	baseCfg.AmbientCtx.AddLogTag("sql", nil)
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
 	// and this tenant work.
 	//
 	// TODO(tbg): address this when we introduce the real tenant RPCs in:
 	// https://github.com/cockroachdb/cockroach/issues/47898
-	baseCfg.ClusterName = clusterName
+	baseCfg.ClusterName = kvClusterName
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseCfg.MaxOffset))
 
@@ -474,13 +470,41 @@ func testSQLServerArgs(ts *TestServer, tenID roachpb.TenantID) sqlServerArgs {
 		rpcTestingKnobs,
 	)
 
+	// TODO(tbg): expose this registry via prometheus. See:
+	// https://github.com/cockroachdb/cockroach/issues/47905
+	registry := metric.NewRegistry()
+
 	var dsKnobs kvcoord.ClientTestingKnobs
 	if dsKnobsP, ok := baseCfg.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
 		dsKnobs = *dsKnobsP
 	}
 	rpcRetryOptions := base.DefaultRetryOptions()
-	resolver := gossip.AddressResolver(g) // TODO(tbg): break gossip dep
-	nodeDialer := nodedialer.New(rpcContext, resolver)
+
+	// TODO(nvb): this use of Gossip needs to go. Tracked in:
+	// https://github.com/cockroachdb/cockroach/issues/47909
+	var g *gossip.Gossip
+	{
+		var nodeID base.NodeIDContainer
+		nodeID.Set(context.Background(), fakeNodeID)
+		var clusterID base.ClusterIDContainer
+		dummyGossipGRPC := rpc.NewServer(rpcContext) // never Serve()s anything
+		g = gossip.New(
+			baseCfg.AmbientCtx,
+			&clusterID,
+			&nodeID,
+			rpcContext,
+			dummyGossipGRPC,
+			stopper,
+			registry,
+			baseCfg.Locality,
+			&baseCfg.DefaultZoneConfig,
+		)
+	}
+
+	nodeDialer := nodedialer.New(
+		rpcContext,
+		gossip.AddressResolver(g), // TODO(nvb): break gossip dep
+	)
 	dsCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
 		Settings:          st,
@@ -497,9 +521,7 @@ func testSQLServerArgs(ts *TestServer, tenID roachpb.TenantID) sqlServerArgs {
 	if p, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
 		clientKnobs = *p
 	}
-	// TODO(tbg): expose this registry via prometheus. See:
-	// https://github.com/cockroachdb/cockroach/issues/47905
-	registry := metric.NewRegistry()
+
 	txnMetrics := kvcoord.MakeTxnMetrics(baseCfg.HistogramWindowInterval())
 	registry.AddMetricStruct(txnMetrics)
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
@@ -594,13 +616,24 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 		return "", err
 	}
 
-	args := testSQLServerArgs(ts, params.TenantID)
-	if params.AllowSettingClusterSettings {
+	return startTenant(ts.Stopper(), ts.Cfg.ClusterName, ts.RPCAddr(), params.TenantID, params.AllowSettingClusterSettings)
+}
+
+func startTenant(
+	stopper *stop.Stopper,
+	kvClusterName string,
+	tsRPCAddr string,
+	tenID roachpb.TenantID,
+	allowSetClusterSetting bool,
+) (pgAddr string, _ error) {
+	args := testSQLServerArgs(stopper, kvClusterName, tenID)
+	// TODO(tbg): clean this up.
+	if allowSetClusterSetting {
 		args.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
 			ClusterSettingsUpdater: args.Settings.MakeUpdater(),
 		}
 	}
-	ts = nil // proves we're not using it below
+	ctx := context.Background()
 
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
@@ -638,6 +671,16 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 		socketFile = "" // no unix socket
 	)
 	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
+
+	{
+		rsvlr, err := resolver.NewResolver(tsRPCAddr)
+		if err != nil {
+			return "", err
+		}
+		// NB: gossip server is not bound to any address, so the advertise addr does
+		// not matter.
+		args.gossip.Start(pgL.Addr(), []resolver.Resolver{rsvlr})
+	}
 
 	if err := s.start(ctx,
 		args.stopper,
