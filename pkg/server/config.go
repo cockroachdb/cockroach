@@ -152,14 +152,17 @@ func MakeBaseConfig(st *cluster.Settings) BaseConfig {
 	return baseCfg
 }
 
-// Config holds parameters needed to setup a (combined KV and SQL) server.
-//
-// TODO(tbg): this should end up being just SQLConfig union KVConfig union BaseConfig.
+// Config holds the parameters needed to set up a combined KV and SQL server.
 type Config struct {
-	// Embed the base context.
 	BaseConfig
-	base.RaftConfig
+	KVConfig
 	SQLConfig
+}
+
+// KVConfig holds the parameters that (together with a BaseConfig) allow setting
+// up a KV server.
+type KVConfig struct {
+	base.RaftConfig
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
@@ -271,7 +274,27 @@ type Config struct {
 	enginesCreated bool
 }
 
-// SQLConfig holds the parameters to setup a SQL server.
+// MakeKVConfig returns a KVConfig with default values.
+func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
+	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
+	kvCfg := KVConfig{
+		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
+		CacheSize:                      DefaultCacheSize,
+		ScanInterval:                   defaultScanInterval,
+		ScanMinIdleTime:                defaultScanMinIdleTime,
+		ScanMaxIdleTime:                defaultScanMaxIdleTime,
+		EventLogEnabled:                defaultEventLogEnabled,
+		EnableWebSessionAuthentication: !disableWebLogin,
+		Stores: base.StoreSpecList{
+			Specs: []base.StoreSpec{storeSpec},
+		},
+	}
+	kvCfg.SetDefaults()
+	return kvCfg
+}
+
+// SQLConfig holds the parameters that (together with a BaseConfig) allow
+// setting up a SQL server.
 type SQLConfig struct {
 	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
 	LeaseManagerConfig *base.LeaseManagerConfig
@@ -357,25 +380,13 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
 	baseCfg := MakeBaseConfig(st)
-
-	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
+	kvCfg := MakeKVConfig(storeSpec)
 
 	cfg := Config{
-		BaseConfig:                     baseCfg,
-		SQLConfig:                      sqlCfg,
-		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
-		CacheSize:                      DefaultCacheSize,
-		ScanInterval:                   defaultScanInterval,
-		ScanMinIdleTime:                defaultScanMinIdleTime,
-		ScanMaxIdleTime:                defaultScanMaxIdleTime,
-		EventLogEnabled:                defaultEventLogEnabled,
-		EnableWebSessionAuthentication: !disableWebLogin,
-		Stores: base.StoreSpecList{
-			Specs: []base.StoreSpec{storeSpec},
-		},
+		BaseConfig: baseCfg,
+		KVConfig:   kvCfg,
+		SQLConfig:  sqlCfg,
 	}
-
-	cfg.RaftConfig.SetDefaults()
 
 	return cfg
 }
