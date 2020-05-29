@@ -1558,7 +1558,7 @@ endif
 # to the present, because then it will becomes newer
 # than all the other produced artifacts downstream and force
 # them to rebuild too.
-%.eg.go: bin/execgen
+$(EXECGEN_TARGETS): bin/execgen
 	@echo EXECGEN $@
 	@execgen $@ > $@.tmp || { rm -f $@.tmp; exit 1; }
 	@cmp $@.tmp $@ 2>/dev/null && rm -f $@.tmp || mv -f $@.tmp $@
@@ -1569,6 +1569,12 @@ endif
 	    target_timestamp_file=bin/execgen; \
 	  fi; \
 	  touch -r $$target_timestamp_file $@
+
+# Add a catch-all rule for any non-existent execgen generated
+# files. This prevents build errors when switching between branches
+# that introduce or remove execgen generated files as these files are
+# persisted in bin/%.d dependency lists (e.g. in bin/logictest.d).
+%.eg.go: ;
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
