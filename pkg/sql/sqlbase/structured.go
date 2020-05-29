@@ -4405,7 +4405,7 @@ func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
 func (desc *TypeDescriptor) HydrateTypeInfoWithName(typ *types.T, name *tree.TypeName) error {
-	typ.TypeMeta.Name = name
+	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {

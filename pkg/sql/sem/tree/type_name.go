@@ -67,16 +67,6 @@ func (t *TypeName) FQString() string {
 
 func (t *TypeName) objectName() {}
 
-// Basename implements the types.UserDefinedTypeName interface.
-func (t *TypeName) Basename() string {
-	return t.Type()
-}
-
-// FQName implements the types.UserDefinedTypeName interface.
-func (t *TypeName) FQName() string {
-	return t.FQString()
-}
-
 // NewUnqualifiedTypeName returns a new base type name.
 func NewUnqualifiedTypeName(typ Name) *TypeName {
 	return &TypeName{objName{

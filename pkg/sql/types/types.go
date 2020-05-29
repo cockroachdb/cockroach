@@ -185,7 +185,8 @@ type T struct {
 // UserDefinedTypeMetadata contains metadata needed for runtime
 // operations on user defined types. The metadata must be read only.
 type UserDefinedTypeMetadata struct {
-	Name UserDefinedTypeName
+	// Name is the resolved name of this type.
+	Name *UserDefinedTypeName
 
 	// enumData is non-nil iff the metadata is for an ENUM type.
 	EnumData *EnumMetadata
@@ -212,13 +213,40 @@ func (e *EnumMetadata) debugString() string {
 	)
 }
 
-// UserDefinedTypeName is an interface for the types package to manipulate
-// qualified type names from higher level packages for name display.
-type UserDefinedTypeName interface {
-	// Basename returns the unqualified name of the type.
-	Basename() string
-	// FQName returns the fully qualified name of the type.
-	FQName() string
+// UserDefinedTypeName is a struct representing a qualified user defined
+// type name. We redefine a common struct from higher level packages. We
+// do so because proto will panic if any members of a proto struct are
+// private. Rather than expose private members of higher level packages,
+// we define a separate type here to be safe.
+type UserDefinedTypeName struct {
+	Catalog string
+	Schema  string
+	Name    string
+}
+
+// MakeUserDefinedTypeName creates a user defined type name.
+func MakeUserDefinedTypeName(catalog, schema, name string) *UserDefinedTypeName {
+	return &UserDefinedTypeName{
+		Catalog: catalog,
+		Schema:  schema,
+		Name:    name,
+	}
+}
+
+// Basename returns the unqualified name.
+func (u UserDefinedTypeName) Basename() string {
+	return u.Name
+}
+
+// FQName returns the fully qualified name.
+func (u UserDefinedTypeName) FQName() string {
+	var sb strings.Builder
+	sb.WriteString(u.Catalog)
+	sb.WriteString(".")
+	sb.WriteString(u.Schema)
+	sb.WriteString(".")
+	sb.WriteString(u.Name)
+	return sb.String()
 }
 
 // Convenience list of pre-constructed types. Caller code can use any of these
