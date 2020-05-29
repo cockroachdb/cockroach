@@ -848,7 +848,7 @@ func initTableReaderSpec(
 		Table:             *n.desc.TableDesc(),
 		Reverse:           n.reverse,
 		IsCheck:           n.isCheck,
-		Visibility:        n.colCfg.visibility.toDistSQLScanVisibility(),
+		Visibility:        n.colCfg.visibility,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
 
@@ -886,14 +886,16 @@ func initTableReaderSpec(
 
 // scanNodeOrdinal returns the index of a column with the given ID.
 func tableOrdinal(
-	desc *sqlbase.ImmutableTableDescriptor, colID sqlbase.ColumnID, visibility scanVisibility,
+	desc *sqlbase.ImmutableTableDescriptor,
+	colID sqlbase.ColumnID,
+	visibility execinfrapb.ScanVisibility,
 ) int {
 	for i := range desc.Columns {
 		if desc.Columns[i].ID == colID {
 			return i
 		}
 	}
-	if visibility == publicAndNonPublicColumns {
+	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		offset := len(desc.Columns)
 		for i, col := range desc.MutationColumns() {
 			if col.ID == colID {
@@ -1071,7 +1073,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	p.Processors = make([]physicalplan.Processor, 0, len(spanPartitions))
 
-	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
+	returnMutations := n.colCfg.visibility == execinfra.ScanVisibilityPublicAndNotPublic
 
 	for i, sp := range spanPartitions {
 		var tr *execinfrapb.TableReaderSpec
@@ -1797,7 +1799,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:             *n.table.desc.TableDesc(),
 		IndexIdx:          0,
-		Visibility:        n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		Visibility:        n.table.colCfg.visibility,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 	}
@@ -1859,7 +1861,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:             *n.table.desc.TableDesc(),
 		Type:              n.joinType,
-		Visibility:        n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		Visibility:        n.table.colCfg.visibility,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
