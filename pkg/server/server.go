@@ -553,7 +553,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:                 registry,
 		sessionRegistry:          sessionRegistry,
 		circularInternalExecutor: internalExecutor,
-		jobRegistry:              jobRegistry,
+		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
 	})
