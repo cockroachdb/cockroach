@@ -883,12 +883,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		)
 	}
 	if distributeSubquery {
-		subqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
+		subqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributeSubquery)
 	} else {
 		subqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
 	}
 
-	subqueryPlanCtx.isLocal = !distributeSubquery
 	subqueryPlanCtx.planner = planner
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.collectBundle {
@@ -1194,12 +1193,11 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		)
 	}
 	if distributePostquery {
-		postqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
+		postqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributePostquery)
 	} else {
 		postqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
 	}
 
-	postqueryPlanCtx.isLocal = !distributePostquery
 	postqueryPlanCtx.planner = planner
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true

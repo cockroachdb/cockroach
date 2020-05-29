@@ -3248,9 +3248,10 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 
 // NewPlanningCtx returns a new PlanningCtx.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
-	ctx context.Context, evalCtx *extendedEvalContext, txn *kv.Txn,
+	ctx context.Context, evalCtx *extendedEvalContext, txn *kv.Txn, distribute bool,
 ) *PlanningCtx {
 	planCtx := dsp.newLocalPlanningCtx(ctx, evalCtx)
+	planCtx.isLocal = !distribute
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeAddresses = make(map[roachpb.NodeID]string)
 	planCtx.NodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
@@ -3265,6 +3266,7 @@ func (dsp *DistSQLPlanner) newLocalPlanningCtx(
 	return &PlanningCtx{
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
+		isLocal:         true,
 	}
 }
 
