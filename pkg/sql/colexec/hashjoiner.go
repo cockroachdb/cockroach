@@ -256,11 +256,11 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 					hj.spec.joinType == sqlbase.RightOuterJoin ||
 					hj.spec.joinType == sqlbase.LeftSemiJoin ||
 					hj.spec.joinType == sqlbase.IntersectAllJoin {
-					// Next the left side once.
-					// TODO(asubiotto): Figure out why the left side needs to be Nexted.
-					//  Without this, TestLogic/fakedist/inner-join flakes.
-					_ = hj.inputOne.Next(ctx)
-					hj.state = hjDone
+					// TODO(asubiotto): Figure out why the left side needs to
+					//  be fully consumed. Without this, some logic tests are
+					//  flaking.
+					// hj.state = hjDone
+					continue
 				}
 			}
 			continue
