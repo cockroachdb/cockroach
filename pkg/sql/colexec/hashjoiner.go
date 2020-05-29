@@ -256,11 +256,12 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 					hj.spec.joinType == sqlbase.RightOuterJoin ||
 					hj.spec.joinType == sqlbase.LeftSemiJoin ||
 					hj.spec.joinType == sqlbase.IntersectAllJoin {
-					// Next the left side once.
-					// TODO(asubiotto): Figure out why the left side needs to be Nexted.
-					//  Without this, TestLogic/fakedist/inner-join flakes.
-					_ = hj.inputOne.Next(ctx)
-					hj.state = hjDone
+					// The short-circuiting behavior is temporarily disabled
+					// because it causes flakiness of some tests due to #48785
+					// (concurrent calls to DrainMeta and Next).
+					// TODO(asubiotto): remove this once the issue is resolved.
+					// hj.state = hjDone
+					continue
 				}
 			}
 			continue
