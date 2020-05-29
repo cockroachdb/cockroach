@@ -78,7 +78,7 @@ func newIndexJoiner(
 		desc:      spec.Table,
 		batchSize: indexJoinerBatchSize,
 	}
-	needMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	needMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	if err := ij.Init(
 		ij,
 		post,

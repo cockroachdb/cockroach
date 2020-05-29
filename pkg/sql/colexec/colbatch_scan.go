@@ -116,7 +116,7 @@ func newColBatchScan(
 
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
-	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
 	evalCtx := flowCtx.NewEvalCtx()
 	// Before we can safely use types from the table descriptor, we need to
@@ -182,7 +182,7 @@ func initCRowFetcher(
 	}
 
 	cols := immutDesc.Columns
-	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = immutDesc.ReadableColumns
 	}
 	tableArgs := row.FetcherTableArgs{

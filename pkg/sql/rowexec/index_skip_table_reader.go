@@ -78,7 +78,7 @@ func newIndexSkipTableReader(
 
 	t := istrPool.Get().(*indexSkipTableReader)
 
-	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	t.ignoreMisplannedRanges = flowCtx.Local
 	t.reverse = spec.Reverse
