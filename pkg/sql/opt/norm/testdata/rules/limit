@@ -98,7 +98,7 @@ SELECT * FROM (SELECT * FROM a LIMIT 0) LIMIT -1
 limit
  ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  ├── cardinality: [0 - 0]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── values
@@ -275,7 +275,7 @@ SELECT * FROM a LIMIT -1
 limit
  ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── cardinality: [0 - 0]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── scan a
@@ -1055,7 +1055,7 @@ SELECT * FROM ab LEFT JOIN uv ON a = u LIMIT -1
 limit
  ├── columns: a:1!null b:2 u:3 v:4
  ├── cardinality: [0 - 0]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── left-join (hash)

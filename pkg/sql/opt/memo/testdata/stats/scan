@@ -507,14 +507,17 @@ WHERE
 ----
 project
  ├── columns: "?column?":26(int!null)
+ ├── immutable
  ├── stats: [rows=1]
  ├── fd: ()-->(26)
  ├── select
  │    ├── columns: col1:25(bool!null)
+ │    ├── immutable
  │    ├── stats: [rows=1, distinct(25)=1, null(25)=0]
  │    ├── fd: ()-->(25)
  │    ├── project
  │    │    ├── columns: col1:25(bool)
+ │    │    ├── immutable
  │    │    ├── stats: [rows=333333.333, distinct(25)=333333.333, null(25)=0]
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
@@ -528,7 +531,7 @@ project
  │    │    │    └── filters
  │    │    │         └── tab0.j:10 IN (tab1.j:21,) [type=bool, outer=(10,21)]
  │    │    └── projections
- │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:16, tab0.f:6, tab0.e:5::STRING), tab1.f:17, '') THEN true ELSE false END [as=col1:25, type=bool, outer=(5,6,8,16,17)]
+ │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:16, tab0.f:6, tab0.e:5::STRING), tab1.f:17, '') THEN true ELSE false END [as=col1:25, type=bool, outer=(5,6,8,16,17), immutable]
  │    └── filters
  │         └── col1:25 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
  └── projections

@@ -158,14 +158,14 @@ SELECT * FROM (SELECT i, s, f, rank() OVER (PARTITION BY i, f) FROM a) WHERE ran
 ----
 window partition=(2,3)
  ├── columns: i:2 s:4 f:3 rank:6
- ├── side-effects
+ ├── volatile, side-effects
  ├── select
  │    ├── columns: i:2 f:3 s:4
- │    ├── side-effects
+ │    ├── volatile, side-effects
  │    ├── scan a
  │    │    └── columns: i:2 f:3 s:4
  │    └── filters
- │         └── random() < 0.5 [side-effects]
+ │         └── random() < 0.5 [volatile, side-effects]
  └── windows
       └── rank [as=rank:6]
 

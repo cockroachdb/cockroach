@@ -29,7 +29,7 @@ update usertable
  ├── update-mapping:
  │    └── field5_new:23 => field5:7
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: field5_new:23!null ycsb_key:12!null field5:18
       ├── cardinality: [0 - 1]
@@ -105,7 +105,7 @@ insert usertable
  │    ├── column10:21 => field8:10
  │    └── column11:22 => field9:11
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── values
       ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column8:19!null column9:20!null column10:21!null column11:22!null
       ├── cardinality: [1 - 1]
@@ -173,7 +173,7 @@ update usertable
  ├── update-mapping:
  │    └── field5_new:23 => field5:7
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: field5_new:23!null ycsb_key:12!null field5:18
       ├── cardinality: [0 - 1]
