@@ -296,6 +296,9 @@ func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
 // SQLConfig holds the parameters that (together with a BaseConfig) allow
 // setting up a SQL server.
 type SQLConfig struct {
+	// The tenant that the SQL server runs on the behalf of.
+	TenantID roachpb.TenantID
+
 	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
 	LeaseManagerConfig *base.LeaseManagerConfig
 
@@ -327,11 +330,9 @@ type SQLConfig struct {
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
-func MakeSQLConfig(
-	tenID roachpb.TenantID, // NB: unused, but used soon
-	tempStorageCfg base.TempStorageConfig,
-) SQLConfig {
+func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig) SQLConfig {
 	sqlCfg := SQLConfig{
+		TenantID:           tenID,
 		MemoryPoolSize:     defaultSQLMemoryPoolSize,
 		TableStatCacheSize: defaultSQLTableStatCacheSize,
 		QueryCacheSize:     defaultSQLQueryCacheSize,
