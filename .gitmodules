@@ -32,3 +32,6 @@
 [submodule "c-deps/geos"]
 	path = c-deps/geos
 	url = https://github.com/libgeos/geos.git
+[submodule "c-deps/proj"]
+	path = c-deps/proj
+	url = https://github.com/OSGeo/PROJ.git
