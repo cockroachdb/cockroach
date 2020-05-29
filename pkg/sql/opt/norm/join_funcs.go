@@ -579,3 +579,115 @@ func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
 	res.Flags = f
 	return &res
 }
+
+
+// CanExtractTupleEquality checks that the only filters which reference  
+// projected columns are equality expressions which compare a variable and a
+// tuple
+func (c *CustomFuncs) CanExtractTupleEquality(
+	projections memo.ProjectionsExpr, filters memo.FiltersExpr,
+) bool {
+	var projectedTupleCols opt.ColSet
+	var projectedColSet opt.ColSet
+
+	for _, p := range projections {
+		projectedColSet.Add(p.Col)
+		if _, isTuple := p.Element.(*memo.TupleExpr); isTuple {
+			projectedTupleCols.Add(p.Col)
+		}
+	}
+	for _, f := range filters {
+		// We're only interested in filters which reference a projected column.
+		if !f.ScalarProps().OuterCols.Intersects(projectedColSet) {
+			if !isValidTupleEqualityExpression(&f, projectedTupleCols) {
+				return false
+			}
+		}
+	}
+	return true
+
+}
+
+// isValidTupleEqualityExpression checks that the filtersItem passed to it is an
+// equality between a variable and a tuple.
+func isValidTupleEqualityExpression(
+	f *memo.FiltersItem, projectedCols opt.ColSet,
+) bool {
+	if f.Condition.Op() != opt.EqOp {
+		return false
+	}
+	eq := f.Condition.(*memo.EqExpr)
+	if eq.Left.Op() == opt.VariableOp && eq.Right.Op() == opt.TupleOp {
+		variable := eq.Left.(*memo.VariableExpr)
+		if projectedCols.Contains(variable.Col){
+			return true
+		}
+	}
+	return false
+}
+
+// RewriteTupleEquality takes a list of filters, finds equalities between a projected
+// variable and a tuple, and replaces them with multiple equalities between the
+// underlying values.
+func (c *CustomFuncs) RewriteTupleEquality(
+	filters memo.FiltersExpr, projections memo.ProjectionsExpr,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, 0, len(filters))
+	projectedCols := map[opt.ColumnID]*memo.TupleExpr{}
+	var projectedColsSet opt.ColSet
+
+	for _, p := range projections {
+		if tuple, isTuple := p.Element.(*memo.TupleExpr); isTuple {
+			projectedCols[p.Col] = tuple
+			projectedColsSet.Add(p.Col)
+		}
+	}
+
+	for _, f := range filters {
+		if !f.ScalarProps().OuterCols.Intersects(projectedColsSet) {
+			if(!c.rewriteTupleEqualityFilterItem(f,newFilters,projectedCols)){
+				panic(errors.AssertionFailedf("cannot extract tuple equality "))
+			}
+		} else {
+			newFilters = append(newFilters, f)
+		}
+	}
+	return newFilters
+}
+
+// rewriteTupleEqualityFilterItem akes a FilterItem that is an equality between
+// a projected variable and a tuple and rewrites it as a series of equalities 
+// between the underlying tuple elements, adding these new equalities to the provided 
+// filtersExpr. Returns false if this cannot be done.
+func (c *CustomFuncs) rewriteTupleEqualityFilterItem(
+	f memo.FiltersItem,
+	newFilters memo.FiltersExpr,
+	projectedCols map[opt.ColumnID]*memo.TupleExpr, 
+	) bool{
+	if eq, ok := f.Condition.(*memo.EqExpr) ; ok {
+		if eq.Left.Op() == opt.VariableOp && eq.Right.Op() == opt.TupleOp {
+			leftVariable := eq.Left.(*memo.VariableExpr)
+			rightTuple := eq.Right.(*memo.TupleExpr)
+
+			if projectedTuple, isTuple := projectedCols[leftVariable.Col]; isTuple {
+				if len(projectedTuple.Elems) != len(rightTuple.Elems) {
+					return false;
+				}
+
+				for i := range projectedTuple.Elems {
+					newFilters = append(newFilters, c.f.ConstructFiltersItem(
+						c.f.ConstructEq(projectedTuple.Elems[i], rightTuple.Elems[i]),
+					))
+				}
+			}
+		}else {
+			return false;
+		}
+		
+	} else {
+		return false;
+	}
+	return true;
+}
+
+

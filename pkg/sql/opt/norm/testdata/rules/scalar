@@ -1244,32 +1244,23 @@ project
  ├── columns: k:1!null
  ├── key: (1)
  └── semi-join (hash)
-      ├── columns: k:1!null column10:10
+      ├── columns: k:1!null i:2
       ├── key: (1)
-      ├── fd: (1)-->(10)
-      ├── project
-      │    ├── columns: column10:10 k:1!null
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
       │    ├── key: (1)
-      │    ├── fd: (1)-->(10)
-      │    ├── scan a
-      │    │    ├── columns: k:1!null i:2
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2)
-      │    └── projections
-      │         └── (k:1, i:2) [as=column10:10, outer=(1,2)]
-      ├── project
-      │    ├── columns: column9:9!null
+      │    └── fd: (1)-->(2)
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null
       │    ├── cardinality: [3 - 3]
-      │    ├── values
-      │    │    ├── columns: column1:7!null column2:8!null
-      │    │    ├── cardinality: [3 - 3]
-      │    │    ├── (1, 1)
-      │    │    ├── (2, 2)
-      │    │    └── (3, 3)
-      │    └── projections
-      │         └── (column2:8, column1:7) [as=column9:9, outer=(7,8)]
+      │    ├── (1, 1)
+      │    ├── (2, 2)
+      │    └── (3, 3)
       └── filters
-           └── column10:10 = column9:9 [outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+           ├── column2:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── column1:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
 
 # --------------------------------------------------
 # SimplifyEqualsAnyTuple
