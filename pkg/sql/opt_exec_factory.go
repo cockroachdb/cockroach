@@ -117,7 +117,6 @@ func (ef *execFactory) ConstructScan(
 	}
 
 	scan.index = indexDesc
-	scan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	scan.hardLimit = hardLimit
 	scan.softLimit = softLimit
 
@@ -642,7 +641,6 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	primaryIndex := tabDesc.GetPrimaryIndex()
 	tableScan.index = &primaryIndex
-	tableScan.isSecondaryIndex = false
 	tableScan.disableBatchLimit()
 
 	n := &indexJoinNode{
@@ -686,7 +684,6 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	tableScan.index = indexDesc
-	tableScan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 
 	n := &lookupJoinNode{
 		input:        input.(planNode),
@@ -752,7 +749,6 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 		return nil, err
 	}
 	tableScan.index = indexDesc
-	tableScan.isSecondaryIndex = true
 	vtableCols := sqlbase.ResultColumnsFromColDescs(tableDesc.ID, tableDesc.Columns)
 	projectedVtableCols := planColumns(&tableScan)
 	outputCols := make(sqlbase.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
@@ -820,7 +816,6 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	scan.index = indexDesc
-	scan.isSecondaryIndex = (indexDesc.ID != tableDesc.PrimaryIndex.ID)
 
 	return scan, nil
 }
