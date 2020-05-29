@@ -1483,3 +1483,75 @@ anti-join (cross)
  │    ├── key: (5)
  │    └── fd: (5)-->(3,4)
  └── filters (true)
+
+exec-ddl
+ALTER TABLE xysd INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 400
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE uv INJECT STATISTICS '[
+  {
+    "columns": ["u"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["u","v"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 550
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# We use multi-column stats split across the join to estimate the selectivity
+# here.
+opt
+SELECT * FROM xysd, uv WHERE (s = 'foo' AND u = 3 AND v = 4) OR (s = 'bar' AND u = 5 AND v = 6)
+----
+inner-join (cross)
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:5(int!null) v:6(int!null)
+ ├── stats: [rows=11979.6897, distinct(3)=2, null(3)=0, distinct(5)=2, null(5)=0, distinct(6)=2, null(6)=0, distinct(5,6)=2.19138756, null(5,6)=0]
+ ├── fd: (1)-->(2-4), (3,4)-->(1,2)
+ ├── scan uv
+ │    ├── columns: u:5(int) v:6(int!null)
+ │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(5,6)=550, null(5,6)=0]
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=500, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── filters
+      └── (((s:3 = 'foo') AND (u:5 = 3)) AND (v:6 = 4)) OR (((s:3 = 'bar') AND (u:5 = 5)) AND (v:6 = 6)) [type=bool, outer=(3,5,6), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo']; /5: [/3 - /3] [/5 - /5]; /6: [/4 - /4] [/6 - /6])]
