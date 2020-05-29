@@ -135,12 +135,12 @@ func LivenessStatus(
 	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
 ) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
-		if l.Decommissioning {
+		if l.DeprecatedDecommissioning {
 			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
 		}
 		return kvserverpb.NodeLivenessStatus_DEAD
 	}
-	if l.Decommissioning {
+	if l.DeprecatedDecommissioning {
 		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
 	}
 	if l.Draining {
@@ -354,7 +354,9 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 // updateLocalStoreAfterRebalance is used to update the local copy of the
 // target store immediately after a replica addition or removal.
 func (sp *StorePool) updateLocalStoreAfterRebalance(
-	storeID roachpb.StoreID, rangeUsageInfo RangeUsageInfo, changeType roachpb.ReplicaChangeType,
+	storeID roachpb.StoreID,
+	rangeUsageInfo RangeUsageInfo,
+	changeType roachpb.ReplicaChangeType,
 ) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()

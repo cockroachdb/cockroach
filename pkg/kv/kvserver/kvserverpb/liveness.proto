@@ -44,7 +44,16 @@ message Liveness {
   // TODO(andrei): Change this to a regular Timestamp field in 21.1.
   util.hlc.LegacyTimestamp expiration = 3 [(gogoproto.nullable) = false];
   bool draining = 4;
-  bool decommissioning = 5;
+  bool deprecated_decommissioning = 5;
+
+  CommissionStatus status = 6;
+}
+
+enum CommissionStatus {
+     DECOMMISSIONING_ = 0;
+     RECOMMISSIONING_ = 1;
+     DECOMMISSIONED_ = 2;
+     COMMISSIONED_ = 3;
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the

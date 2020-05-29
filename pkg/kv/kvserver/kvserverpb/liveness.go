@@ -43,8 +43,8 @@ func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
 
 func (l Liveness) String() string {
 	var extra string
-	if l.Draining || l.Decommissioning {
-		extra = fmt.Sprintf(" drain:%t decom:%t", l.Draining, l.Decommissioning)
+	if l.Draining || l.DeprecatedDecommissioning {
+		extra = fmt.Sprintf(" drain:%t decom:%t", l.Draining, l.DeprecatedDecommissioning)
 	}
 	return fmt.Sprintf("liveness(nid:%d epo:%d exp:%s%s)", l.NodeID, l.Epoch, l.Expiration, extra)
 }

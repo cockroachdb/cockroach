@@ -1691,7 +1691,7 @@ func (s *adminServer) DecommissionStatus(
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
 			NodeID:          l.NodeID,
 			ReplicaCount:    replicaCounts[l.NodeID],
-			Decommissioning: l.Decommissioning,
+			Decommissioning: l.DeprecatedDecommissioning,
 			Draining:        l.Draining,
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
