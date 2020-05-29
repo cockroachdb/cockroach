@@ -2203,24 +2203,26 @@ CREATE TABLE pg_catalog.pg_proc (
 							argmodes = tree.DNull
 							variadicType = oidZero
 						}
+						provolatile, proleakproof := builtin.Volatility.ToPostgres()
+
 						err := addRow(
-							h.BuiltinOid(name, &builtin),            // oid
-							dName,                                   // proname
-							nspOid,                                  // pronamespace
-							tree.DNull,                              // proowner
-							oidZero,                                 // prolang
-							tree.DNull,                              // procost
-							tree.DNull,                              // prorows
-							variadicType,                            // provariadic
-							tree.DNull,                              // protransform
-							tree.MakeDBool(tree.DBool(isAggregate)), // proisagg
-							tree.MakeDBool(tree.DBool(isWindow)),    // proiswindow
-							tree.DBoolFalse,                         // prosecdef
-							tree.MakeDBool(tree.DBool(!props.Impure)), // proleakproof
-							tree.DBoolFalse,                             // proisstrict
-							tree.MakeDBool(tree.DBool(isRetSet)),        // proretset
-							tree.NewDString(string(builtin.Volatility)), // provolatile
-							tree.DNull, // proparallel
+							h.BuiltinOid(name, &builtin),             // oid
+							dName,                                    // proname
+							nspOid,                                   // pronamespace
+							tree.DNull,                               // proowner
+							oidZero,                                  // prolang
+							tree.DNull,                               // procost
+							tree.DNull,                               // prorows
+							variadicType,                             // provariadic
+							tree.DNull,                               // protransform
+							tree.MakeDBool(tree.DBool(isAggregate)),  // proisagg
+							tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
+							tree.DBoolFalse,                          // prosecdef
+							tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
+							tree.DBoolFalse,                          // proisstrict
+							tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
+							tree.NewDString(provolatile),             // provolatile
+							tree.DNull,                               // proparallel
 							tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 							retType,                                         // prorettype

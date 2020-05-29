@@ -415,7 +415,7 @@ func (c *CustomFuncs) FoldFunction(
 	}
 	// Functions that aren't immutable and also not in the whitelist cannot
 	// be folded.
-	if _, ok := FoldFunctionWhitelist[private.Name]; private.Overload.Volatility != tree.VolatilityImmutable && !ok {
+	if _, ok := FoldFunctionWhitelist[private.Name]; !ok && private.Overload.Volatility > tree.VolatilityImmutable {
 		return nil
 	}
 

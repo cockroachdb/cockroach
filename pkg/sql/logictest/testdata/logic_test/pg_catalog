@@ -659,6 +659,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL
 2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0               0 0       2 2        NULL      NULL
+2621181441  15        2         false        false         false           false         false           true        false         false       true       false           6 7      3903121477 0               0 0       2 2        NULL      NULL
 2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
@@ -714,6 +715,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2407840836  0                           3
 2621181440  0                           1
 2621181440  0                           2
+2621181441  0                           1
+2621181441  0                           2
 2621181443  0                           1
 2667577107  0                           1
 2834522046  0                           1
@@ -1379,14 +1382,14 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    protransform  proisagg  proiswindow  prosecdef  proleakproof
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
-substring  NULL          false     false        false      true
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
+substring  NULL          false     false        false      false
 
 query TBBTT colnames
 SELECT proname, proisstrict, proretset, provolatile, proparallel
