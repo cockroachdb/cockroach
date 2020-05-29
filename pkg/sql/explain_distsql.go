@@ -93,7 +93,9 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !willDistribute
+	if !willDistribute {
+		planCtx.ForceLocal()
+	}
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType

@@ -32,7 +32,9 @@ func PlanAndRunCTAS(
 	recv *DistSQLReceiver,
 ) {
 	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), txn)
-	planCtx.isLocal = isLocal
+	if isLocal {
+		planCtx.ForceLocal()
+	}
 	planCtx.planner = planner
 	planCtx.stmtType = tree.Rows
 

@@ -308,7 +308,7 @@ func (dsp *DistSQLPlanner) Run(
 	// the line.
 	localState.EvalContext = &evalCtx.EvalContext
 	localState.Txn = txn
-	if planCtx.isLocal {
+	if planCtx.IsLocal() {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
 	} else if txn != nil {
@@ -404,7 +404,7 @@ func (dsp *DistSQLPlanner) Run(
 	// This is important, since these flows are forced to use the RootTxn (since
 	// they might have mutations), and the RootTxn does not permit concurrency.
 	// For such flows, we were supposed to have fused everything.
-	if txn != nil && planCtx.isLocal && flow.ConcurrentExecution() {
+	if txn != nil && planCtx.IsLocal() && flow.ConcurrentExecution() {
 		recv.SetError(errors.AssertionFailedf(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
 		return func() {}
@@ -888,7 +888,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		subqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
 	}
 
-	subqueryPlanCtx.isLocal = !distributeSubquery
+	if !distributeSubquery {
+		subqueryPlanCtx.ForceLocal()
+	}
 	subqueryPlanCtx.planner = planner
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.collectBundle {
@@ -1013,7 +1015,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	plan planNode,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
-	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
+	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.IsLocal())
 
 	physPlan, err := dsp.createPlanForNode(planCtx, plan)
 	if err != nil {
@@ -1199,7 +1201,9 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		postqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
 	}
 
-	postqueryPlanCtx.isLocal = !distributePostquery
+	if !distributePostquery {
+		postqueryPlanCtx.ForceLocal()
+	}
 	postqueryPlanCtx.planner = planner
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true

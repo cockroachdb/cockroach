@@ -149,7 +149,9 @@ func makeExplainPlanningCtx(
 	willDistribute bool,
 ) *PlanningCtx {
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !willDistribute
+	if !willDistribute {
+		planCtx.ForceLocal()
+	}
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = stmtType

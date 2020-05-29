@@ -261,7 +261,7 @@ func runPlanInsidePlan(
 	evalCtx := params.p.ExtendedEvalContextCopy()
 	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.newLocalPlanningCtx(params.ctx, evalCtx)
 	// Always plan local.
-	planCtx.isLocal = true
+	planCtx.ForceLocal()
 	plannerCopy := *params.p
 	planCtx.planner = &plannerCopy
 	planCtx.planner.curPlan = *plan

@@ -315,7 +315,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *valuesNode:
 		// This is unfortunately duplicated by createPlanForNode, and must be kept
 		// in sync with its implementation.
-		if !n.specifiedInQuery || planCtx.isLocal || planCtx.noEvalSubqueries {
+		if !n.specifiedInQuery || planCtx.IsLocal() || planCtx.noEvalSubqueries {
 			return true
 		}
 		return false
@@ -512,8 +512,14 @@ type PlanningCtx struct {
 	// Nodes that fail a health check have empty addresses.
 	NodeAddresses map[roachpb.NodeID]string
 
-	// isLocal is set to true if we're planning this query on a single node.
-	isLocal bool
+	internal struct {
+		// forceLocal is set to bool if the plan *has* to be distributed. Do not
+		// access directly - use ForceLocal() and IsLocal() instead.
+		//
+		// TODO(asubiotto): there should be a cleaner contract here where the SQL
+		// layer can not reach into the internals of PlanningCtx.
+		forceLocal bool
+	}
 	planner *planner
 	// ignoreClose, when set to true, will prevent the closing of the planner's
 	// current plan. Only the top-level query needs to close it, but everything
@@ -540,6 +546,10 @@ type PlanningCtx struct {
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
 
+func (p *PlanningCtx) ForceLocal() {
+	p.internal.forceLocal = true
+}
+
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
 func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 	if p.ExtendedEvalCtx == nil {
@@ -551,7 +561,7 @@ func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 // IsLocal returns true if this PlanningCtx is being used to plan a query that
 // has no remote flows.
 func (p *PlanningCtx) IsLocal() bool {
-	return p.isLocal
+	return p.internal.forceLocal
 }
 
 // EvaluateSubqueries returns true if this plan requires subqueries be fully
@@ -723,7 +733,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	}
 	ctx := planCtx.ctx
 	partitions := make([]SpanPartition, 0, 1)
-	if planCtx.isLocal {
+	if planCtx.IsLocal() {
 		// If we're planning locally, map all spans to the local node.
 		partitions = append(partitions,
 			SpanPartition{dsp.nodeDesc.NodeID, spans})
@@ -1079,7 +1089,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	}
 
 	var spanPartitions []SpanPartition
-	if planCtx.isLocal {
+	if planCtx.IsLocal() {
 		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
 	} else if n.hardLimit == 0 {
 		// No hard limit - plan all table readers where their data live. Note
@@ -2393,7 +2403,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		//
 		// NB: If you change this conditional, you must also change it in
 		// checkSupportForNode!
-		if !n.specifiedInQuery || planCtx.isLocal || planCtx.noEvalSubqueries {
+		if !n.specifiedInQuery || planCtx.IsLocal() || planCtx.noEvalSubqueries {
 			plan, err = dsp.wrapPlan(planCtx, n)
 		} else {
 			plan, err = dsp.createPlanForValues(planCtx, n)
@@ -3254,6 +3264,10 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeAddresses = make(map[roachpb.NodeID]string)
 	planCtx.NodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
+	if !planCtx.EvalContext().Codec.ForSystemTenant() {
+		// Tenants do not get to distribute queries.
+		planCtx.ForceLocal()
+	}
 	return planCtx
 }
 

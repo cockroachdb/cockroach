@@ -867,7 +867,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	} else {
 		planCtx = ex.server.cfg.DistSQLPlanner.newLocalPlanningCtx(ctx, evalCtx)
 	}
-	planCtx.isLocal = !distribute
+	if !distribute {
+		planCtx.ForceLocal()
+	}
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
 	if planner.collectBundle {

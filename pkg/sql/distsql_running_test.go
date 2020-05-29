@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
 
 // Test that we don't attempt to create flows in an aborted transaction.
@@ -159,7 +160,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		// We need isLocal = false so that we executing the plan involves marshaling
 		// the root txn meta to leaf txns. Local flows can start in aborted txns
 		// because they just use the root txn.
-		planCtx.isLocal = false
+		require.False(t, planCtx.IsLocal())
 		planCtx.planner = p
 		planCtx.stmtType = recv.stmtType
 
