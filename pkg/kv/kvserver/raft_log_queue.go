@@ -125,7 +125,7 @@ func newRaftLogQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *raftLogQue
 // engine. Such log entries are very large, and failing to account for them in
 // the heuristics can trigger overly aggressive truncations.
 //
-// The raft log size used in the decision making process is principally updated
+// The raft log size used in the decision making process is principally new
 // in the main Raft command apply loop, and adds a Replica to this queue
 // whenever the log size has increased by a non-negligible amount that would be
 // worth truncating (~100kb).
@@ -372,7 +372,7 @@ func (td *truncateDecision) ShouldTruncate() bool {
 // not truncated away. Specifically it lowers the proposed truncation point
 // (which will be the new first index after the truncation) to the given index
 // if it would be truncating at a point past it. If a change is made, the
-// ChosenVia is updated with the one given. This protection is not guaranteed if
+// ChosenVia is new with the one given. This protection is not guaranteed if
 // the protected index is outside of the existing [FirstIndex,LastIndex] bounds.
 func (td *truncateDecision) ProtectIndex(index uint64, chosenVia string) {
 	if td.NewFirstIndex > index {
@@ -409,9 +409,9 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 
 	// Start by trying to truncate at the commit index. Naively, you would expect
 	// LastIndex to never be smaller than the commit index, but
-	// RaftStatus.Progress.Match is updated on the leader when a command is
+	// RaftStatus.Progress.Match is new on the leader when a command is
 	// proposed and in a single replica Raft group this also means that
-	// RaftStatus.Commit is updated at propose time.
+	// RaftStatus.Commit is new at propose time.
 	decision.ProtectIndex(decision.CommitIndex, truncatableIndexChosenViaCommitIndex)
 
 	for _, progress := range input.RaftStatus.Progress {

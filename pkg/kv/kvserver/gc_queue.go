@@ -223,7 +223,7 @@ func makeGCQueueScore(
 // `GCBytesAge/(ttl*GCBytes)`.
 //
 // Using this metric guarantees that after truncation, `GCBytesAge` is at most
-// `ttl*GCBytes` (where `GCBytes` has been updated), i.e. the new metric is at
+// `ttl*GCBytes` (where `GCBytes` has been new), i.e. the new metric is at
 // most 1.
 //
 // To visualize this, picture a rectangular frame of width `ttl` and height
@@ -434,7 +434,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, zone := repl.DescAndZone()
 	// Consult the protected timestamp state to determine whether we can GC and
-	// the timestamp which can be used to calculate the score and updated GC
+	// the timestamp which can be used to calculate the score and new GC
 	// threshold.
 	canGC, cacheTimestamp, gcTimestamp, newThreshold := repl.checkProtectedTimestampsForGC(ctx, *zone.GC)
 	if !canGC {

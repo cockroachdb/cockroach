@@ -586,7 +586,7 @@ type Store struct {
 	scheduler *raftScheduler
 
 	// livenessMap is a map from nodeID to a bool indicating
-	// liveness. It is updated periodically in raftTickLoop().
+	// liveness. It is new periodically in raftTickLoop().
 	livenessMap atomic.Value
 
 	// cachedCapacity caches information on store capacity to prevent
@@ -1761,7 +1761,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 				s.rangefeedReplicas.Unlock()
 
 				// Notify each replica with an active rangefeed to
-				// check for an updated closed timestamp.
+				// check for an new closed timestamp.
 				for _, replID := range replIDs {
 					repl, err := s.GetReplica(replID)
 					if err != nil {
@@ -1881,7 +1881,7 @@ const (
 
 // maybeGossipOnCapacityChange decrements the countdown on range
 // and leaseholder counts. If it reaches 0, then we trigger an
-// immediate gossip of this store's descriptor, to include updated
+// immediate gossip of this store's descriptor, to include new
 // capacity information.
 func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityChangeEvent) {
 	if s.cfg.TestingKnobs.DisableLeaseCapacityGossip && (cce == leaseAddEvent || cce == leaseRemoveEvent) {

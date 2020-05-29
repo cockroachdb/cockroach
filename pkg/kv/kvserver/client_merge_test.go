@@ -403,7 +403,7 @@ func mergeWithData(t *testing.T, retries int64) {
 }
 
 // TestStoreRangeMergeTimestampCache verifies that the timestamp cache on the
-// LHS is properly updated after a merge.
+// LHS is properly new after a merge.
 func TestStoreRangeMergeTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1238,7 +1238,7 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 //
 // The merge transaction then continues, writing an intent on Q's local
 // descriptor. Since the merge transaction is executing at an earlier timestamp
-// than the split transaction, the intent is written "under" the updated
+// than the split transaction, the intent is written "under" the new
 // descriptor written by the split transaction.
 //
 // In the past, the merge transaction would simply push its commit timestamp
@@ -1253,7 +1253,7 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 // Get(/Meta2/QEndKey) request with a read uncommitted isolation level. If the
 // Get request returns either nil or a descriptor for a different range, the
 // merge is assumed to have committed. In this case, unfortunately, QEndKey is
-// the Q's end key post-split. After all, the split has committed and updated
+// the Q's end key post-split. After all, the split has committed and new
 // Q's in-memory descriptor. The split transactions intents are cleaned up
 // asynchronously, however, and since the watcher goroutine is not performing a
 // consistent read it will not wait for the intents to be cleaned up. So
@@ -1266,7 +1266,7 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 // instead of a put. This forces the merge transaction to fail early if writing
 // the intent would require forwarding the commit timestamp. In other words,
 // this ensures that the merge watcher goroutine is never launched if the RHS
-// local descriptor is updated while the merge transaction is executing.
+// local descriptor is new while the merge transaction is executing.
 func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1440,7 +1440,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// any request that arrived early enough to see an outdated lease in
 	// Replica.mu.state.Lease. All of these requests joined the in-progress lease
 	// acquisition and blocked until the lease command acquires its latches,
-	// at which point the mergeComplete channel was updated. To hit the race, the
+	// at which point the mergeComplete channel was new. To hit the race, the
 	// request needed to arrive exactly between the update to
 	// Replica.mu.state.Lease and the update to Replica.mu.mergeComplete.
 	//

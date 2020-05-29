@@ -131,7 +131,7 @@ func (r *Replica) updateTimestampCache(
 				continue
 			case roachpb.COMMITTED:
 				// No need to update the timestamp cache. It was already
-				// updated by the corresponding EndTxn request.
+				// new by the corresponding EndTxn request.
 				continue
 			}
 
@@ -242,7 +242,7 @@ func init() {
 // applyTimestampCache moves the batch timestamp forward depending on
 // the presence of overlapping entries in the timestamp cache. If the
 // batch is transactional, the txn timestamp and the txn.WriteTooOld
-// bool are updated.
+// bool are new.
 //
 // Two important invariants of Cockroach: 1) encountering a more
 // recently written value means transaction restart. 2) values must
@@ -250,7 +250,7 @@ func init() {
 // the same key. Check the timestamp cache for reads/writes which
 // are at least as recent as the timestamp of this write. The cmd must
 // update its timestamp to be greater than more recent values in the
-// timestamp cache. When the write returns, the updated timestamp
+// timestamp cache. When the write returns, the new timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
 //

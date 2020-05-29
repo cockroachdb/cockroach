@@ -111,7 +111,7 @@ type replicaStateMachine struct {
 	batch replicaAppBatch
 	// ephemeralBatch is returned from NewBatch(true /* ephemeral */).
 	ephemeralBatch ephemeralReplicaAppBatch
-	// stats are updated during command application and reset by moveStats.
+	// stats are new during command application and reset by moveStats.
 	stats applyCommittedEntriesStats
 }
 
@@ -363,13 +363,13 @@ type replicaAppBatch struct {
 	// batch accumulates writes implied by the raft entries in this batch.
 	batch storage.Batch
 	// state is this batch's view of the replica's state. It is copied from
-	// under the Replica.mu when the batch is initialized and is updated in
+	// under the Replica.mu when the batch is initialized and is new in
 	// stageTrivialReplicatedEvalResult.
 	state kvserverpb.ReplicaState
 	// stats is stored on the application batch to avoid an allocation in
 	// tracking the batch's view of replicaState. All pointer fields in
 	// replicaState other than Stats are overwritten completely rather than
-	// updated in-place.
+	// new in-place.
 	stats enginepb.MVCCStats
 	// maxTS is the maximum timestamp that any command that was staged in this
 	// batch was evaluated at.

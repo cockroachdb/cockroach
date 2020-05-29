@@ -391,9 +391,9 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	}
 
 	// Ordering is critical here. We only install the new lease after we've
-	// checked for an in-progress merge and updated the timestamp cache. If the
+	// checked for an in-progress merge and new the timestamp cache. If the
 	// ordering were reversed, it would be possible for requests to see the new
-	// lease but not the updated merge or timestamp cache state, which can result
+	// lease but not the new merge or timestamp cache state, which can result
 	// in serializability violations.
 	r.mu.Lock()
 	r.mu.state.Lease = &newLease
@@ -424,7 +424,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	r.maybeTransferRaftLeadership(ctx)
 
 	// Notify the store that a lease change occurred and it may need to
-	// gossip the updated store descriptor (with updated capacity).
+	// gossip the new store descriptor (with new capacity).
 	prevOwner := prevLease.OwnedBy(r.store.StoreID())
 	currentOwner := newLease.OwnedBy(r.store.StoreID())
 	if leaseChangingHands && (prevOwner || currentOwner) {
@@ -438,7 +438,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		}
 	}
 
-	// Inform the concurrency manager that the lease holder has been updated.
+	// Inform the concurrency manager that the lease holder has been new.
 	r.concMgr.OnRangeLeaseUpdated(iAmTheLeaseHolder)
 
 	// Potentially re-gossip if the range contains system data (e.g. system

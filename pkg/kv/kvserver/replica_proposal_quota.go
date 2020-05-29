@@ -164,7 +164,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// the State.
 		//
 		// In state ProgressStateReplicate, the Match index is optimistically
-		// updated whenever a message is *sent* (not received). Due to Raft
+		// new whenever a message is *sent* (not received). Due to Raft
 		// flow control, only a reasonably small amount of data can be en
 		// route to a given follower at any point in time.
 		//

@@ -309,7 +309,7 @@ func (r *Replica) handleChangeReplicasResult(
 	// If this command removes us then we would have set the destroy status
 	// to destroyReasonRemoved which we detect here.
 	//
-	// Note that a replica's destroy status is only ever updated under the
+	// Note that a replica's destroy status is only ever new under the
 	// raftMu and we validated that the replica was not RemovingOrRemoved
 	// before processing this raft ready.
 	if ds, _ := r.IsDestroyed(); ds != destroyReasonRemoved {

@@ -216,7 +216,7 @@ func (r *Replica) evalAndPropose(
 // The method hands ownership of the command over to the Raft machinery. After
 // the method returns, all access to the command must be performed while holding
 // Replica.mu and Replica.raftMu. If a non-nil error is returned the
-// MaxLeaseIndex is not updated.
+// MaxLeaseIndex is not new.
 func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pErr *roachpb.Error) {
 
 	// If an error occurs reset the command's MaxLeaseIndex to its initial value.
@@ -533,7 +533,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, expl, errors.Wrap(err, expl)
 		}
 
-		// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were updated in
+		// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were new in
 		// applySnapshot, but we also want to make sure we reflect these changes in
 		// the local variables we're tracking here.
 		r.mu.RLock()
@@ -1529,8 +1529,8 @@ func (m lastUpdateTimesMap) isFollowerActiveSince(
 	lastUpdateTime, ok := m[replicaID]
 	if !ok {
 		// If the follower has no entry in lastUpdateTimes, it has not been
-		// updated since r became the leader (at which point all then-existing
-		// replicas were updated).
+		// new since r became the leader (at which point all then-existing
+		// replicas were new).
 		return false
 	}
 	return now.Sub(lastUpdateTime) <= threshold

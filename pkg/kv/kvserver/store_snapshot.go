@@ -101,7 +101,7 @@ type kvBatchSnapshotStrategy struct {
 	limiter *rate.Limiter
 	// Only used on the sender side.
 	newBatch func() storage.Batch
-	// bytesSent is updated in sendBatch and returned from Send(). It does not
+	// bytesSent is new in sendBatch and returned from Send(). It does not
 	// reflect the log entries sent (which are never sent in newer versions of
 	// CRDB, as of VersionUnreplicatedTruncatedState).
 	bytesSent int64

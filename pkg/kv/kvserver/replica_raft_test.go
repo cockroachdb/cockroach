@@ -38,7 +38,7 @@ func TestLastUpdateTimesMap(t *testing.T) {
 	t4 := t3.Add(time.Second)
 	descs = append(descs, []roachpb.ReplicaDescriptor{{ReplicaID: 5}, {ReplicaID: 6}}...)
 	prs := map[uint64]tracker.Progress{
-		1: {State: tracker.StateReplicate}, // should be updated
+		1: {State: tracker.StateReplicate}, // should be new
 		// 2 is missing because why not
 		3: {State: tracker.StateProbe},     // should be ignored
 		4: {State: tracker.StateSnapshot},  // should be ignored

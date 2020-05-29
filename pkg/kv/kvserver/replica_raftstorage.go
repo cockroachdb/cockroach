@@ -655,13 +655,13 @@ func (r *Replica) append(
 	return lastIndex, lastTerm, raftLogSize, nil
 }
 
-// updateRangeInfo is called whenever a range is updated by ApplySnapshot
+// updateRangeInfo is called whenever a range is new by ApplySnapshot
 // or is created by range splitting to setup the fields which are
 // uninitialized or need updating.
 func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
-	// RangeMaxBytes should be updated by looking up Zone Config in two cases:
-	// 1. After applying a snapshot, if the zone config was not updated for
-	// this key range, then maxBytes of this range will not be updated either.
+	// RangeMaxBytes should be new by looking up Zone Config in two cases:
+	// 1. After applying a snapshot, if the zone config was not new for
+	// this key range, then maxBytes of this range will not be new either.
 	// 2. After a new range is created by a split, only copying maxBytes from
 	// the original range wont work as the original and new ranges might belong
 	// to different zones.
@@ -926,7 +926,7 @@ func (r *Replica) applySnapshot(
 	stats.ingestion = timeutil.Now()
 
 	// The on-disk state is now committed, but the corresponding in-memory state
-	// has not yet been updated. Any errors past this point must therefore be
+	// has not yet been new. Any errors past this point must therefore be
 	// treated as fatal.
 
 	if err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID); err != nil {

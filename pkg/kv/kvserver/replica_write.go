@@ -98,9 +98,9 @@ func (r *Replica) executeWriteBatch(
 		// meant to protect against future correctness anomalies.
 		defer func() {
 			if br != nil && ba.Txn != nil && br.Txn == nil {
-				log.Fatalf(ctx, "assertion failed: transaction updated by "+
+				log.Fatalf(ctx, "assertion failed: transaction new by "+
 					"timestamp cache, but transaction returned in response; "+
-					"updated timestamp would have been lost (recovered): "+
+					"new timestamp would have been lost (recovered): "+
 					"%s in batch %s", ba.Txn, ba,
 				)
 			}

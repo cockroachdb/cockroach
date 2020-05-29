@@ -157,7 +157,7 @@ func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 	return rec.i.CanCreateTxnRecord(txnID, txnKey, txnMinTS)
 }
 
-// GetGCThreshold returns the GC threshold of the Range, typically updated when
+// GetGCThreshold returns the GC threshold of the Range, typically new when
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
 func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {

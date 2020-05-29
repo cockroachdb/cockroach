@@ -467,7 +467,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		t.Fatalf("did not get expected error: %+v", err)
 	}
 
-	// After the aborted transaction, r.Desc was not updated.
+	// After the aborted transaction, r.Desc was not new.
 	// TODO(bdarnell): expose and inspect raft's internal state.
 	if replicas := repl.Desc().InternalReplicas; len(replicas) != 1 {
 		t.Fatalf("expected 1 replica, found %v", replicas)
@@ -4043,7 +4043,7 @@ func TestFailedConfChange(t *testing.T) {
 		if status.RaftState != raft.StateLeader {
 			return errors.Errorf("store %d: expected StateLeader, was %s", i, status.RaftState)
 		}
-		// In issue #13506, the Progress map would be updated as if the
+		// In issue #13506, the Progress map would be new as if the
 		// change had succeeded.
 		if l := len(status.Progress); l != 2 {
 			return errors.Errorf("store %d: expected 2 replicas in raft, found %d in %s", i, l, status)

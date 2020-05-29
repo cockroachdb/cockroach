@@ -195,7 +195,7 @@ const (
 func (sd *storeDetail) status(
 	now time.Time, threshold time.Duration, nl NodeLivenessFunc,
 ) storeStatus {
-	// The store is considered dead if it hasn't been updated via gossip
+	// The store is considered dead if it hasn't been new via gossip
 	// within the liveness threshold. Note that lastUpdatedTime is set
 	// when the store detail is created and will have a non-zero value
 	// even before the first gossip arrives for a store.
@@ -209,7 +209,7 @@ func (sd *storeDetail) status(
 		return storeStatusUnknown
 	}
 
-	// Even if the store has been updated via gossip, we still rely on
+	// Even if the store has been new via gossip, we still rely on
 	// the node liveness to determine whether it is considered live.
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
 	case kvserverpb.NodeLivenessStatus_DEAD, kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
@@ -288,7 +288,7 @@ func NewStorePool(
 	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
 
 	// Enable redundant callbacks for the store keys because we use these
-	// callbacks as a clock to determine when a store was last updated even if it
+	// callbacks as a clock to determine when a store was last new even if it
 	// hasn't otherwise changed.
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate, gossip.Redundant)

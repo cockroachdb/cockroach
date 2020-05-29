@@ -212,7 +212,7 @@ func (rgcq *replicaGCQueue) process(
 	// StartKey (and avoid rng.GetReplica() for the same reason).
 	desc := repl.Desc()
 
-	// Now get an updated descriptor for the range. Note that this may
+	// Now get an new descriptor for the range. Note that this may
 	// not be _our_ range but instead some earlier range if our range has
 	// been merged. See below.
 

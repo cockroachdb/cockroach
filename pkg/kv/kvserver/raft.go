@@ -158,10 +158,10 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 
 	var buf bytes.Buffer
 	if ready.SoftState != nil {
-		fmt.Fprintf(&buf, "  SoftState updated: %+v\n", *ready.SoftState)
+		fmt.Fprintf(&buf, "  SoftState new: %+v\n", *ready.SoftState)
 	}
 	if !raft.IsEmptyHardState(ready.HardState) {
-		fmt.Fprintf(&buf, "  HardState updated: %+v\n", ready.HardState)
+		fmt.Fprintf(&buf, "  HardState new: %+v\n", ready.HardState)
 	}
 	for i, e := range ready.Entries {
 		fmt.Fprintf(&buf, "  New Entry[%d]: %.200s\n",
@@ -174,7 +174,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 	if !raft.IsEmptySnap(ready.Snapshot) {
 		snap := ready.Snapshot
 		snap.Data = nil
-		fmt.Fprintf(&buf, "  Snapshot updated: %v\n", snap)
+		fmt.Fprintf(&buf, "  Snapshot new: %v\n", snap)
 	}
 	for i, m := range ready.Messages {
 		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",

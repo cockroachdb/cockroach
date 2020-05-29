@@ -230,7 +230,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 }
 
 // TestTxnWaitQueueUpdateTxn creates two waiters on a txn and verifies
-// both are returned when the txn is updated.
+// both are returned when the txn is new.
 func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -426,7 +426,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 
 // TestTxnWaitQueueUpdateNotPushedTxn verifies that no PushTxnResponse
 // is returned in the event that the pushee txn only has its timestamp
-// updated.
+// new.
 func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -578,7 +578,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 }
 
 // TestTxnWaitQueuePusherUpdate verifies that the pusher's status is
-// periodically updated and will notice if the pusher has been aborted.
+// periodically new and will notice if the pusher has been aborted.
 func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -795,7 +795,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	// Create txnA with a lower priority so it won't think it could push
 	// txnB without updating its priority.
 	txnA := newTransaction("txn", roachpb.Key("a"), -1, tc.Clock())
-	// However, write an "updated" txnA with higher priority, which it
+	// However, write an "new" txnA with higher priority, which it
 	// will need to read via a QueryTxn request in order to realize it
 	// can in fact break the deadlock.
 	updatedTxnA := *txnA
@@ -805,7 +805,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	}
 	// Create txnB with priority=2, so txnA won't think it can push, but
 	// when we set up txnB as the pusher, the request will include txnA's
-	// updated priority, making txnB think it can't break a deadlock.
+	// new priority, making txnB think it can't break a deadlock.
 	txnB := newTransaction("txn", roachpb.Key("a"), -2, tc.Clock())
 	if err := writeTxnRecord(context.Background(), &tc, txnB); err != nil {
 		t.Fatal(err)

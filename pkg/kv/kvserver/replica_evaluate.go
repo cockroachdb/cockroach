@@ -381,7 +381,7 @@ func evaluateBatch(
 		// accumulate updates to it. Once accumulated, we then remove the Txn
 		// from each individual response.
 		// TODO(spencer,tschottdorf): need copy-on-write behavior for the
-		//   updated batch transaction / timestamp.
+		//   new batch transaction / timestamp.
 		if baHeader.Txn != nil {
 			if header := reply.Header(); header.Txn != nil {
 				baHeader.Txn.Update(header.Txn)
@@ -480,13 +480,13 @@ func evaluateCommand(
 		returnRangeInfo(reply, rec)
 	}
 
-	// TODO(peter): We'd like to assert that the hlc clock is always updated
+	// TODO(peter): We'd like to assert that the hlc clock is always new
 	// correctly, but various tests insert versioned data without going through
 	// the proper channels. See TestPushTxnUpgradeExistingTxn for an example.
 	//
 	// if header.Txn != nil && h.Timestamp.LessEq(header.Txn.Timestamp) {
 	// 	if now := r.store.Clock().Now(); now.Less(header.Txn.Timestamp) {
-	// 		log.Fatalf(ctx, "hlc clock not updated: %s < %s", now, header.Txn.Timestamp)
+	// 		log.Fatalf(ctx, "hlc clock not new: %s < %s", now, header.Txn.Timestamp)
 	// 	}
 	// }
 
@@ -533,7 +533,7 @@ func returnRangeInfo(reply roachpb.Response, rec batcheval.EvalContext) {
 // the request can be evaluated. If ba is a transactional request, then dealine
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 //
-// If true is returned, ba and ba.Txn will have been updated with the new
+// If true is returned, ba and ba.Txn will have been new with the new
 // timestamp.
 func canDoServersideRetry(
 	ctx context.Context,

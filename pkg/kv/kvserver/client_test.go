@@ -479,7 +479,7 @@ func (m *multiTestContext) Stop() {
 }
 
 // gossipStores forces each store to gossip its store descriptor and then
-// blocks until all nodes have received these updated descriptors.
+// blocks until all nodes have received these new descriptors.
 func (m *multiTestContext) gossipStores() {
 	timestamps := make(map[string]int64)
 	for i := 0; i < len(m.stores); i++ {
@@ -1176,11 +1176,11 @@ func (m *multiTestContext) changeReplicas(
 	var desc roachpb.RangeDescriptor
 	for r := retry.Start(retryOpts); r.Next(); {
 
-		// Perform a consistent read to get the updated range descriptor (as
+		// Perform a consistent read to get the new range descriptor (as
 		// opposed to just going to one of the stores), to make sure we have
 		// the effects of any previous ChangeReplicas call. By the time
 		// ChangeReplicas returns the raft leader is guaranteed to have the
-		// updated version, but followers are not.
+		// new version, but followers are not.
 		if err := m.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			return 0, err
 		}

@@ -394,7 +394,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 //
 // Note that this test originally injected a Gossip update with a higher Epoch
 // and semantics have since changed to make the "self" record less special. It
-// is updated like any other node's record, with appropriate safeguards against
+// is new like any other node's record, with appropriate safeguards against
 // clobbering in place.
 func TestNodeLivenessSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -620,7 +620,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 }
 
 // TestNodeLivenessSetDraining verifies that when draining, a node's liveness
-// record is updated and the node will not be present in the store list of other
+// record is new and the node will not be present in the store list of other
 // nodes once they are aware of its draining state.
 func TestNodeLivenessSetDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -955,7 +955,7 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 }
 
 // TestNodeLivenessSetDecommissioning verifies that when decommissioning, a
-// node's liveness record is updated and remains after restart.
+// node's liveness record is new and remains after restart.
 func TestNodeLivenessSetDecommissioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Sets itself to decommissioning.
@@ -1028,4 +1028,71 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
+}
+
+// TestMixedVersionNodeLiveness tests how liveness records are interpreted in
+// mixed version clusters running v20.1 and v20.2 nodes. This is of interest
+// given the proto representation for liveness records were changed between the
+// two major versions.
+//
+// TODO(irfansharif): Remove this in v20.2.
+func TestMixedVersionNodeLiveness(t *testing.T) {
+	// XXX: Fill this in.
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	g := mtc.gossips[0]
+
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	// Verify liveness is properly initialized. This needs to be wrapped in a
+	// SucceedsSoon because node liveness gets initialized via an async gossip
+	// callback.
+	var liveness kvserver.LivenessRecord
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		liveness, err = mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
+		return err
+	})
+	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
+		t.Fatal(err)
+	}
+
+	// Gossip random nonsense for liveness and verify that asking for
+	// the node's own node ID returns the "correct" value.
+	key := gossip.MakeNodeLivenessKey(mtc.gossips[1].NodeID.Get())
+	var count int32
+	g.RegisterCallback(key, func(_ string, val roachpb.Value) {
+		atomic.AddInt32(&count, 1)
+	})
+	testutils.SucceedsSoon(t, func() error {
+		// XXX: Use v20.1 liveness here.
+		newLiveness := liveness
+		newLiveness.Epoch = 42 // XXX: Do we need this?
+
+		if err := g.AddInfoProto(key, &newLiveness, 0); err != nil {
+			t.Fatal(err)
+		}
+		if atomic.LoadInt32(&count) < 2 { // XXX: Why 2?
+			return errors.New("expected gossip callback to get triggered")
+		}
+		return nil
+	})
+
+	l := mtc.nodeLivenesses[0]
+	lGetRec, err := l.GetLiveness(mtc.gossips[1].NodeID.Get())
+	require.NoError(t, err)
+	lGet := lGetRec.Liveness
+	lSelf, err := l.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(lGet, lSelf) {
+		t.Errorf("expected GetLiveness() to return same value as Self(): %+v != %+v", lGet, lSelf)
+	}
+	if lGet.Epoch == 2 {
+		t.Errorf("expected GetLiveness() not to return artificially gossiped liveness: %+v", lGet)
+	}
+	t.Logf("GetLiveness() returned liveness: %+v", lGet)
 }

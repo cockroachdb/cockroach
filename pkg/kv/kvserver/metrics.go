@@ -195,7 +195,7 @@ var (
 	}
 	metaLastUpdateNanos = metric.Metadata{
 		Name:        "lastupdatenanos",
-		Help:        "Timestamp at which bytes/keys/intents metrics were last updated",
+		Help:        "Timestamp at which bytes/keys/intents metrics were last new",
 		Measurement: "Last Update",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}

@@ -93,7 +93,7 @@ func (r *Replica) protectedTimestampRecordApplies(
 		return false, err
 	}
 	if cacheTooOld {
-		return false, errors.AssertionFailedf("cache was not updated after being refreshed")
+		return false, errors.AssertionFailedf("cache was not new after being refreshed")
 	}
 	return willApply, nil
 }

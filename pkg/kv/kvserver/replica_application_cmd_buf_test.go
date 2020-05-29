@@ -23,7 +23,7 @@ func TestReplicatedCmdBuf(t *testing.T) {
 	var buf replicatedCmdBuf
 	// numStates is chosen arbitrarily.
 	const numStates = 5*replicatedCmdBufNodeSize + 1
-	// Test that the len field is properly updated.
+	// Test that the len field is properly new.
 	var states []*replicatedCmd
 	for i := 0; i < numStates; i++ {
 		assert.Equal(t, i, int(buf.len))

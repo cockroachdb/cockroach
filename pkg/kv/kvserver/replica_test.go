@@ -1091,7 +1091,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	}
 }
 
-// TestReplicaLeaseCounters verifies leaseRequest metrics counters are updated
+// TestReplicaLeaseCounters verifies leaseRequest metrics counters are new
 // correctly after a lease request.
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1325,7 +1325,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			start: now.Add(31, 0), expiration: now.Add(50, 0),
 			// The cache now moves to this other store, and we can't query that.
 			expLowWater: 0},
-		// Lease is regranted to this store. The low-water mark is updated to the
+		// Lease is regranted to this store. The low-water mark is new to the
 		// beginning of the lease.
 		{storeID: tc.store.StoreID(),
 			start: now.Add(60, 0), expiration: now.Add(70, 0),
@@ -2899,7 +2899,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 
 	// Abort the intent again and try to write again to ensure the timestamp
-	// cache wasn't updated by the second (successful), third (unsuccessful),
+	// cache wasn't new by the second (successful), third (unsuccessful),
 	// or fourth (successful) conditional put. Only the conditional put that
 	// hit a ConditionFailedError should update the timestamp cache.
 	abortIntent(cpArgs2.Span(), &txnLater)
@@ -2990,7 +2990,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 
 	// Abort the intent again and try to write again to ensure the timestamp
-	// cache wasn't updated by the second (successful), third (unsuccessful),
+	// cache wasn't new by the second (successful), third (unsuccessful),
 	// or fourth (successful) init put. Only the init put that hit a
 	// ConditionFailedError should update the timestamp cache.
 	abortIntent(ipArgs1.Span(), &txnLater)
@@ -5330,7 +5330,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
-		// Now, attempt to push the transaction using updated timestamp.
+		// Now, attempt to push the transaction using new timestamp.
 		pushee.WriteTimestamp = test.ts
 		args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 
@@ -5384,7 +5384,7 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Make sure the pushee in the request has updated information on the pushee.
+	// Make sure the pushee in the request has new information on the pushee.
 	// Since the pushee has higher priority than the pusher, the push should fail.
 	pushee.Priority = 4
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
@@ -5530,7 +5530,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Set the manual clock to the txn start time + offset. This is the time
 		// source used to detect transaction expiration. We make sure to set it
-		// above h.Timestamp to avoid it being updated by the request.
+		// above h.Timestamp to avoid it being new by the request.
 		now := pushee.ReadTimestamp.Add(test.timeOffset, 0)
 		tc.manualClock.Set(now.WallTime)
 
@@ -5759,7 +5759,7 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 
 // TestPushTxnSerializableRestart simulates a transaction which is
 // started at t=0, fails serializable commit due to a read at a key
-// being written at t=1, is then restarted at the updated timestamp,
+// being written at t=1, is then restarted at the new timestamp,
 // but before the txn can be retried, it's pushed to t=2, an even
 // higher timestamp. The test verifies that the serializable commit
 // fails yet again, preventing regression of a bug in which we blindly
@@ -7517,7 +7517,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	type magicKey struct{}
 
-	var c int32                // updated atomically
+	var c int32                // new atomically
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
@@ -8043,7 +8043,7 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	type magicKey struct{}
 	magicCtx := context.WithValue(ctx, magicKey{}, "foo")
 
-	var c int32 // updated atomically
+	var c int32 // new atomically
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
@@ -8220,8 +8220,8 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 		"retry: proposalIllegalLeaseIndex",
 		// The LocalResult is nil. This is the important part for this test.
 		"LocalResult: nil",
-		// Re-evaluation succeeds and one txn is to be updated.
-		"LocalResult \\(reply.*#updated txns: 1",
+		// Re-evaluation succeeds and one txn is to be new.
+		"LocalResult \\(reply.*#new txns: 1",
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -9584,7 +9584,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 }
 
 // TestReplicaServersideRefreshes verifies local retry logic for transactional
-// and non transactional batches. Verifies the timestamp cache is updated to
+// and non transactional batches. Verifies the timestamp cache is new to
 // reflect the timestamp at which retried batches are executed.
 func TestReplicaServersideRefreshes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -11137,7 +11137,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				return sendWrappedWithErr(hbH, &hb)
 			},
 			// The heartbeat request won't throw an error, but also won't update the
-			// transaction record. It will simply return the updated transaction state.
+			// transaction record. It will simply return the new transaction state.
 			// This is kind of strange, but also doesn't cause any issues.
 			expError:         "",
 			expTxn:           txnWithStatus(roachpb.ABORTED),
@@ -11227,7 +11227,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				return sendWrappedWithErr(hbH, &hb)
 			},
 			// The heartbeat request won't throw an error, but also won't update the
-			// transaction record. It will simply return the updated transaction state.
+			// transaction record. It will simply return the new transaction state.
 			// This is kind of strange, but also doesn't cause any issues.
 			expError:         "",
 			expTxn:           txnWithStatus(roachpb.COMMITTED),

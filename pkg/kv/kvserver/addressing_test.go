@@ -52,7 +52,7 @@ func meta2Key(key roachpb.RKey) []byte {
 }
 
 // TestUpdateRangeAddressing verifies range addressing records are
-// correctly updated on creation of new range descriptors.
+// correctly new on creation of new range descriptors.
 func TestUpdateRangeAddressing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()

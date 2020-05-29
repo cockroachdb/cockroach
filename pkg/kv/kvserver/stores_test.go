@@ -317,7 +317,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 		t.Errorf("bootstrap info %+v not equal to expected %+v", verifyBI, bi)
 	}
 
-	// Verify that stores[0], which had old info, was updated with
+	// Verify that stores[0], which had old info, was new with
 	// latest bootstrap info during the read.
 	ls3 := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, ls.clock)
 	ls3.AddStore(stores[0])
@@ -420,7 +420,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 			t.Fatalf("expected %+v, got %+v", expCV, cv)
 		}
 
-		// Write an updated Version to both stores.
+		// Write an new Version to both stores.
 		cv := clusterversion.ClusterVersion{
 			Version: versionB,
 		}

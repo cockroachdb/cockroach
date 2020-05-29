@@ -77,7 +77,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 				XXX_unrecognized []byte
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
-			// and the expected sums should be updated.
+			// and the expected sums should be new.
 			var _ = expectedHardState(raftpb.HardState{})
 
 			n := r.Uint64()

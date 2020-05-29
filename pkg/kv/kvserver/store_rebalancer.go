@@ -259,7 +259,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		// Finally, update our local copies of the descriptors so that if
 		// additional transfers are needed we'll be making the decisions with more
-		// up-to-date info. The StorePool copies are updated by transferLease.
+		// up-to-date info. The StorePool copies are new by transferLease.
 		localDesc.Capacity.LeaseCount--
 		localDesc.Capacity.QueriesPerSecond -= replWithStats.qps
 		if otherDesc := storeMap[target.StoreID]; otherDesc != nil {

@@ -210,7 +210,7 @@ func (r *Replica) CheckConsistency(
 		// The replicas were in sync. Check that the MVCCStats haven't diverged from
 		// what they should be. This code originated in the realization that there
 		// were many bugs in our stats computations. These are being fixed, but it
-		// is through this mechanism that existing ranges are updated. Hence, the
+		// is through this mechanism that existing ranges are new. Hence, the
 		// logging below is relatively timid.
 
 		// If there's no delta, there's nothing else to do.

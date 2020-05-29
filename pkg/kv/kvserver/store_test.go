@@ -1231,7 +1231,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	}
 }
 
-// TestStoreSendUpdateTime verifies that the node clock is updated.
+// TestStoreSendUpdateTime verifies that the node clock is new.
 func TestStoreSendUpdateTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -1441,7 +1441,7 @@ func TestStoreReplicasByKey(t *testing.T) {
 
 // TestStoreSetRangesMaxBytes creates a set of ranges via splitting
 // and then sets the config zone to a custom max bytes value to
-// verify the ranges' max bytes are updated appropriately.
+// verify the ranges' max bytes are new appropriately.
 func TestStoreSetRangesMaxBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -2109,7 +2109,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 }
 
 // TestStoreScanResumeTSCache verifies that the timestamp cache is
-// properly updated when scans and reverse scans return partial
+// properly new when scans and reverse scans return partial
 // results and a resume span.
 func TestStoreScanResumeTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()

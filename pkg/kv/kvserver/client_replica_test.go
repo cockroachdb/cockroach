@@ -190,7 +190,7 @@ func TestRejectFutureCommand(t *testing.T) {
 //    get operation with time T+100. This pushes the Writer txn timestamp to
 //    T+100. The Reader also writes to the same key the Writer did a cput to
 //    in order to trigger the restart of the Writer's txn. The original
-//    write intent timestamp is also updated to T+100.
+//    write intent timestamp is also new to T+100.
 // 3) The Writer starts a new epoch of the txn, but before it writes, the
 //    Reader sends another high priority get operation with time T+200. This
 //    pushes the Writer txn timestamp to T+200 to trigger a restart of the
@@ -200,7 +200,7 @@ func TestRejectFutureCommand(t *testing.T) {
 //    operation, and cockroach doesn't update its timestamp cache.
 // 4) The Writer executes the put operation again. This put operation comes
 //    out-of-order since its timestamp is T+100, while the intent timestamp
-//    updated at Step 3 is T+200.
+//    new at Step 3 is T+200.
 // 5) The put operation overrides the old value using timestamp T+100.
 // 6) When the Writer attempts to commit its txn, the txn will be restarted
 //    again at a new epoch timestamp T+200, which will finally succeed.
@@ -351,7 +351,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// Advance the clock and send a get operation again. This time
 	// we use TestingCommandFilter so that a get operation is not
 	// processed after the write intent is resolved (to prevent the
-	// timestamp cache from being updated).
+	// timestamp cache from being new).
 	manual.Increment(100)
 
 	h.Timestamp = cfg.Clock.Now()
@@ -989,7 +989,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 }
 
 // TestLeaseMetricsOnSplitAndTransfer verifies that lease-related metrics
-// are updated after splitting a range and then initiating one successful
+// are new after splitting a range and then initiating one successful
 // and one failing lease transfer.
 func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1953,7 +1953,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Read keyC with txnOld, which is updated below. This prevents the
+	// Read keyC with txnOld, which is new below. This prevents the
 	// transaction from refreshing when it hits the serializable error.
 	if _, err := txnOld.Get(ctx, keyC); err != nil {
 		t.Fatal(err)
@@ -3017,7 +3017,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 			t.Helper()
 			require.NoError(t, performScan())
 		}
-		// Make sure the cache has been updated. Once it has then we know it won't
+		// Make sure the cache has been new. Once it has then we know it won't
 		// be for minutes. It should read on startup.
 		waitForCacheAfter = func(t *testing.T, min hlc.Timestamp) {
 			t.Helper()

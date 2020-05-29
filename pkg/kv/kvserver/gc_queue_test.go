@@ -825,7 +825,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				}
 				// If the transaction record was GCed and didn't begin the test
 				// as finalized, verify that the timestamp cache was
-				// updated (by the corresponding PushTxn that marked the record
+				// new (by the corresponding PushTxn that marked the record
 				// as ABORTED) to prevent it from being created again in the
 				// future.
 				if !sp.status.IsFinalized() {
@@ -882,7 +882,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	defer batch.Close()
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
-	tc.repl.assertStateLocked(ctx, batch) // check that in-mem and on-disk state were updated
+	tc.repl.assertStateLocked(ctx, batch) // check that in-mem and on-disk state were new
 	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 }

@@ -145,7 +145,7 @@ func prepareSplitDescs(
 	// Create right hand side range descriptor.
 	rightDesc := roachpb.NewRangeDescriptor(rightRangeID, splitKey, leftDesc.EndKey, leftDesc.Replicas())
 
-	// Init updated version of existing range descriptor.
+	// Init new version of existing range descriptor.
 	{
 		tmp := *leftDesc
 		leftDesc = &tmp
@@ -155,7 +155,7 @@ func prepareSplitDescs(
 	leftDesc.EndKey = splitKey
 
 	// Set the generation of the right hand side descriptor to match that of the
-	// (updated) left hand side. See the comment on the field for an explanation
+	// (new) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
 
@@ -290,7 +290,7 @@ func splitTxnStickyUpdateAttempt(
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
-// distributed txn which writes updated left and new right hand side range
+// distributed txn which writes new left and new right hand side range
 // descriptors, and updates the range addressing metadata. The handover of
 // responsibility for the reassigned key range is carried out seamlessly
 // through a split trigger carried out as part of the commit of that
@@ -547,7 +547,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 
 		lastErr = updateDesc(r.Desc())
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
-		// command with the updated descriptor.
+		// command with the new descriptor.
 		if !errors.HasType(lastErr, (*roachpb.ConditionFailedError)(nil)) &&
 			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
 			break
@@ -692,7 +692,7 @@ func (r *Replica) AdminMerge(
 		// Log the merge into the range event log.
 		// TODO(spencer): event logging API should accept a batch
 		// instead of a transaction; there's no reason this logging
-		// shouldn't be done in parallel via the batch with the updated
+		// shouldn't be done in parallel via the batch with the new
 		// range addressing.
 		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc); err != nil {
 			return err
@@ -914,7 +914,7 @@ func IsSnapshotError(err error) bool {
 //    in a configuration ("joint configuration") in which a quorum of both the
 //    old replicas and the new replica sets is required for decision making.
 //    Transitioning into this joint configuration, the RangeDescriptor (which is
-//    the source of truth of the replication configuration) is updated with
+//    the source of truth of the replication configuration) is new with
 //    corresponding replicas of type VOTER_INCOMING and VOTER_OUTGOING.
 //    Immediately after committing this change, a second transition updates the
 //    descriptor with and activates the final configuration.
@@ -1393,7 +1393,7 @@ const (
 // internalReplicationChange is a replication target together with an internal
 // change type. The internal change type is needed to encode in which way the
 // replica is mutated (i.e. in a sense, what its predecessor looked like). We
-// need this to accurately transcribe the old into the updated range descriptor.
+// need this to accurately transcribe the old into the new range descriptor.
 type internalReplicationChange struct {
 	target roachpb.ReplicationTarget
 	typ    internalChangeType
@@ -1513,7 +1513,7 @@ func prepareChangeReplicasTrigger(
 	}
 
 	if err := updatedDesc.Validate(); err != nil {
-		return nil, errors.Wrapf(err, "validating updated descriptor %s", &updatedDesc)
+		return nil, errors.Wrapf(err, "validating new descriptor %s", &updatedDesc)
 	}
 
 	var crt *roachpb.ChangeReplicasTrigger

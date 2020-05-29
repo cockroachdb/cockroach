@@ -98,7 +98,7 @@ func TestLogSplits(t *testing.T) {
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
-			t.Errorf("recorded wrong updated descriptor %s for split of range %d", info.UpdatedDesc, rangeID)
+			t.Errorf("recorded wrong new descriptor %s for split of range %d", info.UpdatedDesc, rangeID)
 		}
 		if int64(info.NewDesc.RangeID) != otherRangeID.Int64 {
 			t.Errorf("recorded wrong new descriptor %s for split of range %d", info.NewDesc, rangeID)
@@ -222,7 +222,7 @@ func TestLogMerges(t *testing.T) {
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
-			t.Errorf("recorded wrong updated descriptor %s for merge of range %d", info.UpdatedDesc, rangeID)
+			t.Errorf("recorded wrong new descriptor %s for merge of range %d", info.UpdatedDesc, rangeID)
 		}
 		if int64(info.RemovedDesc.RangeID) != otherRangeID.Int64 {
 			t.Errorf("recorded wrong new descriptor %s for merge of range %d", info.RemovedDesc, rangeID)
@@ -319,10 +319,10 @@ func TestLogRebalances(t *testing.T) {
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
-			t.Errorf("recorded wrong updated descriptor %s for add replica of range %d", info.UpdatedDesc, rangeID)
+			t.Errorf("recorded wrong new descriptor %s for add replica of range %d", info.UpdatedDesc, rangeID)
 		}
 		if a, e := *info.AddedReplica, desc.InternalReplicas[0]; a != e {
-			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
+			t.Errorf("recorded wrong new replica %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
 		if a, e := info.Reason, kvserverpb.ReasonRangeUnderReplicated; a != e {
@@ -371,10 +371,10 @@ func TestLogRebalances(t *testing.T) {
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
-			t.Errorf("recorded wrong updated descriptor %s for remove replica of range %d", info.UpdatedDesc, rangeID)
+			t.Errorf("recorded wrong new descriptor %s for remove replica of range %d", info.UpdatedDesc, rangeID)
 		}
 		if a, e := *info.RemovedReplica, desc.InternalReplicas[0]; a != e {
-			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
+			t.Errorf("recorded wrong new replica %s for remove replica of range %d, expected %s",
 				a, rangeID, e)
 		}
 		if a, e := info.Reason, kvserverpb.ReasonRangeOverReplicated; a != e {

@@ -245,11 +245,11 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter func(int, string)) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		liveness, err := nl.SelfEx()
+		livenessRec, err := nl.SelfEx()
 		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
-		err = nl.setDrainingInternal(ctx, liveness, drain, reporter)
+		err = nl.setDrainingInternal(ctx, livenessRec, drain, reporter)
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
@@ -262,7 +262,10 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter fu
 
 // SetDecommissioning runs a best-effort attempt of marking the the liveness
 // record as decommissioning. It returns whether the function committed a
-// transaction that updated the liveness record. // XXX: When does it not?
+// transaction that new the liveness record.
+//
+// TODO(irfansharif): Remove this decommission bool API to set enum state
+// instead.
 func (nl *NodeLiveness) SetDecommissioning(
 	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
 ) (changeCommitted bool, err error) {
@@ -322,7 +325,10 @@ func (nl *NodeLiveness) SetDecommissioning(
 			return false, errors.Wrap(err, "invalid liveness record")
 		}
 
-		rec := LivenessRecord{
+		// XXX: Do we need to reconcile here? We could ge reading from the key
+		// written by the old version.
+
+		oldLivenessRec := LivenessRecord{
 			Liveness: oldLiveness,
 			raw:      kv.Value,
 		}
@@ -331,9 +337,9 @@ func (nl *NodeLiveness) SetDecommissioning(
 		// to make sure that when we actually try to update the liveness, the
 		// previous view is correct. This, too, is required to de-flake
 		// TestNodeLivenessDecommissionAbsent.
-		nl.maybeUpdate(rec)
+		nl.maybeUpdate(oldLivenessRec)
 
-		return nl.setDecommissioningInternal(ctx, nodeID, rec, decommission)
+		return nl.setDecommissioningInternal(ctx, nodeID, oldLivenessRec, decommission)
 	}
 
 	for {
@@ -346,7 +352,7 @@ func (nl *NodeLiveness) SetDecommissioning(
 }
 
 func (nl *NodeLiveness) setDrainingInternal(
-	ctx context.Context, liveness LivenessRecord, drain bool, reporter func(int, string),
+	ctx context.Context, oldLivenessRec LivenessRecord, drain bool, reporter func(int, string),
 ) error {
 	nodeID := nl.gossip.NodeID.Get()
 	sem := nl.sem(nodeID)
@@ -361,27 +367,32 @@ func (nl *NodeLiveness) setDrainingInternal(
 	}()
 
 	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+		old:         oldLivenessRec.Liveness,
+		oldRaw:      oldLivenessRec.raw,
+		ignoreCache: true,
+	}
+	if oldLivenessRec.Liveness != (kvserverpb.Liveness{}) {
+		update.new = oldLivenessRec.Liveness
+	} else {
+		// Liveness record didn't previously exist, so we create one.
+		update.new = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
-		},
-		old:         liveness.Liveness,
-		ignoreCache: true,
-		oldRaw:      liveness.raw,
-	}
-	if liveness.Liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness.Liveness
+		}
 	}
 
-	if reporter != nil && drain && !update.updated.Draining {
+	if reporter != nil && drain && !update.new.Draining {
 		// Report progress to the Drain RPC.
 		reporter(1, "liveness record")
 	}
-	update.updated.Draining = drain
+	update.new.Draining = drain
+	// We may have read a liveness record written by a v20.1 node, so we
+	// reconcile.
+	update.new = reconcileMixedVersionLiveness(update.new)
 
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		nl.maybeUpdate(actual)
-		if actual.Draining == update.updated.Draining {
+		if actual.Draining == update.new.Draining {
 			return errNodeDrainingSet
 		}
 		return errors.New("failed to update liveness record because record has changed")
@@ -402,8 +413,8 @@ func (nl *NodeLiveness) setDrainingInternal(
 // livenessUpdate contains the information for CPutting a new version of a
 // liveness record. It has both the new and the old version of the proto.
 type livenessUpdate struct {
-	updated kvserverpb.Liveness
-	old     kvserverpb.Liveness
+	new kvserverpb.Liveness
+	old kvserverpb.Liveness
 	// When ignoreCache is set, we won't assume that our in-memory cached version
 	// of the liveness record is accurate and will use a CPut on the liveness
 	// table with the old value supplied by the client (oldRaw). This is used for
@@ -425,33 +436,65 @@ type livenessUpdate struct {
 }
 
 func (nl *NodeLiveness) setDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness LivenessRecord, decommission bool,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	oldLivenessRec LivenessRecord,
+	decommission bool,
 ) (changeCommitted bool, err error) {
 	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+		old:         oldLivenessRec.Liveness,
+		oldRaw:      oldLivenessRec.raw,
+		ignoreCache: true,
+	}
+	if oldLivenessRec.Liveness != (kvserverpb.Liveness{}) {
+		update.new = oldLivenessRec.Liveness
+	} else {
+		// Liveness record didn't previously exist, so we create one.
+		update.new = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
-		},
-		old:         liveness.Liveness,
-		ignoreCache: true,
-		oldRaw:      liveness.raw,
+		}
 	}
-	if liveness.Liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness.Liveness
+	// We need to reconcile correctly here. We're setting a boolean
+	// decommisioning to either:
+	// (a) a liveness record written by a 20.1 node, or
+	// (b) a liveness record written by a 20.2 node
+	// (c) a liveness record that didn't previously exist (could belong to a
+	// node from v20.1, or v20.2).
+	//
+	// TODO(irfansharif): Test the following scenario.
+	// 		- Decommission n2 from n1, where n2 has no liveness record. n1
+	// 		  running v20.2
+	//		- n2 is running v20.1, tries to update it's liveness record. Finds
+	// 		  it's own liveness record written by n1 (but the new proto,
+	// 		  which it doesn't know how to read fully). Will it parse
+	// 		  properly? It's important for v20.2 nodes to be able to read v20.1 and
+	// 		  v20.2 representations. It's important for v20.2 to write a representation
+	//  	  understood by both v20.1 and v20.2.
+	if update.new.Status == kvserverpb.CommissionStatus_UNKNOWN_ {
+		// (a), (c).
+		update.new.DeprecatedDecommissioning = decommission
+		update.new = reconcileMixedVersionLiveness(update.new)
+	} else {
+		// (b).
+		// TODO(irfansharif): Once the API for the function accepts an enum,
+		// change the status here appropriately. Right now we're only
+		// representing the decommissioning state.
+		update.new.Status = kvserverpb.CommissionStatus_DECOMMISSIONING_
+		update.new = reconcileMixedVersionLiveness(update.new)
 	}
-	update.updated.DeprecatedDecommissioning = decommission
 
 	var conditionFailed bool
 	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		conditionFailed = true
-		if actual.DeprecatedDecommissioning == update.updated.DeprecatedDecommissioning {
+		if actual.DeprecatedDecommissioning == update.new.DeprecatedDecommissioning {
 			return nil
 		}
 		return errChangeDecommissioningFailed
 	}); err != nil {
 		return false, err
 	}
-	committed := !conditionFailed && liveness.DeprecatedDecommissioning != decommission
+	committed := !conditionFailed && oldLivenessRec.DeprecatedDecommissioning != decommission
 	return committed, nil
 }
 
@@ -584,7 +627,7 @@ var errNodeAlreadyLive = errors.New("node already live")
 
 // Heartbeat is called to update a node's expiration timestamp. This
 // method does a conditional put on the node liveness record, and if
-// successful, stores the updated liveness record in the nodes map.
+// successful, stores the new liveness record in the nodes map.
 //
 // The liveness argument is the expected previous value of this node's
 // liveness.
@@ -630,30 +673,39 @@ func (nl *NodeLiveness) heartbeatInternal(
 	}()
 
 	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
-			NodeID: nodeID,
-			Epoch:  1,
-		},
 		old: liveness,
 	}
 	if liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness
+		update.new = liveness
 		if incrementEpoch {
-			update.updated.Epoch++
+			update.new.Epoch++
 			// Clear draining field.
-			update.updated.Draining = false
+			update.new.Draining = false
+		}
+	} else {
+		// Liveness record didn't previously exist, so we create one.
+		update.new = kvserverpb.Liveness{
+			NodeID: nodeID,
+			Epoch:  1,
 		}
 	}
+	// We may have read a liveness record written by a v20.1 node, so we
+	// reconcile.
+	//
+	// XXX: Mental note. What's the guarantee that v21.1 nodes will never see
+	// v20.1 representation? Updates on heartbeats? Does that guarantee what we
+	// want?
+	update.new = reconcileMixedVersionLiveness(update.new)
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
 	{
-		update.updated.Expiration = hlc.LegacyTimestamp(
+		update.new.Expiration = hlc.LegacyTimestamp(
 			nl.clock.Now().Add((nl.livenessThreshold).Nanoseconds(), 0))
 		// This guards against the system clock moving backwards. As long
 		// as the cockroach process is running, checks inside hlc.Clock
 		// will ensure that the clock never moves backwards, but these
 		// checks don't work across process restarts.
-		if update.updated.Expiration.Less(liveness.Expiration) {
+		if update.new.Expiration.Less(liveness.Expiration) {
 			return errors.Errorf("proposed liveness update expires earlier than previous record")
 		}
 	}
@@ -779,7 +831,7 @@ func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (LivenessRecord
 // IncrementEpoch is called to attempt to revoke another node's
 // current epoch, causing an expiration of all its leases. This method
 // does a conditional put on the node liveness record, and if
-// successful, stores the updated liveness record in the nodes map. If
+// successful, stores the new liveness record in the nodes map. If
 // this method is called on a node ID which is considered live
 // according to the most recent information gathered through gossip,
 // an error is returned.
@@ -817,10 +869,11 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness kvserverpb.
 	}
 
 	update := livenessUpdate{
-		updated: liveness,
-		old:     liveness,
+		new: liveness,
+		old: liveness,
 	}
-	update.updated.Epoch++
+	update.new.Epoch++
+	update.new = reconcileMixedVersionLiveness(update.new)
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		defer nl.maybeUpdate(actual)
 		if actual.Epoch > liveness.Epoch {
@@ -923,7 +976,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			log.Fatalf(ctx, "unexpected oldRaw when ignoreCache not specified")
 		}
 
-		l, err := nl.GetLiveness(update.updated.NodeID)
+		l, err := nl.GetLiveness(update.new.NodeID)
 		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			return LivenessRecord{}, err
 		}
@@ -936,8 +989,8 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	v := new(roachpb.Value)
 	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		key := keys.NodeLivenessKey(update.updated.NodeID)
-		if err := v.SetProto(&update.updated); err != nil {
+		key := keys.NodeLivenessKey(update.new.NodeID)
+		if err := v.SetProto(&update.new); err != nil {
 			log.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
 		// Make a copy of the expected value. We can't pass oldRaw because b.CPut()
@@ -994,7 +1047,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	if cb != nil {
 		cb(ctx)
 	}
-	return LivenessRecord{Liveness: update.updated, raw: v}, nil
+	return LivenessRecord{Liveness: update.new, raw: v}, nil
 }
 
 // maybeUpdate replaces the liveness (if it appears newer) and invokes the

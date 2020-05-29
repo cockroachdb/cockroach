@@ -255,7 +255,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				args := makeArgs(r, ts, aliveAt)
 				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
-				require.EqualError(t, err, "cache was not updated after being refreshed")
+				require.EqualError(t, err, "cache was not new after being refreshed")
 				require.True(t, errors.IsAssertionFailure(err), "%v", err)
 			},
 		},

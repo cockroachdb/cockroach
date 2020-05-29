@@ -262,7 +262,7 @@ func (s *Store) processRaftRequestWithReplica(
 
 // processRaftSnapshotRequest processes the incoming non-preemptive snapshot
 // Raft request on the request's specified replica. The function makes sure to
-// handle any updated Raft Ready state. It also adds and later removes the
+// handle any new Raft Ready state. It also adds and later removes the
 // (potentially) necessary placeholder to protect against concurrent access to
 // the keyspace encompassed by the snapshot but not yet guarded by the replica.
 func (s *Store) processRaftSnapshotRequest(

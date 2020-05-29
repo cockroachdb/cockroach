@@ -650,7 +650,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 }
 
 // ensureClosedTimestampStarted does its best to make sure that this node is
-// receiving closed timestamp updated for this replica's range. Note that this
+// receiving closed timestamp new for this replica's range. Note that this
 // forces a valid lease to exist on the range and so can be reasonably expensive
 // if there is not already a valid lease.
 func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Error {

@@ -215,7 +215,7 @@ type Replica struct {
 	readOnlyCmdMu syncutil.RWMutex
 
 	// rangeStr is a string representation of a RangeDescriptor that can be
-	// atomically read and updated without needing to acquire the replica.mu lock.
+	// atomically read and new without needing to acquire the replica.mu lock.
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
 
@@ -372,14 +372,14 @@ type Replica struct {
 		// from its left-hand-side upon creation.
 		initialMaxClosed hlc.Timestamp
 
-		// The most recently updated time for each follower of this range. This is updated
+		// The most recently new time for each follower of this range. This is new
 		// every time a Raft message is received from a peer.
 		// Note that superficially it seems that similar information is contained in the
 		// Progress of a RaftStatus, which has a RecentActive field. However, that field
 		// is always true unless CheckQuorum is active, which at the time of writing in
 		// CockroachDB is not the case.
 		//
-		// The lastUpdateTimes map is also updated when a leaseholder steps up
+		// The lastUpdateTimes map is also new when a leaseholder steps up
 		// (making the assumption that all followers are live at that point),
 		// and when the range unquiesces (marking all replicating followers as
 		// live).
@@ -400,7 +400,7 @@ type Replica struct {
 		//
 		// Normally, a replica knows about the other replica descriptors for a
 		// range via the RangeDescriptor stored in Replica.mu.state.Desc. But that
-		// descriptor is only updated during a Split or ChangeReplicas operation.
+		// descriptor is only new during a Split or ChangeReplicas operation.
 		// There are periods during a Replica's lifetime when that information is
 		// out of date:
 		//
@@ -408,11 +408,11 @@ type Replica struct {
 		// Raft message for it. This is the common case for ChangeReplicas and an
 		// uncommon case for Splits. The leader will be sending the replica
 		// messages and the replica needs to be able to respond before it can
-		// receive an updated range descriptor (via a snapshot,
+		// receive an new range descriptor (via a snapshot,
 		// changeReplicasTrigger, or splitTrigger).
 		//
 		// 2. If the node containing a replica is partitioned or down while the
-		// replicas for the range are updated. When the node comes back up, other
+		// replicas for the range are new. When the node comes back up, other
 		// replicas may begin communicating with it and it needs to be able to
 		// respond. Unlike 1 where there is no range descriptor, in this situation
 		// the replica has a range descriptor but it is out of date. Note that a
@@ -421,7 +421,7 @@ type Replica struct {
 		// effect, this is another path for which the replica's local range
 		// descriptor is out of date.
 		//
-		// The last seen replica descriptors are updated on receipt of every raft
+		// The last seen replica descriptors are new on receipt of every raft
 		// message via Replica.setLastReplicaDescriptors (see
 		// Store.HandleRaftRequest). These last seen descriptors are used when
 		// the replica's RangeDescriptor contains missing or out of date descriptors
@@ -534,7 +534,7 @@ type Replica struct {
 		// after flushing the rangefeed.Processor event channel. This ensures
 		// that no events that were filtered before the new registration was
 		// added will be observed by the new registration and all events after
-		// the new registration will respect the updated filter.
+		// the new registration will respect the new filter.
 		//
 		// Requires Replica.rangefeedMu be held when mutating the pointer.
 		opFilter *rangefeed.Filter
@@ -1311,7 +1311,7 @@ func (ec *endCmds) done(
 	ec.repl.updateTimestampCache(ctx, ba, br, pErr)
 
 	// Release the latches acquired by the request and exit lock wait-queues.
-	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
+	// Must be done AFTER the timestamp cache is new. ec.g is only set when
 	// the Raft proposal has assumed responsibility for the request.
 	if ec.g != nil {
 		ec.repl.concMgr.FinishReq(ec.g)
@@ -1341,7 +1341,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 
 	// At this point, we know we have a deletion intent on our range descriptor.
 	// That means a merge is in progress. Block all commands until we can
-	// retrieve an updated range descriptor from meta2, which will indicate
+	// retrieve an new range descriptor from meta2, which will indicate
 	// whether the merge succeeded or not.
 
 	mergeCompleteCh := make(chan struct{})
