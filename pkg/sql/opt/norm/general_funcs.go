@@ -290,7 +290,7 @@ func (c *CustomFuncs) HasOuterCols(input opt.Expr) bool {
 }
 
 // IsCorrelated returns true if any variable in the source expression references
-// a column from the destination expression. For example:
+// a column from the given set of output columns. For example:
 //   (InnerJoin
 //     (Scan a)
 //     (Scan b)
@@ -300,8 +300,8 @@ func (c *CustomFuncs) HasOuterCols(input opt.Expr) bool {
 // The $item expression is correlated with the (Scan a) expression because it
 // references one of its columns. But the $item expression is not correlated
 // with the (Scan b) expression.
-func (c *CustomFuncs) IsCorrelated(src, dst memo.RelExpr) bool {
-	return src.Relational().OuterCols.Intersects(dst.Relational().OutputCols)
+func (c *CustomFuncs) IsCorrelated(src memo.RelExpr, cols opt.ColSet) bool {
+	return src.Relational().OuterCols.Intersects(cols)
 }
 
 // IsBoundBy returns true if all outer references in the source expression are
