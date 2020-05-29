@@ -15,26 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// Descriptor provides table information for results from a name lookup.
-type Descriptor interface {
-	tree.NameResolutionResult
-
-	// DatabaseDesc returns the underlying database descriptor, or nil if the
-	// descriptor is not a table backed object.
-	DatabaseDesc() *sqlbase.DatabaseDescriptor
-
-	// SchemaDesc returns the underlying schema descriptor, or nil if the
-	// descriptor is not a table backed object.
-	SchemaDesc() *sqlbase.SchemaDescriptor
-
-	// TableDesc returns the underlying table descriptor, or nil if the
-	// descriptor is not a table backed object.
-	TableDesc() *sqlbase.TableDescriptor
-
-	// TypeDesc returns the underlying type descriptor, or nil if the
-	// descriptor is not a type backed object.
-	TypeDesc() *sqlbase.TypeDescriptor
-}
+// Descriptor is an interface for retrieved catalog descriptors.
+type Descriptor = sqlbase.DescriptorInterface
 
 // VirtualSchemas is a collection of VirtualSchemas.
 type VirtualSchemas interface {
