@@ -72,10 +72,8 @@ func (b *CheckConstraintBuilder) MarkNameInUse(name string) {
 //   - It does not include subqueries.
 //   - It does not include aggregate, window, or set returning functions.
 //
-// Note that mutable functions are currently allowed, but using them can lead
-// to unexpected behavior.
-// TODO(mgartner): Add unit tests for Build. Some cases should test
-// MarkNameInUse, too.
+// Note that mutable functions are currently allowed, unlike in partial index
+// predicates, but using them can lead to unexpected behavior.
 func (b *CheckConstraintBuilder) Build(
 	c *tree.CheckConstraintTableDef,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
@@ -184,7 +182,6 @@ func (b *CheckConstraintBuilder) generateUniqueName(expr tree.Expr) (string, err
 //
 // Note that the generated name is not guaranteed to be unique among the other
 // constraints of the table.
-// TODO(mgartner): Add unit tests for DefaultName.
 func (b *CheckConstraintBuilder) DefaultName(expr tree.Expr) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
