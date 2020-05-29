@@ -126,7 +126,9 @@ ALTER TABLE data INJECT STATISTICS '[
 
 # Ensure lookup join performs properly on input that has more than 100 rows.
 query I
-SELECT count(*) FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
+SELECT count(*)
+FROM (SELECT * FROM data WHERE c = 1) AS l
+NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
 1000
 

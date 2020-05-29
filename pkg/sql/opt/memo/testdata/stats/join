@@ -1125,7 +1125,7 @@ CREATE TABLE table1 (
 ----
 
 # Regression test for #38091.
-norm
+norm disable=EliminateJoinUnderProjectLeft
 SELECT (
         SELECT 1
           FROM table1

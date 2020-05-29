@@ -2,6 +2,45 @@
 # project.opt contains normalization rules for the Project operator.
 # =============================================================================
 
+# EliminateJoinUnderProjectLeft replaces a join with its left input when:
+# 1. The project doesn't use columns from the join's right input.
+# 2. The join does not filter any left rows.
+# 3. The join does not duplicate any left rows.
+# 4. The join does not null-extend the left columns.
+#
+# Note: EliminateJoinUnderProjectLeft should stay above EliminateProject so that
+# it has a chance to fire before the Project can be removed.
+[EliminateJoinUnderProjectLeft, Normalize]
+(Project
+    $join:(InnerJoin | LeftJoin $left:* $right:*) &
+        (JoinDoesNotDuplicateLeftRows $join) &
+        (JoinPreservesLeftRows $join)
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            $rightCols:(OutputCols $right)
+        )
+    $passthrough:* & ^(ColsIntersect $passthrough $rightCols)
+)
+=>
+(Project $left $projections $passthrough)
+
+# EliminateJoinUnderProjectRight mirrors EliminateJoinUnderProjectLeft.
+[EliminateJoinUnderProjectRight, Normalize]
+(Project
+    $join:(InnerJoin $left:* $right:*) &
+        (JoinDoesNotDuplicateRightRows $join) &
+        (JoinPreservesRightRows $join)
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            $leftCols:(OutputCols $left)
+        )
+    $passthrough:* & ^(ColsIntersect $passthrough $leftCols)
+)
+=>
+(Project $right $projections $passthrough)
+
 # EliminateProject discards a Project operator which is not adding or removing
 # columns.
 [EliminateProject, Normalize]

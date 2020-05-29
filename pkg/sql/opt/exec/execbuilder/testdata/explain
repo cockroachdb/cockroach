@@ -952,6 +952,7 @@ inner-join (hash)
  ├── cost: 2219.95
  ├── fd: (4)-->(5), (1)==(4), (4)==(1)
  ├── prune: (2,5)
+ ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
  ├── scan tc
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
