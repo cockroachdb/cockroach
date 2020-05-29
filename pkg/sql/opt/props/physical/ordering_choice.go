@@ -480,7 +480,7 @@ func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 // ordering column array.
 func (oc *OrderingChoice) Copy() OrderingChoice {
 	var other OrderingChoice
-	other.Optional = oc.Optional
+	other.Optional = oc.Optional.Copy()
 	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
 	copy(other.Columns, oc.Columns)
 	return other
