@@ -338,6 +338,12 @@ func (c *CustomFuncs) eqConditionsToColMap(
 func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	left, right memo.RelExpr, filters memo.FiltersExpr,
 ) bool {
+	if filters.IsTrue() {
+		// Fast path: if this is a cross join, left rows are guaranteed to match if
+		// the right input is guaranteed to have at least one row.
+		return !right.Relational().Cardinality.CanBeZero()
+	}
+
 	unfilteredCols := c.deriveUnfilteredCols(right)
 	if unfilteredCols.Empty() {
 		// Condition #3: right input has no columns which contain values from
@@ -554,15 +560,12 @@ func (c *CustomFuncs) deriveUnfilteredCols(in memo.RelExpr) opt.ColSet {
 		right := t.Child(1).(memo.RelExpr)
 		on := *t.Child(2).(*memo.FiltersExpr)
 
-		// Cross join always preserves left/right rows.
-		isCrossJoin := on.IsTrue()
-
 		// Inner joins may preserve left/right rows, according to
 		// JoinFiltersMatchAllLeftRows conditions.
-		if isCrossJoin || c.JoinFiltersMatchAllLeftRows(left, right, on) {
+		if c.JoinFiltersMatchAllLeftRows(left, right, on) {
 			relational.Rule.UnfilteredCols.UnionWith(c.deriveUnfilteredCols(left))
 		}
-		if isCrossJoin || c.JoinFiltersMatchAllLeftRows(right, left, on) {
+		if c.JoinFiltersMatchAllLeftRows(right, left, on) {
 			relational.Rule.UnfilteredCols.UnionWith(c.deriveUnfilteredCols(right))
 		}
 	}
