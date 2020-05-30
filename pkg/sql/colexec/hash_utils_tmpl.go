@@ -24,7 +24,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,9 +37,6 @@ var _ = execgen.UNSAFEGET
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
-
-// Dummy import to pull in "typeconv" package.
-var _ = typeconv.DatumVecCanonicalTypeFamily
 
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily

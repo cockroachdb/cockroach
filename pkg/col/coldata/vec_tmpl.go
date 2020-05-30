@@ -22,10 +22,7 @@ package coldata
 import (
 	"fmt"
 
-	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -33,9 +30,6 @@ import (
 
 // _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
-
-// Dummy import to pull in "typeconv" package.
-var _ = typeconv.DatumVecCanonicalTypeFamily
 
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
