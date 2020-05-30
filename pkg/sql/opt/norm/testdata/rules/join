@@ -1509,9 +1509,280 @@ semi-join-apply
       └── k:3 = x:1 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
 
 # --------------------------------------------------
-# SimplifyLeftJoinWithoutFilters
+# SimplifyLeftJoin + SimplifyRightJoin
 # --------------------------------------------------
-norm expect=SimplifyLeftJoinWithoutFilters
+norm expect=SimplifyLeftJoin
+SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10
+ ├── key: (6)
+ ├── fd: (6)-->(7-10), (1)-->(2-5), (1)==(6), (6)==(1)
+ ├── scan a2
+ │    ├── columns: a2.k:6!null a2.i:7 a2.f:8!null a2.s:9 a2.j:10
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-10)
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a.k:1 = a2.k:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Right side has partial rows, so only right-join can be simplified.
+norm expect=SimplifyRightJoin
+SELECT * FROM a FULL JOIN (SELECT * FROM a WHERE k>0) AS a2 ON a.k=a2.k
+----
+left-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6 i:7 f:8 s:9 j:10
+ ├── key: (1)
+ ├── fd: (1)-->(2-10), (6)-->(7-10)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── select
+ │    ├── columns: k:6!null i:7 f:8!null s:9 j:10
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7-10)
+ │    ├── scan a
+ │    │    ├── columns: k:6!null i:7 f:8!null s:9 j:10
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7-10)
+ │    └── filters
+ │         └── k:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
+ └── filters
+      └── k:1 = k:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Multiple equality conditions, with duplicates and reversed columns.
+norm expect=SimplifyLeftJoin
+SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.k=a2.k AND a2.f=a.f
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10
+ ├── key: (6)
+ ├── fd: (6)-->(7-10), (1)-->(2-5), (3)==(8), (8)==(3), (1)==(6), (6)==(1)
+ ├── scan a2
+ │    ├── columns: a2.k:6!null a2.i:7 a2.f:8!null a2.s:9 a2.j:10
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-10)
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      ├── a2.f:8 = a.f:3 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      └── a2.k:6 = a.k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Input contains Project operator.
+norm expect=SimplifyLeftJoin
+SELECT * FROM (SELECT length(s), f FROM a) AS a FULL JOIN a AS a2 ON a.f=a2.f
+----
+inner-join (hash)
+ ├── columns: length:6 f:3!null k:7!null i:8 f:9!null s:10 j:11
+ ├── fd: (7)-->(8-11), (3)==(9), (9)==(3)
+ ├── scan a2
+ │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8-11)
+ ├── project
+ │    ├── columns: length:6 a.f:3!null
+ │    ├── scan a
+ │    │    └── columns: a.f:3!null a.s:4
+ │    └── projections
+ │         └── length(a.s:4) [as=length:6, outer=(4)]
+ └── filters
+      └── a.f:3 = a2.f:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+
+# Multiple join levels.
+norm expect=SimplifyLeftJoin
+SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2 ON a.f=a2.f
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10 k:11!null i:12 f:13!null s:14 j:15
+ ├── key: (1,11)
+ ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6), (1)-->(2-5), (3)==(8), (8)==(3)
+ ├── inner-join (hash)
+ │    ├── columns: a.k:6!null a.i:7 a.f:8!null a.s:9 a.j:10 a2.k:11!null a2.i:12 a2.f:13!null a2.s:14 a2.j:15
+ │    ├── key: (11)
+ │    ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6)
+ │    ├── scan a
+ │    │    ├── columns: a.k:6!null a.i:7 a.f:8!null a.s:9 a.j:10
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7-10)
+ │    ├── scan a2
+ │    │    ├── columns: a2.k:11!null a2.i:12 a2.f:13!null a2.s:14 a2.j:15
+ │    │    ├── key: (11)
+ │    │    └── fd: (11)-->(12-15)
+ │    └── filters
+ │         └── a.k:6 = a2.k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a.f:3 = a.f:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+
+# Left joins on a foreign key turn into inner joins.
+norm expect=SimplifyLeftJoin
+SELECT *
+FROM c
+LEFT OUTER JOIN a
+ON c.y = a.k
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2!null z:3!null k:4!null i:5 f:6!null s:7 j:8
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (4)-->(5-8), (2)==(4), (4)==(2)
+ ├── scan c
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan a
+ │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5-8)
+ └── filters
+      └── y:2 = k:4 [outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+
+# Left joins on a multiple-column foreign key turn into inner joins.
+norm expect=SimplifyLeftJoin
+SELECT *
+FROM d
+LEFT OUTER JOIN c
+ON d.z = c.z
+AND d.y = c.x
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3), (2)==(4), (4)==(2)
+ ├── scan d
+ │    ├── columns: d.x:1!null d.y:2!null d.z:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: c.x:4!null c.y:5!null c.z:6!null
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5,6)
+ └── filters
+      ├── d.z:3 = c.z:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+      └── d.y:2 = c.x:4 [outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+
+# Left join on a part of a foreign key turns into an inner join.
+norm expect=SimplifyLeftJoin
+SELECT *
+FROM d
+LEFT OUTER JOIN c
+ON d.z = c.z
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── key: (1,4)
+ ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3)
+ ├── scan d
+ │    ├── columns: d.x:1!null d.y:2!null d.z:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: c.x:4!null c.y:5!null c.z:6!null
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5,6)
+ └── filters
+      └── d.z:3 = c.z:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+
+# Cross join case. The presence of a not-null foreign key implies that there
+# will be at least one right row when there is at least one left row, so left
+# rows will always be matched at least once.
+norm expect=SimplifyLeftJoin
+SELECT *
+FROM d
+LEFT OUTER JOIN c
+ON True
+----
+inner-join (cross)
+ ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── key: (1,4)
+ ├── fd: (1)-->(2,3), (4)-->(5,6)
+ ├── scan d
+ │    ├── columns: d.x:1!null d.y:2!null d.z:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: c.x:4!null c.y:5!null c.z:6!null
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5,6)
+ └── filters (true)
+
+norm expect=SimplifyRightJoin
+SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
+----
+left-join (cross)
+ ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
+ ├── cardinality: [1 - ]
+ ├── key: (4)
+ ├── fd: ()-->(3), (4)-->(5-8)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:3!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(3)
+ │    ├── scan b
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:3]
+ ├── scan a
+ │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5-8)
+ └── filters (true)
+
+# Full-join.
+norm expect=SimplifyRightJoin
+SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
+----
+left-join (cross)
+ ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
+ ├── cardinality: [1 - ]
+ ├── key: (4)
+ ├── fd: ()-->(3), (4)-->(5-8)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:3!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(3)
+ │    ├── scan b
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:3]
+ ├── scan a
+ │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5-8)
+ └── filters (true)
+
+# Full-join.
+norm expect=SimplifyRightJoin
+SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
+----
+left-join (cross)
+ ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
+ ├── cardinality: [1 - ]
+ ├── key: (4)
+ ├── fd: ()-->(3), (4)-->(5-8)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:3!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(3)
+ │    ├── scan b
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:3]
+ ├── scan a
+ │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5-8)
+ └── filters (true)
+
+norm expect=SimplifyLeftJoin
 SELECT * FROM a LEFT JOIN (SELECT count(*) FROM b) ON True
 ----
 inner-join (cross)
@@ -1533,7 +1804,7 @@ inner-join (cross)
  └── filters (true)
 
 # Full-join.
-norm expect=SimplifyLeftJoinWithoutFilters
+norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN (SELECT count(*) FROM b) ON True
 ----
 left-join (cross)
@@ -1556,7 +1827,7 @@ left-join (cross)
  └── filters (true)
 
 # Left-join-apply.
-norm expect=SimplifyLeftJoinWithoutFilters
+norm expect=SimplifyLeftJoin
 SELECT * FROM a WHERE (SELECT sum(column1) FROM (VALUES (k), (1))) = 1
 ----
 project
@@ -1600,102 +1871,8 @@ project
       └── filters
            └── sum:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
-# Don't simplify right join
-norm expect-not=SimplifyLeftJoinWithoutFilters
-SELECT * FROM a RIGHT JOIN (SELECT count(*) FROM b) ON True
-----
-left-join (cross)
- ├── columns: k:1 i:2 f:3 s:4 j:5 count:8!null
- ├── cardinality: [1 - ]
- ├── key: (1)
- ├── fd: ()-->(8), (1)-->(2-5)
- ├── scalar-group-by
- │    ├── columns: count_rows:8!null
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(8)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [as=count_rows:8]
- ├── scan a
- │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters (true)
-
-# --------------------------------------------------
-# SimplifyRightJoinWithoutFilters
-# --------------------------------------------------
-norm expect=SimplifyRightJoinWithoutFilters
-SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
-----
-left-join (cross)
- ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
- ├── cardinality: [1 - ]
- ├── key: (4)
- ├── fd: ()-->(3), (4)-->(5-8)
- ├── scalar-group-by
- │    ├── columns: count_rows:3!null
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [as=count_rows:3]
- ├── scan a
- │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
- │    ├── key: (4)
- │    └── fd: (4)-->(5-8)
- └── filters (true)
-
-# Full-join.
-norm expect=SimplifyRightJoinWithoutFilters
-SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
-----
-left-join (cross)
- ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
- ├── cardinality: [1 - ]
- ├── key: (4)
- ├── fd: ()-->(3), (4)-->(5-8)
- ├── scalar-group-by
- │    ├── columns: count_rows:3!null
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [as=count_rows:3]
- ├── scan a
- │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
- │    ├── key: (4)
- │    └── fd: (4)-->(5-8)
- └── filters (true)
-
-# Full-join.
-norm expect=SimplifyRightJoinWithoutFilters
-SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
-----
-left-join (cross)
- ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
- ├── cardinality: [1 - ]
- ├── key: (4)
- ├── fd: ()-->(3), (4)-->(5-8)
- ├── scalar-group-by
- │    ├── columns: count_rows:3!null
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [as=count_rows:3]
- ├── scan a
- │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
- │    ├── key: (4)
- │    └── fd: (4)-->(5-8)
- └── filters (true)
-
 # Don't simplify left join
-norm expect-not=SimplifyRightJoinWithoutFilters
+norm expect-not=SimplifyRightJoin
 SELECT * FROM (SELECT count(*) FROM b) LEFT JOIN a ON True
 ----
 left-join (cross)
@@ -1717,214 +1894,31 @@ left-join (cross)
  │    └── fd: (4)-->(5-8)
  └── filters (true)
 
-# --------------------------------------------------
-# SimplifyLeftJoinWithFilters + SimplifyRightJoinWithFilters
-# --------------------------------------------------
-norm expect=SimplifyLeftJoinWithFilters
-SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k
+# Don't simplify right join
+norm expect-not=SimplifyLeftJoin
+SELECT * FROM a RIGHT JOIN (SELECT count(*) FROM b) ON True
 ----
-inner-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10
- ├── key: (6)
- ├── fd: (6)-->(7-10), (1)-->(2-5), (1)==(6), (6)==(1)
- ├── scan a2
- │    ├── columns: a2.k:6!null a2.i:7 a2.f:8!null a2.s:9 a2.j:10
- │    ├── key: (6)
- │    └── fd: (6)-->(7-10)
- ├── scan a
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      └── a.k:1 = a2.k:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-
-# Right side has partial rows, so only right-join can be simplified.
-norm expect=SimplifyRightJoinWithFilters
-SELECT * FROM a FULL JOIN (SELECT * FROM a WHERE k>0) AS a2 ON a.k=a2.k
-----
-left-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6 i:7 f:8 s:9 j:10
+left-join (cross)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 count:8!null
+ ├── cardinality: [1 - ]
  ├── key: (1)
- ├── fd: (1)-->(2-10), (6)-->(7-10)
+ ├── fd: ()-->(8), (1)-->(2-5)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:8!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(8)
+ │    ├── scan b
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:8]
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── select
- │    ├── columns: k:6!null i:7 f:8!null s:9 j:10
- │    ├── key: (6)
- │    ├── fd: (6)-->(7-10)
- │    ├── scan a
- │    │    ├── columns: k:6!null i:7 f:8!null s:9 j:10
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7-10)
- │    └── filters
- │         └── k:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
- └── filters
-      └── k:1 = k:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-
-# Multiple equality conditions, with duplicates and reversed columns.
-norm expect=SimplifyLeftJoinWithFilters
-SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.k=a2.k AND a2.f=a.f
-----
-inner-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10
- ├── key: (6)
- ├── fd: (6)-->(7-10), (1)-->(2-5), (3)==(8), (8)==(3), (1)==(6), (6)==(1)
- ├── scan a2
- │    ├── columns: a2.k:6!null a2.i:7 a2.f:8!null a2.s:9 a2.j:10
- │    ├── key: (6)
- │    └── fd: (6)-->(7-10)
- ├── scan a
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      ├── a2.f:8 = a.f:3 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
-      └── a2.k:6 = a.k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-
-# Input contains Project operator.
-norm expect=SimplifyLeftJoinWithFilters
-SELECT * FROM (SELECT length(s), f FROM a) AS a FULL JOIN a AS a2 ON a.f=a2.f
-----
-inner-join (hash)
- ├── columns: length:6 f:3!null k:7!null i:8 f:9!null s:10 j:11
- ├── fd: (7)-->(8-11), (3)==(9), (9)==(3)
- ├── scan a2
- │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
- │    ├── key: (7)
- │    └── fd: (7)-->(8-11)
- ├── project
- │    ├── columns: length:6 a.f:3!null
- │    ├── scan a
- │    │    └── columns: a.f:3!null a.s:4
- │    └── projections
- │         └── length(a.s:4) [as=length:6, outer=(4)]
- └── filters
-      └── a.f:3 = a2.f:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
-
-# Multiple join levels.
-norm expect=SimplifyLeftJoinWithFilters
-SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2 ON a.f=a2.f
-----
-inner-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10 k:11!null i:12 f:13!null s:14 j:15
- ├── key: (1,11)
- ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6), (1)-->(2-5), (3)==(8), (8)==(3)
- ├── inner-join (hash)
- │    ├── columns: a.k:6!null a.i:7 a.f:8!null a.s:9 a.j:10 a2.k:11!null a2.i:12 a2.f:13!null a2.s:14 a2.j:15
- │    ├── key: (11)
- │    ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6)
- │    ├── scan a
- │    │    ├── columns: a.k:6!null a.i:7 a.f:8!null a.s:9 a.j:10
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7-10)
- │    ├── scan a2
- │    │    ├── columns: a2.k:11!null a2.i:12 a2.f:13!null a2.s:14 a2.j:15
- │    │    ├── key: (11)
- │    │    └── fd: (11)-->(12-15)
- │    └── filters
- │         └── a.k:6 = a2.k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
- ├── scan a
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      └── a.f:3 = a.f:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
-
-# Left joins on a foreign key turn into inner joins.
-norm expect=SimplifyLeftJoinWithFilters
-SELECT *
-FROM c
-LEFT OUTER JOIN a
-ON c.y = a.k
-----
-inner-join (hash)
- ├── columns: x:1!null y:2!null z:3!null k:4!null i:5 f:6!null s:7 j:8
- ├── key: (1)
- ├── fd: (1)-->(2,3), (4)-->(5-8), (2)==(4), (4)==(2)
- ├── scan c
- │    ├── columns: x:1!null y:2!null z:3!null
- │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- ├── scan a
- │    ├── columns: k:4!null i:5 f:6!null s:7 j:8
- │    ├── key: (4)
- │    └── fd: (4)-->(5-8)
- └── filters
-      └── y:2 = k:4 [outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
-
-# Left joins on a multiple-column foreign key turn into inner joins.
-norm expect=SimplifyLeftJoinWithFilters
-SELECT *
-FROM d
-LEFT OUTER JOIN c
-ON d.z = c.z
-AND d.y = c.x
-----
-inner-join (hash)
- ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
- ├── key: (1)
- ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3), (2)==(4), (4)==(2)
- ├── scan d
- │    ├── columns: d.x:1!null d.y:2!null d.z:3!null
- │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- ├── scan c
- │    ├── columns: c.x:4!null c.y:5!null c.z:6!null
- │    ├── key: (4)
- │    └── fd: (4)-->(5,6)
- └── filters
-      ├── d.z:3 = c.z:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
-      └── d.y:2 = c.x:4 [outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
-
-# Left join on a part of a foreign key turns into an inner join.
-norm expect=SimplifyLeftJoinWithFilters
-SELECT *
-FROM d
-LEFT OUTER JOIN c
-ON d.z = c.z
-----
-inner-join (hash)
- ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
- ├── key: (1,4)
- ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3)
- ├── scan d
- │    ├── columns: d.x:1!null d.y:2!null d.z:3!null
- │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- ├── scan c
- │    ├── columns: c.x:4!null c.y:5!null c.z:6!null
- │    ├── key: (4)
- │    └── fd: (4)-->(5,6)
- └── filters
-      └── d.z:3 = c.z:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
-
-# Cross join case. The presence of a not-null foreign key implies that there
-# will be at least one right row when there is at least one left row, so left
-# rows will always be matched at least once.
-norm expect=SimplifyLeftJoinWithFilters
-SELECT *
-FROM d
-LEFT OUTER JOIN c
-ON True
-----
-inner-join (cross)
- ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
- ├── key: (1,4)
- ├── fd: (1)-->(2,3), (4)-->(5,6)
- ├── scan d
- │    ├── columns: d.x:1!null d.y:2!null d.z:3!null
- │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- ├── scan c
- │    ├── columns: c.x:4!null c.y:5!null c.z:6!null
- │    ├── key: (4)
- │    └── fd: (4)-->(5,6)
  └── filters (true)
 
 # Can't simplify: joins on non-foreign keys.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT *
 FROM c
 LEFT OUTER JOIN a
@@ -1946,7 +1940,7 @@ left-join (hash)
       └── z:3 = k:4 [outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
 
 # Can't simplify: joins on non-foreign keys still in foreign key index.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT *
 FROM c
 LEFT OUTER JOIN a
@@ -1968,7 +1962,7 @@ left-join (hash)
       └── x:1 = k:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 # Can't simplify: non-equality condition.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k<a2.k
 ----
 full-join (cross)
@@ -1987,7 +1981,7 @@ full-join (cross)
       └── a.k:1 < a2.k:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Can't simplify: non-join equality condition.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM a FULL JOIN a AS a2 ON a.f=1 AND a.f=a2.f
 ----
 full-join (hash)
@@ -2007,7 +2001,7 @@ full-join (hash)
       └── a.f:3 = a2.f:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Can't simplify: non-null column.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM a FULL JOIN a AS a2 ON a.s=a2.s
 ----
 full-join (hash)
@@ -2026,7 +2020,7 @@ full-join (hash)
       └── a.s:4 = a2.s:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
 
 # Can't simplify: equality column that is synthesized.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM a FULL JOIN (SELECT k+1 AS k FROM a) AS a2 ON a.k=a2.k
 ----
 full-join (hash)
@@ -2047,7 +2041,7 @@ full-join (hash)
       └── a.k:1 = k:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # Can't simplify: equality condition with different column ordinals.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.f
 ----
 full-join (cross)
@@ -2066,7 +2060,7 @@ full-join (cross)
       └── a.k:1 = a2.f:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Can't simplify: one equality condition has columns from same side of join.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
 full-join (hash)
@@ -2087,7 +2081,7 @@ full-join (hash)
       └── a2.f:8 IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(8), constraints=(/8: (/NULL - ]; tight)]
 
 # Can't simplify: equality conditions have columns from different tables.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM (SELECT * FROM a, b) AS a FULL JOIN a AS a2 ON a.k=a2.k AND a.x=a2.k
 ----
 full-join (hash)
@@ -2116,7 +2110,7 @@ full-join (hash)
       └── x:6 = a2.k:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
 
 # Can't simplify: The a2.x column is not part of unfilteredCols.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT * FROM a LEFT JOIN (SELECT * FROM a, b) AS a2 ON a.k=a2.x
 ----
 left-join (hash)
@@ -2144,7 +2138,7 @@ left-join (hash)
       └── k:1 = x:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # Can't simplify if IGNORE_FOREIGN_KEYS hint is passed.
-norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
 SELECT *
 FROM c@{IGNORE_FOREIGN_KEYS}
 LEFT OUTER JOIN a
