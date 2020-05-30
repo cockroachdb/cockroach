@@ -62,6 +62,8 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 20.1.
 	"schemachanger.lease.duration":       {},
 	"schemachanger.lease.renew_fraction": {},
+	"sql.distsql.temp_storage.joins":     {},
+	"sql.distsql.temp_storage.sorts":     {},
 	// removes as of 20.2.
 	"rocksdb.ingest_backpressure.pending_compaction_threshold": {},
 }
