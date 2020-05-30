@@ -74,6 +74,7 @@ type UnaryOp struct {
 	Typ        *types.T
 	ReturnType *types.T
 	Fn         func(*EvalContext, Datum) (Datum, error)
+	Volatility Volatility
 
 	types   TypeList
 	retType ReturnTyper
@@ -123,6 +124,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				}
 				return NewDInt(-i), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&UnaryOp{
 			Typ:        types.Float,
@@ -130,6 +132,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDFloat(-*d.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&UnaryOp{
 			Typ:        types.Decimal,
@@ -140,6 +143,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				dd.Decimal.Neg(dec)
 				return dd, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&UnaryOp{
 			Typ:        types.Interval,
@@ -151,6 +155,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				i.Months = -i.Months
 				return &DInterval{Duration: i}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -161,6 +166,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDInt(^MustBeDInt(d)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&UnaryOp{
 			Typ:        types.VarBit,
@@ -169,6 +175,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				p := MustBeDBitArray(d)
 				return &DBitArray{BitArray: bitarray.Not(p.BitArray)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&UnaryOp{
 			Typ:        types.INet,
@@ -177,6 +184,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				ipAddr := MustBeDIPAddr(d).IPAddr
 				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -187,6 +195,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return Sqrt(float64(*d.(*DFloat)))
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&UnaryOp{
 			Typ:        types.Decimal,
@@ -195,6 +204,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				dec := &d.(*DDecimal).Decimal
 				return DecimalSqrt(dec)
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -205,6 +215,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return Cbrt(float64(*d.(*DFloat)))
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&UnaryOp{
 			Typ:        types.Decimal,
@@ -213,6 +224,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				dec := &d.(*DDecimal).Decimal
 				return DecimalCbrt(dec)
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 })
@@ -224,6 +236,7 @@ type BinOp struct {
 	ReturnType   *types.T
 	NullableArgs bool
 	Fn           func(*EvalContext, Datum, Datum) (Datum, error)
+	Volatility   Volatility
 
 	types   TypeList
 	retType ReturnTyper
@@ -434,6 +447,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) & MustBeDInt(right)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.VarBit,
@@ -449,6 +463,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					BitArray: bitarray.And(lhs.BitArray, rhs.BitArray),
 				}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.INet,
@@ -460,6 +475,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				newIPAddr, err := ipAddr.And(&other)
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -471,6 +487,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) | MustBeDInt(right)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.VarBit,
@@ -486,6 +503,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					BitArray: bitarray.Or(lhs.BitArray, rhs.BitArray),
 				}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.INet,
@@ -497,6 +515,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				newIPAddr, err := ipAddr.Or(&other)
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -508,6 +527,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) ^ MustBeDInt(right)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.VarBit,
@@ -523,6 +543,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					BitArray: bitarray.Xor(lhs.BitArray, rhs.BitArray),
 				}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -539,6 +560,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDInt(DInt(r)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -547,6 +569,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) + *right.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -559,6 +582,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Add(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -572,6 +596,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Add(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -585,6 +610,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Add(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -597,6 +623,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDDate(d), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -610,6 +637,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDDate(d), nil
 
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -623,6 +651,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
 				return MakeDTimestamp(leftTime.Add(t), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Time,
@@ -636,6 +665,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := time.Duration(*left.(*DTime)) * time.Microsecond
 				return MakeDTimestamp(rightTime.Add(t), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -649,6 +679,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := leftTime.Add(right.(*DTimeTZ).ToDuration())
 				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.TimeTZ,
@@ -662,6 +693,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := rightTime.Add(left.(*DTimeTZ).ToDuration())
 				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Time,
@@ -671,6 +703,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := timeofday.TimeOfDay(*left.(*DTime))
 				return MakeDTime(t.Add(right.(*DInterval).Duration)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -680,6 +713,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := timeofday.TimeOfDay(*right.(*DTime))
 				return MakeDTime(t.Add(left.(*DInterval).Duration)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.TimeTZ,
@@ -690,6 +724,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				duration := right.(*DInterval).Duration
 				return NewDTimeTZFromOffset(t.Add(duration), t.OffsetSecs), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -700,6 +735,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				duration := left.(*DInterval).Duration
 				return NewDTimeTZFromOffset(t.Add(duration), t.OffsetSecs), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Timestamp,
@@ -709,6 +745,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return MakeDTimestamp(duration.Add(
 					left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -718,6 +755,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return MakeDTimestamp(duration.Add(
 					right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.TimestampTZ,
@@ -728,6 +766,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := duration.Add(left.(*DTimestampTZ).Time.In(ctx.GetLocation()), right.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityStable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -738,6 +777,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := duration.Add(right.(*DTimestampTZ).Time.In(ctx.GetLocation()), left.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityStable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -746,6 +786,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Add(right.(*DInterval).Duration)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -759,6 +800,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := duration.Add(leftTime, right.(*DInterval).Duration)
 				return MakeDTimestamp(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -772,6 +814,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := duration.Add(rightTime, left.(*DInterval).Duration)
 				return MakeDTimestamp(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.INet,
@@ -783,6 +826,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				newIPAddr, err := ipAddr.Add(int64(i))
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -794,6 +838,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				newIPAddr, err := ipAddr.Add(int64(i))
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -810,6 +855,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDInt(DInt(r)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -818,6 +864,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) - *right.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -830,6 +877,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Sub(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -843,6 +891,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Sub(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -856,6 +905,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Sub(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -868,6 +918,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDDate(d), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -883,6 +934,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				// This can't overflow because they are upconverted from int32 to int64.
 				return NewDInt(DInt(int64(a) - int64(b))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -896,6 +948,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
 				return MakeDTimestamp(leftTime.Add(-1*t), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Time,
@@ -907,6 +960,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				diff := timeofday.Difference(t1, t2)
 				return &DInterval{Duration: diff}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Timestamp,
@@ -916,6 +970,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.TimestampTZ,
@@ -925,6 +980,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Timestamp,
@@ -940,6 +996,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				nanos := left.(*DTimestamp).Sub(stripped.Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityStable,
 		},
 		&BinOp{
 			LeftType:   types.TimestampTZ,
@@ -955,6 +1012,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				nanos := stripped.Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityStable,
 		},
 		&BinOp{
 			LeftType:   types.Time,
@@ -964,6 +1022,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := timeofday.TimeOfDay(*left.(*DTime))
 				return MakeDTime(t.Add(right.(*DInterval).Duration.Mul(-1))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.TimeTZ,
@@ -974,6 +1033,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				duration := right.(*DInterval).Duration
 				return NewDTimeTZFromOffset(t.Add(duration.Mul(-1)), t.OffsetSecs), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Timestamp,
@@ -983,6 +1043,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return MakeDTimestamp(duration.Add(
 					left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.TimestampTZ,
@@ -995,6 +1056,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				)
 				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityStable,
 		},
 		&BinOp{
 			LeftType:   types.Date,
@@ -1008,6 +1070,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t := duration.Add(leftTime, right.(*DInterval).Duration.Mul(-1))
 				return MakeDTimestamp(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -1016,6 +1079,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Sub(right.(*DInterval).Duration)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1028,6 +1092,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1040,6 +1105,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1061,6 +1127,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.INet,
@@ -1072,6 +1139,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				diff, err := ipAddr.SubIPAddr(&other)
 				return NewDInt(DInt(diff)), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			// Note: postgres ver 10 does NOT have Int - INet. Throws ERROR: 42883.
@@ -1084,6 +1152,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				newIPAddr, err := ipAddr.Sub(int64(i))
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1108,6 +1177,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDInt(c), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -1116,6 +1186,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1128,6 +1199,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Mul(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		// The following two overloads are needed because DInt/DInt = DDecimal. Due
 		// to this operation, normalization may sometimes create a DInt * DDecimal
@@ -1144,6 +1216,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Mul(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -1157,6 +1230,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := ExactCtx.Mul(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -1165,6 +1239,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: right.(*DInterval).Duration.Mul(int64(MustBeDInt(left)))}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -1173,6 +1248,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Mul(int64(MustBeDInt(right)))}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -1182,6 +1258,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				r := float64(*right.(*DFloat))
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(r)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -1191,6 +1268,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := float64(*left.(*DFloat))
 				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(l)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1204,6 +1282,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(t)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -1217,6 +1296,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(t)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1236,6 +1316,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -1248,6 +1329,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDFloat(*left.(*DFloat) / r), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1263,6 +1345,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1279,6 +1362,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -1295,6 +1379,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -1307,6 +1392,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.Div(int64(rInt))}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Interval,
@@ -1319,6 +1405,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.DivFloat(r)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1334,6 +1421,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDInt(MustBeDInt(left) / rInt), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -1344,6 +1432,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				r := float64(*right.(*DFloat))
 				return NewDFloat(DFloat(math.Trunc(l / r))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1356,6 +1445,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1372,6 +1462,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -1388,6 +1479,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1403,6 +1495,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDInt(MustBeDInt(left) % r), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -1411,6 +1504,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(DFloat(math.Mod(float64(*left.(*DFloat)), float64(*right.(*DFloat))))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1423,6 +1517,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1436,6 +1531,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -1449,6 +1545,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1460,6 +1557,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDString(string(MustBeDString(left) + MustBeDString(right))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Bytes,
@@ -1468,6 +1566,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.VarBit,
@@ -1480,6 +1579,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					BitArray: bitarray.Concat(lhs.BitArray, rhs.BitArray),
 				}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1492,6 +1592,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1509,6 +1610,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDInt(MustBeDInt(left) << uint(rval)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.VarBit,
@@ -1521,6 +1623,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					BitArray: lhs.BitArray.LeftShiftAny(int64(rhs)),
 				}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.INet,
@@ -1531,6 +1634,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.ContainedBy(&other))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1547,6 +1651,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDInt(MustBeDInt(left) >> uint(rval)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.VarBit,
@@ -1559,6 +1664,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					BitArray: lhs.BitArray.LeftShiftAny(-int64(rhs)),
 				}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.INet,
@@ -1569,6 +1675,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.Contains(&other))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1580,6 +1687,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return IntPow(MustBeDInt(left), MustBeDInt(right))
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Float,
@@ -1589,6 +1697,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				f := math.Pow(float64(*left.(*DFloat)), float64(*right.(*DFloat)))
 				return NewDFloat(DFloat(f)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1601,6 +1710,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := DecimalCtx.Pow(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Decimal,
@@ -1614,6 +1724,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := DecimalCtx.Pow(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Int,
@@ -1627,6 +1738,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				_, err := DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1645,6 +1757,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1660,6 +1773,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1671,6 +1785,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1696,6 +1811,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1718,6 +1834,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -1743,6 +1860,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 }
@@ -1774,6 +1892,8 @@ type CmpOp struct {
 	// Datum return type is a union between *DBool and dNull.
 	Fn func(*EvalContext, Datum, Datum) (Datum, error)
 
+	Volatility Volatility
+
 	types       TypeList
 	isPreferred bool
 
@@ -1801,22 +1921,35 @@ func (op *CmpOp) preferred() bool {
 }
 
 func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOperator]cmpOpOverload {
+	findVolatility := func(op ComparisonOperator, t *types.T) Volatility {
+		for _, impl := range cmpOps[EQ] {
+			o := impl.(*CmpOp)
+			if o.LeftType.Equivalent(t) && o.RightType.Equivalent(t) {
+				return o.Volatility
+			}
+		}
+		panic(errors.AssertionFailedf("could not find cmp op %s(%s,%s)", op, t, t))
+	}
+
 	// Array equality comparisons.
 	for _, t := range types.Scalar {
 		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
-			LeftType:  types.MakeArray(t),
-			RightType: types.MakeArray(t),
-			Fn:        cmpOpScalarEQFn,
+			LeftType:   types.MakeArray(t),
+			RightType:  types.MakeArray(t),
+			Fn:         cmpOpScalarEQFn,
+			Volatility: findVolatility(EQ, t),
 		})
 		cmpOps[LE] = append(cmpOps[LE], &CmpOp{
-			LeftType:  types.MakeArray(t),
-			RightType: types.MakeArray(t),
-			Fn:        cmpOpScalarLEFn,
+			LeftType:   types.MakeArray(t),
+			RightType:  types.MakeArray(t),
+			Fn:         cmpOpScalarLEFn,
+			Volatility: findVolatility(LE, t),
 		})
 		cmpOps[LT] = append(cmpOps[LT], &CmpOp{
-			LeftType:  types.MakeArray(t),
-			RightType: types.MakeArray(t),
-			Fn:        cmpOpScalarLTFn,
+			LeftType:   types.MakeArray(t),
+			RightType:  types.MakeArray(t),
+			Fn:         cmpOpScalarLTFn,
+			Volatility: findVolatility(LT, t),
 		})
 
 		cmpOps[IsNotDistinctFrom] = append(cmpOps[IsNotDistinctFrom], &CmpOp{
@@ -1824,6 +1957,7 @@ func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOper
 			RightType:    types.MakeArray(t),
 			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
+			Volatility:   findVolatility(IsNotDistinctFrom, t),
 		})
 	}
 
@@ -1852,70 +1986,74 @@ func (o cmpOpOverload) LookupImpl(left, right *types.T) (*CmpOp, bool) {
 }
 
 func makeCmpOpOverload(
-	fn func(ctx *EvalContext, left, right Datum) (Datum, error), a, b *types.T, nullableArgs bool,
+	fn func(ctx *EvalContext, left, right Datum) (Datum, error),
+	a, b *types.T,
+	nullableArgs bool,
+	v Volatility,
 ) *CmpOp {
 	return &CmpOp{
 		LeftType:     a,
 		RightType:    b,
 		Fn:           fn,
 		NullableArgs: nullableArgs,
+		Volatility:   v,
 	}
 }
 
-func makeEqFn(a, b *types.T) *CmpOp {
-	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* NullableArgs */)
+func makeEqFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* NullableArgs */, v)
 }
-func makeLtFn(a, b *types.T) *CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* NullableArgs */)
+func makeLtFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* NullableArgs */, v)
 }
-func makeLeFn(a, b *types.T) *CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* NullableArgs */)
+func makeLeFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* NullableArgs */, v)
 }
-func makeIsFn(a, b *types.T) *CmpOp {
-	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */)
+func makeIsFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */, v)
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	EQ: {
 		// Single-type comparisons.
-		makeEqFn(types.AnyEnum, types.AnyEnum),
-		makeEqFn(types.Bool, types.Bool),
-		makeEqFn(types.Bytes, types.Bytes),
-		makeEqFn(types.Date, types.Date),
-		makeEqFn(types.Decimal, types.Decimal),
-		makeEqFn(types.AnyCollatedString, types.AnyCollatedString),
-		makeEqFn(types.Float, types.Float),
-		makeEqFn(types.Geography, types.Geography),
-		makeEqFn(types.Geometry, types.Geometry),
-		makeEqFn(types.INet, types.INet),
-		makeEqFn(types.Int, types.Int),
-		makeEqFn(types.Interval, types.Interval),
-		makeEqFn(types.Jsonb, types.Jsonb),
-		makeEqFn(types.Oid, types.Oid),
-		makeEqFn(types.String, types.String),
-		makeEqFn(types.Time, types.Time),
-		makeEqFn(types.TimeTZ, types.TimeTZ),
-		makeEqFn(types.Timestamp, types.Timestamp),
-		makeEqFn(types.TimestampTZ, types.TimestampTZ),
-		makeEqFn(types.Uuid, types.Uuid),
-		makeEqFn(types.VarBit, types.VarBit),
+		makeEqFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeEqFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeEqFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeEqFn(types.Date, types.Date, VolatilityLeakProof),
+		makeEqFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		makeEqFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		makeEqFn(types.Float, types.Float, VolatilityLeakProof),
+		makeEqFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeEqFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeEqFn(types.INet, types.INet, VolatilityLeakProof),
+		makeEqFn(types.Int, types.Int, VolatilityLeakProof),
+		makeEqFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeEqFn(types.Jsonb, types.Jsonb, VolatilityImmutable),
+		makeEqFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeEqFn(types.String, types.String, VolatilityLeakProof),
+		makeEqFn(types.Time, types.Time, VolatilityLeakProof),
+		makeEqFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeEqFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeEqFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeEqFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeEqFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeEqFn(types.Date, types.Timestamp),
-		makeEqFn(types.Date, types.TimestampTZ),
-		makeEqFn(types.Decimal, types.Float),
-		makeEqFn(types.Decimal, types.Int),
-		makeEqFn(types.Float, types.Decimal),
-		makeEqFn(types.Float, types.Int),
-		makeEqFn(types.Int, types.Decimal),
-		makeEqFn(types.Int, types.Float),
-		makeEqFn(types.Timestamp, types.Date),
-		makeEqFn(types.Timestamp, types.TimestampTZ),
-		makeEqFn(types.TimestampTZ, types.Date),
-		makeEqFn(types.TimestampTZ, types.Timestamp),
-		makeEqFn(types.Time, types.TimeTZ),
-		makeEqFn(types.TimeTZ, types.Time),
+		makeEqFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeEqFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeEqFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeEqFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeEqFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeEqFn(types.Float, types.Int, VolatilityLeakProof),
+		makeEqFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeEqFn(types.Int, types.Float, VolatilityLeakProof),
+		makeEqFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeEqFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeEqFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeEqFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeEqFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeEqFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
 		&CmpOp{
@@ -1924,47 +2062,48 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	LT: {
 		// Single-type comparisons.
-		makeLtFn(types.AnyEnum, types.AnyEnum),
-		makeLtFn(types.Bool, types.Bool),
-		makeLtFn(types.Bytes, types.Bytes),
-		makeLtFn(types.Date, types.Date),
-		makeLtFn(types.Decimal, types.Decimal),
-		makeLtFn(types.AnyCollatedString, types.AnyCollatedString),
-		makeLtFn(types.Float, types.Float),
-		makeLtFn(types.Geography, types.Geography),
-		makeLtFn(types.Geometry, types.Geometry),
-		makeLtFn(types.INet, types.INet),
-		makeLtFn(types.Int, types.Int),
-		makeLtFn(types.Interval, types.Interval),
-		makeLtFn(types.Oid, types.Oid),
-		makeLtFn(types.String, types.String),
-		makeLtFn(types.Time, types.Time),
-		makeLtFn(types.TimeTZ, types.TimeTZ),
-		makeLtFn(types.Timestamp, types.Timestamp),
-		makeLtFn(types.TimestampTZ, types.TimestampTZ),
-		makeLtFn(types.Uuid, types.Uuid),
-		makeLtFn(types.VarBit, types.VarBit),
+		makeLtFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeLtFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeLtFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeLtFn(types.Date, types.Date, VolatilityLeakProof),
+		makeLtFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		makeLtFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		makeLtFn(types.Float, types.Float, VolatilityLeakProof),
+		makeLtFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeLtFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeLtFn(types.INet, types.INet, VolatilityLeakProof),
+		makeLtFn(types.Int, types.Int, VolatilityLeakProof),
+		makeLtFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeLtFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeLtFn(types.String, types.String, VolatilityLeakProof),
+		makeLtFn(types.Time, types.Time, VolatilityLeakProof),
+		makeLtFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeLtFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeLtFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeLtFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeLtFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeLtFn(types.Date, types.Timestamp),
-		makeLtFn(types.Date, types.TimestampTZ),
-		makeLtFn(types.Decimal, types.Float),
-		makeLtFn(types.Decimal, types.Int),
-		makeLtFn(types.Float, types.Decimal),
-		makeLtFn(types.Float, types.Int),
-		makeLtFn(types.Int, types.Decimal),
-		makeLtFn(types.Int, types.Float),
-		makeLtFn(types.Timestamp, types.Date),
-		makeLtFn(types.Timestamp, types.TimestampTZ),
-		makeLtFn(types.TimestampTZ, types.Date),
-		makeLtFn(types.TimestampTZ, types.Timestamp),
-		makeLtFn(types.Time, types.TimeTZ),
-		makeLtFn(types.TimeTZ, types.Time),
+		makeLtFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeLtFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeLtFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeLtFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeLtFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeLtFn(types.Float, types.Int, VolatilityLeakProof),
+		makeLtFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeLtFn(types.Int, types.Float, VolatilityLeakProof),
+		makeLtFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeLtFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeLtFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeLtFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeLtFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeLtFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
 		&CmpOp{
@@ -1973,47 +2112,48 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	LE: {
 		// Single-type comparisons.
-		makeLeFn(types.AnyEnum, types.AnyEnum),
-		makeLeFn(types.Bool, types.Bool),
-		makeLeFn(types.Bytes, types.Bytes),
-		makeLeFn(types.Date, types.Date),
-		makeLeFn(types.Decimal, types.Decimal),
-		makeLeFn(types.AnyCollatedString, types.AnyCollatedString),
-		makeLeFn(types.Float, types.Float),
-		makeLeFn(types.Geography, types.Geography),
-		makeLeFn(types.Geometry, types.Geometry),
-		makeLeFn(types.INet, types.INet),
-		makeLeFn(types.Int, types.Int),
-		makeLeFn(types.Interval, types.Interval),
-		makeLeFn(types.Oid, types.Oid),
-		makeLeFn(types.String, types.String),
-		makeLeFn(types.Time, types.Time),
-		makeLeFn(types.TimeTZ, types.TimeTZ),
-		makeLeFn(types.Timestamp, types.Timestamp),
-		makeLeFn(types.TimestampTZ, types.TimestampTZ),
-		makeLeFn(types.Uuid, types.Uuid),
-		makeLeFn(types.VarBit, types.VarBit),
+		makeLeFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeLeFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeLeFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeLeFn(types.Date, types.Date, VolatilityLeakProof),
+		makeLeFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		makeLeFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		makeLeFn(types.Float, types.Float, VolatilityLeakProof),
+		makeLeFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeLeFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeLeFn(types.INet, types.INet, VolatilityLeakProof),
+		makeLeFn(types.Int, types.Int, VolatilityLeakProof),
+		makeLeFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeLeFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeLeFn(types.String, types.String, VolatilityLeakProof),
+		makeLeFn(types.Time, types.Time, VolatilityLeakProof),
+		makeLeFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeLeFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeLeFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeLeFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeLeFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeLeFn(types.Date, types.Timestamp),
-		makeLeFn(types.Date, types.TimestampTZ),
-		makeLeFn(types.Decimal, types.Float),
-		makeLeFn(types.Decimal, types.Int),
-		makeLeFn(types.Float, types.Decimal),
-		makeLeFn(types.Float, types.Int),
-		makeLeFn(types.Int, types.Decimal),
-		makeLeFn(types.Int, types.Float),
-		makeLeFn(types.Timestamp, types.Date),
-		makeLeFn(types.Timestamp, types.TimestampTZ),
-		makeLeFn(types.TimestampTZ, types.Date),
-		makeLeFn(types.TimestampTZ, types.Timestamp),
-		makeLeFn(types.Time, types.TimeTZ),
-		makeLeFn(types.TimeTZ, types.Time),
+		makeLeFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeLeFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeLeFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeLeFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeLeFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeLeFn(types.Float, types.Int, VolatilityLeakProof),
+		makeLeFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeLeFn(types.Int, types.Float, VolatilityLeakProof),
+		makeLeFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeLeFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeLeFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeLeFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeLeFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeLeFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
 		&CmpOp{
@@ -2022,6 +2162,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -2033,45 +2174,46 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			NullableArgs: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
 			isPreferred: true,
+			Volatility:  VolatilityLeakProof,
 		},
 		// Single-type comparisons.
-		makeIsFn(types.AnyEnum, types.AnyEnum),
-		makeIsFn(types.Bool, types.Bool),
-		makeIsFn(types.Bytes, types.Bytes),
-		makeIsFn(types.Date, types.Date),
-		makeIsFn(types.Decimal, types.Decimal),
-		makeIsFn(types.AnyCollatedString, types.AnyCollatedString),
-		makeIsFn(types.Float, types.Float),
-		makeIsFn(types.Geography, types.Geography),
-		makeIsFn(types.Geometry, types.Geometry),
-		makeIsFn(types.INet, types.INet),
-		makeIsFn(types.Int, types.Int),
-		makeIsFn(types.Interval, types.Interval),
-		makeIsFn(types.Jsonb, types.Jsonb),
-		makeIsFn(types.Oid, types.Oid),
-		makeIsFn(types.String, types.String),
-		makeIsFn(types.Time, types.Time),
-		makeIsFn(types.TimeTZ, types.TimeTZ),
-		makeIsFn(types.Timestamp, types.Timestamp),
-		makeIsFn(types.TimestampTZ, types.TimestampTZ),
-		makeIsFn(types.Uuid, types.Uuid),
-		makeIsFn(types.VarBit, types.VarBit),
+		makeIsFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeIsFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeIsFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeIsFn(types.Date, types.Date, VolatilityLeakProof),
+		makeIsFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		makeIsFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		makeIsFn(types.Float, types.Float, VolatilityLeakProof),
+		makeIsFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeIsFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeIsFn(types.INet, types.INet, VolatilityLeakProof),
+		makeIsFn(types.Int, types.Int, VolatilityLeakProof),
+		makeIsFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeIsFn(types.Jsonb, types.Jsonb, VolatilityImmutable),
+		makeIsFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeIsFn(types.String, types.String, VolatilityLeakProof),
+		makeIsFn(types.Time, types.Time, VolatilityLeakProof),
+		makeIsFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeIsFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeIsFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeIsFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeIsFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeIsFn(types.Date, types.Timestamp),
-		makeIsFn(types.Date, types.TimestampTZ),
-		makeIsFn(types.Decimal, types.Float),
-		makeIsFn(types.Decimal, types.Int),
-		makeIsFn(types.Float, types.Decimal),
-		makeIsFn(types.Float, types.Int),
-		makeIsFn(types.Int, types.Decimal),
-		makeIsFn(types.Int, types.Float),
-		makeIsFn(types.Timestamp, types.Date),
-		makeIsFn(types.Timestamp, types.TimestampTZ),
-		makeIsFn(types.TimestampTZ, types.Date),
-		makeIsFn(types.TimestampTZ, types.Timestamp),
-		makeIsFn(types.Time, types.TimeTZ),
-		makeIsFn(types.TimeTZ, types.Time),
+		makeIsFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeIsFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeIsFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeIsFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeIsFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeIsFn(types.Float, types.Int, VolatilityLeakProof),
+		makeIsFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeIsFn(types.Int, types.Float, VolatilityLeakProof),
+		makeIsFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeIsFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeIsFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeIsFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeIsFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeIsFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
 		&CmpOp{
@@ -2084,32 +2226,33 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				}
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), IsNotDistinctFrom), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	In: {
-		makeEvalTupleIn(types.AnyEnum),
-		makeEvalTupleIn(types.Bool),
-		makeEvalTupleIn(types.Bytes),
-		makeEvalTupleIn(types.Date),
-		makeEvalTupleIn(types.Decimal),
-		makeEvalTupleIn(types.AnyCollatedString),
-		makeEvalTupleIn(types.AnyTuple),
-		makeEvalTupleIn(types.Float),
-		makeEvalTupleIn(types.Geography),
-		makeEvalTupleIn(types.Geometry),
-		makeEvalTupleIn(types.INet),
-		makeEvalTupleIn(types.Int),
-		makeEvalTupleIn(types.Interval),
-		makeEvalTupleIn(types.Jsonb),
-		makeEvalTupleIn(types.Oid),
-		makeEvalTupleIn(types.String),
-		makeEvalTupleIn(types.Time),
-		makeEvalTupleIn(types.TimeTZ),
-		makeEvalTupleIn(types.Timestamp),
-		makeEvalTupleIn(types.TimestampTZ),
-		makeEvalTupleIn(types.Uuid),
-		makeEvalTupleIn(types.VarBit),
+		makeEvalTupleIn(types.AnyEnum, VolatilityLeakProof),
+		makeEvalTupleIn(types.Bool, VolatilityLeakProof),
+		makeEvalTupleIn(types.Bytes, VolatilityLeakProof),
+		makeEvalTupleIn(types.Date, VolatilityLeakProof),
+		makeEvalTupleIn(types.Decimal, VolatilityLeakProof),
+		makeEvalTupleIn(types.AnyCollatedString, VolatilityLeakProof),
+		makeEvalTupleIn(types.AnyTuple, VolatilityLeakProof),
+		makeEvalTupleIn(types.Float, VolatilityLeakProof),
+		makeEvalTupleIn(types.Geography, VolatilityLeakProof),
+		makeEvalTupleIn(types.Geometry, VolatilityLeakProof),
+		makeEvalTupleIn(types.INet, VolatilityLeakProof),
+		makeEvalTupleIn(types.Int, VolatilityLeakProof),
+		makeEvalTupleIn(types.Interval, VolatilityLeakProof),
+		makeEvalTupleIn(types.Jsonb, VolatilityLeakProof),
+		makeEvalTupleIn(types.Oid, VolatilityLeakProof),
+		makeEvalTupleIn(types.String, VolatilityLeakProof),
+		makeEvalTupleIn(types.Time, VolatilityLeakProof),
+		makeEvalTupleIn(types.TimeTZ, VolatilityLeakProof),
+		makeEvalTupleIn(types.Timestamp, VolatilityLeakProof),
+		makeEvalTupleIn(types.TimestampTZ, VolatilityLeakProof),
+		makeEvalTupleIn(types.Uuid, VolatilityLeakProof),
+		makeEvalTupleIn(types.VarBit, VolatilityLeakProof),
 	},
 
 	Like: {
@@ -2119,6 +2262,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, false)
 			},
+			Volatility: VolatilityLeakProof,
 		},
 	},
 
@@ -2129,6 +2273,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, true)
 			},
+			Volatility: VolatilityLeakProof,
 		},
 	},
 
@@ -2140,6 +2285,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				key := similarToKey{s: string(MustBeDString(right)), escape: '\\'}
 				return matchRegexpWithKey(ctx, left, key)
 			},
+			Volatility: VolatilityLeakProof,
 		},
 	},
 
@@ -2151,6 +2297,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: false}
 				return matchRegexpWithKey(ctx, left, key)
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -2162,6 +2309,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: true}
 				return matchRegexpWithKey(ctx, left, key)
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -2179,6 +2327,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				}
 				return DBoolFalse, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -2202,6 +2351,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				}
 				return DBoolFalse, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -2225,6 +2375,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				}
 				return DBoolTrue, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -2237,6 +2388,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				needles := MustBeDArray(right)
 				return ArrayContains(ctx, haystack, needles)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&CmpOp{
 			LeftType:  types.Jsonb,
@@ -2248,6 +2400,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				}
 				return MakeDBool(DBool(c)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
@@ -2260,6 +2413,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				haystack := MustBeDArray(right)
 				return ArrayContains(ctx, haystack, needles)
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&CmpOp{
 			LeftType:  types.Jsonb,
@@ -2271,6 +2425,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				}
 				return MakeDBool(DBool(c)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 	Overlaps: {
@@ -2296,6 +2451,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				}
 				return DBoolFalse, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 		&CmpOp{
 			LeftType:  types.INet,
@@ -2305,6 +2461,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.ContainsOrContainedBy(&other))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 })
@@ -2417,7 +2574,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 	return b
 }
 
-func makeEvalTupleIn(typ *types.T) *CmpOp {
+func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
 	return &CmpOp{
 		LeftType:  typ,
 		RightType: types.AnyTuple,
@@ -2479,6 +2636,7 @@ func makeEvalTupleIn(typ *types.T) *CmpOp {
 			return DBoolFalse, nil
 		},
 		NullableArgs: true,
+		Volatility:   v,
 	}
 }
 
