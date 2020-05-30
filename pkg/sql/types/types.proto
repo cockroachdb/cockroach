@@ -417,6 +417,21 @@ message GeoMetadata {
   optional geopb.Shape shape = 2 [(gogoproto.nullable)=false];
 }
 
+// PersistentUserDefinedTypeMetadata contains user defined type metadata
+// that will be serialized to disk, unlike other user defined type metadata
+// that is only stored in memory once a type is resolved.
+message PersistentUserDefinedTypeMetadata {
+  // StableTypeID is the ID of the backing TypeDescriptor for this type.
+  optional uint32 stable_type_id = 1
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "StableTypeID"];
+
+  // StableArrayTypeID is the ID of the TypeDescriptor that defines the backs
+  // the automatically generated array type for this type. StableArrayTypeID
+  // is only set for user defined types that aren't arrays.
+  optional uint32 stable_array_type_id = 2
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "StableArrayTypeID"];
+}
+
 // T is a wrapper around InternalType.
 message T {
     option (gogoproto.typedecl) = false;
@@ -509,8 +524,6 @@ message InternalType {
     // GeoMetadata is populated for geospatial types.
     optional GeoMetadata geo_metadata = 14;
 
-    // StableTypeID is the ID of the backing TypeDescriptor for this type.
-    // StableTypeID is set only for User Defined Types.
-    optional uint32 stable_type_id = 15
-      [(gogoproto.nullable) = false, (gogoproto.customname) = "StableTypeID"];
+    // UDTMetadata is populated for user defined types.
+    optional PersistentUserDefinedTypeMetadata udt_metadata = 15 [(gogoproto.customname) = "UDTMetadata"];
 }

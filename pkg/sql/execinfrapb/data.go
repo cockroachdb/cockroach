@@ -15,7 +15,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -87,50 +90,38 @@ func (tr *DistSQLTypeResolver) ResolveType(
 	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
 }
 
+func makeTypeLookupFunc(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) sqlbase.TypeLookupFunc {
+	return func(id sqlbase.ID) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
+		return resolver.ResolveTypeDescByID(ctx, txn, codec, id)
+	}
+}
+
 // ResolveTypeByID implements tree.ResolvableTypeReference.
 func (tr *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
 	// TODO (rohany): This should eventually look into the set of cached type
 	//  descriptors before attempting to access it here.
-	typDesc, err := sqlbase.GetTypeDescFromID(
-		ctx,
-		tr.EvalContext.Txn,
-		tr.EvalContext.Codec,
-		sqlbase.ID(id),
-	)
+	lookup := makeTypeLookupFunc(ctx, tr.EvalContext.Txn, tr.EvalContext.Codec)
+	name, typDesc, err := lookup(sqlbase.ID(id))
 	if err != nil {
 		return nil, err
 	}
-	var typ *types.T
-	switch t := typDesc.Kind; t {
-	case sqlbase.TypeDescriptor_ENUM:
-		typ = types.MakeEnum(id)
-	case sqlbase.TypeDescriptor_ALIAS:
-		return typDesc.Alias, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t)
-	}
-	if err := typDesc.HydrateTypeInfo(typ); err != nil {
-		return nil, err
-	}
-	return typ, nil
+	return typDesc.MakeTypesT(name, lookup)
 }
 
 // HydrateTypeSlice hydrates all user defined types in an input slice of types.
 func HydrateTypeSlice(evalCtx *tree.EvalContext, typs []*types.T) error {
+	// TODO (rohany): This should eventually look into the set of cached type
+	//  descriptors before attempting to access it here.
+	lookup := makeTypeLookupFunc(evalCtx.Context, evalCtx.Txn, evalCtx.Codec)
 	for _, t := range typs {
 		if t.UserDefined() {
-			// TODO (rohany): This should eventually look into the set of cached type
-			//  descriptors before attempting to access it here.
-			typDesc, err := sqlbase.GetTypeDescFromID(
-				evalCtx.Context,
-				evalCtx.Txn,
-				evalCtx.Codec,
-				sqlbase.ID(t.StableTypeID()),
-			)
+			name, typDesc, err := lookup(sqlbase.ID(t.StableTypeID()))
 			if err != nil {
 				return err
 			}
-			if err := typDesc.HydrateTypeInfo(t); err != nil {
+			if err := typDesc.HydrateTypeInfoWithName(t, name, lookup); err != nil {
 				return err
 			}
 		}
