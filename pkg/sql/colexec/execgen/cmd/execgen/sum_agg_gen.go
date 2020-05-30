@@ -16,6 +16,8 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -47,7 +49,13 @@ func genSumAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, sameTypeBinaryOpToOverloads[tree.Plus])
+	overloads := sameTypeBinaryOpToOverloads[tree.Plus]
+	// We want to omit the overload that operates on datum-backed vectors.
+	if overloads[len(overloads)-1].CanonicalTypeFamily != typeconv.DatumVecCanonicalTypeFamily {
+		colexecerror.InternalError("unexpectedly plus overload on datum-backed types is not the last one")
+	}
+	overloads = overloads[:len(overloads)-1]
+	return tmpl.Execute(wr, overloads)
 }
 
 func init() {

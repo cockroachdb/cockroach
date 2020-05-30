@@ -221,7 +221,7 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &decimalScratch.tmpDec1
+				tmpDec := &_overloadHelper.tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -241,7 +241,7 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &decimalScratch.tmpDec1
+				tmpDec := &_overloadHelper.tmpDec1
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
@@ -259,7 +259,7 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &decimalScratch.tmpDec1
+				tmpDec := &_overloadHelper.tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -279,7 +279,7 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &decimalScratch.tmpDec1
+				tmpDec := &_overloadHelper.tmpDec1
 				tmpDec.SetFinite(int64({{.Left}}), 0)
 				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
 			}
@@ -310,13 +310,13 @@ func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		// Inline the code from tree.compareTimestamps.
 		t := template.Must(template.New("").Parse(`
-      if {{.Left}}.Before({{.Right}}) {
-				{{.Target}} = -1
-			} else if {{.Right}}.Before({{.Left}}) {
-				{{.Target}} = 1
-			} else { 
-        {{.Target}} = 0
-      }`))
+		if {{.Left}}.Before({{.Right}}) {
+			{{.Target}} = -1
+		} else if {{.Right}}.Before({{.Left}}) {
+			{{.Target}} = 1
+		} else {
+			{{.Target}} = 0
+		}`))
 
 		if err := t.Execute(&buf, args); err != nil {
 			colexecerror.InternalError(err)
@@ -333,13 +333,7 @@ func (c intervalCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (c datumCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
-		// In most cases, we have a datum coming from coldataext.datumVec on
-		// the left side, but it is also possible that we have a constant datum
-		// on the left, then the datum vec will be on the right side.
-		datumVecVariableName := leftCol
-		if datumVecVariableName == "_" {
-			datumVecVariableName = rightCol
-		}
+		datumVecVariableName := getDatumVecVariableName(leftCol, rightCol, false /* preferRightSide */)
 		return fmt.Sprintf(`
 			%s = %s.(*coldataext.Datum).CompareDatum(%s, %s)
 		`, targetElem, leftElem, datumVecVariableName, rightElem)

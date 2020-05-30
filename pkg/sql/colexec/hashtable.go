@@ -166,7 +166,7 @@ type hashTable struct {
 	// each other.
 	allowNullEquality bool
 
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
 	datumAlloc     sqlbase.DatumAlloc
 	cancelChecker  CancelChecker
 
@@ -380,7 +380,7 @@ func (ht *hashTable) computeBuckets(
 	}
 
 	for i := range ht.keyCols {
-		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch, &ht.datumAlloc)
+		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, ht.overloadHelper, &ht.datumAlloc)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)
