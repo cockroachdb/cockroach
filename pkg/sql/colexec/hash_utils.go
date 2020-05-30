@@ -109,7 +109,7 @@ type tupleHashDistributor struct {
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
 	cancelChecker  CancelChecker
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
 	datumAlloc     sqlbase.DatumAlloc
 }
 
@@ -132,7 +132,7 @@ func (d *tupleHashDistributor) distribute(
 	initHash(d.buckets, n, d.initHashValue)
 
 	for _, i := range hashCols {
-		rehash(ctx, d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, d.decimalScratch, &d.datumAlloc)
+		rehash(ctx, d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, d.overloadHelper, &d.datumAlloc)
 	}
 
 	finalizeHash(d.buckets, n, uint64(len(d.selections)))

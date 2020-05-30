@@ -1,0 +1,182 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE many_types (
+    _bool        BOOL,
+    _bytes       BYTES,
+    _date        DATE,
+    _decimal     DECIMAL,
+    _int2        INT2,
+    _int4        INT4,
+    _int         INT8,
+    _oid         OID,
+    _float       FLOAT8,
+    _string      STRING,
+    _uuid        UUID,
+    _timestamp   TIMESTAMP,
+    _timestamptz TIMESTAMPTZ,
+    _interval    INTERVAL,
+    _inet        INet,
+    _json        JSON,
+    _time        Time
+)
+
+statement ok
+INSERT
+  INTO many_types
+VALUES (
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+       ),
+       (
+       false,
+       '123',
+       '2019-10-22',
+       1.23,
+       123,
+       123,
+       123,
+       123,
+       1.23,
+       '123',
+       '63616665-6630-3064-6465-616462656562',
+       '1-1-18 1:00:00.001',
+       '1-1-18 1:00:00.001-8',
+       '12:34:56.123456',
+       '127.0.0.1',
+       '[1, "hello", {"a": ["foo", {"b": 3}]}]',
+       '1:00:00.001'
+       ),
+       (
+       true,
+       '456',
+       '2020-05-21',
+       4.56,
+       456,
+       456,
+       456,
+       456,
+       4.56,
+       '456',
+       '63616665-0000-0000-6465-616462656562',
+       '1-1-18 1:00:00.456',
+       '1-1-18 1:00:00.456-8',
+       '01:23:45.012345',
+       '192.168.0.0/16',
+       '[2, "hi", {"b": ["bar", {"c": 4}]}]',
+       '1:00:00.456'
+       )
+
+query T
+EXPLAIN (VEC) SELECT _inet - _int2 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projMinusDatumInt16Op
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT _inet - _int2 FROM many_types
+----
+NULL
+126.255.255.134
+192.167.254.56/16
+
+query T
+EXPLAIN (VEC) SELECT _inet - 1 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projMinusDatumInt64ConstOp
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT _inet - 1 FROM many_types
+----
+NULL
+127.0.0.0
+192.167.255.255/16
+
+query T
+EXPLAIN (VEC) SELECT _int4 + _inet FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projPlusInt32DatumOp
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT _int4 + _inet FROM many_types
+----
+NULL
+127.0.0.124
+192.168.1.200/16
+
+query T
+EXPLAIN (VEC) SELECT 2 + _inet FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projPlusDatumInt64ConstOp
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT 2 + _inet FROM many_types
+----
+NULL
+127.0.0.3
+192.168.0.2/16
+
+query T
+EXPLAIN (VEC) SELECT _time + _interval FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projPlusDatumIntervalOp
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT _time + _interval FROM many_types
+----
+NULL
+0000-01-01 13:34:56.124456 +0000 UTC
+0000-01-01 02:23:45.468345 +0000 UTC
+
+query T
+EXPLAIN (VEC) SELECT _json - _int FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projMinusDatumInt64Op
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT _json - _int FROM many_types
+----
+NULL
+[1, "hello", {"a": ["foo", {"b": 3}]}]
+[2, "hi", {"b": ["bar", {"c": 4}]}]
+
+# Make sure we fall back to row engine when we have a mixed-type expression
+# with dates.
+query T
+EXPLAIN (VEC) SELECT _time + _date FROM many_types
+----
+│
+└ Node 1
+  └ *rowexec.tableReader

@@ -41,12 +41,14 @@ var (
 	zeroIntervalValue duration.Duration
 )
 
-// decimalOverloadScratch is a utility struct that helps us avoid allocations
-// of temporary decimals on every overloaded operation with them. In order for
-// the templates to see it correctly, a local variable named `scratch` of this
-// type must be declared before the inlined overloaded code.
-type decimalOverloadScratch struct {
+// overloadHelper is a utility struct that helps us avoid allocations
+// of temporary decimals on every overloaded operation with them as well as
+// plumbs through other useful information. In order for the templates to see
+// it correctly, a local variable named `_overloadHelper` of this type must be declared
+// before the inlined overloaded code.
+type overloadHelper struct {
 	tmpDec1, tmpDec2 apd.Decimal
+	binFn            *tree.BinOp
 }
 
 // makeWindowIntoBatch updates windowedBatch so that it provides a "window"
