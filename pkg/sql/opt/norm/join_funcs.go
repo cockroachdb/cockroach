@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -462,8 +463,17 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		for j := 0; j < numCols; j++ {
 			indexLeftCol := leftTab.ColumnID(fkRef.OriginColumnOrdinal(leftTabMeta.Table, j))
 
-			// Not every fk column needs to be in the equality conditions.
 			if !remainingLeftColIDs.Contains(indexLeftCol) {
+				// Not all FK columns are part of the equality conditions. There are two
+				// cases:
+				// 1. MATCH SIMPLE/PARTIAL: if this column is nullable, rows from this
+				//    foreign key are not guaranteed to match.
+				// 2. MATCH FULL: FK rows are still guaranteed to match because the
+				//    non-present columns can only be NULL if all FK columns are NULL.
+				if fkRef.MatchMethod() != tree.MatchFull && !leftColIDs.Contains(indexLeftCol) {
+					fkMatch = false
+					break
+				}
 				continue
 			}
 
