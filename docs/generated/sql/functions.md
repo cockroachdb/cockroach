@@ -744,6 +744,60 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry.</p>
 </span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry: geometry, distance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry: geometry, distance: <a href="float.html">float</a>, buffer_style_params: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This variant takes in a space separate parameter string, which will augment the buffer styles. Valid parameters are:</p>
+<ul>
+<li>quad_segs=&lt;int&gt;, default 8</li>
+<li>endcap=&lt;round|flat|butt|square&gt;, default round</li>
+<li>join=&lt;round|mitre|miter|bevel&gt;, default round</li>
+<li>side=&lt;both|left|right&gt;, default both</li>
+<li>mitre_limit=&lt;float&gt;, default 5.0</li>
+</ul>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry: geometry, distance: <a href="float.html">float</a>, quad_segs: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="decimal.html">decimal</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="decimal.html">decimal</a>, buffer_style_params: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This variant takes in a space separate parameter string, which will augment the buffer styles. Valid parameters are:</p>
+<ul>
+<li>quad_segs=&lt;int&gt;, default 8</li>
+<li>endcap=&lt;round|flat|butt|square&gt;, default round</li>
+<li>join=&lt;round|mitre|miter|bevel&gt;, default round</li>
+<li>side=&lt;both|left|right&gt;, default both</li>
+<li>mitre_limit=&lt;float&gt;, default 5.0</li>
+</ul>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="decimal.html">decimal</a>, quad_segs: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="float.html">float</a>, buffer_style_params: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This variant takes in a space separate parameter string, which will augment the buffer styles. Valid parameters are:</p>
+<ul>
+<li>quad_segs=&lt;int&gt;, default 8</li>
+<li>endcap=&lt;round|flat|butt|square&gt;, default round</li>
+<li>join=&lt;round|mitre|miter|bevel&gt;, default round</li>
+<li>side=&lt;both|left|right&gt;, default both</li>
+<li>mitre_limit=&lt;float&gt;, default 5.0</li>
+</ul>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="float.html">float</a>, quad_segs: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance.</p>
+<p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_centroid"></a><code>st_centroid(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
@@ -1039,7 +1093,6 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_segmentize"></a><code>st_segmentize(geography: geography, max_segment_length_meters: <a href="float.html">float</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a modified Geography having no segment longer than the given max_segment_length meters.</p>
 <p>The calculations are done on a sphere.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
-<p>This function will automatically use any available index.</p>
 </span></td></tr>
 <tr><td><a name="st_setsrid"></a><code>st_setsrid(geography: geography, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Sets a Geography to a new SRID without transforming the coordinates.</p>
 </span></td></tr>

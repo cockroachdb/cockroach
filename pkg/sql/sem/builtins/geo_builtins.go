@@ -318,6 +318,30 @@ var areaOverloadGeometry1 = geometryOverload1(
 	tree.VolatilityImmutable,
 )
 
+var stBufferInfoBuilder = infoBuilder{
+	info:         `Returns a Geometry that represents all points whose distance is less than or equal to the given distance.`,
+	libraryUsage: usesGEOS,
+}
+
+var stBufferWithParamsInfoBuilder = infoBuilder{
+	info: `Returns a Geometry that represents all points whose distance is less than or equal to the given distance.
+
+This variant takes in a space separate parameter string, which will augment the buffer styles. Valid parameters are:
+* quad_segs=<int>, default 8
+* endcap=<round|flat|butt|square>, default round
+* join=<round|mitre|miter|bevel>, default round
+* side=<both|left|right>, default both
+* mitre_limit=<float>, default 5.0`,
+	libraryUsage: usesGEOS,
+}
+
+var stBufferWithQuadSegInfoBuilder = infoBuilder{
+	info: `Returns a Geometry that represents all points whose distance is less than or equal to the given distance.
+
+This variant approximates the circle into quad_seg segments per line (the default is 8).`,
+	libraryUsage: usesGEOS,
+}
+
 var geoBuiltins = map[string]builtinDefinition{
 	//
 	// Input (Geometry)
@@ -1881,8 +1905,275 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 
 The calculations are done on a sphere.`,
 				libraryUsage: usesS2,
-				canUseIndex:  true,
 			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_buffer": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				distance := *args[1].(*tree.DFloat)
+
+				ret, err := geomfn.Buffer(g.Geometry, geomfn.MakeDefaultBufferParams(), float64(distance))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"distance", types.Float},
+				{"quad_segs", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				distance := *args[1].(*tree.DFloat)
+				quadSegs := *args[2].(*tree.DInt)
+
+				ret, err := geomfn.Buffer(
+					g.Geometry,
+					geomfn.MakeDefaultBufferParams().WithQuadrantSegments(int(quadSegs)),
+					float64(distance),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferWithQuadSegInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"distance", types.Float},
+				{"buffer_style_params", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				distance := *args[1].(*tree.DFloat)
+				paramsString := *args[2].(*tree.DString)
+
+				params, modifiedDistance, err := geomfn.ParseBufferParams(string(paramsString), float64(distance))
+				if err != nil {
+					return nil, err
+				}
+
+				ret, err := geomfn.Buffer(
+					g.Geometry,
+					params,
+					modifiedDistance,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferWithParamsInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_str", types.String},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				gStr := *args[0].(*tree.DString)
+				distance := *args[1].(*tree.DFloat)
+
+				g, err := geo.ParseGeometry(string(gStr))
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), float64(distance))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_str", types.String},
+				// This should be float, but for this to work equivalently to the psql type system,
+				// we have to make a decimal definition.
+				{"distance", types.Decimal},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				gStr := *args[0].(*tree.DString)
+				distance, err := args[1].(*tree.DDecimal).Float64()
+				if err != nil {
+					return nil, err
+				}
+
+				g, err := geo.ParseGeometry(string(gStr))
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), distance)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_str", types.String},
+				{"distance", types.Float},
+				{"quad_segs", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				gStr := *args[0].(*tree.DString)
+				distance := *args[1].(*tree.DFloat)
+				quadSegs := *args[2].(*tree.DInt)
+
+				g, err := geo.ParseGeometry(string(gStr))
+				if err != nil {
+					return nil, err
+				}
+
+				ret, err := geomfn.Buffer(
+					g,
+					geomfn.MakeDefaultBufferParams().WithQuadrantSegments(int(quadSegs)),
+					float64(distance),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferWithQuadSegInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_str", types.String},
+				// This should be float, but for this to work equivalently to the psql type system,
+				// we have to make a decimal definition.
+				{"distance", types.Decimal},
+				{"quad_segs", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				gStr := *args[0].(*tree.DString)
+				distance, err := args[1].(*tree.DDecimal).Float64()
+				if err != nil {
+					return nil, err
+				}
+				quadSegs := *args[2].(*tree.DInt)
+
+				g, err := geo.ParseGeometry(string(gStr))
+				if err != nil {
+					return nil, err
+				}
+
+				ret, err := geomfn.Buffer(
+					g,
+					geomfn.MakeDefaultBufferParams().WithQuadrantSegments(int(quadSegs)),
+					distance,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferWithQuadSegInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_str", types.String},
+				{"distance", types.Float},
+				{"buffer_style_params", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				gStr := *args[0].(*tree.DString)
+				distance := *args[1].(*tree.DFloat)
+				paramsString := *args[2].(*tree.DString)
+
+				g, err := geo.ParseGeometry(string(gStr))
+				if err != nil {
+					return nil, err
+				}
+
+				params, modifiedDistance, err := geomfn.ParseBufferParams(string(paramsString), float64(distance))
+				if err != nil {
+					return nil, err
+				}
+
+				ret, err := geomfn.Buffer(
+					g,
+					params,
+					modifiedDistance,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferWithParamsInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_str", types.String},
+				// This should be float, but for this to work equivalently to the psql type system,
+				// we have to make a decimal definition.
+				{"distance", types.Decimal},
+				{"buffer_style_params", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				gStr := *args[0].(*tree.DString)
+				distance, err := args[1].(*tree.DDecimal).Float64()
+				if err != nil {
+					return nil, err
+				}
+				paramsString := *args[2].(*tree.DString)
+
+				g, err := geo.ParseGeometry(string(gStr))
+				if err != nil {
+					return nil, err
+				}
+
+				params, modifiedDistance, err := geomfn.ParseBufferParams(string(paramsString), distance)
+				if err != nil {
+					return nil, err
+				}
+
+				ret, err := geomfn.Buffer(
+					g,
+					params,
+					modifiedDistance,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info:       stBufferWithParamsInfoBuilder.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
 	),

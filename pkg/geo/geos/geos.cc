@@ -14,7 +14,7 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
-#endif // #if _WIN32
+#endif  // #if _WIN32
 #include <memory>
 #include <stdlib.h>
 #include <string>
@@ -22,14 +22,14 @@
 #include "geos.h"
 
 #if _WIN32
-#define dlopen(x,y) LoadLibrary(x)
+#define dlopen(x, y) LoadLibrary(x)
 #define dlsym GetProcAddress
 #define dlclose FreeLibrary
-#define dlerror() ((char*) "failed to execute dlsym")
+#define dlerror() ((char*)"failed to execute dlsym")
 typedef HMODULE dlhandle;
 #else
 typedef void* dlhandle;
-#endif // #if _WIN32
+#endif  // #if _WIN32
 
 #define CR_GEOS_NO_ERROR_DEFINED_MESSAGE "geos: returned invalid result but error not populated"
 
@@ -41,6 +41,7 @@ typedef void (*CR_GEOS_MessageHandler)(const char*, void*);
 typedef void* CR_GEOS_WKTReader;
 typedef void* CR_GEOS_WKBReader;
 typedef void* CR_GEOS_WKBWriter;
+typedef void* CR_GEOS_BufferParams;
 
 // Function declarations from `capi/geos_c.h.in` in GEOS.
 typedef CR_GEOS_Handle (*CR_GEOS_init_r)();
@@ -62,6 +63,21 @@ typedef CR_GEOS_WKBReader (*CR_GEOS_WKBReader_create_r)(CR_GEOS_Handle);
 typedef CR_GEOS_Geometry (*CR_GEOS_WKBReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKBReader, const char*,
                                                      size_t);
 typedef void (*CR_GEOS_WKBReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBReader);
+
+typedef CR_GEOS_BufferParams (*CR_GEOS_BufferParams_create_r)(CR_GEOS_Handle);
+typedef void (*CR_GEOS_GEOSBufferParams_destroy_r)(CR_GEOS_Handle, CR_GEOS_BufferParams);
+typedef int (*CR_GEOS_BufferParams_setEndCapStyle_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                     int endCapStyle);
+typedef int (*CR_GEOS_BufferParams_setJoinStyle_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                   int joinStyle);
+typedef int (*CR_GEOS_BufferParams_setMitreLimit_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                    double mitreLimit);
+typedef int (*CR_GEOS_BufferParams_setQuadrantSegments_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                          int quadrantSegments);
+typedef int (*CR_GEOS_BufferParams_setSingleSided_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                     int singleSided);
+typedef CR_GEOS_Geometry (*CR_GEOS_BufferWithParams_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                       CR_GEOS_BufferParams, double width);
 
 typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
@@ -103,6 +119,15 @@ struct CR_GEOS {
   CR_GEOS_finish_r GEOS_finish_r;
   CR_GEOS_Context_setErrorMessageHandler_r GEOSContext_setErrorMessageHandler_r;
   CR_GEOS_Free_r GEOSFree_r;
+
+  CR_GEOS_BufferParams_create_r GEOSBufferParams_create_r;
+  CR_GEOS_GEOSBufferParams_destroy_r GEOSBufferParams_destroy_r;
+  CR_GEOS_BufferParams_setEndCapStyle_r GEOSBufferParams_setEndCapStyle_r;
+  CR_GEOS_BufferParams_setJoinStyle_r GEOSBufferParams_setJoinStyle_r;
+  CR_GEOS_BufferParams_setMitreLimit_r GEOSBufferParams_setMitreLimit_r;
+  CR_GEOS_BufferParams_setQuadrantSegments_r GEOSBufferParams_setQuadrantSegments_r;
+  CR_GEOS_BufferParams_setSingleSided_r GEOSBufferParams_setSingleSided_r;
+  CR_GEOS_BufferWithParams_r GEOSBufferWithParams_r;
 
   CR_GEOS_SetSRID_r GEOSSetSRID_r;
   CR_GEOS_GetSRID_r GEOSGetSRID_r;
@@ -164,6 +189,14 @@ struct CR_GEOS {
     INIT(GEOSFree_r);
     INIT(GEOSContext_setErrorMessageHandler_r);
     INIT(GEOSGeom_destroy_r);
+    INIT(GEOSBufferParams_create_r);
+    INIT(GEOSBufferParams_destroy_r);
+    INIT(GEOSBufferParams_setEndCapStyle_r);
+    INIT(GEOSBufferParams_setJoinStyle_r);
+    INIT(GEOSBufferParams_setMitreLimit_r);
+    INIT(GEOSBufferParams_setQuadrantSegments_r);
+    INIT(GEOSBufferParams_setSingleSided_r);
+    INIT(GEOSBufferWithParams_r);
     INIT(GEOSSetSRID_r);
     INIT(GEOSGetSRID_r);
     INIT(GEOSArea_r);
@@ -251,7 +284,8 @@ CR_GEOS_Handle initHandleWithErrorBuffer(CR_GEOS* lib, std::string* buffer) {
   return handle;
 }
 
-CR_GEOS_Geometry CR_GEOS_GeometryFromSlice(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Slice slice) {
+CR_GEOS_Geometry CR_GEOS_GeometryFromSlice(CR_GEOS* lib, CR_GEOS_Handle handle,
+                                           CR_GEOS_Slice slice) {
   auto wkbReader = lib->GEOSWKBReader_create_r(handle);
   auto geom = lib->GEOSWKBReader_read_r(handle, wkbReader, slice.data, slice.len);
   lib->GEOSWKBReader_destroy_r(handle, wkbReader);
@@ -309,12 +343,43 @@ CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double x
   return toGEOSString(error.data(), error.length());
 }
 
+CR_GEOS_Status CR_GEOS_Buffer(CR_GEOS* lib, CR_GEOS_Slice ewkb, CR_GEOS_BufferParamsInput params,
+                              double distance, CR_GEOS_String* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *ret = {.data = NULL, .len = 0};
+
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, ewkb);
+  if (geom != nullptr) {
+    auto gParams = lib->GEOSBufferParams_create_r(handle);
+    if (gParams != nullptr) {
+      if (lib->GEOSBufferParams_setEndCapStyle_r(handle, gParams, params.endCapStyle) &&
+          lib->GEOSBufferParams_setJoinStyle_r(handle, gParams, params.joinStyle) &&
+          lib->GEOSBufferParams_setMitreLimit_r(handle, gParams, params.mitreLimit) &&
+          lib->GEOSBufferParams_setQuadrantSegments_r(handle, gParams, params.quadrantSegments) &&
+          lib->GEOSBufferParams_setSingleSided_r(handle, gParams, params.singleSided)) {
+        auto bufferedGeom = lib->GEOSBufferWithParams_r(handle, geom, gParams, distance);
+        if (bufferedGeom != nullptr) {
+          auto srid = lib->GEOSGetSRID_r(handle, geom);
+          CR_GEOS_writeGeomToEWKB(lib, handle, bufferedGeom, ret, srid);
+          lib->GEOSGeom_destroy_r(handle, bufferedGeom);
+        }
+      }
+      lib->GEOSBufferParams_destroy_r(handle, gParams);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
 //
 // Unary operators
 //
 
 template <typename T, typename R>
-CR_GEOS_Status CR_GEOS_UnaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, R *ret) {
+CR_GEOS_Status CR_GEOS_UnaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, R* ret) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
   auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
@@ -333,7 +398,8 @@ CR_GEOS_Status CR_GEOS_UnaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, R *ret
 }
 
 template <typename T, typename R>
-CR_GEOS_Status CR_GEOS_BinaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GEOS_Slice b, R *ret) {
+CR_GEOS_Status CR_GEOS_BinaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                      R* ret) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
   auto wkbReader = lib->GEOSWKBReader_create_r(handle);
@@ -359,15 +425,15 @@ CR_GEOS_Status CR_GEOS_BinaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GE
   return toGEOSString(error.data(), error.length());
 }
 
-CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double *ret) {
+CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSArea_r, a, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double *ret) {
+CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String *centroidEWKB) {
+CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* centroidEWKB) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
   auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
@@ -385,7 +451,7 @@ CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String *c
   return toGEOSString(error.data(), error.length());
 }
 
-CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double *ret) {
+CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double* ret) {
   return CR_GEOS_BinaryOperator(lib, lib->GEOSDistance_r, a, b, ret);
 }
 
@@ -394,7 +460,8 @@ CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, 
 //
 
 template <typename T>
-CR_GEOS_Status CR_GEOS_BinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_BinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                       char* ret) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
 
@@ -424,39 +491,39 @@ CR_GEOS_Status CR_GEOS_BinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_G
   return toGEOSString(error.data(), error.length());
 }
 
-CR_GEOS_Status CR_GEOS_Covers(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Covers(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSCovers_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_CoveredBy(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_CoveredBy(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSCoveredBy_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Contains(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Contains(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSContains_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Crosses(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Crosses(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSCrosses_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Equals(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Equals(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSEquals_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Intersects(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Intersects(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSIntersects_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Overlaps(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Overlaps(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSOverlaps_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Touches(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Touches(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSTouches_r, a, b, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Within(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+CR_GEOS_Status CR_GEOS_Within(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSWithin_r, a, b, ret);
 }
 
@@ -465,7 +532,7 @@ CR_GEOS_Status CR_GEOS_Within(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, ch
 // See: https://en.wikipedia.org/wiki/DE-9IM.
 //
 
-CR_GEOS_Status CR_GEOS_Relate(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, CR_GEOS_String *ret) {
+CR_GEOS_Status CR_GEOS_Relate(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, CR_GEOS_String* ret) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
 
