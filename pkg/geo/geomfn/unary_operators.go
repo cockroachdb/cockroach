@@ -122,3 +122,54 @@ func Perimeter(g *geo.Geometry) (float64, error) {
 func Area(g *geo.Geometry) (float64, error) {
 	return geos.Area(g.EWKB())
 }
+
+// LineInterpolatePoints returns one or more points along the given
+// LineString which are at an integral multiples of given fraction of
+// LineString's total length. When repeat is set to false, it returns
+// the first point.
+func LineInterpolatePoints(g *geo.Geometry, fraction float64, repeat bool) (*geo.Geometry, error) {
+	if fraction < 0 || fraction > 1 {
+		return nil, errors.Newf("fraction %v should be within [0 1] range", fraction)
+	}
+	geomRepr, err := g.AsGeomT()
+	if err != nil {
+		return nil, err
+	}
+	// Empty geometries do not react well in GEOS, so we have to
+	// convert and check beforehand.
+	// Remove after #49209 is resolved.
+	if geomRepr.Empty() {
+		return geo.NewGeometryFromGeom(geom.NewPointEmpty(geom.XY))
+	}
+	switch geomRepr := geomRepr.(type) {
+	case *geom.LineString:
+		// In case fraction is greater than 0.5 or equal to 0 or repeat is false,
+		// then we will have only one interpolated point.
+		if repeat && fraction <= 0.5 && fraction != 0 {
+			numberOfInterpolatedPoints := int(1 / fraction)
+			interpolatedPoints := geom.NewMultiPoint(geom.XY).SetSRID(geomRepr.SRID())
+			for pointInserted := 1; pointInserted <= numberOfInterpolatedPoints; pointInserted++ {
+				pointEWKB, err := geos.InterpolateLine(g.EWKB(), float64(pointInserted)*fraction)
+				if err != nil {
+					return nil, err
+				}
+				point, err := ewkb.Unmarshal(pointEWKB)
+				if err != nil {
+					return nil, err
+				}
+				err = interpolatedPoints.Push(point.(*geom.Point))
+				if err != nil {
+					return nil, err
+				}
+			}
+			return geo.NewGeometryFromGeom(interpolatedPoints)
+		}
+		interpolatedPointEWKB, err := geos.InterpolateLine(g.EWKB(), fraction)
+		if err != nil {
+			return nil, err
+		}
+		return geo.ParseGeometryFromEWKB(interpolatedPointEWKB)
+	default:
+		return nil, errors.Newf("Geometry %T should be LineString", geomRepr)
+	}
+}

@@ -66,6 +66,7 @@ typedef void (*CR_GEOS_WKBReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBReader);
 typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef CR_GEOS_Geometry (*CR_GEOS_Centroid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Interpolate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
 
 typedef int (*CR_GEOS_Distance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double*);
 
@@ -119,6 +120,7 @@ struct CR_GEOS {
   CR_GEOS_Area_r GEOSArea_r;
   CR_GEOS_Length_r GEOSLength_r;
   CR_GEOS_Centroid_r GEOSGetCentroid_r;
+  CR_GEOS_Interpolate_r GEOSInterpolateNormalized_r;
 
   CR_GEOS_Distance_r GEOSDistance_r;
 
@@ -169,6 +171,7 @@ struct CR_GEOS {
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
     INIT(GEOSGetCentroid_r);
+    INIT(GEOSInterpolateNormalized_r);
     INIT(GEOSDistance_r);
     INIT(GEOSCovers_r);
     INIT(GEOSCoveredBy_r);
@@ -383,6 +386,25 @@ CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String *c
   }
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS* lib, CR_GEOS_Slice a, double fraction,
+                                   CR_GEOS_String* interpolatedPointEWKB) {
+   std::string error;
+   auto handle = initHandleWithErrorBuffer(lib, &error);
+   auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+   *interpolatedPointEWKB = {.data = NULL, .len = 0};
+   if (geom != nullptr) {
+     auto interpolatedPoint = lib->GEOSInterpolateNormalized_r(handle, geom, fraction);
+     if (interpolatedPoint != nullptr) {
+       auto srid = lib->GEOSGetSRID_r(handle, geom);
+       CR_GEOS_writeGeomToEWKB(lib, handle, interpolatedPoint, interpolatedPointEWKB, srid);
+       lib->GEOSGeom_destroy_r(handle, interpolatedPoint);
+     }
+     lib->GEOSGeom_destroy_r(handle, geom);
+   }
+   lib->GEOS_finish_r(handle);
+   return toGEOSString(error.data(), error.length());
 }
 
 CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double *ret) {

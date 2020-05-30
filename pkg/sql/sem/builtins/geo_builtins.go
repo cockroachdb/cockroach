@@ -1420,6 +1420,50 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_lineinterpolatepoint": makeBuiltin(
+		defProps(),
+		lineInterpolatePointForRepeatOverload(
+			false,
+			`Returns point along the given LineString which is at given fraction of LineString's total length.`,
+		),
+	),
+	"st_lineinterpolatepoints": makeBuiltin(
+		defProps(),
+		lineInterpolatePointForRepeatOverload(
+			true,
+			`Returns one or more points along the LineString which is at an integral multiples of `+
+				`given fraction of LineString's total length.
+
+Note If the result has zero or one points, it will be returned as a POINT. If it has two or more points, it will be returned as a MULTIPOINT.`,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"fraction", types.Float},
+				{"repeat", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				fraction := float64(*args[1].(*tree.DFloat))
+				repeat := bool(*args[2].(*tree.DBool))
+				interpolatedPoints, err := geomfn.LineInterpolatePoints(g.Geometry, fraction, repeat)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(interpolatedPoints), nil
+			},
+			Info: infoBuilder{
+				info: `Returns one or more points along the LineString which is at an integral multiples of given fraction ` +
+					`of LineString's total length. If repeat is false (default true) then it returns first point.
+
+Note If the result has zero or one points, it will be returned as a POINT. If it has two or more points, it will be returned as a MULTIPOINT.`,
+				libraryUsage: usesGEOS,
+				canUseIndex:  true,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// Binary functions
@@ -2403,4 +2447,29 @@ func makeTableName(catalogName string, schemaName string, tableName string) tree
 		return tree.MakeUnresolvedName(schemaName, tableName)
 	}
 	return tree.MakeUnresolvedName(tableName)
+}
+
+func lineInterpolatePointForRepeatOverload(repeat bool, builtinInfo string) tree.Overload {
+	return tree.Overload{
+		Types: tree.ArgTypes{
+			{"geometry", types.Geometry},
+			{"fraction", types.Float},
+		},
+		ReturnType: tree.FixedReturnType(types.Geometry),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			g := args[0].(*tree.DGeometry)
+			fraction := float64(*args[1].(*tree.DFloat))
+			interpolatedPoints, err := geomfn.LineInterpolatePoints(g.Geometry, fraction, repeat)
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDGeometry(interpolatedPoints), nil
+		},
+		Info: infoBuilder{
+			info:         builtinInfo,
+			libraryUsage: usesGEOS,
+			canUseIndex:  true,
+		}.String(),
+		Volatility: tree.VolatilityImmutable,
+	}
 }
