@@ -28,7 +28,7 @@ func genVecComparators(wr io.Writer) error {
 	}
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
-		"_TYPE_WIDTH", "{{.Width}}{{if eq .Width -1}}: default{{end}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_TYPE", "{{.VecMethod}}",
 	)

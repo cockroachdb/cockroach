@@ -29,7 +29,6 @@ func genDistinctOps(wr io.Writer) error {
 
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
-		"_CANONICAL_TYPE_FAMILYY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_GOTYPE", "{{.GoType}}",
