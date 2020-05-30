@@ -101,6 +101,10 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	for _, c := range validCasts {
+		if c.volatility == 0 {
+			t.Errorf("cast %s::%s has no volatility set", c.from.Name(), c.to.Name())
+
+		}
 		if c.ignoreVolatilityCheck {
 			continue
 		}
