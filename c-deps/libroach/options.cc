@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 #include "options.h"
+#include <limits>
 #include <rocksdb/env.h>
 #include <rocksdb/filter_policy.h>
 #include <rocksdb/slice_transform.h>
@@ -263,14 +264,12 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Default is 64gb but that can be hit easily during bulk-ingestion since it
   // is based on assumptions about relative level sizes that do not hold when
   // adding data directly. Additionally some system-critical writes in
-  // cockroach (node-liveness), just can not be slow or they will fail and cause
-  // unavailability, so back-pressuring may *cause* unavailability, instead of
-  // gracefully slowing to some stable equilibrium to avoid it. As such, we want
-  // these set very high so are very unlikely to hit them.
-  // TODO(dt): if/when we dynamically tune for bulk-ingestion, we could leave
-  // these as-is and only raise / disable them during ingest.
-  options.soft_pending_compaction_bytes_limit = 2048ull << 30;
-  options.hard_pending_compaction_bytes_limit = 4098ull << 30;
+  // cockroach (node-liveness), just can not be slow or they will fail and
+  // cause unavailability, so back-pressuring may *cause* unavailability,
+  // instead of gracefully slowing to some stable equilibrium to avoid it. As
+  // such, we want these set so they are impossible to hit.
+  options.soft_pending_compaction_bytes_limit = std::numeric_limits<uint64_t>::max();
+  options.hard_pending_compaction_bytes_limit = std::numeric_limits<uint64_t>::max();
   // Flush write buffers to L0 as soon as they are full. A higher
   // value could be beneficial if there are duplicate records in each
   // of the individual write buffers, but perf testing hasn't shown
