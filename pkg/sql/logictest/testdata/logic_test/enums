@@ -410,3 +410,51 @@ CREATE TABLE t1 (
    INDEX i (x ASC),
    FAMILY "primary" (x, rowid)
 )
+
+# Test that the implicit array type has been created, and that we can use it.
+query TT
+SELECT ARRAY['hello']::_greeting, ARRAY['hello'::greeting]
+----
+{hello} {hello}
+
+# Test that we can't mix enums in an array.
+query error pq: expected 'cockroach'::dbs to be of type greeting, found type dbs
+SELECT ARRAY['hello'::greeting, 'cockroach'::dbs]
+
+statement ok
+CREATE TABLE enum_array (x _greeting, y greeting[]);
+INSERT INTO enum_array VALUES (ARRAY['hello'], ARRAY['hello']), (ARRAY['howdy'], ARRAY['howdy'])
+
+query TT rowsort
+SELECT * FROM enum_array
+----
+{hello} {hello}
+{howdy} {howdy}
+
+query TTT
+SELECT pg_typeof(x), pg_typeof(x[1]), pg_typeof(ARRAY['hello']::_greeting) FROM enum_array LIMIT 1
+----
+test.public.greeting[] test.public.greeting test.public.greeting[]
+
+# Ensure that the implicitly created array type will tolerate collisions.
+# _collision will create __collision as its implicit array type, so the
+# creation of collision will have to retry twice before it finds the open
+# spot of ___collision for its implicit array type.
+statement ok
+CREATE TYPE _collision AS ENUM ();
+CREATE TYPE collision AS ENUM ();
+
+# _collision and __collision typelem and typarray should point back at each
+# other, and vice versa for collision and ___collision.
+query TOOO rowsort
+SELECT
+  typname, oid, typelem, typarray
+FROM
+  pg_type
+WHERE
+  typname IN ('collision', '_collision', '__collision', '___collision')
+----
+_collision    100082  0       100083
+__collision   100083  100082  0
+collision     100084  0       100085
+___collision  100085  100084  0

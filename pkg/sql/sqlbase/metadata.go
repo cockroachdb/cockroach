@@ -60,6 +60,8 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 		desc.Union = &Descriptor_Table{Table: t}
 	case *DatabaseDescriptor:
 		desc.Union = &Descriptor_Database{Database: t}
+	case *MutableTypeDescriptor:
+		desc.Union = &Descriptor_Type{Type: &t.TypeDescriptor}
 	case *TypeDescriptor:
 		desc.Union = &Descriptor_Type{Type: t}
 	case *SchemaDescriptor:

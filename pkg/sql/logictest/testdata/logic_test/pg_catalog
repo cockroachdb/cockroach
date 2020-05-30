@@ -931,8 +931,8 @@ SELECT * FROM pg_enum
 oid  enumtypid  enumsortorder  enumlabel
 1043025669  100063  0  v1
 1043025861  100063  1  v2
-1865129000  100064  0  v3
-1865129192  100064  1  v4
+1881906619  100065  0  v3
+1881906555  100065  1  v4
 
 ## pg_catalog.pg_type
 
@@ -941,410 +941,420 @@ SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid    typname        typnamespace  typowner  typlen  typbyval  typtype
-16     bool           1307062959    NULL      1       true      b
-17     bytea          1307062959    NULL      -1      false     b
-18     char           1307062959    NULL      1       true      b
-19     name           1307062959    NULL      -1      false     b
-20     int8           1307062959    NULL      8       true      b
-21     int2           1307062959    NULL      2       true      b
-22     int2vector     1307062959    NULL      -1      false     b
-23     int4           1307062959    NULL      4       true      b
-24     regproc        1307062959    NULL      8       true      b
-25     text           1307062959    NULL      -1      false     b
-26     oid            1307062959    NULL      8       true      b
-30     oidvector      1307062959    NULL      -1      false     b
-700    float4         1307062959    NULL      4       true      b
-701    float8         1307062959    NULL      8       true      b
-705    unknown        1307062959    NULL      0       true      b
-869    inet           1307062959    NULL      24      true      b
-1000   _bool          1307062959    NULL      -1      false     b
-1001   _bytea         1307062959    NULL      -1      false     b
-1002   _char          1307062959    NULL      -1      false     b
-1003   _name          1307062959    NULL      -1      false     b
-1005   _int2          1307062959    NULL      -1      false     b
-1006   _int2vector    1307062959    NULL      -1      false     b
-1007   _int4          1307062959    NULL      -1      false     b
-1008   _regproc       1307062959    NULL      -1      false     b
-1009   _text          1307062959    NULL      -1      false     b
-1013   _oidvector     1307062959    NULL      -1      false     b
-1014   _bpchar        1307062959    NULL      -1      false     b
-1015   _varchar       1307062959    NULL      -1      false     b
-1016   _int8          1307062959    NULL      -1      false     b
-1021   _float4        1307062959    NULL      -1      false     b
-1022   _float8        1307062959    NULL      -1      false     b
-1028   _oid           1307062959    NULL      -1      false     b
-1041   _inet          1307062959    NULL      -1      false     b
-1042   bpchar         1307062959    NULL      -1      false     b
-1043   varchar        1307062959    NULL      -1      false     b
-1082   date           1307062959    NULL      16      true      b
-1083   time           1307062959    NULL      8       true      b
-1114   timestamp      1307062959    NULL      24      true      b
-1115   _timestamp     1307062959    NULL      -1      false     b
-1182   _date          1307062959    NULL      -1      false     b
-1183   _time          1307062959    NULL      -1      false     b
-1184   timestamptz    1307062959    NULL      24      true      b
-1185   _timestamptz   1307062959    NULL      -1      false     b
-1186   interval       1307062959    NULL      24      true      b
-1187   _interval      1307062959    NULL      -1      false     b
-1231   _numeric       1307062959    NULL      -1      false     b
-1266   timetz         1307062959    NULL      16      true      b
-1270   _timetz        1307062959    NULL      -1      false     b
-1560   bit            1307062959    NULL      -1      false     b
-1561   _bit           1307062959    NULL      -1      false     b
-1562   varbit         1307062959    NULL      -1      false     b
-1563   _varbit        1307062959    NULL      -1      false     b
-1700   numeric        1307062959    NULL      -1      false     b
-2202   regprocedure   1307062959    NULL      8       true      b
-2205   regclass       1307062959    NULL      8       true      b
-2206   regtype        1307062959    NULL      8       true      b
-2207   _regprocedure  1307062959    NULL      -1      false     b
-2210   _regclass      1307062959    NULL      -1      false     b
-2211   _regtype       1307062959    NULL      -1      false     b
-2249   record         1307062959    NULL      0       true      p
-2277   anyarray       1307062959    NULL      -1      false     p
-2283   anyelement     1307062959    NULL      -1      false     p
-2287   _record        1307062959    NULL      -1      false     b
-2950   uuid           1307062959    NULL      16      true      b
-2951   _uuid          1307062959    NULL      -1      false     b
-3802   jsonb          1307062959    NULL      -1      false     b
-3807   _jsonb         1307062959    NULL      -1      false     b
-4089   regnamespace   1307062959    NULL      8       true      b
-4090   _regnamespace  1307062959    NULL      -1      false     b
-90000  geometry       1307062959    NULL      -1      false     b
-90001  _geometry      1307062959    NULL      -1      false     b
-90002  geography      1307062959    NULL      -1      false     b
-90003  _geography     1307062959    NULL      -1      false     b
-100063  newtype1      1307062959    NULL      -1      false     e
-100064  newtype2      1307062959    NULL      -1      false     e
+oid     typname        typnamespace  typowner  typlen  typbyval  typtype
+16      bool           1307062959    NULL      1       true      b
+17      bytea          1307062959    NULL      -1      false     b
+18      char           1307062959    NULL      1       true      b
+19      name           1307062959    NULL      -1      false     b
+20      int8           1307062959    NULL      8       true      b
+21      int2           1307062959    NULL      2       true      b
+22      int2vector     1307062959    NULL      -1      false     b
+23      int4           1307062959    NULL      4       true      b
+24      regproc        1307062959    NULL      8       true      b
+25      text           1307062959    NULL      -1      false     b
+26      oid            1307062959    NULL      8       true      b
+30      oidvector      1307062959    NULL      -1      false     b
+700     float4         1307062959    NULL      4       true      b
+701     float8         1307062959    NULL      8       true      b
+705     unknown        1307062959    NULL      0       true      b
+869     inet           1307062959    NULL      24      true      b
+1000    _bool          1307062959    NULL      -1      false     b
+1001    _bytea         1307062959    NULL      -1      false     b
+1002    _char          1307062959    NULL      -1      false     b
+1003    _name          1307062959    NULL      -1      false     b
+1005    _int2          1307062959    NULL      -1      false     b
+1006    _int2vector    1307062959    NULL      -1      false     b
+1007    _int4          1307062959    NULL      -1      false     b
+1008    _regproc       1307062959    NULL      -1      false     b
+1009    _text          1307062959    NULL      -1      false     b
+1013    _oidvector     1307062959    NULL      -1      false     b
+1014    _bpchar        1307062959    NULL      -1      false     b
+1015    _varchar       1307062959    NULL      -1      false     b
+1016    _int8          1307062959    NULL      -1      false     b
+1021    _float4        1307062959    NULL      -1      false     b
+1022    _float8        1307062959    NULL      -1      false     b
+1028    _oid           1307062959    NULL      -1      false     b
+1041    _inet          1307062959    NULL      -1      false     b
+1042    bpchar         1307062959    NULL      -1      false     b
+1043    varchar        1307062959    NULL      -1      false     b
+1082    date           1307062959    NULL      16      true      b
+1083    time           1307062959    NULL      8       true      b
+1114    timestamp      1307062959    NULL      24      true      b
+1115    _timestamp     1307062959    NULL      -1      false     b
+1182    _date          1307062959    NULL      -1      false     b
+1183    _time          1307062959    NULL      -1      false     b
+1184    timestamptz    1307062959    NULL      24      true      b
+1185    _timestamptz   1307062959    NULL      -1      false     b
+1186    interval       1307062959    NULL      24      true      b
+1187    _interval      1307062959    NULL      -1      false     b
+1231    _numeric       1307062959    NULL      -1      false     b
+1266    timetz         1307062959    NULL      16      true      b
+1270    _timetz        1307062959    NULL      -1      false     b
+1560    bit            1307062959    NULL      -1      false     b
+1561    _bit           1307062959    NULL      -1      false     b
+1562    varbit         1307062959    NULL      -1      false     b
+1563    _varbit        1307062959    NULL      -1      false     b
+1700    numeric        1307062959    NULL      -1      false     b
+2202    regprocedure   1307062959    NULL      8       true      b
+2205    regclass       1307062959    NULL      8       true      b
+2206    regtype        1307062959    NULL      8       true      b
+2207    _regprocedure  1307062959    NULL      -1      false     b
+2210    _regclass      1307062959    NULL      -1      false     b
+2211    _regtype       1307062959    NULL      -1      false     b
+2249    record         1307062959    NULL      0       true      p
+2277    anyarray       1307062959    NULL      -1      false     p
+2283    anyelement     1307062959    NULL      -1      false     p
+2287    _record        1307062959    NULL      -1      false     b
+2950    uuid           1307062959    NULL      16      true      b
+2951    _uuid          1307062959    NULL      -1      false     b
+3802    jsonb          1307062959    NULL      -1      false     b
+3807    _jsonb         1307062959    NULL      -1      false     b
+4089    regnamespace   1307062959    NULL      8       true      b
+4090    _regnamespace  1307062959    NULL      -1      false     b
+90000   geometry       1307062959    NULL      -1      false     b
+90001   _geometry      1307062959    NULL      -1      false     b
+90002   geography      1307062959    NULL      -1      false     b
+90003   _geography     1307062959    NULL      -1      false     b
+100063  newtype1       1307062959    NULL      -1      false     e
+100064  _newtype1      1307062959    NULL      -1      false     b
+100065  newtype2       1307062959    NULL      -1      false     e
+100066  _newtype2      1307062959    NULL      -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid    typname        typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
-16     bool           B            false           true          ,         0         0        1000
-17     bytea          U            false           true          ,         0         0        1001
-18     char           S            false           true          ,         0         0        1002
-19     name           S            false           true          ,         0         0        1003
-20     int8           N            false           true          ,         0         0        1016
-21     int2           N            false           true          ,         0         0        1005
-22     int2vector     A            false           true          ,         0         21       1006
-23     int4           N            false           true          ,         0         0        1007
-24     regproc        N            false           true          ,         0         0        1008
-25     text           S            false           true          ,         0         0        1009
-26     oid            N            false           true          ,         0         0        1028
-30     oidvector      A            false           true          ,         0         26       1013
-700    float4         N            false           true          ,         0         0        1021
-701    float8         N            false           true          ,         0         0        1022
-705    unknown        X            false           true          ,         0         0        0
-869    inet           I            false           true          ,         0         0        1041
-1000   _bool          A            false           true          ,         0         16       0
-1001   _bytea         A            false           true          ,         0         17       0
-1002   _char          A            false           true          ,         0         18       0
-1003   _name          A            false           true          ,         0         19       0
-1005   _int2          A            false           true          ,         0         21       0
-1006   _int2vector    A            false           true          ,         0         22       0
-1007   _int4          A            false           true          ,         0         23       0
-1008   _regproc       A            false           true          ,         0         24       0
-1009   _text          A            false           true          ,         0         25       0
-1013   _oidvector     A            false           true          ,         0         30       0
-1014   _bpchar        A            false           true          ,         0         1042     0
-1015   _varchar       A            false           true          ,         0         1043     0
-1016   _int8          A            false           true          ,         0         20       0
-1021   _float4        A            false           true          ,         0         700      0
-1022   _float8        A            false           true          ,         0         701      0
-1028   _oid           A            false           true          ,         0         26       0
-1041   _inet          A            false           true          ,         0         869      0
-1042   bpchar         S            false           true          ,         0         0        1014
-1043   varchar        S            false           true          ,         0         0        1015
-1082   date           D            false           true          ,         0         0        1182
-1083   time           D            false           true          ,         0         0        1183
-1114   timestamp      D            false           true          ,         0         0        1115
-1115   _timestamp     A            false           true          ,         0         1114     0
-1182   _date          A            false           true          ,         0         1082     0
-1183   _time          A            false           true          ,         0         1083     0
-1184   timestamptz    D            false           true          ,         0         0        1185
-1185   _timestamptz   A            false           true          ,         0         1184     0
-1186   interval       T            false           true          ,         0         0        1187
-1187   _interval      A            false           true          ,         0         1186     0
-1231   _numeric       A            false           true          ,         0         1700     0
-1266   timetz         D            false           true          ,         0         0        1270
-1270   _timetz        A            false           true          ,         0         1266     0
-1560   bit            V            false           true          ,         0         0        1561
-1561   _bit           A            false           true          ,         0         1560     0
-1562   varbit         V            false           true          ,         0         0        1563
-1563   _varbit        A            false           true          ,         0         1562     0
-1700   numeric        N            false           true          ,         0         0        1231
-2202   regprocedure   N            false           true          ,         0         0        2207
-2205   regclass       N            false           true          ,         0         0        2210
-2206   regtype        N            false           true          ,         0         0        2211
-2207   _regprocedure  A            false           true          ,         0         2202     0
-2210   _regclass      A            false           true          ,         0         2205     0
-2211   _regtype       A            false           true          ,         0         2206     0
-2249   record         P            false           true          ,         0         0        2287
-2277   anyarray       P            false           true          ,         0         0        0
-2283   anyelement     P            false           true          ,         0         0        2277
-2287   _record        A            false           true          ,         0         2249     0
-2950   uuid           U            false           true          ,         0         0        2951
-2951   _uuid          A            false           true          ,         0         2950     0
-3802   jsonb          U            false           true          ,         0         0        3807
-3807   _jsonb         A            false           true          ,         0         3802     0
-4089   regnamespace   N            false           true          ,         0         0        4090
-4090   _regnamespace  A            false           true          ,         0         4089     0
-90000  geometry       U            false           true          ,         0         0        90001
-90001  _geometry      A            false           true          ,         0         90000    0
-90002  geography      U            false           true          ,         0         0        90003
-90003  _geography     A            false           true          ,         0         90002    0
-100063  newtype1      E            false           true          ,         0         0        0
-100064  newtype2      E            false           true          ,         0         0        0
+oid     typname        typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
+16      bool           B            false           true          ,         0         0        1000
+17      bytea          U            false           true          ,         0         0        1001
+18      char           S            false           true          ,         0         0        1002
+19      name           S            false           true          ,         0         0        1003
+20      int8           N            false           true          ,         0         0        1016
+21      int2           N            false           true          ,         0         0        1005
+22      int2vector     A            false           true          ,         0         21       1006
+23      int4           N            false           true          ,         0         0        1007
+24      regproc        N            false           true          ,         0         0        1008
+25      text           S            false           true          ,         0         0        1009
+26      oid            N            false           true          ,         0         0        1028
+30      oidvector      A            false           true          ,         0         26       1013
+700     float4         N            false           true          ,         0         0        1021
+701     float8         N            false           true          ,         0         0        1022
+705     unknown        X            false           true          ,         0         0        0
+869     inet           I            false           true          ,         0         0        1041
+1000    _bool          A            false           true          ,         0         16       0
+1001    _bytea         A            false           true          ,         0         17       0
+1002    _char          A            false           true          ,         0         18       0
+1003    _name          A            false           true          ,         0         19       0
+1005    _int2          A            false           true          ,         0         21       0
+1006    _int2vector    A            false           true          ,         0         22       0
+1007    _int4          A            false           true          ,         0         23       0
+1008    _regproc       A            false           true          ,         0         24       0
+1009    _text          A            false           true          ,         0         25       0
+1013    _oidvector     A            false           true          ,         0         30       0
+1014    _bpchar        A            false           true          ,         0         1042     0
+1015    _varchar       A            false           true          ,         0         1043     0
+1016    _int8          A            false           true          ,         0         20       0
+1021    _float4        A            false           true          ,         0         700      0
+1022    _float8        A            false           true          ,         0         701      0
+1028    _oid           A            false           true          ,         0         26       0
+1041    _inet          A            false           true          ,         0         869      0
+1042    bpchar         S            false           true          ,         0         0        1014
+1043    varchar        S            false           true          ,         0         0        1015
+1082    date           D            false           true          ,         0         0        1182
+1083    time           D            false           true          ,         0         0        1183
+1114    timestamp      D            false           true          ,         0         0        1115
+1115    _timestamp     A            false           true          ,         0         1114     0
+1182    _date          A            false           true          ,         0         1082     0
+1183    _time          A            false           true          ,         0         1083     0
+1184    timestamptz    D            false           true          ,         0         0        1185
+1185    _timestamptz   A            false           true          ,         0         1184     0
+1186    interval       T            false           true          ,         0         0        1187
+1187    _interval      A            false           true          ,         0         1186     0
+1231    _numeric       A            false           true          ,         0         1700     0
+1266    timetz         D            false           true          ,         0         0        1270
+1270    _timetz        A            false           true          ,         0         1266     0
+1560    bit            V            false           true          ,         0         0        1561
+1561    _bit           A            false           true          ,         0         1560     0
+1562    varbit         V            false           true          ,         0         0        1563
+1563    _varbit        A            false           true          ,         0         1562     0
+1700    numeric        N            false           true          ,         0         0        1231
+2202    regprocedure   N            false           true          ,         0         0        2207
+2205    regclass       N            false           true          ,         0         0        2210
+2206    regtype        N            false           true          ,         0         0        2211
+2207    _regprocedure  A            false           true          ,         0         2202     0
+2210    _regclass      A            false           true          ,         0         2205     0
+2211    _regtype       A            false           true          ,         0         2206     0
+2249    record         P            false           true          ,         0         0        2287
+2277    anyarray       P            false           true          ,         0         0        0
+2283    anyelement     P            false           true          ,         0         0        2277
+2287    _record        A            false           true          ,         0         2249     0
+2950    uuid           U            false           true          ,         0         0        2951
+2951    _uuid          A            false           true          ,         0         2950     0
+3802    jsonb          U            false           true          ,         0         0        3807
+3807    _jsonb         A            false           true          ,         0         3802     0
+4089    regnamespace   N            false           true          ,         0         0        4090
+4090    _regnamespace  A            false           true          ,         0         4089     0
+90000   geometry       U            false           true          ,         0         0        90001
+90001   _geometry      A            false           true          ,         0         90000    0
+90002   geography      U            false           true          ,         0         0        90003
+90003   _geography     A            false           true          ,         0         90002    0
+100063  newtype1       E            false           true          ,         0         0        100064
+100064  _newtype1      A            false           true          ,         0         100063   0
+100065  newtype2       E            false           true          ,         0         0        100066
+100066  _newtype2      A            false           true          ,         0         100065   0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid    typname        typinput        typoutput        typreceive        typsend           typmodin  typmodout  typanalyze
-16     bool           boolin          boolout          boolrecv          boolsend          0         0          0
-17     bytea          byteain         byteaout         bytearecv         byteasend         0         0          0
-18     char           charin          charout          charrecv          charsend          0         0          0
-19     name           namein          nameout          namerecv          namesend          0         0          0
-20     int8           int8in          int8out          int8recv          int8send          0         0          0
-21     int2           int2in          int2out          int2recv          int2send          0         0          0
-22     int2vector     int2vectorin    int2vectorout    int2vectorrecv    int2vectorsend    0         0          0
-23     int4           int4in          int4out          int4recv          int4send          0         0          0
-24     regproc        regprocin       regprocout       regprocrecv       regprocsend       0         0          0
-25     text           textin          textout          textrecv          textsend          0         0          0
-26     oid            oidin           oidout           oidrecv           oidsend           0         0          0
-30     oidvector      oidvectorin     oidvectorout     oidvectorrecv     oidvectorsend     0         0          0
-700    float4         float4in        float4out        float4recv        float4send        0         0          0
-701    float8         float8in        float8out        float8recv        float8send        0         0          0
-705    unknown        unknownin       unknownout       unknownrecv       unknownsend       0         0          0
-869    inet           inetin          inetout          inetrecv          inetsend          0         0          0
-1000   _bool          array_in        array_out        array_recv        array_send        0         0          0
-1001   _bytea         array_in        array_out        array_recv        array_send        0         0          0
-1002   _char          array_in        array_out        array_recv        array_send        0         0          0
-1003   _name          array_in        array_out        array_recv        array_send        0         0          0
-1005   _int2          array_in        array_out        array_recv        array_send        0         0          0
-1006   _int2vector    array_in        array_out        array_recv        array_send        0         0          0
-1007   _int4          array_in        array_out        array_recv        array_send        0         0          0
-1008   _regproc       array_in        array_out        array_recv        array_send        0         0          0
-1009   _text          array_in        array_out        array_recv        array_send        0         0          0
-1013   _oidvector     array_in        array_out        array_recv        array_send        0         0          0
-1014   _bpchar        array_in        array_out        array_recv        array_send        0         0          0
-1015   _varchar       array_in        array_out        array_recv        array_send        0         0          0
-1016   _int8          array_in        array_out        array_recv        array_send        0         0          0
-1021   _float4        array_in        array_out        array_recv        array_send        0         0          0
-1022   _float8        array_in        array_out        array_recv        array_send        0         0          0
-1028   _oid           array_in        array_out        array_recv        array_send        0         0          0
-1041   _inet          array_in        array_out        array_recv        array_send        0         0          0
-1042   bpchar         bpcharin        bpcharout        bpcharrecv        bpcharsend        0         0          0
-1043   varchar        varcharin       varcharout       varcharrecv       varcharsend       0         0          0
-1082   date           date_in         date_out         date_recv         date_send         0         0          0
-1083   time           time_in         time_out         time_recv         time_send         0         0          0
-1114   timestamp      timestamp_in    timestamp_out    timestamp_recv    timestamp_send    0         0          0
-1115   _timestamp     array_in        array_out        array_recv        array_send        0         0          0
-1182   _date          array_in        array_out        array_recv        array_send        0         0          0
-1183   _time          array_in        array_out        array_recv        array_send        0         0          0
-1184   timestamptz    timestamptz_in  timestamptz_out  timestamptz_recv  timestamptz_send  0         0          0
-1185   _timestamptz   array_in        array_out        array_recv        array_send        0         0          0
-1186   interval       interval_in     interval_out     interval_recv     interval_send     0         0          0
-1187   _interval      array_in        array_out        array_recv        array_send        0         0          0
-1231   _numeric       array_in        array_out        array_recv        array_send        0         0          0
-1266   timetz         timetz_in       timetz_out       timetz_recv       timetz_send       0         0          0
-1270   _timetz        array_in        array_out        array_recv        array_send        0         0          0
-1560   bit            bit_in          bit_out          bit_recv          bit_send          0         0          0
-1561   _bit           array_in        array_out        array_recv        array_send        0         0          0
-1562   varbit         varbit_in       varbit_out       varbit_recv       varbit_send       0         0          0
-1563   _varbit        array_in        array_out        array_recv        array_send        0         0          0
-1700   numeric        numeric_in      numeric_out      numeric_recv      numeric_send      0         0          0
-2202   regprocedure   regprocedurein  regprocedureout  regprocedurerecv  regproceduresend  0         0          0
-2205   regclass       regclassin      regclassout      regclassrecv      regclasssend      0         0          0
-2206   regtype        regtypein       regtypeout       regtyperecv       regtypesend       0         0          0
-2207   _regprocedure  array_in        array_out        array_recv        array_send        0         0          0
-2210   _regclass      array_in        array_out        array_recv        array_send        0         0          0
-2211   _regtype       array_in        array_out        array_recv        array_send        0         0          0
-2249   record         record_in       record_out       record_recv       record_send       0         0          0
-2277   anyarray       anyarray_in     anyarray_out     anyarray_recv     anyarray_send     0         0          0
-2283   anyelement     anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
-2287   _record        array_in        array_out        array_recv        array_send        0         0          0
-2950   uuid           uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
-2951   _uuid          array_in        array_out        array_recv        array_send        0         0          0
-3802   jsonb          jsonb_in        jsonb_out        jsonb_recv        jsonb_send        0         0          0
-3807   _jsonb         array_in        array_out        array_recv        array_send        0         0          0
-4089   regnamespace   regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
-4090   _regnamespace  array_in        array_out        array_recv        array_send        0         0          0
-90000  geometry       geometry_in     geometry_out     geometry_recv     geometry_send     0         0          0
-90001  _geometry      array_in        array_out        array_recv        array_send        0         0          0
-90002  geography      geography_in    geography_out    geography_recv    geography_send    0         0          0
-90003  _geography     array_in        array_out        array_recv        array_send        0         0          0
-100063  newtype1      enum_in         enum_out         enum_recv         enum_send         0         0          0
-100064  newtype2      enum_in         enum_out         enum_recv         enum_send         0         0          0
+oid     typname        typinput        typoutput        typreceive        typsend           typmodin  typmodout  typanalyze
+16      bool           boolin          boolout          boolrecv          boolsend          0         0          0
+17      bytea          byteain         byteaout         bytearecv         byteasend         0         0          0
+18      char           charin          charout          charrecv          charsend          0         0          0
+19      name           namein          nameout          namerecv          namesend          0         0          0
+20      int8           int8in          int8out          int8recv          int8send          0         0          0
+21      int2           int2in          int2out          int2recv          int2send          0         0          0
+22      int2vector     int2vectorin    int2vectorout    int2vectorrecv    int2vectorsend    0         0          0
+23      int4           int4in          int4out          int4recv          int4send          0         0          0
+24      regproc        regprocin       regprocout       regprocrecv       regprocsend       0         0          0
+25      text           textin          textout          textrecv          textsend          0         0          0
+26      oid            oidin           oidout           oidrecv           oidsend           0         0          0
+30      oidvector      oidvectorin     oidvectorout     oidvectorrecv     oidvectorsend     0         0          0
+700     float4         float4in        float4out        float4recv        float4send        0         0          0
+701     float8         float8in        float8out        float8recv        float8send        0         0          0
+705     unknown        unknownin       unknownout       unknownrecv       unknownsend       0         0          0
+869     inet           inetin          inetout          inetrecv          inetsend          0         0          0
+1000    _bool          array_in        array_out        array_recv        array_send        0         0          0
+1001    _bytea         array_in        array_out        array_recv        array_send        0         0          0
+1002    _char          array_in        array_out        array_recv        array_send        0         0          0
+1003    _name          array_in        array_out        array_recv        array_send        0         0          0
+1005    _int2          array_in        array_out        array_recv        array_send        0         0          0
+1006    _int2vector    array_in        array_out        array_recv        array_send        0         0          0
+1007    _int4          array_in        array_out        array_recv        array_send        0         0          0
+1008    _regproc       array_in        array_out        array_recv        array_send        0         0          0
+1009    _text          array_in        array_out        array_recv        array_send        0         0          0
+1013    _oidvector     array_in        array_out        array_recv        array_send        0         0          0
+1014    _bpchar        array_in        array_out        array_recv        array_send        0         0          0
+1015    _varchar       array_in        array_out        array_recv        array_send        0         0          0
+1016    _int8          array_in        array_out        array_recv        array_send        0         0          0
+1021    _float4        array_in        array_out        array_recv        array_send        0         0          0
+1022    _float8        array_in        array_out        array_recv        array_send        0         0          0
+1028    _oid           array_in        array_out        array_recv        array_send        0         0          0
+1041    _inet          array_in        array_out        array_recv        array_send        0         0          0
+1042    bpchar         bpcharin        bpcharout        bpcharrecv        bpcharsend        0         0          0
+1043    varchar        varcharin       varcharout       varcharrecv       varcharsend       0         0          0
+1082    date           date_in         date_out         date_recv         date_send         0         0          0
+1083    time           time_in         time_out         time_recv         time_send         0         0          0
+1114    timestamp      timestamp_in    timestamp_out    timestamp_recv    timestamp_send    0         0          0
+1115    _timestamp     array_in        array_out        array_recv        array_send        0         0          0
+1182    _date          array_in        array_out        array_recv        array_send        0         0          0
+1183    _time          array_in        array_out        array_recv        array_send        0         0          0
+1184    timestamptz    timestamptz_in  timestamptz_out  timestamptz_recv  timestamptz_send  0         0          0
+1185    _timestamptz   array_in        array_out        array_recv        array_send        0         0          0
+1186    interval       interval_in     interval_out     interval_recv     interval_send     0         0          0
+1187    _interval      array_in        array_out        array_recv        array_send        0         0          0
+1231    _numeric       array_in        array_out        array_recv        array_send        0         0          0
+1266    timetz         timetz_in       timetz_out       timetz_recv       timetz_send       0         0          0
+1270    _timetz        array_in        array_out        array_recv        array_send        0         0          0
+1560    bit            bit_in          bit_out          bit_recv          bit_send          0         0          0
+1561    _bit           array_in        array_out        array_recv        array_send        0         0          0
+1562    varbit         varbit_in       varbit_out       varbit_recv       varbit_send       0         0          0
+1563    _varbit        array_in        array_out        array_recv        array_send        0         0          0
+1700    numeric        numeric_in      numeric_out      numeric_recv      numeric_send      0         0          0
+2202    regprocedure   regprocedurein  regprocedureout  regprocedurerecv  regproceduresend  0         0          0
+2205    regclass       regclassin      regclassout      regclassrecv      regclasssend      0         0          0
+2206    regtype        regtypein       regtypeout       regtyperecv       regtypesend       0         0          0
+2207    _regprocedure  array_in        array_out        array_recv        array_send        0         0          0
+2210    _regclass      array_in        array_out        array_recv        array_send        0         0          0
+2211    _regtype       array_in        array_out        array_recv        array_send        0         0          0
+2249    record         record_in       record_out       record_recv       record_send       0         0          0
+2277    anyarray       anyarray_in     anyarray_out     anyarray_recv     anyarray_send     0         0          0
+2283    anyelement     anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
+2287    _record        array_in        array_out        array_recv        array_send        0         0          0
+2950    uuid           uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
+2951    _uuid          array_in        array_out        array_recv        array_send        0         0          0
+3802    jsonb          jsonb_in        jsonb_out        jsonb_recv        jsonb_send        0         0          0
+3807    _jsonb         array_in        array_out        array_recv        array_send        0         0          0
+4089    regnamespace   regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
+4090    _regnamespace  array_in        array_out        array_recv        array_send        0         0          0
+90000   geometry       geometry_in     geometry_out     geometry_recv     geometry_send     0         0          0
+90001   _geometry      array_in        array_out        array_recv        array_send        0         0          0
+90002   geography      geography_in    geography_out    geography_recv    geography_send    0         0          0
+90003   _geography     array_in        array_out        array_recv        array_send        0         0          0
+100063  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100064  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
+100065  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100066  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid    typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
-16     bool           NULL      NULL        false       0            -1
-17     bytea          NULL      NULL        false       0            -1
-18     char           NULL      NULL        false       0            -1
-19     name           NULL      NULL        false       0            -1
-20     int8           NULL      NULL        false       0            -1
-21     int2           NULL      NULL        false       0            -1
-22     int2vector     NULL      NULL        false       0            -1
-23     int4           NULL      NULL        false       0            -1
-24     regproc        NULL      NULL        false       0            -1
-25     text           NULL      NULL        false       0            -1
-26     oid            NULL      NULL        false       0            -1
-30     oidvector      NULL      NULL        false       0            -1
-700    float4         NULL      NULL        false       0            -1
-701    float8         NULL      NULL        false       0            -1
-705    unknown        NULL      NULL        false       0            -1
-869    inet           NULL      NULL        false       0            -1
-1000   _bool          NULL      NULL        false       0            -1
-1001   _bytea         NULL      NULL        false       0            -1
-1002   _char          NULL      NULL        false       0            -1
-1003   _name          NULL      NULL        false       0            -1
-1005   _int2          NULL      NULL        false       0            -1
-1006   _int2vector    NULL      NULL        false       0            -1
-1007   _int4          NULL      NULL        false       0            -1
-1008   _regproc       NULL      NULL        false       0            -1
-1009   _text          NULL      NULL        false       0            -1
-1013   _oidvector     NULL      NULL        false       0            -1
-1014   _bpchar        NULL      NULL        false       0            -1
-1015   _varchar       NULL      NULL        false       0            -1
-1016   _int8          NULL      NULL        false       0            -1
-1021   _float4        NULL      NULL        false       0            -1
-1022   _float8        NULL      NULL        false       0            -1
-1028   _oid           NULL      NULL        false       0            -1
-1041   _inet          NULL      NULL        false       0            -1
-1042   bpchar         NULL      NULL        false       0            -1
-1043   varchar        NULL      NULL        false       0            -1
-1082   date           NULL      NULL        false       0            -1
-1083   time           NULL      NULL        false       0            -1
-1114   timestamp      NULL      NULL        false       0            -1
-1115   _timestamp     NULL      NULL        false       0            -1
-1182   _date          NULL      NULL        false       0            -1
-1183   _time          NULL      NULL        false       0            -1
-1184   timestamptz    NULL      NULL        false       0            -1
-1185   _timestamptz   NULL      NULL        false       0            -1
-1186   interval       NULL      NULL        false       0            -1
-1187   _interval      NULL      NULL        false       0            -1
-1231   _numeric       NULL      NULL        false       0            -1
-1266   timetz         NULL      NULL        false       0            -1
-1270   _timetz        NULL      NULL        false       0            -1
-1560   bit            NULL      NULL        false       0            -1
-1561   _bit           NULL      NULL        false       0            -1
-1562   varbit         NULL      NULL        false       0            -1
-1563   _varbit        NULL      NULL        false       0            -1
-1700   numeric        NULL      NULL        false       0            -1
-2202   regprocedure   NULL      NULL        false       0            -1
-2205   regclass       NULL      NULL        false       0            -1
-2206   regtype        NULL      NULL        false       0            -1
-2207   _regprocedure  NULL      NULL        false       0            -1
-2210   _regclass      NULL      NULL        false       0            -1
-2211   _regtype       NULL      NULL        false       0            -1
-2249   record         NULL      NULL        false       0            -1
-2277   anyarray       NULL      NULL        false       0            -1
-2283   anyelement     NULL      NULL        false       0            -1
-2287   _record        NULL      NULL        false       0            -1
-2950   uuid           NULL      NULL        false       0            -1
-2951   _uuid          NULL      NULL        false       0            -1
-3802   jsonb          NULL      NULL        false       0            -1
-3807   _jsonb         NULL      NULL        false       0            -1
-4089   regnamespace   NULL      NULL        false       0            -1
-4090   _regnamespace  NULL      NULL        false       0            -1
-90000  geometry       NULL      NULL        false       0            -1
-90001  _geometry      NULL      NULL        false       0            -1
-90002  geography      NULL      NULL        false       0            -1
-90003  _geography     NULL      NULL        false       0            -1
-100063  newtype1      NULL      NULL        false       0            -1
-100064  newtype2      NULL      NULL        false       0            -1
+oid     typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
+16      bool           NULL      NULL        false       0            -1
+17      bytea          NULL      NULL        false       0            -1
+18      char           NULL      NULL        false       0            -1
+19      name           NULL      NULL        false       0            -1
+20      int8           NULL      NULL        false       0            -1
+21      int2           NULL      NULL        false       0            -1
+22      int2vector     NULL      NULL        false       0            -1
+23      int4           NULL      NULL        false       0            -1
+24      regproc        NULL      NULL        false       0            -1
+25      text           NULL      NULL        false       0            -1
+26      oid            NULL      NULL        false       0            -1
+30      oidvector      NULL      NULL        false       0            -1
+700     float4         NULL      NULL        false       0            -1
+701     float8         NULL      NULL        false       0            -1
+705     unknown        NULL      NULL        false       0            -1
+869     inet           NULL      NULL        false       0            -1
+1000    _bool          NULL      NULL        false       0            -1
+1001    _bytea         NULL      NULL        false       0            -1
+1002    _char          NULL      NULL        false       0            -1
+1003    _name          NULL      NULL        false       0            -1
+1005    _int2          NULL      NULL        false       0            -1
+1006    _int2vector    NULL      NULL        false       0            -1
+1007    _int4          NULL      NULL        false       0            -1
+1008    _regproc       NULL      NULL        false       0            -1
+1009    _text          NULL      NULL        false       0            -1
+1013    _oidvector     NULL      NULL        false       0            -1
+1014    _bpchar        NULL      NULL        false       0            -1
+1015    _varchar       NULL      NULL        false       0            -1
+1016    _int8          NULL      NULL        false       0            -1
+1021    _float4        NULL      NULL        false       0            -1
+1022    _float8        NULL      NULL        false       0            -1
+1028    _oid           NULL      NULL        false       0            -1
+1041    _inet          NULL      NULL        false       0            -1
+1042    bpchar         NULL      NULL        false       0            -1
+1043    varchar        NULL      NULL        false       0            -1
+1082    date           NULL      NULL        false       0            -1
+1083    time           NULL      NULL        false       0            -1
+1114    timestamp      NULL      NULL        false       0            -1
+1115    _timestamp     NULL      NULL        false       0            -1
+1182    _date          NULL      NULL        false       0            -1
+1183    _time          NULL      NULL        false       0            -1
+1184    timestamptz    NULL      NULL        false       0            -1
+1185    _timestamptz   NULL      NULL        false       0            -1
+1186    interval       NULL      NULL        false       0            -1
+1187    _interval      NULL      NULL        false       0            -1
+1231    _numeric       NULL      NULL        false       0            -1
+1266    timetz         NULL      NULL        false       0            -1
+1270    _timetz        NULL      NULL        false       0            -1
+1560    bit            NULL      NULL        false       0            -1
+1561    _bit           NULL      NULL        false       0            -1
+1562    varbit         NULL      NULL        false       0            -1
+1563    _varbit        NULL      NULL        false       0            -1
+1700    numeric        NULL      NULL        false       0            -1
+2202    regprocedure   NULL      NULL        false       0            -1
+2205    regclass       NULL      NULL        false       0            -1
+2206    regtype        NULL      NULL        false       0            -1
+2207    _regprocedure  NULL      NULL        false       0            -1
+2210    _regclass      NULL      NULL        false       0            -1
+2211    _regtype       NULL      NULL        false       0            -1
+2249    record         NULL      NULL        false       0            -1
+2277    anyarray       NULL      NULL        false       0            -1
+2283    anyelement     NULL      NULL        false       0            -1
+2287    _record        NULL      NULL        false       0            -1
+2950    uuid           NULL      NULL        false       0            -1
+2951    _uuid          NULL      NULL        false       0            -1
+3802    jsonb          NULL      NULL        false       0            -1
+3807    _jsonb         NULL      NULL        false       0            -1
+4089    regnamespace   NULL      NULL        false       0            -1
+4090    _regnamespace  NULL      NULL        false       0            -1
+90000   geometry       NULL      NULL        false       0            -1
+90001   _geometry      NULL      NULL        false       0            -1
+90002   geography      NULL      NULL        false       0            -1
+90003   _geography     NULL      NULL        false       0            -1
+100063  newtype1       NULL      NULL        false       0            -1
+100064  _newtype1      NULL      NULL        false       0            -1
+100065  newtype2       NULL      NULL        false       0            -1
+100066  _newtype2      NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid    typname        typndims  typcollation  typdefaultbin  typdefault  typacl
-16     bool           0         0             NULL           NULL        NULL
-17     bytea          0         0             NULL           NULL        NULL
-18     char           0         3903121477    NULL           NULL        NULL
-19     name           0         3903121477    NULL           NULL        NULL
-20     int8           0         0             NULL           NULL        NULL
-21     int2           0         0             NULL           NULL        NULL
-22     int2vector     0         0             NULL           NULL        NULL
-23     int4           0         0             NULL           NULL        NULL
-24     regproc        0         0             NULL           NULL        NULL
-25     text           0         3903121477    NULL           NULL        NULL
-26     oid            0         0             NULL           NULL        NULL
-30     oidvector      0         0             NULL           NULL        NULL
-700    float4         0         0             NULL           NULL        NULL
-701    float8         0         0             NULL           NULL        NULL
-705    unknown        0         0             NULL           NULL        NULL
-869    inet           0         0             NULL           NULL        NULL
-1000   _bool          0         0             NULL           NULL        NULL
-1001   _bytea         0         0             NULL           NULL        NULL
-1002   _char          0         3903121477    NULL           NULL        NULL
-1003   _name          0         3903121477    NULL           NULL        NULL
-1005   _int2          0         0             NULL           NULL        NULL
-1006   _int2vector    0         0             NULL           NULL        NULL
-1007   _int4          0         0             NULL           NULL        NULL
-1008   _regproc       0         0             NULL           NULL        NULL
-1009   _text          0         3903121477    NULL           NULL        NULL
-1013   _oidvector     0         0             NULL           NULL        NULL
-1014   _bpchar        0         3903121477    NULL           NULL        NULL
-1015   _varchar       0         3903121477    NULL           NULL        NULL
-1016   _int8          0         0             NULL           NULL        NULL
-1021   _float4        0         0             NULL           NULL        NULL
-1022   _float8        0         0             NULL           NULL        NULL
-1028   _oid           0         0             NULL           NULL        NULL
-1041   _inet          0         0             NULL           NULL        NULL
-1042   bpchar         0         3903121477    NULL           NULL        NULL
-1043   varchar        0         3903121477    NULL           NULL        NULL
-1082   date           0         0             NULL           NULL        NULL
-1083   time           0         0             NULL           NULL        NULL
-1114   timestamp      0         0             NULL           NULL        NULL
-1115   _timestamp     0         0             NULL           NULL        NULL
-1182   _date          0         0             NULL           NULL        NULL
-1183   _time          0         0             NULL           NULL        NULL
-1184   timestamptz    0         0             NULL           NULL        NULL
-1185   _timestamptz   0         0             NULL           NULL        NULL
-1186   interval       0         0             NULL           NULL        NULL
-1187   _interval      0         0             NULL           NULL        NULL
-1231   _numeric       0         0             NULL           NULL        NULL
-1266   timetz         0         0             NULL           NULL        NULL
-1270   _timetz        0         0             NULL           NULL        NULL
-1560   bit            0         0             NULL           NULL        NULL
-1561   _bit           0         0             NULL           NULL        NULL
-1562   varbit         0         0             NULL           NULL        NULL
-1563   _varbit        0         0             NULL           NULL        NULL
-1700   numeric        0         0             NULL           NULL        NULL
-2202   regprocedure   0         0             NULL           NULL        NULL
-2205   regclass       0         0             NULL           NULL        NULL
-2206   regtype        0         0             NULL           NULL        NULL
-2207   _regprocedure  0         0             NULL           NULL        NULL
-2210   _regclass      0         0             NULL           NULL        NULL
-2211   _regtype       0         0             NULL           NULL        NULL
-2249   record         0         0             NULL           NULL        NULL
-2277   anyarray       0         3903121477    NULL           NULL        NULL
-2283   anyelement     0         0             NULL           NULL        NULL
-2287   _record        0         0             NULL           NULL        NULL
-2950   uuid           0         0             NULL           NULL        NULL
-2951   _uuid          0         0             NULL           NULL        NULL
-3802   jsonb          0         0             NULL           NULL        NULL
-3807   _jsonb         0         0             NULL           NULL        NULL
-4089   regnamespace   0         0             NULL           NULL        NULL
-4090   _regnamespace  0         0             NULL           NULL        NULL
-90000  geometry       0         0             NULL           NULL        NULL
-90001  _geometry      0         0             NULL           NULL        NULL
-90002  geography      0         0             NULL           NULL        NULL
-90003  _geography     0         0             NULL           NULL        NULL
-100063  newtype1      0         0             NULL           NULL        NULL
-100064  newtype2      0         0             NULL           NULL        NULL
+oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
+16      bool           0         0             NULL           NULL        NULL
+17      bytea          0         0             NULL           NULL        NULL
+18      char           0         3903121477    NULL           NULL        NULL
+19      name           0         3903121477    NULL           NULL        NULL
+20      int8           0         0             NULL           NULL        NULL
+21      int2           0         0             NULL           NULL        NULL
+22      int2vector     0         0             NULL           NULL        NULL
+23      int4           0         0             NULL           NULL        NULL
+24      regproc        0         0             NULL           NULL        NULL
+25      text           0         3903121477    NULL           NULL        NULL
+26      oid            0         0             NULL           NULL        NULL
+30      oidvector      0         0             NULL           NULL        NULL
+700     float4         0         0             NULL           NULL        NULL
+701     float8         0         0             NULL           NULL        NULL
+705     unknown        0         0             NULL           NULL        NULL
+869     inet           0         0             NULL           NULL        NULL
+1000    _bool          0         0             NULL           NULL        NULL
+1001    _bytea         0         0             NULL           NULL        NULL
+1002    _char          0         3903121477    NULL           NULL        NULL
+1003    _name          0         3903121477    NULL           NULL        NULL
+1005    _int2          0         0             NULL           NULL        NULL
+1006    _int2vector    0         0             NULL           NULL        NULL
+1007    _int4          0         0             NULL           NULL        NULL
+1008    _regproc       0         0             NULL           NULL        NULL
+1009    _text          0         3903121477    NULL           NULL        NULL
+1013    _oidvector     0         0             NULL           NULL        NULL
+1014    _bpchar        0         3903121477    NULL           NULL        NULL
+1015    _varchar       0         3903121477    NULL           NULL        NULL
+1016    _int8          0         0             NULL           NULL        NULL
+1021    _float4        0         0             NULL           NULL        NULL
+1022    _float8        0         0             NULL           NULL        NULL
+1028    _oid           0         0             NULL           NULL        NULL
+1041    _inet          0         0             NULL           NULL        NULL
+1042    bpchar         0         3903121477    NULL           NULL        NULL
+1043    varchar        0         3903121477    NULL           NULL        NULL
+1082    date           0         0             NULL           NULL        NULL
+1083    time           0         0             NULL           NULL        NULL
+1114    timestamp      0         0             NULL           NULL        NULL
+1115    _timestamp     0         0             NULL           NULL        NULL
+1182    _date          0         0             NULL           NULL        NULL
+1183    _time          0         0             NULL           NULL        NULL
+1184    timestamptz    0         0             NULL           NULL        NULL
+1185    _timestamptz   0         0             NULL           NULL        NULL
+1186    interval       0         0             NULL           NULL        NULL
+1187    _interval      0         0             NULL           NULL        NULL
+1231    _numeric       0         0             NULL           NULL        NULL
+1266    timetz         0         0             NULL           NULL        NULL
+1270    _timetz        0         0             NULL           NULL        NULL
+1560    bit            0         0             NULL           NULL        NULL
+1561    _bit           0         0             NULL           NULL        NULL
+1562    varbit         0         0             NULL           NULL        NULL
+1563    _varbit        0         0             NULL           NULL        NULL
+1700    numeric        0         0             NULL           NULL        NULL
+2202    regprocedure   0         0             NULL           NULL        NULL
+2205    regclass       0         0             NULL           NULL        NULL
+2206    regtype        0         0             NULL           NULL        NULL
+2207    _regprocedure  0         0             NULL           NULL        NULL
+2210    _regclass      0         0             NULL           NULL        NULL
+2211    _regtype       0         0             NULL           NULL        NULL
+2249    record         0         0             NULL           NULL        NULL
+2277    anyarray       0         3903121477    NULL           NULL        NULL
+2283    anyelement     0         0             NULL           NULL        NULL
+2287    _record        0         0             NULL           NULL        NULL
+2950    uuid           0         0             NULL           NULL        NULL
+2951    _uuid          0         0             NULL           NULL        NULL
+3802    jsonb          0         0             NULL           NULL        NULL
+3807    _jsonb         0         0             NULL           NULL        NULL
+4089    regnamespace   0         0             NULL           NULL        NULL
+4090    _regnamespace  0         0             NULL           NULL        NULL
+90000   geometry       0         0             NULL           NULL        NULL
+90001   _geometry      0         0             NULL           NULL        NULL
+90002   geography      0         0             NULL           NULL        NULL
+90003   _geography     0         0             NULL           NULL        NULL
+100063  newtype1       0         0             NULL           NULL        NULL
+100064  _newtype1      0         0             NULL           NULL        NULL
+100065  newtype2       0         0             NULL           NULL        NULL
+100066  _newtype2      0         0             NULL           NULL        NULL
 
 user testuser
 
@@ -1909,8 +1919,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-66        20        1         1             9223372036854775807  1       1         false
-67        20        6         2             10                   5       1         false
+68        20        1         1             9223372036854775807  1       1         false
+69        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -2363,7 +2373,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
-1443049372  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+1962521914  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -2409,22 +2419,22 @@ idxb       CREATE INDEX idxb ON test.public.geospatial_table USING gin (b ASC)
 
 subtest regression_46799
 statement ok
-create table t(x INT DEFAULT 1, y INT DEFAULT 1);
+CREATE TABLE t(x INT DEFAULT 1, y INT DEFAULT 1);
 
 query I
-select adnum from pg_attrdef WHERE adrelid = 87
+SELECT adnum FROM pg_attrdef WHERE adrelid = 89
 ----
 1
 2
 3
 
 statement ok
-alter table t drop column y;
-alter table t add column y int default 1;
+ALTER TABLE t DROP COLUMN y;
+ALTER TABLE t ADD COLUMN y INT DEFAULT 1;
 
-# make sure after adding and dropping the same column, the adnum for the re-added column increases.
+# Make sure after adding and dropping the same column, the adnum for the re-added column increases.
 query I
-select adnum from pg_attrdef WHERE adrelid = 87
+select adnum from pg_attrdef WHERE adrelid = 89
 ----
 1
 3
@@ -2437,13 +2447,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-88  88  jt
+90  90  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
-88  88    jt
+90  90    jt
 
 subtest regression_49207
 statement ok
