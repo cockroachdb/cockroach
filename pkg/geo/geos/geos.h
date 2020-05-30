@@ -66,6 +66,12 @@ CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret);
 CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* centroidEWKB);
 
 //
+// Linear reference.
+//
+CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS *lib, CR_GEOS_Slice a, double distance,
+                                   CR_GEOS_String *interpolatedPoint);
+
+//
 // Binary operators.
 //
 

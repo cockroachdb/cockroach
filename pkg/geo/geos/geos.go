@@ -267,6 +267,25 @@ func Centroid(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// InterpolateLine returns the point along the given LineString which is at
+// a given distance from starting point.
+// Note: For distance less than 0 it returns start point similarly for distance
+// greater LineString's length.
+// InterpolateLine also works with (Multi)LineString. However, the result is
+// not appropriate as it combines all the LineString present in (MULTI)LineString,
+// considering all the corner points of LineString overlaps each other.
+func InterpolateLine(ewkb geopb.EWKB, distance float64) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Interpolate(g, goToCSlice(ewkb), C.double(distance), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // MinDistance returns the minimum distance between two EWKBs.
 func MinDistance(a geopb.EWKB, b geopb.EWKB) (float64, error) {
 	g, err := ensureInitInternal()
