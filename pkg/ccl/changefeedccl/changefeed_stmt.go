@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"net/url"
 	"sort"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -571,6 +573,16 @@ func (b *changefeedResumer) Resume(
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+
+			if flowinfra.IsFlowRetryableError(err) {
+				// We don't want to retry flowinfra retryable error in the retry loop above.
+				// This error currently indicates that this node is being drained.  As such,
+				// retries will not help.
+				// Instead, we want to make sure that the changefeed job is not marked failed
+				// due to a transient, retryable error.
+				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+			}
+
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
 			return err
 		}
