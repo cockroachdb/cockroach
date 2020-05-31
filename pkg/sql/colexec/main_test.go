@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"testing"
@@ -66,12 +67,16 @@ func TestMain(m *testing.M) {
 		testDiskAcc = &diskAcc
 		defer testDiskAcc.Close(ctx)
 
-		// Pick a random batch size in [minBatchSize, coldata.MaxBatchSize]
-		// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
-		randomBatchSize := generateBatchSize()
-		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
-		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
-			colexecerror.InternalError(err)
+		flag.Parse()
+		if f := flag.Lookup("test.bench"); f == nil || f.Value.String() == "" {
+			// If we're running benchmarks, don't set a random batch size.
+			// Pick a random batch size in [minBatchSize, coldata.MaxBatchSize]
+			// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
+			randomBatchSize := generateBatchSize()
+			fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
+			if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+				colexecerror.InternalError(err)
+			}
 		}
 		return m.Run()
 	}())
