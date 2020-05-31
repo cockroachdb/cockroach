@@ -411,103 +411,103 @@ false
 
 # Tests with a tuple coming from a subquery.
 query B
-SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a))
+SELECT NULL IN (SELECT * FROM (VALUES (1)) AS t(a))
 ----
 NULL
 
 query B
-SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (1, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT (2, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (2, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 false
 
 query B
-SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT (NULL::int, 2) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 2) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 false
 
 query B
-SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+SELECT NULL NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
 ----
 NULL
 
 query B
-SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (1, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT (2, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (2, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 true
 
 query B
-SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT (NULL::int, 2) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 2) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 true
 
 query B
-SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 # Tests with an empty IN tuple.
 query B
-SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+SELECT NULL IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
 ----
 false
 
 query B
-SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (1, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 false
 
 query B
-SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 false
 
 query B
-SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 false
 
 query B
-SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+SELECT NULL NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
 ----
 true
 
 query B
-SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (1, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
 
 query B
-SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
 
 query B
-SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
 

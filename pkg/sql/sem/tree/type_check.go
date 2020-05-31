@@ -1842,12 +1842,31 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
+		// If the left type is NULL or is a tuple containing NULLS, then it won't
+		// be equivalent to the right type, but should pass type-checking.
+		if hasUnknownFamily(left) {
+			return nil
+		}
 		if !left.Equivalent(right.TupleContents()[0]) {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
 	}
 	return nil
+}
+
+func hasUnknownFamily(t *types.T) bool {
+	if t.Family() == types.UnknownFamily {
+		return true
+	}
+	if t.Family() == types.TupleFamily {
+		for _, tc := range t.TupleContents() {
+			if hasUnknownFamily(tc) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func typeCheckComparisonOp(
