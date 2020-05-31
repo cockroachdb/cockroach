@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 var errNoInboundStreamConnection = errors.New("no inbound stream connection")
