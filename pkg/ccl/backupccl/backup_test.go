@@ -2474,6 +2474,70 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			latestBackup,
 		)
 	})
+
+	t.Run("create-backup-drop-backup", func(t *testing.T) {
+		var tsBefore string
+		backupPath := "nodelocal://0/drop_table_db"
+
+		sqlDB.Exec(t, "CREATE DATABASE drop_table_db")
+		sqlDB.Exec(t, "CREATE DATABASE drop_table_db_restore")
+		sqlDB.Exec(t, "CREATE TABLE drop_table_db.a (k int, v string)")
+		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, "INSERT INTO drop_table_db.a VALUES (1, 'foo')")
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
+		sqlDB.Exec(t, "DROP TABLE drop_table_db.a")
+		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db TO $1 WITH revision_history`, backupPath)
+		restoreQuery := fmt.Sprintf(
+			"RESTORE drop_table_db.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='drop_table_db_restore'", tsBefore)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+
+		restoredTableQuery := "SELECT * FROM drop_table_db_restore.a"
+		backedUpTableQuery := fmt.Sprintf("SELECT * FROM drop_table_db.a AS OF SYSTEM TIME %s", tsBefore)
+		sqlDB.CheckQueryResults(t, backedUpTableQuery, sqlDB.QueryStr(t, restoredTableQuery))
+	})
+
+	t.Run("backup-create-drop-backup", func(t *testing.T) {
+		var tsBefore string
+		backupPath := "nodelocal://0/create_and_drop"
+
+		sqlDB.Exec(t, "CREATE DATABASE create_and_drop")
+		sqlDB.Exec(t, "CREATE DATABASE create_and_drop_restore")
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, "CREATE TABLE create_and_drop.a (k int, v string)")
+		sqlDB.Exec(t, "INSERT INTO create_and_drop.a VALUES (1, 'foo')")
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
+		sqlDB.Exec(t, "DROP TABLE create_and_drop.a")
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop TO $1 WITH revision_history`, backupPath)
+		restoreQuery := fmt.Sprintf(
+			"RESTORE create_and_drop.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='create_and_drop_restore'", tsBefore)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+
+		restoredTableQuery := "SELECT * FROM create_and_drop_restore.a"
+		backedUpTableQuery := fmt.Sprintf("SELECT * FROM create_and_drop.a AS OF SYSTEM TIME %s", tsBefore)
+		sqlDB.CheckQueryResults(t, backedUpTableQuery, sqlDB.QueryStr(t, restoredTableQuery))
+	})
+
+	// This is a regression test for #49707.
+	t.Run("ignore-dropped-table", func(t *testing.T) {
+		backupPath := "nodelocal://0/ignore_dropped_table"
+
+		sqlDB.Exec(t, "CREATE DATABASE ignore_dropped_table")
+		sqlDB.Exec(t, "CREATE TABLE ignore_dropped_table.a (k int, v string)")
+		sqlDB.Exec(t, "CREATE TABLE ignore_dropped_table.b (k int, v string)")
+		sqlDB.Exec(t, "DROP TABLE ignore_dropped_table.a")
+		sqlDB.Exec(t, `BACKUP DATABASE ignore_dropped_table TO $1 WITH revision_history`, backupPath)
+		// Make a backup without any changes to the schema. This ensures that table
+		// "a" is not included in the span for this incremental backup.
+		sqlDB.Exec(t, `BACKUP DATABASE ignore_dropped_table TO $1 WITH revision_history`, backupPath)
+		// Edit the schemas to back up to ensure there are revisions generated.
+		// Table a should not be considered part of the span of the next backup.
+		sqlDB.Exec(t, "CREATE TABLE ignore_dropped_table.c (k int, v string)")
+		sqlDB.Exec(t, `BACKUP DATABASE ignore_dropped_table TO $1 WITH revision_history`, backupPath)
+
+		// Ensure it can be restored.
+		sqlDB.Exec(t, "DROP DATABASE ignore_dropped_table")
+		sqlDB.Exec(t, "RESTORE DATABASE ignore_dropped_table FROM $1", backupPath)
+	})
 }
 
 func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
