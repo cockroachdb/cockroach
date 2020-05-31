@@ -159,6 +159,20 @@ func (fr *FlowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
 	}
 }
 
+type flowRetryableError struct {
+	cause error
+}
+
+func (e *flowRetryableError) Error() string {
+	return fmt.Sprintf("flow retryable error: %+v", e.cause)
+}
+
+// IsFlowRetryableError returns true if an error represents a retryable
+// flow error.
+func IsFlowRetryableError(e error) bool {
+	return errors.HasType(e, (*flowRetryableError)(nil))
+}
+
 // RegisterFlow makes a flow accessible to ConnectInboundStream. Any concurrent
 // ConnectInboundStream calls that are waiting for this flow are woken up.
 //
@@ -188,11 +202,19 @@ func (fr *FlowRegistry) RegisterFlow(
 			}
 		}
 	}()
-	if fr.draining {
-		return errors.Errorf(
+
+	draining := fr.draining
+	if f.Cfg != nil {
+		if knobs, ok := f.Cfg.TestingKnobs.Flowinfra.(*TestingKnobs); ok && knobs != nil && knobs.FlowRegistryDraining != nil {
+			draining = knobs.FlowRegistryDraining()
+		}
+	}
+
+	if draining {
+		return &flowRetryableError{cause: errors.Errorf(
 			"could not register flowID %d because the registry is draining",
 			id,
-		)
+		)}
 	}
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
