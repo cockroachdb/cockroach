@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2806,4 +2807,88 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 
 	// Only the enterprise version uses jobs.
 	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedHandlesDrainingNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	flushCh := make(chan struct{}, 1)
+	defer close(flushCh)
+
+	shouldDrain := true
+	knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{
+		DrainFast: true,
+		Changefeed: &TestingKnobs{
+			AfterSinkFlush: func() error {
+				select {
+				case flushCh <- struct{}{}:
+				default:
+				}
+				return nil
+			},
+		},
+		Flowinfra: &flowinfra.TestingKnobs{
+			FlowRegistryDraining: func() bool {
+				if shouldDrain {
+					shouldDrain = false
+					return true
+				}
+				return false
+			},
+		},
+	}}
+
+	sinkDir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	tc := serverutils.StartTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			UseDatabase:   "test",
+			Knobs:         knobs,
+			ExternalIODir: sinkDir,
+		}})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := tc.ServerConn(1)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		10,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+
+	// Introduce 4 splits to get 5 ranges.  We need multiple ranges in order to run distributed
+	// flow.
+	sqlDB.Exec(t, "ALTER TABLE test.foo SPLIT AT (SELECT i*2 FROM generate_series(1, 4) AS g(i))")
+	sqlDB.Exec(t, "ALTER TABLE test.foo SCATTER")
+
+	// Create a factory which executes the CREATE CHANGEFEED statement on server 0.
+	// This statement should fail, but the job itself ought to be creaated.
+	// After some time, that job should be adopted by another node, and executed successfully.
+	f := cdctest.MakeCloudFeedFactory(tc.Server(1), tc.ServerConn(0), sinkDir, flushCh)
+
+	feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
+	defer closeFeed(t, feed)
+
+	// At this point, the job created by feed will fail to start running on node 0 due to draining
+	// registry.  However, this job will be retried, and it should succeeded.
+	// Note: This test is a bit unrealistic in that if the registry is draining, that
+	// means that the server is draining (i.e being shut down).  We don't do a full shutdown
+	// here, but we are simulating a restart by failing to start a flow the first time around.
+	assertPayloads(t, feed, []string{
+		`foo: [1]->{"after": {"k": 1, "v": 1}}`,
+		`foo: [2]->{"after": {"k": 2, "v": 0}}`,
+		`foo: [3]->{"after": {"k": 3, "v": 1}}`,
+		`foo: [4]->{"after": {"k": 4, "v": 0}}`,
+		`foo: [5]->{"after": {"k": 5, "v": 1}}`,
+		`foo: [6]->{"after": {"k": 6, "v": 0}}`,
+		`foo: [7]->{"after": {"k": 7, "v": 1}}`,
+		`foo: [8]->{"after": {"k": 8, "v": 0}}`,
+		`foo: [9]->{"after": {"k": 9, "v": 1}}`,
+		`foo: [10]->{"after": {"k": 10, "v": 0}}`,
+	})
 }
