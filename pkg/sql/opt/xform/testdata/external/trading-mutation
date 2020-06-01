@@ -590,9 +590,7 @@ project
 #      could eliminate the join to Cards (because of FK).
 #   2. InnerJoin can be pushed below GroupBy, which would put the GroupBy as the
 #      input of the ScalarGroupBy.
-#   3. ScalarGroupBy Max of a GroupBy Max is just ScalarGroupBy Max. Those two
-#      would then be collapsed into one.
-#   4. Furthermore, the join with the second Cards table could be eliminated,
+#   3. Furthermore, the join with the second Cards table could be eliminated,
 #      just as with #1.
 #
 opt format=show-stats
