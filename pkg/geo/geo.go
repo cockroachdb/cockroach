@@ -514,24 +514,9 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	var shape geopb.Shape
-	switch t := t.(type) {
-	case *geom.Point:
-		shape = geopb.Shape_Point
-	case *geom.LineString:
-		shape = geopb.Shape_LineString
-	case *geom.Polygon:
-		shape = geopb.Shape_Polygon
-	case *geom.MultiPoint:
-		shape = geopb.Shape_MultiPoint
-	case *geom.MultiLineString:
-		shape = geopb.Shape_MultiLineString
-	case *geom.MultiPolygon:
-		shape = geopb.Shape_MultiPolygon
-	case *geom.GeometryCollection:
-		shape = geopb.Shape_GeometryCollection
-	default:
-		return geopb.SpatialObject{}, errors.Newf("unknown shape: %T", t)
+	shape, err := geopbShape(t)
+	if err != nil {
+		return geopb.SpatialObject{}, err
 	}
 	switch t.Layout() {
 	case geom.XY:
@@ -552,4 +537,25 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 		Shape:       shape,
 		BoundingBox: bbox,
 	}, nil
+}
+
+func geopbShape(t geom.T) (geopb.Shape, error) {
+	switch t := t.(type) {
+	case *geom.Point:
+		return geopb.Shape_Point, nil
+	case *geom.LineString:
+		return geopb.Shape_LineString, nil
+	case *geom.Polygon:
+		return geopb.Shape_Polygon, nil
+	case *geom.MultiPoint:
+		return geopb.Shape_MultiPoint, nil
+	case *geom.MultiLineString:
+		return geopb.Shape_MultiLineString, nil
+	case *geom.MultiPolygon:
+		return geopb.Shape_MultiPolygon, nil
+	case *geom.GeometryCollection:
+		return geopb.Shape_GeometryCollection, nil
+	default:
+		return geopb.Shape_Unset, errors.Newf("unknown shape: %T", t)
+	}
 }

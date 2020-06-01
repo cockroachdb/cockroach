@@ -874,6 +874,65 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_summary": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				summary, err := geo.Summary(t, g.Shape(), false)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDString(summary), nil
+			},
+			types.String,
+			infoBuilder{
+				info: `Returns a text summary of the contents of the geometry.
+
+Flags shown square brackets after the geometry type have the following meaning:
+* M: has M coordinate
+* Z: has Z coordinate
+* B: has a cached bounding box
+* G: is geography
+* S: has spatial reference system
+`,
+			},
+			tree.VolatilityImmutable,
+		),
+		geographyOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+				t, err := g.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				summary, err := geo.Summary(t, g.Shape(), true)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDString(summary), nil
+			},
+			types.String,
+			infoBuilder{
+				info: `Returns a text summary of the contents of the geography.
+
+Flags shown square brackets after the geometry type have the following meaning:
+* M: has M coordinate
+* Z: has Z coordinate
+* B: has a cached bounding box
+* G: is geography
+* S: has spatial reference system
+`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_endpoint": makeBuiltin(
 		defProps(),
 		geometryOverload1(

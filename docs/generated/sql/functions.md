@@ -1051,6 +1051,26 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_startpoint"></a><code>st_startpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the first point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_summary"></a><code>st_summary(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a text summary of the contents of the geography.</p>
+<p>Flags shown square brackets after the geometry type have the following meaning:</p>
+<ul>
+<li>M: has M coordinate</li>
+<li>Z: has Z coordinate</li>
+<li>B: has a cached bounding box</li>
+<li>G: is geography</li>
+<li>S: has spatial reference system</li>
+</ul>
+</span></td></tr>
+<tr><td><a name="st_summary"></a><code>st_summary(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a text summary of the contents of the geometry.</p>
+<p>Flags shown square brackets after the geometry type have the following meaning:</p>
+<ul>
+<li>M: has M coordinate</li>
+<li>Z: has Z coordinate</li>
+<li>B: has a cached bounding box</li>
+<li>G: is geography</li>
+<li>S: has spatial reference system</li>
+</ul>
+</span></td></tr>
 <tr><td><a name="st_touches"></a><code>st_touches(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the only points in common between geometry_a and geometry_b are on the boundary. Note points do not touch other points.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
