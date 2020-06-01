@@ -115,15 +115,14 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanning(
 	if err != nil {
 		return nil, nil, err
 	}
-	// Because we're not going through the normal pathways, we have to set up
-	// the nodeID -> nodeAddress map ourselves.
+	// Because we're not going through the normal pathways, we have to set up the
+	// planCtx.NodeStatuses map ourselves. CheckNodeHealthAndVersion() will
+	// populate it.
 	for _, node := range resp.Nodes {
-		if err := dsp.CheckNodeHealthAndVersion(planCtx, &node.Desc); err != nil {
-			continue
-		}
+		_ /* NodeStautus */ = dsp.CheckNodeHealthAndVersion(planCtx, node.Desc.NodeID)
 	}
-	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeAddresses))
-	for nodeID := range planCtx.NodeAddresses {
+	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeStatuses))
+	for nodeID := range planCtx.NodeStatuses {
 		nodes = append(nodes, nodeID)
 	}
 	// Shuffle node order so that multiple IMPORTs done in parallel will not

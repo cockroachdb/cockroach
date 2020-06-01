@@ -105,7 +105,7 @@ func initCLIDefaults() {
 	debugCtx.replicated = false
 	debugCtx.inputFile = ""
 	debugCtx.printSystemConfig = false
-	debugCtx.maxResults = 1000
+	debugCtx.maxResults = 0
 	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
 
 	serverCfg.GoroutineDumpDirName = ""
@@ -306,7 +306,7 @@ var debugCtx struct {
 	inputFile         string
 	ballastSize       base.SizeSpec
 	printSystemConfig bool
-	maxResults        int64
+	maxResults        int
 }
 
 // startCtx captures the command-line arguments for the `start` command.

@@ -1684,6 +1684,8 @@ func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemCon
 // NB: we're trying to get rid of this dep altogether, see:
 // https://github.com/cockroachdb/cockroach/issues/48432
 type DeprecatedOracleGossip interface {
+	// GetNodeDescriptor is used by oracles to order replicas by distance from the
+	// current locality.
 	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
 	GetNodeIDForStoreID(roachpb.StoreID) (roachpb.NodeID, error)
 }
