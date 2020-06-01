@@ -10,8 +10,6 @@
 
 package geogfn
 
-import _ "github.com/cockroachdb/cockroach/pkg/geo/geoproj" // blank import to make sure PROJ compiles
-
 // UseSphereOrSpheroid indicates whether to use a Sphere or Spheroid
 // for certain calculations.
 type UseSphereOrSpheroid bool
