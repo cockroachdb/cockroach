@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -347,11 +346,6 @@ func setupRanges(
 		}
 	}
 
-	// TODO(andrei): The sleep below serves to remove the noise that the
-	// RangeCache might encounter, clobbering descriptors with old versions.
-	// Remove once all the causes of such clobbering, listed in #10751, have been
-	// fixed.
-	time.Sleep(300 * time.Millisecond)
 	// Run a select across the whole table to populate the caches with all the
 	// ranges.
 	if _, err := db.Exec(`SELECT count(1) from test`); err != nil {

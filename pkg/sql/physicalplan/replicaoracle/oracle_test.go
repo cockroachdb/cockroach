@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -32,29 +31,6 @@ import (
 // TestRandomOracle defeats TestUnused for RandomChoice.
 func TestRandomOracle(t *testing.T) {
 	_ = NewOracleFactory(RandomChoice, Config{})
-}
-
-// Test that the binPackingOracle is consistent in its choices: once a range has
-// been assigned to one node, that choice is reused.
-func TestBinPackingOracleIsConsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	rng := roachpb.RangeDescriptor{RangeID: 99}
-	queryState := MakeQueryState()
-	expRepl := roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 99, ReplicaID: 99}
-	queryState.AssignedRanges[rng.RangeID] = expRepl
-	of := NewOracleFactory(BinPackingChoice, Config{
-		LeaseHolderCache: kvcoord.NewLeaseHolderCache(func() int64 { return 1 }),
-	})
-	// For our purposes, an uninitialized binPackingOracle will do.
-	bp := of.Oracle(nil)
-	repl, err := bp.ChoosePreferredReplica(context.Background(), rng, queryState)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if repl != expRepl {
-		t.Fatalf("expected replica %+v, got: %+v", expRepl, repl)
-	}
 }
 
 func TestClosest(t *testing.T) {

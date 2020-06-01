@@ -172,9 +172,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := mockCache.InsertRangeDescriptors(ctx, *r); err != nil {
-				t.Fatal(err)
-			}
+			mockCache.InsertRangeDescriptors(ctx, *r)
 
 			ts := hlc.Timestamp{WallTime: 100}
 			b, err := bulk.MakeBulkAdder(

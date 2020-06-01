@@ -229,11 +229,6 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 		}
 	}
 
-	// If we've assigned the range before, return that assignment.
-	if repl, ok := queryState.AssignedRanges[desc.RangeID]; ok {
-		return repl, nil
-	}
-
 	replicas, err := replicaSliceOrErr(desc, o.gossip)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
