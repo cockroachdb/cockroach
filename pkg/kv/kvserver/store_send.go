@@ -214,16 +214,39 @@ func (s *Store) Send(
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if !t.MismatchedRange.ContainsKey(rSpan.Key) {
-			if r2 := s.LookupReplica(rSpan.Key); r2 != nil {
-				// Only return the correct range descriptor as a hint
-				// if we know the current lease holder for that range, which
-				// indicates that our knowledge is not stale.
-				if l, _ := r2.GetLease(); r2.IsLeaseValid(l, s.Clock().Now()) {
-					t.SuggestedRange = r2.Desc()
-				}
-			}
+
+		// The kvclient thought that a particular range id covers rSpans. It was
+		// wrong; the respective range doesn't cover all of rSpan, or perhaps it
+		// doesn't even overlap it. Clearly the client has a stale range cache.
+		// We'll return info on the range that the request ended up being routed to
+		// and, to the extent that we have the info, the ranges containing the keys
+		// that the client requested, and all the ranges in between.
+		ri := t.Ranges()[0]
+		skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
+		startKey := ri.Desc.StartKey
+		if rSpan.Key.Less(startKey) {
+			startKey = rSpan.Key
 		}
+		endKey := ri.Desc.EndKey
+		if endKey.Less(rSpan.EndKey) {
+			endKey = rSpan.EndKey
+		}
+		s.VisitReplicasByKey(ctx, startKey, endKey, func(ctx context.Context, r KeyRange) bool {
+			var l roachpb.Lease
+			if rep, ok := r.(*Replica); ok {
+				// Note that we return the lease even if it's expired. The kvclient can
+				// use it as it sees fit.
+				l, _ /* next lease */ = rep.GetLease()
+			}
+			if r.Desc().RangeID == skipRID {
+				return true // continue visiting
+			}
+			t.AppendRangeInfo(roachpb.RangeInfo{
+				Desc:  *r.Desc(),
+				Lease: l,
+			})
+			return true // continue visiting
+		})
 	case *roachpb.RaftGroupDeletedError:
 		// This error needs to be converted appropriately so that clients
 		// will retry.

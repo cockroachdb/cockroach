@@ -835,6 +835,17 @@ class RangeKeyMismatchError : public ::google::protobuf::MessageLite /* @@protoc
 
   // accessors -------------------------------------------------------
 
+  int ranges_size() const;
+  void clear_ranges();
+  static const int kRangesFieldNumber = 5;
+  ::cockroach::roachpb::RangeInfo* mutable_ranges(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+      mutable_ranges();
+  const ::cockroach::roachpb::RangeInfo& ranges(int index) const;
+  ::cockroach::roachpb::RangeInfo* add_ranges();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+      ranges() const;
+
   bool has_request_start_key() const;
   void clear_request_start_key();
   static const int kRequestStartKeyFieldNumber = 1;
@@ -863,28 +874,28 @@ class RangeKeyMismatchError : public ::google::protobuf::MessageLite /* @@protoc
   ::std::string* release_request_end_key();
   void set_allocated_request_end_key(::std::string* request_end_key);
 
-  bool has_mismatched_range() const;
-  void clear_mismatched_range();
-  static const int kMismatchedRangeFieldNumber = 3;
+  bool has_deprecated_mismatched_range() const;
+  void clear_deprecated_mismatched_range();
+  static const int kDeprecatedMismatchedRangeFieldNumber = 3;
   private:
-  const ::cockroach::roachpb::RangeDescriptor& _internal_mismatched_range() const;
+  const ::cockroach::roachpb::RangeDescriptor& _internal_deprecated_mismatched_range() const;
   public:
-  const ::cockroach::roachpb::RangeDescriptor& mismatched_range() const;
-  ::cockroach::roachpb::RangeDescriptor* release_mismatched_range();
-  ::cockroach::roachpb::RangeDescriptor* mutable_mismatched_range();
-  void set_allocated_mismatched_range(::cockroach::roachpb::RangeDescriptor* mismatched_range);
+  const ::cockroach::roachpb::RangeDescriptor& deprecated_mismatched_range() const;
+  ::cockroach::roachpb::RangeDescriptor* release_deprecated_mismatched_range();
+  ::cockroach::roachpb::RangeDescriptor* mutable_deprecated_mismatched_range();
+  void set_allocated_deprecated_mismatched_range(::cockroach::roachpb::RangeDescriptor* deprecated_mismatched_range);
 
-  // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
-  bool has_suggested_range() const;
-  void clear_suggested_range();
-  static const int kSuggestedRangeFieldNumber = 4;
+  // optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
+  bool has_deprecated_suggested_range() const;
+  void clear_deprecated_suggested_range();
+  static const int kDeprecatedSuggestedRangeFieldNumber = 4;
   private:
-  const ::cockroach::roachpb::RangeDescriptor& _internal_suggested_range() const;
+  const ::cockroach::roachpb::RangeDescriptor& _internal_deprecated_suggested_range() const;
   public:
-  const ::cockroach::roachpb::RangeDescriptor& suggested_range() const;
-  ::cockroach::roachpb::RangeDescriptor* release_suggested_range();
-  ::cockroach::roachpb::RangeDescriptor* mutable_suggested_range();
-  void set_allocated_suggested_range(::cockroach::roachpb::RangeDescriptor* suggested_range);
+  const ::cockroach::roachpb::RangeDescriptor& deprecated_suggested_range() const;
+  ::cockroach::roachpb::RangeDescriptor* release_deprecated_suggested_range();
+  ::cockroach::roachpb::RangeDescriptor* mutable_deprecated_suggested_range();
+  void set_allocated_deprecated_suggested_range(::cockroach::roachpb::RangeDescriptor* deprecated_suggested_range);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeKeyMismatchError)
  private:
@@ -892,18 +903,19 @@ class RangeKeyMismatchError : public ::google::protobuf::MessageLite /* @@protoc
   void clear_has_request_start_key();
   void set_has_request_end_key();
   void clear_has_request_end_key();
-  void set_has_mismatched_range();
-  void clear_has_mismatched_range();
-  void set_has_suggested_range();
-  void clear_has_suggested_range();
+  void set_has_deprecated_mismatched_range();
+  void clear_has_deprecated_mismatched_range();
+  void set_has_deprecated_suggested_range();
+  void clear_has_deprecated_suggested_range();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo > ranges_;
   ::google::protobuf::internal::ArenaStringPtr request_start_key_;
   ::google::protobuf::internal::ArenaStringPtr request_end_key_;
-  ::cockroach::roachpb::RangeDescriptor* mismatched_range_;
-  ::cockroach::roachpb::RangeDescriptor* suggested_range_;
+  ::cockroach::roachpb::RangeDescriptor* deprecated_mismatched_range_;
+  ::cockroach::roachpb::RangeDescriptor* deprecated_suggested_range_;
   friend struct ::protobuf_roachpb_2ferrors_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -5189,111 +5201,137 @@ inline void RangeKeyMismatchError::set_allocated_request_end_key(::std::string* 
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.request_end_key)
 }
 
-inline bool RangeKeyMismatchError::has_mismatched_range() const {
+inline bool RangeKeyMismatchError::has_deprecated_mismatched_range() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void RangeKeyMismatchError::set_has_mismatched_range() {
+inline void RangeKeyMismatchError::set_has_deprecated_mismatched_range() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void RangeKeyMismatchError::clear_has_mismatched_range() {
+inline void RangeKeyMismatchError::clear_has_deprecated_mismatched_range() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::_internal_mismatched_range() const {
-  return *mismatched_range_;
+inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::_internal_deprecated_mismatched_range() const {
+  return *deprecated_mismatched_range_;
 }
-inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::mismatched_range() const {
-  const ::cockroach::roachpb::RangeDescriptor* p = mismatched_range_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
+inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::deprecated_mismatched_range() const {
+  const ::cockroach::roachpb::RangeDescriptor* p = deprecated_mismatched_range_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.deprecated_mismatched_range)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RangeDescriptor*>(
       &::cockroach::roachpb::_RangeDescriptor_default_instance_);
 }
-inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_mismatched_range() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
-  clear_has_mismatched_range();
-  ::cockroach::roachpb::RangeDescriptor* temp = mismatched_range_;
-  mismatched_range_ = NULL;
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_deprecated_mismatched_range() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeKeyMismatchError.deprecated_mismatched_range)
+  clear_has_deprecated_mismatched_range();
+  ::cockroach::roachpb::RangeDescriptor* temp = deprecated_mismatched_range_;
+  deprecated_mismatched_range_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_mismatched_range() {
-  set_has_mismatched_range();
-  if (mismatched_range_ == NULL) {
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_deprecated_mismatched_range() {
+  set_has_deprecated_mismatched_range();
+  if (deprecated_mismatched_range_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::roachpb::RangeDescriptor>(GetArenaNoVirtual());
-    mismatched_range_ = p;
+    deprecated_mismatched_range_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
-  return mismatched_range_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.deprecated_mismatched_range)
+  return deprecated_mismatched_range_;
 }
-inline void RangeKeyMismatchError::set_allocated_mismatched_range(::cockroach::roachpb::RangeDescriptor* mismatched_range) {
+inline void RangeKeyMismatchError::set_allocated_deprecated_mismatched_range(::cockroach::roachpb::RangeDescriptor* deprecated_mismatched_range) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(mismatched_range_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deprecated_mismatched_range_);
   }
-  if (mismatched_range) {
+  if (deprecated_mismatched_range) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      mismatched_range = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, mismatched_range, submessage_arena);
+      deprecated_mismatched_range = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, deprecated_mismatched_range, submessage_arena);
     }
-    set_has_mismatched_range();
+    set_has_deprecated_mismatched_range();
   } else {
-    clear_has_mismatched_range();
+    clear_has_deprecated_mismatched_range();
   }
-  mismatched_range_ = mismatched_range;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
+  deprecated_mismatched_range_ = deprecated_mismatched_range;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.deprecated_mismatched_range)
 }
 
-// optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
-inline bool RangeKeyMismatchError::has_suggested_range() const {
+// optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
+inline bool RangeKeyMismatchError::has_deprecated_suggested_range() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
-inline void RangeKeyMismatchError::set_has_suggested_range() {
+inline void RangeKeyMismatchError::set_has_deprecated_suggested_range() {
   _has_bits_[0] |= 0x00000008u;
 }
-inline void RangeKeyMismatchError::clear_has_suggested_range() {
+inline void RangeKeyMismatchError::clear_has_deprecated_suggested_range() {
   _has_bits_[0] &= ~0x00000008u;
 }
-inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::_internal_suggested_range() const {
-  return *suggested_range_;
+inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::_internal_deprecated_suggested_range() const {
+  return *deprecated_suggested_range_;
 }
-inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::suggested_range() const {
-  const ::cockroach::roachpb::RangeDescriptor* p = suggested_range_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.suggested_range)
+inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::deprecated_suggested_range() const {
+  const ::cockroach::roachpb::RangeDescriptor* p = deprecated_suggested_range_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.deprecated_suggested_range)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RangeDescriptor*>(
       &::cockroach::roachpb::_RangeDescriptor_default_instance_);
 }
-inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_suggested_range() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeKeyMismatchError.suggested_range)
-  clear_has_suggested_range();
-  ::cockroach::roachpb::RangeDescriptor* temp = suggested_range_;
-  suggested_range_ = NULL;
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_deprecated_suggested_range() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeKeyMismatchError.deprecated_suggested_range)
+  clear_has_deprecated_suggested_range();
+  ::cockroach::roachpb::RangeDescriptor* temp = deprecated_suggested_range_;
+  deprecated_suggested_range_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_suggested_range() {
-  set_has_suggested_range();
-  if (suggested_range_ == NULL) {
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_deprecated_suggested_range() {
+  set_has_deprecated_suggested_range();
+  if (deprecated_suggested_range_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::roachpb::RangeDescriptor>(GetArenaNoVirtual());
-    suggested_range_ = p;
+    deprecated_suggested_range_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.suggested_range)
-  return suggested_range_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.deprecated_suggested_range)
+  return deprecated_suggested_range_;
 }
-inline void RangeKeyMismatchError::set_allocated_suggested_range(::cockroach::roachpb::RangeDescriptor* suggested_range) {
+inline void RangeKeyMismatchError::set_allocated_deprecated_suggested_range(::cockroach::roachpb::RangeDescriptor* deprecated_suggested_range) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(suggested_range_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deprecated_suggested_range_);
   }
-  if (suggested_range) {
+  if (deprecated_suggested_range) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      suggested_range = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, suggested_range, submessage_arena);
+      deprecated_suggested_range = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, deprecated_suggested_range, submessage_arena);
     }
-    set_has_suggested_range();
+    set_has_deprecated_suggested_range();
   } else {
-    clear_has_suggested_range();
+    clear_has_deprecated_suggested_range();
   }
-  suggested_range_ = suggested_range;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.suggested_range)
+  deprecated_suggested_range_ = deprecated_suggested_range;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.deprecated_suggested_range)
+}
+
+inline int RangeKeyMismatchError::ranges_size() const {
+  return ranges_.size();
+}
+inline ::cockroach::roachpb::RangeInfo* RangeKeyMismatchError::mutable_ranges(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.ranges)
+  return ranges_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+RangeKeyMismatchError::mutable_ranges() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeKeyMismatchError.ranges)
+  return &ranges_;
+}
+inline const ::cockroach::roachpb::RangeInfo& RangeKeyMismatchError::ranges(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.ranges)
+  return ranges_.Get(index);
+}
+inline ::cockroach::roachpb::RangeInfo* RangeKeyMismatchError::add_ranges() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeKeyMismatchError.ranges)
+  return ranges_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+RangeKeyMismatchError::ranges() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeKeyMismatchError.ranges)
+  return ranges_;
 }
 
 // -------------------------------------------------------------------

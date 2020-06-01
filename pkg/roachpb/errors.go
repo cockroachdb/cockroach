@@ -366,7 +366,15 @@ func (e *RangeNotFoundError) message(_ *Error) string {
 var _ ErrorDetailInterface = &RangeNotFoundError{}
 
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMismatchError {
+//
+// desc and lease represent info about the range that the request was
+// erroneously routed to.
+//
+// Note that more range info is commonly added to the error after the error is
+// created.
+func NewRangeKeyMismatchError(
+	start, end Key, desc *RangeDescriptor, lease *Lease,
+) *RangeKeyMismatchError {
 	if desc == nil {
 		panic("NewRangeKeyMismatchError with nil descriptor")
 	}
@@ -375,10 +383,20 @@ func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMi
 		// regressions of #6027.
 		panic(fmt.Sprintf("descriptor is not initialized: %+v", desc))
 	}
+	var l Lease
+	if lease != nil {
+		l = *lease
+	}
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
 		RequestEndKey:   end,
-		MismatchedRange: *desc,
+		// More ranges are sometimes added to rangesInternal later.
+		rangesInternal: []RangeInfo{
+			{
+				Desc:  *desc,
+				Lease: l,
+			}},
+		DeprecatedMismatchedRange: *desc,
 	}
 }
 
@@ -387,8 +405,30 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 func (e *RangeKeyMismatchError) message(_ *Error) string {
+	desc := &e.Ranges()[0].Desc
 	return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s",
-		e.RequestStartKey, e.RequestEndKey, e.MismatchedRange.StartKey, e.MismatchedRange.EndKey)
+		e.RequestStartKey, e.RequestEndKey, desc.StartKey, desc.EndKey)
+}
+
+// Ranges returns the range info for the range that the request was erroneously
+// routed to. It deals with legacy errors coming from 20.1 nodes by returning
+// empty lease for the respective descriptors.
+func (e *RangeKeyMismatchError) Ranges() []RangeInfo {
+	if len(e.rangesInternal) != 0 {
+		return e.rangesInternal
+	}
+	// Fallback for 20.1 errors. Remove in 20.3.
+	ranges := []RangeInfo{{Desc: e.DeprecatedMismatchedRange}}
+	if e.DeprecatedSuggestedRange != nil {
+		ranges = append(ranges, RangeInfo{Desc: *e.DeprecatedSuggestedRange})
+	}
+	return ranges
+}
+
+// AppendRangeInfo appends info about one range to the set returned to the
+// kvclient.
+func (e *RangeKeyMismatchError) AppendRangeInfo(ri RangeInfo) {
+	e.rangesInternal = append(e.rangesInternal, ri)
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}

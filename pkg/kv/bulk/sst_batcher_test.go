@@ -324,9 +324,9 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 				} else if i == len(splits)-earlySplit {
 					late = getMem()
 				}
-				return &roachpb.RangeKeyMismatchError{
-					MismatchedRange: roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])},
-				}
+				return roachpb.NewRangeKeyMismatchError(
+					span.Key, span.EndKey,
+					&roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])}, nil /* lease */)
 			}
 		}
 		return nil

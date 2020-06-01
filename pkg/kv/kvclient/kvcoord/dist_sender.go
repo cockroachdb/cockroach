@@ -1057,7 +1057,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// turning single-range queries into multi-range queries for no good
 	// reason.
 	if ba.IsUnsplittable() {
-		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc())
+		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc(), ri.Lease())
 		return nil, roachpb.NewError(mismatch)
 	}
 	// If there's no transaction and ba spans ranges, possibly re-run as part of
@@ -1452,30 +1452,18 @@ func (ds *DistSender) sendPartialBatch(
 			// likely the result of a range split. If we have new range
 			// descriptors, insert them instead as long as they are different
 			// from the last descriptor to avoid endless loops.
-
-			// Sanity check that we got the different descriptors. Getting the same
-			// descriptor and putting it in the cache would be bad, as we'd go through
-			// an infinite loops of retries.
-			{
-				different := func(rd *roachpb.RangeDescriptor) bool {
-					return !desc.RSpan().Equal(rd.RSpan())
-				}
-				if !different(&tErr.MismatchedRange) {
+			replacements := make([]roachpb.RangeInfo, 0, len(tErr.Ranges()))
+			for _, ri := range tErr.Ranges() {
+				// Sanity check that we got the different descriptors. Getting the same
+				// descriptor and putting it in the cache would be bad, as we'd go through
+				// an infinite loops of retries.
+				if desc.RSpan().Equal(ri.Desc.RSpan()) {
 					log.Fatalf(ctx, "MismatchedRange not different from original desc. desc: %s. mismatched: %s",
-						desc, tErr.MismatchedRange)
+						desc, ri.Desc)
 				}
-				if (tErr.SuggestedRange != nil) && !different(tErr.SuggestedRange) {
-					log.Fatalf(ctx, "SuggestedRange not different from original desc. desc: %s. suggested: %s",
-						desc, tErr.SuggestedRange)
-				}
-			}
 
-			replacements := make([]roachpb.RangeInfo, 0, 2)
-			replacements = append(replacements, roachpb.RangeInfo{Desc: tErr.MismatchedRange})
-			if tErr.SuggestedRange != nil {
-				replacements = append(replacements, roachpb.RangeInfo{Desc: *tErr.SuggestedRange})
+				replacements = append(replacements, roachpb.RangeInfo{Desc: ri.Desc, Lease: ri.Lease})
 			}
-			// Same as Evict() if replacements is empty.
 			evictToken.EvictAndReplace(ctx, replacements...)
 			// On addressing errors (likely a split), we need to re-invoke
 			// the range descriptor lookup machinery, so we recurse by
@@ -1485,7 +1473,7 @@ func (ds *DistSender) sendPartialBatch(
 			// to it matches the positions into our batch (using the full
 			// batch here would give a potentially larger response slice
 			// with unknown mapping to our truncated reply).
-			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
+			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", replacements)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 			return response{reply: reply, positions: positions, pErr: pErr}
 		}
