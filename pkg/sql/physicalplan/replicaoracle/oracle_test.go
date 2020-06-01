@@ -36,7 +36,8 @@ func TestRandomOracle(t *testing.T) {
 func TestClosest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
 	g, _ := makeGossip(t, stopper)
 	nd, _ := g.GetNodeDescriptor(1)
 	of := NewOracleFactory(ClosestChoice, Config{
@@ -50,13 +51,13 @@ func TestClosest(t *testing.T) {
 		return time.Millisecond, true
 	}
 	o := of.Oracle(nil)
-	info, err := o.ChoosePreferredReplica(context.Background(), &roachpb.RangeDescriptor{
+	info, err := o.ChoosePreferredReplica(ctx, &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
 			{NodeID: 3, StoreID: 3},
 		},
-	}, QueryState{})
+	}, nil /* lease */, QueryState{})
 	if err != nil {
 		t.Fatalf("Failed to choose closest replica: %v", err)
 	}

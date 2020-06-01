@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,11 +41,10 @@ var (
 
 // Config is used to construct an OracleFactory.
 type Config struct {
-	NodeDesc         roachpb.NodeDescriptor
-	Settings         *cluster.Settings
-	Gossip           gossip.DeprecatedOracleGossip
-	RPCContext       *rpc.Context
-	LeaseHolderCache *kvcoord.LeaseHolderCache
+	NodeDesc   roachpb.NodeDescriptor
+	Settings   *cluster.Settings
+	Gossip     gossip.DeprecatedOracleGossip
+	RPCContext *rpc.Context
 }
 
 // Oracle is used to choose the lease holder for ranges. This
@@ -57,14 +55,18 @@ type Config struct {
 // the query (the chosen node) will acquire a new lease.
 type Oracle interface {
 	// ChoosePreferredReplica returns a choice for one range. Implementors are
-	// free to use the queryState param, which has info about the number of	ranges
+	// free to use the QueryState param, which has info about the number of	ranges
 	// already handled by each node for the current SQL query. The state is not
-	// updated with the result of this method; the caller is in charge of  that.
+	// updated with the result of this method; the caller is in charge of that.
+	//
+	// When the range's leaseholder is known, lease info is passed in.
+	// Implementors are free to use it, or ignore it if they don't care about the
+	// leaseholder (e.g. when we're planning for follower reads).
 	//
 	// A RangeUnavailableError can be returned if there's no information in gossip
 	// about any of the nodes that might be tried.
 	ChoosePreferredReplica(
-		context.Context, *roachpb.RangeDescriptor, QueryState,
+		context.Context, *roachpb.RangeDescriptor, *roachpb.Lease, QueryState,
 	) (roachpb.ReplicaDescriptor, error)
 }
 
@@ -131,7 +133,7 @@ func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *randomOracle) ChoosePreferredReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.Lease, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	replicas, err := replicaSliceOrErr(desc, o.gossip)
 	if err != nil {
@@ -161,7 +163,7 @@ func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *closestOracle) ChoosePreferredReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.Lease, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	replicas, err := replicaSliceOrErr(desc, o.gossip)
 	if err != nil {
@@ -187,7 +189,6 @@ const maxPreferredRangesPerLeaseHolder = 10
 // node.
 // Finally, it tries not to overload any node.
 type binPackingOracle struct {
-	leaseHolderCache                 *kvcoord.LeaseHolderCache
 	maxPreferredRangesPerLeaseHolder int
 	gossip                           gossip.DeprecatedOracleGossip
 	latencyFunc                      kvcoord.LatencyFunc
@@ -201,7 +202,6 @@ func newBinPackingOracleFactory(cfg Config) OracleFactory {
 		maxPreferredRangesPerLeaseHolder: maxPreferredRangesPerLeaseHolder,
 		gossip:                           cfg.Gossip,
 		nodeDesc:                         cfg.NodeDesc,
-		leaseHolderCache:                 cfg.LeaseHolderCache,
 		latencyFunc:                      latencyFunc(cfg.RPCContext),
 	}
 }
@@ -213,20 +213,11 @@ func (o *binPackingOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *binPackingOracle) ChoosePreferredReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, queryState QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, lease *roachpb.Lease, queryState QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	// Attempt to find a cached lease holder and use it if found.
-	// If an error occurs, ignore it and proceed to choose a replica below.
-	if storeID, ok := o.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
-		repl := roachpb.ReplicaDescriptor{StoreID: storeID}
-		// Fill in the node descriptor.
-		nodeID, err := o.gossip.GetNodeIDForStoreID(storeID)
-		if err != nil {
-			log.VEventf(ctx, 2, "failed to lookup store %d: %s", storeID, err)
-		} else {
-			repl.NodeID = nodeID
-			return repl, nil
-		}
+	// If we know the leaseholder, we choose it.
+	if lease != nil {
+		return lease.Replica, nil
 	}
 
 	replicas, err := replicaSliceOrErr(desc, o.gossip)
