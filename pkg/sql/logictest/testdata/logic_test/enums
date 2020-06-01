@@ -458,3 +458,14 @@ _collision    100082  0       100083
 __collision   100083  100082  0
 collision     100084  0       100085
 ___collision  100085  100084  0
+
+# Regression for #49756.
+query TT
+SELECT
+  column_name, column_type
+FROM
+  crdb_internal.table_columns
+WHERE
+  descriptor_name = 'enum_array' AND column_name = 'x'
+----
+x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100064 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100063 time_precision_is_set:false udt_metadata:<stable_type_id:63 stable_array_type_id:64 > > TypeMeta:<> > time_precision_is_set:false udt_metadata:<stable_type_id:64 stable_array_type_id:0 >
