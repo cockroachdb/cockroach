@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
@@ -26,11 +25,7 @@ type logicalOperation struct {
 
 const andOrProjTmpl = "pkg/sql/colexec/and_or_projection_tmpl.go"
 
-func genAndOrProjectionOps(wr io.Writer) error {
-	t, err := ioutil.ReadFile(andOrProjTmpl)
-	if err != nil {
-		return err
-	}
+func genAndOrProjectionOps(inputFile string, wr io.Writer) error {
 
 	r := strings.NewReplacer(
 		"_OP_LOWER", "{{.Lower}}",
@@ -39,7 +34,7 @@ func genAndOrProjectionOps(wr io.Writer) error {
 		"_L_HAS_NULLS", "$.lHasNulls",
 		"_R_HAS_NULLS", "$.rHasNulls",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFile)
 
 	addTupleForRight := makeFunctionRegex("_ADD_TUPLE_FOR_RIGHT", 1)
 	s = addTupleForRight.ReplaceAllString(s, `{{template "addTupleForRight" buildDict "Global" $ "lHasNulls" $1}}`)

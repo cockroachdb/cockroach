@@ -12,19 +12,13 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
 
 const selectionOpsTmpl = "pkg/sql/colexec/selection_ops_tmpl.go"
 
-func getSelectionOpsTmpl() (*template.Template, error) {
-	t, err := ioutil.ReadFile(selectionOpsTmpl)
-	if err != nil {
-		return nil, err
-	}
-
+func getSelectionOpsTmpl(inputFile string) (*template.Template, error) {
 	r := strings.NewReplacer(
 		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
 		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
@@ -38,7 +32,7 @@ func getSelectionOpsTmpl() (*template.Template, error) {
 		"_L_TYP", "{{.Left.VecMethod}}",
 		"_R_TYP", "{{.Right.VecMethod}}",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFile)
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 6))
@@ -57,8 +51,8 @@ func getSelectionOpsTmpl() (*template.Template, error) {
 	return template.New("selection_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 }
 
-func genSelectionOps(wr io.Writer) error {
-	tmpl, err := getSelectionOpsTmpl()
+func genSelectionOps(inputFile string, wr io.Writer) error {
+	tmpl, err := getSelectionOpsTmpl(inputFile)
 	if err != nil {
 		return err
 	}

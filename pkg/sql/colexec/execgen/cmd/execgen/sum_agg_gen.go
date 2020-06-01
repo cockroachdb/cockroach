@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -23,12 +22,7 @@ import (
 
 const sumAggTmpl = "pkg/sql/colexec/sum_agg_tmpl.go"
 
-func genSumAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile(sumAggTmpl)
-	if err != nil {
-		return err
-	}
-
+func genSumAgg(inputFile string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
@@ -37,7 +31,7 @@ func genSumAgg(wr io.Writer) error {
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFile)
 
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 6))

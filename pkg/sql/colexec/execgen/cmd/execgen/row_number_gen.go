@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
@@ -24,15 +23,8 @@ type rowNumberTmplInfo struct {
 
 const rowNumberTmpl = "pkg/sql/colexec/row_number_tmpl.go"
 
-func genRowNumberOp(wr io.Writer) error {
-	d, err := ioutil.ReadFile(rowNumberTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_ROW_NUMBER_STRING", "{{.String}}")
+func genRowNumberOp(inputFile string, wr io.Writer) error {
+	s := strings.ReplaceAll(inputFile, "_ROW_NUMBER_STRING", "{{.String}}")
 
 	computeRowNumberRe := makeFunctionRegex("_COMPUTE_ROW_NUMBER", 0)
 	s = computeRowNumberRe.ReplaceAllString(s, `{{template "computeRowNumber" buildDict "HasPartition" .HasPartition}}`)

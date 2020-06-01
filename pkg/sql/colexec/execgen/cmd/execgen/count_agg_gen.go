@@ -12,22 +12,14 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
 
 const countAggTmpl = "pkg/sql/colexec/count_agg_tmpl.go"
 
-func genCountAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile(countAggTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_KIND", "{{.Kind}}")
+func genCountAgg(inputFile string, wr io.Writer) error {
+	s := strings.ReplaceAll(inputFile, "_KIND", "{{.Kind}}")
 
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_COUNT", 4)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateCount" buildDict "Global" . "ColWithNulls" $4}}`)

@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,18 +20,13 @@ import (
 
 const vecTmpl = "pkg/col/coldata/vec_tmpl.go"
 
-func genVec(wr io.Writer) error {
-	d, err := ioutil.ReadFile(vecTmpl)
-	if err != nil {
-		return err
-	}
-
+func genVec(inputFile string, wr io.Writer) error {
 	r := strings.NewReplacer("_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPE", "{{.GoType}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(d))
+	s := r.Replace(inputFile)
 
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 6)
 	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "Global" . "SelOnDest" $6}}`)

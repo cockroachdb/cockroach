@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,19 +20,14 @@ import (
 
 const mergeJoinBaseTmpl = "pkg/sql/colexec/mergejoinbase_tmpl.go"
 
-func genMergeJoinBase(wr io.Writer) error {
-	d, err := ioutil.ReadFile(mergeJoinBaseTmpl)
-	if err != nil {
-		return err
-	}
-
+func genMergeJoinBase(inputFile string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(d))
+	s := r.Replace(inputFile)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 6)
 	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))

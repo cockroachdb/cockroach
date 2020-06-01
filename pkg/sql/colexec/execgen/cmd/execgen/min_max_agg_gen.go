@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -40,12 +39,7 @@ var _ = aggOverloads{}.AggNameTitle()
 
 const minMaxAggTmpl = "pkg/sql/colexec/min_max_agg_tmpl.go"
 
-func genMinMaxAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile(minMaxAggTmpl)
-	if err != nil {
-		return err
-	}
-
+func genMinMaxAgg(inputFile string, wr io.Writer) error {
 	r := strings.NewReplacer(
 
 		"_AGG_TITLE", "{{.AggNameTitle}}",
@@ -57,7 +51,7 @@ func genMinMaxAgg(wr io.Writer) error {
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFile)
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))

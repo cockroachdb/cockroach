@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
@@ -25,14 +24,8 @@ type windowPeerGrouperTmplInfo struct {
 
 const windowPeerGrouperOpsTmpl = "pkg/sql/colexec/window_peer_grouper_tmpl.go"
 
-func genWindowPeerGrouperOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(windowPeerGrouperOpsTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(d)
-	s = strings.ReplaceAll(s, "_PEER_GROUPER_STRING", "{{.String}}")
+func genWindowPeerGrouperOps(inputFile string, wr io.Writer) error {
+	s := strings.ReplaceAll(inputFile, "_PEER_GROUPER_STRING", "{{.String}}")
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("peer_grouper_op").Parse(s)

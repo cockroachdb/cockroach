@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -43,12 +42,7 @@ type joinTypeInfo struct {
 
 const mergeJoinerTmpl = "pkg/sql/colexec/mergejoiner_tmpl.go"
 
-func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
-	d, err := ioutil.ReadFile(mergeJoinerTmpl)
-	if err != nil {
-		return err
-	}
-
+func genMergeJoinOps(inputFile string, wr io.Writer, jti joinTypeInfo) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
@@ -68,7 +62,7 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 		"_HAS_SELECTION", "$.HasSelection",
 		"_SEL_PERMUTATION", "$.SelPermutation",
 	)
-	s := r.Replace(string(d))
+	s := r.Replace(inputFile)
 
 	leftUnmatchedGroupSwitch := makeFunctionRegex("_LEFT_UNMATCHED_GROUP_SWITCH", 1)
 	s = leftUnmatchedGroupSwitch.ReplaceAllString(s, `{{template "leftUnmatchedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -196,8 +190,8 @@ func init() {
 	}
 
 	mergeJoinGenerator := func(jti joinTypeInfo) generator {
-		return func(wr io.Writer) error {
-			return genMergeJoinOps(wr, jti)
+		return func(inputFile string, wr io.Writer) error {
+			return genMergeJoinOps(inputFile, wr, jti)
 		}
 	}
 

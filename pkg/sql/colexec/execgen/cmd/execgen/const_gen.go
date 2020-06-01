@@ -21,7 +21,7 @@ import (
 
 const constTmpl = "pkg/sql/colexec/const_tmpl.go"
 
-func genConstOps(wr io.Writer) error {
+func genConstOps(inputFile string, wr io.Writer) error {
 	d, err := ioutil.ReadFile(constTmpl)
 	if err != nil {
 		return err

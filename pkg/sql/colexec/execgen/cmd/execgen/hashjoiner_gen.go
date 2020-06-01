@@ -12,19 +12,13 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"text/template"
 )
 
 const hashJoinerTmpl = "pkg/sql/colexec/hashjoiner_tmpl.go"
 
-func genHashJoiner(wr io.Writer) error {
-	t, err := ioutil.ReadFile(hashJoinerTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(t)
+func genHashJoiner(inputFile string, wr io.Writer) error {
+	s := inputFile
 
 	distinctCollectRightOuter := makeFunctionRegex("_DISTINCT_COLLECT_PROBE_OUTER", 3)
 	s = distinctCollectRightOuter.ReplaceAllString(s, `{{template "distinctCollectProbeOuter" buildDict "Global" . "UseSel" $3}}`)
