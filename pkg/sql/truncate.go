@@ -168,16 +168,14 @@ func (p *planner) truncateTable(
 	if err != nil {
 		return err
 	}
-	// tableDesc.DropJobID = dropJobID
-	newTableDesc := sqlbase.NewMutableCreatedTableDescriptor(tableDesc.TableDescriptor)
-	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
-		ID: id,
-		// NB: Time is just used for debugging purposes. See the comment on the
-		// field for more details.
-		Time: p.txn.ReadTimestamp(),
+
+	newID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	if err != nil {
+		return err
 	}
-	newTableDesc.SetID(0)
-	newTableDesc.Version = 1
+	// tableDesc.DropJobID = dropJobID
+	newTableDesc := sqlbase.NewMutableTableDescriptorAsReplacement(
+		newID, tableDesc, p.txn.ReadTimestamp())
 
 	// Remove old name -> id map.
 	// This is a violation of consistency because once the TRUNCATE commits
@@ -208,11 +206,6 @@ func (p *planner) truncateTable(
 
 	// Drop table.
 	if err := p.initiateDropTable(ctx, tableDesc, true /* queueJob */, jobDesc, false /* drainName */); err != nil {
-		return err
-	}
-
-	newID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-	if err != nil {
 		return err
 	}
 

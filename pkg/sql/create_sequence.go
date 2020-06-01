@@ -170,7 +170,7 @@ func MakeSequenceTableDesc(
 	isTemporary bool,
 	params *runParams,
 ) (sqlbase.MutableTableDescriptor, error) {
-	desc := InitTableDescriptor(
+	desc := sqlbase.InitTableDescriptor(
 		id,
 		parentID,
 		schemaID,
