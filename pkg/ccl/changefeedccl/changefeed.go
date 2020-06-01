@@ -34,7 +34,8 @@ import (
 )
 
 const (
-	jsonMetaSentinel = `__crdb__`
+	jsonMetaSentinel         = `__crdb__`
+	cloudStorageDefaultFlush = time.Second * 5
 )
 
 type emitEntry struct {
@@ -312,21 +313,27 @@ func emitEntries(
 		}
 
 		// If the resolved timestamp frequency is specified, use it as a rough
-		// approximation of how latency-sensitive the changefeed user is. If
-		// it's not, fall back to the poll interval.
+		// approximation of how latency-sensitive the changefeed user is. If it's
+		// not, fall back to a default of the poll interval or 5s for cloud storage.
 		//
 		// The current poller implementation means we emit a changefeed-level
 		// resolved timestamps to the user once per changefeedPollInterval. This
 		// buffering adds on average timeBetweenFlushes/2 to that latency. With
-		// timeBetweenFlushes and changefeedPollInterval both set to 1s, TPCC
-		// was seeing about 100x more time spent emitting than flushing.
-		// Dividing by 5 tries to balance these a bit, but ultimately is fairly
-		// unprincipled.
+		// timeBetweenFlushes and changefeedPollInterval both set to 1s, TPCC was
+		// seeing about 100x more time spent emitting than flushing when tested with
+		// low-latency sinks like Kafka.
+		//
+		// However when using cloud-storage sinks, flushes can take much longer and
+		// trying to flush too often can thus end up spending too much time in flush
+		// and not enough in emitting to keep up with the feed. Since cloud-storage
+		// file writing sinks typically have higher latency than streaming sinks
+		// like Kafka, when using a cloud-storage sink, the default is instead set
+		// to five seconds if that is longer than the polling interval.
 		//
 		// NB: As long as we periodically get new span-level resolved timestamps
-		// from the poller (which should always happen, even if the watched data
-		// is not changing), then this is sufficient and we don't have to do
-		// anything fancy with timers.
+		// from the poller (which should always happen, even if the watched data is
+		// not changing), then this is sufficient and we don't have to do anything
+		// fancy with timers.
 		var timeBetweenFlushes time.Duration
 		if r, ok := details.Opts[changefeedbase.OptResolvedTimestamps]; ok && r != `` {
 			var err error
@@ -334,7 +341,10 @@ func emitEntries(
 				return nil, err
 			}
 		} else {
-			timeBetweenFlushes = changefeedbase.TableDescriptorPollInterval.Get(&settings.SV) / 5
+			timeBetweenFlushes = changefeedbase.TableDescriptorPollInterval.Get(&settings.SV)
+			if _, ok := sink.(*cloudStorageSink); ok && timeBetweenFlushes < cloudStorageDefaultFlush {
+				timeBetweenFlushes = cloudStorageDefaultFlush
+			}
 		}
 		if len(resolvedSpans) == 0 ||
 			(timeutil.Since(lastFlush) < timeBetweenFlushes && !boundaryReached) {
