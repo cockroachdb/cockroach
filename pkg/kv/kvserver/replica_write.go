@@ -78,7 +78,7 @@ func (r *Replica) executeWriteBatch(
 	// at proposal time, not at application time, because the spanlatch manager
 	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
 	// cause this condition to change.
-	if err := r.checkExecutionCanProceed(ba, g, &st); err != nil {
+	if err := r.checkExecutionCanProceed(ctx, ba, g, &st); err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 

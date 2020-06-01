@@ -246,6 +246,9 @@ func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
 // Lease returns the lease that was retrieved from the cache. If the cache
 // didn't have any lease information, returns nil. The result is to be
 // considered immutable.
+//
+// If a non-nil lease is returned, it will correspond to one of the replicas in
+// et.Desc().
 func (et EvictionToken) Lease() *roachpb.Lease {
 	if et.entry.Lease.Empty() {
 		return nil

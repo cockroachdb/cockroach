@@ -740,6 +740,23 @@ func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return r.getLeaseRLocked()
 }
 
+// GetDescAndLease atomically reads the range's current descriptor and lease.
+func (r *Replica) GetDescAndLease(ctx context.Context) (roachpb.RangeDescriptor, roachpb.Lease) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	l, _ /* nextLease */ := r.getLeaseRLocked()
+	desc := r.descRLocked()
+
+	// Sanity check the lease.
+	if !l.Empty() {
+		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
+			log.Fatalf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
+		}
+	}
+
+	return *desc, l
+}
+
 func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
 		return *r.mu.state.Lease, nextLease

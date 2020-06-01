@@ -194,7 +194,7 @@ func (r *Replica) RangeFeed(
 	// critical-section as the registration is established. This ensures that
 	// the registration doesn't miss any events.
 	r.raftMu.Lock()
-	if err := r.checkExecutionCanProceedForRangeFeed(rSpan, checkTS); err != nil {
+	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
 		return roachpb.NewError(err)
 	}
