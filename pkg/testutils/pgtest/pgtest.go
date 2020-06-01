@@ -24,8 +24,9 @@ import (
 // PGTest can be used to send and receive arbitrary pgwire messages on
 // Postgres-compatible servers.
 type PGTest struct {
-	fe   *pgproto3.Frontend
-	conn net.Conn
+	fe            *pgproto3.Frontend
+	conn          net.Conn
+	isCockroachDB bool
 }
 
 // NewPGTest connects to a Postgres server at addr with username user.
@@ -62,7 +63,14 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 		fe:   fe,
 		conn: conn,
 	}
-	_, err = p.Until(false /* keepErrMsg */, &pgproto3.ReadyForQuery{})
+	msgs, err := p.Until(false /* keepErrMsg */, &pgproto3.ReadyForQuery{})
+	foundCrdb := false
+	for _, msg := range msgs {
+		if s, ok := msg.(*pgproto3.ParameterStatus); ok && s.Name == "crdb_version" {
+			foundCrdb = true
+		}
+	}
+	p.isCockroachDB = foundCrdb
 	success = err == nil
 	return p, err
 }
