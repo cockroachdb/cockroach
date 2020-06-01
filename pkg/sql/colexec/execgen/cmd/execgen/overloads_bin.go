@@ -154,11 +154,16 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[tree.Plus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
 	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
 	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.TimestampTZ
+
+	binOpOutputTypes[tree.Concat] = map[typePair]*types.T{
+		{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}:                                       types.Bytes,
+		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
+	}
 }
 
 func populateBinOpOverloads() {
 	registerBinOpOutputTypes()
-	for _, op := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, op := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div, tree.Concat} {
 		ob := &overloadBase{
 			kind:  binaryOverload,
 			Name:  execgen.BinaryOpName[op],
@@ -181,6 +186,39 @@ func populateBinOpOverloads() {
 // produces binary operator output for a particular type.
 type binOpTypeCustomizer interface {
 	getBinOpAssignFunc() assignFunc
+}
+
+func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		var result string
+		if op.overloadBase.BinOp == tree.Concat {
+			// We expect the target to be of the form "projVec[idx]", however,
+			// datumVec doesn't support indexing, so we need to translate that into
+			// a set operation.
+			if !regexp.MustCompile(`.*\[.*]`).MatchString(targetElem) {
+				return fmt.Sprintf("colexecerror.InternalError(\"couldn't translate indexing on datum vec\")")
+			}
+			// Next, we separate the target into two tokens preemptively removing
+			// the closing square bracket.
+			tokens := strings.Split(targetElem[:len(targetElem)-1], "[")
+			if len(tokens) != 2 {
+				colexecerror.InternalError("unexpectedly len(tokens) != 2")
+			}
+			vecVariable := tokens[0]
+			idxVariable := tokens[1]
+			result = fmt.Sprintf(`
+			{
+				var r = []byte{}
+				r = append(r, %s...)
+				r = append(r, %s...)
+				%s.Set(%s, r)
+			}
+			`, leftElem, rightElem, vecVariable, idxVariable)
+		} else {
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		return result
+	}
 }
 
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {

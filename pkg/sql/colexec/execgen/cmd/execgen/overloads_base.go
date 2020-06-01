@@ -814,6 +814,7 @@ func registerTypeCustomizers() {
 			}
 		}
 	}
+	registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCustomizer{})
 }
 
 var supportedCanonicalTypeFamilies = []types.Family{
