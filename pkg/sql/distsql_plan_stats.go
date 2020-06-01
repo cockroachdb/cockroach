@@ -57,9 +57,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	desc *sqlbase.ImmutableTableDescriptor,
 	reqStats []requestedStat,
 	job *jobs.Job,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	if len(reqStats) == 0 {
-		return PhysicalPlan{}, errors.New("no stats requested")
+		return nil, errors.New("no stats requested")
 	}
 
 	details := job.Details().(jobspb.CreateStatsDetails)
@@ -80,18 +80,18 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	scan := scanNode{desc: desc}
 	err := scan.initDescDefaults(nil /* planDependencies */, colCfg)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	sb := span.MakeBuilder(planCtx.planner.ExecCfg().Codec, desc.TableDesc(), scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	scan.isFull = true
 
 	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	if details.AsOf != nil {
@@ -160,7 +160,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Estimate the expected number of rows based on existing stats in the cache.
 	tableStats, err := planCtx.planner.execCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.ID)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	var rowsExpected uint64
@@ -205,7 +205,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	planCtx *PlanningCtx, job *jobs.Job,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	details := job.Details().(jobspb.CreateStatsDetails)
 	reqStats := make([]requestedStat, len(details.ColumnStats))
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
@@ -238,7 +238,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		return err
 	}
 
-	dsp.FinalizePlan(planCtx, &physPlan)
+	dsp.FinalizePlan(planCtx, physPlan)
 
 	recv := MakeDistSQLReceiver(
 		ctx,
@@ -254,6 +254,6 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	)
 	defer recv.Release()
 
-	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
 	return resultRows.Err()
 }

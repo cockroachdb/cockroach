@@ -59,10 +59,10 @@ type explainDistSQLRun struct {
 // distributed jobs. The plan node should implement this interface so that
 // EXPLAIN (DISTSQL) will show the DistSQL plan instead of the local plan node.
 type distSQLExplainable interface {
-	// makePlanForExplainDistSQL returns the DistSQL physical plan that can be
+	// newPlanForExplainDistSQL returns the DistSQL physical plan that can be
 	// used by the explainDistSQLNode to generate flow specs (and run in the case
 	// of EXPLAIN ANALYZE).
-	makePlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (PhysicalPlan, error)
+	newPlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (*PhysicalPlan, error)
 }
 
 // willDistributePlanForExplainPurposes determines whether we will distribute
@@ -149,7 +149,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 	}
 
-	physPlan, err := makePhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan.main)
+	physPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan.main)
 	if err != nil {
 		if len(n.plan.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (DISTSQL) on this query is " +
@@ -157,7 +157,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 		return err
 	}
-	distSQLPlanner.FinalizePlan(planCtx, &physPlan)
+	distSQLPlanner.FinalizePlan(planCtx, physPlan)
 
 	var diagram execinfrapb.FlowDiagram
 	if n.analyze {
@@ -215,7 +215,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		planCtx.saveDiagramShowInputTypes = n.options.Flags[tree.ExplainFlagTypes]
 
 		distSQLPlanner.Run(
-			planCtx, newParams.p.txn, &physPlan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
+			planCtx, newParams.p.txn, physPlan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
 		)()
 
 		n.run.executedStatement = true
@@ -303,21 +303,21 @@ func (n *explainDistSQLNode) Close(ctx context.Context) {
 	n.plan.close(ctx)
 }
 
-func makePhysPlanForExplainPurposes(
+func newPhysPlanForExplainPurposes(
 	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner, plan planMaybePhysical,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	if plan.isPhysicalPlan() {
-		return *plan.physPlan, nil
+		return plan.physPlan, nil
 	}
-	var physPlan PhysicalPlan
+	var physPlan *PhysicalPlan
 	var err error
 	if planNode, ok := plan.planNode.(distSQLExplainable); ok {
-		physPlan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
+		physPlan, err = planNode.newPlanForExplainDistSQL(planCtx, distSQLPlanner)
 	} else {
 		physPlan, err = distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
 	}
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	return physPlan, nil
 }
