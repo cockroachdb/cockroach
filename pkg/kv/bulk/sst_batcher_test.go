@@ -284,6 +284,7 @@ func (m mockSender) SplitAndScatter(ctx context.Context, _ roachpb.Key, _ hlc.Ti
 // spanning SST is being ingested over a span with a lot of splits.
 func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	if testing.Short() {
 		t.Skip("this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
@@ -324,9 +325,9 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 				} else if i == len(splits)-earlySplit {
 					late = getMem()
 				}
-				return &roachpb.RangeKeyMismatchError{
-					MismatchedRange: roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])},
-				}
+				return roachpb.NewRangeKeyMismatchError(
+					ctx, span.Key, span.EndKey,
+					&roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])}, nil /* lease */)
 			}
 		}
 		return nil
@@ -336,7 +337,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 
 	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
 	if _, err := bulk.AddSSTable(
-		context.Background(), mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, cluster.MakeTestingClusterSettings(),
+		ctx, mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, cluster.MakeTestingClusterSettings(),
 	); err != nil {
 		t.Fatal(err)
 	}

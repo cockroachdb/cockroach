@@ -1090,7 +1090,7 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // they know that they will end up checking for a pending merge at some later
 // time.
 func (r *Replica) checkExecutionCanProceed(
-	ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
 ) error {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -1100,7 +1100,7 @@ func (r *Replica) checkExecutionCanProceed(
 	defer r.mu.RUnlock()
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
-	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
+	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
 	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp, st, ba.IsAdmin()); err != nil {
 		return err
@@ -1121,7 +1121,7 @@ func (r *Replica) checkExecutionCanProceed(
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
 // cannot be executed by the Replica.
 func (r *Replica) checkExecutionCanProceedForRangeFeed(
-	rSpan roachpb.RSpan, ts hlc.Timestamp,
+	ctx context.Context, rSpan roachpb.RSpan, ts hlc.Timestamp,
 ) error {
 	now := r.Clock().Now()
 	r.mu.RLock()
@@ -1129,7 +1129,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	status := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
-	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
+	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
 	} else if err := r.checkTSAboveGCThresholdRLocked(ts, &status, false /* isAdmin */); err != nil {
 		return err
@@ -1144,13 +1144,13 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 
 // checkSpanInRangeRLocked returns an error if a request (identified by its
 // key span) can be run on the replica.
-func (r *Replica) checkSpanInRangeRLocked(rspan roachpb.RSpan) error {
+func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSpan) error {
 	desc := r.mu.state.Desc
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
 	return roachpb.NewRangeKeyMismatchError(
-		rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
+		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease,
 	)
 }
 
