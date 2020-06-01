@@ -505,6 +505,9 @@ message CheckConsistencyRequest {
   // anomalous data to be shut down, so that this data isn't served to clients
   // (or worse, spread to other replicas).
   repeated ReplicaDescriptor terminate = 5 [(gogoproto.nullable) = false];
+  // The max rate in MB/s in which to scan the range to compute the checksum. Used to prevent
+  // a consistency check from overwhelming nodes with large disks.
+  double max_scan_rate = 6 [(gogoproto.casttype) = "golang.org/x/time/rate.Limit"];
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
@@ -1229,6 +1232,9 @@ message ComputeChecksumRequest {
   //
   // See the field of the same name in CheckConsistencyRequest for details.
   repeated ReplicaDescriptor terminate = 7 [(gogoproto.nullable) = false];
+  // The max rate in MB/s in which to scan the range to compute the checksum. Used to prevent
+  // a consistency check from overwhelming nodes with large disks.
+  double max_scan_rate = 8 [(gogoproto.casttype) = "golang.org/x/time/rate.Limit"];
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"golang.org/x/time/rate"
 )
 
 var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
@@ -31,12 +32,21 @@ var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
 	24*time.Hour,
 )
 
+var consistencyCheckRate = settings.RegisterPublicValidatedByteSizeSetting(
+	"server.consistency_check.max_rate",
+	"the rate limit (bytes/sec) to use for consistency checks; used in conjunction with "+
+		"server.consistency_check.interval to control ",
+	8<<20, // 8MB
+	validatePositive,
+)
+
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 
 type consistencyQueue struct {
 	*baseQueue
 	interval       func() time.Duration
 	replicaCountFn func() int
+	maxRate        func() rate.Limit
 }
 
 // newConsistencyQueue returns a new instance of consistencyQueue.
@@ -46,6 +56,9 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 			return consistencyCheckInterval.Get(&store.ClusterSettings().SV)
 		},
 		replicaCountFn: store.ReplicaCount,
+		maxRate: func() rate.Limit {
+			return rate.Limit(consistencyCheckRate.Get(&store.ClusterSettings().SV))
+		},
 	}
 	q.baseQueue = newBaseQueue(
 		"consistencyChecker", q, store, gossip,
@@ -58,6 +71,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 			failures:             store.metrics.ConsistencyQueueFailures,
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
+			processTimeoutFunc:   makeQueueSnapshotTimeoutFunc(consistencyCheckRate),
 		},
 	)
 	return q
@@ -118,7 +132,8 @@ func (q *consistencyQueue) process(
 		// inconsistency but the persisted stats are found to disagree with
 		// those reflected in the data. All of this really ought to be lifted
 		// into the queue in the future.
-		Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
+		Mode:        roachpb.ChecksumMode_CHECK_VIA_QUEUE,
+		MaxScanRate: q.maxRate(),
 	}
 	resp, pErr := repl.CheckConsistency(ctx, req)
 	if pErr != nil {
