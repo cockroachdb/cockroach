@@ -1417,7 +1417,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 		// Not reading from foo will backpressure it and max_behind_nanos will grow.
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
-		const expectedLatency = 100 * time.Millisecond
+		const expectedLatency = 5 * time.Second
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`,
 			(expectedLatency / 3).String())
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = 1.0`)
