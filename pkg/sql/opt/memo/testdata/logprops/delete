@@ -24,7 +24,7 @@ delete abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) rowid:11(int) e:12(int)
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── select
       ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
       ├── key: (11)
@@ -55,13 +55,13 @@ DELETE FROM abcde WHERE a=1 RETURNING *
 ----
 project
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int)
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── fd: ()-->(1)
  ├── prune: (1-4)
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) rowid:11(int) e:12(int)
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── key: (5)
       ├── fd: ()-->(1), (5)-->(2-4)
       ├── prune: (1-4)
@@ -96,7 +96,7 @@ DELETE FROM abcde WHERE rowid=1 RETURNING *
 project
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int)
  ├── cardinality: [0 - 1]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1-4)
@@ -104,7 +104,7 @@ project
       ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) rowid:11(int) e:12(int)
       ├── cardinality: [0 - 1]
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── key: ()
       ├── fd: ()-->(1-5)
       ├── prune: (1-4)
@@ -139,13 +139,13 @@ DELETE FROM abcde WHERE b=c RETURNING *;
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── fd: (2)==(3), (3)==(2)
  ├── prune: (1-4)
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) rowid:11(int) e:12(int)
-      ├── side-effects, mutations
+      ├── volatile, side-effects, mutations
       ├── key: (5)
       ├── fd: (2)==(3), (3)==(2), (5)-->(1-4)
       ├── prune: (1-4)

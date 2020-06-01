@@ -424,7 +424,7 @@ WITH foo AS (INSERT INTO a VALUES (1) RETURNING *) SELECT * FROM foo
 with &1 (foo)
  ├── columns: k:11!null i:12 f:13 s:14 j:15
  ├── cardinality: [1 - 1]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── key: ()
  ├── fd: ()-->(11-15)
  ├── insert a
@@ -436,7 +436,7 @@ with &1 (foo)
  │    │    ├── column9:9 => a.s:4
  │    │    └── column10:10 => a.j:5
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects, mutations
+ │    ├── volatile, side-effects, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
  │    └── values
@@ -463,13 +463,13 @@ WITH foo AS (SELECT 1/0) SELECT * FROM foo
 with &1 (foo)
  ├── columns: "?column?":2
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(2)
  ├── values
  │    ├── columns: "?column?":1
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects
+ │    ├── immutable, side-effects
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1 / 0,)
@@ -577,7 +577,7 @@ WITH cte AS (INSERT INTO child VALUES (1, 1) RETURNING c) SELECT c FROM cte UNIO
 with &2 (cte)
  ├── columns: c:10(int!null)
  ├── cardinality: [1 - 2]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  ├── stats: [rows=2, distinct(10)=2, null(10)=0]
  ├── cost: 1037.7025
  ├── key: (10)
@@ -588,7 +588,7 @@ with &2 (cte)
  │    │    └── column2:4 => t.public.child.p:2
  │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects, mutations
+ │    ├── volatile, side-effects, mutations
  │    ├── stats: [rows=1]
  │    ├── cost: 1037.5925
  │    ├── key: ()
@@ -736,13 +736,13 @@ with &1 (foo)
  ├── columns: "?column?":2
  ├── materialized
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(2)
  ├── values
  │    ├── columns: "?column?":1
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects
+ │    ├── immutable, side-effects
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1 / 0,)
@@ -761,7 +761,7 @@ WITH foo AS NOT MATERIALIZED (SELECT 1/0) SELECT * FROM foo
 values
  ├── columns: "?column?":2
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── immutable, side-effects
  ├── key: ()
  ├── fd: ()-->(2)
  └── (1 / 0,)

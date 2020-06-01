@@ -87,6 +87,9 @@ type Shared struct {
 	// time searching subtrees that don't contain subqueries.
 	HasCorrelatedSubquery bool
 
+	// VolatilitySet contains the set of volatilities contained in the expression.
+	VolatilitySet VolatilitySet
+
 	// CanHaveSideEffects is true if the expression modifies state outside its
 	// own scope, or if depends upon state that may change across evaluations. An
 	// expression can have side effects if it can do any of the following:

@@ -60,6 +60,7 @@ ORDER BY
 sort
  ├── save-table-name: q9_sort_1
  ├── columns: nation:48(char!null) o_year:51(float) sum_profit:53(float!null)
+ ├── immutable
  ├── stats: [rows=1500.68104, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(53)=1500.68104, null(53)=0, distinct(48,51)=1500.68104, null(48,51)=0]
  ├── key: (48,51)
  ├── fd: (48,51)-->(53)
@@ -68,12 +69,14 @@ sort
       ├── save-table-name: q9_group_by_2
       ├── columns: n_name:48(char!null) o_year:51(float) sum:53(float!null)
       ├── grouping columns: n_name:48(char!null) o_year:51(float)
+      ├── immutable
       ├── stats: [rows=1500.68104, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(53)=1500.68104, null(53)=0, distinct(48,51)=1500.68104, null(48,51)=0]
       ├── key: (48,51)
       ├── fd: (48,51)-->(53)
       ├── project
       │    ├── save-table-name: q9_project_3
       │    ├── columns: o_year:51(float) amount:52(float!null) n_name:48(char!null)
+      │    ├── immutable
       │    ├── stats: [rows=2406.66318, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(52)=1508.01915, null(52)=0, distinct(48,51)=1500.68104, null(48,51)=0]
       │    ├── inner-join (lookup part)
       │    │    ├── save-table-name: q9_lookup_join_4
@@ -153,7 +156,7 @@ sort
       │    │    └── filters
       │    │         └── p_name:2 LIKE '%green%' [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    └── projections
-      │         ├── extract('year', o_orderdate:42) [as=o_year:51, type=float, outer=(42)]
+      │         ├── extract('year', o_orderdate:42) [as=o_year:51, type=float, outer=(42), immutable]
       │         └── (l_extendedprice:22 * (1.0 - l_discount:23)) - (ps_supplycost:36 * l_quantity:21) [as=amount:52, type=float, outer=(21-23,36)]
       └── aggregations
            └── sum [as=sum:53, type=float, outer=(52)]

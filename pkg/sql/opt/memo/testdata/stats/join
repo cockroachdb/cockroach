@@ -1392,6 +1392,7 @@ FROM
 ----
 full-join (cross)
  ├── columns: a:1(int) b:2(int) c:3(int) a:4(int) b:5(int) c:6(int)
+ ├── immutable
  ├── stats: [rows=100]
  ├── key: (1,2)
  ├── fd: (1,2)-->(3-6)
@@ -1407,7 +1408,7 @@ full-join (cross)
  │    ├── key: ()
  │    └── fd: ()-->(4-6)
  └── filters
-      └── is [type=bool, subquery]
+      └── is [type=bool, immutable, subquery]
            ├── function: not_like_escape [type=bool]
            │    ├── '' [type=string]
            │    ├── CAST(NULL AS STRING) [type=string]

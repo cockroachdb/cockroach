@@ -494,6 +494,7 @@ SELECT (least(tup, (1,2))).a FROM (VALUES (((1,2) AS a,b), ((3,4) AS a,b))) v(tu
 project
  ├── columns: a:3
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(3)
  ├── values
@@ -503,7 +504,7 @@ project
  │    ├── fd: ()-->(1)
  │    └── (((1, 2) AS a, b),)
  └── projections
-      └── (least(column1:1, (1, 2))).a [as=a:3, outer=(1)]
+      └── (least(column1:1, (1, 2))).a [as=a:3, outer=(1), immutable]
 
 # --------------------------------------------------
 # PushColumnRemappingIntoValues

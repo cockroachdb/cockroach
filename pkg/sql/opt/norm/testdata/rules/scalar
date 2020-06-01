@@ -223,10 +223,11 @@ SELECT s NOT IN ('foo', s || 'foo', 'bar', length(s)::string, NULL) AS r FROM a
 ----
 project
  ├── columns: r:7
+ ├── immutable
  ├── scan a
  │    └── columns: s:4
  └── projections
-      └── s:4 NOT IN ('foo', s:4 || 'foo', 'bar', length(s:4)::STRING, NULL) [as=r:7, outer=(4)]
+      └── s:4 NOT IN ('foo', s:4 || 'foo', 'bar', length(s:4)::STRING, NULL) [as=r:7, outer=(4), immutable]
 
 # Regression test #36031.
 norm expect-not=NormalizeInConst
@@ -1504,39 +1505,39 @@ SELECT ARRAY(SELECT generate_series(1, a.k) ORDER BY 1 DESC) FROM a
 ----
 project
  ├── columns: array:9
- ├── side-effects
+ ├── immutable, side-effects
  ├── group-by
  │    ├── columns: k:1!null canary:10 array_agg:11
  │    ├── grouping columns: k:1!null
  │    ├── internal-ordering: -7
- │    ├── side-effects
+ │    ├── immutable, side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(10,11)
  │    ├── sort
  │    │    ├── columns: k:1!null generate_series:7 canary:10
- │    │    ├── side-effects
+ │    │    ├── immutable, side-effects
  │    │    ├── ordering: -7
  │    │    └── left-join-apply
  │    │         ├── columns: k:1!null generate_series:7 canary:10
- │    │         ├── side-effects
+ │    │         ├── immutable, side-effects
  │    │         ├── scan a
  │    │         │    ├── columns: k:1!null
  │    │         │    └── key: (1)
  │    │         ├── project
  │    │         │    ├── columns: canary:10!null generate_series:7
  │    │         │    ├── outer: (1)
- │    │         │    ├── side-effects
+ │    │         │    ├── immutable, side-effects
  │    │         │    ├── fd: ()-->(10)
  │    │         │    ├── project-set
  │    │         │    │    ├── columns: generate_series:7
  │    │         │    │    ├── outer: (1)
- │    │         │    │    ├── side-effects
+ │    │         │    │    ├── immutable, side-effects
  │    │         │    │    ├── values
  │    │         │    │    │    ├── cardinality: [1 - 1]
  │    │         │    │    │    ├── key: ()
  │    │         │    │    │    └── ()
  │    │         │    │    └── zip
- │    │         │    │         └── generate_series(1, k:1) [outer=(1), side-effects]
+ │    │         │    │         └── generate_series(1, k:1) [outer=(1), immutable, side-effects]
  │    │         │    └── projections
  │    │         │         └── true [as=canary:10]
  │    │         └── filters (true)

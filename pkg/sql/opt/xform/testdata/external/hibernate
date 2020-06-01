@@ -2530,6 +2530,7 @@ FROM
 ----
 project
  ├── columns: id1_0_0_:1!null c_name2_0_0_:2 formula0_0_:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2), (2)-->(6)
  ├── inner-join (merge)
@@ -2549,7 +2550,7 @@ project
  │    │    └── ordering: +3
  │    └── filters (true)
  └── projections
-      └── length(this_.c_name:2) [as=formula0_0_:6, outer=(2)]
+      └── length(this_.c_name:2) [as=formula0_0_:6, outer=(2), immutable]
 
 exec-ddl
 drop table t_name

@@ -62,6 +62,7 @@ ORDER BY
 sort
  ├── save-table-name: q7_sort_1
  ├── columns: supp_nation:42(char!null) cust_nation:46(char!null) l_year:49(float) revenue:51(float!null)
+ ├── immutable
  ├── stats: [rows=974.320532, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(51)=974.320532, null(51)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
  ├── key: (42,46,49)
  ├── fd: (42,46,49)-->(51)
@@ -70,12 +71,14 @@ sort
       ├── save-table-name: q7_group_by_2
       ├── columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float) sum:51(float!null)
       ├── grouping columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float)
+      ├── immutable
       ├── stats: [rows=974.320532, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(51)=974.320532, null(51)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
       ├── key: (42,46,49)
       ├── fd: (42,46,49)-->(51)
       ├── project
       │    ├── save-table-name: q7_project_3
       │    ├── columns: l_year:49(float) volume:50(float!null) n1.n_name:42(char!null) n2.n_name:46(char!null)
+      │    ├── immutable
       │    ├── stats: [rows=7741.78379, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(50)=7579.92926, null(50)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q7_inner_join_4
@@ -144,7 +147,7 @@ sort
       │    │         ├── s_suppkey:1 = l_suppkey:10 [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    │         └── s_nationkey:4 = n1.n_nationkey:41 [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ]), fd=(4)==(41), (41)==(4)]
       │    └── projections
-      │         ├── extract('year', l_shipdate:18) [as=l_year:49, type=float, outer=(18)]
+      │         ├── extract('year', l_shipdate:18) [as=l_year:49, type=float, outer=(18), immutable]
       │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=volume:50, type=float, outer=(13,14)]
       └── aggregations
            └── sum [as=sum:51, type=float, outer=(50)]
