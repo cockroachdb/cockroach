@@ -29,3 +29,21 @@ func (b *BoundingBox) Update(x, y float64) {
 	b.MinY = math.Min(b.MinY, y)
 	b.MaxY = math.Max(b.MaxY, y)
 }
+
+// Intersects returns whether the BoundingBoxes intersect.
+// Empty bounding boxes never intersect.
+func (b *BoundingBox) Intersects(o *BoundingBox) bool {
+	// If either side is empty, they do not intersect.
+	if b == nil || o == nil {
+		return false
+	}
+	// If any rectangle is completely above the other, they do not intersect.
+	if b.MinY > o.MaxY || o.MinY > b.MaxY {
+		return false
+	}
+	// If any rectangle is completely on the left of the other, they do not intersect.
+	if b.MinX > o.MaxX || o.MinX > b.MaxX {
+		return false
+	}
+	return true
+}

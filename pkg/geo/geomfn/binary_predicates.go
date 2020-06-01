@@ -20,6 +20,9 @@ func Covers(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
+	}
 	return geos.Covers(a.EWKB(), b.EWKB())
 }
 
@@ -28,6 +31,9 @@ func CoveredBy(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
+	}
 	return geos.CoveredBy(a.EWKB(), b.EWKB())
 }
 
@@ -35,6 +41,9 @@ func CoveredBy(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 func Contains(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
 	}
 	return geos.Contains(a.EWKB(), b.EWKB())
 }
@@ -46,6 +55,9 @@ func ContainsProperly(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
+	}
 	return MatchesDE9IM(relate, "T**FF*FF*")
 }
 
@@ -53,6 +65,9 @@ func ContainsProperly(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 func Crosses(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
 	}
 	return geos.Crosses(a.EWKB(), b.EWKB())
 }
@@ -62,6 +77,15 @@ func Equals(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	// Empty items are equal to each other.
+	// Do this check before the BoundingBoxIntersects check, as we would otherwise
+	// return false.
+	if a.Empty() && b.Empty() {
+		return true, nil
+	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
+	}
 	return geos.Equals(a.EWKB(), b.EWKB())
 }
 
@@ -69,6 +93,9 @@ func Equals(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 func Intersects(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
 	}
 	return geos.Intersects(a.EWKB(), b.EWKB())
 }
@@ -78,6 +105,9 @@ func Overlaps(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
+	}
 	return geos.Overlaps(a.EWKB(), b.EWKB())
 }
 
@@ -86,6 +116,9 @@ func Touches(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
+	}
 	return geos.Touches(a.EWKB(), b.EWKB())
 }
 
@@ -93,6 +126,9 @@ func Touches(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 func Within(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
 	}
 	return geos.Within(a.EWKB(), b.EWKB())
 }
