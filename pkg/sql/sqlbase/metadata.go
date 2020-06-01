@@ -43,10 +43,8 @@ type DescriptorProto interface {
 	protoutil.Message
 	GetPrivileges() *PrivilegeDescriptor
 	GetID() ID
-	SetID(ID)
 	TypeName() string
 	GetName() string
-	SetName(string)
 	GetAuditMode() TableDescriptor_AuditMode
 }
 

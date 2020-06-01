@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 //
@@ -47,10 +49,12 @@ var (
 // state should be an error (false) or a no-op (true).
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
-	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool, jobDesc string,
-) (bool, error) {
+	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
+) (*sqlbase.DatabaseDescriptor, bool, error) {
+
+	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
-	dKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, desc.Name)
+	dKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, dbName)
 	// TODO(solon): This conditional can be removed in 20.2. Every database
 	// is created with a public schema for cluster version >= 20.1, so we can remove
 	// the `shouldCreatePublicSchema` logic as well.
@@ -58,23 +62,24 @@ func (p *planner) createDatabase(
 		shouldCreatePublicSchema = false
 	}
 
-	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, desc.Name); err == nil && exists {
-		if ifNotExists {
+	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
+		if database.IfNotExists {
 			// Noop.
-			return false, nil
+			return nil, false, nil
 		}
-		return false, sqlbase.NewDatabaseAlreadyExistsError(desc.Name)
+		return nil, false, sqlbase.NewDatabaseAlreadyExistsError(dbName)
 	} else if err != nil {
-		return false, err
+		return nil, false, err
 	}
 
 	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 
-	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
-		return true, err
+	desc := sqlbase.MakeDatabaseDesc(id, database)
+	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, &desc, nil, jobDesc); err != nil {
+		return nil, true, err
 	}
 
 	// TODO(solon): This check should be removed and a public schema should
@@ -82,11 +87,11 @@ func (p *planner) createDatabase(
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
 		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
-			return true, err
+			return nil, true, err
 		}
 	}
 
-	return true, nil
+	return &desc, true, nil
 }
 
 func (p *planner) createDescriptorWithID(
@@ -97,7 +102,13 @@ func (p *planner) createDescriptorWithID(
 	st *cluster.Settings,
 	jobDesc string,
 ) error {
-	descriptor.SetID(id)
+	if descriptor.GetID() == 0 {
+		// TODO(ajwerner): Return the error here rather than fatal.
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf("cannot create descriptor with an empty ID: %v", descriptor))
+	}
+	if descriptor.GetID() != id {
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf("cannot create descriptor with an unexpected (%v) ID: %v", id, descriptor))
+	}
 	// TODO(pmattis): The error currently returned below is likely going to be
 	// difficult to interpret.
 	//

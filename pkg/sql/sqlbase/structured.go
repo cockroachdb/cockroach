@@ -684,11 +684,6 @@ func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
 }
 
-// SetID implements the DescriptorProto interface.
-func (desc *TableDescriptor) SetID(id ID) {
-	desc.ID = id
-}
-
 // TypeName returns the plain type of this descriptor.
 func (desc *TableDescriptor) TypeName() string {
 	return "relation"
@@ -3679,11 +3674,6 @@ func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
 	return exprs
 }
 
-// SetID implements the DescriptorProto interface.
-func (desc *DatabaseDescriptor) SetID(id ID) {
-	desc.ID = id
-}
-
 // TypeName returns the plain type of this descriptor.
 func (desc *DatabaseDescriptor) TypeName() string {
 	return "database"
@@ -4394,11 +4384,6 @@ func (desc *TypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
 	return nil
 }
 
-// SetID implements the DescriptorProto interface.
-func (desc *TypeDescriptor) SetID(id ID) {
-	desc.ID = id
-}
-
 // TypeName implements the DescriptorProto interface.
 func (desc *TypeDescriptor) TypeName() string {
 	return "type"
@@ -4539,11 +4524,6 @@ func (desc *TypeDescriptor) NameResolutionResult() {}
 // GetAuditMode implements the DescriptorProto interface.
 func (desc *SchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 	return TableDescriptor_DISABLED
-}
-
-// SetID implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) SetID(id ID) {
-	desc.ID = id
 }
 
 // TypeName implements the DescriptorProto interface.
