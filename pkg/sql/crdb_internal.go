@@ -73,6 +73,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
 		sqlbase.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
 		sqlbase.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
+		sqlbase.CrdbInternalCreateTypeStmtsTableID:      crdbInternalCreateTypeStmtsTable,
 		sqlbase.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
 		sqlbase.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
 		sqlbase.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
@@ -1343,6 +1344,57 @@ CREATE TABLE crdb_internal.builtin_functions (
 			}
 		}
 		return nil
+	},
+}
+
+var crdbInternalCreateTypeStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user defined types accessible by the current user in current database (KV scan)",
+	schema: `
+CREATE TABLE crdb_internal.create_type_statements (
+	database_id        INT,
+  database_name      STRING,
+  schema_name        STRING,
+  descriptor_id      INT,
+  descriptor_name    STRING,
+  create_statement   STRING,
+	INDEX (descriptor_id)
+)
+`,
+	populate: func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTypeDesc(ctx, p, db, func(db *DatabaseDescriptor, sc string, typeDesc *TypeDescriptor) error {
+			switch typeDesc.Kind {
+			case sqlbase.TypeDescriptor_ENUM:
+				var enumLabels []string
+				for i := range typeDesc.EnumMembers {
+					enumLabels = append(enumLabels, typeDesc.EnumMembers[i].LogicalRepresentation)
+				}
+				name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.Name, sc, db.Name}, 0)
+				if err != nil {
+					return err
+				}
+				node := &tree.CreateType{
+					Variety:    tree.Enum,
+					TypeName:   name,
+					EnumLabels: enumLabels,
+				}
+				if err := addRow(
+					tree.NewDInt(tree.DInt(db.ID)),       // database_id
+					tree.NewDString(db.Name),             // database_name
+					tree.NewDString(sc),                  // schema_name
+					tree.NewDInt(tree.DInt(typeDesc.ID)), // descriptor_id
+					tree.NewDString(typeDesc.Name),       // descriptor_name
+					tree.NewDString(tree.AsString(node)), // create_statement
+				); err != nil {
+					return err
+				}
+			case sqlbase.TypeDescriptor_ALIAS:
+			// Alias types are created implicitly, so we don't have create
+			// statements for them.
+			default:
+				return errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.Kind.String())
+			}
+			return nil
+		})
 	},
 }
 

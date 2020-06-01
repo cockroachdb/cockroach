@@ -18,6 +18,7 @@ crdb_internal  cluster_sessions           table
 crdb_internal  cluster_settings           table
 crdb_internal  cluster_transactions       table
 crdb_internal  create_statements          table
+crdb_internal  create_type_statements     table
 crdb_internal  feature_usage              table
 crdb_internal  forward_dependencies       table
 crdb_internal  gossip_alerts              table
@@ -618,3 +619,19 @@ query B
 SELECT crdb_internal.is_admin()
 ----
 false
+
+user root
+
+# Test the crdb_internal.create_type_statements table.
+statement ok
+SET experimental_enable_enums=true;
+CREATE TYPE enum1 AS ENUM ('hello', 'hi');
+CREATE TYPE enum2 AS ENUM ()
+
+query ITTITT
+SELECT * FROM crdb_internal.create_type_statements
+----
+52  test  public  61  enum1  CREATE TYPE test.public.enum1 AS ENUM ('hello', 'hi')
+52  test  public  63  enum2  CREATE TYPE test.public.enum2 AS ENUM ()
+
+# Test the virtual index as well.

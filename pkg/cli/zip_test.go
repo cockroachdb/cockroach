@@ -69,6 +69,7 @@ table_name NOT IN (
 	'backward_dependencies',
 	'builtin_functions',
 	'create_statements',
+	'create_type_statements',
 	'forward_dependencies',
 	'index_columns',
 	'table_columns',

@@ -1440,46 +1440,27 @@ CREATE TABLE pg_catalog.pg_enum (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
-		if err != nil {
-			return err
-		}
-		for _, desc := range descs {
-			typDesc, ok := desc.(*sqlbase.TypeDescriptor)
-			if !ok {
-				continue
-			}
-			if dbContext != nil && typDesc.ParentID != dbContext.ID {
-				continue
-			}
+		return forEachTypeDesc(ctx, p, dbContext, func(_ *DatabaseDescriptor, _ string, typDesc *TypeDescriptor) error {
+			// We only want to iterate over ENUM types.
 			if typDesc.Kind != sqlbase.TypeDescriptor_ENUM {
-				continue
+				return nil
 			}
 			// Generate a row for each member of the enum. We don't represent enums
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
-			typ := types.MakeEnum(uint32(typDesc.ID), uint32(typDesc.ArrayTypeID))
-			if err := typDesc.HydrateTypeInfoWithName(
-				typ,
-				tree.NewUnqualifiedTypeName(tree.Name(typDesc.Name)),
-				p.makeTypeLookupFn(ctx),
-			); err != nil {
-				return err
-			}
-			enumData := typ.TypeMeta.EnumData
-			typOID := tree.NewDOid(tree.DInt(typ.Oid()))
-			for i := range enumData.LogicalRepresentations {
+			typOID := tree.NewDOid(tree.DInt(types.StableTypeIDToOID(uint32(typDesc.ID))))
+			for i, member := range typDesc.EnumMembers {
 				if err := addRow(
-					h.EnumEntryOid(typOID, enumData.PhysicalRepresentations[i]),
+					h.EnumEntryOid(typOID, member.PhysicalRepresentation),
 					typOID,
 					tree.NewDFloat(tree.DFloat(float64(i))),
-					tree.NewDString(enumData.LogicalRepresentations[i]),
+					tree.NewDString(member.LogicalRepresentation),
 				); err != nil {
 					return err
 				}
 			}
-		}
-		return nil
+			return nil
+		})
 	},
 }
 
@@ -2753,21 +2734,7 @@ CREATE TABLE pg_catalog.pg_type (
 				}
 
 				// Now generate rows for user defined types in this database.
-				descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
-				if err != nil {
-					return err
-				}
-				for _, desc := range descs {
-					typDesc, ok := desc.(*sqlbase.TypeDescriptor)
-					if !ok {
-						continue
-					}
-					// Ignore this type if it is not part of this database.
-					// TODO (rohany): This logic will need to be updated once we support
-					//  user defined schemas.
-					if typDesc.ParentID != db.ID {
-						continue
-					}
+				return forEachTypeDesc(ctx, p, dbContext, func(_ *DatabaseDescriptor, _ string, typDesc *TypeDescriptor) error {
 					typ, err := typDesc.MakeTypesT(
 						tree.NewUnqualifiedTypeName(tree.Name(typDesc.Name)),
 						p.makeTypeLookupFn(ctx),
@@ -2775,11 +2742,8 @@ CREATE TABLE pg_catalog.pg_type (
 					if err != nil {
 						return err
 					}
-					if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
-						return err
-					}
-				}
-				return nil
+					return addPGTypeRow(h, nspOid, typ, addRow)
+				})
 			})
 	},
 }
