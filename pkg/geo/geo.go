@@ -216,6 +216,11 @@ func (g *Geometry) AsGeomT() (geom.T, error) {
 	return ewkb.Unmarshal(g.SpatialObject.EWKB)
 }
 
+// Empty returns whether the given Geometry is empty.
+func (g *Geometry) Empty() bool {
+	return g.SpatialObject.BoundingBox == nil
+}
+
 // EWKB returns the EWKB representation of the Geometry.
 func (g *Geometry) EWKB() geopb.EWKB {
 	return g.SpatialObject.EWKB
@@ -229,6 +234,12 @@ func (g *Geometry) SRID() geopb.SRID {
 // Shape returns the shape of the Geometry.
 func (g *Geometry) Shape() geopb.Shape {
 	return g.SpatialObject.Shape
+}
+
+// BoundingBoxIntersects returns whether the bounding box of the given geometry
+// intersects with the other.
+func (g *Geometry) BoundingBoxIntersects(o *Geometry) bool {
+	return g.SpatialObject.BoundingBox.Intersects(o.SpatialObject.BoundingBox)
 }
 
 //

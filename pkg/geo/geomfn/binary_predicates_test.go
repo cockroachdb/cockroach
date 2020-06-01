@@ -19,6 +19,8 @@ import (
 )
 
 var (
+	emptyRect            = geo.MustParseGeometry("POLYGON EMPTY")
+	emptyLine            = geo.MustParseGeometry("LINESTRING EMPTY")
 	leftRect             = geo.MustParseGeometry("POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))")
 	leftRectPoint        = geo.MustParseGeometry("POINT(-0.5 0.5)")
 	rightRect            = geo.MustParseGeometry("POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))")
@@ -162,6 +164,9 @@ func TestEquals(t *testing.T) {
 		b        *geo.Geometry
 		expected bool
 	}{
+		{emptyLine, emptyRect, true},
+		{emptyLine, emptyLine, true},
+		{emptyRect, emptyRect, true},
 		{rightRect, rightRectPoint, false},
 		{rightRectPoint, rightRect, false},
 		{leftRect, rightRect, false},
