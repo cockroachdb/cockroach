@@ -264,12 +264,18 @@ func (it *spanResolverIterator) ReplicaInfo(
 		panic(it.Error())
 	}
 
+	// If we've assigned the range before, return that assignment.
+	rngID := it.it.Desc().RangeID
+	if repl, ok := it.queryState.AssignedRanges[rngID]; ok {
+		return repl, nil
+	}
+
 	repl, err := it.oracle.ChoosePreferredReplica(
 		ctx, *it.it.Desc(), it.queryState)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
 	it.queryState.RangesPerNode[repl.NodeID]++
-	it.queryState.AssignedRanges[it.it.Desc().RangeID] = repl
+	it.queryState.AssignedRanges[rngID] = repl
 	return repl, nil
 }
