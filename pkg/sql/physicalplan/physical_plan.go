@@ -793,10 +793,7 @@ func (p *PhysicalPlan) AddLimit(
 // PopulateEndpoints processes p.Streams and adds the corresponding
 // StreamEndpointSpecs to the processors' input and output specs. This should be
 // used when the plan is completed and ready to be executed.
-//
-// The nodeAddresses map contains the address of all the nodes referenced in the
-// plan.
-func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string) {
+func (p *PhysicalPlan) PopulateEndpoints() {
 	// Note: instead of using p.Streams, we could fill in the input/output specs
 	// directly throughout the planning code, but this makes the rest of the code
 	// a bit simpler.

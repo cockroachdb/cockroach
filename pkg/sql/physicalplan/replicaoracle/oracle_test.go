@@ -41,9 +41,7 @@ func TestBinPackingOracleIsConsistent(t *testing.T) {
 
 	rng := roachpb.RangeDescriptor{RangeID: 99}
 	queryState := MakeQueryState()
-	expRepl := kvcoord.ReplicaInfo{
-		ReplicaDescriptor: roachpb.ReplicaDescriptor{
-			NodeID: 99, StoreID: 99, ReplicaID: 99}}
+	expRepl := roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 99, ReplicaID: 99}
 	queryState.AssignedRanges[rng.RangeID] = expRepl
 	of := NewOracleFactory(BinPackingChoice, Config{
 		LeaseHolderCache: kvcoord.NewLeaseHolderCache(func() int64 { return 1 }),
