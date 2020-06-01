@@ -13,7 +13,6 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -100,7 +99,7 @@ func (c *conn) handleAuthentication(
 	if !canLogin {
 		ac.Logf(ctx, "%q does not have login privilege", c.sessionArgs.User)
 		return nil, sendError(errors.Errorf(
-			fmt.Sprintf("%s does not have login privilege", c.sessionArgs.User)))
+			"%s does not have login privilege", c.sessionArgs.User))
 	}
 
 	// Retrieve the authentication method.

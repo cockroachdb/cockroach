@@ -107,7 +107,9 @@ func applyMethodsAndVerify(
 			b1Window.AssertOffsetsAreNonDecreasing(b1Window.Len())
 			debugString += fmt.Sprintf("\n%s\n", b1Window)
 			if err := verifyEqual(b1Window, b2Window); err != nil {
-				return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat:\n%sreference:\n%s", debugString, b1Window.String(), prettyByteSlice(b2Window)))
+				return errors.Wrapf(err,
+					"\ndebugString:\n%s\nflat:\n%s\nreference:\n%s",
+					debugString, b1Window.String(), prettyByteSlice(b2Window))
 			}
 			continue
 		case copySlice, appendSlice:
@@ -157,7 +159,9 @@ func applyMethodsAndVerify(
 		b1.AssertOffsetsAreNonDecreasing(b1.Len())
 		debugString += fmt.Sprintf("\n%s\n", b1)
 		if err := verifyEqual(b1, b2); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat (maxSetIdx=%d):\n%sreference:\n%s", debugString, b1.maxSetIndex, b1.String(), prettyByteSlice(b2)))
+			return errors.Wrapf(err,
+				"\ndebugString:\n%s\nflat (maxSetIdx=%d):\n%s\nreference:\n%s",
+				debugString, b1.maxSetIndex, b1.String(), prettyByteSlice(b2))
 		}
 	}
 	return nil

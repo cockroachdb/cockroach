@@ -61,7 +61,7 @@ func entryEq(l, r raftpb.Entry) error {
 		return errors.Wrap(err, "unmarshalling RHS")
 	}
 	if !reflect.DeepEqual(lc, rc) {
-		return errors.New(strings.Join(pretty.Diff(lc, rc), "\n"))
+		return errors.Newf("unexpected:\n%s", strings.Join(pretty.Diff(lc, rc), "\n"))
 	}
 	return nil
 }

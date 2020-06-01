@@ -37,7 +37,7 @@ func CompareVals(a, b []interface{}) error {
 		return nil
 	}
 	if diff := cmp.Diff(a, b, cmpOptions...); diff != "" {
-		return errors.New(diff)
+		return errors.Newf("unexpected diff:\n%s", diff)
 	}
 	return nil
 }

@@ -316,11 +316,11 @@ func SendReport(
 func ReportOrPanic(
 	ctx context.Context, sv *settings.Values, format string, reportables ...interface{},
 ) {
+	err := errors.Newf(format, reportables...)
 	if !build.IsRelease() || (sv != nil && PanicOnAssertions.Get(sv)) {
-		panic(fmt.Sprintf(format, reportables...))
+		panic(err)
 	}
-	Warningf(ctx, format, reportables...)
-	err := errors.Newf("internal error: "+format, reportables...)
+	Warningf(ctx, "%v", err)
 	sendCrashReport(ctx, sv, err, ReportTypeError)
 }
 

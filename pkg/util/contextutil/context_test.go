@@ -75,7 +75,7 @@ func TestRunWithTimeout(t *testing.T) {
 // cause should be the returned error and not context.DeadlineExceeded.
 func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 	ctx := context.Background()
-	notContextDeadlineExceeded := errors.New(context.DeadlineExceeded.Error())
+	notContextDeadlineExceeded := errors.Handled(context.DeadlineExceeded)
 	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
 		<-ctx.Done()
 		return notContextDeadlineExceeded

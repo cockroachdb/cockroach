@@ -237,7 +237,8 @@ func checkDemoConfiguration(
 		}
 
 		// If geo-partition-replicas is requested, make sure the workload has a Partitioning step.
-		configErr := errors.New(fmt.Sprintf("workload %s is not configured to have a partitioning step", gen.Meta().Name))
+		configErr := errors.Newf(
+			"workload %s is not configured to have a partitioning step", gen.Meta().Name)
 		hookser, ok := gen.(workload.Hookser)
 		if !ok {
 			return nil, configErr

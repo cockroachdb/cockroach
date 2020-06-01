@@ -135,19 +135,13 @@ func newCluster(name string) (*install.SyncedCluster, error) {
 
 	c, ok := install.Clusters[name]
 	if !ok {
-		// NB: We don't use fmt.Errorf due to a linter error about the error
-		// message containing capitals and punctuation. We don't use
-		// errors.New(fmt.Sprintf()) due to a linter error that we should use
-		// fmt.Errorf() instead. Sigh.
-		s := fmt.Sprintf(`unknown cluster: %s
-
+		err := errors.Newf(`unknown cluster: %s`, name)
+		err = errors.WithHintf(err, `
 Available clusters:
   %s
-
-Hint: use "roachprod sync" to update the list of available clusters.
-`,
-			name, strings.Join(sortedClusters(), "\n  "))
-		return nil, errors.New(s)
+`, strings.Join(sortedClusters(), "\n  "))
+		err = errors.WithHint(err, `Use "roachprod sync" to update the list of available clusters.`)
+		return nil, err
 	}
 
 	switch clusterType {
@@ -1114,21 +1108,17 @@ of nodes, outputting a line whenever a change is detected:
 		if err != nil {
 			return err
 		}
-		var errs []string
 		for msg := range c.Monitor(monitorIgnoreEmptyNodes, monitorOneShot) {
 			if msg.Err != nil {
 				msg.Msg += "error: " + msg.Err.Error()
 			}
-			s := fmt.Sprintf("%d: %s", msg.Index, msg.Msg)
+			thisError := errors.Newf("%d: %s", msg.Index, msg.Msg)
 			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
-				errs = append(errs, s)
+				err = errors.CombineErrors(err, thisError)
 			}
-			fmt.Println(s)
+			fmt.Println(thisError.Error())
 		}
-		if len(errs) != 0 {
-			return errors.New(strings.Join(errs, ", "))
-		}
-		return nil
+		return err
 	}),
 }
 

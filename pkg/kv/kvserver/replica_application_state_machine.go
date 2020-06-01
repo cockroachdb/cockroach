@@ -69,18 +69,18 @@ type nonDeterministicFailure struct {
 
 // The provided format string should be safe for reporting.
 func makeNonDeterministicFailure(format string, args ...interface{}) error {
-	str := fmt.Sprintf(format, args...)
+	err := errors.Newf(format, args...)
 	return &nonDeterministicFailure{
-		wrapped:  errors.New(str),
-		safeExpl: str,
+		wrapped:  err,
+		safeExpl: err.Error(),
 	}
 }
 
 // The provided msg should be safe for reporting.
-func wrapWithNonDeterministicFailure(err error, msg string) error {
+func wrapWithNonDeterministicFailure(err error, format string, args ...interface{}) error {
 	return &nonDeterministicFailure{
-		wrapped:  errors.Wrap(err, msg),
-		safeExpl: msg,
+		wrapped:  errors.Wrapf(err, format, args...),
+		safeExpl: fmt.Sprintf(format, args...),
 	}
 }
 
@@ -445,11 +445,13 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-		kind := "merge"
+		var err error
 		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
-			kind = "split"
+			err = wrapWithNonDeterministicFailure(err, "unable to acquire split lock")
+		} else {
+			err = wrapWithNonDeterministicFailure(err, "unable to acquire merge lock")
 		}
-		return nil, wrapWithNonDeterministicFailure(err, "unable to acquire "+kind+" lock")
+		return nil, err
 	} else if splitMergeUnlock != nil {
 		// Set the splitMergeUnlock on the replicaAppBatch to be called
 		// after the batch has been applied (see replicaAppBatch.commit).

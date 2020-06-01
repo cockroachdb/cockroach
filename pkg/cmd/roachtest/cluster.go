@@ -1539,24 +1539,21 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 		c.l.Printf("consistency check failed with %v; ignoring", err)
 		return nil
 	}
-	var buf bytes.Buffer
+	var finalErr error
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
-		if err := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
-			return err
+		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
+			return scanErr
 		}
-		fmt.Fprintf(&buf, "r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail)
+		finalErr = errors.CombineErrors(finalErr,
+			errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail))
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		finalErr = errors.CombineErrors(finalErr, err)
 	}
 
-	msg := buf.String()
-	if msg != "" {
-		return errors.New(msg)
-	}
-	return nil
+	return finalErr
 }
 
 // FailOnReplicaDivergence fails the test if

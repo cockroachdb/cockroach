@@ -380,9 +380,9 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		_, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		_, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
 		// Make sure it deleted the learner.
@@ -398,9 +398,9 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		formattedTrace := trace.String()
 		expectedMessages := []string{
 			`transitioning out of joint configuration`,
@@ -436,9 +436,9 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Run the replicaGC queue.
 	checkNoGC := func() roachpb.RangeDescriptor {
 		store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
 		require.Contains(t, trace.String(), msg)
 		return tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -495,12 +495,12 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	// raft to figure out that the replica needs a snapshot.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	testutils.SucceedsSoon(t, func() error {
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
 		if err != nil {
 			return err
 		}
-		if errMsg != `` {
-			return errors.New(errMsg)
+		if processErr != nil {
+			return processErr
 		}
 		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
 		formattedTrace := trace.String()
@@ -620,12 +620,12 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	queue1ErrCh := make(chan error, 1)
 	go func() {
 		queue1ErrCh <- func() error {
-			trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+			trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 			if err != nil {
 				return err
 			}
-			if !strings.Contains(errMsg, `descriptor changed`) {
-				return errors.Errorf(`expected "descriptor changed" error got: %s`, errMsg)
+			if !strings.Contains(processErr.Error(), `descriptor changed`) {
+				return errors.Errorf(`expected "descriptor changed" error got: %+v`, processErr)
 			}
 			formattedTrace := trace.String()
 			expectedMessages := []string{
@@ -971,9 +971,9 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		})
 
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		formattedTrace := trace.String()
 		expectedMessages := []string{
 			`removing learner replicas \[n2,s2\]`,
@@ -1006,9 +1006,9 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		checkTransitioningOut := func() {
 			t.Helper()
 			store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-			trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+			trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 			require.NoError(t, err)
-			require.Equal(t, ``, errMsg)
+			require.NoError(t, processErr)
 			formattedTrace := trace.String()
 			expectedMessages := []string{
 				`transitioning out of joint configuration`,

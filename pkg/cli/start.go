@@ -760,11 +760,11 @@ If problems persist, please see %s.`
 			// Attempt to start the server.
 			if err := s.Start(ctx); err != nil {
 				if le := (*server.ListenError)(nil); errors.As(err, &le) {
-					const errorPrefix = "consider changing the port via --"
+					const errorPrefix = "consider changing the port via --%s"
 					if le.Addr == serverCfg.Addr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ListenAddr.Name)
+						err = errors.Wrapf(err, errorPrefix, cliflags.ListenAddr.Name)
 					} else if le.Addr == serverCfg.HTTPAddr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ListenHTTPAddr.Name)
+						err = errors.Wrapf(err, errorPrefix, cliflags.ListenHTTPAddr.Name)
 					}
 				}
 

@@ -1756,6 +1756,11 @@ func TestLint(t *testing.T) {
 			// own redact code.
 			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct cast on error object`),
 			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct comparison of error object`),
+			// The logging package translates log.Fatal calls into errors.
+			// We can't use the regular exception mechanism via functions.go
+			// because addStructured takes its positional argument as []interface{},
+			// instead of ...interface{}.
+			stream.GrepNot(`pkg/util/log/structured\.go:\d+:\d+: addStructured\(\): format argument is not a constant expression`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")
