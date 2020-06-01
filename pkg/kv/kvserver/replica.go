@@ -1126,7 +1126,7 @@ func (r *Replica) checkSpanInRangeRLocked(rspan roachpb.RSpan) error {
 		return nil
 	}
 	return roachpb.NewRangeKeyMismatchError(
-		rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
+		rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease,
 	)
 }
 

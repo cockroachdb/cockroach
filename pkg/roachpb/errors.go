@@ -366,7 +366,13 @@ func (e *RangeNotFoundError) message(_ *Error) string {
 var _ ErrorDetailInterface = &RangeNotFoundError{}
 
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMismatchError {
+//
+// desc and lease represent info about the range that the request was
+// errorneously routed to (i.e. MismatchedRange). The SuggestedRange field is
+// filled in later.
+func NewRangeKeyMismatchError(
+	start, end Key, desc *RangeDescriptor, lease *Lease,
+) *RangeKeyMismatchError {
 	if desc == nil {
 		panic("NewRangeKeyMismatchError with nil descriptor")
 	}
@@ -375,10 +381,18 @@ func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMi
 		// regressions of #6027.
 		panic(fmt.Sprintf("descriptor is not initialized: %+v", desc))
 	}
+	var l Lease
+	if lease != nil {
+		l = *lease
+	}
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
 		RequestEndKey:   end,
-		MismatchedRange: *desc,
+		MismatchedRange: RangeInfo{
+			Desc:  *desc,
+			Lease: l,
+		},
+		DeprecatedMismatchedRange: *desc,
 	}
 }
 
@@ -387,8 +401,14 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 func (e *RangeKeyMismatchError) message(_ *Error) string {
+	var desc *RangeDescriptor
+	if e.MismatchedRange.Desc.IsInitialized() {
+		desc = &e.MismatchedRange.Desc
+	} else {
+		desc = &e.DeprecatedMismatchedRange
+	}
 	return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s",
-		e.RequestStartKey, e.RequestEndKey, e.MismatchedRange.StartKey, e.MismatchedRange.EndKey)
+		e.RequestStartKey, e.RequestEndKey, desc.StartKey, desc.EndKey)
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}

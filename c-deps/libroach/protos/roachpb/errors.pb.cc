@@ -21,6 +21,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_Intent;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_Lease;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeInfo;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2ferrors_2eproto {
@@ -45,12 +46,12 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::prot
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_IndeterminateCommitError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_IntentMissingError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_LeaseRejectedError;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RangeKeyMismatchError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TransactionPushError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TransactionRetryWithProtoRefreshError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_WriteIntentError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_WriteTooOldError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_NotLeaseHolderError;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeKeyMismatchError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ReadWithinUncertaintyIntervalError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<30> scc_info_AmbiguousResultError;
 }  // namespace protobuf_roachpb_2ferrors_2eproto
@@ -323,9 +324,10 @@ static void InitDefaultsRangeKeyMismatchError() {
   ::cockroach::roachpb::RangeKeyMismatchError::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_RangeKeyMismatchError =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsRangeKeyMismatchError}, {
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_RangeKeyMismatchError =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRangeKeyMismatchError}, {
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_RangeInfo.base,}};
 
 static void InitDefaultsReadWithinUncertaintyIntervalError() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1734,10 +1736,22 @@ void RangeNotFoundError::InternalSwap(RangeNotFoundError* other) {
 // ===================================================================
 
 void RangeKeyMismatchError::InitAsDefaultInstance() {
-  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->mismatched_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->deprecated_mismatched_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
-  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->suggested_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->deprecated_suggested_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
+  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->mismatched_range_ = const_cast< ::cockroach::roachpb::RangeInfo*>(
+      ::cockroach::roachpb::RangeInfo::internal_default_instance());
+  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->suggested_range_ = const_cast< ::cockroach::roachpb::RangeInfo*>(
+      ::cockroach::roachpb::RangeInfo::internal_default_instance());
+}
+void RangeKeyMismatchError::clear_deprecated_mismatched_range() {
+  if (deprecated_mismatched_range_ != NULL) deprecated_mismatched_range_->Clear();
+  clear_has_deprecated_mismatched_range();
+}
+void RangeKeyMismatchError::clear_deprecated_suggested_range() {
+  if (deprecated_suggested_range_ != NULL) deprecated_suggested_range_->Clear();
+  clear_has_deprecated_suggested_range();
 }
 void RangeKeyMismatchError::clear_mismatched_range() {
   if (mismatched_range_ != NULL) mismatched_range_->Clear();
@@ -1750,6 +1764,8 @@ void RangeKeyMismatchError::clear_suggested_range() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeKeyMismatchError::kRequestStartKeyFieldNumber;
 const int RangeKeyMismatchError::kRequestEndKeyFieldNumber;
+const int RangeKeyMismatchError::kDeprecatedMismatchedRangeFieldNumber;
+const int RangeKeyMismatchError::kDeprecatedSuggestedRangeFieldNumber;
 const int RangeKeyMismatchError::kMismatchedRangeFieldNumber;
 const int RangeKeyMismatchError::kSuggestedRangeFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -1774,13 +1790,23 @@ RangeKeyMismatchError::RangeKeyMismatchError(const RangeKeyMismatchError& from)
   if (from.has_request_end_key()) {
     request_end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.request_end_key_);
   }
+  if (from.has_deprecated_mismatched_range()) {
+    deprecated_mismatched_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.deprecated_mismatched_range_);
+  } else {
+    deprecated_mismatched_range_ = NULL;
+  }
+  if (from.has_deprecated_suggested_range()) {
+    deprecated_suggested_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.deprecated_suggested_range_);
+  } else {
+    deprecated_suggested_range_ = NULL;
+  }
   if (from.has_mismatched_range()) {
-    mismatched_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.mismatched_range_);
+    mismatched_range_ = new ::cockroach::roachpb::RangeInfo(*from.mismatched_range_);
   } else {
     mismatched_range_ = NULL;
   }
   if (from.has_suggested_range()) {
-    suggested_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.suggested_range_);
+    suggested_range_ = new ::cockroach::roachpb::RangeInfo(*from.suggested_range_);
   } else {
     suggested_range_ = NULL;
   }
@@ -1790,9 +1816,9 @@ RangeKeyMismatchError::RangeKeyMismatchError(const RangeKeyMismatchError& from)
 void RangeKeyMismatchError::SharedCtor() {
   request_start_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   request_end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  ::memset(&mismatched_range_, 0, static_cast<size_t>(
+  ::memset(&deprecated_mismatched_range_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&suggested_range_) -
-      reinterpret_cast<char*>(&mismatched_range_)) + sizeof(suggested_range_));
+      reinterpret_cast<char*>(&deprecated_mismatched_range_)) + sizeof(suggested_range_));
 }
 
 RangeKeyMismatchError::~RangeKeyMismatchError() {
@@ -1803,6 +1829,8 @@ RangeKeyMismatchError::~RangeKeyMismatchError() {
 void RangeKeyMismatchError::SharedDtor() {
   request_start_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   request_end_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (this != internal_default_instance()) delete deprecated_mismatched_range_;
+  if (this != internal_default_instance()) delete deprecated_suggested_range_;
   if (this != internal_default_instance()) delete mismatched_range_;
   if (this != internal_default_instance()) delete suggested_range_;
 }
@@ -1823,7 +1851,7 @@ void RangeKeyMismatchError::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 15u) {
+  if (cached_has_bits & 63u) {
     if (cached_has_bits & 0x00000001u) {
       request_start_key_.ClearNonDefaultToEmptyNoArena();
     }
@@ -1831,10 +1859,18 @@ void RangeKeyMismatchError::Clear() {
       request_end_key_.ClearNonDefaultToEmptyNoArena();
     }
     if (cached_has_bits & 0x00000004u) {
+      GOOGLE_DCHECK(deprecated_mismatched_range_ != NULL);
+      deprecated_mismatched_range_->Clear();
+    }
+    if (cached_has_bits & 0x00000008u) {
+      GOOGLE_DCHECK(deprecated_suggested_range_ != NULL);
+      deprecated_suggested_range_->Clear();
+    }
+    if (cached_has_bits & 0x00000010u) {
       GOOGLE_DCHECK(mismatched_range_ != NULL);
       mismatched_range_->Clear();
     }
-    if (cached_has_bits & 0x00000008u) {
+    if (cached_has_bits & 0x00000020u) {
       GOOGLE_DCHECK(suggested_range_ != NULL);
       suggested_range_->Clear();
     }
@@ -1885,6 +1921,29 @@ bool RangeKeyMismatchError::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_deprecated_mismatched_range()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_deprecated_suggested_range()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_mismatched_range()));
         } else {
           goto handle_unusual;
@@ -1892,10 +1951,10 @@ bool RangeKeyMismatchError::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
-      case 4: {
+      // optional .cockroach.roachpb.RangeInfo suggested_range = 6;
+      case 6: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_suggested_range()));
         } else {
@@ -1943,13 +2002,24 @@ void RangeKeyMismatchError::SerializeWithCachedSizes(
 
   if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      3, this->_internal_mismatched_range(), output);
+      3, this->_internal_deprecated_mismatched_range(), output);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
+  // optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
   if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      4, this->_internal_suggested_range(), output);
+      4, this->_internal_deprecated_suggested_range(), output);
+  }
+
+  if (cached_has_bits & 0x00000010u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, this->_internal_mismatched_range(), output);
+  }
+
+  // optional .cockroach.roachpb.RangeInfo suggested_range = 6;
+  if (cached_has_bits & 0x00000020u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      6, this->_internal_suggested_range(), output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -1963,7 +2033,7 @@ size_t RangeKeyMismatchError::ByteSizeLong() const {
 
   total_size += _internal_metadata_.unknown_fields().size();
 
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 63u) {
     if (has_request_start_key()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
@@ -1976,13 +2046,26 @@ size_t RangeKeyMismatchError::ByteSizeLong() const {
           this->request_end_key());
     }
 
+    if (has_deprecated_mismatched_range()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *deprecated_mismatched_range_);
+    }
+
+    // optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
+    if (has_deprecated_suggested_range()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *deprecated_suggested_range_);
+    }
+
     if (has_mismatched_range()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           *mismatched_range_);
     }
 
-    // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
+    // optional .cockroach.roachpb.RangeInfo suggested_range = 6;
     if (has_suggested_range()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
@@ -2008,7 +2091,7 @@ void RangeKeyMismatchError::MergeFrom(const RangeKeyMismatchError& from) {
   (void) cached_has_bits;
 
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 15u) {
+  if (cached_has_bits & 63u) {
     if (cached_has_bits & 0x00000001u) {
       set_has_request_start_key();
       request_start_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.request_start_key_);
@@ -2018,10 +2101,16 @@ void RangeKeyMismatchError::MergeFrom(const RangeKeyMismatchError& from) {
       request_end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.request_end_key_);
     }
     if (cached_has_bits & 0x00000004u) {
-      mutable_mismatched_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.mismatched_range());
+      mutable_deprecated_mismatched_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.deprecated_mismatched_range());
     }
     if (cached_has_bits & 0x00000008u) {
-      mutable_suggested_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.suggested_range());
+      mutable_deprecated_suggested_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.deprecated_suggested_range());
+    }
+    if (cached_has_bits & 0x00000010u) {
+      mutable_mismatched_range()->::cockroach::roachpb::RangeInfo::MergeFrom(from.mismatched_range());
+    }
+    if (cached_has_bits & 0x00000020u) {
+      mutable_suggested_range()->::cockroach::roachpb::RangeInfo::MergeFrom(from.suggested_range());
     }
   }
 }
@@ -2047,6 +2136,8 @@ void RangeKeyMismatchError::InternalSwap(RangeKeyMismatchError* other) {
     GetArenaNoVirtual());
   request_end_key_.Swap(&other->request_end_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
+  swap(deprecated_mismatched_range_, other->deprecated_mismatched_range_);
+  swap(deprecated_suggested_range_, other->deprecated_suggested_range_);
   swap(mismatched_range_, other->mismatched_range_);
   swap(suggested_range_, other->suggested_range_);
   swap(_has_bits_[0], other->_has_bits_[0]);

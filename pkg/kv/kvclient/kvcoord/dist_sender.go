@@ -1025,7 +1025,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// turning single-range queries into multi-range queries for no good
 	// reason.
 	if ba.IsUnsplittable() {
-		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc())
+		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc(), ri.Lease())
 		return nil, roachpb.NewError(mismatch)
 	}
 	// If there's no transaction and ba spans ranges, possibly re-run as part of
@@ -1424,14 +1424,37 @@ func (ds *DistSender) sendPartialBatch(
 			different := func(rd *roachpb.RangeDescriptor) bool {
 				return !desc.RSpan().Equal(rd.RSpan())
 			}
-			if different(&tErr.MismatchedRange) {
-				replacements = append(replacements, &kvbase.RangeCacheEntry{Desc: tErr.MismatchedRange})
-			}
-			if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
-				if includesFrontOfCurSpan(isReverse, tErr.SuggestedRange, rs) {
-					replacements = append(replacements, &kvbase.RangeCacheEntry{Desc: *tErr.SuggestedRange})
+			if desc := tErr.MismatchedRange.Desc; desc.IsInitialized() {
+				if different(&desc) {
+					replacements = append(replacements,
+						&kvbase.RangeCacheEntry{Desc: desc, Lease: tErr.MismatchedRange.Lease})
+				}
+			} else {
+				// Deal with 20.1 nodes.
+				if different(&tErr.DeprecatedMismatchedRange) {
+					// We have no lease info, so we don't put any in the RangeCacheEntry.
+					replacement := &kvbase.RangeCacheEntry{Desc: tErr.DeprecatedMismatchedRange}
+					replacements = append(replacements, replacement)
 				}
 			}
+
+			if tErr.SuggestedRange != nil {
+				desc := tErr.SuggestedRange.Desc
+				if different(&desc) && includesFrontOfCurSpan(isReverse, &desc, rs) {
+					replacements = append(replacements,
+						&kvbase.RangeCacheEntry{Desc: desc, Lease: tErr.SuggestedRange.Lease})
+				}
+			} else {
+				// Deal with 20.1 nodes.
+				if tErr.DeprecatedSuggestedRange != nil && different(tErr.DeprecatedSuggestedRange) {
+					if includesFrontOfCurSpan(isReverse, tErr.DeprecatedSuggestedRange, rs) {
+						// We have no lease info, so we don't put any in the RangeCacheEntry.
+						replacement := &kvbase.RangeCacheEntry{Desc: *tErr.DeprecatedSuggestedRange}
+						replacements = append(replacements, replacement)
+					}
+				}
+			}
+
 			// Same as Evict() if replacements is empty.
 			evictToken.EvictAndReplace(ctx, replacements...)
 			// On addressing errors (likely a split), we need to re-invoke

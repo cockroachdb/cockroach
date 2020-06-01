@@ -936,11 +936,11 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", pErr)
 	} else {
-		if mismatchedDesc := mismatchErr.MismatchedRange; mismatchedDesc.RangeID != firstRepl.RangeID {
+		if mismatchedDesc := mismatchErr.MismatchedRange.Desc; mismatchedDesc.RangeID != firstRepl.RangeID {
 			t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
 		}
-		if suggestedDesc := mismatchErr.SuggestedRange; suggestedDesc == nil || suggestedDesc.RangeID != newRepl.RangeID {
-			t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, suggestedDesc)
+		if suggestedRng := mismatchErr.SuggestedRange; suggestedRng == nil || suggestedRng.Desc.RangeID != newRepl.RangeID {
+			t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, suggestedRng.Desc)
 		}
 	}
 }

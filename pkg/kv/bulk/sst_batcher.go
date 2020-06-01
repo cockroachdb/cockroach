@@ -428,7 +428,12 @@ func AddSSTable(
 				}
 				// This range has split -- we need to split the SST to try again.
 				if m := (*roachpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
-					split := m.MismatchedRange.EndKey.AsRawKey()
+					var split roachpb.Key
+					if m.MismatchedRange.Desc.IsInitialized() {
+						split = m.MismatchedRange.Desc.EndKey.AsRawKey()
+					} else {
+						split = m.DeprecatedMismatchedRange.EndKey.AsRawKey()
+					}
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
 					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings)
 					if err != nil {

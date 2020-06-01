@@ -963,11 +963,13 @@ func TestEvictCacheOnError(t *testing.T) {
 		shouldClearLeaseHolder bool
 		shouldClearReplica     bool
 	}{
-		{false, errors.New(errString), false, false},                                     // non-retryable replica error
-		{false, &roachpb.RangeKeyMismatchError{MismatchedRange: testDesc}, false, false}, // RangeKeyMismatch replica error
-		{false, &roachpb.RangeNotFoundError{}, false, false},                             // RangeNotFound replica error
-		{false, nil, false, false},                                                       // RPC error
-		{true, nil, false, false},                                                        // canceled context
+		{false, errors.New(errString), false, false}, // non-retryable replica error
+		{false, &roachpb.RangeKeyMismatchError{ // RangeKeyMismatch replica error
+			MismatchedRange: roachpb.RangeInfo{Desc: testDesc}}, false, false,
+		},
+		{false, &roachpb.RangeNotFoundError{}, false, false}, // RangeNotFound replica error
+		{false, nil, false, false},                           // RPC error
+		{true, nil, false, false},                            // canceled context
 	}
 
 	for i, tc := range testCases {
@@ -1270,8 +1272,8 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 			br.Error = roachpb.NewError(&roachpb.RangeKeyMismatchError{
 				RequestStartKey: rs.Key.AsRawKey(),
 				RequestEndKey:   rs.EndKey.AsRawKey(),
-				MismatchedRange: rhsDesc,
-				SuggestedRange:  &lhsDesc,
+				MismatchedRange: roachpb.RangeInfo{Desc: rhsDesc},
+				SuggestedRange:  &roachpb.RangeInfo{Desc: lhsDesc},
 			})
 			return &br, nil
 		} else if ba.RangeID != lhsDesc.RangeID {
@@ -3264,10 +3266,10 @@ func TestEvictMetaRange(t *testing.T) {
 				err := &roachpb.RangeKeyMismatchError{
 					RequestStartKey: rs.Key.AsRawKey(),
 					RequestEndKey:   rs.EndKey.AsRawKey(),
-					MismatchedRange: testMeta2RangeDescriptor1,
+					MismatchedRange: roachpb.RangeInfo{Desc: testMeta2RangeDescriptor1},
 				}
 				if hasSuggestedRange {
-					err.SuggestedRange = &testMeta2RangeDescriptor2
+					err.SuggestedRange = &roachpb.RangeInfo{Desc: testMeta2RangeDescriptor2}
 				}
 				reply.Error = roachpb.NewError(err)
 				return reply, nil

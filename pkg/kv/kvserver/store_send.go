@@ -214,13 +214,18 @@ func (s *Store) Send(
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if !t.MismatchedRange.ContainsKey(rSpan.Key) {
+		if !t.MismatchedRange.Desc.ContainsKey(rSpan.Key) {
 			if r2 := s.LookupReplica(rSpan.Key); r2 != nil {
 				// Only return the correct range descriptor as a hint
 				// if we know the current lease holder for that range, which
 				// indicates that our knowledge is not stale.
 				if l, _ := r2.GetLease(); r2.IsLeaseValid(l, s.Clock().Now()) {
-					t.SuggestedRange = r2.Desc()
+					desc := r2.Desc()
+					t.SuggestedRange = &roachpb.RangeInfo{
+						Desc:  *desc,
+						Lease: l,
+					}
+					t.DeprecatedSuggestedRange = r2.Desc()
 				}
 			}
 		}
