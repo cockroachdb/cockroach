@@ -118,7 +118,7 @@ func (c *CustomFuncs) ExtractDeterminedConditions(
 ) memo.FiltersExpr {
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
 	for i := range filters {
-		if c.IsDeterminedBy(&filters[i], cols, input) {
+		if c.ColsAreDeterminedBy(filters[i].ScalarProps().OuterCols, cols, input) {
 			newFilters = append(newFilters, filters[i])
 		}
 	}
@@ -132,7 +132,7 @@ func (c *CustomFuncs) ExtractUndeterminedConditions(
 ) memo.FiltersExpr {
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
 	for i := range filters {
-		if !c.IsDeterminedBy(&filters[i], cols, input) {
+		if !c.ColsAreDeterminedBy(filters[i].ScalarProps().OuterCols, cols, input) {
 			newFilters = append(newFilters, filters[i])
 		}
 	}
