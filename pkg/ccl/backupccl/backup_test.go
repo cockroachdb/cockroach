@@ -74,28 +74,6 @@ const (
 	localFoo                    = "nodelocal://0/foo"
 )
 
-func backupRestoreTestSetupEmptyWithParams(
-	t testing.TB,
-	clusterSize int,
-	dir string,
-	init func(tc *testcluster.TestCluster),
-	params base.TestClusterArgs,
-) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
-	ctx = context.Background()
-
-	params.ServerArgs.ExternalIODir = dir
-	tc = testcluster.StartTestCluster(t, clusterSize, params)
-	init(tc)
-
-	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	cleanupFn := func() {
-		tc.Stopper().Stop(context.TODO()) // cleans up in memory storage's auxiliary dirs
-	}
-
-	return ctx, tc, sqlDB, cleanupFn
-}
-
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
 	clusterSize int,
@@ -136,8 +114,8 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	cleanupFn := func() {
-		tc.Stopper().Stop(context.TODO()) // cleans up in memory storage's auxiliary dirs
-		dirCleanupFn()                    // cleans up dir, which is the nodelocal:// storage
+		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
+		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
 	}
 
 	return ctx, tc, sqlDB, dir, cleanupFn

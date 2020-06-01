@@ -889,15 +889,15 @@ func createImportingTables(
 			}
 		}
 	}
-	var tempSystemDBID sqlbase.ID
+	tempSystemDBID := keys.MinNonPredefinedUserDescID
 	for id := range details.TableRewrites {
-		if uint32(id) > uint32(tempSystemDBID) {
-			tempSystemDBID = id
+		if int(id) > tempSystemDBID {
+			tempSystemDBID = int(id)
 		}
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		databases = append(databases, &sqlbase.DatabaseDescriptor{
-			ID:         tempSystemDBID,
+			ID:         sqlbase.ID(tempSystemDBID),
 			Name:       restoreTempSystemDB,
 			Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
 		})
