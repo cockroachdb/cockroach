@@ -3396,6 +3396,7 @@ func (desc *MutableTableDescriptor) AddForeignKeyMutation(
 // NOT NULL constraint on a column, so that NOT NULL constraints can be added
 // and dropped correctly in the schema changer. This function mutates inuseNames
 // to add the new constraint name.
+// TODO(mgartner): Move this to schemaexpr.CheckConstraintBuilder.
 func MakeNotNullCheckConstraint(
 	colName string, colID ColumnID, inuseNames map[string]struct{}, validity ConstraintValidity,
 ) *TableDescriptor_CheckConstraint {
