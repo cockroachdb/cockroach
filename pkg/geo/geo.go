@@ -15,7 +15,6 @@ import (
 	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	_ "github.com/cockroachdb/cockroach/pkg/geo/geoproj" // blank import to make sure PROJ compiles
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"

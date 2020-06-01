@@ -1541,8 +1541,6 @@ bin/execgen_out.d: bin/execgen
 	@echo EXECGEN $@; execgen -M $(EXECGEN_TARGETS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
 
-bin/execgen: $(LIBPROJ) $(CGO_FLAGS_FILES)
-
 # No need to pull all the world in when a user just wants
 # to know how to invoke `make` or clean up.
 ifneq ($(build-with-dep-files),)
