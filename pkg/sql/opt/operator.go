@@ -348,6 +348,43 @@ func AggregateIsNeverNull(op Operator) bool {
 	return false
 }
 
+// AggregatesCanMerge returns true if the given inner and outer operators can be
+// replaced with a single equivalent operator, assuming the outer operator is
+// aggregating on the inner. In other words, the inner-outer aggregate pair
+// forms a valid "decomposition" of a single aggregate. For example, the
+// following pairs of queries are equivalent:
+//
+//   SELECT sum(s) FROM (SELECT sum(y) FROM xy GROUP BY x) AS f(s);
+//   SELECT sum(y) FROM xy;
+//
+//   SELECT sum_int(c) FROM (SELECT count(y) FROM xy GROUP BY x) AS f(c);
+//   SELECT count(y) FROM xy;
+//
+// Note: some aggregates like StringAggOp are decomposable in theory, but in
+// practice can not be easily merged as in the examples above.
+func AggregatesCanMerge(inner, outer Operator) bool {
+	switch inner {
+
+	case AnyNotNullAggOp, BitAndAggOp, BitOrAggOp, BoolAndOp,
+		BoolOrOp, ConstAggOp, ConstNotNullAggOp, FirstAggOp,
+		MaxOp, MinOp, SumOp, SumIntOp, XorAggOp:
+		return inner == outer
+
+	case CountOp, CountRowsOp:
+		// Only SumIntOp can be used here because SumOp outputs a decimal value,
+		// while CountOp and CountRowsOp both output int values.
+		return outer == SumIntOp
+
+	case ArrayAggOp, AvgOp, ConcatAggOp, CorrOp, JsonAggOp,
+		JsonbAggOp, PercentileContOp, PercentileDiscOp, SqrDiffOp,
+		StdDevOp, StringAggOp, VarianceOp:
+		return false
+
+	default:
+		panic(errors.AssertionFailedf("unhandled ops: %s, %s", log.Safe(inner), log.Safe(outer)))
+	}
+}
+
 // OpaqueMetadata is an object stored in OpaqueRelExpr and passed
 // through to the exec factory.
 type OpaqueMetadata interface {

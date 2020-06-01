@@ -2917,3 +2917,255 @@ project
            └── agg-distinct [as=count:6, outer=(2)]
                 └── count
                      └── y:2
+
+# --------------------------------------------------
+# FoldGroupingOperators
+# --------------------------------------------------
+
+# Case with sum aggregate.
+norm expect=FoldGroupingOperators
+SELECT sum(s) FROM (SELECT sum(x) FROM xy GROUP BY y) AS f(s)
+----
+scalar-group-by
+ ├── columns: sum:4
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xy
+ │    ├── columns: x:1!null
+ │    └── key: (1)
+ └── aggregations
+      └── sum [as=sum:4, outer=(1)]
+           └── x:1
+
+# Case with count-rows aggregate.
+norm expect=FoldGroupingOperators
+SELECT sum_int(c) FROM (SELECT count(x) FROM xy GROUP BY y) AS f(c)
+----
+scalar-group-by
+ ├── columns: sum_int:4!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xy
+ └── aggregations
+      └── count-rows [as=sum_int:4]
+
+# Case with a count aggregate.
+norm expect=FoldGroupingOperators
+SELECT sum_int(cnt) FROM (SELECT count(c2) FROM nullablecols GROUP BY c1) AS f(cnt)
+----
+scalar-group-by
+ ├── columns: sum_int:6!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan nullablecols
+ │    └── columns: c2:2
+ └── aggregations
+      └── count [as=sum_int:6, outer=(2)]
+           └── c2:2
+
+# Case with max aggregate.
+norm expect=FoldGroupingOperators
+SELECT max(m) FROM (SELECT max(x) FROM xy GROUP BY y) AS f(m)
+----
+scalar-group-by
+ ├── columns: max:4
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xy
+ │    ├── columns: x:1!null
+ │    └── key: (1)
+ └── aggregations
+      └── max [as=max:4, outer=(1)]
+           └── x:1
+
+# Case with bit_and aggregate.
+norm expect=FoldGroupingOperators
+SELECT bit_and(b) FROM (SELECT bit_and(x) FROM xy GROUP BY y) AS f(b)
+----
+scalar-group-by
+ ├── columns: bit_and:4
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── scan xy
+ │    ├── columns: x:1!null
+ │    └── key: (1)
+ └── aggregations
+      └── bit-and-agg [as=bit_and:4, outer=(1)]
+           └── x:1
+
+# Case with multiple aggregates.
+norm expect=FoldGroupingOperators
+SELECT max(m), sum(s), sum_int(c)
+FROM (SELECT sum(b), count(c), max(b) FROM abc GROUP BY a)
+AS f(s, c, m)
+----
+scalar-group-by
+ ├── columns: max:7 sum:8 sum_int:9!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7-9)
+ ├── scan abc
+ │    └── columns: b:2!null
+ └── aggregations
+      ├── max [as=max:7, outer=(2)]
+      │    └── b:2
+      ├── sum [as=sum:8, outer=(2)]
+      │    └── b:2
+      └── count-rows [as=sum_int:9]
+
+# GroupBy on GroupBy case where the inner grouping columns determine the outer
+# grouping columns, but they do not intersect.
+norm expect=FoldGroupingOperators
+SELECT sum(s) FROM (SELECT y, sum(x) AS s FROM xy GROUP BY x) GROUP BY y
+----
+project
+ ├── columns: sum:4!null
+ └── group-by
+      ├── columns: y:2 sum:4!null
+      ├── grouping columns: y:2
+      ├── key: (2)
+      ├── fd: (2)-->(4)
+      ├── scan xy
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── aggregations
+           └── sum [as=sum:4, outer=(1)]
+                └── x:1
+
+# GroupBy on GroupBy case with multiple-column grouping.
+norm expect=FoldGroupingOperators
+SELECT sum(s) FROM (SELECT a, sum(c) AS s FROM abc GROUP BY a, b) GROUP BY a
+----
+project
+ ├── columns: sum:5!null
+ └── group-by
+      ├── columns: a:1!null sum:5!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── scan abc
+      │    └── columns: a:1!null c:3!null
+      └── aggregations
+           └── sum [as=sum:5, outer=(3)]
+                └── c:3
+
+# No-op case with an AvgOp. Note: this query actually could be folded if the
+# groups were known to be of the same size.
+norm expect-not=FoldGroupingOperators
+SELECT sum(a) FROM (SELECT avg(x) FROM xy GROUP BY y) AS f(a)
+----
+scalar-group-by
+ ├── columns: sum:4
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── group-by
+ │    ├── columns: y:2 avg:3!null
+ │    ├── grouping columns: y:2
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(3)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── aggregations
+ │         └── avg [as=avg:3, outer=(1)]
+ │              └── x:1
+ └── aggregations
+      └── sum [as=sum:4, outer=(3)]
+           └── avg:3
+
+# No-op case with several valid aggregate pairs and one invalid pair.
+norm expect-not=FoldGroupingOperators
+SELECT sum(c), sum(s), max(s) FROM (SELECT sum(x), count(x) FROM xy GROUP BY y) AS f(s, c)
+----
+scalar-group-by
+ ├── columns: sum:5 sum:6 max:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5-7)
+ ├── group-by
+ │    ├── columns: y:2 sum:3!null count:4!null
+ │    ├── grouping columns: y:2
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(3,4)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── aggregations
+ │         ├── sum [as=sum:3, outer=(1)]
+ │         │    └── x:1
+ │         └── count-rows [as=count:4]
+ └── aggregations
+      ├── sum [as=sum:5, outer=(4)]
+      │    └── count:4
+      ├── sum [as=sum:6, outer=(3)]
+      │    └── sum:3
+      └── max [as=max:7, outer=(3)]
+           └── sum:3
+
+# No-op case because the outer grouping columns are not functionally determined
+# by the inner grouping columns in the functional dependencies of the input of
+# the inner grouping operator.
+norm expect-not=FoldGroupingOperators
+SELECT max(m) FROM (SELECT max(x) AS m, sum(x) AS s FROM xy GROUP BY y) GROUP BY s
+----
+project
+ ├── columns: max:5!null
+ └── group-by
+      ├── columns: sum:4!null max:5!null
+      ├── grouping columns: sum:4!null
+      ├── key: (4)
+      ├── fd: (4)-->(5)
+      ├── group-by
+      │    ├── columns: y:2 max:3!null sum:4!null
+      │    ├── grouping columns: y:2
+      │    ├── key: (2)
+      │    ├── fd: (2)-->(3,4)
+      │    ├── scan xy
+      │    │    ├── columns: x:1!null y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── aggregations
+      │         ├── max [as=max:3, outer=(1)]
+      │         │    └── x:1
+      │         └── sum [as=sum:4, outer=(1)]
+      │              └── x:1
+      └── aggregations
+           └── max [as=max:5, outer=(3)]
+                └── max:3
+
+# No-op case because one of the grouping operators has an internal ordering. The
+# array_agg ensures that the GroupBy has an internal ordering.
+norm expect-not=FoldGroupingOperators
+SELECT sum(s) FROM (SELECT sum(z) AS s, array_agg(z) FROM (SELECT * FROM uvwz ORDER BY w DESC) GROUP BY u)
+----
+scalar-group-by
+ ├── columns: sum:8
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── group-by
+ │    ├── columns: u:1!null sum:6!null
+ │    ├── grouping columns: u:1!null
+ │    ├── internal-ordering: -3 opt(1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── sort
+ │    │    ├── columns: u:1!null w:3!null z:4!null
+ │    │    ├── ordering: -3 opt(1) [actual: -3]
+ │    │    └── scan uvwz
+ │    │         └── columns: u:1!null w:3!null z:4!null
+ │    └── aggregations
+ │         └── sum [as=sum:6, outer=(4)]
+ │              └── z:4
+ └── aggregations
+      └── sum [as=sum:8, outer=(6)]
+           └── sum:6

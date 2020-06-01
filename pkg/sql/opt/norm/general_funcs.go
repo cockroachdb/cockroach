@@ -320,11 +320,11 @@ func (c *CustomFuncs) IsBoundBy(src opt.Expr, cols opt.ColSet) bool {
 	return c.OuterCols(src).SubsetOf(cols)
 }
 
-// IsDeterminedBy returns true if all outer references in the source expression
-// are bound by the closure of the given columns according to the functional
-// dependencies of the input expression.
-func (c *CustomFuncs) IsDeterminedBy(src opt.Expr, cols opt.ColSet, input memo.RelExpr) bool {
-	return input.Relational().FuncDeps.InClosureOf(c.OuterCols(src), cols)
+// ColsAreDeterminedBy returns true if the given columns are functionally
+// determined by the "in" ColSet according to the functional dependencies of the
+// input expression.
+func (c *CustomFuncs) ColsAreDeterminedBy(cols, in opt.ColSet, input memo.RelExpr) bool {
+	return input.Relational().FuncDeps.InClosureOf(cols, in)
 }
 
 // AreProjectionsCorrelated returns true if any element in the projections
