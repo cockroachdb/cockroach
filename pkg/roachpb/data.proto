@@ -723,3 +723,12 @@ message LeafTxnFinalState {
   bool refresh_invalid = 7;
   reserved 8;
 }
+
+// RangeInfo describes a range which executed a request. It contains
+// the range descriptor and lease information at the time of execution.
+message RangeInfo {
+  option (gogoproto.equal) = true;
+
+  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  Lease lease = 2 [(gogoproto.nullable) = false];
+}

@@ -683,15 +683,16 @@ func TestReplicasByKey(t *testing.T) {
 
 func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	repl1, err := store.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -713,7 +714,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	st := &kvserverpb.LeaseStatus{Timestamp: repl1.Clock().Now()}
-	if err = repl1.checkExecutionCanProceed(&roachpb.BatchRequest{}, nil /* g */, st); !errors.Is(err, expErr) {
+	if err = repl1.checkExecutionCanProceed(ctx, &roachpb.BatchRequest{}, nil /* g */, st); !errors.Is(err, expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
 }
@@ -798,6 +799,75 @@ func TestStoreReplicaVisitor(t *testing.T) {
 			t.Fatalf("got %v, expected %v", seen, exp)
 		}
 	}
+}
+
+func TestStoreVisitReplicasByKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	s, _ := createTestStore(t,
+		testStoreOpts{
+			// This test controls the ranges explicitly.
+			createSystemRanges: false,
+		},
+		stopper)
+
+	// Remove range 1.
+	repl1, err := s.GetReplica(1)
+	require.NoError(t, err)
+	err = s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		DestroyData: true,
+	})
+	require.NoError(t, err)
+
+	// Add 10 new ranges.
+	const newCount = 10
+	ranges := make([]roachpb.RSpan, 0)
+	for i := 0; i < newCount; i++ {
+		start := roachpb.RKey(fmt.Sprintf("a%02d", i))
+		end := roachpb.RKey(fmt.Sprintf("a%02d", i+1))
+		err = s.AddReplica(createReplica(s, roachpb.RangeID(i+1), start, end))
+		ranges = append(ranges, roachpb.RSpan{Key: start, EndKey: end})
+		require.NoError(t, err)
+	}
+	// Reverse ranges, since VisitReplicasByKey returns ranges in reverse key
+	// order.
+	for i, j := 0, len(ranges)-1; i < j; i, j = i+1, j-1 {
+		ranges[i], ranges[j] = ranges[j], ranges[i]
+	}
+
+	// Query for all ranges.
+	visited := make([]roachpb.RSpan, 0)
+	s.VisitReplicasByKey(ctx, roachpb.RKeyMin, roachpb.RKeyMax, func(_ context.Context, r KeyRange) bool {
+		visited = append(visited, r.Desc().RSpan())
+		return true
+	})
+	require.Equal(t, ranges, visited)
+
+	// Query for some of the ranges.
+	visited = visited[:0]
+	s.VisitReplicasByKey(ctx, ranges[6].Key, ranges[3].EndKey, func(_ context.Context, r KeyRange) bool {
+		visited = append(visited, r.Desc().RSpan())
+		return true
+	})
+	require.Equal(t, ranges[3:7], visited)
+
+	// Like above, but don't use exact boundaries.
+	visited = visited[:0]
+	s.VisitReplicasByKey(ctx, ranges[6].Key.Next(), ranges[3].Key.Next(), func(_ context.Context, r KeyRange) bool {
+		visited = append(visited, r.Desc().RSpan())
+		return true
+	})
+	require.Equal(t, ranges[3:7], visited)
+
+	// Query within a single range.
+	visited = visited[:0]
+	s.VisitReplicasByKey(ctx, ranges[6].Key.Next(), ranges[6].Key.Next(), func(_ context.Context, r KeyRange) bool {
+		visited = append(visited, r.Desc().RSpan())
+		return true
+	})
+	require.Equal(t, ranges[6:7], visited)
 }
 
 func TestHasOverlappingReplica(t *testing.T) {
