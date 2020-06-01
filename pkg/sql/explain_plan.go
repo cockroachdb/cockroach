@@ -195,19 +195,19 @@ func populateExplain(
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainPlanningCtx(distSQLPlanner, params, stmtType, plan.subqueryPlans, willDistribute)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, stmtType, plan.subqueryPlans, willDistribute)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physicalPlan, err := makePhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
+	physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
 	if err == nil {
 		// There might be an issue making the physical plan, but that should not
 		// cause an error or panic, so swallow the error. See #40677 for example.
-		distSQLPlanner.FinalizePlan(planCtx, &physicalPlan)
+		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
 		// TODO(asubiotto): This cast from SQLInstanceID to NodeID is temporary:
 		//  https://github.com/cockroachdb/cockroach/issues/49596
 		flows := physicalPlan.GenerateFlowSpecs(roachpb.NodeID(params.extendedEvalCtx.NodeID.SQLInstanceID()))
-		flowCtx := makeFlowCtx(planCtx, physicalPlan, params)
+		flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
 		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData

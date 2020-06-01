@@ -348,14 +348,14 @@ func makeColStatKey(cols []sqlbase.ColumnID) string {
 	return colSet.String()
 }
 
-// makePlanForExplainDistSQL is part of the distSQLExplainable interface.
-func (n *createStatsNode) makePlanForExplainDistSQL(
+// newPlanForExplainDistSQL is part of the distSQLExplainable interface.
+func (n *createStatsNode) newPlanForExplainDistSQL(
 	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	// Create a job record but don't actually start the job.
 	record, err := n.makeJobRecord(planCtx.ctx)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	job := n.p.ExecCfg().JobRegistry.NewJob(*record)
 
