@@ -34,4 +34,4 @@
 	url = https://github.com/libgeos/geos.git
 [submodule "c-deps/proj"]
 	path = c-deps/proj
-	url = https://github.com/OSGeo/PROJ.git
+	url = https://github.com/cockroachdb/PROJ.git
