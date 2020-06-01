@@ -170,7 +170,7 @@ update computed
  │    ├── b_new:8 => b:2
  │    └── column9:9 => c:3
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: column9:9!null a_new:7!null b_new:8!null a:4!null b:5 c:6
       ├── key: (4)
@@ -580,14 +580,14 @@ LIMIT
 project
  ├── columns: c0:6!null
  ├── cardinality: [0 - 107]
- ├── side-effects
+ ├── stable+volatile, side-effects
  └── limit
       ├── columns: c0:6!null c1:7!null
       ├── cardinality: [0 - 107]
-      ├── side-effects
+      ├── stable+volatile, side-effects
       ├── select
       │    ├── columns: c0:6!null c1:7!null
-      │    ├── side-effects
+      │    ├── stable+volatile, side-effects
       │    ├── limit hint: 107.00
       │    ├── project
       │    │    ├── columns: c0:6!null c1:7!null
@@ -599,7 +599,7 @@ project
       │    │         ├── crdb_internal.public.zones.zone_id:1 + 1 [as=c0:6, outer=(1)]
       │    │         └── crdb_internal.public.zones.zone_id:1 + 2 [as=c1:7, outer=(1)]
       │    └── filters
-      │         └── le [outer=(6,7), side-effects, correlated-subquery]
+      │         └── le [outer=(6,7), stable+volatile, side-effects, correlated-subquery]
       │              ├── case
       │              │    ├── true
       │              │    ├── when

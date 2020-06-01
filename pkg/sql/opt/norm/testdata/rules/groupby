@@ -358,7 +358,7 @@ insert nullablecols
  │    ├── i:6 => c3:3
  │    └── i:6 => rowid:4
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── upsert-distinct-on
       ├── columns: i:6!null
       ├── grouping columns: i:6!null
@@ -420,7 +420,7 @@ upsert nullablecols
  ├── update-mapping:
  │    └── upsert_c3:22 => c3:3
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_c3:22!null i:6!null c1:15 c2:16 c3:17 rowid:18
       ├── key: (6,18)
@@ -627,7 +627,7 @@ insert xy
  │    ├── y:4 => x:1
  │    └── column5:5 => y:2
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: y:4!null column5:5
       ├── cardinality: [0 - 1]
@@ -683,7 +683,7 @@ upsert xy
  ├── update-mapping:
  │    └── upsert_y:10 => y:2
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_y:10 y:4!null column5:5 x:6 y:7
       ├── cardinality: [0 - 1]
@@ -733,7 +733,7 @@ insert xy
  │    ├── y:4 => x:1
  │    └── column5:5 => y:2
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── upsert-distinct-on
       ├── columns: y:4 column5:5
       ├── grouping columns: y:4
@@ -784,7 +784,7 @@ upsert xy
  ├── update-mapping:
  │    └── upsert_y:10 => y:2
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_y:10 y:4 column5:5 x:6 y:7
       ├── lax-key: (4,6)
@@ -840,7 +840,7 @@ upsert abc
  ├── update-mapping:
  │    └── "?column?":7 => a:1
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── left-join (hash)
       ├── columns: b:5!null "?column?":7!null "?column?":8!null a:9 b:10 c:11
       ├── key: (5)
@@ -889,7 +889,7 @@ upsert abc
  ├── update-mapping:
  │    └── upsert_c:14 => c:3
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_c:14!null b:5!null c:6!null "?column?":7 a:8 b:9 c:10
       ├── lax-key: (6-10)
@@ -1353,7 +1353,7 @@ insert a
  │    ├── "?column?":12 => s:4
  │    └── column14:14 => j:5
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14
       ├── cardinality: [0 - 1]
@@ -1463,7 +1463,7 @@ upsert a
  ├── update-mapping:
  │    └── upsert_f:23 => f:3
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_f:23 i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 k:15 i:16 f:17 s:18 j:19
       ├── cardinality: [0 - 1]
@@ -1721,12 +1721,12 @@ distinct-on
  ├── columns: x:1
  ├── grouping columns: column1:1
  ├── cardinality: [1 - 2]
- ├── side-effects
+ ├── volatile, side-effects
  ├── key: (1)
  └── values
       ├── columns: column1:1
       ├── cardinality: [2 - 2]
-      ├── side-effects
+      ├── volatile, side-effects
       ├── (1,)
       └── (unique_rowid(),)
 
@@ -1794,7 +1794,7 @@ insert a
  │    ├── column2:7 => s:4
  │    └── column10:10 => j:5
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10
       ├── fd: ()-->(9,10)
@@ -1844,7 +1844,7 @@ upsert a
  ├── update-mapping:
  │    └── upsert_f:19 => f:3
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_f:19 column1:6!null column2:7 column3:8 column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
       ├── cardinality: [2 - ]
@@ -1893,7 +1893,7 @@ upsert a
  ├── update-mapping:
  │    └── upsert_f:19 => f:3
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_f:19 column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
       ├── cardinality: [1 - ]
@@ -1955,7 +1955,7 @@ insert a
  │    ├── column2:7 => s:4
  │    └── column10:10 => j:5
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10
       ├── fd: ()-->(10)
@@ -2029,7 +2029,7 @@ insert a
  │    ├── column2:7 => s:4
  │    └── column10:10 => j:5
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── upsert-distinct-on
       ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       ├── grouping columns: column3:8!null column9:9
@@ -2128,55 +2128,55 @@ insert a
  │    ├── column2:7 => s:4
  │    └── column10:10 => j:5
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── project
       ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
-      ├── side-effects
+      ├── volatile, side-effects
       ├── fd: ()-->(10), (6)~~>(7-9)
       └── select
            ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
-           ├── side-effects
+           ├── volatile, side-effects
            ├── lax-key: (6,17,19,22,23)
            ├── fd: ()-->(10,19,22), (6)~~>(7-9)
            ├── left-join (hash)
            │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
-           │    ├── side-effects
+           │    ├── volatile, side-effects
            │    ├── lax-key: (6,17,19,22,23)
            │    ├── fd: ()-->(10,19), (6)~~>(7-9)
            │    ├── select
            │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
-           │    │    ├── side-effects
+           │    │    ├── volatile, side-effects
            │    │    ├── lax-key: (6,17,19)
            │    │    ├── fd: ()-->(10,19), (6)~~>(7-9)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
-           │    │    │    ├── side-effects
+           │    │    │    ├── volatile, side-effects
            │    │    │    ├── lax-key: (6,17,19)
            │    │    │    ├── fd: ()-->(10), (6)~~>(7-9)
            │    │    │    ├── upsert-distinct-on
            │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
            │    │    │    │    ├── grouping columns: column1:6
-           │    │    │    │    ├── side-effects
+           │    │    │    │    ├── volatile, side-effects
            │    │    │    │    ├── lax-key: (6)
            │    │    │    │    ├── fd: ()-->(10), (6)~~>(7-10)
            │    │    │    │    ├── select
            │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
-           │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    ├── volatile, side-effects
            │    │    │    │    │    ├── fd: ()-->(10,11)
            │    │    │    │    │    ├── left-join (hash)
            │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
            │    │    │    │    │    │    ├── cardinality: [2 - ]
-           │    │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    │    ├── volatile, side-effects
            │    │    │    │    │    │    ├── fd: ()-->(10)
            │    │    │    │    │    │    ├── project
            │    │    │    │    │    │    │    ├── columns: column10:10 column1:6 column2:7!null column3:8!null column4:9!null
            │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
-           │    │    │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    │    │    ├── volatile, side-effects
            │    │    │    │    │    │    │    ├── fd: ()-->(10)
            │    │    │    │    │    │    │    ├── values
            │    │    │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null
            │    │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
-           │    │    │    │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    │    │    │    ├── volatile, side-effects
            │    │    │    │    │    │    │    │    ├── (unique_rowid(), 'foo', 1, 1.0)
            │    │    │    │    │    │    │    │    └── (unique_rowid(), 'bar', 2, 2.0)
            │    │    │    │    │    │    │    └── projections
@@ -2229,7 +2229,7 @@ insert a
  │    ├── "?column?":11 => s:4
  │    └── column13:13 => j:5
  ├── cardinality: [0 - 0]
- ├── side-effects, mutations
+ ├── volatile, side-effects, mutations
  └── upsert-distinct-on
       ├── columns: i:7!null "?column?":11!null column12:12 column13:13
       ├── grouping columns: i:7!null

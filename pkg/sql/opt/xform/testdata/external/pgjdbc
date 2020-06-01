@@ -82,6 +82,7 @@ WHERE
 ----
 project
  ├── columns: type_cat:71 type_schem:34!null type_name:2!null class_name:71 data_type:72 remarks:73 base_type:74
+ ├── stable
  ├── fd: ()-->(71)
  ├── ensure-distinct-on
  │    ├── columns: t.oid:1 t.typname:2!null t.typtype:7 nspname:34!null case:70 rownum:75!null
@@ -131,5 +132,5 @@ project
  └── projections
       ├── NULL [as=type_cat:71]
       ├── CASE WHEN t.typtype:7 = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [as=data_type:72, outer=(7)]
-      ├── obj_description(t.oid:1, 'pg_type') [as=remarks:73, outer=(1)]
+      ├── obj_description(t.oid:1, 'pg_type') [as=remarks:73, outer=(1), stable]
       └── CASE WHEN t.typtype:7 = 'd' THEN case:70 END [as=base_type:74, outer=(7,70)]
