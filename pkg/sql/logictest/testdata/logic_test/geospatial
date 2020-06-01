@@ -1428,3 +1428,111 @@ ORDER BY id
 1  4004  0
 2  4326  4326
 3  4004  3857
+
+subtest st_summary
+
+query T
+SELECT ST_Summary('POINT(0 0)'::geometry)
+----
+Point[B]
+
+query T
+SELECT ST_Summary('SRID=4326;POINT(0 0)'::geometry)
+----
+Point[BS]
+
+query T
+SELECT ST_Summary('POINT(0 0 0)'::geometry)
+----
+Point[B]
+
+query T
+SELECT ST_Summary('POINT(0 0 0 0)'::geometry)
+----
+Point[B]
+
+query T
+SELECT ST_Summary('MULTIPOINT(0 0)'::geometry)
+----
+MultiPoint[B] with 1 element
+Point[B]
+
+query T
+SELECT ST_Summary('SRID=4326;MULTIPOINT(0 0)'::geometry)
+----
+MultiPoint[BS] with 1 element
+  Point[B]
+
+query T
+SELECT ST_Summary('GEOMETRYCOLLECTION(MULTILINESTRING((0 0, 1 0),(2 0, 4 4)),MULTIPOINT(0 0))'::geometry)
+----
+GeometryCollection[B] with 2 elements
+  MultiLineString[B] with 2 elements
+    LineString[B] with 2 points
+    LineString[B] with 2 points
+  MultiPoint[B] with 1 element
+    Point[B]
+
+
+query T
+SELECT ST_Summary('SRID=4326;GEOMETRYCOLLECTION(MULTILINESTRING((0 0, 1 0),(2 0, 4 4)),MULTIPOINT(0 0))'::geometry)
+----
+GeometryCollection[BS] with 2 elements
+  MultiLineString[B] with 2 elements
+    LineString[B] with 2 points
+    LineString[B] with 2 points
+  MultiPoint[B] with 1 element
+    Point[B]
+
+query T
+SELECT ST_Summary('POINT(0 0)'::geography)
+----
+Point[BSG]
+
+query T
+SELECT ST_Summary('SRID=4326;POINT(0 0)'::geography)
+----
+Point[BSG]
+
+query T
+SELECT ST_Summary('POINT(0 0 0)'::geography)
+----
+Point[BSG]
+
+query T
+SELECT ST_Summary('POINT(0 0 0 0)'::geography)
+----
+Point[BSG]
+
+query T
+SELECT ST_Summary('MULTIPOINT(0 0)'::geography)
+----
+MultiPoint[BSG] with 1 element
+  Point[BG]
+
+query T
+SELECT ST_Summary('SRID=4326;MULTIPOINT(0 0)'::geography)
+----
+MultiPoint[BSG] with 1 element
+  Point[BG]
+
+query T
+SELECT ST_Summary('GEOMETRYCOLLECTION(MULTILINESTRING((0 0, 1 0),(2 0, 4 4)),MULTIPOINT(0 0))'::geography)
+----
+GeometryCollection[BSG] with 2 elements
+  MultiLineString[BG] with 2 elements
+    LineString[BG] with 2 points
+    LineString[BG] with 2 points
+  MultiPoint[BG] with 1 element
+    Point[BG]
+
+
+query T
+SELECT ST_Summary('SRID=4326;GEOMETRYCOLLECTION(MULTILINESTRING((0 0, 1 0),(2 0, 4 4)),MULTIPOINT(0 0))'::geography)
+----
+GeometryCollection[BSG] with 2 elements
+  MultiLineString[BG] with 2 elements
+    LineString[BG] with 2 points
+    LineString[BG] with 2 points
+  MultiPoint[BG] with 1 element
+    Point[BG]
