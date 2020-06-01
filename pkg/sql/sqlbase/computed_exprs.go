@@ -95,6 +95,7 @@ func MakeComputedExprs(
 	tn *tree.TableName,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	addingCols bool,
 ) ([]tree.TypedExpr, error) {
 	// Check to see if any of the columns have computed expressions. If there
@@ -133,7 +134,6 @@ func MakeComputedExprs(
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
 	source := NewSourceInfoForSingleTable(*tn, ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
-	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = iv
 
 	addColumnInfo := func(col *ColumnDescriptor) {
@@ -159,7 +159,7 @@ func MakeComputedExprs(
 			return nil, err
 		}
 
-		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, col.Type)
+		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.Type)
 		if err != nil {
 			return nil, err
 		}

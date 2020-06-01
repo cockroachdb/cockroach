@@ -61,7 +61,9 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunks = cb
 
-	if err := cb.ColumnBackfiller.Init(ctx, cb.flowCtx.NewEvalCtx(), cb.desc); err != nil {
+	evalCtx := cb.flowCtx.NewEvalCtx()
+	evalCtx.DB = cb.flowCtx.Cfg.DB
+	if err := cb.ColumnBackfiller.Init(ctx, evalCtx, cb.desc); err != nil {
 		return nil, err
 	}
 
