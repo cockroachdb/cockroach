@@ -886,7 +886,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
+	dsp.FinalizePlan(subqueryPlanCtx, subqueryPhysPlan)
 
 	// TODO(arjun): #28264: We set up a row container, wrap it in a row
 	// receiver, and use it and serialize the results of the subquery. The type
@@ -916,7 +916,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRowReceiver := NewRowResultWriter(rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
-	dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	if subqueryRecv.commErr != nil {
 		return subqueryRecv.commErr
 	}
@@ -1003,9 +1003,9 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.SetError(err)
 		return func() {}
 	}
-	dsp.FinalizePlan(planCtx, &physPlan)
+	dsp.FinalizePlan(planCtx, physPlan)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	return dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	return dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
 
 // PlanAndRunCascadesAndChecks runs any cascade and check queries.
@@ -1189,13 +1189,13 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(postqueryPlanCtx, &postqueryPhysPlan)
+	dsp.FinalizePlan(postqueryPlanCtx, postqueryPhysPlan)
 
 	postqueryRecv := recv.clone()
 	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
 	// but it may not be the case when we support cascades through the optimizer.
 	postqueryRecv.resultWriter = &errOnlyResultWriter{}
-	dsp.Run(postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	if postqueryRecv.commErr != nil {
 		return postqueryRecv.commErr
 	}
