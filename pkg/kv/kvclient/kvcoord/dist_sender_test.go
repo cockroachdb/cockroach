@@ -939,26 +939,24 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 func TestEvictCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// if rpcError is true, the first attempt gets an RPC error, otherwise
-	// the RPC call succeeds but there is an error in the RequestHeader.
+	// The first attempt gets a BatchResponse with replicaError in the header, if
+	// replicaError set. If not set, the first attempt gets an RPC error. The
+	// second attempt, if any, succeeds.
 	// Currently lease holder and cached range descriptor are treated equally.
 	// TODO(bdarnell): refactor to cover different types of retryable errors.
+	const errString = "boom"
 	testCases := []struct {
 		canceledCtx            bool
-		rpcError               bool
 		replicaError           error
 		shouldClearLeaseHolder bool
 		shouldClearReplica     bool
 	}{
-		{false, false, nil, false, false},                              // non-retryable replica error
-		{false, false, &roachpb.RangeKeyMismatchError{}, false, false}, // RangeKeyMismatch replica error
-		{false, true, &roachpb.RangeKeyMismatchError{}, false, false},  // RPC error aka all nodes dead
-		{false, false, &roachpb.RangeNotFoundError{}, false, false},    // RangeNotFound replica error
-		{false, true, &roachpb.RangeNotFoundError{}, false, false},     // RPC error aka all nodes dead
-		{true, false, nil, false, false},                               // canceled context
+		{false, errors.New(errString), false, false},            // non-retryable replica error
+		{false, &roachpb.RangeKeyMismatchError{}, false, false}, // RangeKeyMismatch replica error
+		{false, &roachpb.RangeNotFoundError{}, false, false},    // RangeNotFound replica error
+		{false, nil, false, false},                              // RPC error
+		{true, nil, false, false},                               // canceled context
 	}
-
-	const errString = "boom"
 
 	for i, tc := range testCases {
 		stopper := stop.NewStopper()
@@ -989,17 +987,11 @@ func TestEvictCacheOnError(t *testing.T) {
 				cancel()
 				return nil, ctx.Err()
 			}
-			if tc.rpcError {
-				return nil, roachpb.NewSendError(errString)
-			}
-			var err error
-			if tc.replicaError != nil {
-				err = tc.replicaError
-			} else {
-				err = errors.New(errString)
+			if tc.replicaError == nil {
+				return nil, errors.New(errString)
 			}
 			reply := &roachpb.BatchResponse{}
-			reply.Error = roachpb.NewError(err)
+			reply.Error = roachpb.NewError(tc.replicaError)
 			return reply, nil
 		}
 
