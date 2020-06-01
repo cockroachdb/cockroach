@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -227,6 +228,13 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 			log.Warningf(ctx, "created checkpoint %s", dir)
 		}
 	}
+	var maxScanRate = cc.MaxScanRate
+	// If we are running in mix version mode, the caller may have not sent this field,
+	// in that case we disable the rate limiting.
+	if maxScanRate == 0 {
+		maxScanRate = rate.Inf
+	}
+	limiter := limit.NewLimiter(maxScanRate)
 
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
@@ -236,7 +244,8 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 			if cc.SaveSnapshot {
 				snapshot = &roachpb.RaftSnapshotData{}
 			}
-			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode)
+
+			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, limiter)
 			if err != nil {
 				log.Errorf(ctx, "%v", err)
 				result = nil

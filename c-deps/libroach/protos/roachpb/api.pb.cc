@@ -9072,6 +9072,7 @@ const int CheckConsistencyRequest::kWithDiffFieldNumber;
 const int CheckConsistencyRequest::kModeFieldNumber;
 const int CheckConsistencyRequest::kCheckpointFieldNumber;
 const int CheckConsistencyRequest::kTerminateFieldNumber;
+const int CheckConsistencyRequest::kMaxScanRateFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 CheckConsistencyRequest::CheckConsistencyRequest()
@@ -9092,15 +9093,15 @@ CheckConsistencyRequest::CheckConsistencyRequest(const CheckConsistencyRequest& 
     header_ = NULL;
   }
   ::memcpy(&mode_, &from.mode_,
-    static_cast<size_t>(reinterpret_cast<char*>(&checkpoint_) -
-    reinterpret_cast<char*>(&mode_)) + sizeof(checkpoint_));
+    static_cast<size_t>(reinterpret_cast<char*>(&max_scan_rate_) -
+    reinterpret_cast<char*>(&mode_)) + sizeof(max_scan_rate_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.CheckConsistencyRequest)
 }
 
 void CheckConsistencyRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&checkpoint_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(checkpoint_));
+      reinterpret_cast<char*>(&max_scan_rate_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(max_scan_rate_));
 }
 
 CheckConsistencyRequest::~CheckConsistencyRequest() {
@@ -9133,8 +9134,8 @@ void CheckConsistencyRequest::Clear() {
   }
   header_ = NULL;
   ::memset(&mode_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&checkpoint_) -
-      reinterpret_cast<char*>(&mode_)) + sizeof(checkpoint_));
+      reinterpret_cast<char*>(&max_scan_rate_) -
+      reinterpret_cast<char*>(&mode_)) + sizeof(max_scan_rate_));
   _internal_metadata_.Clear();
 }
 
@@ -9219,6 +9220,19 @@ bool CheckConsistencyRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(49u /* 49 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &max_scan_rate_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -9274,6 +9288,10 @@ void CheckConsistencyRequest::SerializeWithCachedSizes(
       output);
   }
 
+  if (this->max_scan_rate() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(6, this->max_scan_rate(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.CheckConsistencyRequest)
@@ -9317,6 +9335,10 @@ size_t CheckConsistencyRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  if (this->max_scan_rate() != 0) {
+    total_size += 1 + 8;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -9347,6 +9369,9 @@ void CheckConsistencyRequest::MergeFrom(const CheckConsistencyRequest& from) {
   if (from.checkpoint() != 0) {
     set_checkpoint(from.checkpoint());
   }
+  if (from.max_scan_rate() != 0) {
+    set_max_scan_rate(from.max_scan_rate());
+  }
 }
 
 void CheckConsistencyRequest::CopyFrom(const CheckConsistencyRequest& from) {
@@ -9371,6 +9396,7 @@ void CheckConsistencyRequest::InternalSwap(CheckConsistencyRequest* other) {
   swap(mode_, other->mode_);
   swap(with_diff_, other->with_diff_);
   swap(checkpoint_, other->checkpoint_);
+  swap(max_scan_rate_, other->max_scan_rate_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -20376,6 +20402,7 @@ const int ComputeChecksumRequest::kSnapshotFieldNumber;
 const int ComputeChecksumRequest::kModeFieldNumber;
 const int ComputeChecksumRequest::kCheckpointFieldNumber;
 const int ComputeChecksumRequest::kTerminateFieldNumber;
+const int ComputeChecksumRequest::kMaxScanRateFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ComputeChecksumRequest::ComputeChecksumRequest()
@@ -20537,6 +20564,19 @@ bool ComputeChecksumRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(65u /* 65 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &max_scan_rate_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -20597,6 +20637,10 @@ void ComputeChecksumRequest::SerializeWithCachedSizes(
       output);
   }
 
+  if (this->max_scan_rate() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(8, this->max_scan_rate(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ComputeChecksumRequest)
@@ -20637,6 +20681,10 @@ size_t ComputeChecksumRequest::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->mode());
   }
 
+  if (this->max_scan_rate() != 0) {
+    total_size += 1 + 8;
+  }
+
   // bool snapshot = 4;
   if (this->snapshot() != 0) {
     total_size += 1 + 1;
@@ -20674,6 +20722,9 @@ void ComputeChecksumRequest::MergeFrom(const ComputeChecksumRequest& from) {
   if (from.mode() != 0) {
     set_mode(from.mode());
   }
+  if (from.max_scan_rate() != 0) {
+    set_max_scan_rate(from.max_scan_rate());
+  }
   if (from.snapshot() != 0) {
     set_snapshot(from.snapshot());
   }
@@ -20703,6 +20754,7 @@ void ComputeChecksumRequest::InternalSwap(ComputeChecksumRequest* other) {
   swap(header_, other->header_);
   swap(version_, other->version_);
   swap(mode_, other->mode_);
+  swap(max_scan_rate_, other->max_scan_rate_);
   swap(snapshot_, other->snapshot_);
   swap(checkpoint_, other->checkpoint_);
   _internal_metadata_.Swap(&other->_internal_metadata_);

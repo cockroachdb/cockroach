@@ -35,8 +35,9 @@ func TestReplicaChecksumVersion(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "matchingVersion", func(t *testing.T, matchingVersion bool) {
 		cc := kvserverpb.ComputeChecksum{
-			ChecksumID: uuid.FastMakeV4(),
-			Mode:       roachpb.ChecksumMode_CHECK_FULL,
+			ChecksumID:  uuid.FastMakeV4(),
+			Mode:        roachpb.ChecksumMode_CHECK_FULL,
+			MaxScanRate: 1 << 20,
 		}
 		if matchingVersion {
 			cc.Version = batcheval.ReplicaChecksumVersion
