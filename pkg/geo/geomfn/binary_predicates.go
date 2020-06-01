@@ -41,12 +41,11 @@ func Contains(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 
 // ContainsProperly returns whether geometry A properly contains geometry B.
 func ContainsProperly(a *geo.Geometry, b *geo.Geometry) (bool, error) {
-	// No GEOS CAPI to call ContainsProperly; fallback to Relate.
-	relate, err := Relate(a, b)
-	if err != nil {
-		return false, err
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
-	return MatchesDE9IM(relate, "T**FF*FF*")
+	// No GEOS CAPI to call ContainsProperly; fallback to RelatePattern.
+	return geos.RelatePattern(a.EWKB(), b.EWKB(), "T**FF*FF*")
 }
 
 // Crosses returns whether geometry A crosses geometry B.

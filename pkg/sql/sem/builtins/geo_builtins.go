@@ -1795,11 +1795,7 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 				a := args[0].(*tree.DGeometry)
 				b := args[1].(*tree.DGeometry)
 				pattern := args[2].(*tree.DString)
-				relation, err := geomfn.Relate(a.Geometry, b.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				ret, err := geomfn.MatchesDE9IM(relation, string(*pattern))
+				ret, err := geomfn.RelatePattern(a.Geometry, b.Geometry, string(*pattern))
 				if err != nil {
 					return nil, err
 				}

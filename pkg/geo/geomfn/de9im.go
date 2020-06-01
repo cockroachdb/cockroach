@@ -25,6 +25,14 @@ func Relate(a *geo.Geometry, b *geo.Geometry) (string, error) {
 	return geos.Relate(a.EWKB(), b.EWKB())
 }
 
+// RelatePattern returns the whether the DE-9IM relation between A and B matches.
+func RelatePattern(a *geo.Geometry, b *geo.Geometry, pattern string) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	return geos.RelatePattern(a.EWKB(), b.EWKB(), pattern)
+}
+
 // MatchesDE9IM checks whether the given DE-9IM relation matches the DE-91M pattern.
 // Assumes the relation has been computed, and such has no 'T' and '*' characters.
 // See: https://en.wikipedia.org/wiki/DE-9IM.
