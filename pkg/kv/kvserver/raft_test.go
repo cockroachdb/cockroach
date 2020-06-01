@@ -43,7 +43,7 @@ func TestWrapNumbersAsSafe(t *testing.T) {
 	}
 
 	wrapNumbersAsSafe(reportables...)
-	format := "some reportables"
+	const format = "some reportables"
 	err := errors.WithSafeDetails(leafErr{}, format, reportables...)
 
 	const expected = `<kvserver.leafErr>

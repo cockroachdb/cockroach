@@ -1133,7 +1133,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 	value := []byte("value")
 
-	intentionalErrText := "intentional error to cause abort"
+	const intentionalErrText = "intentional error to cause abort"
 	// Test aborted transaction.
 	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		key := []byte("key-abort")

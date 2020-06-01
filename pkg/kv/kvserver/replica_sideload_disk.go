@@ -270,7 +270,7 @@ func (ss *diskSideloadStorage) forEach(
 			return errors.Wrapf(err, "while parsing %q during TruncateTo", match)
 		}
 		if err := visit(logIdx, match); err != nil {
-			return errors.Wrap(err, match)
+			return errors.Wrapf(err, "matching pattern %q", match)
 		}
 	}
 	return nil

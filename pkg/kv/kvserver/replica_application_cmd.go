@@ -211,8 +211,9 @@ func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) error {
 		}
 		d.confChange.ConfChangeI = cc
 	default:
-		err := errors.New("unknown entry type")
-		return wrapWithNonDeterministicFailure(err, err.Error())
+		const msg = "unknown entry type"
+		err := errors.New(msg)
+		return wrapWithNonDeterministicFailure(err, msg)
 	}
 	if err := protoutil.Unmarshal(d.confChange.AsV2().Context, &d.confChange.ConfChangeContext); err != nil {
 		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeContext")

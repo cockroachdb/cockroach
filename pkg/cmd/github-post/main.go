@@ -162,7 +162,7 @@ func listFailures(
 				continue
 			}
 			if err := json.Unmarshal([]byte(line), &te); err != nil {
-				return errors.Wrap(err, line)
+				return errors.Wrapf(err, "unable to parse %q", line)
 			}
 		}
 		lastEvent = te

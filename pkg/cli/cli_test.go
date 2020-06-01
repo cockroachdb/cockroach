@@ -1882,11 +1882,11 @@ func TestJunkPositionalArguments(t *testing.T) {
 		line := test + " " + junk
 		out, err := c.RunWithCapture(line)
 		if err != nil {
-			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
+			t.Fatalf("%d: %v", i, err)
 		}
 		exp := fmt.Sprintf("%s\nERROR: unknown command %q for \"cockroach %s\"\n", line, junk, test)
 		if exp != out {
-			t.Errorf("expected:\n%s\ngot:\n%s", exp, out)
+			t.Errorf("%d: expected:\n%s\ngot:\n%s", i, exp, out)
 		}
 	}
 }
