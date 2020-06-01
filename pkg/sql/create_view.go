@@ -247,7 +247,7 @@ func makeViewTableDesc(
 	evalCtx *tree.EvalContext,
 	temporary bool,
 ) (sqlbase.MutableTableDescriptor, error) {
-	desc := InitTableDescriptor(
+	desc := sqlbase.InitTableDescriptor(
 		id,
 		parentID,
 		schemaID,
