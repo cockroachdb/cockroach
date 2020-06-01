@@ -324,6 +324,9 @@ func (ds *ServerImpl) setupFlow(
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
 		}
+		// Since we are constructing an EvalContext on a remote node, outfit it
+		// with a DistSQLTypeResolver.
+		evalCtx.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCtx}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		var haveSequences bool
