@@ -60,6 +60,7 @@ func ComputeChecksum(
 		Mode:         args.Mode,
 		Checkpoint:   args.Checkpoint,
 		Terminate:    args.Terminate,
+		MaxScanRate:  args.MaxScanRate,
 	}
 	return pd, nil
 }

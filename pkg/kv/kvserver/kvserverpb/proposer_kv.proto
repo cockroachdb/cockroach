@@ -87,6 +87,9 @@ message ComputeChecksum {
   // Replicas processing this command which find themselves in this slice will
   // terminate. See `CheckConsistencyRequest.Terminate`.
   repeated roachpb.ReplicaDescriptor terminate = 6 [(gogoproto.nullable) = false];
+  // The max rate in MB/s in which to scan the range to compute the checksum. Used to prevent
+  // a consistency check from overwhelming nodes with large disks.
+  double max_scan_rate = 7 [(gogoproto.casttype) = "golang.org/x/time/rate.Limit"];
 }
 
 // Compaction holds core details about a suggested compaction.

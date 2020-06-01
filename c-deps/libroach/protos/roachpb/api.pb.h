@@ -3815,6 +3815,11 @@ class CheckConsistencyRequest : public ::google::protobuf::MessageLite /* @@prot
   bool checkpoint() const;
   void set_checkpoint(bool value);
 
+  void clear_max_scan_rate();
+  static const int kMaxScanRateFieldNumber = 6;
+  double max_scan_rate() const;
+  void set_max_scan_rate(double value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.CheckConsistencyRequest)
  private:
 
@@ -3824,6 +3829,7 @@ class CheckConsistencyRequest : public ::google::protobuf::MessageLite /* @@prot
   int mode_;
   bool with_diff_;
   bool checkpoint_;
+  double max_scan_rate_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -9436,6 +9442,11 @@ class ComputeChecksumRequest : public ::google::protobuf::MessageLite /* @@proto
   ::cockroach::roachpb::ChecksumMode mode() const;
   void set_mode(::cockroach::roachpb::ChecksumMode value);
 
+  void clear_max_scan_rate();
+  static const int kMaxScanRateFieldNumber = 8;
+  double max_scan_rate() const;
+  void set_max_scan_rate(double value);
+
   // bool snapshot = 4;
   void clear_snapshot();
   static const int kSnapshotFieldNumber = 4;
@@ -9456,6 +9467,7 @@ class ComputeChecksumRequest : public ::google::protobuf::MessageLite /* @@proto
   ::cockroach::roachpb::RequestHeader* header_;
   ::google::protobuf::uint32 version_;
   int mode_;
+  double max_scan_rate_;
   bool snapshot_;
   bool checkpoint_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -19420,6 +19432,19 @@ CheckConsistencyRequest::terminate() const {
   return terminate_;
 }
 
+inline void CheckConsistencyRequest::clear_max_scan_rate() {
+  max_scan_rate_ = 0;
+}
+inline double CheckConsistencyRequest::max_scan_rate() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CheckConsistencyRequest.max_scan_rate)
+  return max_scan_rate_;
+}
+inline void CheckConsistencyRequest::set_max_scan_rate(double value) {
+  
+  max_scan_rate_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CheckConsistencyRequest.max_scan_rate)
+}
+
 // -------------------------------------------------------------------
 
 // CheckConsistencyResponse_Result
@@ -24282,6 +24307,19 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Replica
 ComputeChecksumRequest::terminate() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.ComputeChecksumRequest.terminate)
   return terminate_;
+}
+
+inline void ComputeChecksumRequest::clear_max_scan_rate() {
+  max_scan_rate_ = 0;
+}
+inline double ComputeChecksumRequest::max_scan_rate() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ComputeChecksumRequest.max_scan_rate)
+  return max_scan_rate_;
+}
+inline void ComputeChecksumRequest::set_max_scan_rate(double value) {
+  
+  max_scan_rate_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ComputeChecksumRequest.max_scan_rate)
 }
 
 // -------------------------------------------------------------------
