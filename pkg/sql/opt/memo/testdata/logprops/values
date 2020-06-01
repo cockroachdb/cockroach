@@ -8,6 +8,7 @@ SELECT * FROM (VALUES (1, 2), (3, 4), (NULL, 5))
 values
  ├── columns: column1:1(int) column2:2(int!null)
  ├── cardinality: [3 - 3]
+ ├── immutable
  ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
  │    ├── const: 1 [type=int]
@@ -43,6 +44,7 @@ SELECT * FROM (VALUES (NULL, 2), (3, NULL), (5, 6))
 values
  ├── columns: column1:1(int) column2:2(int)
  ├── cardinality: [3 - 3]
+ ├── immutable
  ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
  │    ├── cast: INT8 [type=int]

@@ -444,8 +444,8 @@ func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
 		return castFrom.Equivalent(castTo), sqltelemetry.EnumCastCounter
 	}
 
-	cast, ok := castsMap[castsMapKey{from: fromFamily, to: toFamily}]
-	if !ok {
+	cast := lookupCast(fromFamily, toFamily)
+	if cast == nil {
 		return false, nil
 	}
 	return true, cast.counter

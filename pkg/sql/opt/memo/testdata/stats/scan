@@ -1015,6 +1015,7 @@ SELECT a, b::string FROM t47742 WHERE b = true
 ----
 project
  ├── columns: a:1(int) b:4(string!null)
+ ├── immutable
  ├── stats: [rows=2640.64496]
  ├── fd: ()-->(4)
  ├── index-join t47742
@@ -1032,7 +1033,7 @@ project
  │         ├── key: (3)
  │         └── fd: ()-->(2)
  └── projections
-      └── t47742.b:2::STRING [as=b:4, type=string, outer=(2)]
+      └── t47742.b:2::STRING [as=b:4, type=string, outer=(2), immutable]
 
 # Multi-column stats tests.
 exec-ddl

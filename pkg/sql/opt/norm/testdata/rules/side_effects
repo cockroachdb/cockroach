@@ -284,7 +284,7 @@ select
                                │         ├── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
                                │         └── (5 / xy.y:7) > 1 [outer=(7), immutable, side-effects]
                                └── projections
-                                    └── xy.y:7::DECIMAL [as=y:8, outer=(7)]
+                                    └── xy.y:7::DECIMAL [as=y:8, outer=(7), immutable]
 
 # Decorrelate IFERROR branch if there are no side effects
 norm
@@ -302,6 +302,7 @@ project
       ├── fd: (1)-->(2-6,8), (6)-->(8)
       ├── left-join (hash)
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:8
+      │    ├── immutable
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-6,8), (6)-->(8)
       │    ├── scan a
@@ -310,6 +311,7 @@ project
       │    │    └── fd: (1)-->(2-5)
       │    ├── project
       │    │    ├── columns: y:8 x:6!null
+      │    │    ├── immutable
       │    │    ├── key: (6)
       │    │    ├── fd: (6)-->(8)
       │    │    ├── scan xy
@@ -317,7 +319,7 @@ project
       │    │    │    ├── key: (6)
       │    │    │    └── fd: (6)-->(7)
       │    │    └── projections
-      │    │         └── xy.y:7::DECIMAL [as=y:8, outer=(7)]
+      │    │         └── xy.y:7::DECIMAL [as=y:8, outer=(7), immutable]
       │    └── filters
       │         └── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
       └── filters

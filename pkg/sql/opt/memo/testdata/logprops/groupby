@@ -270,10 +270,12 @@ group-by
  ├── columns: column1:1(int)
  ├── grouping columns: column1:1(int)
  ├── cardinality: [1 - 4]
+ ├── immutable
  ├── key: (1)
  └── values
       ├── columns: column1:1(int)
       ├── cardinality: [4 - 4]
+      ├── immutable
       ├── prune: (1)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]

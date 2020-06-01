@@ -148,14 +148,17 @@ SELECT lag('foo'::string) OVER (), lag(1) OVER () FROM kv
 ----
 project
  ├── columns: lag:8(string) lag:9(int)
+ ├── immutable
  ├── prune: (8,9)
  └── window partition=()
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int) lag_1_arg1:10(string!null) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
+      ├── immutable
       ├── key: (1)
       ├── fd: ()-->(10-13), (1)-->(2-7)
       ├── prune: (1-9)
       ├── project
       │    ├── columns: lag_1_arg1:10(string!null) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── immutable
       │    ├── key: (1)
       │    ├── fd: ()-->(10-13), (1)-->(2-7)
       │    ├── prune: (1-7,10-13)
@@ -167,12 +170,12 @@ project
       │    │    ├── prune: (1-7)
       │    │    └── interesting orderings: (+1)
       │    └── projections
-      │         ├── cast: STRING [as=lag_1_arg1:10, type=string]
+      │         ├── cast: STRING [as=lag_1_arg1:10, type=string, immutable]
       │         │    └── const: 'foo' [type=string]
       │         ├── const: 1 [as=lag_1_arg2:11, type=int]
-      │         ├── cast: STRING [as=lag_1_arg3:12, type=string]
+      │         ├── cast: STRING [as=lag_1_arg3:12, type=string, immutable]
       │         │    └── null [type=unknown]
-      │         └── cast: INT8 [as=lag_2_arg3:13, type=int]
+      │         └── cast: INT8 [as=lag_2_arg3:13, type=int, immutable]
       │              └── null [type=unknown]
       └── windows
            ├── lag [as=lag:8, type=string, outer=(10-12)]

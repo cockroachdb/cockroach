@@ -254,11 +254,13 @@ SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 project
  ├── columns: i:2
  ├── cardinality: [0 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(2)
  └── select
       ├── columns: i:2 f:5!null
       ├── cardinality: [0 - 1]
+      ├── immutable
       ├── key: ()
       ├── fd: ()-->(2,5)
       ├── project
@@ -280,7 +282,7 @@ project
       │    └── projections
       │         └── a.f:3 / 2.0 [as=f:5, outer=(3)]
       └── filters
-           └── f:5 = i:2::FLOAT8 [outer=(2,5), constraints=(/5: (/NULL - ])]
+           └── f:5 = i:2::FLOAT8 [outer=(2,5), immutable, constraints=(/5: (/NULL - ])]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 norm
@@ -1309,15 +1311,17 @@ SELECT avg(s::int+i), s, i FROM a GROUP BY s, i, i+1
 group-by
  ├── columns: avg:6 s:4 i:2
  ├── grouping columns: i:2 s:4
+ ├── immutable
  ├── key: (2,4)
  ├── fd: (2,4)-->(6)
  ├── project
  │    ├── columns: column5:5 i:2 s:4
+ │    ├── immutable
  │    ├── fd: (2,4)-->(5)
  │    ├── scan a
  │    │    └── columns: i:2 s:4
  │    └── projections
- │         └── i:2 + s:4::INT8 [as=column5:5, outer=(2,4)]
+ │         └── i:2 + s:4::INT8 [as=column5:5, outer=(2,4), immutable]
  └── aggregations
       └── avg [as=avg:6, outer=(5)]
            └── column5:5

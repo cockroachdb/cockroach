@@ -68,7 +68,7 @@ insert abcde
       │    └── projections
       │         ├── const: 10 [as=column10:10, type=int]
       │         ├── function: unique_rowid [as=column11:11, type=int, volatile, side-effects]
-      │         └── cast: INT8 [as=column12:12, type=int]
+      │         └── cast: INT8 [as=column12:12, type=int, immutable]
       │              └── null [type=unknown]
       └── projections
            └── plus [as=column13:13, type=int, outer=(8,10)]
@@ -136,7 +136,7 @@ project
            │    └── projections
            │         ├── const: 10 [as=column10:10, type=int]
            │         ├── function: unique_rowid [as=column11:11, type=int, volatile, side-effects]
-           │         └── cast: INT8 [as=column12:12, type=int]
+           │         └── cast: INT8 [as=column12:12, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
                 └── plus [as=column13:13, type=int, outer=(8,10)]
@@ -187,7 +187,7 @@ project
            │    └── projections
            │         ├── const: 10 [as=column10:10, type=int]
            │         ├── function: unique_rowid [as=column11:11, type=int, volatile, side-effects]
-           │         └── cast: INT8 [as=column12:12, type=int]
+           │         └── cast: INT8 [as=column12:12, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
                 └── plus [as=column13:13, type=int, outer=(8,10)]
@@ -239,7 +239,7 @@ insert abcde
       │    └── projections
       │         ├── const: 10 [as=column9:9, type=int]
       │         ├── function: unique_rowid [as=column10:10, type=int, volatile, side-effects]
-      │         └── cast: INT8 [as=column11:11, type=int]
+      │         └── cast: INT8 [as=column11:11, type=int, immutable]
       │              └── null [type=unknown]
       └── projections
            └── plus [as=column12:12, type=int, outer=(8,9)]
@@ -280,6 +280,7 @@ project
            │    ├── prune: (8,10-13)
            │    ├── project
            │    │    ├── columns: int8:10(int) y:8(int!null)
+           │    │    ├── immutable
            │    │    ├── fd: ()-->(8)
            │    │    ├── prune: (8,10)
            │    │    ├── select
@@ -299,14 +300,14 @@ project
            │    │    │              ├── variable: y:8 [type=int]
            │    │    │              └── const: 1 [type=int]
            │    │    └── projections
-           │    │         └── cast: INT8 [as=int8:10, type=int, outer=(9)]
+           │    │         └── cast: INT8 [as=int8:10, type=int, outer=(9), immutable]
            │    │              └── plus [type=float]
            │    │                   ├── variable: z:9 [type=float]
            │    │                   └── const: 1.0 [type=float]
            │    └── projections
            │         ├── const: 10 [as=column11:11, type=int]
            │         ├── function: unique_rowid [as=column12:12, type=int, volatile, side-effects]
-           │         └── cast: INT8 [as=column13:13, type=int]
+           │         └── cast: INT8 [as=column13:13, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
                 └── plus [as=column14:14, type=int, outer=(10,11)]

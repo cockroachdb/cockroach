@@ -111,16 +111,19 @@ with &1
  │    ├── stats: [rows=9.94974874]
  │    └── project
  │         ├── columns: upsert_x:13(string) upsert_y:14(int!null) upsert_z:15(float) a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float) y_new:12(int!null)
+ │         ├── immutable
  │         ├── stats: [rows=9.94974874]
  │         ├── lax-key: (5,9)
  │         ├── fd: ()-->(8,12), (5)~~>(4), (9)-->(10,11), (5,9)-->(13), (4,9)-->(14), (5,9)~~>(4,14,15)
  │         ├── project
  │         │    ├── columns: y_new:12(int!null) a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
+ │         │    ├── immutable
  │         │    ├── stats: [rows=9.94974874]
  │         │    ├── lax-key: (5,9)
  │         │    ├── fd: ()-->(8,12), (5)~~>(4), (9)-->(10,11)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
+ │         │    │    ├── immutable
  │         │    │    ├── stats: [rows=9.94974874, distinct(9)=9.94974874, null(9)=0]
  │         │    │    ├── lax-key: (5,9)
  │         │    │    ├── fd: ()-->(8), (5)~~>(4), (9)-->(10,11)
@@ -128,11 +131,13 @@ with &1
  │         │    │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float)
  │         │    │    │    ├── grouping columns: b:5(string)
  │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+ │         │    │    │    ├── immutable
  │         │    │    │    ├── stats: [rows=9.94974874, distinct(4)=6.31184239, null(4)=0, distinct(5)=9.94974874, null(5)=0]
  │         │    │    │    ├── lax-key: (5)
  │         │    │    │    ├── fd: ()-->(8), (5)~~>(4,8)
  │         │    │    │    ├── project
  │         │    │    │    │    ├── columns: column8:8(float) a:4(int!null) b:5(string)
+ │         │    │    │    │    ├── immutable
  │         │    │    │    │    ├── stats: [rows=9.94974874, distinct(5)=6.31184239, null(5)=0]
  │         │    │    │    │    ├── fd: ()-->(8)
  │         │    │    │    │    ├── project
@@ -154,7 +159,7 @@ with &1
  │         │    │    │    │    │         └── filters
  │         │    │    │    │    │              └── c:6 = 1.0 [type=bool, outer=(6), constraints=(/6: [/1.0 - /1.0]; tight), fd=()-->(6)]
  │         │    │    │    │    └── projections
- │         │    │    │    │         └── NULL::FLOAT8 [as=column8:8, type=float]
+ │         │    │    │    │         └── NULL::FLOAT8 [as=column8:8, type=float, immutable]
  │         │    │    │    └── aggregations
  │         │    │    │         ├── first-agg [as=a:4, type=int, outer=(4)]
  │         │    │    │         │    └── a:4 [type=int]
@@ -204,6 +209,7 @@ upsert xyz
  └── project
       ├── columns: column8:8(float) a:4(int!null) b:5(string)
       ├── cardinality: [0 - 0]
+      ├── immutable
       ├── stats: [rows=0]
       ├── fd: ()-->(8)
       ├── project
@@ -227,7 +233,7 @@ upsert xyz
       │         └── filters
       │              └── false [type=bool]
       └── projections
-           └── NULL::FLOAT8 [as=column8:8, type=float]
+           └── NULL::FLOAT8 [as=column8:8, type=float, immutable]
 
 # Nullable conflict column. Ensure that ensure-upsert-distinct-on passes through
 # the input's null count.
@@ -280,6 +286,7 @@ upsert uv
       │    │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=0]
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: z:6(int)
+      │    │    │    │    │    ├── immutable
       │    │    │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=0]
       │    │    │    │    │    ├── scan xyz
       │    │    │    │    │    │    ├── columns: x:3(string!null) y:4(int!null) xyz.z:5(float)
@@ -287,7 +294,7 @@ upsert uv
       │    │    │    │    │    │    ├── key: (3)
       │    │    │    │    │    │    └── fd: (3)-->(4,5)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── xyz.z:5::INT8 [as=z:6, type=int, outer=(5)]
+      │    │    │    │    │         └── xyz.z:5::INT8 [as=z:6, type=int, outer=(5), immutable]
       │    │    │    │    └── projections
       │    │    │    │         └── unique_rowid() [as=column7:7, type=int, volatile, side-effects]
       │    │    │    └── aggregations

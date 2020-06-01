@@ -1211,20 +1211,24 @@ ORDER BY
 ----
 sort
  ├── columns: ps_partkey:1!null value:18!null
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(18)
  ├── ordering: -18
  └── select
       ├── columns: ps_partkey:1!null sum:18!null
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(18)
       ├── group-by
       │    ├── columns: ps_partkey:1!null sum:18!null
       │    ├── grouping columns: ps_partkey:1!null
+      │    ├── immutable
       │    ├── key: (1)
       │    ├── fd: (1)-->(18)
       │    ├── project
       │    │    ├── columns: column17:17!null ps_partkey:1!null
+      │    │    ├── immutable
       │    │    ├── inner-join (lookup partsupp)
       │    │    │    ├── columns: ps_partkey:1!null ps_suppkey:2!null ps_availqty:3!null ps_supplycost:4!null s_suppkey:6!null s_nationkey:9!null n_nationkey:13!null n_name:14!null
       │    │    │    ├── key columns: [1 2] = [1 2]
@@ -1255,26 +1259,29 @@ sort
       │    │    │    │    └── filters (true)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── ps_supplycost:4 * ps_availqty:3::FLOAT8 [as=column17:17, outer=(3,4)]
+      │    │         └── ps_supplycost:4 * ps_availqty:3::FLOAT8 [as=column17:17, outer=(3,4), immutable]
       │    └── aggregations
       │         └── sum [as=sum:18, outer=(17)]
       │              └── column17:17
       └── filters
-           └── gt [outer=(18), subquery, constraints=(/18: (/NULL - ])]
+           └── gt [outer=(18), immutable, subquery, constraints=(/18: (/NULL - ])]
                 ├── sum:18
                 └── subquery
                      └── project
                           ├── columns: "?column?":37
                           ├── cardinality: [1 - 1]
+                          ├── immutable
                           ├── key: ()
                           ├── fd: ()-->(37)
                           ├── scalar-group-by
                           │    ├── columns: sum:36
                           │    ├── cardinality: [1 - 1]
+                          │    ├── immutable
                           │    ├── key: ()
                           │    ├── fd: ()-->(36)
                           │    ├── project
                           │    │    ├── columns: column35:35!null
+                          │    │    ├── immutable
                           │    │    ├── inner-join (lookup partsupp)
                           │    │    │    ├── columns: ps_suppkey:20!null ps_availqty:21!null ps_supplycost:22!null s_suppkey:24!null s_nationkey:27!null n_nationkey:31!null n_name:32!null
                           │    │    │    ├── key columns: [19 20] = [19 20]
@@ -1304,7 +1311,7 @@ sort
                           │    │    │    │    └── filters (true)
                           │    │    │    └── filters (true)
                           │    │    └── projections
-                          │    │         └── ps_supplycost:22 * ps_availqty:21::FLOAT8 [as=column35:35, outer=(21,22)]
+                          │    │         └── ps_supplycost:22 * ps_availqty:21::FLOAT8 [as=column35:35, outer=(21,22), immutable]
                           │    └── aggregations
                           │         └── sum [as=sum:36, outer=(35)]
                           │              └── column35:35

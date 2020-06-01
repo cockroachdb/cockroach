@@ -547,14 +547,17 @@ project
  │    ├── columns: primary_id:1!null idtable.secondary_id:2!null data:3!null value:4!null column5:5!null
  │    ├── key columns: [1] = [1]
  │    ├── lookup columns are key
+ │    ├── immutable
  │    ├── fd: (1)-->(2,3), (4)-->(5), (2)==(5), (5)==(2)
  │    ├── inner-join (lookup idtable@secondary_id)
  │    │    ├── columns: primary_id:1!null idtable.secondary_id:2!null value:4!null column5:5!null
  │    │    ├── key columns: [5] = [2]
+ │    │    ├── immutable
  │    │    ├── fd: (4)-->(5), (1)-->(2), (2)==(5), (5)==(2)
  │    │    ├── project
  │    │    │    ├── columns: column5:5 value:4!null
  │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── immutable
  │    │    │    ├── fd: (4)-->(5)
  │    │    │    ├── values
  │    │    │    │    ├── columns: value:4!null
@@ -562,7 +565,7 @@ project
  │    │    │    │    ├── ('{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}',)
  │    │    │    │    └── ('{"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}',)
  │    │    │    └── projections
- │    │    │         └── (value:4->>'secondary_id')::UUID [as=column5:5, outer=(4)]
+ │    │    │         └── (value:4->>'secondary_id')::UUID [as=column5:5, outer=(4), immutable]
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections

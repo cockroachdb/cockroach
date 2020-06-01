@@ -974,24 +974,24 @@ where
 ----
 project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
- ├── has-placeholder
+ ├── immutable, has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  └── inner-join (lookup person)
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:10!null
       ├── key columns: [10] = [1]
       ├── lookup columns are key
-      ├── has-placeholder
+      ├── immutable, has-placeholder
       ├── key: (10)
       ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
       ├── distinct-on
       │    ├── columns: person_id:10
       │    ├── grouping columns: person_id:10
-      │    ├── has-placeholder
+      │    ├── immutable, has-placeholder
       │    ├── key: (10)
       │    └── select
       │         ├── columns: phones1_.id:7!null person_id:10
-      │         ├── has-placeholder
+      │         ├── immutable, has-placeholder
       │         ├── key: (7)
       │         ├── fd: (7)-->(10)
       │         ├── scan phones1_
@@ -999,7 +999,7 @@ project
       │         │    ├── key: (7)
       │         │    └── fd: (7)-->(10)
       │         └── filters
-      │              └── phones1_.id:7 = $1::INT8 [outer=(7), constraints=(/7: (/NULL - ])]
+      │              └── phones1_.id:7 = $1::INT8 [outer=(7), immutable, constraints=(/7: (/NULL - ])]
       └── filters (true)
 
 opt
@@ -1024,24 +1024,24 @@ where
 ----
 project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
- ├── has-placeholder
+ ├── immutable, has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  └── inner-join (lookup person)
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:10!null
       ├── key columns: [10] = [1]
       ├── lookup columns are key
-      ├── has-placeholder
+      ├── immutable, has-placeholder
       ├── key: (10)
       ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
       ├── distinct-on
       │    ├── columns: person_id:10
       │    ├── grouping columns: person_id:10
-      │    ├── has-placeholder
+      │    ├── immutable, has-placeholder
       │    ├── key: (10)
       │    └── select
       │         ├── columns: phones1_.id:7!null person_id:10
-      │         ├── has-placeholder
+      │         ├── immutable, has-placeholder
       │         ├── key: (7)
       │         ├── fd: (7)-->(10)
       │         ├── scan phones1_
@@ -1049,7 +1049,7 @@ project
       │         │    ├── key: (7)
       │         │    └── fd: (7)-->(10)
       │         └── filters
-      │              └── phones1_.id:7 = $1::INT8 [outer=(7), constraints=(/7: (/NULL - ])]
+      │              └── phones1_.id:7 = $1::INT8 [outer=(7), immutable, constraints=(/7: (/NULL - ])]
       └── filters (true)
 
 opt
@@ -1110,7 +1110,7 @@ where
 ----
 anti-join (hash)
  ├── columns: id1_4_:1!null phone_nu2_4_:2 person_i4_4_:4 phone_ty3_4_:3
- ├── has-placeholder
+ ├── stable, has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan phone0_
@@ -1119,11 +1119,11 @@ anti-join (hash)
  │    └── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: phone_id:6!null repairtimestamps:7
- │    ├── has-placeholder
+ │    ├── stable, has-placeholder
  │    ├── scan repairtime1_
  │    │    └── columns: phone_id:6!null repairtimestamps:7
  │    └── filters
- │         └── (repairtimestamps:7 >= $1::DATE) IS NOT false [outer=(7)]
+ │         └── (repairtimestamps:7 >= $1::DATE) IS NOT false [outer=(7), stable]
  └── filters
       └── id:1 = phone_id:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
