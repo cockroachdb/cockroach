@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
@@ -59,15 +58,8 @@ var (
 
 const rankTmpl = "pkg/sql/colexec/rank_tmpl.go"
 
-func genRankOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(rankTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_RANK_STRING", "{{.String}}")
+func genRankOps(inputFileContents string, wr io.Writer) error {
+	s := strings.ReplaceAll(inputFileContents, "_RANK_STRING", "{{.String}}")
 
 	computeRankRe := makeFunctionRegex("_COMPUTE_RANK", 0)
 	s = computeRankRe.ReplaceAllString(s, `{{template "computeRank" buildDict "Global" . "HasPartition" .HasPartition}}`)

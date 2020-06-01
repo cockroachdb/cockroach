@@ -12,18 +12,13 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
 
 const hashUtilsTmpl = "pkg/sql/colexec/hash_utils_tmpl.go"
 
-func genHashUtils(wr io.Writer) error {
-	t, err := ioutil.ReadFile(hashUtilsTmpl)
-	if err != nil {
-		return err
-	}
+func genHashUtils(inputFileContents string, wr io.Writer) error {
 
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
@@ -31,7 +26,7 @@ func genHashUtils(wr io.Writer) error {
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFileContents)
 
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 4)
 	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.UnaryAssign", 4))

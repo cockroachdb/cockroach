@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,19 +20,14 @@ import (
 
 const rowsToVecTmpl = "pkg/sql/colexec/rowstovec_tmpl.go"
 
-func genRowsToVec(wr io.Writer) error {
-	f, err := ioutil.ReadFile(rowsToVecTmpl)
-	if err != nil {
-		return err
-	}
-
+func genRowsToVec(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPE", "{{.GoType}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(f))
+	s := r.Replace(inputFileContents)
 
 	rowsToVecRe := makeFunctionRegex("_ROWS_TO_COL_VEC", 4)
 	s = rowsToVecRe.ReplaceAllString(s, `{{template "rowsToColVec" .}}`)
