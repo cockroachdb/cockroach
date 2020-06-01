@@ -867,7 +867,6 @@ class RangeKeyMismatchError : public ::google::protobuf::MessageLite /* @@protoc
   ::std::string* release_request_end_key();
   void set_allocated_request_end_key(::std::string* request_end_key);
 
-  // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
   bool has_mismatched_range() const;
   void clear_mismatched_range();
   static const int kMismatchedRangeFieldNumber = 3;
@@ -5328,7 +5327,6 @@ inline void RangeKeyMismatchError::set_allocated_request_end_key(::std::string* 
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.request_end_key)
 }
 
-// optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
 inline bool RangeKeyMismatchError::has_mismatched_range() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }

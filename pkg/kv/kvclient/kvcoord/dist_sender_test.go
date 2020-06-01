@@ -945,17 +945,29 @@ func TestEvictCacheOnError(t *testing.T) {
 	// Currently lease holder and cached range descriptor are treated equally.
 	// TODO(bdarnell): refactor to cover different types of retryable errors.
 	const errString = "boom"
+	testDesc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: testMetaEndKey,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
 	testCases := []struct {
 		canceledCtx            bool
 		replicaError           error
 		shouldClearLeaseHolder bool
 		shouldClearReplica     bool
 	}{
-		{false, errors.New(errString), false, false},            // non-retryable replica error
-		{false, &roachpb.RangeKeyMismatchError{}, false, false}, // RangeKeyMismatch replica error
-		{false, &roachpb.RangeNotFoundError{}, false, false},    // RangeNotFound replica error
-		{false, nil, false, false},                              // RPC error
-		{true, nil, false, false},                               // canceled context
+		{false, errors.New(errString), false, false},                                     // non-retryable replica error
+		{false, &roachpb.RangeKeyMismatchError{MismatchedRange: testDesc}, false, false}, // RangeKeyMismatch replica error
+		{false, &roachpb.RangeNotFoundError{}, false, false},                             // RangeNotFound replica error
+		{false, nil, false, false},                                                       // RPC error
+		{true, nil, false, false},                                                        // canceled context
 	}
 
 	for i, tc := range testCases {
@@ -1199,11 +1211,17 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Updated below, after it has first been returned.
-	goodRangeDescriptor := testUserRangeDescriptor
-	badRangeDescriptor := testUserRangeDescriptor
-	badRangeDescriptor.EndKey = roachpb.RKey("zBad")
-	badRangeDescriptor.RangeID++
+	// The test is gonna send the request first to staleDesc, but it reaches the
+	// rhsDesc, which redirects it to lhsDesc.
+	staleDesc := testUserRangeDescriptor
+	lhsDesc := testUserRangeDescriptor
+	lhsDesc.EndKey = roachpb.RKey("m")
+	lhsDesc.RangeID = staleDesc.RangeID + 1
+	lhsDesc.Generation = staleDesc.Generation + 1
+	rhsDesc := testUserRangeDescriptor
+	rhsDesc.StartKey = roachpb.RKey("m")
+	rhsDesc.RangeID = staleDesc.RangeID + 2
+	rhsDesc.Generation = staleDesc.Generation + 2
 	firstLookup := true
 
 	var testFn simpleSendFn = func(
@@ -1237,7 +1255,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 			br := &roachpb.BatchResponse{}
 			r := &roachpb.ScanResponse{}
 			var kv roachpb.KeyValue
-			if err := kv.Value.SetProto(&badRangeDescriptor); err != nil {
+			if err := kv.Value.SetProto(&staleDesc); err != nil {
 				t.Fatal(err)
 			}
 			r.Rows = append(r.Rows, kv)
@@ -1247,16 +1265,17 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 
 		// When the Scan first turns up, provide the correct descriptor as a
 		// suggestion for future range descriptor lookups.
-		if ba.RangeID == badRangeDescriptor.RangeID {
+		if ba.RangeID == staleDesc.RangeID {
 			var br roachpb.BatchResponse
 			br.Error = roachpb.NewError(&roachpb.RangeKeyMismatchError{
 				RequestStartKey: rs.Key.AsRawKey(),
 				RequestEndKey:   rs.EndKey.AsRawKey(),
-				SuggestedRange:  &goodRangeDescriptor,
+				MismatchedRange: rhsDesc,
+				SuggestedRange:  &lhsDesc,
 			})
 			return &br, nil
-		} else if ba.RangeID != goodRangeDescriptor.RangeID {
-			t.Fatalf("unexpected RangeID %d provided in request %v", ba.RangeID, ba)
+		} else if ba.RangeID != lhsDesc.RangeID {
+			t.Fatalf("unexpected RangeID %d provided in request %v. expected: %s", ba.RangeID, ba, lhsDesc.RangeID)
 		}
 		return ba.CreateReply(), nil
 	}
@@ -3245,7 +3264,7 @@ func TestEvictMetaRange(t *testing.T) {
 				err := &roachpb.RangeKeyMismatchError{
 					RequestStartKey: rs.Key.AsRawKey(),
 					RequestEndKey:   rs.EndKey.AsRawKey(),
-					MismatchedRange: &testMeta2RangeDescriptor1,
+					MismatchedRange: testMeta2RangeDescriptor1,
 				}
 				if hasSuggestedRange {
 					err.SuggestedRange = &testMeta2RangeDescriptor2

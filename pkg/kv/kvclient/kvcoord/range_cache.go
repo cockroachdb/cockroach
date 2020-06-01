@@ -617,6 +617,9 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 	ctx context.Context, rs ...roachpb.RangeDescriptor,
 ) {
 	for i := range rs {
+		if !rs[i].IsInitialized() {
+			panic(fmt.Sprintf("inserting uninitialized desc: %s", rs[i]))
+		}
 		// Note: we append the end key of each range to meta records
 		// so that calls to rdc.rangeCache.cache.Ceil() for a key will return
 		// the correct range.

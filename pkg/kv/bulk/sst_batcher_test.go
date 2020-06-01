@@ -319,7 +319,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 					late = getMem()
 				}
 				return &roachpb.RangeKeyMismatchError{
-					MismatchedRange: &roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])},
+					MismatchedRange: roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])},
 				}
 			}
 		}
