@@ -94,6 +94,7 @@ SELECT * FROM (VALUES (0.0), (0.00), (0.000)) AS v (x) WHERE x = 0 AND x::STRING
 select
  ├── columns: x:1!null
  ├── cardinality: [0 - 3]
+ ├── immutable
  ├── fd: ()-->(1)
  ├── values
  │    ├── columns: column1:1!null
@@ -103,7 +104,7 @@ select
  │    └── (0.000,)
  └── filters
       ├── column1:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
-      └── column1:1::STRING = '0.00' [outer=(1)]
+      └── column1:1::STRING = '0.00' [outer=(1), immutable]
 
 # The rule should trigger, but not inline the composite type.
 norm expect=InlineConstVar
@@ -112,6 +113,7 @@ SELECT * FROM (VALUES (0.0, 'a'), (0.00, 'b'), (0.000, 'b')) AS v (x, y) WHERE x
 select
  ├── columns: x:1!null y:2!null
  ├── cardinality: [0 - 3]
+ ├── immutable
  ├── fd: ()-->(1,2)
  ├── values
  │    ├── columns: column1:1!null column2:2!null
@@ -121,7 +123,7 @@ select
  │    └── (0.000, 'b')
  └── filters
       ├── column1:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
-      ├── column1:1::STRING = '0.00' [outer=(1)]
+      ├── column1:1::STRING = '0.00' [outer=(1), immutable]
       └── column2:2 = 'b' [outer=(2), constraints=(/2: [/'b' - /'b']; tight), fd=()-->(2)]
 
 # Ensure that InlineConstVar fires before filter pushdown rules.

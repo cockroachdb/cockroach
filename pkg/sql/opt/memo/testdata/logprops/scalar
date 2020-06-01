@@ -6,6 +6,10 @@ exec-ddl
 CREATE TABLE uv (u INT, v INT NOT NULL)
 ----
 
+exec-ddl
+CREATE TABLE sf (s STRING, f FLOAT)
+----
+
 build
 SELECT * FROM xy WHERE x < 5
 ----
@@ -257,6 +261,7 @@ SELECT x / 1, x::float / 2.0, x::decimal / 3.0 FROM xy
 ----
 project
  ├── columns: "?column?":3(decimal!null) "?column?":4(float!null) "?column?":5(decimal!null)
+ ├── immutable
  ├── prune: (3-5)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
@@ -268,11 +273,73 @@ project
       ├── div [as="?column?":3, type=decimal, outer=(1)]
       │    ├── variable: x:1 [type=int]
       │    └── const: 1 [type=int]
-      ├── div [as="?column?":4, type=float, outer=(1)]
+      ├── div [as="?column?":4, type=float, outer=(1), immutable]
       │    ├── cast: FLOAT8 [type=float]
       │    │    └── variable: x:1 [type=int]
       │    └── const: 2.0 [type=float]
-      └── div [as="?column?":5, type=decimal, outer=(1)]
+      └── div [as="?column?":5, type=decimal, outer=(1), immutable]
            ├── cast: DECIMAL [type=decimal]
            │    └── variable: x:1 [type=int]
            └── const: 3.0 [type=decimal]
+
+# Verify that we take into account the volatility of casts.
+build
+SELECT s::TIMESTAMP FROM sf
+----
+project
+ ├── columns: s:4(timestamp)
+ ├── stable
+ ├── prune: (4)
+ ├── scan sf
+ │    ├── columns: sf.s:1(string) f:2(float) rowid:3(int!null)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(1,2)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+3)
+ └── projections
+      └── cast: TIMESTAMP [as=s:4, type=timestamp, outer=(1), stable]
+           └── variable: sf.s:1 [type=string]
+
+build
+SELECT f::STRING FROM sf
+----
+project
+ ├── columns: f:4(string)
+ ├── stable
+ ├── prune: (4)
+ ├── scan sf
+ │    ├── columns: s:1(string) sf.f:2(float) rowid:3(int!null)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(1,2)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+3)
+ └── projections
+      └── cast: STRING [as=f:4, type=string, outer=(2), stable]
+           └── variable: sf.f:2 [type=float]
+
+build
+SELECT ARRAY(SELECT f FROM sf)::STRING[]
+----
+project
+ ├── columns: array:4(string[])
+ ├── cardinality: [1 - 1]
+ ├── stable
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── prune: (4)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── cast: STRING[] [as=array:4, type=string[], stable, subquery]
+           └── array-flatten [type=float[]]
+                └── project
+                     ├── columns: f:2(float)
+                     ├── prune: (2)
+                     └── scan sf
+                          ├── columns: s:1(string) f:2(float) rowid:3(int!null)
+                          ├── key: (3)
+                          ├── fd: (3)-->(1,2)
+                          ├── prune: (1-3)
+                          └── interesting orderings: (+3)

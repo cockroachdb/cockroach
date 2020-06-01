@@ -181,17 +181,18 @@ FROM a
 ----
 project
  ├── columns: i:7 arr:8 s:9 s:10 i:11 s:12 array:13 array:14
+ ├── stable
  ├── scan a
  │    └── columns: a.i:2 a.s:4 a.arr:6
  └── projections
-      ├── a.i:2::FLOAT8 [as=i:7, outer=(2)]
-      ├── a.arr:6::DECIMAL[] [as=arr:8, outer=(6)]
-      ├── a.s:4::JSONB [as=s:9, outer=(4)]
-      ├── a.s:4::VARCHAR(2) [as=s:10, outer=(4)]
-      ├── a.i:2::INT2::INT8 [as=i:11, outer=(2)]
-      ├── a.s:4::CHAR::VARCHAR [as=s:12, outer=(4)]
-      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:13, outer=(2)]
-      └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:14, outer=(2)]
+      ├── a.i:2::FLOAT8 [as=i:7, outer=(2), immutable]
+      ├── a.arr:6::DECIMAL[] [as=arr:8, outer=(6), immutable]
+      ├── a.s:4::JSONB [as=s:9, outer=(4), immutable]
+      ├── a.s:4::VARCHAR(2) [as=s:10, outer=(4), immutable]
+      ├── a.i:2::INT2::INT8 [as=i:11, outer=(2), immutable]
+      ├── a.s:4::CHAR::VARCHAR [as=s:12, outer=(4), immutable]
+      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:13, outer=(2), stable]
+      └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:14, outer=(2), immutable]
 
 # --------------------------------------------------
 # NormalizeInConst

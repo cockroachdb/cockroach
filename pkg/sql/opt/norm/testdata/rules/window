@@ -234,12 +234,15 @@ SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHER
 ----
 project
  ├── columns: i:2 f:3 rank:6
+ ├── immutable
  └── window partition=(1)
       ├── columns: k:1!null i:2 f:3 rank:6
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── select
       │    ├── columns: k:1!null i:2 f:3
+      │    ├── immutable
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    ├── scan a
@@ -247,7 +250,7 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3)
       │    └── filters
-      │         └── (i:2 * f:3::INT8) = 3 [outer=(2,3)]
+      │         └── (i:2 * f:3::INT8) = 3 [outer=(2,3), immutable]
       └── windows
            └── rank [as=rank:6]
 

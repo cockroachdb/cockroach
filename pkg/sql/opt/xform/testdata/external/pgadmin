@@ -144,4 +144,4 @@ project
  │    └── filters
  │         └── "?column?":36 [outer=(36), constraints=(/36: [/true - /true]; tight), fd=()-->(36)]
  └── projections
-      └── CASE WHEN (client_hostname:8 IS NOT NULL) AND (client_hostname:8 != '') THEN (client_hostname:8 || ':') || client_port:9::STRING WHEN (client_addr:7 IS NOT NULL) AND (client_addr:7::STRING != '') THEN (client_addr:7::STRING || ':') || client_port:9::STRING WHEN client_port:9 = -1 THEN 'local pipe' ELSE 'localhost:' || client_port:9::STRING END [as=Client:37, outer=(7-9)]
+      └── CASE WHEN (client_hostname:8 IS NOT NULL) AND (client_hostname:8 != '') THEN (client_hostname:8 || ':') || client_port:9::STRING WHEN (client_addr:7 IS NOT NULL) AND (client_addr:7::STRING != '') THEN (client_addr:7::STRING || ':') || client_port:9::STRING WHEN client_port:9 = -1 THEN 'local pipe' ELSE 'localhost:' || client_port:9::STRING END [as=Client:37, outer=(7-9), immutable]

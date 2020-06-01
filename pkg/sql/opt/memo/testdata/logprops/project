@@ -153,6 +153,7 @@ SELECT 1 AS a, 'foo' AS b, NULL AS c, 1::decimal + NULL AS d, NULL::STRING AS e 
 ----
 project
  ├── columns: a:5(int!null) b:6(string!null) c:7(unknown) d:7(unknown) e:8(string)
+ ├── immutable
  ├── fd: ()-->(5-8)
  ├── prune: (5-8)
  ├── scan xysd
@@ -165,7 +166,7 @@ project
       ├── const: 1 [as=a:5, type=int]
       ├── const: 'foo' [as=b:6, type=string]
       ├── null [as=c:7, type=unknown]
-      └── cast: STRING [as=e:8, type=string]
+      └── cast: STRING [as=e:8, type=string, immutable]
            └── null [type=unknown]
 
 # Project constant over input with no needed columns and ensure that there is
@@ -312,6 +313,7 @@ SELECT y, y::TEXT FROM xysd
 ----
 project
  ├── columns: y:2(int) y:5(string)
+ ├── immutable
  ├── fd: (2)-->(5)
  ├── prune: (2,5)
  ├── scan xysd
@@ -321,7 +323,7 @@ project
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── projections
-      └── cast: STRING [as=y:5, type=string, outer=(2)]
+      └── cast: STRING [as=y:5, type=string, outer=(2), immutable]
            └── variable: xysd.y:2 [type=int]
 
 # We don't have the FD: d --> d::TEXT because d is a composite type.
@@ -331,6 +333,7 @@ SELECT d, d::TEXT FROM xysd
 ----
 project
  ├── columns: d:4(decimal!null) d:5(string!null)
+ ├── immutable
  ├── prune: (4,5)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) xysd.d:4(decimal!null)
@@ -339,7 +342,7 @@ project
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── projections
-      └── cast: STRING [as=d:5, type=string, outer=(4)]
+      └── cast: STRING [as=d:5, type=string, outer=(4), immutable]
            └── variable: xysd.d:4 [type=decimal]
 
 # We have the equality relation between the synthesized column and the column
