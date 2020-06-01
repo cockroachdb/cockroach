@@ -482,11 +482,13 @@ func (r *fkSelfResolver) LookupObject(
 //
 // It only reveals physical descriptors (not virtual descriptors).
 type internalLookupCtx struct {
-	dbNames map[sqlbase.ID]string
-	dbIDs   []sqlbase.ID
-	dbDescs map[sqlbase.ID]*DatabaseDescriptor
-	tbDescs map[sqlbase.ID]*TableDescriptor
-	tbIDs   []sqlbase.ID
+	dbNames  map[sqlbase.ID]string
+	dbIDs    []sqlbase.ID
+	dbDescs  map[sqlbase.ID]*DatabaseDescriptor
+	tbDescs  map[sqlbase.ID]*TableDescriptor
+	tbIDs    []sqlbase.ID
+	typDescs map[sqlbase.ID]*TypeDescriptor
+	typIDs   []sqlbase.ID
 }
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding
@@ -509,7 +511,8 @@ func newInternalLookupCtxFromDescriptors(
 	dbNames := make(map[sqlbase.ID]string)
 	dbDescs := make(map[sqlbase.ID]*DatabaseDescriptor)
 	tbDescs := make(map[sqlbase.ID]*TableDescriptor)
-	var tbIDs, dbIDs []sqlbase.ID
+	typDescs := make(map[sqlbase.ID]*TypeDescriptor)
+	var tbIDs, typIDs, dbIDs []sqlbase.ID
 	// Record database descriptors for name lookups.
 	for _, desc := range descs {
 		if database := desc.GetDatabase(); database != nil {
@@ -524,14 +527,22 @@ func newInternalLookupCtxFromDescriptors(
 				// Only make the table visible for iteration if the prefix was included.
 				tbIDs = append(tbIDs, table.ID)
 			}
+		} else if typ := desc.GetType(); typ != nil {
+			typDescs[typ.ID] = typ
+			if prefix == nil || prefix.ID == typ.ParentID {
+				// Only make the type visible for iteration if the prefix was included.
+				typIDs = append(typIDs, typ.ID)
+			}
 		}
 	}
 	return &internalLookupCtx{
-		dbNames: dbNames,
-		dbDescs: dbDescs,
-		tbDescs: tbDescs,
-		tbIDs:   tbIDs,
-		dbIDs:   dbIDs,
+		dbNames:  dbNames,
+		dbDescs:  dbDescs,
+		tbDescs:  tbDescs,
+		typDescs: typDescs,
+		tbIDs:    tbIDs,
+		dbIDs:    dbIDs,
+		typIDs:   typIDs,
 	}
 }
 
