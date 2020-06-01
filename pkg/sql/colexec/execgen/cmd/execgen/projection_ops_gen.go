@@ -12,25 +12,11 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
 
 const projConstOpsTmpl = "pkg/sql/colexec/proj_const_ops_tmpl.go"
-
-// getProjConstOpTmplString returns a "projConstOp" template with isConstLeft
-// determining whether the constant is on the left or on the right.
-func getProjConstOpTmplString(isConstLeft bool) (string, error) {
-	t, err := ioutil.ReadFile(projConstOpsTmpl)
-	if err != nil {
-		return "", err
-	}
-
-	s := string(t)
-	s = replaceProjConstTmplVariables(s, isConstLeft)
-	return s, nil
-}
 
 // replaceProjTmplVariables replaces template variables used in the templates
 // for projection operators. It should only be used within this file.
@@ -95,14 +81,8 @@ func replaceProjConstTmplVariables(tmpl string, isConstLeft bool) string {
 const projNonConstOpsTmpl = "pkg/sql/colexec/proj_non_const_ops_tmpl.go"
 
 // genProjNonConstOps is the generator for projection operators on two vectors.
-func genProjNonConstOps(wr io.Writer) error {
-	t, err := ioutil.ReadFile(projNonConstOpsTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(t)
-	s = replaceProjTmplVariables(s)
+func genProjNonConstOps(inputFileContents string, wr io.Writer) error {
+	s := replaceProjTmplVariables(inputFileContents)
 
 	tmpl, err := template.New("proj_non_const_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
@@ -114,11 +94,8 @@ func genProjNonConstOps(wr io.Writer) error {
 
 func init() {
 	projConstOpsGenerator := func(isConstLeft bool) generator {
-		return func(wr io.Writer) error {
-			tmplString, err := getProjConstOpTmplString(isConstLeft)
-			if err != nil {
-				return err
-			}
+		return func(inputFileContents string, wr io.Writer) error {
+			tmplString := replaceProjConstTmplVariables(inputFileContents, isConstLeft)
 			tmpl, err := template.New("proj_const_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(tmplString)
 			if err != nil {
 				return err

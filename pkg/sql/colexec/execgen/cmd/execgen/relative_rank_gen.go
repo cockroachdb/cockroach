@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
@@ -26,15 +25,8 @@ type relativeRankTmplInfo struct {
 
 const relativeRankTmpl = "pkg/sql/colexec/relative_rank_tmpl.go"
 
-func genRelativeRankOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(relativeRankTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_RELATIVE_RANK_STRING", "{{.String}}")
+func genRelativeRankOps(inputFileContents string, wr io.Writer) error {
+	s := strings.ReplaceAll(inputFileContents, "_RELATIVE_RANK_STRING", "{{.String}}")
 
 	computePartitionsSizesRe := makeFunctionRegex("_COMPUTE_PARTITIONS_SIZES", 0)
 	s = computePartitionsSizesRe.ReplaceAllString(s, `{{template "computePartitionsSizes"}}`)

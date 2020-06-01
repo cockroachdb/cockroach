@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,12 +20,7 @@ import (
 
 const distinctOpsTmpl = "pkg/sql/colexec/distinct_tmpl.go"
 
-func genDistinctOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(distinctOpsTmpl)
-	if err != nil {
-		return err
-	}
-
+func genDistinctOps(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
@@ -34,7 +28,7 @@ func genDistinctOps(wr io.Writer) error {
 		"_GOTYPE", "{{.GoType}}",
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}")
-	s := r.Replace(string(d))
+	s := r.Replace(inputFileContents)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))

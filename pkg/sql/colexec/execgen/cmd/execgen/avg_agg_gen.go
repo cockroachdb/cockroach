@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -55,12 +54,7 @@ var (
 
 const avgAggTmpl = "pkg/sql/colexec/avg_agg_tmpl.go"
 
-func genAvgAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile(avgAggTmpl)
-	if err != nil {
-		return err
-	}
-
+func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
@@ -69,7 +63,7 @@ func genAvgAgg(wr io.Writer) error {
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFileContents)
 
 	assignDivRe := makeFunctionRegex("_ASSIGN_DIV_INT64", 6)
 	s = assignDivRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignDivInt64", 6))

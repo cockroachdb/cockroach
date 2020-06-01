@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,11 +20,7 @@ import (
 
 const constTmpl = "pkg/sql/colexec/const_tmpl.go"
 
-func genConstOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(constTmpl)
-	if err != nil {
-		return err
-	}
+func genConstOps(inputFileContents string, wr io.Writer) error {
 
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
@@ -34,7 +29,7 @@ func genConstOps(wr io.Writer) error {
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(d))
+	s := r.Replace(inputFileContents)
 
 	s = replaceManipulationFuncs(s)
 
