@@ -11,10 +11,9 @@
 import React from "react";
 import { connect } from "react-redux";
 import * as protos from "src/js/protos";
-import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, tableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
+import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
@@ -31,7 +30,7 @@ const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
 
 // DatabaseSummaryGrants displays a summary section describing the grants
 // active on a single database.
-class DatabaseSummaryGrants extends DatabaseSummaryBase {
+export class DatabaseSummaryGrants extends DatabaseSummaryBase {
   totalUsers() {
     const grants = this.props.grants;
     return grants && grants.length;
@@ -47,8 +46,9 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
   )
 
   render() {
-    const { grants, sortSetting } = this.props;
+    const { grants, sortSetting, dbResponse } = this.props;
     const dbID = this.props.name;
+    const loading = dbResponse ? !!dbResponse.inFlight : true;
 
     return (
       <div className="database-summary">
@@ -72,7 +72,8 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
                   cell: (grant) => grant.privileges.join(", "),
                 },
               ]}
-              renderNoResult={this.noDatabaseResults()}
+              loading={loading}
+              renderNoResult={loading ? undefined : this.noDatabaseResults()}
             />
           </div>
           <div className="l-columns__right">
@@ -91,17 +92,14 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
 }
 
 const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => ({ // RootState contains declaration for whole state
-  tableInfos: tableInfos(state, ownProps.name),
+  // tableInfos: tableInfos(state, ownProps.name),
   sortSetting: grantsSortSetting.selector(state),
-  dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
+  dbResponse: databaseDetails(state)[ownProps.name],
   grants: selectGrants(state, ownProps.name),
 });
 
 const mapDispatchToProps = {
   setSort: grantsSortSetting.set,
-  refreshDatabaseDetails,
-  refreshTableDetails,
-  refreshTableStats,
 };
 
 // Connect the DatabaseSummaryGrants class with our redux store.

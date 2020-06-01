@@ -35,7 +35,7 @@ class DatabaseTableListSortedTable extends SortedTable<TableInfo> {}
 
 // DatabaseSummaryTables displays a summary section describing the tables
 // contained in a single database.
-class DatabaseSummaryTables extends DatabaseSummaryBase {
+export class DatabaseSummaryTables extends DatabaseSummaryBase {
   totalSize() {
     const tableInfos = this.props.tableInfos;
     return _.sumBy(tableInfos, (ti) => ti.physicalSize);
