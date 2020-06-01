@@ -78,14 +78,25 @@ message RangeKeyMismatchError {
 
   optional bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
   optional bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
-  // mismatched_range is the range that the command was incorrectly sent to.
-  // It is used to update the sender's range cache without an additional range
-  // lookup.
-  optional RangeDescriptor mismatched_range = 3 [(gogoproto.nullable) = false];
-  // suggested_range is a hint to the sender of a command about the range
-  // they may be looking for. It is only populated when the recipient has
-  // authoritative knowledge of the range requested by the sender.
-  optional RangeDescriptor suggested_range = 4;
+
+  // deprecated_mismatched_range is an older version of mismatched_range. Can go
+  // away in 21.1, when we don't worry about 20.1 kvservers not populating rangesInternal.
+  optional RangeDescriptor deprecated_mismatched_range = 3 [(gogoproto.nullable) = false];
+  // deprecated_suggested_range is an older version of suggested_range. Can go
+  // away in 21.1, when we don't worry about 20.1 kvservers not populating
+  // rangesInternal.
+  optional RangeDescriptor deprecated_suggested_range = 4;
+
+  // ranges contains information intended for the client's range cache. The
+  // server populates it with info on the range with the ID addressed by the
+  // client (always the first in the array) and then all other ranges
+  // overlapping the requested key range, or in between the addressed range and
+  // the requested key range.
+  //
+  // In 21.1 the customname can be removed, together with the Ranges() accessor.
+  repeated RangeInfo ranges = 5 [(gogoproto.customname) = "rangesInternal",
+                                 (gogoproto.nullable) = false];
+
 }
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp

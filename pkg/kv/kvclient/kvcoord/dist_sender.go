@@ -1082,7 +1082,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// turning single-range queries into multi-range queries for no good
 	// reason.
 	if ba.IsUnsplittable() {
-		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc())
+		mismatch := roachpb.NewRangeKeyMismatchError(ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc(), ri.Lease())
 		return nil, roachpb.NewError(mismatch)
 	}
 	// If there's no transaction and ba spans ranges, possibly re-run as part of
@@ -1488,39 +1488,31 @@ func (ds *DistSender) sendPartialBatch(
 		// to our caller.
 		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.RangeKeyMismatchError:
-			// Range descriptor might be out of date - evict it. This is
-			// likely the result of a range split. If we have new range
-			// descriptors, insert them instead as long as they are different
-			// from the last descriptor to avoid endless loops.
-
-			// Sanity check that we got the different descriptors. Getting the same
-			// descriptor and putting it in the cache would be bad, as we'd go through
-			// an infinite loops of retries.
-			{
-				different := func(rd *roachpb.RangeDescriptor) bool {
-					return !desc.RSpan().Equal(rd.RSpan())
-				}
-				if !different(&tErr.MismatchedRange) {
+			// Range descriptor might be out of date - evict it. This is likely the
+			// result of a range split. If we have new range descriptors, insert them
+			// instead.
+			for _, ri := range tErr.Ranges() {
+				// Sanity check that we got the different descriptors. Getting the same
+				// descriptor and putting it in the cache would be bad, as we'd go through
+				// an infinite loops of retries.
+				if desc.RSpan().Equal(ri.Desc.RSpan()) {
 					return response{pErr: roachpb.NewError(errors.AssertionFailedf(
-						"MismatchedRange not different from original desc. desc: %s. suggested: %s",
-						desc, tErr.MismatchedRange))}
-				}
-				if (tErr.SuggestedRange != nil) && !different(tErr.SuggestedRange) {
-					return response{pErr: roachpb.NewError(errors.AssertionFailedf(
-						"SuggestedRange not different from original desc. desc: %s. suggested: %s",
-						desc, tErr.SuggestedRange))}
+						"mismatched range suggestion not different from original desc. desc: %s. suggested: %s. err: %s",
+						desc, ri.Desc, pErr))}
 				}
 			}
-			replacements := make([]roachpb.RangeInfo, 0, 2)
-			replacements = append(replacements, roachpb.RangeInfo{Desc: tErr.MismatchedRange})
-			if tErr.SuggestedRange != nil {
-				replacements = append(replacements, roachpb.RangeInfo{Desc: *tErr.SuggestedRange})
-			}
-			// Same as Evict() if replacements is empty.
-			evictToken.EvictAndReplace(ctx, replacements...)
-			// Clear desc to reload on the next attempt.
-			desc = nil
-			continue
+			evictToken.EvictAndReplace(ctx, tErr.Ranges()...)
+			// On addressing errors (likely a split), we need to re-invoke
+			// the range descriptor lookup machinery, so we recurse by
+			// sending batch to just the partial span this descriptor was
+			// supposed to cover. Note that for the resending, we use the
+			// already truncated batch, so that we know that the response
+			// to it matches the positions into our batch (using the full
+			// batch here would give a potentially larger response slice
+			// with unknown mapping to our truncated reply).
+			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges())
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
+			return response{reply: reply, positions: positions, pErr: pErr}
 		}
 		break
 	}
