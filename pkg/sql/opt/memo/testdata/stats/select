@@ -691,11 +691,13 @@ WHERE
 ----
 index-join lineitem
  ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
+ ├── stable
  ├── stats: [rows=111.111111, distinct(11)=33.3333333, null(11)=0]
  ├── key: (1,4)
  ├── fd: (1,4)-->(2,3,5-16)
  └── select
       ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
+      ├── stable
       ├── stats: [rows=111.111111]
       ├── key: (1,4)
       ├── fd: (1,4)-->(11)
@@ -706,7 +708,7 @@ index-join lineitem
       │    ├── key: (1,4)
       │    └── fd: (1,4)-->(11)
       └── filters
-           └── l_shipdate:11::TIMESTAMPTZ < '1995-10-01' [type=bool, outer=(11)]
+           └── l_shipdate:11::TIMESTAMPTZ < '1995-10-01' [type=bool, outer=(11), stable]
 
 # These queries should generate zigzag joins in xform rules. The column statistics
 # should be comparable between the norm'd and fully optimized expressions.
@@ -1419,10 +1421,12 @@ SELECT x FROM t WHERE x
 ----
 with &1 (t)
  ├── columns: x:6(bool!null)
+ ├── immutable
  ├── stats: [rows=1.98e+20, distinct(6)=1, null(6)=0]
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: x:5(bool)
+ │    ├── immutable
  │    ├── stats: [rows=4e+20]
  │    ├── left-join (cross)
  │    │    ├── columns: t1.x:1(bool) t2.x:3(bool)
@@ -1435,7 +1439,7 @@ with &1 (t)
  │    │    │    └── stats: [rows=2e+10]
  │    │    └── filters (true)
  │    └── projections
- │         └── (t1.x:1::INT8 << 5533)::BOOL OR t2.x:3 [as=x:5, type=bool, outer=(1,3)]
+ │         └── (t1.x:1::INT8 << 5533)::BOOL OR t2.x:3 [as=x:5, type=bool, outer=(1,3), immutable]
  └── select
       ├── columns: x:6(bool!null)
       ├── stats: [rows=1.98e+20, distinct(6)=1, null(6)=0]

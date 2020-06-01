@@ -61,6 +61,7 @@ FROM a
 ----
 project
  ├── columns: ra:7 rb:8 sa:9 sb:10 ta:11 tb:12 ua:13 ub:14 va:15 vb:16 wa:17 wb:18
+ ├── immutable
  ├── fd: ()-->(7-14)
  ├── scan a
  │    └── columns: i:2 arr:6
@@ -73,10 +74,10 @@ project
       ├── CAST(NULL AS FLOAT8) [as=tb:12]
       ├── CAST(NULL AS INT8) [as=ua:13]
       ├── CAST(NULL AS INT8) [as=ub:14]
-      ├── arr:6::DECIMAL[] || CAST(NULL AS DECIMAL[]) [as=va:15, outer=(6)]
-      ├── CAST(NULL AS STRING[]) || arr:6::STRING[] [as=vb:16, outer=(6)]
-      ├── i:2::DECIMAL || CAST(NULL AS DECIMAL[]) [as=wa:17, outer=(2)]
-      └── CAST(NULL AS FLOAT8[]) || i:2::FLOAT8 [as=wb:18, outer=(2)]
+      ├── arr:6::DECIMAL[] || CAST(NULL AS DECIMAL[]) [as=va:15, outer=(6), immutable]
+      ├── CAST(NULL AS STRING[]) || arr:6::STRING[] [as=vb:16, outer=(6), immutable]
+      ├── i:2::DECIMAL || CAST(NULL AS DECIMAL[]) [as=wa:17, outer=(2), immutable]
+      └── CAST(NULL AS FLOAT8[]) || i:2::FLOAT8 [as=wb:18, outer=(2), immutable]
 
 norm
 SELECT

@@ -1404,6 +1404,14 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 		}
 		shared.VolatilitySet.Add(t.Overload.Volatility)
 
+	case *CastExpr:
+		from, to := t.Input.DataType(), t.Typ
+		volatility, ok := tree.LookupCastVolatility(from, to)
+		if !ok {
+			panic(errors.AssertionFailedf("no volatility for cast %s::%s", from, to))
+		}
+		shared.VolatilitySet.Add(volatility)
+
 	default:
 		if opt.IsMutationOp(e) {
 			shared.CanHaveSideEffects = true
