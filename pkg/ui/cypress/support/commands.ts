@@ -70,7 +70,9 @@ Cypress.Commands.overwrite("get", (originalFn: typeof cy.get, selector: string, 
 });
 
 addMatchImageSnapshotCommand("matchImageSnapshot", {
-  capture: "viewport",
+  capture: "fullPage",
+  failureThreshold: 0.03,
+  failureThresholdType: "percent",
 });
 
 declare global {
