@@ -114,6 +114,7 @@ func Load(
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)
 	evalCtx.Codec = keys.TODOSQLCodec
+	semaCtx := tree.MakeSemaContext()
 
 	blobClientFactory := blobs.TestBlobServiceClient(writeToDir)
 	conf, err := cloud.ExternalStorageConfFromURI(uri)
@@ -230,7 +231,7 @@ func Load(
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
-				sqlbase.ProcessDefaultColumns(ctx, tableDesc.Columns, tableDesc, &txCtx, evalCtx)
+				sqlbase.ProcessDefaultColumns(ctx, tableDesc.Columns, tableDesc, &txCtx, evalCtx, &semaCtx)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "process default columns")
 			}

@@ -299,6 +299,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
+	p.extendedEvalCtx.TypeResolver = p
 
 	p.sessionDataMutator = dataMutator
 	p.autoCommit = false

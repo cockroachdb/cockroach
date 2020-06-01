@@ -16,8 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -187,4 +189,118 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *sqlbase.ColumnDescri
 	}
 
 	return nil
+}
+
+// descContainer is a helper type that implements tree.IndexedVarContainer; it
+// is used to type check computed columns and does not support evaluation.
+type descContainer struct {
+	cols []sqlbase.ColumnDescriptor
+}
+
+func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	panic("unsupported")
+}
+
+func (j *descContainer) IndexedVarResolvedType(idx int) *types.T {
+	return j.cols[idx].Type
+}
+
+func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
+}
+
+// MakeComputedExprs returns a slice of the computed expressions for the
+// slice of input column descriptors, or nil if none of the input column
+// descriptors have computed expressions.
+// The length of the result slice matches the length of the input column
+// descriptors. For every column that has no computed expression, a NULL
+// expression is reported.
+// addingCols indicates if the input column descriptors are being added
+// and allows type checking of the compute expressions to reference
+// input columns earlier in the slice.
+func MakeComputedExprs(
+	ctx context.Context,
+	cols []sqlbase.ColumnDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tn *tree.TableName,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	addingCols bool,
+) ([]tree.TypedExpr, error) {
+	// Check to see if any of the columns have computed expressions. If there
+	// are none, we don't bother with constructing the map as the expressions
+	// are all NULL.
+	haveComputed := false
+	for i := range cols {
+		if cols[i].IsComputed() {
+			haveComputed = true
+			break
+		}
+	}
+	if !haveComputed {
+		return nil, nil
+	}
+
+	// Build the computed expressions map from the parsed statement.
+	computedExprs := make([]tree.TypedExpr, 0, len(cols))
+	exprStrings := make([]string, 0, len(cols))
+	for i := range cols {
+		col := &cols[i]
+		if col.IsComputed() {
+			exprStrings = append(exprStrings, *col.ComputeExpr)
+		}
+	}
+	exprs, err := parser.ParseExprs(exprStrings)
+	if err != nil {
+		return nil, err
+	}
+
+	// We need an ivarHelper and sourceInfo, unlike DEFAULT, since computed
+	// columns can reference other columns and thus need to be able to resolve
+	// column names (at this stage they only need to resolve the types so that
+	// the expressions can be typechecked - we have no need to evaluate them).
+	iv := &descContainer{tableDesc.Columns}
+	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
+
+	source := sqlbase.NewSourceInfoForSingleTable(*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
+	semaCtx.IVarContainer = iv
+
+	addColumnInfo := func(col *sqlbase.ColumnDescriptor) {
+		ivarHelper.AppendSlot()
+		iv.cols = append(iv.cols, *col)
+		newCols := sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), []sqlbase.ColumnDescriptor{*col})
+		source.SourceColumns = append(source.SourceColumns, newCols...)
+	}
+
+	compExprIdx := 0
+	for i := range cols {
+		col := &cols[i]
+		if !col.IsComputed() {
+			computedExprs = append(computedExprs, tree.DNull)
+			if addingCols {
+				addColumnInfo(col)
+			}
+			continue
+		}
+		expr, err := sqlbase.ResolveNames(
+			exprs[compExprIdx], source, ivarHelper, evalCtx.SessionData.SearchPath)
+		if err != nil {
+			return nil, err
+		}
+
+		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.Type)
+		if err != nil {
+			return nil, err
+		}
+		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
+			return nil, err
+		}
+		computedExprs = append(computedExprs, typedExpr)
+		compExprIdx++
+		if addingCols {
+			addColumnInfo(col)
+		}
+	}
+	return computedExprs, nil
 }
