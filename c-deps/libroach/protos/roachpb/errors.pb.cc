@@ -1904,7 +1904,6 @@ bool RangeKeyMismatchError::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
@@ -1965,7 +1964,6 @@ void RangeKeyMismatchError::SerializeWithCachedSizes(
       2, this->request_end_key(), output);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
   if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       3, this->_internal_mismatched_range(), output);
@@ -2001,7 +1999,6 @@ size_t RangeKeyMismatchError::ByteSizeLong() const {
           this->request_end_key());
     }
 
-    // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
     if (has_mismatched_range()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(

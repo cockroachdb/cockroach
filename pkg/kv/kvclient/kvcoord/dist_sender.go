@@ -1508,8 +1508,8 @@ func (ds *DistSender) sendPartialBatch(
 			different := func(rd *roachpb.RangeDescriptor) bool {
 				return !desc.RSpan().Equal(rd.RSpan())
 			}
-			if tErr.MismatchedRange != nil && different(tErr.MismatchedRange) {
-				replacements = append(replacements, *tErr.MismatchedRange)
+			if different(&tErr.MismatchedRange) {
+				replacements = append(replacements, tErr.MismatchedRange)
 			}
 			if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
 				if includesFrontOfCurSpan(isReverse, tErr.SuggestedRange, rs) {
