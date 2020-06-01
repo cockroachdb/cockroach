@@ -271,41 +271,6 @@ func (f *vectorizedFlow) Release() {
 	vectorizedFlowPool.Put(f)
 }
 
-// tryRemoveAll tries to remove all directories and files contained in root as
-// well as root.
-// Used as a temporary solution to forcefully remove the flow's temporary
-// storage directory until #45098 is resolved.
-// TODO(asubiotto): Remove once #45098 is resolved.
-func (f *vectorizedFlow) tryRemoveAll(root string) error {
-	// Unfortunately there is no way to Stat using TempFS, so simply try all
-	// alternatives.
-	if f.Cfg.TempFS.Remove(root) != nil {
-		// If there was an error, it might be a directory.
-		if f.Cfg.TempFS.RemoveDir(root) != nil {
-			// DeleteDir failed, this is probably due to children.
-			children, err := f.Cfg.TempFS.List(root)
-			if err != nil {
-				// This would be a weird error, so return it.
-				return err
-			}
-			for _, child := range children {
-				if child == "." || child == ".." {
-					continue
-				}
-				// List returns relative paths, so join with parent dir.
-				if err := f.tryRemoveAll(filepath.Join(root, child)); err != nil {
-					return err
-				}
-			}
-			// Now that children are cleaned up, delete the directory.
-			if err := f.Cfg.TempFS.RemoveDir(root); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
@@ -323,7 +288,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	created := f.tempStorage.createdStateMu.created
 	f.tempStorage.createdStateMu.Unlock()
 	if created {
-		if err := f.tryRemoveAll(f.tempStorage.path); err != nil {
+		if err := f.Cfg.TempFS.RemoveAll(f.tempStorage.path); err != nil {
 			// Log error as a Warning but keep on going to close the memory
 			// infrastructure.
 			log.Warningf(
