@@ -18,13 +18,15 @@ CREATE TABLE many_types (
     _interval    INTERVAL,
     _inet        INet,
     _json        JSON,
-    _time        Time
+    _time        Time,
+    _varbit      VARBIT
 )
 
 statement ok
 INSERT
   INTO many_types
 VALUES (
+        NULL,
         NULL,
         NULL,
         NULL,
@@ -60,7 +62,8 @@ VALUES (
        '12:34:56.123456',
        '127.0.0.1',
        '[1, "hello", {"a": ["foo", {"b": 3}]}]',
-       '1:00:00.001'
+       '1:00:00.001',
+       B'1'
        ),
        (
        true,
@@ -79,7 +82,8 @@ VALUES (
        '01:23:45.012345',
        '192.168.0.0/16',
        '[2, "hi", {"b": ["bar", {"c": 4}]}]',
-       '1:00:00.456'
+       '1:00:00.456',
+       B'11'
        )
 
 query T
@@ -171,6 +175,67 @@ SELECT _json - _int FROM many_types
 NULL
 [1, "hello", {"a": ["foo", {"b": 3}]}]
 [2, "hi", {"b": ["bar", {"c": 4}]}]
+
+query T
+EXPLAIN (VEC) SELECT _bytes || _bytes FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projConcatBytesBytesOp
+    └ *colexec.colBatchScan
+
+query T
+SELECT _bytes || _bytes FROM many_types
+----
+NULL
+123123
+456456
+
+query T
+EXPLAIN (VEC) SELECT _string || _string FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projConcatBytesBytesOp
+    └ *colexec.colBatchScan
+
+query T
+SELECT _string || _string FROM many_types
+----
+NULL
+123123
+456456
+
+query T
+EXPLAIN (VEC) SELECT _json || _json FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projConcatDatumDatumOp
+    └ *colexec.colBatchScan
+
+query T
+SELECT _json || _json FROM many_types
+----
+NULL
+[1, "hello", {"a": ["foo", {"b": 3}]}, 1, "hello", {"a": ["foo", {"b": 3}]}]
+[2, "hi", {"b": ["bar", {"c": 4}]}, 2, "hi", {"b": ["bar", {"c": 4}]}]
+
+query T
+EXPLAIN (VEC) SELECT _varbit || _varbit FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projConcatDatumDatumOp
+    └ *colexec.colBatchScan
+
+query T
+SELECT _varbit || _varbit FROM many_types
+----
+NULL
+11
+1111
+
 
 # Make sure we fall back to row engine when we have a mixed-type expression
 # with dates.
