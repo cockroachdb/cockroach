@@ -982,17 +982,18 @@ func TestEvictCacheOnError(t *testing.T) {
 		},
 	}
 
+	rangeMismachErr := roachpb.NewRangeKeyMismatchError(
+		context.Background(), nil, nil, &lhs, nil /* lease */)
+	rangeMismachErr.AppendRangeInfo(context.Background(), rhs, roachpb.Lease{})
+
 	testCases := []struct {
 		canceledCtx            bool
 		replicaError           error
 		shouldClearLeaseHolder bool
 		shouldClearReplica     bool
 	}{
-		{false, errors.New(errString), false, false}, // non-retryable replica error
-		{false, &roachpb.RangeKeyMismatchError{
-			MismatchedRange: lhs,
-			SuggestedRange:  &rhs,
-		}, false, false}, // RangeKeyMismatch replica error
+		{false, errors.New(errString), false, false},         // non-retryable replica error
+		{false, rangeMismachErr, false, false},               // RangeKeyMismatch replica error
 		{false, &roachpb.RangeNotFoundError{}, false, false}, // RangeNotFound replica error
 		{false, nil, false, false},                           // RPC error
 		{true, nil, false, false},                            // canceled context
@@ -1259,7 +1260,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	firstLookup := true
 
 	var testFn simpleSendFn = func(
-		_ context.Context,
+		ctx context.Context,
 		_ SendOptions,
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
@@ -1301,12 +1302,9 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		// suggestion for future range descriptor lookups.
 		if ba.RangeID == staleDesc.RangeID {
 			var br roachpb.BatchResponse
-			br.Error = roachpb.NewError(&roachpb.RangeKeyMismatchError{
-				RequestStartKey: rs.Key.AsRawKey(),
-				RequestEndKey:   rs.EndKey.AsRawKey(),
-				MismatchedRange: rhsDesc,
-				SuggestedRange:  &lhsDesc,
-			})
+			err := roachpb.NewRangeKeyMismatchError(ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), &rhsDesc, nil /* lease */)
+			err.AppendRangeInfo(ctx, lhsDesc, roachpb.Lease{})
+			br.Error = roachpb.NewError(err)
 			return &br, nil
 		} else if ba.RangeID != lhsDesc.RangeID {
 			t.Fatalf("unexpected RangeID %d provided in request %v. expected: %s", ba.RangeID, ba, lhsDesc.RangeID)
@@ -3203,8 +3201,9 @@ func TestCanSendToFollower(t *testing.T) {
 // from the cache.
 func TestEvictMetaRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	testutils.RunTrueAndFalse(t, "hasSuggestedRange", func(t *testing.T, hasSuggestedRange bool) {
 		splitKey := keys.RangeMetaKey(roachpb.RKey("b"))
@@ -3319,13 +3318,10 @@ func TestEvictMetaRange(t *testing.T) {
 
 				reply := ba.CreateReply()
 				// Return a RangeKeyMismatchError to simulate the range being stale.
-				err := &roachpb.RangeKeyMismatchError{
-					RequestStartKey: rs.Key.AsRawKey(),
-					RequestEndKey:   rs.EndKey.AsRawKey(),
-					MismatchedRange: testMeta2RangeDescriptor1,
-				}
+				err := roachpb.NewRangeKeyMismatchError(
+					ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), &testMeta2RangeDescriptor1, nil /* lease */)
 				if hasSuggestedRange {
-					err.SuggestedRange = &testMeta2RangeDescriptor2
+					err.AppendRangeInfo(ctx, testMeta2RangeDescriptor2, roachpb.Lease{})
 				}
 				reply.Error = roachpb.NewError(err)
 				return reply, nil
@@ -3356,7 +3352,7 @@ func TestEvictMetaRange(t *testing.T) {
 		ds := NewDistSender(cfg)
 
 		scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), false)
-		if _, pErr := kv.SendWrapped(context.Background(), ds, scan); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
 
@@ -3371,7 +3367,7 @@ func TestEvictMetaRange(t *testing.T) {
 		isStale = true
 
 		scan = roachpb.NewScan(roachpb.Key("b"), roachpb.Key("c"), false)
-		if _, pErr := kv.SendWrapped(context.Background(), ds, scan); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
 

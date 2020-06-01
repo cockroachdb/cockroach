@@ -1956,6 +1956,38 @@ func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
 	v.Visit(visitor)
 }
 
+// VisitReplicasByKey invokes the visitor on all the replicas for ranges that
+// overlap [startKey, endKey), or until the visitor returns false. Replicas are
+// visited in key order. store.mu is held during the visiting.
+//
+// The argument to the visitor is either a *Replica or *ReplicaPlaceholder.
+// Returned replicas might be IsDestroyed(); if the visitor cares, it needs to
+// protect against it itself.
+func (s *Store) VisitReplicasByKey(
+	ctx context.Context,
+	startKey, endKey roachpb.RKey,
+	visitor func(context.Context, KeyRange) (wantMore bool),
+) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if endKey.Less(startKey) {
+		log.Fatalf(ctx, "endKey < startKey (%s < %s)", endKey, startKey)
+	}
+	// Align startKey on a range start. Otherwise the AscendRange below would skip
+	// startKey's range.
+	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(startKey), func(item btree.Item) bool {
+		// No-op if startKey is the start of a range.
+		startKey = item.(KeyRange).startKey()
+		return false
+	})
+
+	// Iterate though overlapping replicas.
+	s.mu.replicasByKey.AscendRange(rangeBTreeKey(startKey), rangeBTreeKey(endKey),
+		func(item btree.Item) bool {
+			return visitor(ctx, item.(KeyRange))
+		})
+}
+
 // WriteLastUpTimestamp records the supplied timestamp into the "last up" key
 // on this store. This value should be refreshed whenever this store's node
 // updates its own liveness record; it is used by a restarting store to

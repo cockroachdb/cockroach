@@ -85,7 +85,7 @@ func (rk RKey) AsRawKey() Key {
 	return Key(rk)
 }
 
-// Less compares two RKeys.
+// Less returns true if receiver < otherRK.
 func (rk RKey) Less(otherRK RKey) bool {
 	return bytes.Compare(rk, otherRK) < 0
 }
@@ -2299,3 +2299,7 @@ func init() {
 
 // SafeValue implements the redact.SafeValue interface.
 func (ReplicaChangeType) SafeValue() {}
+
+func (ri RangeInfo) String() string {
+	return fmt.Sprintf("desc: %s lease: %s", ri.Desc, ri.Lease)
+}
