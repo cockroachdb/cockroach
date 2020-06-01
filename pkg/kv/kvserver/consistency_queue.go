@@ -31,6 +31,16 @@ var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
 	24*time.Hour,
 )
 
+var consistencyCheckRate = settings.RegisterPublicValidatedByteSizeSetting(
+	"server.consistency_check.max_rate",
+	"the rate limit (bytes/sec) to use for consistency checks; used in "+
+		"conjunction with server.consistency_check.interval to control the rate "+
+		"of consistency checks. Note that setting a rate too high can negatively "+
+		"impact performance.",
+	8<<20, // 8MB
+	validatePositive,
+)
+
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 
 type consistencyQueue struct {
@@ -58,6 +68,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 			failures:             store.metrics.ConsistencyQueueFailures,
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate),
 		},
 	)
 	return q
