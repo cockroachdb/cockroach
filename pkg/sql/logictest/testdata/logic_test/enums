@@ -869,3 +869,83 @@ howdy cockroach
 
 statement ok
 ROLLBACK
+
+# Tests for column additions with enum tables.
+statement ok
+CREATE TABLE column_add (x greeting);
+INSERT INTO column_add VALUES ('hello')
+
+# Test that we can backfill a column when an enum column is in the table.
+statement ok
+ALTER TABLE column_add ADD COLUMN y INT DEFAULT 1
+
+query TI
+SELECT * FROM column_add
+----
+hello 1
+
+# Test that we can add an enum column with a default value.
+statement ok
+ALTER TABLE column_add ADD COLUMN z greeting DEFAULT 'howdy'
+
+query TIT
+SELECT * FROM column_add
+----
+hello 1 howdy
+
+# Test that we can add an enum computed column.
+statement ok
+ALTER TABLE column_add ADD COLUMN w greeting AS ('hi') STORED
+
+query TITT
+SELECT * FROM column_add
+----
+hello 1 howdy hi
+
+# Test that we can add a computed column that uses an enum.
+statement ok
+ALTER TABLE column_add ADD COLUMN v BOOL AS (z < 'hi' AND x >= 'hello') STORED
+
+query TITTB
+SELECT * FROM column_add
+----
+hello 1 howdy hi true
+
+# Repeat the above process on a new table in a transaction to exercise
+# the schema change in txn codepath.
+statement ok
+DROP TABLE column_add
+
+statement ok
+BEGIN;
+CREATE TABLE column_add (x greeting);
+INSERT INTO column_add VALUES ('hello');
+ALTER TABLE column_add ADD COLUMN y INT DEFAULT 1;
+ALTER TABLE column_add ADD COLUMN z greeting DEFAULT 'howdy';
+ALTER TABLE column_add ADD COLUMN w greeting AS ('hi') STORED;
+ALTER TABLE column_add ADD COLUMN v BOOL AS (z < 'hi' AND x >= 'hello') STORED
+
+query TITTB
+SELECT * FROM column_add
+----
+hello 1 howdy hi true
+
+statement ok
+COMMIT
+
+# Lastly, ensure that we can create a column using a type created in the
+# same transaction.
+statement ok
+BEGIN;
+CREATE TYPE in_txn AS ENUM ('in', 'txn');
+CREATE TABLE tbl_in_txn (x INT);
+INSERT INTO tbl_in_txn VALUES (1);
+ALTER TABLE tbl_in_txn ADD COLUMN y in_txn DEFAULT 'txn';
+
+query IT
+SELECT * FROM tbl_in_txn
+----
+1 txn
+
+statement ok
+ROLLBACK

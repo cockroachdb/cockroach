@@ -71,7 +71,7 @@ type FlowCtx struct {
 // var context.
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 	evalCopy := ctx.EvalCtx.Copy()
-	evalCopy.DistSQLTypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCopy}
+	evalCopy.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCopy}
 	return evalCopy
 }
 

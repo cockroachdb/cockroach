@@ -29,6 +29,7 @@ func MakeDefaultExprs(
 	cols []ColumnDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 ) ([]tree.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
@@ -59,7 +60,6 @@ func MakeDefaultExprs(
 	}
 
 	defExprIdx := 0
-	semaCtx := tree.MakeSemaContext()
 	for i := range cols {
 		col := &cols[i]
 		if col.DefaultExpr == nil {
@@ -67,7 +67,7 @@ func MakeDefaultExprs(
 			continue
 		}
 		expr := exprs[defExprIdx]
-		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, col.Type)
+		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -88,11 +88,12 @@ func ProcessDefaultColumns(
 	tableDesc *ImmutableTableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 ) ([]ColumnDescriptor, []tree.TypedExpr, error) {
 	cols = processColumnSet(cols, tableDesc, func(col *ColumnDescriptor) bool {
 		return col.DefaultExpr != nil
 	})
-	defaultExprs, err := MakeDefaultExprs(ctx, cols, txCtx, evalCtx)
+	defaultExprs, err := MakeDefaultExprs(ctx, cols, txCtx, evalCtx, semaCtx)
 	return cols, defaultExprs, err
 }
 
