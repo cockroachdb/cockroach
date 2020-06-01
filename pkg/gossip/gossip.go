@@ -540,13 +540,6 @@ func (g *Gossip) GetNodeIDSQLAddress(nodeID roachpb.NodeID) (*util.UnresolvedAdd
 	return g.getNodeIDSQLAddressLocked(nodeID)
 }
 
-// GetNodeIDForStoreID looks up the NodeID by StoreID.
-func (g *Gossip) GetNodeIDForStoreID(storeID roachpb.StoreID) (roachpb.NodeID, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.getNodeIDForStoreIDLocked(storeID)
-}
-
 // GetNodeDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	g.mu.RLock()
@@ -882,13 +875,6 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.storeMap[desc.StoreID] = desc.Node.NodeID
-}
-
-func (g *Gossip) getNodeIDForStoreIDLocked(storeID roachpb.StoreID) (roachpb.NodeID, error) {
-	if nodeID, ok := g.storeMap[storeID]; ok {
-		return nodeID, nil
-	}
-	return 0, errors.Errorf("unable to look up Node ID for store %d", storeID)
 }
 
 func (g *Gossip) updateClients() {
@@ -1718,7 +1704,6 @@ type DeprecatedOracleGossip interface {
 	// GetNodeDescriptor is used by oracles to order replicas by distance from the
 	// current locality.
 	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
-	GetNodeIDForStoreID(roachpb.StoreID) (roachpb.NodeID, error)
 }
 
 // DeprecatedOracleGossip returns an DeprecatedOracleGossip (a Gossip for use with the
