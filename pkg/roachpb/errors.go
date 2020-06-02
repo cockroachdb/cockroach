@@ -382,9 +382,12 @@ var _ ErrorDetailInterface = &RangeNotFoundError{}
 
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
 func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMismatchError {
-	if desc != nil && !desc.IsInitialized() {
-		// We must never send uninitialized ranges back to the client (nil
-		// is fine) guard against regressions of #6027.
+	if desc == nil {
+		panic("NewRangeKeyMismatchError with nil descriptor")
+	}
+	if !desc.IsInitialized() {
+		// We must never send uninitialized ranges back to the client guard against
+		// regressions of #6027.
 		panic(fmt.Sprintf("descriptor is not initialized: %+v", desc))
 	}
 	return &RangeKeyMismatchError{
