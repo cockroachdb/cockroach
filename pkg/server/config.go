@@ -289,7 +289,7 @@ func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
 			Specs: []base.StoreSpec{storeSpec},
 		},
 	}
-	kvCfg.SetDefaults()
+	kvCfg.RaftConfig.SetDefaults()
 	return kvCfg
 }
 
