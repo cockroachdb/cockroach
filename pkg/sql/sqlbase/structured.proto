@@ -466,6 +466,13 @@ message IndexDescriptor {
   // GeoConfig, if it's not the zero value, describes configuration for
   // this geospatial inverted index.
   optional geo.geoindex.Config geo_config = 22 [(gogoproto.nullable) = false];
+
+  // Predicate, if it's not empty, indicates that the index is a partial index
+  // with Predicate as the expression. If Predicate is empty, the index is not
+  // a partial index. Columns are referred to in the expression by their name.
+  // TODO(mgartner): Update the comment to explain that columns are referenced
+  // by their ID once #49766 is addressed.
+  optional string predicate = 23 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
