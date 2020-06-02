@@ -351,15 +351,16 @@ func (p *planner) initiateDropTable(
 	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be able to use
 	// this faster mechanism.
 	if tableDesc.IsTable() && !tableDesc.IsInterleaved() {
-		// Get the zone config applying to this table in order to
-		// ensure there is a GC TTL.
-		_, _, _, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false, /* getInheritedDefault */
-		)
-		if err != nil {
-			return err
-		}
-
+		// TODO BEFORE MERGING: confirm that we can delete this.
+		//
+		// // Get the zone config applying to this table in order to
+		// // ensure there is a GC TTL.
+		// _, _, _, err := GetZoneConfigInTxn(
+		// 	ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false, /* getInheritedDefault */
+		// )
+		// if err != nil {
+		// 	return err
+		// }
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 

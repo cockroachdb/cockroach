@@ -92,15 +92,12 @@ func updateStatusForGCElements(
 			return err
 		}
 
-		zoneCfg, placeholder, _, err := sql.ZoneConfigHook(cfg, uint32(tableID))
+		zoneCfg, err := cfg.GetZoneConfigForObject(execCfg.Codec, uint32(tableID))
 		if err != nil {
 			log.Errorf(ctx, "zone config for desc: %d, err = %+v", tableID, err)
 			return nil
 		}
 		tableTTL := getTableTTL(defTTL, zoneCfg)
-		if placeholder == nil {
-			placeholder = zoneCfg
-		}
 
 		// Update the status of the table if the table was dropped.
 		if table.Dropped() {
@@ -113,7 +110,7 @@ func updateStatusForGCElements(
 		}
 
 		// Update the status of any indexes waiting for GC.
-		indexesExpired, deadline := updateIndexesStatus(ctx, execCfg, tableTTL, table, protectedtsCache, placeholder, indexDropTimes, progress)
+		indexesExpired, deadline := updateIndexesStatus(ctx, execCfg, tableTTL, table, protectedtsCache, zoneCfg, indexDropTimes, progress)
 		if indexesExpired {
 			expired = true
 		}
@@ -184,7 +181,7 @@ func updateIndexesStatus(
 	tableTTL int32,
 	table *sqlbase.TableDescriptor,
 	protectedtsCache protectedts.Cache,
-	placeholder *zonepb.ZoneConfig,
+	zoneCfg *zonepb.ZoneConfig,
 	indexDropTimes map[sqlbase.IndexID]int64,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, soonestDeadline time.Time) {
@@ -198,7 +195,7 @@ func updateIndexesStatus(
 
 		sp := table.IndexSpan(execCfg.Codec, idxProgress.IndexID)
 
-		ttlSeconds := getIndexTTL(tableTTL, placeholder, idxProgress.IndexID)
+		ttlSeconds := getIndexTTL(tableTTL, zoneCfg, idxProgress.IndexID)
 
 		deadlineNanos := indexDropTimes[idxProgress.IndexID] + int64(ttlSeconds)*time.Second.Nanoseconds()
 		deadline := timeutil.Unix(0, deadlineNanos)

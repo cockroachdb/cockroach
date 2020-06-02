@@ -121,7 +121,7 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 	r.previousVersion = make(RangeReport, len(rows))
 	for _, row := range rows {
 		key := ZoneKey{}
-		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
+		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
 		r.previousVersion[key] = zoneRangeStatus{
 			(int32)(*row[2].(*tree.DInt)),
@@ -305,7 +305,7 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 	if err != nil {
 		log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
 	}
-	for i := uint32(1); i <= maxObjectID; i++ {
+	for i := config.SystemTenantObjectID(1); i <= maxObjectID; i++ {
 		zone, err := getZoneByID(i, v.cfg)
 		if err != nil {
 			log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)

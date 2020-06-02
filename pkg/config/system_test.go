@@ -39,16 +39,24 @@ func tkey(tableID uint32, chunks ...string) []byte {
 	return key
 }
 
-func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
+func tenantTkey(tenantID uint64, tableID uint32, chunks ...string) []byte {
+	key := keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID)).TablePrefix(tableID)
+	for _, c := range chunks {
+		key = append(key, []byte(c)...)
+	}
+	return key
+}
+
+func sqlKV(tableID uint32, indexID, descID uint64) roachpb.KeyValue {
 	k := tkey(tableID)
 	k = encoding.EncodeUvarintAscending(k, indexID)
-	k = encoding.EncodeUvarintAscending(k, descriptorID)
+	k = encoding.EncodeUvarintAscending(k, descID)
 	k = encoding.EncodeUvarintAscending(k, 12345) // Column ID, but could be anything.
 	return kv(k, nil)
 }
 
-func descriptor(descriptorID uint64) roachpb.KeyValue {
-	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(descriptorID))
+func descriptor(descID uint64) roachpb.KeyValue {
+	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(descID))
 	v := sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{})
 	kv := roachpb.KeyValue{Key: k}
 	if err := kv.Value.SetProto(v); err != nil {
@@ -57,9 +65,9 @@ func descriptor(descriptorID uint64) roachpb.KeyValue {
 	return kv
 }
 
-func zoneConfig(descriptorID uint32, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
+func zoneConfig(descID config.SystemTenantObjectID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
-		Key: config.MakeZoneKey(descriptorID),
+		Key: config.MakeZoneKey(descID),
 	}
 	if err := kv.Value.SetProto(&zonepb.ZoneConfig{SubzoneSpans: spans}); err != nil {
 		panic(err)
@@ -127,8 +135,8 @@ func TestGetLargestID(t *testing.T) {
 
 	type testCase struct {
 		values    []roachpb.KeyValue
-		largest   uint32
-		maxID     uint32
+		largest   config.SystemTenantObjectID
+		maxID     config.SystemTenantObjectID
 		pseudoIDs []uint32
 		errStr    string
 	}
@@ -170,10 +178,14 @@ func TestGetLargestID(t *testing.T) {
 		func() testCase {
 			ms := sqlbase.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 			descIDs := ms.DescriptorIDs()
-			maxDescID := descIDs[len(descIDs)-1]
+			maxDescID := config.SystemTenantObjectID(descIDs[len(descIDs)-1])
 			kvs, _ /* splits */ := ms.GetInitialValues()
 			pseudoIDs := keys.PseudoTableIDs
-			return testCase{kvs, uint32(maxDescID), 0, pseudoIDs, ""}
+			const pseudoIDIsMax = true // NOTE: will change as new system objects are added
+			if pseudoIDIsMax {
+				maxDescID = config.SystemTenantObjectID(keys.MaxPseudoTableID)
+			}
+			return testCase{kvs, maxDescID, 0, pseudoIDs, ""}
 		}(),
 
 		// Test non-zero max.
@@ -417,7 +429,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 
 	testCases := []struct {
 		key        roachpb.RKey
-		expectedID uint32
+		expectedID config.SystemTenantObjectID
 	}{
 		{roachpb.RKeyMin, keys.MetaRangesID},
 		{roachpb.RKey(keys.Meta1Prefix), keys.MetaRangesID},
@@ -459,6 +471,12 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.MinUserDescID), keys.MinUserDescID},
 		{tkey(keys.MinUserDescID + 22), keys.MinUserDescID + 22},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
+
+		// Secondary tenant tables should refer to the TenantsRangesID.
+		{tenantTkey(5, keys.MinUserDescID), keys.TenantsRangesID},
+		{tenantTkey(5, keys.MinUserDescID+22), keys.TenantsRangesID},
+		{tenantTkey(10, keys.MinUserDescID), keys.TenantsRangesID},
+		{tenantTkey(10, keys.MinUserDescID+22), keys.TenantsRangesID},
 	}
 
 	originalZoneConfigHook := config.ZoneConfigHook
@@ -474,9 +492,9 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		Values: kvs,
 	}
 	for tcNum, tc := range testCases {
-		var objectID uint32
+		var objectID config.SystemTenantObjectID
 		config.ZoneConfigHook = func(
-			_ *config.SystemConfig, id uint32,
+			_ *config.SystemConfig, id config.SystemTenantObjectID,
 		) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 			objectID = id
 			return &zonepb.ZoneConfig{}, nil, false, nil

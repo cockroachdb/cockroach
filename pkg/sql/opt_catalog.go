@@ -391,7 +391,7 @@ func (oc *optCatalog) getZoneConfig(
 	if oc.cfg == nil || desc.IsVirtualTable() {
 		return emptyZoneConfig, nil
 	}
-	zone, err := oc.cfg.GetZoneConfigForObject(uint32(desc.ID))
+	zone, err := oc.cfg.GetZoneConfigForObject(oc.codec(), uint32(desc.ID))
 	if err != nil {
 		return nil, err
 	}

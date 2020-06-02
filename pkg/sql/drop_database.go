@@ -228,9 +228,9 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	// No job was created because no tables were dropped, so zone config can be
-	// immediately removed.
-	if len(tableDescs) == 0 {
-		zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
+	// immediately removed, if applicable.
+	if len(tableDescs) == 0 && params.ExecCfg().Codec.ForSystemTenant() {
+		zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(n.dbDesc.ID))
 		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 		}

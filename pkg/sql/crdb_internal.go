@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2322,6 +2324,10 @@ CREATE TABLE crdb_internal.zones (
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if !p.ExecCfg().Codec.ForSystemTenant() {
+			return errorutil.UnsupportedWithMultiTenancy()
+		}
+
 		namespace, err := p.getAllNames(ctx)
 		if err != nil {
 			return err
@@ -2372,7 +2378,7 @@ CREATE TABLE crdb_internal.zones (
 
 			// Inherit full information about this zone.
 			fullZone := configProto
-			if err := completeZoneConfig(&fullZone, uint32(tree.MustBeDInt(r[0])), getKey); err != nil {
+			if err := completeZoneConfig(&fullZone, config.SystemTenantObjectID(tree.MustBeDInt(r[0])), getKey); err != nil {
 				return err
 			}
 
@@ -2843,6 +2849,14 @@ func addPartitioningRows(
 	colOffset int,
 	addRow func(...tree.Datum) error,
 ) error {
+	// Secondary tenants cannot set zone configs on individual objects, so they
+	// have no ability to partition tables/indexes.
+	// NOTE: we assume the system tenant below by casting object IDs directly to
+	// config.SystemTenantObjectID.
+	if !p.ExecCfg().Codec.ForSystemTenant() {
+		return nil
+	}
+
 	tableID := tree.NewDInt(tree.DInt(table.ID))
 	indexID := tree.NewDInt(tree.DInt(index.ID))
 	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
@@ -2886,7 +2900,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(table.ID), index, l.Name, false /* getInheritedDefault */)
+			ctx, p.txn, config.SystemTenantObjectID(table.ID), index, l.Name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -2942,7 +2956,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(table.ID), index, r.Name, false /* getInheritedDefault */)
+			ctx, p.txn, config.SystemTenantObjectID(table.ID), index, r.Name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}

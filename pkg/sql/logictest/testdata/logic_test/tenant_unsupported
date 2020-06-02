@@ -70,3 +70,14 @@ SELECT * FROM crdb_internal.kv_store_status
 
 statement error operation is unsupported
 SELECT * FROM crdb_internal.kv_node_status
+
+# Cannot manipulate zone configurations
+
+statement error operation is unsupported
+SELECT * FROM crdb_internal.zones
+
+statement error operation is unsupported
+SHOW ZONE CONFIGURATION FOR TABLE kv
+
+statement error operation is unsupported
+ALTER TABLE kv CONFIGURE ZONE USING num_replicas = 123
