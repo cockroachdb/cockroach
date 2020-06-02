@@ -64,6 +64,7 @@ project
  ├── columns: r:7
  ├── inner-join (hash)
  │    ├── columns: a.x:1!null y:2 b.x:5!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: (5)
  │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
  │    ├── scan a
@@ -338,6 +339,7 @@ project
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: column1_1:7!null rownum:9!null
  │    │    │    ├── cardinality: [4 - 4]
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    │    │    ├── fd: (9)-->(7)
  │    │    │    ├── ordinality
  │    │    │    │    ├── columns: column1_1:7!null rownum:9!null
@@ -622,6 +624,7 @@ project
  │    ├── left-join (cross)
  │    │    ├── columns: column1:2 "?column?":3!null rownum:5!null
  │    │    ├── cardinality: [2 - 8]
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── fd: (5)-->(3)
  │    │    ├── ordinality
  │    │    │    ├── columns: "?column?":3!null rownum:5!null

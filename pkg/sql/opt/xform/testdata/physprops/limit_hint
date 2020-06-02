@@ -520,6 +520,7 @@ limit
  │    └── inner-join (cross)
  │         ├── columns: c0:1
  │         ├── cardinality: [0 - 0]
+ │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         ├── immutable, side-effects
  │         ├── scan t44683
  │         │    └── columns: c0:1
@@ -573,6 +574,7 @@ project
       │    ├── inner-join (cross)
       │    │    ├── columns: "?column?":3!null t1.c0:6
       │    │    ├── cardinality: [0 - 0]
+      │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    ├── immutable, side-effects
       │    │    ├── fd: ()-->(3)
       │    │    ├── scan t1

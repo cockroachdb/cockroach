@@ -95,6 +95,7 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=0, distinct(5)=500, null(5)=0]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
@@ -116,6 +117,7 @@ SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
 left-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  ├── stats: [rows=10000, distinct(5)=500, null(5)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -158,6 +160,7 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 ----
 full-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── stats: [rows=10000]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -295,6 +298,7 @@ group-by
  ├── fd: (1,6)-->(8)
  ├── inner-join (hash)
  │    ├── columns: x:1(int!null) u:5(int!null) v:6(int!null)
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(5)=500, null(5)=0, distinct(1,6)=10000, null(1,6)=0]
  │    ├── fd: (1)==(5), (5)==(1)
  │    ├── scan xysd
@@ -356,6 +360,7 @@ SELECT * FROM xysd JOIN uv ON x=u AND y=v
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── stats: [rows=25, distinct(1)=25, null(1)=0, distinct(2)=25, null(2)=0, distinct(5)=25, null(5)=0, distinct(6)=25, null(6)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  ├── scan xysd
@@ -376,6 +381,7 @@ SELECT * FROM xysd JOIN uv ON x=u AND y+v=5 AND y > 0 AND y < 300
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── stats: [rows=3333.33333, distinct(1)=500, null(1)=0, distinct(5)=500, null(5)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
  ├── select
@@ -482,6 +488,7 @@ project
       ├── fd: (2)-->(8)
       ├── left-join (hash)
       │    ├── columns: x:1(int!null) y:2(int) u:5(int) v:6(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
       │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0, distinct(5)=500, null(5)=1666.66667]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -515,6 +522,7 @@ project
       ├── fd: (2)-->(8)
       ├── left-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:5(int) v:6(int!null)
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.66667, distinct(2)=399.903879, null(2)=6666.66667]
       │    ├── fd: (1)-->(2)
       │    ├── scan uv
@@ -548,6 +556,7 @@ project
       ├── fd: (2)-->(8)
       ├── full-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:5(int) v:6(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
       │    ├── stats: [rows=11666.6667, distinct(2)=400, null(2)=6666.66667]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -676,6 +685,7 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.99851, null(2)=2500, distinct(3)=499.977311, null(3)=50, distinct(5)=499, null(5)=0, distinct(2,3)=3160.69477, null(2,3)=25, distinct(3,5)=5000, null(3,5)=0, distinct(1,2,7)=5000, null(1,2,7)=0]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
@@ -697,6 +707,7 @@ SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
 left-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -739,6 +750,7 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 ----
 full-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -766,6 +778,7 @@ select
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── full-join (hash)
  │    ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  │    ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,5)=10000, null(3,5)=50, distinct(1,2,7)=10000, null(1,2,7)=0]
  │    ├── key: (1,7)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -791,6 +804,7 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
 ----
 full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=250000, distinct(3,5)=250000, null(3,5)=250000, distinct(1,2,7)=50000000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -966,6 +980,7 @@ SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
 left-join (cross)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
@@ -1000,6 +1015,7 @@ SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
 left-join (cross)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
@@ -1044,6 +1060,7 @@ SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 left-join (cross)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
@@ -1068,6 +1085,7 @@ SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 left-join (cross)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
@@ -1092,6 +1110,7 @@ SELECT * FROM (SELECT 1) FULL JOIN (VALUES (1), (2)) ON true
 inner-join (cross)
  ├── columns: "?column?":1(int!null) column1:2(int!null)
  ├── cardinality: [2 - 2]
+ ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
  ├── stats: [rows=2]
  ├── fd: ()-->(1)
  ├── values
@@ -1160,6 +1179,7 @@ project
  │    │    │    ├── fd: ()-->(15)
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    │    │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
  │    │    │    │    ├── scan table1
  │    │    │    │    │    └── stats: [rows=1000]
@@ -1184,6 +1204,7 @@ SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
 left-join (cross)
  ├── columns: x:1(int!null) x:2(int)
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
@@ -1392,6 +1413,7 @@ FROM
 ----
 full-join (cross)
  ├── columns: a:1(int) b:2(int) c:3(int) a:4(int) b:5(int) c:6(int)
+ ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
  ├── immutable
  ├── stats: [rows=100]
  ├── key: (1,2)

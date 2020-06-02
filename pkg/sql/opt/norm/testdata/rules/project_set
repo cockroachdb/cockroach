@@ -59,6 +59,7 @@ SELECT unnest(ARRAY[1,2,3]) FROM unnest(ARRAY[4,5,6])
 inner-join (cross)
  ├── columns: unnest:2!null
  ├── cardinality: [9 - 9]
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── values
  │    ├── cardinality: [3 - 3]
  │    ├── ()

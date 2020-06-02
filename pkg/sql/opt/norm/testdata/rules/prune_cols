@@ -692,6 +692,7 @@ project
  ├── fd: (5)-->(2,6)
  └── inner-join (hash)
       ├── columns: k:1!null i:2 x:5!null y:6
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: (5)
       ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
       ├── scan a
@@ -711,6 +712,7 @@ SELECT a.k, a.i, xy.* FROM a LEFT JOIN xy ON a.k=xy.x AND a.i<5
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 x:5 y:6
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2,5,6), (5)-->(6)
  ├── scan a
@@ -734,6 +736,7 @@ project
  ├── fd: (5)-->(6)
  ├── full-join (cross)
  │    ├── columns: k:1 x:5 y:6
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    ├── key: (1,5)
  │    ├── fd: (5)-->(6)
  │    ├── scan a
@@ -770,6 +773,7 @@ project
  ├── fd: (5)-->(6)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 x:5!null y:6 column7:7!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,7), (5)-->(6), (5)==(7), (7)==(5)
  │    ├── project
@@ -818,6 +822,7 @@ project
       ├── fd: (1)-->(2), (1)==(5), (5)==(1), (7)-->(8)
       ├── inner-join (hash)
       │    ├── columns: k:1!null i:2 x:5!null
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       │    ├── key: (5)
       │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
       │    ├── scan a
@@ -961,6 +966,7 @@ project
  ├── fd: (1)-->(2,4)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 k:3!null i:4
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
       ├── scan xy
@@ -980,6 +986,7 @@ SELECT xy.*, a.k, a.i FROM xy LEFT JOIN a ON xy.x=a.k AND a.i<xy.x
 ----
 left-join (hash)
  ├── columns: x:1!null y:2 k:3 i:4
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(4)
  ├── scan xy
@@ -1008,6 +1015,7 @@ project
  ├── fd: (1)-->(2)
  ├── full-join (cross)
  │    ├── columns: x:1 y:2 k:3
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2)
  │    ├── scan xy
@@ -1044,6 +1052,7 @@ project
  ├── fd: (1)-->(2)
  ├── inner-join (hash)
  │    ├── columns: x:1!null y:2 k:3!null i:4 column7:7!null
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    ├── key: (3)
  │    ├── fd: (1)-->(2), (3)-->(4,7), (1)==(7), (7)==(1)
  │    ├── scan xy
@@ -1096,6 +1105,7 @@ project
       │    └── fd: (1)-->(2)
       ├── inner-join (hash)
       │    ├── columns: k:3!null x:7!null y:8
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       │    ├── key: (7)
       │    ├── fd: (7)-->(8), (3)==(7), (7)==(3)
       │    ├── scan a
@@ -1138,6 +1148,7 @@ project
  ├── fd: (1)-->(5), (1,5)-->(7)
  ├── left-join (hash)
  │    ├── columns: k:1!null x:5
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
  │    ├── fd: (1)-->(5)
  │    ├── scan a
@@ -1248,6 +1259,7 @@ scalar-group-by
  │    │    ├── fd: (1)-->(6)
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: k:1!null i:2 y:6
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    ├── fd: (1)-->(2)
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1!null i:2
@@ -1462,6 +1474,7 @@ project
  ├── fd: (1)-->(6)
  └── inner-join (hash)
       ├── columns: k:1!null i:2!null x:5!null y:6
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: (5)
       ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
       ├── select
@@ -1984,6 +1997,7 @@ upsert a
       ├── left-join (cross)
       │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
       │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       │    ├── key: ()
       │    ├── fd: ()-->(5-12)
       │    ├── values
@@ -2040,6 +2054,7 @@ upsert a
       ├── left-join (cross)
       │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
       │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       │    ├── key: ()
       │    ├── fd: ()-->(5-12)
       │    ├── values
@@ -2087,6 +2102,7 @@ upsert "family"
  └── left-join (cross)
       ├── columns: column1:6!null column2:7!null column8:8 a:9 b:10
       ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── key: ()
       ├── fd: ()-->(6-10)
       ├── values
@@ -2144,6 +2160,7 @@ project
            ├── left-join (cross)
            │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column5:10!null a:11 c:13 d:14 e:15
            │    ├── cardinality: [1 - 1]
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    ├── key: ()
            │    ├── fd: ()-->(6-11,13-15)
            │    ├── values
@@ -2196,6 +2213,7 @@ upsert "family"
       ├── left-join (cross)
       │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 a:11 c:13 d:14
       │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       │    ├── key: ()
       │    ├── fd: ()-->(6-11,13,14)
       │    ├── values
@@ -2245,6 +2263,7 @@ upsert mutation
       ├── left-join (cross)
       │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 e:14
       │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       │    ├── key: ()
       │    ├── fd: ()-->(6-14)
       │    ├── values
@@ -2590,6 +2609,7 @@ project
            ├── left-join (cross)
            │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 rowid:21
            │    ├── cardinality: [1 - 1]
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    ├── volatile, side-effects
            │    ├── key: ()
            │    ├── fd: ()-->(9-16,21)
@@ -2688,6 +2708,7 @@ project
            ├── left-join (hash)
            │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 d:17 rowid:21
            │    ├── cardinality: [1 - 1]
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
            │    ├── volatile, side-effects
            │    ├── key: ()
            │    ├── fd: ()-->(9-17,21)
@@ -2748,6 +2769,7 @@ update abcde
  ├── fd: (1)-->(12,13)
  └── inner-join (hash)
       ├── columns: abcde.a:6!null abcde.b:7 abcde.c:8 abcde.d:9 abcde.e:10 "family".a:11!null "family".b:12 "family".c:13
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: (11)
       ├── fd: (6)-->(7-10), (7,8)~~>(6,9,10), (11)-->(12,13), (6)==(11), (11)==(6)
       ├── scan abcde

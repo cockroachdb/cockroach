@@ -10,11 +10,7 @@
 
 package props
 
-import (
-	"bytes"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-)
+import "bytes"
 
 // MultiplicityValue is a bitfield that describes whether a join duplicates
 // and/or filters rows from a particular input.
@@ -57,27 +53,9 @@ const (
 // join output exactly once. However, since this cannot be proven before
 // runtime, the duplicated and filtered flags must be set.
 //
-// When it is stored in the Relational properties of an operator other than a
-// join, JoinMultiplicity is simply used to bubble up unfiltered output columns.
-//
 // After initial construction by multiplicity_builder.go, JoinMultiplicity
 // should be considered immutable.
 type JoinMultiplicity struct {
-	// UnfilteredCols contains all columns from the operator's input(s) that are
-	// guaranteed to never have been filtered. Row duplication is allowed and
-	// other columns from the same base table need not be included. This allows
-	// the validity of properties from the base table to be verified (for example,
-	// a foreign-key relation).
-	//
-	// UnfilteredCols can be populated for non-join as well as join operators
-	// because the UnfilteredCols fields of a join's inputs are used in the
-	// construction of its JoinMultiplicity.
-	//
-	// UnfilteredCols should only be used by MultiplicityBuilder to aid in
-	// initializing the other fields. Other callers should only use the property
-	// methods (e.g. JoinFiltersMatchAllLeftRows).
-	UnfilteredCols opt.ColSet
-
 	// LeftMultiplicity and RightMultiplicity describe how the left and right
 	// input rows respectively will be affected by the join operator.
 	// As an example, using the query from above:
@@ -129,7 +107,7 @@ func (mp *JoinMultiplicity) String() string {
 
 	var buf bytes.Buffer
 	const zeroOrMore = "zero-or-more"
-	const oneOrZero = "one-or-zero"
+	const zeroOrOne = "zero-or-one"
 	const oneOrMore = "one-or-more"
 	const exactlyOne = "exactly-one"
 
@@ -148,7 +126,7 @@ func (mp *JoinMultiplicity) String() string {
 			if preservesRows {
 				writeFlag(exactlyOne)
 			} else {
-				writeFlag(oneOrZero)
+				writeFlag(zeroOrOne)
 			}
 		} else {
 			if preservesRows {

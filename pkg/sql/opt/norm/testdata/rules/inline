@@ -354,6 +354,7 @@ SELECT * FROM (SELECT 1 AS one) LEFT JOIN a ON k=one
 left-join (cross)
  ├── columns: one:1!null k:2 i:3 f:4 s:5 j:6
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: ()
  ├── fd: ()-->(1-6)
  ├── values
@@ -381,6 +382,7 @@ SELECT * FROM a FULL JOIN (SELECT 1 AS one) ON k=one
 full-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 one:6
  ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -411,6 +413,7 @@ SELECT * FROM a INNER JOIN (SELECT 1 AS one, y FROM xy) ON k=y
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3 s:4 j:5 one:8!null y:7!null
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── fd: ()-->(8), (1)-->(2-5), (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -752,6 +755,7 @@ project
  │    ├── fd: (13)-->(11)
  │    ├── left-join (cross)
  │    │    ├── columns: expr:6!null true:10 rownum:13!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── fd: (13)-->(6)
  │    │    ├── ordinality
  │    │    │    ├── columns: expr:6!null rownum:13!null

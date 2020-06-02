@@ -152,6 +152,7 @@ Initial expression
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+   ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
    ├── key: (1)
    ├── fd: (1)-->(2-6), (4)-->(5,6)
    ├── scan orders
@@ -179,6 +180,7 @@ NormalizeInConst
 ================================================================================
    left-join (hash)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
     ├── key: (1)
     ├── fd: (1)-->(2-6), (4)-->(5,6)
     ├── scan orders
@@ -214,6 +216,7 @@ CommuteLeftJoin (higher cost)
   -left-join (hash)
   +right-join (hash)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+  - ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
     ├── key: (1)
     ├── fd: (1)-->(2-6), (4)-->(5,6)
   + ├── scan customers
@@ -248,6 +251,7 @@ GenerateLookupJoins (higher cost)
   -left-join (hash)
   +left-join (lookup customers)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+  - ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
   + ├── key columns: [2] = [4]
   + ├── lookup columns are key
     ├── key: (1)
@@ -321,6 +325,7 @@ Final best expression
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+   ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
    ├── key: (1)
    ├── fd: (1)-->(2-6), (4)-->(5,6)
    ├── scan orders

@@ -173,6 +173,7 @@ project
       │         │    │    ├── fd: ()-->(6,27,46), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13), (1)==(17,29), (17)==(1,29), (29,30)-->(32), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (30)==(34), (34)==(30), (29)==(1,17)
       │         │    │    ├── inner-join (hash)
       │         │    │    │    ├── columns: ps_partkey:29!null ps_suppkey:30!null ps_supplycost:32!null s_suppkey:34!null s_nationkey:37!null n_nationkey:41!null n_regionkey:43!null r_regionkey:45!null r_name:46!null
+      │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    ├── key: (29,34)
       │         │    │    │    ├── fd: ()-->(46), (29,30)-->(32), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (30)==(34), (34)==(30)
       │         │    │    │    ├── scan partsupp
@@ -181,6 +182,7 @@ project
       │         │    │    │    │    └── fd: (29,30)-->(32)
       │         │    │    │    ├── inner-join (hash)
       │         │    │    │    │    ├── columns: s_suppkey:34!null s_nationkey:37!null n_nationkey:41!null n_regionkey:43!null r_regionkey:45!null r_name:46!null
+      │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    │    ├── key: (34)
       │         │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37)
       │         │    │    │    │    ├── scan supplier@s_nk
@@ -209,10 +211,12 @@ project
       │         │    │    │         └── s_suppkey:34 = ps_suppkey:30 [outer=(30,34), constraints=(/30: (/NULL - ]; /34: (/NULL - ]), fd=(30)==(34), (34)==(30)]
       │         │    │    ├── inner-join (hash)
       │         │    │    │    ├── columns: p_partkey:1!null p_mfgr:3!null p_type:5!null p_size:6!null s_suppkey:10!null s_name:11!null s_address:12!null s_nationkey:13!null s_phone:14!null s_acctbal:15!null s_comment:16!null ps_partkey:17!null ps_suppkey:18!null ps_supplycost:20!null n_nationkey:22!null n_name:23!null n_regionkey:24!null r_regionkey:26!null r_name:27!null
+      │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    ├── key: (17,18)
       │         │    │    │    ├── fd: ()-->(6,27), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13), (1)==(17), (17)==(1)
       │         │    │    │    ├── inner-join (hash)
       │         │    │    │    │    ├── columns: s_suppkey:10!null s_name:11!null s_address:12!null s_nationkey:13!null s_phone:14!null s_acctbal:15!null s_comment:16!null ps_partkey:17!null ps_suppkey:18!null ps_supplycost:20!null n_nationkey:22!null n_name:23!null n_regionkey:24!null r_regionkey:26!null r_name:27!null
+      │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    │    ├── key: (17,18)
       │         │    │    │    │    ├── fd: ()-->(27), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13)
       │         │    │    │    │    ├── scan partsupp
@@ -221,6 +225,7 @@ project
       │         │    │    │    │    │    └── fd: (17,18)-->(20)
       │         │    │    │    │    ├── inner-join (hash)
       │         │    │    │    │    │    ├── columns: s_suppkey:10!null s_name:11!null s_address:12!null s_nationkey:13!null s_phone:14!null s_acctbal:15!null s_comment:16!null n_nationkey:22!null n_name:23!null n_regionkey:24!null r_regionkey:26!null r_name:27!null
+      │         │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    │    │    ├── key: (10)
       │         │    │    │    │    │    ├── fd: ()-->(27), (22)-->(23,24), (24)==(26), (26)==(24), (10)-->(11-16), (13)==(22), (22)==(13)
       │         │    │    │    │    │    ├── scan supplier
@@ -353,6 +358,7 @@ limit
  │         │    ├── fd: (18)-->(13,16)
  │         │    ├── inner-join (hash)
  │         │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:9!null o_custkey:10!null o_orderdate:13!null o_shippriority:16!null l_orderkey:18!null l_extendedprice:23!null l_discount:24!null l_shipdate:28!null
+ │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         │    │    ├── fd: ()-->(7), (9)-->(10,13,16), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
  │         │    │    ├── select
  │         │    │    │    ├── columns: l_orderkey:18!null l_extendedprice:23!null l_discount:24!null l_shipdate:28!null
@@ -526,17 +532,21 @@ sort
       │    ├── columns: column48:48!null n_name:42!null
       │    ├── inner-join (hash)
       │    │    ├── columns: c_custkey:1!null c_nationkey:4!null o_orderkey:9!null o_custkey:10!null o_orderdate:13!null l_orderkey:18!null l_suppkey:20!null l_extendedprice:23!null l_discount:24!null s_suppkey:34!null s_nationkey:37!null n_nationkey:41!null n_name:42!null n_regionkey:43!null r_regionkey:45!null r_name:46!null
+      │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    ├── fd: ()-->(46), (1)-->(4), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(4,41), (41)==(4,37), (20)==(34), (34)==(20), (9)==(18), (18)==(9), (1)==(10), (10)==(1), (4)==(37,41)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: o_orderkey:9!null o_custkey:10!null o_orderdate:13!null l_orderkey:18!null l_suppkey:20!null l_extendedprice:23!null l_discount:24!null s_suppkey:34!null s_nationkey:37!null n_nationkey:41!null n_name:42!null n_regionkey:43!null r_regionkey:45!null r_name:46!null
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── fd: ()-->(46), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20), (9)==(18), (18)==(9)
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── columns: l_orderkey:18!null l_suppkey:20!null l_extendedprice:23!null l_discount:24!null s_suppkey:34!null s_nationkey:37!null n_nationkey:41!null n_name:42!null n_regionkey:43!null r_regionkey:45!null r_name:46!null
+      │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20)
       │    │    │    │    ├── scan lineitem
       │    │    │    │    │    └── columns: l_orderkey:18!null l_suppkey:20!null l_extendedprice:23!null l_discount:24!null
       │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    ├── columns: s_suppkey:34!null s_nationkey:37!null n_nationkey:41!null n_name:42!null n_regionkey:43!null r_regionkey:45!null r_name:46!null
+      │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    │    │    ├── key: (34)
       │    │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37)
       │    │    │    │    │    ├── scan supplier@s_nk
@@ -713,6 +723,7 @@ group-by
  │         ├── immutable
  │         ├── inner-join (hash)
  │         │    ├── columns: s_suppkey:1!null s_nationkey:4!null l_orderkey:8!null l_suppkey:10!null l_extendedprice:13!null l_discount:14!null l_shipdate:18!null o_orderkey:24!null o_custkey:25!null c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
+ │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         │    ├── fd: (1)-->(4), (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(41), (41)==(4)
  │         │    ├── inner-join (hash)
  │         │    │    ├── columns: l_orderkey:8!null l_suppkey:10!null l_extendedprice:13!null l_discount:14!null l_shipdate:18!null o_orderkey:24!null o_custkey:25!null c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
@@ -723,6 +734,7 @@ group-by
  │         │    │    │    ├── fd: (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25)
  │         │    │    │    ├── inner-join (hash)
  │         │    │    │    │    ├── columns: o_orderkey:24!null o_custkey:25!null c_custkey:33!null c_nationkey:36!null
+ │         │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
  │         │    │    │    │    ├── key: (24)
  │         │    │    │    │    ├── fd: (33)-->(36), (24)-->(25), (25)==(33), (33)==(25)
  │         │    │    │    │    ├── scan customer@c_nk
@@ -858,6 +870,7 @@ sort
       │    │    │    │    ├── fd: ()-->(5,59), (10)-->(13), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34), (17)==(33), (33)==(17), (10)==(19), (19)==(10), (13)==(54), (54)==(13), (1)==(18), (18)==(1)
       │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    ├── columns: s_suppkey:10!null s_nationkey:13!null l_orderkey:17!null l_partkey:18!null l_suppkey:19!null l_extendedprice:22!null l_discount:23!null o_orderkey:33!null o_custkey:34!null o_orderdate:37!null c_custkey:42!null c_nationkey:45!null n1.n_nationkey:50!null n1.n_regionkey:52!null n2.n_nationkey:54!null n2.n_name:55!null r_regionkey:58!null r_name:59!null
+      │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    │    │    ├── fd: ()-->(59), (10)-->(13), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34), (17)==(33), (33)==(17), (10)==(19), (19)==(10), (13)==(54), (54)==(13)
       │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    ├── columns: l_orderkey:17!null l_partkey:18!null l_suppkey:19!null l_extendedprice:22!null l_discount:23!null o_orderkey:33!null o_custkey:34!null o_orderdate:37!null c_custkey:42!null c_nationkey:45!null n1.n_nationkey:50!null n1.n_regionkey:52!null n2.n_nationkey:54!null n2.n_name:55!null r_regionkey:58!null r_name:59!null
@@ -868,6 +881,7 @@ sort
       │    │    │    │    │    │    │    ├── fd: ()-->(59), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34)
       │    │    │    │    │    │    │    ├── inner-join (cross)
       │    │    │    │    │    │    │    │    ├── columns: c_custkey:42!null c_nationkey:45!null n1.n_nationkey:50!null n1.n_regionkey:52!null n2.n_nationkey:54!null n2.n_name:55!null r_regionkey:58!null r_name:59!null
+      │    │    │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
       │    │    │    │    │    │    │    │    ├── key: (42,54)
       │    │    │    │    │    │    │    │    ├── fd: ()-->(59), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45)
       │    │    │    │    │    │    │    │    ├── scan n2
@@ -876,6 +890,7 @@ sort
       │    │    │    │    │    │    │    │    │    └── fd: (54)-->(55)
       │    │    │    │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    │    │    │    ├── columns: c_custkey:42!null c_nationkey:45!null n1.n_nationkey:50!null n1.n_regionkey:52!null r_regionkey:58!null r_name:59!null
+      │    │    │    │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    │    │    │    │    │    │    ├── key: (42)
       │    │    │    │    │    │    │    │    │    ├── fd: ()-->(59), (50)-->(52), (52)==(58), (58)==(52), (42)-->(45), (45)==(50), (50)==(45)
       │    │    │    │    │    │    │    │    │    ├── scan customer@c_nk
@@ -1014,6 +1029,7 @@ sort
       │    │    ├── fd: (1)-->(2), (10)-->(13), (33,34)-->(36), (38)-->(42), (47)-->(48), (19)==(10,34), (34)==(10,19), (18)==(1,33), (33)==(1,18), (17)==(38), (38)==(17), (10)==(19,34), (13)==(47), (47)==(13), (1)==(18,33)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: s_suppkey:10!null s_nationkey:13!null l_orderkey:17!null l_partkey:18!null l_suppkey:19!null l_quantity:21!null l_extendedprice:22!null l_discount:23!null ps_partkey:33!null ps_suppkey:34!null ps_supplycost:36!null o_orderkey:38!null o_orderdate:42!null n_nationkey:47!null n_name:48!null
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── fd: (10)-->(13), (33,34)-->(36), (38)-->(42), (47)-->(48), (19)==(10,34), (34)==(10,19), (18)==(33), (33)==(18), (17)==(38), (38)==(17), (10)==(19,34), (13)==(47), (47)==(13)
       │    │    │    ├── inner-join (cross)
       │    │    │    │    ├── columns: l_orderkey:17!null l_partkey:18!null l_suppkey:19!null l_quantity:21!null l_extendedprice:22!null l_discount:23!null ps_partkey:33!null ps_suppkey:34!null ps_supplycost:36!null o_orderkey:38!null o_orderdate:42!null n_nationkey:47!null n_name:48!null
@@ -1029,6 +1045,7 @@ sort
       │    │    │    │    │    ├── fd: (38)-->(42), (33,34)-->(36), (19)==(34), (34)==(19), (18)==(33), (33)==(18), (17)==(38), (38)==(17)
       │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    ├── columns: l_orderkey:17!null l_partkey:18!null l_suppkey:19!null l_quantity:21!null l_extendedprice:22!null l_discount:23!null ps_partkey:33!null ps_suppkey:34!null ps_supplycost:36!null
+      │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
       │    │    │    │    │    │    ├── fd: (33,34)-->(36), (19)==(34), (34)==(19), (18)==(33), (33)==(18)
       │    │    │    │    │    │    ├── scan partsupp
       │    │    │    │    │    │    │    ├── columns: ps_partkey:33!null ps_suppkey:34!null ps_supplycost:36!null
@@ -1232,6 +1249,7 @@ sort
       │    │    ├── immutable
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: ps_partkey:1!null ps_suppkey:2!null ps_availqty:3!null ps_supplycost:4!null s_suppkey:6!null s_nationkey:9!null n_nationkey:13!null n_name:14!null
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── key: (1,6)
       │    │    │    ├── fd: ()-->(14), (1,2)-->(3,4), (6)-->(9), (9)==(13), (13)==(9), (2)==(6), (6)==(2)
       │    │    │    ├── scan partsupp
@@ -1282,6 +1300,7 @@ sort
                           │    │    ├── immutable
                           │    │    ├── inner-join (hash)
                           │    │    │    ├── columns: ps_suppkey:20!null ps_availqty:21!null ps_supplycost:22!null s_suppkey:24!null s_nationkey:27!null n_nationkey:31!null n_name:32!null
+                          │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
                           │    │    │    ├── fd: ()-->(32), (24)-->(27), (27)==(31), (31)==(27), (20)==(24), (24)==(20)
                           │    │    │    ├── scan partsupp
                           │    │    │    │    └── columns: ps_suppkey:20!null ps_availqty:21!null ps_supplycost:22!null
@@ -1440,6 +1459,7 @@ sort
       │    ├── fd: (1)-->(18)
       │    ├── left-join (hash)
       │    │    ├── columns: c_custkey:1!null o_orderkey:9 o_custkey:10 o_comment:17
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
       │    │    ├── key: (1,9)
       │    │    ├── fd: (9)-->(10,17)
       │    │    ├── scan customer@c_nk
@@ -1504,6 +1524,7 @@ project
  │    │    ├── columns: column26:26!null column28:28!null
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: l_partkey:2!null l_extendedprice:6!null l_discount:7!null l_shipdate:11!null p_partkey:17!null p_type:21!null
+ │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
  │    │    │    ├── fd: (17)-->(21), (2)==(17), (17)==(2)
  │    │    │    ├── scan part
  │    │    │    │    ├── columns: p_partkey:17!null p_type:21!null
@@ -2148,6 +2169,7 @@ sort
            │         │         │         │    ├── fd: (12,13)-->(14,42)
            │         │         │         │    ├── left-join (hash)
            │         │         │         │    │    ├── columns: ps_partkey:12!null ps_suppkey:13!null ps_availqty:14!null l_partkey:27 l_suppkey:28 l_quantity:30 l_shipdate:36
+           │         │         │         │    │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
            │         │         │         │    │    ├── fd: (12,13)-->(14)
            │         │         │         │    │    ├── scan partsupp
            │         │         │         │    │    │    ├── columns: ps_partkey:12!null ps_suppkey:13!null ps_availqty:14!null

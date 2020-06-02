@@ -226,6 +226,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"RelPropsPtr":         {fullName: "props.Relational", isPointer: true, usePointerIntern: true},
 		"ScalarProps":         {fullName: "props.Scalar"},
 		"FuncDepSet":          {fullName: "props.FuncDepSet"},
+		"JoinMultiplicity":    {fullName: "props.JoinMultiplicity"},
 		"OpaqueMetadata":      {fullName: "opt.OpaqueMetadata", isInterface: true},
 		"JobCommand":          {fullName: "tree.JobCommand", passByVal: true},
 		"IndexOrdinal":        {fullName: "cat.IndexOrdinal", passByVal: true},

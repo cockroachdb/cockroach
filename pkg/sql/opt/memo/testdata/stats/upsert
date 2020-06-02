@@ -123,6 +123,7 @@ with &1
  │         │    ├── fd: ()-->(8,12), (5)~~>(4), (9)-->(10,11)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
+ │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │         │    │    ├── immutable
  │         │    │    ├── stats: [rows=9.94974874, distinct(9)=9.94974874, null(9)=0]
  │         │    │    ├── lax-key: (5,9)
@@ -268,6 +269,7 @@ upsert uv
       │    ├── fd: ()-->(10), (6)~~>(7), (8)-->(9), (9)~~>(8)
       │    ├── left-join (hash)
       │    │    ├── columns: z:6(int) column7:7(int) u:8(int) v:9(int)
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── volatile, side-effects
       │    │    ├── stats: [rows=1000, distinct(9)=991, null(9)=0]
       │    │    ├── lax-key: (6,8)
@@ -349,6 +351,7 @@ upsert mno
       │    ├── fd: ()-->(10), (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7)
       │    ├── left-join (hash)
       │    │    ├── columns: m:4(int!null) n:5(int) o:6(int) m:7(int) n:8(int) o:9(int)
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── stats: [rows=2000, distinct(8)=21.0526316, null(8)=1988.94737, distinct(9)=21.0526316, null(9)=2000]
       │    │    ├── key: (4,7)
       │    │    ├── fd: (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7)

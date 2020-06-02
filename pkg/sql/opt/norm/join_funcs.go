@@ -452,7 +452,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	// Asking whether a join will match all left rows is the same as asking
 	// whether an inner join with the same inputs would filter any rows from its
 	// left input.
-	multiplicity := memo.GetJoinMultiplicityFromInputs(opt.InnerJoinOp, left, right, on)
+	multiplicity := memo.DeriveJoinMultiplicityFromInputs(opt.InnerJoinOp, left, right, on)
 	return multiplicity.JoinPreservesLeftRows()
 }
 

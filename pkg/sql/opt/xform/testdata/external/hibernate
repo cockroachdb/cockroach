@@ -667,11 +667,13 @@ distinct-on
  ├── fd: (10)-->(11-15)
  ├── inner-join (hash)
  │    ├── columns: phone0_.id:1!null person_id:4!null calls1_.phone_id:9!null person2_.id:10!null address:11 createdon:12 name:13 nickname:14 version:15!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    ├── fd: (1)-->(4), (1)==(9), (9)==(1), (10)-->(11-15), (4)==(10), (10)==(4)
  │    ├── scan calls1_
  │    │    └── columns: calls1_.phone_id:9
  │    ├── inner-join (hash)
  │    │    ├── columns: phone0_.id:1!null person_id:4!null person2_.id:10!null address:11 createdon:12 name:13 nickname:14 version:15!null
+ │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(4), (10)-->(11-15), (4)==(10), (10)==(4)
  │    │    ├── scan person2_
@@ -745,6 +747,7 @@ project
       │    ├── fd: (1)-->(2-4,10)
       │    ├── inner-join (hash)
       │    │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 person_id:4 calls1_.id:6!null phone_id:9!null
+      │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       │    │    ├── key: (6)
       │    │    ├── fd: (1)-->(2-4), (6)-->(9), (1)==(9), (9)==(1)
       │    │    ├── scan phone0_
@@ -804,6 +807,7 @@ project
       │    ├── fd: (1)-->(2-6,12)
       │    ├── left-join (hash)
       │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:10
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
       │    │    ├── fd: (1)-->(2-6)
       │    │    ├── scan person0_
       │    │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null
@@ -864,6 +868,7 @@ project
       │    ├── fd: (1)-->(2-4,10)
       │    ├── inner-join (hash)
       │    │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 person_id:4 calls1_.id:6!null phone_id:9!null
+      │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       │    │    ├── key: (6)
       │    │    ├── fd: (1)-->(2-4), (6)-->(9), (1)==(9), (9)==(1)
       │    │    ├── scan phone0_
@@ -923,6 +928,7 @@ project
       │    ├── fd: (1)-->(2-6,12)
       │    ├── inner-join (hash)
       │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:10!null order_id:11!null
+      │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       │    │    ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
       │    │    ├── scan person0_
       │    │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null
@@ -1494,6 +1500,7 @@ project
       │    ├── fd: (1)-->(2,3,7)
       │    ├── left-join (hash)
       │    │    ├── columns: id:1!null email:2 currentproject_id:3 employee_id:4
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
       │    │    ├── fd: (1)-->(2,3)
       │    │    ├── scan componenti0_
       │    │    │    ├── columns: id:1!null email:2 currentproject_id:3
@@ -1995,6 +2002,7 @@ project
  │    │    │    ├── columns: column16:16 li.customerid:8!null li.ordernumber:9!null
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:8!null li.ordernumber:9!null li.productid:10!null li.quantity:11 p.productid:12!null cost:14
+ │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │    │    ├── key: (8,9,12)
  │    │    │    │    ├── fd: (8-10)-->(11), (12)-->(14), (10)==(12), (12)==(10)
  │    │    │    │    ├── scan li
@@ -2111,6 +2119,7 @@ project
  │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24,29)
  │    ├── left-join (hash)
  │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24 li.productid:27 li.quantity:28
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24)
  │    │    ├── group-by
  │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24
@@ -2119,13 +2128,16 @@ project
  │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24)
  │    │    │    ├── left-join (hash)
  │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 li.customerid:15 li.ordernumber:16 column23:23
+ │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(11-14)
  │    │    │    │    ├── left-join (hash)
  │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14
+ │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    │    │    │    ├── key: (1,4,5,7-9)
  │    │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(11-14)
  │    │    │    │    │    ├── left-join (hash)
  │    │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10
+ │    │    │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    │    │    │    ├── key: (1,4,5,7-9)
  │    │    │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10)
  │    │    │    │    │    │    ├── left-join (merge)
@@ -2162,6 +2174,7 @@ project
  │    │    │    │    │    ├── columns: column23:23 li.customerid:15!null li.ordernumber:16!null
  │    │    │    │    │    ├── inner-join (hash)
  │    │    │    │    │    │    ├── columns: li.customerid:15!null li.ordernumber:16!null li.productid:17!null li.quantity:18 p.productid:19!null p.cost:21
+ │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │    │    │    │    ├── key: (15,16,19)
  │    │    │    │    │    │    ├── fd: (15-17)-->(18), (19)-->(21), (17)==(19), (19)==(17)
  │    │    │    │    │    │    ├── scan li
@@ -2275,6 +2288,7 @@ project
  │    │    │    ├── columns: column16:16 li.customerid:8!null li.ordernumber:9!null
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:8!null li.ordernumber:9!null li.productid:10!null li.quantity:11 p.productid:12!null cost:14
+ │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │    │    ├── key: (8,9,12)
  │    │    │    │    ├── fd: (8-10)-->(11), (12)-->(14), (10)==(12), (12)==(10)
  │    │    │    │    ├── scan li
@@ -2358,6 +2372,7 @@ project
  │    ├── fd: (1,2)-->(3,13)
  │    ├── left-join (hash)
  │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null li.customerid:4 li.ordernumber:5 column12:12
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  │    │    ├── fd: (1,2)-->(3)
  │    │    ├── scan order0_
  │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null
@@ -2367,6 +2382,7 @@ project
  │    │    │    ├── columns: column12:12 li.customerid:4!null li.ordernumber:5!null
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:4!null li.ordernumber:5!null li.productid:6!null quantity:7 p.productid:8!null cost:10
+ │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │    │    ├── key: (4,5,8)
  │    │    │    │    ├── fd: (4-6)-->(7), (8)-->(10), (6)==(8), (8)==(6)
  │    │    │    │    ├── scan li

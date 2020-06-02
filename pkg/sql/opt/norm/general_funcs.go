@@ -850,7 +850,7 @@ func (c *CustomFuncs) ExtractGroupingOrdering(
 // FullJoin is guaranteed not to output any given row from its left input more
 // than once.
 func (c *CustomFuncs) JoinDoesNotDuplicateLeftRows(join memo.RelExpr) bool {
-	mult := memo.DeriveJoinMultiplicity(join)
+	mult := memo.GetJoinMultiplicity(join)
 	return mult.JoinDoesNotDuplicateLeftRows()
 }
 
@@ -858,14 +858,14 @@ func (c *CustomFuncs) JoinDoesNotDuplicateLeftRows(join memo.RelExpr) bool {
 // or FullJoin is guaranteed not to output any given row from its right input
 // more than once.
 func (c *CustomFuncs) JoinDoesNotDuplicateRightRows(join memo.RelExpr) bool {
-	mult := memo.DeriveJoinMultiplicity(join)
+	mult := memo.GetJoinMultiplicity(join)
 	return mult.JoinDoesNotDuplicateRightRows()
 }
 
 // JoinPreservesLeftRows returns true if the given InnerJoin, LeftJoin or
 // FullJoin is guaranteed to output every row from its left input at least once.
 func (c *CustomFuncs) JoinPreservesLeftRows(join memo.RelExpr) bool {
-	mult := memo.DeriveJoinMultiplicity(join)
+	mult := memo.GetJoinMultiplicity(join)
 	return mult.JoinPreservesLeftRows()
 }
 
@@ -873,7 +873,7 @@ func (c *CustomFuncs) JoinPreservesLeftRows(join memo.RelExpr) bool {
 // FullJoin is guaranteed to output every row from its right input at least
 // once.
 func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
-	mult := memo.DeriveJoinMultiplicity(join)
+	mult := memo.GetJoinMultiplicity(join)
 	return mult.JoinPreservesRightRows()
 }
 
