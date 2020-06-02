@@ -353,32 +353,30 @@ const (
 	RangeEventTableID                    = 13
 	UITableID                            = 14
 	JobsTableID                          = 15
-	MetaRangesID                         = 16
-	SystemRangesID                       = 17
-	TimeseriesRangesID                   = 18
+	MetaRangesID                         = 16 // pseudo
+	SystemRangesID                       = 17 // pseudo
+	TimeseriesRangesID                   = 18 // pseudo
 	WebSessionsTableID                   = 19
 	TableStatisticsTableID               = 20
 	LocationsTableID                     = 21
-	LivenessRangesID                     = 22
+	LivenessRangesID                     = 22 // pseudo
 	RoleMembersTableID                   = 23
 	CommentsTableID                      = 24
 	ReplicationConstraintStatsTableID    = 25
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
-	PublicSchemaID                       = 29
+	PublicSchemaID                       = 29 // pseudo
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
-	NamespaceTableID = 30
-
-	ProtectedTimestampsMetaTableID    = 31
-	ProtectedTimestampsRecordsTableID = 32
-
-	RoleOptionsTableID = 33
-
+	NamespaceTableID                    = 30
+	ProtectedTimestampsMetaTableID      = 31
+	ProtectedTimestampsRecordsTableID   = 32
+	RoleOptionsTableID                  = 33
 	StatementBundleChunksTableID        = 34
 	StatementDiagnosticsRequestsTableID = 35
 	StatementDiagnosticsTableID         = 36
+	TenantsRangesID                     = 37 // pseudo
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
@@ -400,4 +398,22 @@ const (
 // there's no table descriptor). They're grouped here because the cluster
 // bootstrap process needs to create splits for them; splits for the tables
 // happen separately.
-var PseudoTableIDs = []uint32{MetaRangesID, SystemRangesID, TimeseriesRangesID, LivenessRangesID, PublicSchemaID}
+var PseudoTableIDs = []uint32{
+	MetaRangesID,
+	SystemRangesID,
+	TimeseriesRangesID,
+	LivenessRangesID,
+	PublicSchemaID,
+	TenantsRangesID,
+}
+
+// MaxPseudoTableID is the largest ID in PseudoTableIDs.
+var MaxPseudoTableID = func() uint32 {
+	var max uint32
+	for _, id := range PseudoTableIDs {
+		if max < id {
+			max = id
+		}
+	}
+	return max
+}()

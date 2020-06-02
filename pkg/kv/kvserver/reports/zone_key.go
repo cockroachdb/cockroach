@@ -14,12 +14,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 )
 
 // ZoneKey is the index of the first level in the constraint conformance report.
 type ZoneKey struct {
 	// ZoneID is the id of the zone this key is referencing.
-	ZoneID uint32
+	ZoneID config.SystemTenantObjectID
 	// SubzoneID identifies what subzone, if any, this key is referencing. The
 	// zero value (also named NoSubzone) indicates that the key is referring to a
 	// zone, not a subzone.
@@ -34,7 +35,7 @@ const NoSubzone base.SubzoneID = 0
 //
 // Use NoSubzone for subzoneID to indicate that the key references a zone, not a
 // subzone.
-func MakeZoneKey(zoneID uint32, subzoneID base.SubzoneID) ZoneKey {
+func MakeZoneKey(zoneID config.SystemTenantObjectID, subzoneID base.SubzoneID) ZoneKey {
 	return ZoneKey{
 		ZoneID:    zoneID,
 		SubzoneID: subzoneID,
