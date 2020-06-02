@@ -690,9 +690,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if r.JoinSize > 1 {
 			tp.Childf("join-size: %d", r.JoinSize)
 		}
-		switch e.Op() {
-		case opt.InnerJoinOp, opt.LeftJoinOp, opt.FullJoinOp:
-			if s := r.MultiplicityProps.String(); (r.Available&props.MultiplicityProps) != 0 && s != "" {
+		if !r.UnfilteredCols.Empty() {
+			tp.Childf("unfiltered-cols: %s", r.UnfilteredCols.String())
+		}
+		if join, ok := e.(multiplicityJoin); ok {
+			mult := join.getMultiplicity()
+			if s := mult.String(); s != "" {
 				tp.Childf("multiplicity: %s", s)
 			}
 		}

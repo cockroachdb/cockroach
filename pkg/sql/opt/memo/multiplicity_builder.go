@@ -18,66 +18,47 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DeriveJoinMultiplicity returns a JoinMultiplicity struct that describes how a
-// join operator will affect the rows of its left and right inputs (e.g.
-// duplicated and/or filtered). When the function is called on an operator other
-// than an InnerJoin, a LeftJoin, or a FullJoin, it simply populates the
-// UnfilteredCols field of the JoinMultiplicity for that operator and leaves the
-// join fields unchanged.
-//
-// DeriveJoinMultiplicity recursively derives the UnfilteredCols field and
-// populates the props.Relational.Rule.MultiplicityProps field as it goes to
-// make future calls faster.
-func DeriveJoinMultiplicity(in RelExpr) props.JoinMultiplicity {
-	// If the MultiplicityProps property has already been derived, return it
-	// immediately.
-	relational := in.Relational()
-	if relational.IsAvailable(props.MultiplicityProps) {
-		return relational.Rule.MultiplicityProps
-	}
-	relational.Rule.Available |= props.MultiplicityProps
-	var multiplicity props.JoinMultiplicity
-
-	// Derive MultiplicityProps now.
+// initJoinMultiplicity initializes a JoinMultiplicity for the given InnerJoin,
+// LeftJoin or FullJoin and returns it. initJoinMultiplicity should only be
+// called during construction of the join by the initUnexportedFields methods.
+// Panics if called on an operator other than an InnerJoin, LeftJoin, or
+// FullJoin.
+func initJoinMultiplicity(in RelExpr) {
 	switch t := in.(type) {
-	case *ScanExpr:
-		// All un-limited, unconstrained output columns are unfiltered columns.
-		if t.HardLimit == 0 && t.Constraint == nil {
-			multiplicity.UnfilteredCols = relational.OutputCols
-		}
-
-	case *ProjectExpr:
-		// Project never filters rows, so it passes through unfiltered columns.
-		unfilteredCols := DeriveJoinMultiplicity(t.Input).UnfilteredCols
-		multiplicity.UnfilteredCols = unfilteredCols.Intersection(relational.OutputCols)
-
 	case *InnerJoinExpr, *LeftJoinExpr, *FullJoinExpr:
+		// Calculate JoinMultiplicity.
 		left := t.Child(0).(RelExpr)
 		right := t.Child(1).(RelExpr)
 		filters := *t.Child(2).(*FiltersExpr)
-		multiplicity = GetJoinMultiplicityFromInputs(t.Op(), left, right, filters)
-
-		// Use the JoinMultiplicity to determine whether unfiltered columns can be
-		// passed through.
-		if multiplicity.JoinPreservesLeftRows() {
-			multiplicity.UnfilteredCols.UnionWith(DeriveJoinMultiplicity(left).UnfilteredCols)
-		}
-		if multiplicity.JoinPreservesRightRows() {
-			multiplicity.UnfilteredCols.UnionWith(DeriveJoinMultiplicity(right).UnfilteredCols)
-		}
+		multiplicity := GetJoinMultiplicityFromInputs(t.Op(), left, right, filters)
+		t.(multiplicityJoin).setMultiplicity(multiplicity)
 
 	default:
-		// An empty JoinMultiplicity is returned.
+		panic(errors.AssertionFailedf("invalid operator type: %v", t.Op()))
 	}
-	relational.Rule.MultiplicityProps = multiplicity
-	return relational.Rule.MultiplicityProps
+}
+
+// GetJoinMultiplicity returns a JoinMultiplicity struct that describes how a
+// join operator will affect the rows of its left and right inputs (e.g.
+// duplicated and/or filtered). Panics if the method is called on an operator
+// that does not support JoinMultiplicity (any operator other than an InnerJoin,
+// LeftJoin, or FullJoin).
+func GetJoinMultiplicity(in RelExpr) props.JoinMultiplicity {
+	if join, ok := in.(multiplicityJoin); ok {
+		// JoinMultiplicity has already been initialized during construction of the
+		// join, so simply return it.
+		return join.getMultiplicity()
+	}
+	panic(errors.AssertionFailedf("invalid operator type: %v", in.Op()))
 }
 
 // GetJoinMultiplicityFromInputs returns a JoinMultiplicity that describes how a
 // join of the given type with the given inputs and filters will affect the rows
-// of its inputs. When possible, DeriveJoinMultiplicity should be called instead
+// of its inputs. When possible, GetJoinMultiplicity should be called instead
 // because GetJoinMultiplicityFromInputs cannot take advantage of a previously
-// calculated JoinMultiplicity.
+// calculated JoinMultiplicity. The UnfilteredCols Relational property is used
+// in calculating the JoinMultiplicity, and is lazily derived by a call to
+// deriveUnfilteredCols.
 func GetJoinMultiplicityFromInputs(
 	joinOp opt.Operator, left, right RelExpr, filters FiltersExpr,
 ) props.JoinMultiplicity {
@@ -99,6 +80,53 @@ func GetJoinMultiplicityFromInputs(
 		LeftMultiplicity:  leftMultiplicity,
 		RightMultiplicity: rightMultiplicity,
 	}
+}
+
+// deriveUnfilteredCols recursively derives the UnfilteredCols field and
+// populates the props.Relational.Rule.UnfilteredCols field as it goes to
+// make future calls faster.
+func deriveUnfilteredCols(in RelExpr) opt.ColSet {
+	// If the UnfilteredCols property has already been derived, return it
+	// immediately.
+	relational := in.Relational()
+	if relational.IsAvailable(props.UnfilteredCols) {
+		return relational.Rule.UnfilteredCols
+	}
+	relational.Rule.Available |= props.UnfilteredCols
+	unfilteredCols := opt.ColSet{}
+
+	// Derive UnfilteredCols now.
+	switch t := in.(type) {
+	case *ScanExpr:
+		// All un-limited, unconstrained output columns are unfiltered columns.
+		if t.HardLimit == 0 && t.Constraint == nil {
+			unfilteredCols.UnionWith(relational.OutputCols)
+		}
+
+	case *ProjectExpr:
+		// Project never filters rows, so it passes through unfiltered columns.
+		unfilteredCols.UnionWith(deriveUnfilteredCols(t.Input))
+
+	case *InnerJoinExpr, *LeftJoinExpr, *FullJoinExpr:
+		left := t.Child(0).(RelExpr)
+		right := t.Child(1).(RelExpr)
+		filters := *t.Child(2).(*FiltersExpr)
+		multiplicity := GetJoinMultiplicityFromInputs(t.Op(), left, right, filters)
+
+		// Use the UnfilteredCols to determine whether unfiltered columns can be
+		// passed through.
+		if multiplicity.JoinPreservesLeftRows() {
+			unfilteredCols.UnionWith(deriveUnfilteredCols(left))
+		}
+		if multiplicity.JoinPreservesRightRows() {
+			unfilteredCols.UnionWith(deriveUnfilteredCols(right))
+		}
+
+	default:
+		// An empty ColSet is returned.
+	}
+	relational.Rule.UnfilteredCols = unfilteredCols
+	return relational.Rule.UnfilteredCols
 }
 
 // getJoinLeftMultiplicityVal returns a MultiplicityValue that describes whether
@@ -217,11 +245,11 @@ func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
 		// Case 1b: if there is at least one not-null foreign key column referencing
 		// the unfiltered right columns, return true. Otherwise, false.
 		return makeForeignKeyMap(
-			md, left.Relational().NotNullCols, DeriveJoinMultiplicity(right).UnfilteredCols) != nil
+			md, left.Relational().NotNullCols, deriveUnfilteredCols(right)) != nil
 	}
 
 	leftColIDs := left.Relational().NotNullCols
-	rightColIDs := DeriveJoinMultiplicity(right).UnfilteredCols
+	rightColIDs := deriveUnfilteredCols(right)
 	if rightColIDs.Empty() {
 		// Right input has no unfiltered columns.
 		return false
@@ -355,8 +383,8 @@ func makeForeignKeyMap(
 				leftCol := fkTableID.ColumnID(leftOrd)
 				rightCol := refTableID.ColumnID(rightOrd)
 				if !leftNotNullCols.Contains(leftCol) {
-					// Not all FK columns are part of the equality conditions. There are two
-					// cases:
+					// Not all FK columns are part of the equality conditions. There are
+					// two cases:
 					// 1. MATCH SIMPLE/PARTIAL: if this column is nullable, rows from this
 					//    foreign key are not guaranteed to match.
 					// 2. MATCH FULL: FK rows are still guaranteed to match because the

@@ -280,6 +280,31 @@ group-by
       └── max [as=max:7, outer=(2)]
            └── y:2
 
+# Currently a no-op case even though we could hypothetically remove the join,
+# since the presence of a not-null foreign key in fks implies that either both
+# tables will have a cardinality of at least one, or both will have a
+# cardinality of zero.
+norm expect-not=EliminateJoinUnderGroupByLeft
+SELECT DISTINCT ON (k) k, v FROM fks INNER JOIN xy ON True
+----
+distinct-on
+ ├── columns: k:1!null v:2
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (cross)
+ │    ├── columns: k:1!null v:2
+ │    ├── fd: (1)-->(2)
+ │    ├── scan fks
+ │    │    ├── columns: k:1!null v:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan xy
+ │    └── filters (true)
+ └── aggregations
+      └── first-agg [as=v:2, outer=(2)]
+           └── v:2
+
 # No-op case because the InnerJoin will return no rows if fks is empty.
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT DISTINCT ON (x) x, y FROM xy INNER JOIN fks ON True
@@ -409,31 +434,6 @@ group-by
  └── aggregations
       └── max [as=max:7, outer=(2)]
            └── y:2
-
-# Currently a no-op case even though we could hypothetically remove the join,
-# since the presence of a not-null foreign key in fks implies that either both
-# tables will have a cardinality of at least one, or both will have a
-# cardinality of zero.
-norm expect-not=EliminateJoinUnderGroupByLeft
-SELECT DISTINCT ON (k) k, v FROM fks INNER JOIN xy ON True
-----
-distinct-on
- ├── columns: k:1!null v:2
- ├── grouping columns: k:1!null
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── inner-join (cross)
- │    ├── columns: k:1!null v:2
- │    ├── fd: (1)-->(2)
- │    ├── scan fks
- │    │    ├── columns: k:1!null v:2
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
- │    ├── scan xy
- │    └── filters (true)
- └── aggregations
-      └── first-agg [as=v:2, outer=(2)]
-           └── v:2
 
 # --------------------------------------------------
 # EliminateJoinUnderGroupByRight

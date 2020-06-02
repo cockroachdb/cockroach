@@ -370,7 +370,7 @@ memo (optimized, ~9KB, required=[presentation: field:6])
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
-memo (optimized, ~7KB, required=[presentation: tag:11])
+memo (optimized, ~6KB, required=[presentation: tag:11])
  ├── G1: (distinct-on G2 G3 cols=(11))
  │    └── [presentation: tag:11]
  │         ├── best: (distinct-on G2 G3 cols=(11))
