@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -64,6 +66,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -2808,6 +2811,7 @@ func TestBackupEncrypted(t *testing.T) {
 	// Let's throw it in some other cluster metadata too for fun.
 	sqlDB.Exec(t, `CREATE USER neverappears`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING cluster.organization = 'neverappears'`)
+	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM neverappears.neverappears`)
 
 	// Full cluster-backup to capture all possible metadata.
 	backupLoc1 := localFoo + "/x?COCKROACH_LOCALITY=default"
@@ -2825,6 +2829,29 @@ func TestBackupEncrypted(t *testing.T) {
 	sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
 	sqlDB.Exec(t, `BACKUP TO ($1, $2) INCREMENTAL FROM $3 WITH encryption_passphrase='abcdefg'`,
 		backupLoc1inc, backupLoc2inc, backupLoc1)
+
+	t.Run("check-stats-encrypted", func(t *testing.T) {
+		partitionMatcher := regexp.MustCompile(`BACKUP-STATISTICS`)
+		subDir := path.Join(rawDir, "foo")
+		err := filepath.Walk(subDir, func(fName string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if partitionMatcher.MatchString(fName) {
+				statsBytes, err := ioutil.ReadFile(fName)
+				if err != nil {
+					return err
+				}
+				if strings.Contains(fName, "foo/cleartext") {
+					assert.False(t, storageccl.AppearsEncrypted(statsBytes))
+				} else {
+					assert.True(t, storageccl.AppearsEncrypted(statsBytes))
+				}
+			}
+			return nil
+		})
+		require.NoError(t, err)
+	})
 
 	before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
 
