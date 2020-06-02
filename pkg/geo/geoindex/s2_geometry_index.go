@@ -319,7 +319,7 @@ func (s *s2GeometryIndex) s2RegionsFromPlanarGeom(geomRepr geom.T) []s2.Region {
 	return regions
 }
 
-func (s *s2GeometryIndex) testingInnerCovering(g *geo.Geometry) s2.CellUnion {
+func (s *s2GeometryIndex) TestingInnerCovering(g *geo.Geometry) s2.CellUnion {
 	gt, _, err := s.convertToGeomTAndTryClip(g)
 	if err != nil || gt == nil {
 		return nil

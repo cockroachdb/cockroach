@@ -83,8 +83,8 @@ type GeographyIndex interface {
 	// ST_Intersects(g, x), where x are the indexed geometries.
 	Intersects(c context.Context, g *geo.Geography) (UnionKeySpans, error)
 
-	// testingInnerCovering returns an inner covering of g.
-	testingInnerCovering(g *geo.Geography) s2.CellUnion
+	// TestingInnerCovering returns an inner covering of g.
+	TestingInnerCovering(g *geo.Geography) s2.CellUnion
 }
 
 // GeometryIndex is an index over 2D cartesian coordinates.
@@ -113,8 +113,8 @@ type GeometryIndex interface {
 	// ST_Intersects(g, x), where x are the indexed geometries.
 	Intersects(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
 
-	// testingInnerCovering returns an inner covering of g.
-	testingInnerCovering(g *geo.Geometry) s2.CellUnion
+	// TestingInnerCovering returns an inner covering of g.
+	TestingInnerCovering(g *geo.Geometry) s2.CellUnion
 }
 
 // RelationshipType stores a type of geospatial relationship query that can
@@ -417,7 +417,7 @@ func invertedIndexKeys(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) [
 
 // TODO(sumeer): examine RegionCoverer carefully to see if we can strengthen
 // the covering invariant, which would increase the efficiency of covers() and
-// remove the need for testingInnerCovering().
+// remove the need for TestingInnerCovering().
 //
 // Helper for Covers.
 func covers(c context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpans {
