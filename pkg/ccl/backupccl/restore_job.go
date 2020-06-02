@@ -778,6 +778,8 @@ func restore(
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
+// TODO: this method returns two things: the sqlbase.Descriptor and the backup manifest.
+// Ideally, this should be broken down into two methods.
 func loadBackupSQLDescs(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -825,6 +827,29 @@ type restoreResumer struct {
 	}
 }
 
+// getStatisticsFromBackup retrieves Statistics from backup manifest,
+// either through the Statistics field or from the files.
+func getStatisticsFromBackup(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	encryption *roachpb.FileEncryptionOptions,
+	backup BackupManifest,
+) []*stats.TableStatisticProto {
+	if backup.Statistics != nil {
+		return backup.Statistics
+	}
+	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
+	for _, fname := range backup.StatisticsFilenames {
+		myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
+		if err != nil {
+			return tableStatistics
+		}
+		tableStatistics = append(tableStatistics, myStatsTable.Statistics...)
+	}
+
+	return tableStatistics
+}
+
 // remapRelevantStatistics changes the table ID references in the stats
 // from those they had in the backed up database to what they should be
 // in the restored database.
@@ -832,12 +857,11 @@ type restoreResumer struct {
 // being restored. If the descriptorRewrites can re-write the table ID, then that
 // table is being restored.
 func remapRelevantStatistics(
-	backup BackupManifest, descriptorRewrites DescRewriteMap,
+	tableStatistics []*stats.TableStatisticProto, descriptorRewrites DescRewriteMap,
 ) []*stats.TableStatisticProto {
-	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
+	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
 
-	for i := range backup.Statistics {
-		stat := backup.Statistics[i]
+	for _, stat := range tableStatistics {
 		tableRewrite, ok := descriptorRewrites[stat.TableID]
 		if !ok {
 			// Table re-write not present, so statistic should not be imported.
@@ -996,9 +1020,20 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
+	// The lastInd information is needed to know the index of latestBackUpManifest
+	// in order to retrieve the corresponding URI.
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
 	)
+	lastInd := getBackupIndAtTime(backupManifests, details.EndTime)
+	if err != nil {
+		return err
+	}
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastInd])
+	if err != nil {
+		return errors.Wrapf(err, "creating external store configuration")
+	}
+	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
 	if err != nil {
 		return err
 	}
@@ -1011,7 +1046,8 @@ func (r *restoreResumer) Resume(
 	r.descriptorCoverage = details.DescriptorCoverage
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
-	r.latestStats = remapRelevantStatistics(latestBackupManifest, details.DescriptorRewrites)
+	backupStats := getStatisticsFromBackup(ctx, defaultStore, details.Encryption, latestBackupManifest)
+	r.latestStats = remapRelevantStatistics(backupStats, details.DescriptorRewrites)
 
 	if len(r.tables) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).

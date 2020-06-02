@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -350,9 +349,8 @@ func backupPlanHook(
 			return err
 		}
 
-		statsCache := p.ExecCfg().TableStatsCache
-		tableStatistics := make([]*stats.TableStatisticProto, 0)
 		var tables []sqlbase.TableDescriptorInterface
+		statsFiles := make(map[sqlbase.ID]string)
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
 				db := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
@@ -369,14 +367,9 @@ func backupPlanHook(
 				}
 				tables = append(tables, table)
 
-				// Collect all the table stats for this table.
-				tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
-				if err != nil {
-					return err
-				}
-				for i := range tableStatisticsAcc {
-					tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
-				}
+				// TODO: look into the tradeoffs of having all objects in the array to be in the same file,
+				// vs having each object in a separate file, or somewhere in between.
+				statsFiles[tableDesc.GetID()] = BackupStatisticsFileName
 			}
 		}
 
@@ -596,20 +589,20 @@ func backupPlanHook(
 		// of requiring full backups after schema changes remains.
 
 		backupManifest := BackupManifest{
-			StartTime:          startTime,
-			EndTime:            endTime,
-			MVCCFilter:         mvccFilter,
-			Descriptors:        targetDescs,
-			DescriptorChanges:  revs,
-			CompleteDbs:        completeDBs,
-			Spans:              spans,
-			IntroducedSpans:    newSpans,
-			FormatVersion:      BackupFormatDescriptorTrackingVersion,
-			BuildInfo:          build.GetInfo(),
-			NodeID:             nodeID,
-			ClusterID:          p.ExecCfg().ClusterID(),
-			Statistics:         tableStatistics,
-			DescriptorCoverage: backupStmt.DescriptorCoverage,
+			StartTime:           startTime,
+			EndTime:             endTime,
+			MVCCFilter:          mvccFilter,
+			Descriptors:         targetDescs,
+			DescriptorChanges:   revs,
+			CompleteDbs:         completeDBs,
+			Spans:               spans,
+			IntroducedSpans:     newSpans,
+			FormatVersion:       BackupFormatDescriptorTrackingVersion,
+			BuildInfo:           build.GetInfo(),
+			NodeID:              nodeID,
+			ClusterID:           p.ExecCfg().ClusterID(),
+			StatisticsFilenames: statsFiles,
+			DescriptorCoverage:  backupStmt.DescriptorCoverage,
 		}
 
 		// Sanity check: re-run the validation that RESTORE will do, but this time
