@@ -301,9 +301,9 @@ func migrateJobToOldFormat(
 ) error {
 	ctx := context.Background()
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if schemaChangeType == CreateTable {
-		tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "new_table")
+		tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "new_table")
 	}
 
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -362,7 +362,7 @@ func migrateJobToOldFormat(
 			return err
 		}
 		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-			keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+			keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 		)
 	})
 }
@@ -427,7 +427,7 @@ func migrateGCJobToOldFormat(
 		return nil
 
 	case DropIndex:
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		if l := len(tableDesc.GCMutations); l != 1 {
 			return errors.AssertionFailedf("expected exactly 1 GCMutation, found %d", l)
 		}
@@ -447,7 +447,7 @@ func migrateGCJobToOldFormat(
 				return err
 			}
 			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-				keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+				keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 			)
 		})
 	default:
@@ -875,7 +875,7 @@ func TestGCJobCreated(t *testing.T) {
 	if _, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test();`); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tableDesc.State = sqlbase.TableDescriptor_DROP
 	tableDesc.Version++
 	tableDesc.DropTime = 1
@@ -889,7 +889,7 @@ func TestGCJobCreated(t *testing.T) {
 			return err
 		}
 		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-			keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+			keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 		)
 	}); err != nil {
 		t.Fatal(err)
@@ -958,7 +958,7 @@ func TestMissingMutation(t *testing.T) {
 
 	// To get the table descriptor into the (invalid) state we're trying to test,
 	// clear the mutations on the table descriptor.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tableDesc.Mutations = nil
 	require.NoError(
 		t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -966,7 +966,7 @@ func TestMissingMutation(t *testing.T) {
 				return err
 			}
 			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-				keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+				keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 			)
 		}),
 	)

@@ -102,7 +102,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := replaceVars(&v.desc.TableDescriptor, d.Computed.Expr)
+	replacedExpr, _, err := replaceVars(v.desc, d.Computed.Expr)
 	if err != nil {
 		return err
 	}

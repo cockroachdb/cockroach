@@ -93,7 +93,7 @@ type partitioningTest struct {
 		createStmt string
 
 		// tableDesc is the TableDescriptor created by `createStmt`.
-		tableDesc *sqlbase.TableDescriptor
+		tableDesc *sqlbase.MutableTableDescriptor
 
 		// zoneConfigStmt contains SQL that effects the zone configs described
 		// by `configs`.
@@ -135,7 +135,7 @@ func (pt *partitioningTest) parse() error {
 		if err != nil {
 			return err
 		}
-		pt.parsed.tableDesc = mutDesc.TableDesc()
+		pt.parsed.tableDesc = mutDesc
 		if err := pt.parsed.tableDesc.ValidateTable(); err != nil {
 			return err
 		}
@@ -1262,7 +1262,7 @@ func TestSelectPartitionExprs(t *testing.T) {
 			for _, p := range strings.Split(test.partitions, `,`) {
 				partNames = append(partNames, tree.Name(p))
 			}
-			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
+			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc.TableDesc(), partNames)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -1273,7 +1273,7 @@ func TestSelectPartitionExprs(t *testing.T) {
 	}
 	t.Run("error", func(t *testing.T) {
 		partNames := tree.NameList{`p33p44`, `nope`}
-		_, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
+		_, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc.TableDesc(), partNames)
 		if !testutils.IsError(err, `unknown partition`) {
 			t.Errorf(`expected "unknown partition" error got: %+v`, err)
 		}

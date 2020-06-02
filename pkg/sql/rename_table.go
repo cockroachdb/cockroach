@@ -145,7 +145,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
 	err = catalogkv.WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc.TableDesc())
+		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc)
 	if err != nil {
 		return err
 	}

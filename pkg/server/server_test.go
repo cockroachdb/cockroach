@@ -550,10 +550,11 @@ func TestSystemConfigGossip(t *testing.T) {
 
 	key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 	valAt := func(i int) *sqlbase.Descriptor {
-		return sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
+		desc := sqlbase.DatabaseDescriptor{
 			ID:   sqlbase.ID(i),
 			Name: "foo",
-		})
+		}
+		return desc.DescriptorProto()
 	}
 
 	// Register a callback for gossip updates.

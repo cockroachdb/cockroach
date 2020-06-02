@@ -77,15 +77,15 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			myTableID := sqlbase.ID(keys.MinUserDescID + 3)
 			myOtherTableID := sqlbase.ID(keys.MinUserDescID + 4)
 
-			var myTableDesc *sqlbase.TableDescriptor
-			var myOtherTableDesc *sqlbase.TableDescriptor
+			var myTableDesc *sqlbase.MutableTableDescriptor
+			var myOtherTableDesc *sqlbase.MutableTableDescriptor
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
-				myTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myTableID)
+				myTableDesc, err = sqlbase.GetMutableTableDescFromID(ctx, txn, keys.SystemSQLCodec, myTableID)
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
+				myOtherTableDesc, err = sqlbase.GetMutableTableDescFromID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
 				return err
 			}); err != nil {
 				t.Fatal(err)
@@ -146,10 +146,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
-				descDesc := sqlbase.WrapDescriptor(myTableDesc)
+				descDesc := myTableDesc.DescriptorProto()
 				b.Put(descKey, descDesc)
 				descKey2 := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
-				descDesc2 := sqlbase.WrapDescriptor(myOtherTableDesc)
+				descDesc2 := myOtherTableDesc.DescriptorProto()
 				b.Put(descKey2, descDesc2)
 				return txn.Run(ctx, b)
 			}); err != nil {
@@ -196,13 +196,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
-				myTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myTableID)
+				myTableDesc, err = sqlbase.GetMutableTableDescFromID(ctx, txn, keys.SystemSQLCodec, myTableID)
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
 				}
-				myOtherTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
+				myOtherTableDesc, err = sqlbase.GetMutableTableDescFromID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")

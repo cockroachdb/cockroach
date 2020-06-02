@@ -331,7 +331,7 @@ CREATE TABLE test.tt (x test.t);
 		t.Fatal(err)
 	}
 	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
-	typLookup := func(id sqlbase.ID) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
+	typLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 		typDesc, err := sqlbase.GetTypeDescFromID(ctx, kvDB, keys.SystemSQLCodec, id)
 		if err != nil {
 			return nil, nil, err

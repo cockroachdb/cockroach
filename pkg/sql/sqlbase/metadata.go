@@ -24,11 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-var _ DescriptorProto = &DatabaseDescriptor{}
-var _ DescriptorProto = &TableDescriptor{}
-var _ DescriptorProto = &TypeDescriptor{}
-var _ DescriptorProto = &SchemaDescriptor{}
-
 // DescriptorKey is the interface implemented by both
 // databaseKey and tableKey. It is used to easily get the
 // descriptor key and plain name.
@@ -37,19 +32,11 @@ type DescriptorKey interface {
 	Name() string
 }
 
-// DescriptorProto is the interface implemented by all Descriptors.
-// TODO(marc): this is getting rather large.
-type DescriptorProto interface {
-	protoutil.Message
-	GetPrivileges() *PrivilegeDescriptor
-	GetID() ID
-	TypeName() string
-	GetName() string
-	GetAuditMode() TableDescriptor_AuditMode
-}
-
-// WrapDescriptor fills in a Descriptor.
-func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
+// wrapDescriptor fills in a Descriptor from a given member of its union.
+//
+// TODO(ajwerner): Replace this with the relevant type-specific DescriptorProto
+// methods.
+func wrapDescriptor(descriptor protoutil.Message) *Descriptor {
 	desc := &Descriptor{}
 	switch t := descriptor.(type) {
 	case *MutableTableDescriptor:
@@ -65,7 +52,7 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 	case *SchemaDescriptor:
 		desc.Union = &Descriptor_Schema{Schema: t}
 	default:
-		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
+		panic(fmt.Sprintf("unknown descriptor type: %T", descriptor))
 	}
 	return desc
 }
@@ -83,7 +70,7 @@ type MetadataSchema struct {
 
 type metadataDescriptor struct {
 	parentID ID
-	desc     DescriptorProto
+	desc     DescriptorInterface
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -101,7 +88,7 @@ func MakeMetadataSchema(
 }
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
-func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
+func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorInterface) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
 		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
@@ -148,7 +135,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
-	addDescriptor := func(parentID ID, desc DescriptorProto) {
+	addDescriptor := func(parentID ID, desc DescriptorInterface) {
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
@@ -176,8 +163,8 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 		// Create descriptor metadata key.
 		value = roachpb.Value{}
-		wrappedDesc := WrapDescriptor(desc)
-		if err := value.SetProto(wrappedDesc); err != nil {
+		descDesc := desc.DescriptorProto()
+		if err := value.SetProto(descDesc); err != nil {
 			log.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		ret = append(ret, roachpb.KeyValue{
@@ -240,8 +227,8 @@ var systemTableIDCache = func() [2]map[string]ID {
 		ms := MetadataSchema{codec: codec}
 		addSystemDescriptorsToSchema(&ms)
 		for _, d := range ms.descs {
-			t, ok := d.desc.(*TableDescriptor)
-			if !ok || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
+			t := d.desc.TableDesc()
+			if t == nil || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
 				// We only cache table descriptors under 'system' with a
 				// reserved table ID.
 				continue

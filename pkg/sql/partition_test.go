@@ -41,7 +41,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tableKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
@@ -64,7 +64,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	// Note that this is really a gross hack - it breaks planner caches, which
 	// assume that nothing is going to change out from under them like this. We
 	// "fix" the issue by altering the table's name to refresh the cache, below.
-	if err := kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
+	if err := kvDB.Put(ctx, tableKey, tableDesc.DescriptorProto()); err != nil {
 		t.Fatal(err)
 	}
 	sqlDB.Exec(t, "ALTER TABLE t.kv RENAME to t.kv2")

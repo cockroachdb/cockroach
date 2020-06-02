@@ -251,12 +251,12 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 // Returns res = nil if the zone specifier is not for a table or index.
 func (p *planner) resolveTableForZone(
 	ctx context.Context, zs *tree.ZoneSpecifier,
-) (res *TableDescriptor, err error) {
+) (res sqlbase.DescriptorInterface, err error) {
 	if zs.TargetsIndex() {
 		var mutRes *MutableTableDescriptor
 		_, mutRes, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
 		if mutRes != nil {
-			res = mutRes.TableDesc()
+			res = mutRes
 		}
 	} else if zs.TargetsTable() {
 		var immutRes *ImmutableTableDescriptor
@@ -268,7 +268,7 @@ func (p *planner) resolveTableForZone(
 		if err != nil {
 			return nil, err
 		} else if immutRes != nil {
-			res = immutRes.TableDesc()
+			res = immutRes
 		}
 	}
 	return res, err
@@ -302,7 +302,7 @@ func resolveZone(ctx context.Context, txn *kv.Txn, zs *tree.ZoneSpecifier) (sqlb
 }
 
 func resolveSubzone(
-	zs *tree.ZoneSpecifier, table *sqlbase.TableDescriptor,
+	zs *tree.ZoneSpecifier, table sqlbase.DescriptorInterface,
 ) (*sqlbase.IndexDescriptor, string, error) {
 	if !zs.TargetsTable() || zs.TableOrIndex.Index == "" && zs.Partition == "" {
 		return nil, "", nil
@@ -311,11 +311,11 @@ func resolveSubzone(
 	indexName := string(zs.TableOrIndex.Index)
 	var index *sqlbase.IndexDescriptor
 	if indexName == "" {
-		index = &table.PrimaryIndex
+		index = &table.TableDesc().PrimaryIndex
 		indexName = index.Name
 	} else {
 		var err error
-		index, _, err = table.FindIndexByName(indexName)
+		index, _, err = table.TableDesc().FindIndexByName(indexName)
 		if err != nil {
 			return nil, "", err
 		}

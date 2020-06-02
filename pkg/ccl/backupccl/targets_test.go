@@ -27,18 +27,33 @@ import (
 func TestDescriptorsMatchingTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	descriptors := []sqlbase.Descriptor{
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 0, Name: "system"}),
-		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 1, Name: "foo", ParentID: 0}),
-		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 2, Name: "bar", ParentID: 0}),
-		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 4, Name: "baz", ParentID: 3}),
-		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 6, Name: "offline", ParentID: 0, State: sqlbase.TableDescriptor_OFFLINE}),
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 3, Name: "data"}),
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 5, Name: "empty"}),
-	}
-	// Set the timestamp on the table descriptors.
-	for _, d := range descriptors {
-		d.Table(hlc.Timestamp{WallTime: 1})
+	// TODO(ajwerner): There should be a constructor for an ImmutableTableDescriptor
+	// and really all of the leasable descriptor types which includes its initial
+	// DescriptorMeta. This refactoring precedes the actual adoption of
+	// DescriptorMeta.
+	var descriptors []sqlbase.Descriptor
+	{
+		// Make shorthand type names for syntactic sugar.
+		type tbDesc = sqlbase.TableDescriptor
+		type dbDesc = sqlbase.DatabaseDescriptor
+		ts1 := hlc.Timestamp{WallTime: 1}
+		mkTable := func(descriptor tbDesc) sqlbase.Descriptor {
+			desc := sqlbase.NewImmutableTableDescriptor(descriptor)
+			desc.ModificationTime = ts1
+			return *desc.DescriptorProto()
+		}
+		mkDB := func(descriptor dbDesc) sqlbase.Descriptor {
+			return *descriptor.DescriptorProto()
+		}
+		descriptors = []sqlbase.Descriptor{
+			mkDB(dbDesc{ID: 0, Name: "system"}),
+			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
+			mkTable(tbDesc{ID: 2, Name: "bar", ParentID: 0}),
+			mkTable(tbDesc{ID: 4, Name: "baz", ParentID: 3}),
+			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: sqlbase.TableDescriptor_OFFLINE}),
+			mkDB(dbDesc{ID: 3, Name: "data"}),
+			mkDB(dbDesc{ID: 5, Name: "empty"}),
+		}
 	}
 
 	tests := []struct {

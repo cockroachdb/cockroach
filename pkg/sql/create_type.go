@@ -164,11 +164,16 @@ func (p *planner) createArrayType(
 	}
 
 	// Construct the descriptor for the array type.
-	arrayTypDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.MakeTypeDescriptor(
-		db.ID, keys.PublicSchemaID, id, arrayTypeName,
-	))
-	arrayTypDesc.Kind = sqlbase.TypeDescriptor_ALIAS
-	arrayTypDesc.Alias = types.MakeArray(elemTyp)
+	// TODO(ajwerner): This is getting fixed up in a later commit to deal with
+	// meta, just hold on.
+	arrayTypDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.TypeDescriptor{
+		Name:           arrayTypeName,
+		ID:             id,
+		ParentID:       db.ID,
+		ParentSchemaID: keys.PublicSchemaID,
+		Kind:           sqlbase.TypeDescriptor_ALIAS,
+		Alias:          types.MakeArray(elemTyp),
+	})
 
 	jobStr := fmt.Sprintf("implicit array type creation for %s", tree.AsStringWithFQNames(n, params.Ann()))
 	if err := p.createDescriptorWithID(
@@ -235,11 +240,14 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.MakeTypeDescriptor(
-		db.ID, keys.PublicSchemaID, id, typeName.Type(),
-	))
-	typeDesc.Kind = sqlbase.TypeDescriptor_ENUM
-	typeDesc.EnumMembers = members
+	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.TypeDescriptor{
+		Name:           typeName.Type(),
+		ID:             id,
+		ParentID:       db.ID,
+		ParentSchemaID: keys.PublicSchemaID,
+		Kind:           sqlbase.TypeDescriptor_ENUM,
+		EnumMembers:    members,
+	})
 
 	// Create the implicit array type for this type before finishing the type.
 	arrayTypeID, err := p.createArrayType(params, n, typeName, typeDesc, db)

@@ -64,7 +64,7 @@ func ShowCreateTable(
 	p PlanHookState,
 	tn *tree.Name,
 	dbPrefix string,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	lCtx simpleSchemaResolver,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
@@ -209,7 +209,7 @@ func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,
 	allDescs []sqlbase.Descriptor,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	var stmt string
