@@ -1530,6 +1530,41 @@ func forEachDatabaseDesc(
 	return nil
 }
 
+// forEachTypeDesc calls a function for each TypeDescriptor. If dbContext is
+// not nil, then the function is called for only TypeDescriptors within the
+// given database.
+func forEachTypeDesc(
+	ctx context.Context,
+	p *planner,
+	dbContext *DatabaseDescriptor,
+	fn func(db *DatabaseDescriptor, sc string, typ *TypeDescriptor) error,
+) error {
+	descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
+	if err != nil {
+		return err
+	}
+	schemaNames, err := getSchemaNames(ctx, p, dbContext)
+	if err != nil {
+		return err
+	}
+	lCtx := newInternalLookupCtx(descs, dbContext)
+	for _, id := range lCtx.typIDs {
+		typ := lCtx.typDescs[id]
+		dbDesc, parentExists := lCtx.dbDescs[typ.ParentID]
+		if !parentExists {
+			continue
+		}
+		scName, ok := schemaNames[typ.GetParentSchemaID()]
+		if !ok {
+			return errors.AssertionFailedf("schema id %d not found", typ.GetParentSchemaID())
+		}
+		if err := fn(dbDesc, scName, typ); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // forEachTableDesc retrieves all table descriptors from the current
 // database and all system databases and iterates through them. For
 // each table, the function will call fn with its respective database
