@@ -123,14 +123,23 @@ $input
     $private
 )
 
-# PushLimitIntoLeftJoin pushes a Limit into the left input of a left join. Since
-# the left join creates an output row for each left input row, we only need that
-# many rows from that input. We can only do this if the limit ordering refers
-# only to the left input columns. We also check that the cardinality of the left
-# input is more than the limit, to prevent repeated applications of the rule.
-[PushLimitIntoLeftJoin, Normalize]
+# PushLimitIntoLeftJoin pushes a Limit into the left input of a join when rows
+# from the left input are guaranteed to (1) be preserved by the join and (2) to
+# not be null-extended by the join. Since the join creates an output row for
+# each left input row, we only need that many rows from that input. We can only
+# do this if the limit ordering refers only to the left input columns. We also
+# check that the cardinality of the left input is more than the limit, to
+# prevent repeated applications of the rule. See PushLimitIntoJoinRight comment
+# for why FullJoins cannot be matched.
+[PushLimitIntoJoinLeft, Normalize]
 (Limit
-    $input:(LeftJoin $left:* $right:* $on:* $private:*)
+    $input:(InnerJoin | LeftJoin
+            $left:*
+            $right:*
+            $on:*
+            $private:*
+        ) &
+        (JoinPreservesLeftRows $input)
     $limitExpr:(Const $limit:*) &
         (IsPositiveInt $limit) &
         ^(LimitGeMaxRows $limit $left)
@@ -142,9 +151,47 @@ $input
 )
 =>
 (Limit
-    (LeftJoin
+    ((OpName $input)
         (Limit $left $limitExpr (PruneOrdering $ordering $cols))
         $right
+        $on
+        $private
+    )
+    $limitExpr
+    $ordering
+)
+
+# PushLimitIntoJoinRight mirrors PushLimitIntoJoinLeft.
+#
+# Why can we not match a LeftJoin (or FullJoin)?
+#
+#   SELECT * FROM ab LEFT JOIN xy ON a = x LIMIT 10
+# vs
+#   SELECT * FROM ab LEFT JOIN (SELECT * FROM xy LIMIT 10) ON a = x LIMIT 10
+#
+# In the first query, all rows from xy would have a chance to match with a row
+# from ab. In the second query, right rows that otherwise would have matched may
+# be filtered out. Rows from ab would then no longer have matches, and would
+# instead be added back by the LeftJoin with the right side null-extended. The
+# same logic applies to FullJoins.
+[PushLimitIntoJoinRight, Normalize]
+(Limit
+    $input:(InnerJoin $left:* $right:* $on:* $private:*) &
+        (JoinPreservesRightRows $input)
+    $limitExpr:(Const $limit:*) &
+        (IsPositiveInt $limit) &
+        ^(LimitGeMaxRows $limit $right)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $right)
+        )
+)
+=>
+(Limit
+    ((OpName $input)
+        $left
+        (Limit $right $limitExpr (PruneOrdering $ordering $cols))
         $on
         $private
     )
