@@ -580,6 +580,9 @@ func FindFKOriginIndexInTxn(
 // ConditionFailedError on mismatch. We don't directly use CPut with protos
 // because the marshaling is not guaranteed to be stable and also because it's
 // sensitive to things like missing vs default values of fields.
+//
+// TODO(ajwerner): Make this take a TableDescriptorInterface and probably add
+// an equality method on that interface or something like that.
 func ConditionalGetTableDescFromTxn(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation *TableDescriptor,
 ) (*roachpb.Value, error) {
@@ -597,7 +600,7 @@ func ConditionalGetTableDescFromTxn(
 		}
 		existing.Table(existingKV.Value.Timestamp)
 	}
-	wrapped := WrapDescriptor(expectation)
+	wrapped := wrapDescriptor(expectation)
 	if !existing.Equal(wrapped) {
 		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
 	}

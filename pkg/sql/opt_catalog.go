@@ -206,7 +206,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	return ds, false, err
 }
 
-func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorProto, error) {
+func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorInterface, error) {
 	switch t := o.(type) {
 	case *optSchema:
 		return t.desc, nil

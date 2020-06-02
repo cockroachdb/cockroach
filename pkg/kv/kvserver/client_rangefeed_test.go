@@ -63,15 +63,15 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		const junkDescriptorID = 42
 		require.GreaterOrEqual(t, keys.MaxReservedDescID, junkDescriptorID)
 		junkDescriptorKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, junkDescriptorID)
-		junkDescriptor := sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
+		junkDescriptor := &sqlbase.DatabaseDescriptor{
 			Name: "junk",
 			ID:   junkDescriptorID,
-		})
+		}
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.SetSystemConfigTrigger(); err != nil {
 				return err
 			}
-			return txn.Put(ctx, junkDescriptorKey, junkDescriptor)
+			return txn.Put(ctx, junkDescriptorKey, junkDescriptor.DescriptorProto())
 		}))
 		after := db.Clock().Now()
 		for {

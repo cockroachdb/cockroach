@@ -118,7 +118,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	lCtx := newInternalLookupCtx(descs, nil /*prefix - we want all descriptors */)
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		if !tableIsVisible(table, true /*allowAdding*/) {
+		if !tableIsVisible(table.TableDesc(), true /*allowAdding*/) {
 			continue
 		}
 		for _, u := range table.GetPrivileges().Users {
@@ -126,8 +126,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				if f.Len() > 0 {
 					f.WriteString(", ")
 				}
-				parentName := lCtx.getParentName(table)
-				tn := tree.MakeTableName(tree.Name(parentName), tree.Name(table.Name))
+				parentName := lCtx.getParentName(table.TableDesc())
+				tn := tree.MakeTableName(tree.Name(parentName), tree.Name(table.GetName()))
 				f.FormatNode(&tn)
 				break
 			}

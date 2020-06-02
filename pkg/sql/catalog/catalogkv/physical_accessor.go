@@ -207,8 +207,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	if err != nil {
 		return nil, err
 	}
-	switch desc := rawDesc.(type) {
-	case *sqlbase.TableDescriptor:
+	if tableDesc := rawDesc.GetTable(); tableDesc != nil {
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
 		acceptableStates := map[sqlbase.TableDescriptor_State]bool{
@@ -216,7 +215,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			sqlbase.TableDescriptor_PUBLIC:  true,
 			sqlbase.TableDescriptor_OFFLINE: flags.IncludeOffline,
 		}
-		if acceptableStates[desc.State] {
+		if acceptableStates[tableDesc.State] {
 			// Immediately after a RENAME an old name still points to the
 			// descriptor during the drain phase for the name. Do not
 			// return a descriptor during draining.
@@ -225,21 +224,21 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// system.namespace_deprecated table when selecting from system.namespace.
 			// As this table can not be renamed by users, it is okay that the first
 			// check fails.
-			if desc.Name == object ||
+			if tableDesc.Name == object ||
 				object == sqlbase.NamespaceTableName && db == sqlbase.SystemDB.Name {
 				if flags.RequireMutable {
-					return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
+					return sqlbase.NewMutableExistingTableDescriptor(*tableDesc), nil
 				}
-				return sqlbase.NewImmutableTableDescriptor(*desc), nil
+				return sqlbase.NewImmutableTableDescriptor(*tableDesc), nil
 			}
 		}
 		return nil, nil
-	case *sqlbase.TypeDescriptor:
+	} else if typeDesc := rawDesc.GetType(); typeDesc != nil {
 		if flags.RequireMutable {
-			return sqlbase.NewMutableExistingTypeDescriptor(*desc), nil
+			return sqlbase.NewMutableExistingTypeDescriptor(*typeDesc), nil
 		}
-		return sqlbase.NewImmutableTypeDescriptor(*desc), nil
-	default:
-		return nil, nil
+		return sqlbase.NewImmutableTypeDescriptor(*typeDesc), nil
 	}
+	return nil, nil
+
 }

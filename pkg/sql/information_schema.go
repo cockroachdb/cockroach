@@ -261,7 +261,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.TableDescriptor,
+			table *sqlbase.ImmutableTableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -326,7 +326,9 @@ var informationSchemaColumnPrivileges = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 	schema: vtable.InformationSchemaColumnPrivileges,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
+			db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor,
+		) error {
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
@@ -362,7 +364,9 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
+			db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor,
+		) error {
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
@@ -589,7 +593,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.TableDescriptor,
+			table *sqlbase.ImmutableTableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -600,7 +604,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 			dbNameStr := tree.NewDString(db.Name)
 
 			for conName, con := range conInfo {
-				conTable := table
+				conTable := table.TableDesc()
 				conCols := con.Columns
 				conNameStr := tree.NewDString(conName)
 				if con.Kind == sqlbase.ConstraintTypeFK {
@@ -654,7 +658,7 @@ CREATE TABLE information_schema.key_column_usage (
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.TableDescriptor,
+			table *sqlbase.ImmutableTableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -804,7 +808,7 @@ CREATE TABLE information_schema.referential_constraints (
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.TableDescriptor,
+			table *sqlbase.ImmutableTableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			dbNameStr := tree.NewDString(db.Name)
@@ -1060,7 +1064,7 @@ CREATE TABLE information_schema.sequences (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
@@ -1105,7 +1109,7 @@ CREATE TABLE information_schema.statistics (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.GetName())
@@ -1206,7 +1210,7 @@ CREATE TABLE information_schema.table_constraints (
 			func(
 				db *sqlbase.DatabaseDescriptor,
 				scName string,
-				table *sqlbase.TableDescriptor,
+				table *sqlbase.ImmutableTableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
 				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
@@ -1324,7 +1328,7 @@ func populateTablePrivileges(
 	ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error,
 ) error {
 	return forEachTableDesc(ctx, p, dbContext, virtualMany,
-		func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+		func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.Name)
@@ -1380,7 +1384,7 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				if err != nil {
 					return false, err
 				}
-				return true, addTablesTableRow(addRow)(db, schemaName, desc.TableDesc())
+				return true, addTablesTableRow(addRow)(db, schemaName, desc)
 			},
 		},
 	},
@@ -1389,8 +1393,8 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 func addTablesTableRow(
 	addRow func(...tree.Datum) error,
 ) func(db *sqlbase.DatabaseDescriptor, scName string,
-	table *sqlbase.TableDescriptor) error {
-	return func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+	table *sqlbase.ImmutableTableDescriptor) error {
+	return func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 		if table.IsSequence() {
 			return nil
 		}
@@ -1440,7 +1444,7 @@ CREATE TABLE information_schema.views (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				if !table.IsView() {
 					return nil
 				}
@@ -1585,12 +1589,13 @@ func forEachTableDesc(
 	p *planner,
 	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
+	// TODO(ajwerner): Introduce TableDescriptorInterface.
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
 		db *sqlbase.DatabaseDescriptor,
 		scName string,
-		table *sqlbase.TableDescriptor,
+		table *sqlbase.ImmutableTableDescriptor,
 		_ tableLookupFn,
 	) error {
 		return fn(db, scName, table)
@@ -1615,14 +1620,14 @@ func forEachTableDescAll(
 	p *planner,
 	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor) error,
 ) error {
 	return forEachTableDescAllWithTableLookup(ctx,
 		p, dbContext, virtualOpts,
 		func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.TableDescriptor,
+			table *sqlbase.ImmutableTableDescriptor,
 			_ tableLookupFn,
 		) error {
 			return fn(db, scName, table)
@@ -1636,7 +1641,7 @@ func forEachTableDescAllWithTableLookup(
 	p *planner,
 	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor, tableLookupFn) error,
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(ctx,
 		p, dbContext, virtualOpts, true /* allowAdding */, fn)
@@ -1656,7 +1661,7 @@ func forEachTableDescWithTableLookup(
 	p *planner,
 	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor, tableLookupFn) error,
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.ImmutableTableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn)
 }
@@ -1695,7 +1700,7 @@ func forEachTableDescWithTableLookupInternal(
 	dbContext *DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	allowAdding bool,
-	fn func(*DatabaseDescriptor, string, *TableDescriptor, tableLookupFn) error,
+	fn func(*DatabaseDescriptor, string, *ImmutableTableDescriptor, tableLookupFn) error,
 ) error {
 	descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
@@ -1713,7 +1718,7 @@ func forEachTableDescWithTableLookupInternal(
 				e := vEntries[virtSchemaName]
 				for _, tName := range e.orderedDefNames {
 					te := e.defs[tName]
-					if err := fn(dbDesc, virtSchemaName, te.desc, lCtx); err != nil {
+					if err := fn(dbDesc, virtSchemaName, sqlbase.NewImmutableTableDescriptor(*te.desc), lCtx); err != nil {
 						return err
 					}
 				}
@@ -1745,13 +1750,14 @@ func forEachTableDescWithTableLookupInternal(
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
-		if table.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
+		tableDesc := table.TableDesc()
+		dbDesc, parentExists := lCtx.dbDescs[tableDesc.GetParentID()]
+		if tableDesc.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
 			continue
 		}
-		scName, ok := schemaNames[table.GetParentSchemaID()]
+		scName, ok := schemaNames[tableDesc.GetParentSchemaID()]
 		if !ok {
-			return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+			return errors.AssertionFailedf("schema id %d not found", tableDesc.GetParentSchemaID())
 		}
 		if err := fn(dbDesc, scName, table, lCtx); err != nil {
 			return err
@@ -1761,7 +1767,7 @@ func forEachTableDescWithTableLookupInternal(
 }
 
 func forEachIndexInTable(
-	table *sqlbase.TableDescriptor, fn func(*sqlbase.IndexDescriptor) error,
+	table *sqlbase.ImmutableTableDescriptor, fn func(*sqlbase.IndexDescriptor) error,
 ) error {
 	if table.IsPhysicalTable() {
 		if err := fn(&table.PrimaryIndex); err != nil {
@@ -1777,7 +1783,7 @@ func forEachIndexInTable(
 }
 
 func forEachColumnInTable(
-	table *sqlbase.TableDescriptor, fn func(*sqlbase.ColumnDescriptor) error,
+	table *sqlbase.ImmutableTableDescriptor, fn func(*sqlbase.ColumnDescriptor) error,
 ) error {
 	// Table descriptors already hold columns in-order.
 	for i := range table.Columns {
@@ -1789,7 +1795,7 @@ func forEachColumnInTable(
 }
 
 func forEachColumnInIndex(
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	fn func(*sqlbase.ColumnDescriptor) error,
 ) error {
@@ -1880,9 +1886,9 @@ func userCanSeeDatabase(ctx context.Context, p *planner, db *sqlbase.DatabaseDes
 }
 
 func userCanSeeTable(
-	ctx context.Context, p *planner, table *sqlbase.TableDescriptor, allowAdding bool,
+	ctx context.Context, p *planner, table sqlbase.DescriptorInterface, allowAdding bool,
 ) bool {
-	return tableIsVisible(table, allowAdding) && p.CheckAnyPrivilege(ctx, table) == nil
+	return tableIsVisible(table.TableDesc(), allowAdding) && p.CheckAnyPrivilege(ctx, table) == nil
 }
 
 func tableIsVisible(table *TableDescriptor, allowAdding bool) bool {

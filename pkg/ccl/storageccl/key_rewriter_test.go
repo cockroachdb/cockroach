@@ -58,14 +58,14 @@ func TestPrefixRewriter(t *testing.T) {
 func TestKeyRewriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := sqlbase.NamespaceTable
+	desc := sqlbase.NewMutableCreatedTableDescriptor(sqlbase.NamespaceTable.TableDescriptor)
 	oldID := desc.ID
 	newID := desc.ID + 1
 	desc.ID = newID
 	rekeys := []roachpb.ImportRequest_TableRekey{
 		{
 			OldID:   uint32(oldID),
-			NewDesc: mustMarshalDesc(t, &desc),
+			NewDesc: mustMarshalDesc(t, desc.TableDesc()),
 		},
 	}
 
@@ -77,7 +77,8 @@ func TestKeyRewriter(t *testing.T) {
 	}
 
 	t.Run("normal", func(t *testing.T) {
-		key := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, &sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
+		key := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec,
+			sqlbase.NamespaceTable.TableDesc(), desc.PrimaryIndex.ID)
 		newKey, ok, err := kr.RewriteKey(key, notSpan)
 		if err != nil {
 			t.Fatal(err)
@@ -95,7 +96,8 @@ func TestKeyRewriter(t *testing.T) {
 	})
 
 	t.Run("prefix end", func(t *testing.T) {
-		key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, &sqlbase.NamespaceTable, desc.PrimaryIndex.ID)).PrefixEnd()
+		key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec,
+			sqlbase.NamespaceTable.TableDesc(), desc.PrimaryIndex.ID)).PrefixEnd()
 		newKey, ok, err := kr.RewriteKey(key, notSpan)
 		if err != nil {
 			t.Fatal(err)
@@ -114,17 +116,18 @@ func TestKeyRewriter(t *testing.T) {
 
 	t.Run("multi", func(t *testing.T) {
 		desc.ID = oldID + 10
-		desc2 := sqlbase.DescriptorTable
+		desc2 := sqlbase.NewMutableCreatedTableDescriptor(sqlbase.DescriptorTable.TableDescriptor)
 		desc2.ID += 10
 		newKr, err := MakeKeyRewriterFromRekeys([]roachpb.ImportRequest_TableRekey{
-			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, &desc)},
-			{OldID: uint32(sqlbase.DescriptorTable.ID), NewDesc: mustMarshalDesc(t, &desc2)},
+			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
+			{OldID: uint32(sqlbase.DescriptorTable.ID), NewDesc: mustMarshalDesc(t, desc2.TableDesc())},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		key := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, &sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
+		key := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec,
+			sqlbase.NamespaceTable.TableDesc(), desc.PrimaryIndex.ID)
 		newKey, ok, err := newKr.RewriteKey(key, notSpan)
 		if err != nil {
 			t.Fatal(err)
@@ -143,7 +146,7 @@ func TestKeyRewriter(t *testing.T) {
 }
 
 func mustMarshalDesc(t *testing.T, tableDesc *sqlbase.TableDescriptor) []byte {
-	desc := sqlbase.WrapDescriptor(tableDesc)
+	desc := sqlbase.NewImmutableTableDescriptor(*tableDesc).DescriptorProto()
 	// Set the timestamp to a non-zero value.
 	desc.Table(hlc.Timestamp{WallTime: 1})
 	bytes, err := protoutil.Marshal(desc)

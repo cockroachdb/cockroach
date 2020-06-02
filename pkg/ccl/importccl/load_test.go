@@ -65,8 +65,8 @@ func TestGetDescriptorFromDB(t *testing.T) {
 		batch.Put(sqlbase.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), 9999)
 		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), 10000)
 
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 9999), sqlbase.WrapDescriptor(bobDesc))
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 10000), sqlbase.WrapDescriptor(aliceDesc))
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 9999), bobDesc.DescriptorProto())
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 10000), aliceDesc.DescriptorProto())
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)

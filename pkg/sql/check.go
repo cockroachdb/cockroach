@@ -37,7 +37,7 @@ func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	exprStr string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
@@ -46,7 +46,7 @@ func validateCheckExpr(
 		return err
 	}
 	// Construct AST and then convert to a string, to avoid problems with escaping the check expression
-	tblref := tree.TableRef{TableID: int64(tableDesc.ID), As: tree.AliasClause{Alias: "t"}}
+	tblref := tree.TableRef{TableID: int64(tableDesc.GetID()), As: tree.AliasClause{Alias: "t"}}
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
 		From:  tree.From{Tables: []tree.TableExpr{&tblref}},
@@ -360,7 +360,7 @@ func checkMutationInput(
 		} else if !res && checkVals[colIdx] != tree.DNull {
 			// Failed to satisfy CHECK constraint, so unwrap the serialized
 			// check expression to display to the user.
-			expr, exprErr := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, tabDesc.TableDesc(), checks[i].Expr)
+			expr, exprErr := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, tabDesc, checks[i].Expr)
 			if exprErr != nil {
 				// If we ran into an error trying to read the check constraint, wrap it
 				// and return.

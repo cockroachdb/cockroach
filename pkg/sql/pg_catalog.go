@@ -394,7 +394,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 )`,
 	virtualMany, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *DatabaseDescriptor, scName string,
-		table *sqlbase.TableDescriptor,
+		table *sqlbase.ImmutableTableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		colNum := 0
@@ -460,7 +460,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 )`,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *DatabaseDescriptor, scName string,
-		table *sqlbase.TableDescriptor,
+		table *sqlbase.ImmutableTableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
@@ -660,7 +660,7 @@ CREATE TABLE pg_catalog.pg_class (
 )`,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *DatabaseDescriptor, scName string,
-		table *sqlbase.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
+		table *sqlbase.ImmutableTableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
@@ -832,7 +832,7 @@ func populateTableConstraints(
 	h oidHasher,
 	db *sqlbase.DatabaseDescriptor,
 	scName string,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	tableLookup simpleSchemaResolver,
 	addRow func(...tree.Datum) error,
 ) error {
@@ -860,7 +860,7 @@ func populateTableConstraints(
 		var err error
 		switch con.Kind {
 		case sqlbase.ConstraintTypePK:
-			oid = h.PrimaryKeyConstraintOid(db, scName, table, con.Index)
+			oid = h.PrimaryKeyConstraintOid(db, scName, table.TableDesc(), con.Index)
 			contype = conTypePKey
 			conindid = h.IndexOid(table.ID, con.Index.ID)
 
@@ -871,7 +871,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(table.PrimaryKeyString())
 
 		case sqlbase.ConstraintTypeFK:
-			oid = h.ForeignKeyConstraintOid(db, scName, table, con.FK)
+			oid = h.ForeignKeyConstraintOid(db, scName, table.TableDesc(), con.FK)
 			contype = conTypeFK
 			// Foreign keys don't have a single linked index. Pick the first one
 			// that matches on the referenced table.
@@ -908,7 +908,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(buf.String())
 
 		case sqlbase.ConstraintTypeUnique:
-			oid = h.UniqueConstraintOid(db, scName, table, con.Index)
+			oid = h.UniqueConstraintOid(db, scName, table.TableDesc(), con.Index)
 			contype = conTypeUnique
 			conindid = h.IndexOid(table.ID, con.Index.ID)
 			var err error
@@ -922,7 +922,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(f.CloseAndGetString())
 
 		case sqlbase.ConstraintTypeCheck:
-			oid = h.CheckConstraintOid(db, scName, table, con.CheckConstraint)
+			oid = h.CheckConstraintOid(db, scName, table.TableDesc(), con.CheckConstraint)
 			contype = conTypeCheck
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
@@ -996,14 +996,14 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	virtualOpts virtualOpts,
 	includesIndexEntries bool,
 	populateFromTable func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.DatabaseDescriptor,
-		scName string, table *sqlbase.TableDescriptor, lookup simpleSchemaResolver,
+		scName string, table *sqlbase.ImmutableTableDescriptor, lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error,
 ) virtualSchemaTable {
 	populateAll := func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts,
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, lookup tableLookupFn) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor, lookup tableLookupFn) error {
 				return populateFromTable(ctx, p, h, db, scName, table, lookup, addRow)
 			})
 	}
@@ -1044,7 +1044,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					// they're virtual, dropped tables, or ones that the user can't see.
 					if (!table.Desc.IsVirtualTable() && table.Desc.ParentID != db.ID) ||
 						table.Desc.Dropped() ||
-						!userCanSeeTable(ctx, p, table.Desc.TableDesc(), true /*allowAdding*/) {
+						!userCanSeeTable(ctx, p, table.Desc, true /*allowAdding*/) {
 						return false, nil
 					}
 					h := makeOidHasher()
@@ -1053,7 +1053,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					if err != nil {
 						return false, err
 					}
-					if err := populateFromTable(ctx, p, h, db, scName, table.Desc.TableDesc(), scResolver,
+					if err := populateFromTable(ctx, p, h, db, scName, table.Desc, scResolver,
 						addRow); err != nil {
 						return false, err
 					}
@@ -1266,7 +1266,7 @@ CREATE TABLE pg_catalog.pg_depend (
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
-			table *sqlbase.TableDescriptor,
+			table *sqlbase.ImmutableTableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			pgConstraintTableOid := tableOid(pgConstraintsDesc.ID)
@@ -1308,7 +1308,7 @@ CREATE TABLE pg_catalog.pg_depend (
 				} else {
 					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
-				constraintOid := h.ForeignKeyConstraintOid(db, scName, table, con.FK)
+				constraintOid := h.ForeignKeyConstraintOid(db, scName, table.TableDesc(), con.FK)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid
@@ -1601,7 +1601,7 @@ CREATE TABLE pg_catalog.pg_index (
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				tableOid := tableOid(table.ID)
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 					isMutation, isWriteOnly :=
@@ -1689,7 +1689,7 @@ CREATE TABLE pg_catalog.pg_indexes (
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, tableLookup tableLookupFn) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor, tableLookup tableLookupFn) error {
 				scNameName := tree.NewDName(scName)
 				tblName := tree.NewDName(table.Name)
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
@@ -1717,7 +1717,7 @@ func indexDefFromDescriptor(
 	ctx context.Context,
 	p *planner,
 	db *sqlbase.DatabaseDescriptor,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	tableLookup tableLookupFn,
 ) (string, error) {
@@ -2365,7 +2365,7 @@ CREATE TABLE pg_catalog.pg_sequence (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
@@ -2499,7 +2499,7 @@ CREATE TABLE pg_catalog.pg_tables (
 		// empty -- listing tables across databases can yield duplicate
 		// schema/table names.
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				if !table.IsTable() {
 					return nil
 				}
@@ -2962,7 +2962,7 @@ CREATE TABLE pg_catalog.pg_views (
 		// Note: pg_views is not well defined if the dbContext is empty,
 		// because it does not distinguish views in separate databases.
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*virtual schemas do not have views*/
-			func(db *sqlbase.DatabaseDescriptor, scName string, desc *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, desc *sqlbase.ImmutableTableDescriptor) error {
 				if !desc.IsView() {
 					return nil
 				}

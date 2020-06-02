@@ -139,7 +139,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.Put(ctx, mKey, sqlbase.WrapDescriptor(&desc)); err != nil {
+	if err := kvDB.Put(ctx, mKey, desc.DescriptorProto()); err != nil {
 		t.Fatal(err)
 	}
 

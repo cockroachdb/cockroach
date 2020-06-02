@@ -442,7 +442,7 @@ func (s Storage) PublishMultiple(
 
 			b := txn.NewBatch()
 			for tableID, tableDesc := range tableDescs {
-				if err := catalogkv.WriteDescToBatch(ctx, false /* kvTrace */, s.settings, b, s.codec, tableID, tableDesc.TableDesc()); err != nil {
+				if err := catalogkv.WriteDescToBatch(ctx, false /* kvTrace */, s.settings, b, s.codec, tableID, tableDesc); err != nil {
 					return err
 				}
 			}

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -66,7 +68,6 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-
 	if entry, ok := l.vs.GetVirtualSchema(scName); ok {
 		names := make(tree.TableNames, 0, entry.NumTables())
 		desc := entry.Desc().TableDesc()
@@ -105,8 +106,22 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 			}
 			return nil, nil
 		}
+		if flags.RequireMutable {
+			return nil, newMutableAccessToVirtualSchemaError(scEntry, object)
+		}
 		return desc.Desc(), nil
 	}
 	// Fallthrough.
 	return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
+}
+
+func newMutableAccessToVirtualSchemaError(entry catalog.VirtualSchema, object string) error {
+	switch entry.Desc().GetName() {
+	case "pg_catalog":
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"%s is a system catalog", tree.ErrNameString(object))
+	default:
+		return pgerror.Newf(pgcode.WrongObjectType,
+			"%s is a virtual object and cannot be modified", tree.ErrNameString(object))
+	}
 }
