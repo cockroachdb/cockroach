@@ -42,7 +42,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── prune: (2-4,6,7)
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
- ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-zero)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -144,7 +144,7 @@ project
       │    │    ├── prune: (2-4)
       │    │    ├── reject-nulls: (6,9)
       │    │    ├── interesting orderings: (+1) (-3,+4,+1) (+9)
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-zero)
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
       │    │    ├── scan xysd
       │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    │    ├── key: (1)
@@ -155,7 +155,7 @@ project
       │    │    │    ├── columns: v:6(int!null) n:9(int!null)
       │    │    │    ├── fd: (6)==(9), (9)==(6)
       │    │    │    ├── interesting orderings: (+9)
-      │    │    │    ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: v:6(int!null)
       │    │    │    │    └── prune: (6)
@@ -265,7 +265,7 @@ left-join (hash)
  ├── prune: (2-4,6,7)
  ├── reject-nulls: (5-7)
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-zero)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -310,7 +310,7 @@ project
       │    │    ├── prune: (2-4)
       │    │    ├── reject-nulls: (5)
       │    │    ├── interesting orderings: (+1) (-3,+4,+1)
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-zero)
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
       │    │    ├── scan xysd
       │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    │    ├── key: (1)
@@ -626,7 +626,7 @@ select
                 ├── key: ()
                 ├── fd: ()-->(5,6)
                 ├── prune: (6)
-                ├── multiplicity: left-rows(one-or-zero), right-rows(one-or-zero)
+                ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
                 ├── project
                 │    ├── columns: x:5(int)
                 │    ├── outer: (1)
@@ -673,7 +673,7 @@ project
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(5)
-      ├── multiplicity: left-rows(one-or-zero), right-rows(one-or-zero)
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── select
       │    ├── columns: count_rows:5(int!null)
       │    ├── cardinality: [0 - 1]
@@ -1618,7 +1618,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(6), (6)==(1)
  ├── prune: (2-5)
  ├── interesting orderings: (+1) (-3,+4,+1)
- ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-zero)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
@@ -1673,7 +1673,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (4)==(5), (5)==(4)
  ├── prune: (1-3,6-8)
  ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
- ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
  │    ├── key: (1)
@@ -1893,7 +1893,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (9)-->(10-12), (11,12)~~>(9,10), (5)==(3,9), (9)==(3,5), (3)==(5,9)
  ├── prune: (1,2,4,6-8,10-12)
  ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5) (+9) (-11,+12,+9)
- ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
  │    ├── key: (1)
@@ -1984,7 +1984,7 @@ inner-join (hash)
  ├── fd: (9)-->(10-12), (11,12)~~>(9,10), (8)==(9), (9)==(8)
  ├── prune: (10-12)
  ├── interesting orderings: (+9) (-11,+12,+9)
- ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── union
  │    ├── columns: u:7(int) v:8(int!null)
  │    ├── left columns: uv.u:1(int) uv.v:2(int)
@@ -2017,7 +2017,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(6-8), (7,8)~~>(5,6), (1)==(6), (6)==(1)
  ├── prune: (2-5,7,8)
  ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
- ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-zero)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── key: (1)
@@ -2074,7 +2074,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (5)-->(6), (6)~~>(5), (1)==(5), (5)==(1)
  ├── prune: (2-4,6)
  ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (+6,+5)
- ├── multiplicity: left-rows(one-or-zero), right-rows(one-or-zero)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
  │    ├── key: (1)
@@ -2103,7 +2103,7 @@ inner-join (hash)
  ├── columns: r1:1(int!null) r2:2(int!null) r3:3(int!null) a:5(int!null) b:6(int!null) c:7(int!null)
  ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
  ├── interesting orderings: (+1,+2,+3) (+5,+6,+7)
- ├── multiplicity: left-rows(one-or-zero), right-rows(zero-or-more)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── scan ref
  │    ├── columns: r1:1(int!null) r2:2(int) r3:3(int!null)
  │    ├── prune: (1-3)
@@ -2163,3 +2163,125 @@ inner-join (hash)
       └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
            ├── variable: r3:3 [type=int]
            └── variable: c:7 [type=int]
+
+exec-ddl
+CREATE TABLE trade_type (tt_id INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE exchange (ex_id INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE status_type (st_id INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE security (
+    s_symb  INT PRIMARY KEY,
+    s_st_id INT NOT NULL,
+    s_ex_id INT NOT NULL,
+    FOREIGN KEY (s_st_id) REFERENCES status_type (st_id),
+    FOREIGN KEY (s_ex_id) REFERENCES exchange (ex_id)
+)
+----
+
+exec-ddl
+CREATE TABLE trade (
+    t_st_id  INT NOT NULL,
+    t_tt_id  INT NOT NULL,
+    t_s_symb INT NOT NULL,
+    FOREIGN KEY (t_st_id) REFERENCES status_type (st_id),
+    FOREIGN KEY (t_tt_id) REFERENCES trade_type (tt_id),
+    FOREIGN KEY (t_s_symb) REFERENCES security (s_symb)
+)
+----
+
+# Regression test for #49821.
+opt format=show-ruleprops
+SELECT *
+FROM trade, status_type, trade_type, security, exchange
+WHERE st_id = t_st_id
+  AND tt_id = t_tt_id
+  AND s_symb = t_s_symb
+  AND ex_id = s_ex_id
+LIMIT 50;
+----
+limit
+ ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:5(int!null) tt_id:6(int!null) s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
+ ├── cardinality: [0 - 50]
+ ├── fd: (7)-->(8,9), (9)==(10), (10)==(9), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+ ├── prune: (8)
+ ├── interesting orderings: (+5) (+6) (+7) (+8,+7) (+9,+7) (+10) (+1) (+2) (+3)
+ ├── inner-join (hash)
+ │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:5(int!null) tt_id:6(int!null) s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
+ │    ├── fd: (7)-->(8,9), (9)==(10), (10)==(9), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+ │    ├── limit hint: 50.00
+ │    ├── prune: (8)
+ │    ├── interesting orderings: (+5) (+6) (+7) (+8,+7) (+9,+7) (+10) (+1) (+2) (+3)
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: st_id:5(int!null) tt_id:6(int!null) s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
+ │    │    ├── key: (5-7)
+ │    │    ├── fd: (7)-->(8,9), (9)==(10), (10)==(9)
+ │    │    ├── prune: (5-8)
+ │    │    ├── interesting orderings: (+5) (+6) (+7) (+8,+7) (+9,+7) (+10)
+ │    │    ├── join-size: 4
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: tt_id:6(int!null) s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
+ │    │    │    ├── key: (6,7)
+ │    │    │    ├── fd: (7)-->(8,9), (9)==(10), (10)==(9)
+ │    │    │    ├── prune: (6-8)
+ │    │    │    ├── interesting orderings: (+6) (+7) (+8,+7) (+9,+7) (+10)
+ │    │    │    ├── join-size: 3
+ │    │    │    ├── scan trade_type
+ │    │    │    │    ├── columns: tt_id:6(int!null)
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    ├── prune: (6)
+ │    │    │    │    └── interesting orderings: (+6)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
+ │    │    │    │    ├── key: (7)
+ │    │    │    │    ├── fd: (7)-->(8,9), (9)==(10), (10)==(9)
+ │    │    │    │    ├── prune: (7,8)
+ │    │    │    │    ├── interesting orderings: (+7) (+8,+7) (+9,+7) (+10)
+ │    │    │    │    ├── join-size: 2
+ │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    │    │    ├── scan security
+ │    │    │    │    │    ├── columns: s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null)
+ │    │    │    │    │    ├── key: (7)
+ │    │    │    │    │    ├── fd: (7)-->(8,9)
+ │    │    │    │    │    ├── prune: (7-9)
+ │    │    │    │    │    └── interesting orderings: (+7) (+8,+7) (+9,+7)
+ │    │    │    │    ├── scan exchange
+ │    │    │    │    │    ├── columns: ex_id:10(int!null)
+ │    │    │    │    │    ├── key: (10)
+ │    │    │    │    │    ├── prune: (10)
+ │    │    │    │    │    └── interesting orderings: (+10)
+ │    │    │    │    └── filters
+ │    │    │    │         └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+ │    │    │    │              ├── variable: ex_id:10 [type=int]
+ │    │    │    │              └── variable: s_ex_id:9 [type=int]
+ │    │    │    └── filters (true)
+ │    │    ├── scan status_type
+ │    │    │    ├── columns: st_id:5(int!null)
+ │    │    │    ├── key: (5)
+ │    │    │    ├── prune: (5)
+ │    │    │    └── interesting orderings: (+5)
+ │    │    └── filters (true)
+ │    ├── scan trade
+ │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null)
+ │    │    ├── prune: (1-3)
+ │    │    └── interesting orderings: (+1) (+2) (+3)
+ │    └── filters
+ │         ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         │    ├── variable: st_id:5 [type=int]
+ │         │    └── variable: t_st_id:1 [type=int]
+ │         ├── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ │         │    ├── variable: tt_id:6 [type=int]
+ │         │    └── variable: t_tt_id:2 [type=int]
+ │         └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │              ├── variable: s_symb:7 [type=int]
+ │              └── variable: t_s_symb:3 [type=int]
+ └── const: 50 [type=int]

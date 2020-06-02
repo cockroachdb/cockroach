@@ -203,7 +203,7 @@ group-by
  │         ├── fd: (1)-->(2,3), (1)==(4), (4)==(1)
  │         ├── prune: (2,3,5)
  │         ├── interesting orderings: (+1)
- │         ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-zero)
+ │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │         ├── project
  │         │    ├── columns: div:3(decimal) x:1(int!null) y:2(int)
  │         │    ├── immutable, side-effects
