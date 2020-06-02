@@ -58,37 +58,44 @@ func dropTableDesc(
 	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	log.Infof(ctx, "removing table descriptor for table %d", tableDesc.ID)
-	descKey := sqlbase.MakeDescMetadataKey(codec, tableDesc.ID)
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
-
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
 		b := &kv.Batch{}
-		// Delete the descriptor.
-		b.Del(descKey)
-		// Delete the zone config entry for this table.
-		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 
+		// Delete the descriptor.
+		descKey := sqlbase.MakeDescMetadataKey(codec, tableDesc.ID)
+		b.Del(descKey)
+		// Delete the zone config entry for this table, if necessary.
+		if codec.ForSystemTenant() {
+			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.ID))
+			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		}
 		return txn.Run(ctx, b)
 	})
 }
 
 // deleteDatabaseZoneConfig removes the zone config for a given database ID.
-func deleteDatabaseZoneConfig(ctx context.Context, db *kv.DB, databaseID sqlbase.ID) error {
+func deleteDatabaseZoneConfig(
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, databaseID sqlbase.ID,
+) error {
+	if databaseID == sqlbase.InvalidID {
+		return nil
+	}
+	if !codec.ForSystemTenant() {
+		// Secondary tenants do not have zone configs for individual objects.
+		return nil
+	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := &kv.Batch{}
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
+		b := &kv.Batch{}
 
 		// Delete the zone config entry for the dropped database associated with the
 		// job, if it exists.
-		if databaseID == sqlbase.InvalidID {
-			return nil
-		}
-		dbZoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(databaseID))
+		dbZoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(databaseID))
 		b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		return txn.Run(ctx, b)
 	})

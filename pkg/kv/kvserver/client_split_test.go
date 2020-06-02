@@ -1017,7 +1017,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	descID := uint32(keys.MinUserDescID)
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	config.TestingSetZoneConfig(descID, zoneConfig)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
@@ -1079,7 +1079,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	descID := uint32(keys.MinUserDescID)
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	config.TestingSetZoneConfig(descID, zoneConfig)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
@@ -1325,6 +1325,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		ids := schema.DescriptorIDs()
 		maxID := uint32(ids[len(ids)-1])
+		if maxPseudo := keys.MaxPseudoTableID; maxID < maxPseudo {
+			maxID = maxPseudo
+		}
 		for i := uint32(keys.MaxSystemConfigDescID + 1); i <= maxID; i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(i)),

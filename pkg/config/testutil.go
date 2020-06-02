@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-type zoneConfigMap map[uint32]zonepb.ZoneConfig
+type zoneConfigMap map[SystemTenantObjectID]zonepb.ZoneConfig
 
 var (
 	testingZoneConfig   zoneConfigMap
@@ -40,7 +40,7 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 	testingZoneConfig = make(zoneConfigMap)
 	testingPreviousHook = ZoneConfigHook
 	ZoneConfigHook = testingZoneConfigHook
-	testingLargestIDHook = func(maxID uint32) (max uint32) {
+	testingLargestIDHook = func(maxID SystemTenantObjectID) (max SystemTenantObjectID) {
 		testingLock.Lock()
 		defer testingLock.Unlock()
 		for id := range testingZoneConfig {
@@ -70,14 +70,14 @@ func testingResetZoneConfigHook() {
 
 // TestingSetZoneConfig sets the zone config entry for object 'id'
 // in the testing map.
-func TestingSetZoneConfig(id uint32, zone zonepb.ZoneConfig) {
+func TestingSetZoneConfig(id SystemTenantObjectID, zone zonepb.ZoneConfig) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	testingZoneConfig[id] = zone
 }
 
 func testingZoneConfigHook(
-	_ *SystemConfig, id uint32,
+	_ *SystemConfig, id SystemTenantObjectID,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 	testingLock.Lock()
 	defer testingLock.Unlock()

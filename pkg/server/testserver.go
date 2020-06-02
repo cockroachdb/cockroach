@@ -728,6 +728,9 @@ func ExpectedInitialRangeCount(
 			maxSystemDescriptorID = descID
 		}
 	}
+	if maxSystemDescriptorID < sqlbase.ID(keys.MaxPseudoTableID) {
+		maxSystemDescriptorID = sqlbase.ID(keys.MaxPseudoTableID)
+	}
 	systemTableSplits := int(maxSystemDescriptorID - keys.MaxSystemConfigDescID)
 
 	// `n` splits create `n+1` ranges.

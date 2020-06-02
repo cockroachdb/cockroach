@@ -191,7 +191,6 @@ func (p *planner) truncateTable(
 	// structured.proto
 	//
 	// TODO(vivek): Fix properly along with #12123.
-	zoneKey := config.MakeZoneKey(uint32(tableDesc.ID))
 	key := sqlbase.MakeObjectNameKey(
 		ctx, p.ExecCfg().Settings,
 		newTableDesc.ParentID,
@@ -272,24 +271,31 @@ func (p *planner) truncateTable(
 		return err
 	}
 
-	// Copy the zone config.
-	b := &kv.Batch{}
-	b.Get(zoneKey)
-	if err := p.txn.Run(ctx, b); err != nil {
-		return err
+	// Copy the zone config, if this is for the system tenant. Secondary tenants
+	// do not have zone configs for individual objects.
+	if p.ExecCfg().Codec.ForSystemTenant() {
+		zoneKey := config.MakeZoneKey(config.SystemTenantObjectID(tableDesc.ID))
+		b := &kv.Batch{}
+		b.Get(zoneKey)
+		if err := p.txn.Run(ctx, b); err != nil {
+			return err
+		}
+		val := b.Results[0].Rows[0].Value
+		if val == nil {
+			return nil
+		}
+		zoneCfg, err := val.GetBytes()
+		if err != nil {
+			return err
+		}
+		const insertZoneCfg = `INSERT INTO system.zones (id, config) VALUES ($1, $2)`
+		if _, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+			ctx, "insert-zone", p.txn, insertZoneCfg, newID, zoneCfg,
+		); err != nil {
+			return err
+		}
 	}
-	val := b.Results[0].Rows[0].Value
-	if val == nil {
-		return nil
-	}
-	zoneCfg, err := val.GetBytes()
-	if err != nil {
-		return err
-	}
-	const insertZoneCfg = `INSERT INTO system.zones (id, config) VALUES ($1, $2)`
-	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-		ctx, "insert-zone", p.txn, insertZoneCfg, newID, zoneCfg)
-	return err
+	return nil
 }
 
 // For all the references from a table
