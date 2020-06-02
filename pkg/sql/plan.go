@@ -329,9 +329,7 @@ func (p planMaybePhysical) isPhysicalPlan() bool {
 
 func (p planMaybePhysical) planColumns() sqlbase.ResultColumns {
 	if p.isPhysicalPlan() {
-		// TODO(yuzefovich): update this once we support creating table reader
-		// specs directly in the optimizer (see #47474).
-		return nil
+		return p.physPlan.ResultColumns
 	}
 	return planColumns(p.planNode)
 }
