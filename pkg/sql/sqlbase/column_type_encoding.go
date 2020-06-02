@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -93,6 +94,16 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
 		return encoding.EncodeStringDescending(b, string(*t)), nil
+	case *tree.DGeography:
+		if dir == encoding.Ascending {
+			return encoding.EncodeGeoAscending(b, &t.Geography.SpatialObject)
+		}
+		return encoding.EncodeGeoDescending(b, &t.Geography.SpatialObject)
+	case *tree.DGeometry:
+		if dir == encoding.Ascending {
+			return encoding.EncodeGeoAscending(b, &t.Geometry.SpatialObject)
+		}
+		return encoding.EncodeGeoDescending(b, &t.Geometry.SpatialObject)
 	case *tree.DDate:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, t.UnixEpochDaysWithOrig()), nil
@@ -272,6 +283,22 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
+	case types.GeographyFamily:
+		var r geopb.SpatialObject
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeGeoAscending(key)
+		} else {
+			rkey, r, err = encoding.DecodeGeoDescending(key)
+		}
+		return a.NewDGeography(tree.DGeography{Geography: geo.NewGeography(r)}), rkey, err
+	case types.GeometryFamily:
+		var r geopb.SpatialObject
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeGeoAscending(key)
+		} else {
+			rkey, r, err = encoding.DecodeGeoDescending(key)
+		}
+		return a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometry(r)}), rkey, err
 	case types.DateFamily:
 		var t int64
 		if dir == encoding.Ascending {
