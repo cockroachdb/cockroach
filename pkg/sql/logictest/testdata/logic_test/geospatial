@@ -1605,3 +1605,86 @@ GeometryCollection[BSG] with 2 elements
     LineString[BG] with 2 points
   MultiPoint[BG] with 1 element
     Point[BG]
+
+subtest geom_linear_reference
+
+statement ok
+CREATE TABLE geom_linear (
+  dsc  TEXT PRIMARY KEY,
+  geom GEOMETRY
+)
+
+statement ok
+INSERT INTO geom_linear VALUES
+  ('Empty LineString', 'LINESTRING EMPTY'),
+  ('LineString anticlockwise covering all the quadrants', 'LINESTRING(1 -1, 2 2, -2 2, -1 -1)'),
+  ('LineString clockwise covering all the quadrants with SRID 4004', 'SRID=4004;LINESTRING(1 -1, -1 -1, -2 2, 2 2)')
+
+# ST_LineInterpolatePoint, ST_LineInterpolatePoints
+query TRBTTT
+SELECT
+  a.dsc,
+  b.fraction,
+  c.repeat,
+  ST_AsEWKT(ST_LineInterpolatePoint(a.geom, b.fraction::float)),
+  ST_AsEWKT(ST_LineInterpolatePoints(a.geom, b.fraction::float)),
+  ST_AsEWKT(ST_LineInterPolatePoints(a.geom, b.fraction::float, c.repeat))
+FROM geom_linear a
+JOIN (VALUES (0.0), (0.2), (0.5), (0.51), (1.0)) b(fraction) ON (1=1)
+JOIN (VALUES (true), (false)) c(repeat) ON (1=1)
+ORDER BY a.dsc, b.fraction, c.repeat
+----
+Empty LineString                                                0.0   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.0   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.2   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.2   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.5   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.5   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.51  false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.51  true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                1.0   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                1.0   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+LineString anticlockwise covering all the quadrants             0.0   false  POINT (1 -1)                                             POINT (1 -1)                                                                                                                                 POINT (1 -1)
+LineString anticlockwise covering all the quadrants             0.0   true   POINT (1 -1)                                             POINT (1 -1)                                                                                                                                 POINT (1 -1)
+LineString anticlockwise covering all the quadrants             0.2   false  POINT (1.6529822128134706 0.9589466384404113)            MULTIPOINT (1.6529822128134706 0.9589466384404113, 1.032455532033675 2, -1.0324555320336777 2, -1.65298221281347 0.9589466384404097, -1 -1)  POINT (1.6529822128134706 0.9589466384404113)
+LineString anticlockwise covering all the quadrants             0.2   true   POINT (1.6529822128134706 0.9589466384404113)            MULTIPOINT (1.6529822128134706 0.9589466384404113, 1.032455532033675 2, -1.0324555320336777 2, -1.65298221281347 0.9589466384404097, -1 -1)  MULTIPOINT (1.6529822128134706 0.9589466384404113, 1.032455532033675 2, -1.0324555320336777 2, -1.65298221281347 0.9589466384404097, -1 -1)
+LineString anticlockwise covering all the quadrants             0.5   false  POINT (-0.0000000000000004440892098500626 2)             MULTIPOINT (-0.0000000000000004440892098500626 2, -1 -1)                                                                                     POINT (-0.0000000000000004440892098500626 2)
+LineString anticlockwise covering all the quadrants             0.5   true   POINT (-0.0000000000000004440892098500626 2)             MULTIPOINT (-0.0000000000000004440892098500626 2, -1 -1)                                                                                     MULTIPOINT (-0.0000000000000004440892098500626 2, -1 -1)
+LineString anticlockwise covering all the quadrants             0.51  false  POINT (-0.10324555320336826 2)                           POINT (-0.10324555320336826 2)                                                                                                               POINT (-0.10324555320336826 2)
+LineString anticlockwise covering all the quadrants             0.51  true   POINT (-0.10324555320336826 2)                           POINT (-0.10324555320336826 2)                                                                                                               POINT (-0.10324555320336826 2)
+LineString anticlockwise covering all the quadrants             1.0   false  POINT (-1 -1)                                            POINT (-1 -1)                                                                                                                                POINT (-1 -1)
+LineString anticlockwise covering all the quadrants             1.0   true   POINT (-1 -1)                                            POINT (-1 -1)                                                                                                                                POINT (-1 -1)
+LineString clockwise covering all the quadrants with SRID 4004  0.0   false  SRID=4004;POINT (1 -1)                                   SRID=4004;POINT (1 -1)                                                                                                                       SRID=4004;POINT (1 -1)
+LineString clockwise covering all the quadrants with SRID 4004  0.0   true   SRID=4004;POINT (1 -1)                                   SRID=4004;POINT (1 -1)                                                                                                                       SRID=4004;POINT (1 -1)
+LineString clockwise covering all the quadrants with SRID 4004  0.2   false  SRID=4004;POINT (-0.8324555320336762 -1)                 SRID=4004;MULTIPOINT (-0.8324555320336762 -1, -1.5264911064067355 0.579473319220206, -1.6649110640673515 2, 0.16754446796632472 2, 2 2)      SRID=4004;POINT (-0.8324555320336762 -1)
+LineString clockwise covering all the quadrants with SRID 4004  0.2   true   SRID=4004;POINT (-0.8324555320336762 -1)                 SRID=4004;MULTIPOINT (-0.8324555320336762 -1, -1.5264911064067355 0.579473319220206, -1.6649110640673515 2, 0.16754446796632472 2, 2 2)      SRID=4004;MULTIPOINT (-0.8324555320336762 -1, -1.5264911064067355 0.579473319220206, -1.6649110640673515 2, 0.16754446796632472 2, 2 2)
+LineString clockwise covering all the quadrants with SRID 4004  0.5   false  SRID=4004;POINT (-1.816227766016838 1.448683298050514)   SRID=4004;MULTIPOINT (-1.816227766016838 1.448683298050514, 2 2)                                                                             SRID=4004;POINT (-1.816227766016838 1.448683298050514)
+LineString clockwise covering all the quadrants with SRID 4004  0.5   true   SRID=4004;POINT (-1.816227766016838 1.448683298050514)   SRID=4004;MULTIPOINT (-1.816227766016838 1.448683298050514, 2 2)                                                                             SRID=4004;MULTIPOINT (-1.816227766016838 1.448683298050514, 2 2)
+LineString clockwise covering all the quadrants with SRID 4004  0.51  false  SRID=4004;POINT (-1.845201431977848 1.5356042959335445)  SRID=4004;POINT (-1.845201431977848 1.5356042959335445)                                                                                      SRID=4004;POINT (-1.845201431977848 1.5356042959335445)
+LineString clockwise covering all the quadrants with SRID 4004  0.51  true   SRID=4004;POINT (-1.845201431977848 1.5356042959335445)  SRID=4004;POINT (-1.845201431977848 1.5356042959335445)                                                                                      SRID=4004;POINT (-1.845201431977848 1.5356042959335445)
+LineString clockwise covering all the quadrants with SRID 4004  1.0   false  SRID=4004;POINT (2 2)                                    SRID=4004;POINT (2 2)                                                                                                                        SRID=4004;POINT (2 2)
+LineString clockwise covering all the quadrants with SRID 4004  1.0   true   SRID=4004;POINT (2 2)                                    SRID=4004;POINT (2 2)                                                                                                                        SRID=4004;POINT (2 2)
+
+statement error st_lineinterpolatepoint\(\): fraction -1.000000 should be within \[0 1\] range
+SELECT ST_LineInterpolatePoint('LINESTRING (0 0, 1 1)'::geometry, -1)
+
+statement error st_lineinterpolatepoints\(\): fraction -1.000000 should be within \[0 1\] range
+SELECT ST_LineInterpolatePoints('LINESTRING (0 0, 1 1)'::geometry, -1, false)
+
+statement error st_lineinterpolatepoint\(\): geometry MultiLineString should be LineString
+SELECT ST_LineInterpolatePoint('MULTILINESTRING ((0 0, 1 1), (1 1, 0 0))'::geometry, 0.2)
+
+statement error st_lineinterpolatepoints\(\): geometry MultiLineString should be LineString
+SELECT ST_LineInterpolatePoints('MULTILINESTRING ((0 0, 1 1), (1 1, 0 0))'::geometry, 0.2, false)
+
+statement error st_lineinterpolatepoint\(\): geometry Point should be LineString
+SELECT ST_LineInterpolatePoint('POINT (0 0)'::geometry, 0.2)
+
+statement error st_lineinterpolatepoints\(\): geometry Point should be LineString
+SELECT ST_LineInterpolatePoints('POINT (0 0)'::geometry, 0.2, false)
+
+statement error st_lineinterpolatepoint\(\): geometry Polygon should be LineString
+SELECT ST_LineInterpolatePoint('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'::geometry, 0.2)
+
+statement error st_lineinterpolatepoints\(\): geometry Polygon should be LineString
+SELECT ST_LineInterpolatePoints('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'::geometry, 0.2, false)
