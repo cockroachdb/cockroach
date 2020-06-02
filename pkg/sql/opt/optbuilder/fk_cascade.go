@@ -511,6 +511,13 @@ func (cb *onUpdateCascadeBuilder) Build(
 // the columns that contain the old FK values, followed by the columns that
 // contain the new FK values.
 //
+// Note that for Upserts we need to only perform actions for rows that
+// correspond to updates (and not inserts). Normally these would be selected by
+// a "canaryCol IS NOT NULL" filters. However, that is not necessary because for
+// inserted rows the "old" values are all NULL and won't match anything in the
+// inner-join anyway. This reasoning is very similar to that of FK checks for
+// Upserts (see buildFKChecksForUpsert).
+//
 func (b *Builder) buildUpdateCascadeMutationInput(
 	childTable cat.Table,
 	childTableAlias *tree.TableName,
