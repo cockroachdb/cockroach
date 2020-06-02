@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -131,6 +132,15 @@ type scanColumnsConfig struct {
 	// If visibility is set to execinfra.ScanVisibilityPublicAndNotPublic, then
 	// mutation columns can be added to the list of columns.
 	visibility execinfrapb.ScanVisibility
+}
+
+func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrdering) error {
+	for i := range reqOrdering {
+		if reqOrdering[i].ColIdx >= len(cfg.wantedColumns) {
+			return errors.Errorf("invalid reqOrdering: %v", reqOrdering)
+		}
+	}
+	return nil
 }
 
 var publicColumnsCfg = scanColumnsConfig{}
