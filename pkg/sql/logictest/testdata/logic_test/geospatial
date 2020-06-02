@@ -757,6 +757,35 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            true   false
 Square overlapping left and right square  Square overlapping left and right square  true   false
 
+# Buffer -- unfortunately due to floating point precision, these results can be off by small
+# epsilon across operating systems. Until ST_AsEWKT with precision is implemented, we'll have to
+# verify that it works by checking another statistic for now.
+query TIII
+SELECT
+  a.dsc,
+  ST_NPoints(ST_Buffer(a.geom, 10)),
+  ST_NPoints(ST_Buffer(a.geom, 10, 2)),
+  ST_NPoints(ST_Buffer(a.geom, 10, 'quad_segs=4 endcap=flat'))
+FROM geom_operators_test a
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  0     0     0
+Empty LineString                          0     0     0
+Faraway point                             33    9     0
+Line going through left and right square  35    11    5
+NULL                                      NULL  NULL  NULL
+Point middle of Left Square               33    9     0
+Point middle of Right Square              33    9     0
+Square (left)                             37    13    21
+Square (right)                            37    13    21
+Square overlapping left and right square  37    13    21
+
+# Test raw string with ST_Buffer
+query I
+SELECT ST_NPoints(ST_Buffer('SRID=4326;POINT(0 0)', 10.0))
+----
+33
+
 # DE-9IM relations
 query TTTB
 SELECT
