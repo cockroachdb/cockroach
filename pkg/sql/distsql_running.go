@@ -882,11 +882,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
 	subqueryPlanCtx.ignoreClose = true
-	subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
+	subqueryPhysPlan, err := dsp.createPhysPlan(subqueryPlanCtx, subqueryPlan.plan)
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
+	dsp.FinalizePlan(subqueryPlanCtx, subqueryPhysPlan)
 
 	// TODO(arjun): #28264: We set up a row container, wrap it in a row
 	// receiver, and use it and serialize the results of the subquery. The type
@@ -916,7 +916,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRowReceiver := NewRowResultWriter(rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
-	dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	if subqueryRecv.commErr != nil {
 		return subqueryRecv.commErr
 	}
@@ -993,19 +993,19 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	evalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
-	plan planNode,
+	plan planMaybePhysical,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
 	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
-	physPlan, err := dsp.createPlanForNode(planCtx, plan)
+	physPlan, err := dsp.createPhysPlan(planCtx, plan)
 	if err != nil {
 		recv.SetError(err)
 		return func() {}
 	}
-	dsp.FinalizePlan(planCtx, &physPlan)
+	dsp.FinalizePlan(planCtx, physPlan)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	return dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	return dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
 
 // PlanAndRunCascadesAndChecks runs any cascade and check queries.
@@ -1059,14 +1059,14 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		}
 
 		evalCtx := evalCtxFactory()
-		execFactory := makeExecFactory(planner)
+		execFactory := newExecFactory(planner)
 		// The cascading query is allowed to autocommit only if it is the last
 		// cascade and there are no check queries to run.
 		if len(plan.checkPlans) > 0 || i < len(plan.cascades)-1 {
 			execFactory.disableAutoCommit()
 		}
 		cascadePlan, err := plan.cascades[i].PlanFn(
-			ctx, &planner.semaCtx, &evalCtx.EvalContext, &execFactory, buf, buf.bufferedRows.Len(),
+			ctx, &planner.semaCtx, &evalCtx.EvalContext, execFactory, buf, buf.bufferedRows.Len(),
 		)
 		if err != nil {
 			recv.SetError(err)
@@ -1148,7 +1148,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 // planAndRunPostquery runs a cascade or check query.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
 	ctx context.Context,
-	postqueryPlan planNode,
+	postqueryPlan planMaybePhysical,
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
@@ -1185,17 +1185,17 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		}
 	}
 
-	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan)
+	postqueryPhysPlan, err := dsp.createPhysPlan(postqueryPlanCtx, postqueryPlan)
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(postqueryPlanCtx, &postqueryPhysPlan)
+	dsp.FinalizePlan(postqueryPlanCtx, postqueryPhysPlan)
 
 	postqueryRecv := recv.clone()
 	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
 	// but it may not be the case when we support cascades through the optimizer.
 	postqueryRecv.resultWriter = &errOnlyResultWriter{}
-	dsp.Run(postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	if postqueryRecv.commErr != nil {
 		return postqueryRecv.commErr
 	}

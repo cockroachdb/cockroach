@@ -251,6 +251,23 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
+// ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
+// setting that controls experimentalDistSQLPlanningClusterMode below.
+const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
+
+// experimentalDistSQLPlanningClusterMode can be used to enable
+// optimizer-driven DistSQL planning that sidesteps intermediate planNode
+// transition when going from opt.Expr to DistSQL processor specs.
+var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
+	ExperimentalDistSQLPlanningClusterSettingName,
+	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning",
+	"off",
+	map[int64]string{
+		int64(sessiondata.ExperimentalDistSQLPlanningOff): "off",
+		int64(sessiondata.ExperimentalDistSQLPlanningOn):  "on",
+	},
+)
+
 // VectorizeClusterSettingName is the name for the cluster setting that controls
 // the VectorizeClusterMode below.
 const VectorizeClusterSettingName = "sql.defaults.vectorize"
@@ -882,7 +899,7 @@ func willDistributePlan(
 	ctx context.Context,
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
-	plan planNode,
+	plan planMaybePhysical,
 ) bool {
 	if _, singleTenant := nodeID.OptionalNodeID(); !singleTenant {
 		return false
@@ -892,15 +909,33 @@ func willDistributePlan(
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
-	if _, ok := plan.(*zeroNode); ok {
-		return false
+	if plan.isPhysicalPlan() {
+		// zeroNode as the root of the planNode tree is represented by a
+		// physical plan with a single values processor that has 0 rows.
+		if len(plan.physPlan.Processors) == 1 {
+			if valuesSpec := plan.physPlan.Processors[0].Spec.Core.Values; valuesSpec != nil {
+				if valuesSpec.NumRows == 0 {
+					return false
+				}
+			}
+		}
+	} else {
+		if _, ok := plan.planNode.(*zeroNode); ok {
+			return false
+		}
 	}
 
-	rec, err := checkSupportForNode(plan)
-	if err != nil {
-		// Don't use distSQL for this request.
-		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-		return false
+	var rec distRecommendation
+	if plan.isPhysicalPlan() {
+		rec = plan.recommendation
+	} else {
+		var err error
+		rec, err = checkSupportForPlanNode(plan.planNode)
+		if err != nil {
+			// Don't use distSQL for this request.
+			log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
+			return false
+		}
 	}
 
 	return shouldDistributeGivenRecAndMode(rec, distSQLMode)
@@ -1989,6 +2024,12 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 
 func (m *sessionDataMutator) SetEnumsEnabled(val bool) {
 	m.data.EnumsEnabled = val
+}
+
+func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(
+	val sessiondata.ExperimentalDistSQLPlanningMode,
+) {
+	m.data.ExperimentalDistSQLPlanningMode = val
 }
 
 func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {

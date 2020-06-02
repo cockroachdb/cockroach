@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -173,11 +175,39 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 
 	// Build the plan tree.
 	root := execMemo.RootExpr()
-	execFactory := makeExecFactory(p)
-	bld := execbuilder.New(&execFactory, execMemo, &opc.catalog, root, p.EvalContext())
-	plan, err := bld.Build()
-	if err != nil {
-		return err
+	var (
+		plan exec.Plan
+		bld  *execbuilder.Builder
+	)
+	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondata.ExperimentalDistSQLPlanningOff {
+		bld = execbuilder.New(newDistSQLSpecExecFactory(), execMemo, &opc.catalog, root, p.EvalContext())
+		plan, err = bld.Build()
+		if err != nil {
+			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
+				p.stmt.AST.StatementTag() == "SELECT" {
+				// We do not fallback to the old path because experimental
+				// planning is set to 'always' and we have a SELECT statement,
+				// so we return an error.
+				// We use a simple heuristic to check whether the statement is
+				// a SELECT, and the reasoning behind it is that we want to be
+				// able to run certain statement types (e.g. SET) regardless of
+				// whether they are supported by the new factory.
+				// TODO(yuzefovich): update this once we support more than just
+				// SELECT statements (see #47473).
+				return err
+			}
+			// We will fallback to the old path.
+			bld = nil
+		}
+	}
+	if bld == nil {
+		// If bld is non-nil, then experimental planning has succeeded and has
+		// already created a plan.
+		bld = execbuilder.New(newExecFactory(p), execMemo, &opc.catalog, root, p.EvalContext())
+		plan, err = bld.Build()
+		if err != nil {
+			return err
+		}
 	}
 
 	result := plan.(*planTop)
@@ -189,7 +219,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		result.flags.Set(planFlagIsDDL)
 	}
 
-	cols := planColumns(result.main)
+	cols := result.main.planColumns()
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
 			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")

@@ -43,6 +43,9 @@ type SessionData struct {
 	DistSQLMode DistSQLExecMode
 	// EnumsEnabled indicates whether use of ENUM types are allowed.
 	EnumsEnabled bool
+	// ExperimentalDistSQLPlanningMode indicates whether the experimental
+	// DistSQL planning driven by the optimizer is enabled.
+	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode
 	// OptimizerFKChecks indicates whether we should use the new paths to plan foreign
 	// key checks in the optimizer.
 	OptimizerFKChecks bool
@@ -192,6 +195,54 @@ func (c *DataConversionConfig) Equals(other *DataConversionConfig) bool {
 		return false
 	}
 	return true
+}
+
+// ExperimentalDistSQLPlanningMode controls if and when the opt-driven DistSQL
+// planning is used to create physical plans.
+type ExperimentalDistSQLPlanningMode int64
+
+const (
+	// ExperimentalDistSQLPlanningOff means that we always use the old path of
+	// going from opt.Expr to planNodes and then to processor specs.
+	ExperimentalDistSQLPlanningOff ExperimentalDistSQLPlanningMode = iota
+	// ExperimentalDistSQLPlanningOn means that we will attempt to use the new
+	// path for performing DistSQL planning in the optimizer, and if that
+	// doesn't succeed for some reason, we will fallback to the old path.
+	ExperimentalDistSQLPlanningOn
+	// ExperimentalDistSQLPlanningAlways means that we will only use the new path,
+	// and if it fails for any reason, the query will fail as well.
+	ExperimentalDistSQLPlanningAlways
+)
+
+func (m ExperimentalDistSQLPlanningMode) String() string {
+	switch m {
+	case ExperimentalDistSQLPlanningOff:
+		return "off"
+	case ExperimentalDistSQLPlanningOn:
+		return "on"
+	case ExperimentalDistSQLPlanningAlways:
+		return "always"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// ExperimentalDistSQLPlanningModeFromString converts a string into a
+// ExperimentalDistSQLPlanningMode. False is returned if the conversion was
+// unsuccessful.
+func ExperimentalDistSQLPlanningModeFromString(val string) (ExperimentalDistSQLPlanningMode, bool) {
+	var m ExperimentalDistSQLPlanningMode
+	switch strings.ToUpper(val) {
+	case "OFF":
+		m = ExperimentalDistSQLPlanningOff
+	case "ON":
+		m = ExperimentalDistSQLPlanningOn
+	case "ALWAYS":
+		m = ExperimentalDistSQLPlanningAlways
+	default:
+		return 0, false
+	}
+	return m, true
 }
 
 // DistSQLExecMode controls if and when the Executor distributes queries.

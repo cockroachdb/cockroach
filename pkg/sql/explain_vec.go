@@ -36,7 +36,7 @@ type explainVecNode struct {
 	optColumnsSlot
 
 	options *tree.ExplainOptions
-	plan    planNode
+	plan    planMaybePhysical
 
 	stmtType tree.StatementType
 
@@ -61,11 +61,11 @@ func (n *explainVecNode) startExec(params runParams) error {
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan,
 	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainPlanningCtx(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistribute)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistribute)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
+	physPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
 		if len(n.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (VEC) on this query is " +
@@ -74,13 +74,13 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return err
 	}
 
-	distSQLPlanner.FinalizePlan(planCtx, &plan)
+	distSQLPlanner.FinalizePlan(planCtx, physPlan)
 	nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
 	if err != nil {
 		return err
 	}
-	flows := plan.GenerateFlowSpecs(nodeID)
-	flowCtx := makeFlowCtx(planCtx, plan, params)
+	flows := physPlan.GenerateFlowSpecs(nodeID)
+	flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
 	flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
 	// We want to get the vectorized plan which would be executed with the
@@ -128,8 +128,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 	return nil
 }
 
-func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *execinfra.FlowCtx {
-	flowCtx := &execinfra.FlowCtx{
+func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, params runParams) *execinfra.FlowCtx {
+	return &execinfra.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
 		Cfg: &execinfra.ServerConfig{
@@ -138,10 +138,9 @@ func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *exe
 			VecFDSemaphore: params.p.execCfg.DistSQLSrv.VecFDSemaphore,
 		},
 	}
-	return flowCtx
 }
 
-func makeExplainPlanningCtx(
+func newPlanningCtxForExplainPurposes(
 	distSQLPlanner *DistSQLPlanner,
 	params runParams,
 	stmtType tree.StatementType,

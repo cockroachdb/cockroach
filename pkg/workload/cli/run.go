@@ -231,7 +231,7 @@ func workerRun(
 		}
 
 		if err := workFn(ctx); err != nil {
-			if errors.Is(err, ctx.Err()) {
+			if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 				return
 			}
 			errCh <- err
