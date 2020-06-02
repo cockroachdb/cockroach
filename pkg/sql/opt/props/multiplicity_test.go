@@ -13,78 +13,65 @@ package props
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/stretchr/testify/require"
 )
 
 var bothIndeterminate = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityIndeterminateVal,
 	RightMultiplicity: MultiplicityIndeterminateVal,
 }
 
 var bothNoDup = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityNotDuplicatedVal,
 	RightMultiplicity: MultiplicityNotDuplicatedVal,
 }
 
 var bothPreserved = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityPreservedVal,
 	RightMultiplicity: MultiplicityPreservedVal,
 }
 
 var bothNoDupBothPreserved = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityNotDuplicatedVal | MultiplicityPreservedVal,
 	RightMultiplicity: MultiplicityNotDuplicatedVal | MultiplicityPreservedVal,
 }
 
 var leftIndeterminateRightPreserved = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityIndeterminateVal,
 	RightMultiplicity: MultiplicityPreservedVal,
 }
 
 var leftIndeterminateRightNoDup = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityIndeterminateVal,
 	RightMultiplicity: MultiplicityNotDuplicatedVal,
 }
 
 var rightIndeterminateLeftPreserved = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityPreservedVal,
 	RightMultiplicity: MultiplicityIndeterminateVal,
 }
 
 var rightIndeterminateLeftNoDup = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityNotDuplicatedVal,
 	RightMultiplicity: MultiplicityIndeterminateVal,
 }
 
 var bothNoDupLeftPreserved = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityNotDuplicatedVal | MultiplicityPreservedVal,
 	RightMultiplicity: MultiplicityNotDuplicatedVal,
 }
 
 var bothPreservedLeftNoDup = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityPreservedVal | MultiplicityNotDuplicatedVal,
 	RightMultiplicity: MultiplicityPreservedVal,
 }
 
 var bothNoDupRightPreserved = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityNotDuplicatedVal,
 	RightMultiplicity: MultiplicityNotDuplicatedVal | MultiplicityPreservedVal,
 }
 
 var bothPreservedRightNoDup = JoinMultiplicity{
-	UnfilteredCols:    opt.ColSet{},
 	LeftMultiplicity:  MultiplicityPreservedVal,
 	RightMultiplicity: MultiplicityPreservedVal | MultiplicityNotDuplicatedVal,
 }

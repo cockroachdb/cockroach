@@ -166,6 +166,7 @@ define InnerJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
@@ -174,6 +175,7 @@ define LeftJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
@@ -190,6 +192,7 @@ define FullJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]

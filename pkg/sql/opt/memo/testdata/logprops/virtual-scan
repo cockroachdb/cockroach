@@ -9,11 +9,11 @@ project
  ├── prune: (2,5)
  └── left-join (cross)
       ├── columns: catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) information_schema.tables.crdb_internal_vtable_pk:6(int) table_catalog:7(string) table_schema:8(string) table_name:9(string) table_type:10(string) is_insertable_into:11(string) version:12(int)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       ├── fd: ()-->(3), (6)-->(7-12)
       ├── prune: (4-6,9-12)
       ├── reject-nulls: (6-12)
       ├── interesting orderings: (+6)
-      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       ├── project
       │    ├── columns: catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string)
       │    ├── fd: ()-->(3)
@@ -39,7 +39,8 @@ project
       │    ├── key: (6)
       │    ├── fd: (6)-->(7-12)
       │    ├── prune: (6-12)
-      │    └── interesting orderings: (+6)
+      │    ├── interesting orderings: (+6)
+      │    └── unfiltered-cols: (6-12)
       └── filters
            └── and [type=bool, outer=(2,3,7,8), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; /7: (/NULL - ]; /8: (/NULL - ])]
                 ├── eq [type=bool]

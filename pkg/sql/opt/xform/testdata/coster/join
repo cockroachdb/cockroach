@@ -16,6 +16,7 @@ project
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join (hash)
       ├── columns: k:1!null d:4!null x:5!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
       ├── cost: 2123.725
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
@@ -97,6 +98,7 @@ SELECT k, x FROM a INNER LOOKUP JOIN b ON k=x
 inner-join (hash)
  ├── columns: k:1!null x:5!null
  ├── flags: force lookup join (into right side)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(5)=99, null(5)=0]
  ├── cost: 1e+100
  ├── fd: (1)==(5), (5)==(1)

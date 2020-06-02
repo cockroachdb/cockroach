@@ -399,6 +399,7 @@ select
                 │    ├── limit hint: 1.00
                 │    ├── left-join (hash)
                 │    │    ├── columns: k:7!null xy.y:14
+                │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
                 │    │    ├── scan a
                 │    │    │    ├── columns: k:7!null
                 │    │    │    └── key: (7)
@@ -1444,6 +1445,7 @@ project
  │    ├── fd: (1)==(7), (7)==(1), (7)-->(15), (1)-->(7,15)
  │    ├── inner-join (hash)
  │    │    ├── columns: b.k:1!null a.k:7!null
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  │    │    ├── key: (7)
  │    │    ├── fd: (1)==(7), (7)==(1)
  │    │    ├── scan b
@@ -1481,6 +1483,7 @@ project
  │    │    ├── ordering: +7 opt(8) [actual: +7]
  │    │    └── left-join (hash)
  │    │         ├── columns: b.k:1!null b.i:2 a.k:7 a.i:8
+ │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │         ├── key: (1,7)
  │    │         ├── fd: (1)-->(2), (7)-->(8)
  │    │         ├── scan b
@@ -1563,6 +1566,7 @@ project
  │    ├── fd: ()-->(22), (1)-->(22,23)
  │    ├── inner-join (hash)
  │    │    ├── columns: c.k:1!null b.k:7!null array:19 canary:22!null
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  │    │    ├── key: (7)
  │    │    ├── fd: ()-->(19,22), (1)==(7), (7)==(1)
  │    │    ├── scan c
@@ -1627,6 +1631,7 @@ project
  │    │    │    │    │    ├── columns: b.k:7!null a.k:13!null
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    │    │    │    │    ├── key: ()
  │    │    │    │    │    ├── fd: ()-->(7,13)
  │    │    │    │    │    ├── select
@@ -1765,6 +1770,7 @@ project
  │    │    │    │    │         ├── columns: inhrelid:30 inhparent:31 inhseqno:32 c.oid:34 c.relname:35
  │    │    │    │    │         ├── outer: (1)
  │    │    │    │    │         ├── cardinality: [1 - ]
+ │    │    │    │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  │    │    │    │    │         ├── fd: (31)==(34), (34)==(31)
  │    │    │    │    │         ├── values
  │    │    │    │    │         │    ├── cardinality: [1 - 1]
@@ -1830,6 +1836,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k = a.k
 ----
 full-join (cross)
  ├── columns: k:1
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1842,6 +1849,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k >= a.k
 ----
 full-join (cross)
  ├── columns: k:1
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1854,6 +1862,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k <= a.k
 ----
 full-join (cross)
  ├── columns: k:1
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1908,6 +1917,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k != a.k
 ----
 full-join (cross)
  ├── columns: k:1
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1920,6 +1930,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k > a.k
 ----
 full-join (cross)
  ├── columns: k:1
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1932,6 +1943,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k < a.k
 ----
 full-join (cross)
  ├── columns: k:1
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)

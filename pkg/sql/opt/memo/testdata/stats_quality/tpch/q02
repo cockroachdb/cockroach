@@ -116,6 +116,7 @@ project
       │         │    │    ├── inner-join (hash)
       │         │    │    │    ├── save-table-name: q2_inner_join_7
       │         │    │    │    ├── columns: ps_partkey:29(int!null) ps_suppkey:30(int!null) ps_supplycost:32(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
+      │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    ├── stats: [rows=161290.323, distinct(29)=110568.431, null(29)=0, distinct(30)=1844.80594, null(30)=0, distinct(32)=80252.0719, null(32)=0, distinct(34)=1844.80594, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0]
       │         │    │    │    ├── key: (29,34)
       │         │    │    │    ├── fd: ()-->(46), (29,30)-->(32), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (30)==(34), (34)==(30)
@@ -180,12 +181,14 @@ project
       │         │    │    ├── inner-join (hash)
       │         │    │    │    ├── save-table-name: q2_inner_join_14
       │         │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:10(int!null) s_name:11(char!null) s_address:12(varchar!null) s_nationkey:13(int!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
+      │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    ├── stats: [rows=1945.04451, distinct(1)=1333.31636, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=149.99965, null(5)=0, distinct(6)=1, null(6)=0, distinct(10)=1766.2414, null(10)=0, distinct(11)=1767.4156, null(11)=0, distinct(12)=1767.58209, null(12)=0, distinct(13)=5, null(13)=0, distinct(14)=1767.58209, null(14)=0, distinct(15)=1767.03149, null(15)=0, distinct(16)=1766.47747, null(16)=0, distinct(17)=1333.31636, null(17)=0, distinct(18)=1766.2414, null(18)=0, distinct(20)=1921.6712, null(20)=0, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0, distinct(17,18)=1932.15798, null(17,18)=0]
       │         │    │    │    ├── key: (17,18)
       │         │    │    │    ├── fd: ()-->(6,27), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13), (1)==(17), (17)==(1)
       │         │    │    │    ├── inner-join (hash)
       │         │    │    │    │    ├── save-table-name: q2_inner_join_15
       │         │    │    │    │    ├── columns: s_suppkey:10(int!null) s_name:11(char!null) s_address:12(varchar!null) s_nationkey:13(int!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
+      │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    │    ├── stats: [rows=161290.323, distinct(10)=9920, null(10)=0, distinct(11)=9989.99903, null(11)=0, distinct(12)=9999.99901, null(12)=0, distinct(13)=5, null(13)=0, distinct(14)=9999.99901, null(14)=0, distinct(15)=9966.99907, null(15)=0, distinct(16)=9933.99912, null(16)=0, distinct(17)=110564.957, null(17)=0, distinct(18)=9920, null(18)=0, distinct(20)=80250.5069, null(20)=0, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0, distinct(17,18)=146040.974, null(17,18)=0]
       │         │    │    │    │    ├── key: (17,18)
       │         │    │    │    │    ├── fd: ()-->(27), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13)
@@ -202,6 +205,7 @@ project
       │         │    │    │    │    ├── inner-join (hash)
       │         │    │    │    │    │    ├── save-table-name: q2_inner_join_17
       │         │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_name:11(char!null) s_address:12(varchar!null) s_nationkey:13(int!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
+      │         │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    │    │    ├── stats: [rows=2000, distinct(10)=1844.80594, null(10)=0, distinct(11)=1846.09084, null(11)=0, distinct(12)=1846.27302, null(12)=0, distinct(13)=5, null(13)=0, distinct(14)=1846.27302, null(14)=0, distinct(15)=1845.67052, null(15)=0, distinct(16)=1845.06427, null(16)=0, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0]
       │         │    │    │    │    │    ├── key: (10)
       │         │    │    │    │    │    ├── fd: ()-->(27), (22)-->(23,24), (24)==(26), (26)==(24), (10)-->(11-16), (13)==(22), (22)==(13)
@@ -218,6 +222,7 @@ project
       │         │    │    │    │    │    ├── inner-join (hash)
       │         │    │    │    │    │    │    ├── save-table-name: q2_inner_join_19
       │         │    │    │    │    │    │    ├── columns: n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
+      │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         │    │    │    │    │    │    ├── stats: [rows=5, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0]
       │         │    │    │    │    │    │    ├── key: (22)
       │         │    │    │    │    │    │    ├── fd: ()-->(27), (22)-->(23,24), (24)==(26), (26)==(24)

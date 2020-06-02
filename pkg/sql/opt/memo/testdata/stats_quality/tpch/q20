@@ -69,6 +69,7 @@ sort
       └── inner-join (hash)
            ├── save-table-name: q20_inner_join_3
            ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null) n_nationkey:8(int!null) n_name:9(char!null)
+           ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
            ├── stats: [rows=392.749612, distinct(1)=392.685411, null(1)=0, distinct(2)=392.742232, null(2)=0, distinct(3)=392.749612, null(3)=0, distinct(4)=1, null(4)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0]
            ├── key: (1)
            ├── fd: ()-->(9), (1)-->(2-4), (4)==(8), (8)==(4)
@@ -102,6 +103,7 @@ sort
            │    │         └── inner-join (hash)
            │    │              ├── save-table-name: q20_inner_join_8
            │    │              ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) p_partkey:17(int!null) p_name:18(varchar!null) sum:42(float)
+           │    │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
            │    │              ├── stats: [rows=36960.327, distinct(12)=22217.3354, null(12)=0, distinct(13)=9681.00153, null(13)=0, distinct(14)=34508.432, null(14)=0, distinct(17)=22217.3354, null(17)=0, distinct(18)=17907.1379, null(18)=0, distinct(42)=34508.432, null(42)=0]
            │    │              ├── key: (13,17)
            │    │              ├── fd: (12,13)-->(14,42), (17)-->(18), (12)==(17), (17)==(12)

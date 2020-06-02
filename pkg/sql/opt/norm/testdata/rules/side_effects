@@ -76,6 +76,7 @@ SELECT * FROM a INNER JOIN xy ON k=x WHERE k=random()
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── volatile, side-effects
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
@@ -112,6 +113,7 @@ project
  ├── columns: case:8
  ├── left-join (hash)
  │    ├── columns: i:2 x:6 y:7
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    ├── fd: (6)-->(7)
  │    ├── scan a
  │    │    └── columns: i:2
@@ -138,6 +140,7 @@ project
       ├── fd: (1)-->(2-7), (6)-->(7)
       ├── left-join (hash)
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-7), (6)-->(7)
       │    ├── scan a
@@ -302,6 +305,7 @@ project
       ├── fd: (1)-->(2-6,8), (6)-->(8)
       ├── left-join (hash)
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:8
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    ├── immutable
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-6,8), (6)-->(8)

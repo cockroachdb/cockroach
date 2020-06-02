@@ -1366,6 +1366,7 @@ scalar-group-by
  │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:9 ol_d_id:10 ol_w_id:11
  │    ├── full-join (hash)
  │    │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:9 ol_d_id:10 ol_w_id:11
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  │    │    ├── project
  │    │    │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null
  │    │    │    ├── key: (1-3)
