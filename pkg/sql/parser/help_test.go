@@ -80,6 +80,11 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER PARTITION ??`, `ALTER PARTITION`},
 		{`ALTER PARTITION p OF INDEX tbl@idx ??`, `ALTER PARTITION`},
 
+		{`ANALYZE ??`, `ANALYZE`},
+		{`ANALYZE blah ??`, `ANALYZE`},
+		{`ANALYSE ??`, `ANALYZE`},
+		{`ANALYSE blah ??`, `ANALYZE`},
+
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOBS`},
 		{`CANCEL JOBS ??`, `CANCEL JOBS`},
