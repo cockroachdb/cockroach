@@ -37,6 +37,15 @@ typedef struct {
   size_t len;
 } CR_GEOS_String;
 
+// CR_GEOS_BufferParams are parameters that will be passed to buffer.
+typedef struct {
+  int endCapStyle;
+  int joinStyle;
+  int singleSided;
+  int quadrantSegments;
+  double mitreLimit;
+} CR_GEOS_BufferParamsInput;
+
 typedef CR_GEOS_String CR_GEOS_Status;
 
 // CR_GEOS contains all the functions loaded by GEOS.
@@ -49,13 +58,16 @@ typedef struct CR_GEOS CR_GEOS;
 // The error returned does not need to be freed (see comment for CR_GEOS_Slice).
 CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS** lib);
 
-// CR_GEOS_WKTToWKB converts a given WKT into it's WKB form. The wkt slice must be
+// CR_GEOS_WKTToWKB converts a given WKT into it's EWKB form. The wkt slice must be
 // convertible to a NUL character terminated C string.
 CR_GEOS_Status CR_GEOS_WKTToEWKB(CR_GEOS* lib, CR_GEOS_Slice wkt, int srid, CR_GEOS_String* ewkb);
 
-// CR_GEOS_ClipEWKBByRect clips a given WKB by the given rectangle.
-CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice wkb, double xmin, double ymin,
+// CR_GEOS_ClipEWKBByRect clips a given EWKB by the given rectangle.
+CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double xmin, double ymin,
                                       double xmax, double ymax, CR_GEOS_String* clippedEWKB);
+// CR_GEOS_Buffer buffers a given EWKB by the given distance and params.
+CR_GEOS_Status CR_GEOS_Buffer(CR_GEOS* lib, CR_GEOS_Slice ewkb, CR_GEOS_BufferParamsInput params,
+                              double distance, CR_GEOS_String* ret);
 
 //
 // Unary operators.
@@ -92,6 +104,7 @@ CR_GEOS_Status CR_GEOS_Within(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, ch
 CR_GEOS_Status CR_GEOS_Relate(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, CR_GEOS_String* ret);
 CR_GEOS_Status CR_GEOS_RelatePattern(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
                                      CR_GEOS_Slice pattern, char* ret);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
