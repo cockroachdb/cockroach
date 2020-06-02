@@ -1966,16 +1966,20 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 	return newDefs, nil
 }
 
-func makeObjectAlreadyExistsError(collidingObject sqlbase.DescriptorProto, name string) error {
-	switch collidingObject.(type) {
-	case *TableDescriptor:
+func makeObjectAlreadyExistsError(collidingObject *sqlbase.Descriptor, name string) error {
+	switch collidingObject.Union.(type) {
+	case *sqlbase.Descriptor_Table:
 		return sqlbase.NewRelationAlreadyExistsError(name)
-	case *TypeDescriptor:
+	case *sqlbase.Descriptor_Type:
 		return sqlbase.NewTypeAlreadyExistsError(name)
-	case *DatabaseDescriptor:
+	case *sqlbase.Descriptor_Database:
 		return sqlbase.NewDatabaseAlreadyExistsError(name)
+	case *sqlbase.Descriptor_Schema:
+		// TODO(ajwerner): Add a case for an existing schema object.
+		return errors.AssertionFailedf("schema exists with name %v", name)
+	default:
+		return errors.AssertionFailedf("unknown type %T exists with name %v", collidingObject.Union, name)
 	}
-	return nil
 }
 
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column

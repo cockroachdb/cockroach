@@ -50,7 +50,7 @@ func (p *planner) renameDatabase(
 
 	descID := oldDesc.GetID()
 	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
-	descDesc := sqlbase.WrapDescriptor(oldDesc)
+	descDesc := oldDesc.DescriptorProto()
 
 	b := &kv.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {

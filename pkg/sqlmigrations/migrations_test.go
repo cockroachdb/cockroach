@@ -538,7 +538,7 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := sqlbase.NamespaceTable
+	table := sqlbase.NewMutableExistingTableDescriptor(sqlbase.NamespaceTable.TableDescriptor)
 	table.ID = keys.MaxReservedDescID
 
 	prevPrivileges, ok := sqlbase.SystemAllowedPrivileges[table.ID]
@@ -555,7 +555,7 @@ func TestCreateSystemTable(t *testing.T) {
 	table.Name = "dummy"
 	nameKey := sqlbase.NewPublicTableKey(table.ParentID, table.Name).Key(keys.SystemSQLCodec)
 	descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, table.ID)
-	descVal := sqlbase.WrapDescriptor(&table)
+	descVal := table.DescriptorProto()
 
 	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
@@ -794,7 +794,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 			table := desc.Table(ts)
 			table.CreateAsOfTime = sqlbase.NamespaceTable.CreateAsOfTime
 			table.ModificationTime = sqlbase.NamespaceTable.ModificationTime
-			require.True(t, table.Equal(sqlbase.NamespaceTable))
+			require.True(t, table.Equal(sqlbase.NamespaceTable.TableDesc()))
 		}
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
@@ -802,7 +802,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 			table := desc.Table(ts)
 			table.CreateAsOfTime = sqlbase.DeprecatedNamespaceTable.CreateAsOfTime
 			table.ModificationTime = sqlbase.DeprecatedNamespaceTable.ModificationTime
-			require.True(t, table.Equal(sqlbase.DeprecatedNamespaceTable))
+			require.True(t, table.Equal(sqlbase.DeprecatedNamespaceTable.TableDesc()))
 		}
 		return nil
 	}))
@@ -849,7 +849,7 @@ CREATE TABLE system.jobs (
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := sqlbase.JobsTable
-	sqlbase.JobsTable = oldJobsTable
+	sqlbase.JobsTable = sqlbase.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
 	defer func() {
 		sqlbase.JobsTable = jobsTable
 	}()

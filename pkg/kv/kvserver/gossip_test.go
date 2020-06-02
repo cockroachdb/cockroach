@@ -213,11 +213,11 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 
 	require.NoError(t, txA.SetSystemConfigTrigger())
 	require.NoError(t, txA.Put(
-		ctx, keys.SystemSQLCodec.DescMetadataKey(1000), sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{})))
+		ctx, keys.SystemSQLCodec.DescMetadataKey(1000), (&sqlbase.DatabaseDescriptor{}).DescriptorProto()))
 
 	require.NoError(t, txB.SetSystemConfigTrigger())
 	require.NoError(t, txB.Put(
-		ctx, keys.SystemSQLCodec.DescMetadataKey(2000), sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{})))
+		ctx, keys.SystemSQLCodec.DescMetadataKey(2000), (&sqlbase.DatabaseDescriptor{}).DescriptorProto()))
 
 	const someTime = 10 * time.Millisecond
 	clearNotifictions := func(ch <-chan struct{}) {

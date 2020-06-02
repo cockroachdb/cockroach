@@ -147,8 +147,9 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		// configs through proper channels.
 		//
 		// Getting here outside tests is impossible.
+		desc := sqlbase.NewImmutableTableDescriptor(sqlbase.TableDescriptor{}).DescriptorProto()
 		var val roachpb.Value
-		if err := val.SetProto(sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{})); err != nil {
+		if err := val.SetProto(desc); err != nil {
 			panic(err)
 		}
 		return &val

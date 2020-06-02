@@ -70,7 +70,10 @@ func DequalifyColumnRefs(
 // DeserializeTableDescExpr performs this logic, but only returns a
 // tree.Expr to be clear that these returned expressions are not safe to Eval.
 func DeserializeTableDescExpr(
-	ctx context.Context, semaCtx *tree.SemaContext, desc *sqlbase.TableDescriptor, exprStr string,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	desc sqlbase.TableDescriptorInterface,
+	exprStr string,
 ) (tree.Expr, error) {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
@@ -92,7 +95,7 @@ func DeserializeTableDescExpr(
 func FormatColumnForDisplay(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	tbl *sqlbase.TableDescriptor,
+	tbl *sqlbase.ImmutableTableDescriptor,
 	desc *sqlbase.ColumnDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
@@ -213,7 +216,7 @@ func (d *dummyColumn) ResolvedType() *types.T {
 // If the expression references a column that does not exist in the table
 // descriptor, replaceVars errs with pgcode.UndefinedColumn.
 func replaceVars(
-	desc *sqlbase.TableDescriptor, rootExpr tree.Expr,
+	desc sqlbase.TableDescriptorInterface, rootExpr tree.Expr,
 ) (tree.Expr, sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
 

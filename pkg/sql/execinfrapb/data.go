@@ -93,8 +93,8 @@ func (tr *DistSQLTypeResolver) ResolveType(
 func makeTypeLookupFunc(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) sqlbase.TypeLookupFunc {
-	return func(id sqlbase.ID) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
-		return resolver.ResolveTypeDescByID(ctx, txn, codec, id)
+	return func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+		return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
 	}
 }
 

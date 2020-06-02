@@ -22,6 +22,7 @@ import (
 
 // Accessor provides access to sql object descriptors.
 type Accessor interface {
+
 	// GetDatabaseDesc looks up a database by name and returns its
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.

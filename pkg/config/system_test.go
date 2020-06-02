@@ -58,9 +58,9 @@ func sqlKV(tableID uint32, indexID, descID uint64) roachpb.KeyValue {
 
 func descriptor(descID uint64) roachpb.KeyValue {
 	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(descID))
-	v := sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{})
+	v := sqlbase.TableDescriptor{}
 	kv := roachpb.KeyValue{Key: k}
-	if err := kv.Value.SetProto(v); err != nil {
+	if err := kv.Value.SetProto(v.DescriptorProto()); err != nil {
 		panic(err)
 	}
 	return kv

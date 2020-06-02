@@ -241,7 +241,10 @@ func backupShowerDefault(
 								FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
 								IgnoreComments: true,
 							}
-							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors, table, displayOptions)
+							// TODO(ajwerner): This wrapping is unfortunate and will be fixed in
+							// this PR.
+							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
+								sqlbase.NewImmutableTableDescriptor(*table), displayOptions)
 							if err != nil {
 								continue
 							}

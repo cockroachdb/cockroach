@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -157,7 +158,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		0, /* parentID */
 		parentSchemaID,
 		id,
-		hlc.Timestamp{}, /* creationTime */
+		startTime, /* creationTime */
 		publicSelectPrivileges,
 		nil,                        /* affected */
 		nil,                        /* semaCtx */
@@ -235,7 +236,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		parentSchemaID,
 		id,
 		columns,
-		hlc.Timestamp{}, /* creationTime */
+		startTime, /* creationTime */
 		publicSelectPrivileges,
 		nil,   /* semaCtx */
 		nil,   /* evalCtx */
@@ -258,6 +259,10 @@ var virtualSchemas = map[sqlbase.ID]virtualSchema{
 	sqlbase.PgCatalogID:         pgCatalog,
 	sqlbase.CrdbInternalID:      crdbInternal,
 	sqlbase.PgExtensionSchemaID: pgExtension,
+}
+
+var startTime = hlc.Timestamp{
+	WallTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
 }
 
 //
@@ -346,6 +351,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		if !ok {
 			return nil, nil
 		}
+
 		return virtualTypeEntry{
 			desc:    sqlbase.MakeSimpleAliasTypeDescriptor(typ),
 			mutable: flags.RequireMutable,
@@ -375,15 +381,14 @@ func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc    *sqlbase.TypeDescriptor
+	desc    *sqlbase.ImmutableTypeDescriptor
 	mutable bool
 }
 
 func (e virtualTypeEntry) Desc() catalog.Descriptor {
-	if e.mutable {
-		return sqlbase.NewMutableExistingTypeDescriptor(*e.desc)
-	}
-	return sqlbase.NewImmutableTypeDescriptor(*e.desc)
+	// TODO(ajwerner): Should this be allowed? I think no. Let's just store an
+	// ImmutableTypeDesc off of this thing.
+	return e.desc
 }
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)

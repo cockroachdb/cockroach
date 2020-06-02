@@ -289,7 +289,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			clusterID := uuid.MakeV4()
 			hasNewSubzones := false
 			spans, err := sql.GenerateSubzoneSpans(
-				cluster.NoSettings, clusterID, keys.SystemSQLCodec, test.parsed.tableDesc, test.parsed.subzones, hasNewSubzones)
+				cluster.NoSettings, clusterID, keys.SystemSQLCodec, test.parsed.tableDesc.TableDesc(), test.parsed.subzones, hasNewSubzones)
 			if err != nil {
 				t.Fatalf("generating subzone spans: %+v", err)
 			}

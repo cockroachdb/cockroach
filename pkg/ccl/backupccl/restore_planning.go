@@ -401,7 +401,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 		for _, desc := range backupManifest.Descriptors {
 			if table := desc.Table(hlc.Timestamp{}); table != nil {
 				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(codec, table.ID))] =
-					sqlbase.WrapDescriptor(protoutil.Clone(table).(*sqlbase.TableDescriptor))
+					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*sqlbase.TableDescriptor)).DescriptorProto()
 			}
 		}
 	}
@@ -414,7 +414,8 @@ func maybeUpgradeTableDescsInBackupManifests(
 					return err
 				}
 				// TODO(lucy): Is this necessary?
-				backupManifest.Descriptors[j] = *sqlbase.WrapDescriptor(table)
+				backupManifest.Descriptors[j] = *sqlbase.NewMutableExistingTableDescriptor(
+					*table).DescriptorProto()
 			}
 		}
 	}

@@ -119,7 +119,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	// Read table descriptor for version.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	expectedVersion := tableDesc.Version
 	ctx := context.Background()
 
@@ -129,7 +129,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		t.Fatal(err)
 	}
 
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	newVersion := tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
@@ -155,13 +155,15 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	tableDesc.NextMutationID++
 
 	// Run state machine in both directions.
-	for _, direction := range []sqlbase.DescriptorMutation_Direction{sqlbase.DescriptorMutation_ADD, sqlbase.DescriptorMutation_DROP} {
+	for _, direction := range []sqlbase.DescriptorMutation_Direction{
+		sqlbase.DescriptorMutation_ADD, sqlbase.DescriptorMutation_DROP,
+	} {
 		tableDesc.Mutations[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(
 			ctx,
 			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
-			sqlbase.WrapDescriptor(tableDesc),
+			tableDesc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -176,7 +178,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 				t.Fatal(err)
 			}
 
-			tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+			tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+				kvDB, keys.SystemSQLCodec, "t", "test")
 			newVersion = tableDesc.Version
 			if newVersion != expectedVersion {
 				t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
@@ -188,7 +191,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		}
 	}
 	// RunStateMachineBeforeBackfill() doesn't complete the schema change.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 	if len(tableDesc.Mutations) == 0 {
 		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
@@ -217,7 +221,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	// Read table descriptor for version.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// A long running schema change operation runs through
 	// a state machine that increments the version by 3.
@@ -238,7 +243,8 @@ CREATE INDEX foo ON t.test (v)
 
 	// Wait until index is created.
 	for r := retry.Start(retryOpts); r.Next(); {
-		tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+			kvDB, keys.SystemSQLCodec, "t", "test")
 		if len(tableDesc.Indexes) == 1 {
 			break
 		}
@@ -250,7 +256,8 @@ CREATE INDEX foo ON t.test (v)
 	mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 
 	// Ensure that the version has been incremented.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 	newVersion := tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
@@ -263,7 +270,8 @@ CREATE INDEX foo ON t.test (v)
 
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Ensure that the version gets incremented.
-		tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+			kvDB, keys.SystemSQLCodec, "t", "test")
 		name := tableDesc.Indexes[0].Name
 		if name != "ufo" {
 			t.Fatalf("bad index name %s", name)
@@ -282,7 +290,8 @@ CREATE INDEX foo ON t.test (v)
 	}
 	// Wait until indexes are created.
 	for r := retry.Start(retryOpts); r.Next(); {
-		tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+			kvDB, keys.SystemSQLCodec, "t", "test")
 		if len(tableDesc.Indexes) == count+1 {
 			break
 		}
@@ -3557,7 +3566,8 @@ CREATE TABLE d.t (
 `); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "d", "t")
 	// Verify that this descriptor uses the new STORING encoding. Overwrite it
 	// with one that uses the old encoding.
 	for i, index := range tableDesc.Indexes {
@@ -3574,7 +3584,7 @@ CREATE TABLE d.t (
 	if err := kvDB.Put(
 		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
-		sqlbase.WrapDescriptor(tableDesc),
+		tableDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)
 	}

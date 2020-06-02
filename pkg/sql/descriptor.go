@@ -98,7 +98,7 @@ func (p *planner) createDescriptorWithID(
 	ctx context.Context,
 	idKey roachpb.Key,
 	id sqlbase.ID,
-	descriptor sqlbase.DescriptorProto,
+	descriptor sqlbase.DescriptorInterface,
 	st *cluster.Settings,
 	jobDesc string,
 ) error {

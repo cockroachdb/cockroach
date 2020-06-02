@@ -251,8 +251,7 @@ CREATE TABLE crdb_internal.tables (
 			dbNames := make(map[sqlbase.ID]string)
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
-				db, ok := desc.(*sqlbase.DatabaseDescriptor)
-				if ok {
+				if db := desc.GetDatabase(); db != nil {
 					dbNames[db.ID] = db.Name
 				}
 			}
@@ -301,8 +300,8 @@ CREATE TABLE crdb_internal.tables (
 			// Note: we do not use forEachTableDesc() here because we want to
 			// include added and dropped descriptors.
 			for _, desc := range descs {
-				table, ok := desc.(*sqlbase.TableDescriptor)
-				if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
+				table := desc.Table(hlc.Timestamp{})
+				if table == nil || p.CheckAnyPrivilege(ctx, sqlbase.NewImmutableTableDescriptor(*table)) != nil {
 					continue
 				}
 				dbName := dbNames[table.GetParentID()]
@@ -359,8 +358,8 @@ CREATE TABLE crdb_internal.schema_changes (
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
-			table, ok := desc.(*sqlbase.TableDescriptor)
-			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
+			table := desc.Table(hlc.Timestamp{})
+			if table == nil || p.CheckAnyPrivilege(ctx, sqlbase.NewImmutableTableDescriptor(*table)) != nil {
 				continue
 			}
 			tableID := tree.NewDInt(tree.DInt(int64(table.ID)))
@@ -418,7 +417,7 @@ CREATE TABLE crdb_internal.leases (
 	) (err error) {
 		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
 		p.LeaseMgr().VisitLeases(func(desc sqlbase.TableDescriptor, dropped bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
-			if p.CheckAnyPrivilege(ctx, &desc) != nil {
+			if p.CheckAnyPrivilege(ctx, sqlbase.NewImmutableTableDescriptor(desc)) != nil {
 				// TODO(ajwerner): inspect what type of error got returned.
 				return true
 			}
@@ -1449,7 +1448,7 @@ CREATE TABLE crdb_internal.create_statements (
 )
 `, virtualOnce, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.DatabaseDescriptor, scName string,
-		table *sqlbase.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
+		table *sqlbase.ImmutableTableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		contextName := ""
 		parentNameStr := tree.DNull
 		if db != nil {
@@ -1525,7 +1524,7 @@ func showAlterStatementWithInterleave(
 	contextName string,
 	lCtx simpleSchemaResolver,
 	allIdx []sqlbase.IndexDescriptor,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
 ) error {
@@ -1644,7 +1643,7 @@ CREATE TABLE crdb_internal.table_columns (
 		row := make(tree.Datums, 8)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+				func(db *DatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.ID))
 					tableName := tree.NewDString(table.Name)
 					for i := range table.Columns {
@@ -1703,7 +1702,7 @@ CREATE TABLE crdb_internal.table_indexes (
 		row := make(tree.Datums, 7)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+				func(db *DatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.ID))
 					tableName := tree.NewDString(table.Name)
 					row = row[:0]
@@ -1771,7 +1770,7 @@ CREATE TABLE crdb_internal.index_columns (
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(parent *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+			func(parent *DatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				parentName := parent.Name
 				tableName := tree.NewDString(table.Name)
@@ -1883,7 +1882,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		interleaveDep := tree.NewDString("interleave")
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
 			/* virtual tables have no backward/forward dependencies*/
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor, tableLookup tableLookupFn) error {
+			func(db *DatabaseDescriptor, _ string, table *ImmutableTableDescriptor, tableLookup tableLookupFn) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
 
@@ -2031,7 +2030,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 		interleaveDep := tree.NewDString("interleave")
 		sequenceDep := tree.NewDString("sequence")
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+			func(db *DatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
 
@@ -2192,15 +2191,14 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		parents := make(map[uint32]uint32)
 		for _, desc := range descs {
 			id := uint32(desc.GetID())
-			switch desc := desc.(type) {
-			case *sqlbase.TableDescriptor:
-				parents[id] = uint32(desc.ParentID)
-				tableNames[id] = desc.GetName()
+			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+				parents[id] = uint32(tableDesc.ParentID)
+				tableNames[id] = tableDesc.GetName()
 				indexNames[id] = make(map[uint32]string)
-				for _, idx := range desc.Indexes {
+				for _, idx := range tableDesc.Indexes {
 					indexNames[id][uint32(idx.ID)] = idx.Name
 				}
-			case *sqlbase.DatabaseDescriptor:
+			} else if dbDesc := desc.GetDatabase(); dbDesc != nil {
 				dbNames[id] = desc.GetName()
 			}
 		}
@@ -2472,7 +2470,7 @@ CREATE TABLE crdb_internal.zones (
 				if err != nil {
 					return err
 				}
-				if p.CheckAnyPrivilege(ctx, table) != nil {
+				if p.CheckAnyPrivilege(ctx, sqlbase.NewImmutableTableDescriptor(*table)) != nil {
 					continue
 				}
 			}
@@ -3091,9 +3089,9 @@ CREATE TABLE crdb_internal.partitions (
 		}
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
-				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+				func(db *DatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
 					return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-						return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
+						return addPartitioningRows(ctx, p, dbName, table.TableDesc(), index, &index.Partitioning,
 							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
 					})
 				})

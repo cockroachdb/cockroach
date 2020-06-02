@@ -99,14 +99,14 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 // to check the permissions of a descriptor given its ID, or the id given
 // is not a descriptor of a table or database.
 func (p *planner) checkDescriptorPermissions(ctx context.Context, id sqlbase.ID) error {
-	desc, found, err := catalogkv.LookupDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	rawDesc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
 	if err != nil {
 		return err
 	}
-	if !found {
+	if rawDesc == nil {
 		return nil
 	}
-
+	desc := sqlbase.UnwrapDescriptor(rawDesc)
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return pgerror.New(pgcode.InsufficientPrivilege, "insufficient privilege")
 	}

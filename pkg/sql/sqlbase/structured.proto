@@ -1116,7 +1116,7 @@ message SchemaDescriptor {
   option (gogoproto.goproto_getters) = true;
 
   // Shared descriptor fields. See the discussion at the top of TableDescriptor.
-  
+
   // name is the name of the schema.
   optional string name = 2 [(gogoproto.nullable) = false];
 

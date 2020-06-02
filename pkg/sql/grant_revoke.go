@@ -104,7 +104,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
-	var descriptors []sqlbase.DescriptorProto
+	var descriptors []sqlbase.DescriptorInterface
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {

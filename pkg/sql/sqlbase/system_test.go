@@ -18,15 +18,15 @@ import (
 )
 
 func TestShouldSplitAtDesc(t *testing.T) {
-	for inner, should := range map[DescriptorProto]bool{
-		&TableDescriptor{}:                    true,
-		&TableDescriptor{ViewQuery: "SELECT"}: false,
-		&DatabaseDescriptor{}:                 false,
-		&TypeDescriptor{}:                     false,
-		&SchemaDescriptor{}:                   false,
+	for inner, should := range map[DescriptorInterface]bool{
+		NewImmutableTableDescriptor(TableDescriptor{}):                    true,
+		NewImmutableTableDescriptor(TableDescriptor{ViewQuery: "SELECT"}): false,
+		&DatabaseDescriptor{}: false,
+		&TypeDescriptor{}:     false,
+		&SchemaDescriptor{}:   false,
 	} {
 		var rawDesc roachpb.Value
-		require.NoError(t, rawDesc.SetProto(WrapDescriptor(inner)))
+		require.NoError(t, rawDesc.SetProto(inner.DescriptorProto()))
 		require.Equal(t, should, ShouldSplitAtDesc(&rawDesc))
 	}
 }

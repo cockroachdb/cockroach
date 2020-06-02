@@ -125,12 +125,12 @@ func NoLookup(_ context.Context, _ TableID) (catalog.TableEntry, error) {
 
 // CheckPrivilegeFunction is the function type used by MakeFkMetadata that will
 // check the privileges of the current user to access specific tables.
-type CheckPrivilegeFunction func(context.Context, sqlbase.DescriptorProto, privilege.Kind) error
+type CheckPrivilegeFunction func(context.Context, sqlbase.DescriptorInterface, privilege.Kind) error
 
 // NoCheckPrivilege is a stub that can be used to not actually verify privileges.
 // This can be used when the FK work is initialized from a pre-populated
 // FkTableMetadata map.
-func NoCheckPrivilege(_ context.Context, _ sqlbase.DescriptorProto, _ privilege.Kind) error {
+func NoCheckPrivilege(_ context.Context, _ sqlbase.DescriptorInterface, _ privilege.Kind) error {
 	return nil
 }
 

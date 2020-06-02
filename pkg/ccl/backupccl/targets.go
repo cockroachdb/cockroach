@@ -464,25 +464,26 @@ func allSQLDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.Descriptor, 
 	return sqlDescs, nil
 }
 
-func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
+func ensureInterleavesIncluded(tables []sqlbase.TableDescriptorInterface) error {
 	inBackup := make(map[sqlbase.ID]bool, len(tables))
 	for _, t := range tables {
-		inBackup[t.ID] = true
+		inBackup[t.GetID()] = true
 	}
 
 	for _, table := range tables {
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		tableDesc := table.TableDesc()
+		if err := tableDesc.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			for _, a := range index.Interleave.Ancestors {
 				if !inBackup[a.TableID] {
 					return errors.Errorf(
-						"cannot backup table %q without interleave parent (ID %d)", table.Name, a.TableID,
+						"cannot backup table %q without interleave parent (ID %d)", table.GetName(), a.TableID,
 					)
 				}
 			}
 			for _, c := range index.InterleavedBy {
 				if !inBackup[c.Table] {
 					return errors.Errorf(
-						"cannot backup table %q without interleave child table (ID %d)", table.Name, c.Table,
+						"cannot backup table %q without interleave child table (ID %d)", table.GetName(), c.Table,
 					)
 				}
 			}

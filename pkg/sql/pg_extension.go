@@ -45,7 +45,7 @@ func postgisColumnsTablePopulator(
 			p,
 			dbContext,
 			hideVirtual,
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				if !table.IsPhysicalTable() {
 					return nil
 				}
