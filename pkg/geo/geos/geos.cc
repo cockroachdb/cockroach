@@ -41,6 +41,7 @@ typedef void (*CR_GEOS_MessageHandler)(const char*, void*);
 typedef void* CR_GEOS_WKTReader;
 typedef void* CR_GEOS_WKBReader;
 typedef void* CR_GEOS_WKBWriter;
+typedef void* CR_GEOS_BufferParams;
 
 // Function declarations from `capi/geos_c.h.in` in GEOS.
 typedef CR_GEOS_Handle (*CR_GEOS_init_r)();
@@ -62,6 +63,21 @@ typedef CR_GEOS_WKBReader (*CR_GEOS_WKBReader_create_r)(CR_GEOS_Handle);
 typedef CR_GEOS_Geometry (*CR_GEOS_WKBReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKBReader, const char*,
                                                      size_t);
 typedef void (*CR_GEOS_WKBReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBReader);
+
+typedef CR_GEOS_BufferParams (*CR_GEOS_BufferParams_create_r)(CR_GEOS_Handle);
+typedef void (*CR_GEOS_GEOSBufferParams_destroy_r)(CR_GEOS_Handle, CR_GEOS_BufferParams);
+typedef int (*CR_GEOS_BufferParams_setEndCapStyle_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                     int endCapStyle);
+typedef int (*CR_GEOS_BufferParams_setJoinStyle_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                   int joinStyle);
+typedef int (*CR_GEOS_BufferParams_setMitreLimit_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                    double mitreLimit);
+typedef int (*CR_GEOS_BufferParams_setQuadrantSegments_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                          int quadrantSegments);
+typedef int (*CR_GEOS_BufferParams_setSingleSided_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                     int singleSided);
+typedef CR_GEOS_Geometry (*CR_GEOS_BufferWithParams_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                       CR_GEOS_BufferParams, double width);
 
 typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
@@ -105,6 +121,15 @@ struct CR_GEOS {
   CR_GEOS_finish_r GEOS_finish_r;
   CR_GEOS_Context_setErrorMessageHandler_r GEOSContext_setErrorMessageHandler_r;
   CR_GEOS_Free_r GEOSFree_r;
+
+  CR_GEOS_BufferParams_create_r GEOSBufferParams_create_r;
+  CR_GEOS_GEOSBufferParams_destroy_r GEOSBufferParams_destroy_r;
+  CR_GEOS_BufferParams_setEndCapStyle_r GEOSBufferParams_setEndCapStyle_r;
+  CR_GEOS_BufferParams_setJoinStyle_r GEOSBufferParams_setJoinStyle_r;
+  CR_GEOS_BufferParams_setMitreLimit_r GEOSBufferParams_setMitreLimit_r;
+  CR_GEOS_BufferParams_setQuadrantSegments_r GEOSBufferParams_setQuadrantSegments_r;
+  CR_GEOS_BufferParams_setSingleSided_r GEOSBufferParams_setSingleSided_r;
+  CR_GEOS_BufferWithParams_r GEOSBufferWithParams_r;
 
   CR_GEOS_SetSRID_r GEOSSetSRID_r;
   CR_GEOS_GetSRID_r GEOSGetSRID_r;
@@ -167,6 +192,14 @@ struct CR_GEOS {
     INIT(GEOSFree_r);
     INIT(GEOSContext_setErrorMessageHandler_r);
     INIT(GEOSGeom_destroy_r);
+    INIT(GEOSBufferParams_create_r);
+    INIT(GEOSBufferParams_destroy_r);
+    INIT(GEOSBufferParams_setEndCapStyle_r);
+    INIT(GEOSBufferParams_setJoinStyle_r);
+    INIT(GEOSBufferParams_setMitreLimit_r);
+    INIT(GEOSBufferParams_setQuadrantSegments_r);
+    INIT(GEOSBufferParams_setSingleSided_r);
+    INIT(GEOSBufferWithParams_r);
     INIT(GEOSSetSRID_r);
     INIT(GEOSGetSRID_r);
     INIT(GEOSArea_r);
@@ -306,6 +339,37 @@ CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double x
       auto srid = lib->GEOSGetSRID_r(handle, geom);
       CR_GEOS_writeGeomToEWKB(lib, handle, clippedGeom, clippedEWKB, srid);
       lib->GEOSGeom_destroy_r(handle, clippedGeom);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_Buffer(CR_GEOS* lib, CR_GEOS_Slice ewkb, CR_GEOS_BufferParamsInput params,
+                              double distance, CR_GEOS_String* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *ret = {.data = NULL, .len = 0};
+
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, ewkb);
+  if (geom != nullptr) {
+    auto gParams = lib->GEOSBufferParams_create_r(handle);
+    if (gParams != nullptr) {
+      if (lib->GEOSBufferParams_setEndCapStyle_r(handle, gParams, params.endCapStyle) &&
+          lib->GEOSBufferParams_setJoinStyle_r(handle, gParams, params.joinStyle) &&
+          lib->GEOSBufferParams_setMitreLimit_r(handle, gParams, params.mitreLimit) &&
+          lib->GEOSBufferParams_setQuadrantSegments_r(handle, gParams, params.quadrantSegments) &&
+          lib->GEOSBufferParams_setSingleSided_r(handle, gParams, params.singleSided)) {
+        auto bufferedGeom = lib->GEOSBufferWithParams_r(handle, geom, gParams, distance);
+        if (bufferedGeom != nullptr) {
+          auto srid = lib->GEOSGetSRID_r(handle, geom);
+          CR_GEOS_writeGeomToEWKB(lib, handle, bufferedGeom, ret, srid);
+          lib->GEOSGeom_destroy_r(handle, bufferedGeom);
+        }
+      }
+      lib->GEOSBufferParams_destroy_r(handle, gParams);
     }
     lib->GEOSGeom_destroy_r(handle, geom);
   }

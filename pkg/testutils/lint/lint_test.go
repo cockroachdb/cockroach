@@ -1069,6 +1069,7 @@ func TestLint(t *testing.T) {
 
 		ignoredRules := []string{
 			"licence",
+			"mitre",   // PostGIS commands spell these as mitre.
 			"analyse", // required by SQL grammar
 		}
 

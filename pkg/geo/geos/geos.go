@@ -228,6 +228,59 @@ func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// BufferParamsJoinStyle maps to the GEOSBufJoinStyles enum in geos_c.h.in.
+type BufferParamsJoinStyle int
+
+// These should be kept in sync with the geos_c.h.in corresponding enum definition.
+const (
+	BufferParamsJoinStyleRound = 1
+	BufferParamsJoinStyleMitre = 2
+	BufferParamsJoinStyleBevel = 3
+)
+
+// BufferParamsEndCapStyle maps to the GEOSBufCapStyles enum in geos_c.h.in.
+type BufferParamsEndCapStyle int
+
+// These should be kept in sync with the geos_c.h.in corresponding enum definition.
+const (
+	BufferParamsEndCapStyleRound  = 1
+	BufferParamsEndCapStyleFlat   = 2
+	BufferParamsEndCapStyleSquare = 3
+)
+
+// BufferParams are parameters to provide into the GEOS buffer function.
+type BufferParams struct {
+	JoinStyle        BufferParamsJoinStyle
+	EndCapStyle      BufferParamsEndCapStyle
+	SingleSided      bool
+	QuadrantSegments int
+	MitreLimit       float64
+}
+
+// Buffer buffers the given geometry by the given distance and params.
+func Buffer(ewkb geopb.EWKB, params BufferParams, distance float64) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	singleSided := 0
+	if params.SingleSided {
+		singleSided = 1
+	}
+	cParams := C.CR_GEOS_BufferParamsInput{
+		endCapStyle:      C.int(params.EndCapStyle),
+		joinStyle:        C.int(params.JoinStyle),
+		singleSided:      C.int(singleSided),
+		quadrantSegments: C.int(params.QuadrantSegments),
+		mitreLimit:       C.double(params.MitreLimit),
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Buffer(g, goToCSlice(ewkb), cParams, C.double(distance), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // Area returns the area of an EWKB.
 func Area(ewkb geopb.EWKB) (float64, error) {
 	g, err := ensureInitInternal()
