@@ -620,6 +620,7 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 		}
 	}
 	return startTenant(
+		ctx,
 		ts.Stopper(),
 		ts.Cfg.ClusterName,
 		ts.RPCAddr(),
@@ -629,6 +630,7 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 }
 
 func startTenant(
+	ctx context.Context,
 	stopper *stop.Stopper,
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	tsRPCAddr string,
@@ -636,7 +638,6 @@ func startTenant(
 	sqlCfg SQLConfig,
 ) (pgAddr string, _ error) {
 	args := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
-	ctx := context.Background()
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return "", err
