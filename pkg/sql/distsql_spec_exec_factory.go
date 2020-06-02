@@ -22,12 +22,13 @@ import (
 )
 
 type distSQLSpecExecFactory struct {
+	planner *planner
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
-func newDistSQLSpecExecFactory() exec.Factory {
-	return &distSQLSpecExecFactory{}
+func newDistSQLSpecExecFactory(p *planner) exec.Factory {
+	return &distSQLSpecExecFactory{planner: p}
 }
 
 func (e *distSQLSpecExecFactory) ConstructValues(
@@ -235,7 +236,7 @@ func (e *distSQLSpecExecFactory) RenameColumns(
 func (e *distSQLSpecExecFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
 ) (exec.Plan, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return constructPlan(e.planner, root, subqueries, cascades, checks)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(
