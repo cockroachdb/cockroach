@@ -72,7 +72,7 @@ func performGC(
 
 		// Drop database zone config when all the tables have been GCed.
 		if details.ParentID != sqlbase.InvalidID && isDoneGC(progress) {
-			if err := deleteDatabaseZoneConfig(ctx, execCfg.DB, details.ParentID); err != nil {
+			if err := deleteDatabaseZoneConfig(ctx, execCfg.DB, execCfg.Codec, details.ParentID); err != nil {
 				return false, errors.Wrap(err, "deleting database zone config")
 			}
 		}

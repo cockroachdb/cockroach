@@ -280,7 +280,7 @@ type nodeChecker func(nodeID roachpb.NodeID) bool
 type zoneResolver struct {
 	init bool
 	// curObjectID is the object (i.e. usually table) of the configured range.
-	curObjectID uint32
+	curObjectID config.SystemTenantObjectID
 	// curRootZone is the lowest zone convering the previously resolved range
 	// that's not a subzone.
 	// This is used to compute the subzone for a range.
@@ -302,7 +302,9 @@ func (c *zoneResolver) resolveRange(
 // setZone remembers the passed-in info as the reference for further
 // checkSameZone() calls.
 // Clients should generally use the higher-level updateZone().
-func (c *zoneResolver) setZone(objectID uint32, key ZoneKey, rootZone *zonepb.ZoneConfig) {
+func (c *zoneResolver) setZone(
+	objectID config.SystemTenantObjectID, key ZoneKey, rootZone *zonepb.ZoneConfig,
+) {
 	c.init = true
 	c.curObjectID = objectID
 	c.curRootZone = rootZone
@@ -425,7 +427,7 @@ func visitZones(
 // corresponding to id. The zone corresponding to id itself is not visited.
 func visitAncestors(
 	ctx context.Context,
-	id uint32,
+	id config.SystemTenantObjectID,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
@@ -449,12 +451,12 @@ func visitAncestors(
 	}
 
 	// If it's a table, the parent is a database.
-	zone, err := getZoneByID(uint32(tableDesc.ParentID), cfg)
+	zone, err := getZoneByID(config.SystemTenantObjectID(tableDesc.ParentID), cfg)
 	if err != nil {
 		return false, err
 	}
 	if zone != nil {
-		if visitor(ctx, zone, MakeZoneKey(uint32(tableDesc.ParentID), NoSubzone)) {
+		if visitor(ctx, zone, MakeZoneKey(config.SystemTenantObjectID(tableDesc.ParentID), NoSubzone)) {
 			return true, nil
 		}
 	}
@@ -478,7 +480,9 @@ func visitDefaultZone(
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
-func getZoneByID(id uint32, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error) {
+func getZoneByID(
+	id config.SystemTenantObjectID, cfg *config.SystemConfig,
+) (*zonepb.ZoneConfig, error) {
 	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
 	if zoneVal == nil {
 		return nil, nil

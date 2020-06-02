@@ -52,7 +52,7 @@ requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
 requesting heap files for node 1... ? found
 requesting goroutine files for node 1... 0 found
 requesting log file ...
-requesting ranges... 33 found
+requesting ranges... 34 found
 writing: debug/nodes/1/ranges/1.json
 writing: debug/nodes/1/ranges/2.json
 writing: debug/nodes/1/ranges/3.json
@@ -86,6 +86,7 @@ writing: debug/nodes/1/ranges/30.json
 writing: debug/nodes/1/ranges/31.json
 writing: debug/nodes/1/ranges/32.json
 writing: debug/nodes/1/ranges/33.json
+writing: debug/nodes/1/ranges/34.json
 requesting list of SQL databases... 3 found
 requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
 0 tables found
