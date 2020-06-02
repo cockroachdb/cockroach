@@ -169,7 +169,7 @@ func (db *testSender) Send(
 	}
 	repl := db.store.LookupReplica(rs.Key)
 	if repl == nil || !repl.Desc().ContainsKeyRange(rs.Key, rs.EndKey) {
-		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
+		panic(fmt.Sprintf("didn't find right replica for key: %s", rs.Key))
 	}
 	ba.RangeID = repl.RangeID
 	repDesc, err := repl.GetReplicaDescriptor()
