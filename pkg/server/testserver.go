@@ -458,7 +458,7 @@ func makeSQLServerArgs(
 	}
 	rpcContext := rpc.NewContextWithTestingKnobs(
 		baseCfg.AmbientCtx,
-		baseCfg.Config,
+		&baseCfg.Config,
 		clock,
 		stopper,
 		st,

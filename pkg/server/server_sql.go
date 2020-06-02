@@ -497,7 +497,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
 	pgServer := pgwire.MakeServer(
 		cfg.AmbientCtx,
-		cfg.Config,
+		&cfg.Config,
 		cfg.Settings,
 		sqlMemMetrics,
 		&rootSQLMemoryMonitor,

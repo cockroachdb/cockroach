@@ -1332,7 +1332,7 @@ func getClientGRPCConn(
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: cfg.Settings.Tracer},
-		cfg.Config,
+		&cfg.Config,
 		clock,
 		stopper,
 		cfg.Settings,
