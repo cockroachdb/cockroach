@@ -181,7 +181,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		bld  *execbuilder.Builder
 	)
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondata.ExperimentalDistSQLPlanningOff {
-		bld = execbuilder.New(newDistSQLSpecExecFactory(), execMemo, &opc.catalog, root, p.EvalContext())
+		bld = execbuilder.New(newDistSQLSpecExecFactory(p), execMemo, &opc.catalog, root, p.EvalContext())
 		plan, err = bld.Build()
 		if err != nil {
 			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
