@@ -319,15 +319,15 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	}()
 
 	if err != nil {
+		if rbkErr := tx.Rollback(); rbkErr != nil {
+			return errors.Wrapf(err, "Could not rollback %v", rbkErr)
+		}
 		switch {
 		case errors.Is(err, errRunInTxnFatalSentinel):
 			return err
 		case errors.Is(err, errRunInTxnRbkSentinel):
 			if seriousErr := handleOpError(err); seriousErr != nil {
 				return seriousErr
-			}
-			if rbkErr := tx.Rollback(); rbkErr != nil {
-				return errors.Wrapf(err, "Could not rollback %v", rbkErr)
 			}
 			return nil
 		default:

@@ -53,7 +53,7 @@ func runSchemaChangeWorkloadStep(maxOps int) versionStep {
 		loadNode := u.c.All().randNode()[0]
 		runCmd := []string{
 			"./workload run",
-			fmt.Sprintf("schemachange --concurrency 2 --max-ops %d --verbose=1", maxOps),
+			fmt.Sprintf("schemachange --concurrency 2 --max-ops %d --verbose=1 --tolerate-errors=true", maxOps),
 			fmt.Sprintf("{pgurl:1-%d}", u.c.spec.NodeCount),
 		}
 		u.c.Run(ctx, u.c.Node(loadNode), runCmd...)
