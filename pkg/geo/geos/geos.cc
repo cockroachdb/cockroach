@@ -83,6 +83,8 @@ typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef CR_GEOS_Geometry (*CR_GEOS_Centroid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
+typedef CR_GEOS_Geometry (*CR_GEOS_Interpolate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
+
 typedef int (*CR_GEOS_Distance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double*);
 
 typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
@@ -147,6 +149,8 @@ struct CR_GEOS {
   CR_GEOS_Length_r GEOSLength_r;
   CR_GEOS_Centroid_r GEOSGetCentroid_r;
 
+  CR_GEOS_Interpolate_r GEOSInterpolate_r;
+
   CR_GEOS_Distance_r GEOSDistance_r;
 
   CR_GEOS_Covers_r GEOSCovers_r;
@@ -205,6 +209,7 @@ struct CR_GEOS {
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
     INIT(GEOSGetCentroid_r);
+    INIT(GEOSInterpolate_r);
     INIT(GEOSDistance_r);
     INIT(GEOSCovers_r);
     INIT(GEOSCoveredBy_r);
@@ -455,7 +460,34 @@ CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* c
   return toGEOSString(error.data(), error.length());
 }
 
-CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double* ret) {
+//
+// Linear Reference
+//
+
+CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS* lib, CR_GEOS_Slice a, double distance,
+                                   CR_GEOS_String* interpolatedPointEWKB) {
+   std::string error;
+   auto handle = initHandleWithErrorBuffer(lib, &error);
+   auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+   *interpolatedPointEWKB = {.data = NULL, .len = 0};
+   if (geom != nullptr) {
+     auto interpolatedPoint = lib->GEOSInterpolate_r(handle, geom, distance);
+     if (interpolatedPoint != nullptr) {
+       auto srid = lib->GEOSGetSRID_r(handle, geom);
+       CR_GEOS_writeGeomToEWKB(lib, handle, interpolatedPoint, interpolatedPointEWKB, srid);
+       lib->GEOSGeom_destroy_r(handle, interpolatedPoint);
+     }
+     lib->GEOSGeom_destroy_r(handle, geom);
+   }
+   lib->GEOS_finish_r(handle);
+   return toGEOSString(error.data(), error.length());
+}
+
+//
+// Binary operators
+//
+
+CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double *ret) {
   return CR_GEOS_BinaryOperator(lib, lib->GEOSDistance_r, a, b, ret);
 }
 
