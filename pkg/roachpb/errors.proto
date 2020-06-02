@@ -81,7 +81,7 @@ message RangeKeyMismatchError {
   // mismatched_range is the range that the command was incorrectly sent to.
   // It is used to update the sender's range cache without an additional range
   // lookup.
-  optional RangeDescriptor mismatched_range = 3;
+  optional RangeDescriptor mismatched_range = 3 [(gogoproto.nullable) = false];
   // suggested_range is a hint to the sender of a command about the range
   // they may be looking for. It is only populated when the recipient has
   // authoritative knowledge of the range requested by the sender.

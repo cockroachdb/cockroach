@@ -935,7 +935,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", pErr)
 	} else {
-		if mismatchedDesc := mismatchErr.MismatchedRange; mismatchedDesc == nil || mismatchedDesc.RangeID != firstRepl.RangeID {
+		if mismatchedDesc := mismatchErr.MismatchedRange; mismatchedDesc.RangeID != firstRepl.RangeID {
 			t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
 		}
 		if suggestedDesc := mismatchErr.SuggestedRange; suggestedDesc == nil || suggestedDesc.RangeID != newRepl.RangeID {
