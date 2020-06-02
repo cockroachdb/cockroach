@@ -192,7 +192,7 @@ func clearFlagChanges(cmd *cobra.Command) {
 // cliContext captures the command-line parameters of most CLI commands.
 type cliContext struct {
 	// Embed the base context.
-	*base.Config
+	base.Config
 
 	// isInteractive indicates whether the session is interactive, that
 	// is, the commands executed are extremely likely to be *input* from

@@ -109,7 +109,7 @@ func (mo *MaxOffsetType) String() string {
 // server.
 type BaseConfig struct {
 	Settings *cluster.Settings
-	*base.Config
+	base.Config
 
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
@@ -142,13 +142,12 @@ type BaseConfig struct {
 func MakeBaseConfig(st *cluster.Settings) BaseConfig {
 	baseCfg := BaseConfig{
 		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
-		Config:            new(base.Config),
 		Settings:          st,
 		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
 		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
 		StorageEngine:     storage.DefaultStorageEngine,
 	}
-	baseCfg.InitDefaults()
+	baseCfg.Config.InitDefaults()
 	return baseCfg
 }
 
