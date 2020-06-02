@@ -76,7 +76,7 @@ func IsScrubError(err error) bool {
 }
 
 // UnwrapScrubError gets the underlying error if err is a scrub.Error.
-// If err is not a scrub.Error nil is returned.
+// If err is not a scrub.Error, the error is returned unchanged.
 func UnwrapScrubError(err error) error {
 	var e *Error
 	if errors.As(err, &e) {
