@@ -927,7 +927,7 @@ BUILD_TAGGED_RELEASE =
 ## Override for .buildinfo/tag
 BUILDINFO_TAG :=
 
-$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS)
+$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ)
 $(go-targets): $(SQLPARSER_TARGETS) $(EXECGEN_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(if $(BUILDINFO_TAG),$(BUILDINFO_TAG),$(shell cat .buildinfo/tag))" \
@@ -1715,7 +1715,7 @@ logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 # Additional dependencies for binaries that depend on generated code.
 #
 # TODO(benesch): Derive this automatically. This is getting out of hand.
-bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES) $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
 bin/workload bin/roachtest $(logictest-bins): $(EXECGEN_TARGETS)
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS)
 

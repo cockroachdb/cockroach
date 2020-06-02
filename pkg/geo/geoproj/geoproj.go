@@ -18,28 +18,66 @@ package geoproj
 // #cgo windows LDFLAGS: -lshlwapi -lrpcrt4
 //
 // #include "proj.h"
-// #include <proj_api.h>
 import "C"
-import "unsafe"
+import (
+	"unsafe"
 
-// ProjPJ is the projPJ wrapper around the PROJ library's projPJ object.
-type ProjPJ struct {
-	projPJ C.projPJ
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/errors"
+)
+
+// maxArrayLen is the maximum safe length for this architecture.
+const maxArrayLen = 1<<31 - 1
+
+// goToCSlice returns a CR_PROJ_Slice from a given Go byte slice.
+func goToCSlice(b []byte) C.CR_PROJ_Slice {
+	if len(b) == 0 {
+		return C.CR_PROJ_Slice{data: nil, len: 0}
+	}
+	return C.CR_PROJ_Slice{
+		data: (*C.char)(unsafe.Pointer(&b[0])),
+		len:  C.size_t(len(b)),
+	}
 }
 
-// IsLatLng returns whether the underlying ProjPJ is a latlng system.
-// TODO(otan): store this metadata in the projPJ struct.
-func (p *ProjPJ) IsLatLng() bool {
-	return C.pj_is_latlong(p.projPJ) != 0
+func cStatusToUnsafeGoBytes(s C.CR_PROJ_Status) []byte {
+	if s.data == nil {
+		return nil
+	}
+	// Interpret the C pointer as a pointer to a Go array, then slice.
+	return (*[maxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
 }
 
-// NewProjPJFromText initializes a ProjPJ from text.
-// TODO(otan): thread through thread contexts and retrieve error messages.
-// TODO(otan): use slice management mechanisms.
-// TODO(otan): free after creation.
-func NewProjPJFromText(proj4text string) (*ProjPJ, error) {
-	str := C.CString(proj4text)
-	defer C.free(unsafe.Pointer(str))
-	projPJ := C.pj_init_plus(str)
-	return &ProjPJ{projPJ: projPJ}, nil
+// Project projects the given xCoords, yCoords and zCoords from one
+// coordinate system to another using proj4text.
+// Array elements are edited in place.
+func Project(
+	from geoprojbase.Proj4Text,
+	to geoprojbase.Proj4Text,
+	xCoords []float64,
+	yCoords []float64,
+	zCoords []float64,
+) error {
+	if len(xCoords) != len(yCoords) || len(xCoords) != len(zCoords) {
+		return errors.Newf(
+			"len(xCoords) != len(yCoords) != len(zCoords): %d != %d != %d",
+			len(xCoords),
+			len(yCoords),
+			len(zCoords),
+		)
+	}
+	if len(xCoords) == 0 {
+		return nil
+	}
+	if err := cStatusToUnsafeGoBytes(C.CR_PROJ_Transform(
+		goToCSlice([]byte(from)),
+		goToCSlice([]byte(to)),
+		C.long(len(xCoords)),
+		(*C.double)(unsafe.Pointer(&xCoords[0])),
+		(*C.double)(unsafe.Pointer(&yCoords[0])),
+		(*C.double)(unsafe.Pointer(&zCoords[0])),
+	)); err != nil {
+		return errors.Newf("error from PROJ: %s", string(err))
+	}
+	return nil
 }

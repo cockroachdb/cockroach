@@ -1075,6 +1075,18 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
 </span></td></tr>
+<tr><td><a name="st_transform"></a><code>st_transform(geometry: geometry, from_proj_text: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate reference system assuming the from_proj_text to the new to_proj_text by projecting its coordinates. The supplied SRID is set on the new geometry.</p>
+<p>This function utilizes the PROJ library for coordinate projections.</p>
+</span></td></tr>
+<tr><td><a name="st_transform"></a><code>st_transform(geometry: geometry, from_proj_text: <a href="string.html">string</a>, to_proj_text: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate reference system assuming the from_proj_text to the new to_proj_text by projecting its coordinates.</p>
+<p>This function utilizes the PROJ library for coordinate projections.</p>
+</span></td></tr>
+<tr><td><a name="st_transform"></a><code>st_transform(geometry: geometry, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the given SRID coordinate reference system by projecting its coordinates.</p>
+<p>This function utilizes the PROJ library for coordinate projections.</p>
+</span></td></tr>
+<tr><td><a name="st_transform"></a><code>st_transform(geometry: geometry, to_proj_text: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate reference system referenced by the projection text by projecting its coordinates.</p>
+<p>This function utilizes the PROJ library for coordinate projections.</p>
+</span></td></tr>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
