@@ -53,7 +53,7 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 		case "index-keys":
 			return keysToString(index.InvertedIndexKeys(ctx, shapes[nameArg(t, d)]))
 		case "inner-covering":
-			return cellUnionToString(index.testingInnerCovering(shapes[nameArg(t, d)]))
+			return cellUnionToString(index.TestingInnerCovering(shapes[nameArg(t, d)]))
 		case "covers":
 			return spansToString(index.Covers(ctx, shapes[nameArg(t, d)]))
 		case "intersects":
