@@ -908,38 +908,29 @@ func tableOrdinal(
 	panic(fmt.Sprintf("column %d not in desc.Columns", colID))
 }
 
-// getScanNodeToTableOrdinalMap returns a map from scan node column ordinal to
-// table reader column ordinal. Returns nil if the map is identity.
-//
-// scanNodes can have columns set up in a few different ways, depending on the
-// colCfg. The heuristic planner always creates scanNodes with all public
-// columns (even if some of them aren't even in the index we are scanning).
-// The optimizer creates scanNodes with a specific set of wanted columns; in
-// this case we have to create a map from scanNode column ordinal to table
-// column ordinal (which is what the TableReader uses).
-func getScanNodeToTableOrdinalMap(n *scanNode) []int {
-	if n.colCfg.wantedColumns == nil {
-		return nil
-	}
-	if n.colCfg.addUnwantedAsHidden {
-		panic("addUnwantedAsHidden not supported")
-	}
-	res := make([]int, len(n.cols))
+// toTableOrdinals returns a mapping from column ordinals in cols to table
+// reader column ordinals.
+func toTableOrdinals(
+	cols []sqlbase.ColumnDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
+	visibility execinfrapb.ScanVisibility,
+) []int {
+	res := make([]int, len(cols))
 	for i := range res {
-		res[i] = tableOrdinal(n.desc, n.cols[i].ID, n.colCfg.visibility)
+		res[i] = tableOrdinal(desc, cols[i].ID, visibility)
 	}
 	return res
 }
 
-// getOutputColumnsFromScanNode returns the indices of the columns that are
-// returned by a scanNode.
+// getOutputColumnsFromColsForScan returns the indices of the columns that are
+// returned by a scanNode or a tableReader.
 // If remap is not nil, the column ordinals are remapped accordingly.
-func getOutputColumnsFromScanNode(n *scanNode, remap []int) []uint32 {
-	outputColumns := make([]uint32, 0, len(n.cols))
+func getOutputColumnsFromColsForScan(cols []sqlbase.ColumnDescriptor, remap []int) []uint32 {
+	outputColumns := make([]uint32, 0, len(cols))
 	// TODO(radu): if we have a scan with a filter, cols will include the
 	// columns needed for the filter, even if they aren't needed for the next
 	// stage.
-	for i := 0; i < len(n.cols); i++ {
+	for i := 0; i < len(cols); i++ {
 		colIdx := i
 		if remap != nil {
 			colIdx = remap[i]
@@ -1040,66 +1031,123 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *PlanningCtx, n *scanNode,
 ) (*PhysicalPlan, error) {
-	scanNodeToTableOrdinalMap := getScanNodeToTableOrdinalMap(n)
+	// scanNodeToTableOrdinalMap is a map from scan node column ordinal to
+	// table reader column ordinal.
+	//
+	// scanNodes can have columns set up in a few different ways, depending on the
+	// colCfg. The heuristic planner always creates scanNodes with all public
+	// columns (even if some of them aren't even in the index we are scanning).
+	// The optimizer creates scanNodes with a specific set of wanted columns; in
+	// this case we have to create a map from scanNode column ordinal to table
+	// column ordinal (which is what the TableReader uses).
+	var scanNodeToTableOrdinalMap []int
+	if n.colCfg.addUnwantedAsHidden {
+		panic("addUnwantedAsHidden not supported")
+	} else if n.colCfg.wantedColumns != nil {
+		scanNodeToTableOrdinalMap = toTableOrdinals(n.cols, n.desc, n.colCfg.visibility)
+	}
 	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
 	if err != nil {
 		return nil, err
 	}
 
-	var spanPartitions []SpanPartition
+	var p PhysicalPlan
+	err = dsp.planTableReaders(
+		planCtx,
+		&p,
+		&tableReaderPlanningInfo{
+			spec:                   spec,
+			post:                   post,
+			desc:                   n.desc,
+			spans:                  n.spans,
+			reverse:                n.reverse,
+			scanVisibility:         n.colCfg.visibility,
+			maxResults:             n.maxResults,
+			estimatedRowCount:      n.estimatedRowCount,
+			reqOrdering:            n.reqOrdering,
+			cols:                   n.cols,
+			colsToTableOrdrinalMap: scanNodeToTableOrdinalMap,
+		},
+	)
+	return &p, err
+}
+
+// tableReaderPlanningInfo is a utility struct that contains the information
+// needed to perform the physical planning of table readers once the specs have
+// been created. See scanNode to get more context on some of the fields.
+type tableReaderPlanningInfo struct {
+	spec                   *execinfrapb.TableReaderSpec
+	post                   execinfrapb.PostProcessSpec
+	desc                   *sqlbase.ImmutableTableDescriptor
+	spans                  []roachpb.Span
+	reverse                bool
+	scanVisibility         execinfrapb.ScanVisibility
+	maxResults             uint64
+	estimatedRowCount      uint64
+	reqOrdering            ReqOrdering
+	cols                   []sqlbase.ColumnDescriptor
+	colsToTableOrdrinalMap []int
+}
+
+func (dsp *DistSQLPlanner) planTableReaders(
+	planCtx *PlanningCtx, p *PhysicalPlan, info *tableReaderPlanningInfo,
+) error {
+	var (
+		spanPartitions []SpanPartition
+		err            error
+	)
 	if planCtx.isLocal {
-		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
-	} else if n.hardLimit == 0 {
+		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, info.spans}}
+	} else if info.post.Limit == 0 {
 		// No hard limit - plan all table readers where their data live. Note
 		// that we're ignoring soft limits for now since the TableReader will
 		// still read too eagerly in the soft limit case. To prevent this we'll
 		// need a new mechanism on the execution side to modulate table reads.
 		// TODO(yuzefovich): add that mechanism.
-		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
+		spanPartitions, err = dsp.PartitionSpans(planCtx, info.spans)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	} else {
 		// If the scan has a hard limit, use a single TableReader to avoid
 		// reading more rows than necessary.
-		nodeID, err := dsp.getNodeIDForScan(planCtx, n.spans, n.reverse)
+		nodeID, err := dsp.getNodeIDForScan(planCtx, info.spans, info.reverse)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		spanPartitions = []SpanPartition{{nodeID, n.spans}}
+		spanPartitions = []SpanPartition{{nodeID, info.spans}}
 	}
 
-	var p PhysicalPlan
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	p.Processors = make([]physicalplan.Processor, 0, len(spanPartitions))
 
-	returnMutations := n.colCfg.visibility == execinfra.ScanVisibilityPublicAndNotPublic
+	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
 
 	for i, sp := range spanPartitions {
 		var tr *execinfrapb.TableReaderSpec
 		if i == 0 {
 			// For the first span partition, we can just directly use the spec we made
 			// above.
-			tr = spec
+			tr = info.spec
 		} else {
 			// For the rest, we have to copy the spec into a fresh spec.
 			tr = physicalplan.NewTableReaderSpec()
 			// Grab the Spans field of the new spec, and reuse it in case the pooled
 			// TableReaderSpec we got has pre-allocated Spans memory.
 			newSpansSlice := tr.Spans
-			*tr = *spec
+			*tr = *info.spec
 			tr.Spans = newSpansSlice
 		}
 		for j := range sp.Spans {
 			tr.Spans = append(tr.Spans, execinfrapb.TableReaderSpan{Span: sp.Spans[j]})
 		}
 
-		tr.MaxResults = n.maxResults
-		p.TotalEstimatedScannedRows += n.estimatedRowCount
-		if n.estimatedRowCount > p.MaxEstimatedRowCount {
-			p.MaxEstimatedRowCount = n.estimatedRowCount
+		tr.MaxResults = info.maxResults
+		p.TotalEstimatedScannedRows += info.estimatedRowCount
+		if info.estimatedRowCount > p.MaxEstimatedRowCount {
+			p.MaxEstimatedRowCount = info.estimatedRowCount
 		}
 
 		proc := physicalplan.Processor{
@@ -1115,47 +1163,47 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.ResultRouters[i] = pIdx
 	}
 
-	if len(p.ResultRouters) > 1 && len(n.reqOrdering) > 0 {
+	if len(p.ResultRouters) > 1 && len(info.reqOrdering) > 0 {
 		// Make a note of the fact that we have to maintain a certain ordering
 		// between the parallel streams.
 		//
 		// This information is taken into account by the AddProjection call below:
 		// specifically, it will make sure these columns are kept even if they are
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, scanNodeToTableOrdinalMap))
+		p.SetMergeOrdering(dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdrinalMap))
 	}
 
 	var typs []*types.T
 	if returnMutations {
-		typs = make([]*types.T, 0, len(n.desc.Columns)+len(n.desc.MutationColumns()))
+		typs = make([]*types.T, 0, len(info.desc.Columns)+len(info.desc.MutationColumns()))
 	} else {
-		typs = make([]*types.T, 0, len(n.desc.Columns))
+		typs = make([]*types.T, 0, len(info.desc.Columns))
 	}
-	for i := range n.desc.Columns {
-		typs = append(typs, n.desc.Columns[i].Type)
+	for i := range info.desc.Columns {
+		typs = append(typs, info.desc.Columns[i].Type)
 	}
 	if returnMutations {
-		for _, col := range n.desc.MutationColumns() {
+		for _, col := range info.desc.MutationColumns() {
 			typs = append(typs, col.Type)
 		}
 	}
-	p.SetLastStagePost(post, typs)
+	p.SetLastStagePost(info.post, typs)
 
-	outCols := getOutputColumnsFromScanNode(n, scanNodeToTableOrdinalMap)
-	planToStreamColMap := make([]int, len(n.cols))
-	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
-	for i := range n.desc.Columns {
-		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
+	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdrinalMap)
+	planToStreamColMap := make([]int, len(info.cols))
+	descColumnIDs := make([]sqlbase.ColumnID, 0, len(info.desc.Columns))
+	for i := range info.desc.Columns {
+		descColumnIDs = append(descColumnIDs, info.desc.Columns[i].ID)
 	}
 	if returnMutations {
-		for _, c := range n.desc.MutationColumns() {
+		for _, c := range info.desc.MutationColumns() {
 			descColumnIDs = append(descColumnIDs, c.ID)
 		}
 	}
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
-			if descColumnIDs[c] == n.cols[i].ID {
+			if descColumnIDs[c] == info.cols[i].ID {
 				planToStreamColMap[i] = j
 				break
 			}
@@ -1164,7 +1212,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	p.AddProjection(outCols)
 
 	p.PlanToStreamColMap = planToStreamColMap
-	return &p, nil
+	return nil
 }
 
 // selectRenders takes a PhysicalPlan that produces the results corresponding to
