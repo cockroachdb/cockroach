@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -357,18 +356,20 @@ func makePGPrivilegeInquiryDef(
 				var user string
 				if withUser {
 					var err error
-					user, err = getNameForArg(ctx, args[0], "pg_roles", "rolname")
+
+					arg := tree.UnwrapDatum(ctx, args[0])
+					user, err = getNameForArg(ctx, arg, "pg_roles", "rolname")
 					if err != nil {
 						return nil, err
 					}
 					if user == "" {
-						if _, ok := args[0].(*tree.DOid); ok {
+						if _, ok := arg.(*tree.DOid); ok {
 							// Postgres returns falseifn no matching user is
 							// found when given an OID.
 							return tree.DBoolFalse, nil
 						}
 						return nil, pgerror.Newf(pgcode.UndefinedObject,
-							"role %s does not exist", args[0])
+							"role %s does not exist", arg)
 					}
 
 					// Remove the first argument.
@@ -405,7 +406,7 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 	case *tree.DOid:
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE oid = $1 LIMIT 1", pgCol, pgTable)
 	default:
-		log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
+		return "", errors.AssertionFailedf("unexpected arg type %T", t)
 	}
 	r, err := ctx.InternalExecutor.QueryRow(ctx.Ctx(), "get-name-for-arg", ctx.Txn, query, arg)
 	if err != nil || r == nil {
@@ -449,9 +450,8 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		tn := tree.MakeTableNameWithSchema(db, schema, table)
 		return &tn, nil
 	default:
-		log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
+		return nil, errors.AssertionFailedf("unexpected arg type %T", t)
 	}
-	return nil, nil
 }
 
 // TODO(nvanbenschoten): give this a comment.
@@ -1219,7 +1219,7 @@ SELECT description
 					// When colArg is an integer, it specifies the attribute number.
 					colPred = "attnum = $1"
 				default:
-					log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
+					return nil, errors.AssertionFailedf("unexpected arg type %T", t)
 				}
 
 				if r, err := ctx.InternalExecutor.QueryRow(
