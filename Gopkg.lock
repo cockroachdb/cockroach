@@ -458,7 +458,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d9384f595f479e31f06cf58a9bd8798c7f24bce19160359d494efbb5bf0b0ce7"
+  digest = "1:01f450f2b42cdd2e3eac4a0ff01e0eccc287b5e6c590dbb592b3a320cd29cce0"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -484,7 +484,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "a41e4ac929214c1aaf7d152e2042f04f960f63ac"
+  revision = "4887c526300055e1c30635c53fd16b3fe9d9e132"
 
 [[projects]]
   branch = "master"
@@ -2152,6 +2152,7 @@
     "github.com/cockroachdb/errors/testutils",
     "github.com/cockroachdb/gostdlib/cmd/gofmt",
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
+    "github.com/cockroachdb/gostdlib/x/tools/imports",
     "github.com/cockroachdb/logtags",
     "github.com/cockroachdb/pebble",
     "github.com/cockroachdb/pebble/bloom",
