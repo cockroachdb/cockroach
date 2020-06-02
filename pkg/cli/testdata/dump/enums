@@ -1,0 +1,31 @@
+sql
+SET experimental_enable_enums = true;
+CREATE DATABASE d;
+CREATE TYPE d.t AS ENUM ('dump');
+CREATE TABLE d.tt (
+  x d.t,
+  y d._t,
+  z INT
+);
+
+INSERT INTO d.tt VALUES ('dump', ARRAY['dump'], 1), ('dump', ARRAY['dump'], 2)
+----
+INSERT 2
+
+# Test basic dumping of a database.
+dump d
+----
+----
+SET experimental_enable_enums = true;
+CREATE TYPE d.public.t AS ENUM ('dump');
+
+CREATE TABLE tt (
+	x d.public.t NULL,
+	y d.public.t[] NULL,
+	z INT8 NULL,
+	FAMILY "primary" (x, y, z, rowid)
+);
+
+INSERT INTO tt (x, y, z) VALUES
+	('dump', ARRAY['dump'], 1),
+	('dump', ARRAY['dump'], 2);

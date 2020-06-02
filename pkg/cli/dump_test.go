@@ -109,7 +109,8 @@ func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) er
 	if err := dumpCreateTable(w, mds[0]); err != nil {
 		return err
 	}
-	return dumpTableData(w, conn, mds[0])
+	// TODO (rohany): check this.
+	return dumpTableData(w, conn, nil, mds[0])
 }
 
 func TestDumpBytes(t *testing.T) {
