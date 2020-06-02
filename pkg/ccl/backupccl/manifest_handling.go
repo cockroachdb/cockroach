@@ -50,6 +50,9 @@ const (
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 	// ZipType is the format of a GZipped compressed file.
 	ZipType = "application/x-gzip"
+	// BackupStatisticsFileName is the file name used to store the serialized table
+	// statistics for the tables being backed up.
+	BackupStatisticsFileName = "BACKUP-STATISTICS"
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
@@ -230,6 +233,36 @@ func readBackupPartitionDescriptor(
 	return backupManifest, err
 }
 
+// readTableStatistics reads and unmarshals a StatsTable from filename in
+// the provided export store, and returns the StatsTable.
+func readTableStatistics(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *roachpb.FileEncryptionOptions,
+) (StatsTable, error) {
+	r, err := exportStore.ReadFile(ctx, filename)
+	if err != nil {
+		return StatsTable{}, err
+	}
+	defer r.Close()
+	statsBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return StatsTable{}, err
+	}
+	if encryption != nil {
+		statsBytes, err = storageccl.DecryptFile(statsBytes, encryption.Key)
+		if err != nil {
+			return StatsTable{}, err
+		}
+	}
+	var tableStats StatsTable
+	if err := protoutil.Unmarshal(statsBytes, &tableStats); err != nil {
+		return StatsTable{}, err
+	}
+	return tableStats, err
+}
+
 func writeBackupManifest(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -285,6 +318,28 @@ func writeBackupPartitionDescriptor(
 	}
 
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+}
+
+// writeTableStatistics writes a StatsTable object to one of the
+// stores in the backup.
+func writeTableStatistics(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *roachpb.FileEncryptionOptions,
+	stats *StatsTable,
+) error {
+	statsBuf, err := protoutil.Marshal(stats)
+	if err != nil {
+		return err
+	}
+	if encryption != nil {
+		statsBuf, err = storageccl.EncryptFile(statsBuf, encryption.Key)
+		if err != nil {
+			return err
+		}
+	}
+	return exportStore.WriteFile(ctx, filename, bytes.NewReader(statsBuf))
 }
 
 func loadBackupManifests(
@@ -557,21 +612,24 @@ func resolveBackupManifests(
 
 func loadSQLDescsFromBackupsAtTime(
 	backupManifests []BackupManifest, asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, BackupManifest) {
+) ([]sqlbase.Descriptor, BackupManifest, int) {
 	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
+	lastInd := len(backupManifests) - 1
+
 	if asOf.IsEmpty() {
-		return lastBackupManifest.Descriptors, lastBackupManifest
+		return lastBackupManifest.Descriptors, lastBackupManifest, lastInd
 	}
 
-	for _, b := range backupManifests {
+	for ind, b := range backupManifests {
 		if asOf.Less(b.StartTime) {
 			break
 		}
 		lastBackupManifest = b
+		lastInd = ind
 	}
 	if len(lastBackupManifest.DescriptorChanges) == 0 {
-		return lastBackupManifest.Descriptors, lastBackupManifest
+		return lastBackupManifest.Descriptors, lastBackupManifest, lastInd
 	}
 
 	byID := make(map[sqlbase.ID]*sqlbase.Descriptor, len(lastBackupManifest.Descriptors))
@@ -597,7 +655,7 @@ func loadSQLDescsFromBackupsAtTime(
 		}
 		allDescs = append(allDescs, *desc)
 	}
-	return allDescs, lastBackupManifest
+	return allDescs, lastBackupManifest, lastInd
 }
 
 // sanitizeLocalityKV returns a sanitized version of the input string where all

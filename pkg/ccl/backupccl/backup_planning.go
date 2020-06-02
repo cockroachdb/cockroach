@@ -350,6 +350,7 @@ func backupPlanHook(
 
 		statsCache := p.ExecCfg().TableStatsCache
 		tableStatistics := make([]*stats.TableStatisticProto, 0)
+		statsFiles := make(map[sqlbase.ID]string)
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
@@ -378,7 +379,16 @@ func backupPlanHook(
 				for i := range tableStatisticsAcc {
 					tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
 				}
+				// For now, all Stats are written in the same file, so let's only have one key/value pair.
+				// TODO: look into the tradeoffs of having all objects in the array to be in the same file,
+				// vs having each object in a separate file, or somewhere in between.
+				if len(statsFiles) == 0 {
+					statsFiles[tableDesc.GetID()] = BackupStatisticsFileName
+				}
 			}
+		}
+		statsTable := StatsTable{
+			Statistics: tableStatistics,
 		}
 
 		if err := ensureInterleavesIncluded(tables); err != nil {
@@ -597,20 +607,20 @@ func backupPlanHook(
 		// of requiring full backups after schema changes remains.
 
 		backupManifest := BackupManifest{
-			StartTime:          startTime,
-			EndTime:            endTime,
-			MVCCFilter:         mvccFilter,
-			Descriptors:        targetDescs,
-			DescriptorChanges:  revs,
-			CompleteDbs:        completeDBs,
-			Spans:              spans,
-			IntroducedSpans:    newSpans,
-			FormatVersion:      BackupFormatDescriptorTrackingVersion,
-			BuildInfo:          build.GetInfo(),
-			NodeID:             nodeID,
-			ClusterID:          p.ExecCfg().ClusterID(),
-			Statistics:         tableStatistics,
-			DescriptorCoverage: backupStmt.DescriptorCoverage,
+			StartTime:           startTime,
+			EndTime:             endTime,
+			MVCCFilter:          mvccFilter,
+			Descriptors:         targetDescs,
+			DescriptorChanges:   revs,
+			CompleteDbs:         completeDBs,
+			Spans:               spans,
+			IntroducedSpans:     newSpans,
+			FormatVersion:       BackupFormatDescriptorTrackingVersion,
+			BuildInfo:           build.GetInfo(),
+			NodeID:              nodeID,
+			ClusterID:           p.ExecCfg().ClusterID(),
+			StatisticsFilenames: statsFiles,
+			DescriptorCoverage:  backupStmt.DescriptorCoverage,
 		}
 
 		// Sanity check: re-run the validation that RESTORE will do, but this time
@@ -663,6 +673,10 @@ func backupPlanHook(
 		); err != nil {
 			return err
 		}
+
+		// This part writes the StatsTable objects into files.
+		// We delay the writing to here as the 'encryption' value has been changed just earlier on.
+		writeTableStatistics(ctx, defaultStore, BackupStatisticsFileName, encryption, &statsTable)
 
 		backupDetails := jobspb.BackupDetails{
 			StartTime:        startTime,
