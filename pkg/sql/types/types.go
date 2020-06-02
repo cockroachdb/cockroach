@@ -1711,6 +1711,43 @@ func (t *T) Equivalent(other *T) bool {
 	return true
 }
 
+// EquivalentOrNull is the same as Equivalent, except it returns true if `t`
+// is Unknown (i.e., NULL), or is a tuple with all non-Unknown elements
+// matching the types in `other`.
+func (t *T) EquivalentOrNull(other *T) bool {
+	// Check normal equivalency first, then check for Null
+	normalEquivalency := t.Equivalent(other)
+	if normalEquivalency {
+		return true
+	}
+	if t.Family() == UnknownFamily {
+		return true
+	}
+
+	switch t.Family() {
+	case TupleFamily:
+		// If either tuple is the wildcard tuple, it's equivalent to any other
+		// tuple type. This allows overloads to specify that they take an arbitrary
+		// tuple type.
+		if IsWildcardTupleType(t) || IsWildcardTupleType(other) {
+			return true
+		}
+		if len(t.TupleContents()) != len(other.TupleContents()) {
+			return false
+		}
+		for i := range t.TupleContents() {
+			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i]) {
+				return false
+			}
+		}
+
+	default:
+		return normalEquivalency
+	}
+
+	return true
+}
+
 // Identical returns true if every field in this ColumnType is exactly the same
 // as every corresponding field in the given ColumnType. Identical performs a
 // deep comparison, traversing any Tuple or Array contents.
