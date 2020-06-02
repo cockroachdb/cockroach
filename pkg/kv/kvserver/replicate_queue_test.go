@@ -241,6 +241,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 // notice over-replicated ranges and remove replicas from them.
 func TestReplicateQueueDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	const replicaCount = 3
 
 	// The goal of this test is to ensure that down replication occurs correctly
@@ -255,46 +256,22 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 			},
 		},
 	)
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 
-	// Split off a range from the initial range for testing; there are
-	// complications if the metadata ranges are moved.
-	testKey := roachpb.Key("m")
-	if _, _, err := tc.SplitRange(testKey); err != nil {
-		t.Fatal(err)
-	}
+	// Disable the replication queues so that the range we're about to create
+	// doesn't get down-replicated too soon.
+	tc.ToggleReplicateQueues(false)
 
-	allowedErrs := strings.Join([]string{
-		// If a node is already present, we expect this error.
-		"unable to add replica .* which is already present",
-		// If a replica for this range was previously present on this store and
-		// it has already been removed but has not yet been GCed, this error
-		// is expected.
-		kvserver.IntersectingSnapshotMsg,
-	}, "|")
-
-	// Up-replicate the new range to all nodes to create redundant replicas.
-	// Every time a new replica is added, there's a very good chance that
-	// another one is removed. So all the replicas can't be added at once and
-	// instead need to be added one at a time ensuring that the replica did
-	// indeed make it to the desired target.
-	for _, server := range tc.Servers {
-		nodeID := server.NodeID()
-		// If this is not wrapped in a SucceedsSoon, then other temporary
-		// failures unlike the ones listed below, such as rejected reservations
-		// can cause the test to fail. When encountering those failures, a
-		// retry is in order.
-		testutils.SucceedsSoon(t, func() error {
-			_, err := tc.AddReplicas(testKey, roachpb.ReplicationTarget{
-				NodeID:  nodeID,
-				StoreID: server.GetFirstStoreID(),
-			})
-			if testutils.IsError(err, allowedErrs) {
-				return nil
-			}
-			return err
-		})
-	}
+	testKey := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, testKey)
+	// At the end of StartTestCluster(), all ranges have 5 replicas since they're
+	// all "system ranges". When the ScratchRange() splits its range, it also
+	// starts up with 5 replicas. Since it's not a system range, its default zone
+	// config asks for 3x replication, and the replication queue will
+	// down-replicate it.
+	require.Len(t, desc.Replicas().All(), 5)
+	// Re-enable the replication queue.
+	tc.ToggleReplicateQueues(true)
 
 	// Now wait until the replicas have been down-replicated back to the
 	// desired number.
