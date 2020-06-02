@@ -432,3 +432,18 @@ func Relate(a geopb.EWKB, b geopb.EWKB) (string, error) {
 	}
 	return string(cStringToSafeGoBytes(ret)), nil
 }
+
+// RelatePattern whether A and B have a DE-9IM relation matching the given pattern.
+func RelatePattern(a geopb.EWKB, b geopb.EWKB, pattern string) (bool, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(
+		C.CR_GEOS_RelatePattern(g, goToCSlice(a), goToCSlice(b), goToCSlice([]byte(pattern)), &ret),
+	); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
