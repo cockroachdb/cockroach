@@ -78,7 +78,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// Create the table readers; for this we initialize a dummy scanNode.
 	scan := scanNode{desc: desc}
-	err := scan.initDescDefaults(nil /* planDependencies */, colCfg)
+	err := scan.initDescDefaults(colCfg)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -89,7 +89,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 	scan.isFull = true
 
-	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
+	p, err := dsp.createTableReaders(planCtx, &scan)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -104,7 +104,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	sketchSpecs := make([]execinfrapb.SketchSpec, len(reqStats))
-	sampledColumnIDs := make([]sqlbase.ColumnID, scan.valNeededForCol.Len())
+	sampledColumnIDs := make([]sqlbase.ColumnID, len(scan.cols))
 	for i, s := range reqStats {
 		spec := execinfrapb.SketchSpec{
 			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,

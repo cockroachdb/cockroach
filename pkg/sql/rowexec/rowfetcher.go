@@ -73,7 +73,7 @@ func initRowFetcher(
 	}
 
 	cols := immutDesc.Columns
-	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = immutDesc.ReadableColumns
 	}
 	tableArgs := row.FetcherTableArgs{

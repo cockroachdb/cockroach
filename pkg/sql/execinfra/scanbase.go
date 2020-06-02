@@ -10,7 +10,10 @@
 
 package execinfra
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+)
 
 // ParallelScanResultThreshold is the number of results up to which, if the
 // maximum number of results returned by a scan is known, the table reader
@@ -32,3 +35,9 @@ func ScanShouldLimitBatches(maxResults uint64, limitHint int64, flowCtx *FlowCtx
 	}
 	return true
 }
+
+// Prettier aliases for execinfrapb.ScanVisibility values.
+const (
+	ScanVisibilityPublic             = execinfrapb.ScanVisibility_PUBLIC
+	ScanVisibilityPublicAndNotPublic = execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+)

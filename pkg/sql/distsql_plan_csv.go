@@ -105,7 +105,7 @@ func (c *callbackResultWriter) Err() error {
 func (dsp *DistSQLPlanner) setupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []roachpb.NodeID, error) {
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */, true /* distribute */)
 
 	ss, err := execCfg.StatusServer.OptionalErr(47900)
 	if err != nil {

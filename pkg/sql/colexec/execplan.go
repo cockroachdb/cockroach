@@ -650,7 +650,7 @@ func NewColOperator(
 			// still responsible for doing the cancellation check on their own while
 			// performing long operations.
 			result.Op = NewCancelChecker(result.Op)
-			returnMutations := core.TableReader.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+			returnMutations := core.TableReader.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 			result.ColumnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 		case core.Aggregator != nil:
 			if err := checkNumIn(inputs, 1); err != nil {

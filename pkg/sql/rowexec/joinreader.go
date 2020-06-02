@@ -113,7 +113,7 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	jr.colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
 
 	columnIDs, _ := jr.index.FullColumnIDs()

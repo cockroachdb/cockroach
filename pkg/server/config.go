@@ -138,14 +138,31 @@ type BaseConfig struct {
 	TestingKnobs base.TestingKnobs
 }
 
-// Config holds parameters needed to setup a (combined KV and SQL) server.
-//
-// TODO(tbg): this should end up being just SQLConfig union KVConfig union BaseConfig.
+// MakeBaseConfig returns a BaseConfig with default values.
+func MakeBaseConfig(st *cluster.Settings) BaseConfig {
+	baseCfg := BaseConfig{
+		AmbientCtx:        log.AmbientContext{Tracer: st.Tracer},
+		Config:            new(base.Config),
+		Settings:          st,
+		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
+		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
+		StorageEngine:     storage.DefaultStorageEngine,
+	}
+	baseCfg.InitDefaults()
+	return baseCfg
+}
+
+// Config holds the parameters needed to set up a combined KV and SQL server.
 type Config struct {
-	// Embed the base context.
 	BaseConfig
-	base.RaftConfig
+	KVConfig
 	SQLConfig
+}
+
+// KVConfig holds the parameters that (together with a BaseConfig) allow setting
+// up a KV server.
+type KVConfig struct {
+	base.RaftConfig
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
@@ -257,8 +274,31 @@ type Config struct {
 	enginesCreated bool
 }
 
-// SQLConfig holds the parameters to setup a SQL server.
+// MakeKVConfig returns a KVConfig with default values.
+func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
+	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
+	kvCfg := KVConfig{
+		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
+		CacheSize:                      DefaultCacheSize,
+		ScanInterval:                   defaultScanInterval,
+		ScanMinIdleTime:                defaultScanMinIdleTime,
+		ScanMaxIdleTime:                defaultScanMaxIdleTime,
+		EventLogEnabled:                defaultEventLogEnabled,
+		EnableWebSessionAuthentication: !disableWebLogin,
+		Stores: base.StoreSpecList{
+			Specs: []base.StoreSpec{storeSpec},
+		},
+	}
+	kvCfg.RaftConfig.SetDefaults()
+	return kvCfg
+}
+
+// SQLConfig holds the parameters that (together with a BaseConfig) allow
+// setting up a SQL server.
 type SQLConfig struct {
+	// The tenant that the SQL server runs on the behalf of.
+	TenantID roachpb.TenantID
+
 	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
 	LeaseManagerConfig *base.LeaseManagerConfig
 
@@ -289,6 +329,19 @@ type SQLConfig struct {
 	QueryCacheSize int64
 }
 
+// MakeSQLConfig returns a SQLConfig with default values.
+func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig) SQLConfig {
+	sqlCfg := SQLConfig{
+		TenantID:           tenID,
+		MemoryPoolSize:     defaultSQLMemoryPoolSize,
+		TableStatCacheSize: defaultSQLTableStatCacheSize,
+		QueryCacheSize:     defaultSQLQueryCacheSize,
+		TempStorageConfig:  tempStorageCfg,
+		LeaseManagerConfig: base.NewLeaseManagerConfig(),
+	}
+	return sqlCfg
+}
+
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
@@ -317,50 +370,24 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 	return setOpenFileLimit(1)
 }
 
-// MakeConfig returns a Config with default values.
+// MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
 	if err != nil {
 		panic(err)
 	}
+	tempStorageCfg := base.TempStorageConfigFromEnv(
+		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
 
-	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
-
-	sqlCfg := SQLConfig{
-		MemoryPoolSize:     defaultSQLMemoryPoolSize,
-		TableStatCacheSize: defaultSQLTableStatCacheSize,
-		QueryCacheSize:     defaultSQLQueryCacheSize,
-		TempStorageConfig: base.TempStorageConfigFromEnv(
-			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes),
-		LeaseManagerConfig: base.NewLeaseManagerConfig(),
-	}
-
-	bothCfg := BaseConfig{
-		Config:            new(base.Config),
-		Settings:          st,
-		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
-		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
-		StorageEngine:     storage.DefaultStorageEngine,
-	}
+	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
+	baseCfg := MakeBaseConfig(st)
+	kvCfg := MakeKVConfig(storeSpec)
 
 	cfg := Config{
-		BaseConfig:                     bothCfg,
-		SQLConfig:                      sqlCfg,
-		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
-		CacheSize:                      DefaultCacheSize,
-		ScanInterval:                   defaultScanInterval,
-		ScanMinIdleTime:                defaultScanMinIdleTime,
-		ScanMaxIdleTime:                defaultScanMaxIdleTime,
-		EventLogEnabled:                defaultEventLogEnabled,
-		EnableWebSessionAuthentication: !disableWebLogin,
-		Stores: base.StoreSpecList{
-			Specs: []base.StoreSpec{storeSpec},
-		},
+		BaseConfig: baseCfg,
+		KVConfig:   kvCfg,
+		SQLConfig:  sqlCfg,
 	}
-	cfg.AmbientCtx.Tracer = st.Tracer
-
-	cfg.Config.InitDefaults()
-	cfg.RaftConfig.SetDefaults()
 
 	return cfg
 }
