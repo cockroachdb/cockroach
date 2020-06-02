@@ -123,14 +123,41 @@ $input
     $private
 )
 
-# PushLimitIntoLeftJoin pushes a Limit into the left input of a left join. Since
-# the left join creates an output row for each left input row, we only need that
-# many rows from that input. We can only do this if the limit ordering refers
-# only to the left input columns. We also check that the cardinality of the left
-# input is more than the limit, to prevent repeated applications of the rule.
-[PushLimitIntoLeftJoin, Normalize]
+# PushLimitIntoLeftJoin pushes a Limit into the left input of a join when rows
+# from the left input are guaranteed to (1) be preserved by the join and (2) to
+# not be null-extended by the join. Since the join creates an output row for
+# each left input row, we only need that many rows from that input. We can only
+# do this if the limit ordering refers only to the left input columns. We also
+# check that the cardinality of the left input is more than the limit, to
+# prevent repeated applications of the rule. FullJoins and RightJoins cannot be
+# matched because they violate condition #2 - they null-extend left columns.
+#
+# Why can't we match when left rows are being null-extended (e.g. FullJoins and
+# RightJoins)?
+#
+#   CREATE TABLE t_x (x INT PRIMARY KEY)
+#   CREATE TABLE t_r (r INT NOT NULL REFERENCES x(x))
+#
+#   SELECT * FROM t_r RIGHT JOIN t_x ON r = x LIMIT 10
+# vs
+#   SELECT * FROM (SELECT * FROM t_r LIMIT 10) RIGHT JOIN t_x ON r = x LIMIT 10
+#
+# In the first query, all rows from t_r (left rows) would have a chance to match
+# with a row from t_x. In the second query, left rows that otherwise would have
+# matched may be filtered out by the limit. Rows from t_x would then no longer
+# have matches, and would be outputted by the RightJoin with the left side
+# (t_r columns) null-extended. Therefore, pushing the limit into a join input
+# that may be null-extended can lead to output rows being replaced with null
+# values.
+[PushLimitIntoJoinLeft, Normalize]
 (Limit
-    $input:(LeftJoin $left:* $right:* $on:* $private:*)
+    $input:(InnerJoin | LeftJoin
+            $left:*
+            $right:*
+            $on:*
+            $private:*
+        ) &
+        (JoinPreservesLeftRows $input)
     $limitExpr:(Const $limit:*) &
         (IsPositiveInt $limit) &
         ^(LimitGeMaxRows $limit $left)
@@ -142,9 +169,35 @@ $input
 )
 =>
 (Limit
-    (LeftJoin
+    ((OpName $input)
         (Limit $left $limitExpr (PruneOrdering $ordering $cols))
         $right
+        $on
+        $private
+    )
+    $limitExpr
+    $ordering
+)
+
+# PushLimitIntoJoinRight mirrors PushLimitIntoJoinLeft.
+[PushLimitIntoJoinRight, Normalize]
+(Limit
+    $input:(InnerJoin $left:* $right:* $on:* $private:*) &
+        (JoinPreservesRightRows $input)
+    $limitExpr:(Const $limit:*) &
+        (IsPositiveInt $limit) &
+        ^(LimitGeMaxRows $limit $right)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $right)
+        )
+)
+=>
+(Limit
+    ((OpName $input)
+        $left
+        (Limit $right $limitExpr (PruneOrdering $ordering $cols))
         $on
         $private
     )
