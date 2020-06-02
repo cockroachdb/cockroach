@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -32,36 +31,11 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 	table := tree.Name("bar")
 	tn := tree.MakeTableName(database, table)
 
-	desc := sqlbase.MutableTableDescriptor{
-		TableDescriptor: sqlbase.TableDescriptor{
-			Name: string(table),
-			ID:   1,
-			Columns: []sqlbase.ColumnDescriptor{
-				{
-					Name: "a",
-					ID:   1,
-					Type: types.Bool,
-				},
-				{
-					Name: "b",
-					ID:   2,
-					Type: types.Int,
-				},
-			},
-			Mutations: []sqlbase.DescriptorMutation{
-				{
-					Descriptor_: &sqlbase.DescriptorMutation_Column{
-						Column: &sqlbase.ColumnDescriptor{
-							Name: "c",
-							ID:   3,
-							Type: types.String,
-						},
-					},
-					Direction: sqlbase.DescriptorMutation_ADD,
-				},
-			},
-		},
-	}
+	desc := testTableDesc(
+		string(table),
+		[]testCol{{"a", types.Bool}, {"b", types.Int}},
+		[]testCol{{"c", types.String}},
+	)
 
 	validator := NewIndexPredicateValidator(ctx, tn, &desc, &semaCtx)
 
