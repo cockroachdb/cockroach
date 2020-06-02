@@ -104,14 +104,13 @@ type InvertedSpan struct {
 
 // MakeSingleInvertedValSpan constructs a span equivalent to [val, val].
 func MakeSingleInvertedValSpan(val EncInvertedVal) InvertedSpan {
-	end := roachpb.BytesNext(val)
-	return InvertedSpan{start: end[:len(end)-1], end: end}
+	end := EncInvertedVal(roachpb.Key(val).PrefixEnd())
+	return InvertedSpan{start: val, end: end}
 }
 
-// IsSingleVal returns true iff the span is equivalent to [val, val].
-func (s InvertedSpan) IsSingleVal() bool {
-	return len(s.start)+1 == len(s.end) && s.end[len(s.end)-1] == '\x00' &&
-		bytes.Equal(s.start, s.end[:len(s.end)-1])
+// isSingleVal returns true iff the span is equivalent to [val, val].
+func (s InvertedSpan) isSingleVal() bool {
+	return bytes.Equal(roachpb.Key(s.start).PrefixEnd(), s.end)
 }
 
 // InvertedExpression is the interface representing an expression or sub-expression
@@ -323,7 +322,7 @@ func formatSpans(b *strings.Builder, spans []InvertedSpan) {
 func formatSpan(b *strings.Builder, span InvertedSpan) {
 	end := span.end
 	spanEndOpenOrClosed := ')'
-	if span.IsSingleVal() {
+	if span.isSingleVal() {
 		end = span.start
 		spanEndOpenOrClosed = ']'
 	}
