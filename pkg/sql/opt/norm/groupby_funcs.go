@@ -379,3 +379,61 @@ func (c *CustomFuncs) MergeAggs(innerAggs, outerAggs memo.AggregationsExpr) memo
 	}
 	return newAggs
 }
+
+// CanEliminateJoinUnderGroupByLeft returns true if the given join can be
+// eliminated and replaced by its left input. It should be called only when the
+// join is under a grouping operator that is only using columns from the join's
+// left input.
+func (c *CustomFuncs) CanEliminateJoinUnderGroupByLeft(
+	joinExpr memo.RelExpr, aggs memo.AggregationsExpr,
+) bool {
+	return canEliminateGroupByJoin(
+		c.JoinDoesNotDuplicateLeftRows(joinExpr),
+		c.JoinPreservesLeftRows(joinExpr),
+		aggs,
+	)
+}
+
+// CanEliminateJoinUnderGroupByRight returns true if the given join can be
+// eliminated and replaced by its right input. It should be called only when the
+// join is under a grouping operator that is only using columns from the join's
+// right input.
+func (c *CustomFuncs) CanEliminateJoinUnderGroupByRight(
+	joinExpr memo.RelExpr, aggs memo.AggregationsExpr,
+) bool {
+	return canEliminateGroupByJoin(
+		c.JoinDoesNotDuplicateRightRows(joinExpr),
+		c.JoinPreservesRightRows(joinExpr),
+		aggs,
+	)
+}
+
+// canEliminateGroupByJoin returns true if a join expression that has the given
+// effects on its input rows can be safely eliminated. This is the case if the
+// join does not affect the outputs of the GroupBy aggregate functions and it
+// does not remove any rows from the left input expression. For more details on
+// the conditions this function verifies, see the EliminateJoinUnderGroupByLeft
+// comment in groupby.opt. canEliminateGroupByJoin is only be called in cases
+// where rows have not been null-extended.
+func canEliminateGroupByJoin(
+	noRowsDuplicated, allRowsPreserved bool, aggs memo.AggregationsExpr,
+) bool {
+	if !allRowsPreserved {
+		return false
+	}
+	if noRowsDuplicated {
+		return true
+	}
+
+	// All rows are preserved, but they may be duplicated. Check whether the
+	// aggregates ignore duplicates.
+	for i := range aggs {
+		aggOp := memo.ExtractAggFunc(aggs[i].Agg).Op()
+		if !opt.AggregateIgnoresDuplicates(aggOp) {
+			// At least one aggregate does not ignore duplicates.
+			return false
+		}
+	}
+	// All aggregates ignore duplicates.
+	return true
+}
