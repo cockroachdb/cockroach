@@ -126,28 +126,29 @@ func TestGetLargestID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type testCase struct {
-		values  []roachpb.KeyValue
-		largest uint32
-		maxID   uint32
-		errStr  string
+		values    []roachpb.KeyValue
+		largest   uint32
+		maxID     uint32
+		pseudoIDs []uint32
+		errStr    string
 	}
 
 	testCases := []testCase{
 		// No data.
-		{nil, 0, 0, "descriptor table not found"},
+		{nil, 0, 0, nil, "descriptor table not found"},
 
 		// Some data, but not from the system span.
-		{[]roachpb.KeyValue{plainKV("a", "b")}, 0, 0, "descriptor table not found"},
+		{[]roachpb.KeyValue{plainKV("a", "b")}, 0, 0, nil, "descriptor table not found"},
 
 		// Some real data, but no descriptors.
 		{[]roachpb.KeyValue{
 			sqlKV(keys.NamespaceTableID, 1, 1),
 			sqlKV(keys.NamespaceTableID, 1, 2),
 			sqlKV(keys.UsersTableID, 1, 3),
-		}, 0, 0, "descriptor table not found"},
+		}, 0, 0, nil, "descriptor table not found"},
 
 		// Single correct descriptor entry.
-		{[]roachpb.KeyValue{sqlKV(keys.DescriptorTableID, 1, 1)}, 1, 0, ""},
+		{[]roachpb.KeyValue{sqlKV(keys.DescriptorTableID, 1, 1)}, 1, 0, nil, ""},
 
 		// Surrounded by other data.
 		{[]roachpb.KeyValue{
@@ -155,7 +156,7 @@ func TestGetLargestID(t *testing.T) {
 			sqlKV(keys.NamespaceTableID, 1, 30),
 			sqlKV(keys.DescriptorTableID, 1, 8),
 			sqlKV(keys.ZonesTableID, 1, 40),
-		}, 8, 0, ""},
+		}, 8, 0, nil, ""},
 
 		// Descriptors with holes. Index ID does not matter.
 		{[]roachpb.KeyValue{
@@ -163,7 +164,7 @@ func TestGetLargestID(t *testing.T) {
 			sqlKV(keys.DescriptorTableID, 2, 5),
 			sqlKV(keys.DescriptorTableID, 3, 8),
 			sqlKV(keys.DescriptorTableID, 4, 12),
-		}, 12, 0, ""},
+		}, 12, 0, nil, ""},
 
 		// Real SQL layout.
 		func() testCase {
@@ -171,7 +172,8 @@ func TestGetLargestID(t *testing.T) {
 			descIDs := ms.DescriptorIDs()
 			maxDescID := descIDs[len(descIDs)-1]
 			kvs, _ /* splits */ := ms.GetInitialValues()
-			return testCase{kvs, uint32(maxDescID), 0, ""}
+			pseudoIDs := keys.PseudoTableIDs
+			return testCase{kvs, uint32(maxDescID), 0, pseudoIDs, ""}
 		}(),
 
 		// Test non-zero max.
@@ -180,7 +182,7 @@ func TestGetLargestID(t *testing.T) {
 			sqlKV(keys.DescriptorTableID, 2, 5),
 			sqlKV(keys.DescriptorTableID, 3, 8),
 			sqlKV(keys.DescriptorTableID, 4, 12),
-		}, 8, 8, ""},
+		}, 8, 8, nil, ""},
 
 		// Test non-zero max.
 		{[]roachpb.KeyValue{
@@ -188,13 +190,35 @@ func TestGetLargestID(t *testing.T) {
 			sqlKV(keys.DescriptorTableID, 2, 5),
 			sqlKV(keys.DescriptorTableID, 3, 8),
 			sqlKV(keys.DescriptorTableID, 4, 12),
-		}, 5, 7, ""},
+		}, 5, 7, nil, ""},
+
+		// Test pseudo ID (MetaRangesID = 16), exact.
+		{[]roachpb.KeyValue{
+			sqlKV(keys.DescriptorTableID, 1, 1),
+			sqlKV(keys.DescriptorTableID, 4, 12),
+			sqlKV(keys.DescriptorTableID, 4, 19),
+			sqlKV(keys.DescriptorTableID, 4, 22),
+		}, 16, 16, []uint32{16, 17, 18}, ""},
+
+		// Test pseudo ID (TimeseriesRangesID = 18), above.
+		{[]roachpb.KeyValue{
+			sqlKV(keys.DescriptorTableID, 1, 1),
+			sqlKV(keys.DescriptorTableID, 4, 12),
+			sqlKV(keys.DescriptorTableID, 4, 21),
+			sqlKV(keys.DescriptorTableID, 4, 22),
+		}, 18, 20, []uint32{16, 17, 18}, ""},
+
+		// Test pseudo ID (TimeseriesRangesID = 18), largest.
+		{[]roachpb.KeyValue{
+			sqlKV(keys.DescriptorTableID, 1, 1),
+			sqlKV(keys.DescriptorTableID, 4, 12),
+		}, 18, 0, []uint32{16, 17, 18}, ""},
 	}
 
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		ret, err := cfg.GetLargestObjectID(tc.maxID)
+		ret, err := cfg.GetLargestObjectID(tc.maxID, tc.pseudoIDs)
 		if !testutils.IsError(err, tc.errStr) {
 			t.Errorf("#%d: expected err=%q, got %v", tcNum, tc.errStr, err)
 			continue

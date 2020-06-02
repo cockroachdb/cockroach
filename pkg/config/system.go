@@ -171,9 +171,10 @@ func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 }
 
 // GetLargestObjectID returns the largest object ID found in the config which is
-// less than or equal to maxID. If maxID is 0, returns the largest ID in the
-// config.
-func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
+// less than or equal to maxID. The objects in the config are augmented with the
+// provided pseudo IDs. If maxID is 0, returns the largest ID in the config
+// (again, augmented by the pseudo IDs).
+func (s *SystemConfig) GetLargestObjectID(maxID uint32, pseudoIDs []uint32) (uint32, error) {
 	testingLock.Lock()
 	hook := testingLargestIDHook
 	testingLock.Unlock()
@@ -190,28 +191,38 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	lowIndex := sort.Search(len(s.Values), func(i int) bool {
 		return bytes.Compare(s.Values[i].Key, lowBound) >= 0
 	})
-
 	if highIndex == lowIndex {
 		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
 	}
 
+	// Determine the largest pseudo table ID equal to or below maxID.
+	maxPseudoID := uint32(0)
+	for _, id := range pseudoIDs {
+		if id > maxPseudoID && (maxID == 0 || id <= maxID) {
+			maxPseudoID = id
+		}
+	}
+
 	// No maximum specified; maximum ID is the last entry in the descriptor
-	// table.
+	// table or the largest pseudo ID, whichever is larger.
 	if maxID == 0 {
 		id, err := keys.TODOSQLCodec.DecodeDescMetadataID(s.Values[highIndex-1].Key)
 		if err != nil {
 			return 0, err
 		}
-		return uint32(id), nil
+		if id < maxPseudoID {
+			id = maxPseudoID
+		}
+		return id, nil
 	}
 
 	// Maximum specified: need to search the descriptor table. Binary search
 	// through all descriptor table values to find the first descriptor with ID
-	// >= maxID.
+	// >= maxID and pick either it or maxPseudoID, whichever is larger.
 	searchSlice := s.Values[lowIndex:highIndex]
 	var err error
 	maxIdx := sort.Search(len(searchSlice), func(i int) bool {
-		var id uint64
+		var id uint32
 		id, err = keys.TODOSQLCodec.DecodeDescMetadataID(searchSlice[i].Key)
 		if err != nil {
 			return false
@@ -243,7 +254,10 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	return uint32(id), nil
+	if id < maxPseudoID {
+		id = maxPseudoID
+	}
+	return id, nil
 }
 
 // GetZoneConfigForKey looks up the zone config for the object (table
@@ -487,7 +501,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachp
 	// If the startKey falls within the non-system reserved range, compute those
 	// keys first.
 	if startID <= keys.MaxReservedDescID {
-		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID)
+		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID, keys.PseudoTableIDs)
 		if err != nil {
 			log.Errorf(context.TODO(), "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
@@ -499,7 +513,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachp
 	}
 
 	// Find the split key in the user space.
-	endID, err := s.GetLargestObjectID(0)
+	endID, err := s.GetLargestObjectID(0, keys.PseudoTableIDs)
 	if err != nil {
 		log.Errorf(context.TODO(), "unable to determine largest object ID from system config: %s", err)
 		return nil
