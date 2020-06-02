@@ -577,14 +577,14 @@ func makeSQLServerArgs(
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
 			isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
-				return false, errors.New("isMeta1Leaseholder is not available to tenants")
+				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
 			nodeIDContainer: idContainer,
 			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-				return nil, errors.New("external storage is not available to tenants")
+				return nil, errors.New("external storage is not available to secondary tenants")
 			},
 			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-				return nil, errors.New("external uri storage is not available to tenants")
+				return nil, errors.New("external uri storage is not available to secondary tenants")
 			},
 		},
 		SQLConfig:                &sqlCfg,
