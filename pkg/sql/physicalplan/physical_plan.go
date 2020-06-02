@@ -77,7 +77,7 @@ type PhysicalPlan struct {
 	LocalProcessors []execinfra.LocalProcessor
 
 	// LocalProcessorIndexes contains pointers to all of the RowSourceIdx fields
-	// of the  LocalPlanNodeSpecs that were created. This list is in the same
+	// of the LocalPlanNodeSpecs that were created. This list is in the same
 	// order as LocalProcessors, and is kept up-to-date so that LocalPlanNodeSpecs
 	// always have the correct index into the LocalProcessors slice.
 	LocalProcessorIndexes []*uint32
@@ -104,6 +104,10 @@ type PhysicalPlan struct {
 	// This is aliased with InputSyncSpec.ColumnTypes, so it must not be modified
 	// in-place during planning.
 	ResultTypes []*types.T
+
+	// ResultColumns is the schema (result columns) of the rows produced by the
+	// ResultRouters.
+	ResultColumns sqlbase.ResultColumns
 
 	// MergeOrdering is the ordering guarantee for the result streams that must be
 	// maintained when the streams eventually merge. The column indexes refer to

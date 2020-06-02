@@ -2098,6 +2098,14 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	return plan, nil
 }
 
+func getTypesFromResultColumns(cols sqlbase.ResultColumns) []*types.T {
+	typs := make([]*types.T, len(cols))
+	for i, col := range cols {
+		typs[i] = col.Typ
+	}
+	return typs
+}
+
 // getTypesForPlanResult returns the types of the elements in the result streams
 // of a plan that corresponds to a given planNode. If planToStreamColMap is nil,
 // a 1-1 mapping is assumed.
@@ -2105,11 +2113,7 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]*types.T,
 	nodeColumns := planColumns(node)
 	if planToStreamColMap == nil {
 		// No remapping.
-		types := make([]*types.T, len(nodeColumns))
-		for i := range nodeColumns {
-			types[i] = nodeColumns[i].Typ
-		}
-		return types, nil
+		return getTypesFromResultColumns(nodeColumns), nil
 	}
 	numCols := 0
 	for _, streamCol := range planToStreamColMap {
