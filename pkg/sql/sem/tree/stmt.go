@@ -213,6 +213,12 @@ func (*AlterRole) cclOnlyStatement() {}
 func (*AlterRole) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*Analyze) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Analyze) StatementTag() string { return "ANALYZE" }
+
+// StatementType implements the Statement interface.
 func (*Backup) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -919,6 +925,7 @@ func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
 func (n *AlterType) String() string                      { return AsString(n) }
 func (n *AlterRole) String() string                      { return AsString(n) }
 func (n *AlterSequence) String() string                  { return AsString(n) }
+func (n *Analyze) String() string                        { return AsString(n) }
 func (n *Backup) String() string                         { return AsString(n) }
 func (n *BeginTransaction) String() string               { return AsString(n) }
 func (n *ControlJobs) String() string                    { return AsString(n) }
