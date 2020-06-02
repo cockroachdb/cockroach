@@ -408,7 +408,7 @@ func (r *createStatsResumer) Resume(
 			txn.SetFixedTimestamp(ctx, *details.AsOf)
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn, true /* distribute */)
 		planCtx.planner = p
 		if err := dsp.planAndRunCreateStats(
 			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),

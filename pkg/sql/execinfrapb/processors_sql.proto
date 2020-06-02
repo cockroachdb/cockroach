@@ -83,9 +83,9 @@ message TableReaderSpec {
   optional bool is_check = 6 [(gogoproto.nullable) = false];
 
   // Indicates the visibility level of the columns that should be returned.
-  // Normally, will be set to public. Will be set to publicAndNotPublic if the
-  // consumer of this TableReader expects to be able to see in-progress schema
-  // changes.
+  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
+  // the consumer of this TableReader expects to be able to see in-progress
+  // schema changes.
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 
   // If non-zero, this is a guarantee for the upper bound of rows a TableReader
@@ -147,9 +147,9 @@ message IndexSkipTableReaderSpec {
   repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
 
   // Indicates the visibility level of the columns that should be returned.
-  // Normally, will be set to public. Will be set to publicAndNotPublic if the
-  // consumer of this TableReader expects to be able to see in-progress schema
-  // changes.
+  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
+  // the consumer of this TableReader expects to be able to see in-progress
+  // schema changes.
   optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
 
   optional bool reverse = 5 [(gogoproto.nullable) = false];
