@@ -389,6 +389,13 @@ SELECT 1 IN (NULL, 2)
 ----
 NULL
 
+# Note: The desired behavior here differs from the desired behavior of
+# NULL IN <subquery> as tested below.
+query B
+SELECT NULL IN ((1, 1))
+----
+NULL
+
 query B
 SELECT (1, NULL) IN ((1, 1))
 ----
@@ -398,6 +405,23 @@ query B
 SELECT (2, NULL) IN ((1, 1))
 ----
 false
+
+query error unsupported comparison operator: .* expected 1 to be of type tuple, found type int
+SELECT () IN (1,2)
+
+query error unsupported comparison operator: .* expected tuple \(1, 2\) to have a length of 0
+SELECT () IN ((1,2))
+
+query B
+SELECT () IN (());
+----
+true
+
+query error unsupported comparison operator: .* could not parse "string" as type int
+SELECT ('string', NULL) IN ((1, 1))
+
+query error unsupported comparison operator: .* expected tuple \(1, 1\) to have a length of 3
+SELECT (2, 'string', NULL) IN ((1, 1))
 
 query B
 SELECT (1, 1) IN ((1, NULL))
@@ -419,6 +443,21 @@ query B
 SELECT (1, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
+
+query error unsupported comparison operator: <unknown> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT NULL IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b));
+
+query error unsupported comparison operator: <tuple> IN <tuple{int}>
+SELECT () IN (SELECT * FROM (VALUES (1)) AS t(a))
+
+query error unsupported comparison operator: <tuple> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT () IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT ('string', NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{int, string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT (2, 'string', NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 
 query B
 SELECT (2, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
@@ -444,6 +483,21 @@ query B
 SELECT NULL NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
 ----
 NULL
+
+query error unsupported comparison operator: <unknown> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT NULL NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple> IN <tuple{int}>
+SELECT () NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+
+query error unsupported comparison operator: <tuple> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT () NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT ('string', NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{int, string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT (2, 'string', NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 
 query B
 SELECT (1, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
