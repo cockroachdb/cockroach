@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sort"
 
@@ -349,7 +350,8 @@ func backupPlanHook(
 		}
 
 		statsCache := p.ExecCfg().TableStatsCache
-		tableStatistics := make([]*stats.TableStatisticProto, 0)
+		statsTablesByID := make([]*StatsTable, 0)
+		statsFiles := make([]string, 0)
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
@@ -375,9 +377,16 @@ func backupPlanHook(
 				if err != nil {
 					return err
 				}
+				tableStatistics := make([]*stats.TableStatisticProto, 0)
 				for i := range tableStatisticsAcc {
 					tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
 				}
+				statsTable := StatsTable{
+					Statistics: tableStatistics,
+				}
+				statsTablesByID = append(statsTablesByID, &statsTable)
+				fName := fmt.Sprintf("%s_%d", BackupStatistics, tableDesc.GetID())
+				statsFiles = append(statsFiles, fName)
 			}
 		}
 
@@ -390,6 +399,8 @@ func backupPlanHook(
 		var encryptionPassphrase []byte
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
 			encryptionPassphrase = []byte(passphrase)
+		} else {
+			fmt.Println(ok)
 		}
 
 		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
@@ -609,7 +620,8 @@ func backupPlanHook(
 			BuildInfo:          build.GetInfo(),
 			NodeID:             nodeID,
 			ClusterID:          p.ExecCfg().ClusterID(),
-			Statistics:         tableStatistics,
+			Statistics:         nil,
+			StatsFiles:         statsFiles,
 			DescriptorCoverage: backupStmt.DescriptorCoverage,
 		}
 
@@ -662,6 +674,15 @@ func backupPlanHook(
 			ctx, p.ExecCfg().Settings, defaultStore, defaultURI, encryption,
 		); err != nil {
 			return err
+		}
+
+		// This part writes the StatsTable objects into files.
+		// We delay the writing to here as the 'encryption' value has been changed just earlier on.
+		for ind, statsTable := range statsTablesByID {
+			err := writeTableStatistics(ctx, defaultStore, statsFiles[ind], encryption, statsTable)
+			if err != nil {
+				return err
+			}
 		}
 
 		backupDetails := jobspb.BackupDetails{

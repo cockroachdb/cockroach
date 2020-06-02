@@ -657,7 +657,7 @@ func selectTargets(
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
-	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+	allDescs, lastBackupManifest, _ := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
 		return fullClusterTargetsRestore(allDescs)

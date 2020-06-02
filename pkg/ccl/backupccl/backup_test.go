@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -64,6 +65,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -2859,6 +2861,41 @@ func TestBackupEncrypted(t *testing.T) {
 		backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
 
 	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
+}
+
+func TestStatsEncrypted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+
+	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM data.foo`)
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history, encryption_passphrase='abcdefg'`, localFoo)
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+	sqlDB.Exec(t, `RESTORE data.bank, data.foo FROM $1 WITH skip_missing_foreign_keys, into_db = $2, encryption_passphrase='abcdefg'`,
+		localFoo, "data 2")
+	partitionMatcher := regexp.MustCompile(`^BACKUP-STATISTICS`)
+	subDir := fmt.Sprintf("%s/foo", dir)
+	files, err := ioutil.ReadDir(subDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		fName := f.Name()
+		if partitionMatcher.MatchString(fName) {
+			statsFile := subDir + "/" + fName
+			statsBytes, err := ioutil.ReadFile(statsFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.True(t, storageccl.AppearsEncrypted(statsBytes))
+		}
+	}
 }
 
 func TestRestoredPrivileges(t *testing.T) {
