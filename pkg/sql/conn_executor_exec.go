@@ -749,7 +749,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	var cols sqlbase.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
-		cols = planColumns(planner.curPlan.main)
+		cols = planner.curPlan.main.planColumns()
 	}
 	if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
 		res.SetError(err)
