@@ -197,6 +197,12 @@ type planner struct {
 	noticeSender noticeSender
 
 	queryCacheSession querycache.Session
+
+	// contextDatabaseID is the ID of a database. It is set during some name
+	// resolution processes to disallow cross database references. In particular,
+	// the type resolution steps will disallow resolution of types that have a
+	// parentID != contextDatabaseID when it is set.
+	contextDatabaseID sqlbase.ID
 }
 
 func (ctx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
