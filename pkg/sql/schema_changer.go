@@ -432,19 +432,28 @@ func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
 func (sc *SchemaChanger) exec(ctx context.Context) error {
 	ctx = logtags.AddTags(ctx, sc.execLogTags())
 
-	// TODO (lucy): Now that marking a schema change job as succeeded doesn't
-	// happen in the same transaction as removing mutations from a table
-	// descriptor, it seems possible for a job to be resumed after the mutation
-	// has already been removed. If there's a mutation provided, we should check
-	// whether it actually exists on the table descriptor and exit the job if not.
-	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
+	tableDesc, idx, err := sc.idxInLine(ctx)
 	if err != nil {
 		return err
 	}
-	if notFirst {
+	switch idx {
+	case -1: // mutation id not found.
+		// TODO (lucy): Now that marking a schema change job as succeeded doesn't
+		// happen in the same transaction as removing mutations from a table
+		// descriptor, it seems possible for a job to be resumed after the mutation
+		// has already been removed. If there's a mutation provided, we should check
+		// whether it actually exists on the table descriptor and exit the job if not.
+		if sc.mutationID != sqlbase.InvalidMutationID {
+			log.Infof(ctx,
+				"schema change on %s (%d v%d) mutation %d: mutation not found",
+				tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+			)
+		}
+	case 0: // first in line, proceed with mutation.
+	default: // not first in line, abort.
 		log.Infof(ctx,
-			"schema change on %q (v%d): another change is still in progress",
-			tableDesc.Name, tableDesc.Version,
+			"schema change on %s (%d v%d) mutation %d: other changes still in progress %+v",
+			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID, tableDesc.Mutations[0:idx],
 		)
 		return errSchemaChangeNotFirstInLine
 	}
@@ -1109,26 +1118,29 @@ func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
 	return nil
 }
 
-// notFirstInLine returns true whenever the schema change has been queued
-// up for execution after another schema change.
-func (sc *SchemaChanger) notFirstInLine(
+// idxInLine returns the position of the schema change in the mutations queue
+// or -1 if the mutation ID was not found on the queue.
+func (sc *SchemaChanger) idxInLine(
 	ctx context.Context,
-) (*sqlbase.ImmutableTableDescriptor, bool, error) {
+) (*sqlbase.ImmutableTableDescriptor, int, error) {
 	var tableDesc *sqlbase.ImmutableTableDescriptor
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	var idx int
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
 		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
-		return err
-	}); err != nil {
-		return nil, false, err
-	}
-	notFirst := false
-	for i, mutation := range tableDesc.Mutations {
-		if mutation.MutationID == sc.mutationID {
-			notFirst = i != 0
-			break
+		if err != nil {
+			return err
 		}
-	}
-	return tableDesc, notFirst, nil
+		idx = -1
+		for i, mutation := range desc.Mutations {
+			if mutation.MutationID == sc.mutationID {
+				idx = i
+				break
+			}
+		}
+		return nil
+	})
+	return tableDesc, idx, err
 }
 
 // runStateMachineAndBackfill runs the schema change state machine followed by
