@@ -4493,7 +4493,7 @@ func (desc *TypeDescriptor) SetName(name string) {
 func (desc *TypeDescriptor) HydrateTypeInfoWithName(
 	typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc,
 ) error {
-	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
+	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Schema(), name.Object())
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {

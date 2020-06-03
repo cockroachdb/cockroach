@@ -219,17 +219,15 @@ func (e *EnumMetadata) debugString() string {
 // private. Rather than expose private members of higher level packages,
 // we define a separate type here to be safe.
 type UserDefinedTypeName struct {
-	Catalog string
-	Schema  string
-	Name    string
+	Schema string
+	Name   string
 }
 
 // MakeUserDefinedTypeName creates a user defined type name.
-func MakeUserDefinedTypeName(catalog, schema, name string) *UserDefinedTypeName {
+func MakeUserDefinedTypeName(schema, name string) *UserDefinedTypeName {
 	return &UserDefinedTypeName{
-		Catalog: catalog,
-		Schema:  schema,
-		Name:    name,
+		Schema: schema,
+		Name:   name,
 	}
 }
 
@@ -241,8 +239,6 @@ func (u UserDefinedTypeName) Basename() string {
 // FQName returns the fully qualified name.
 func (u UserDefinedTypeName) FQName() string {
 	var sb strings.Builder
-	sb.WriteString(u.Catalog)
-	sb.WriteString(".")
 	sb.WriteString(u.Schema)
 	sb.WriteString(".")
 	sb.WriteString(u.Name)

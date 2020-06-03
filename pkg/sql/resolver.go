@@ -59,11 +59,16 @@ func (p *planner) runWithOptions(flags resolveFlags, fn func()) {
 		defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 		p.avoidCachedDescriptors = true
 	}
+	if flags.databaseContext != sqlbase.InvalidID {
+		defer func(prev sqlbase.ID) { p.databaseContext = prev }(p.databaseContext)
+		p.databaseContext = flags.databaseContext
+	}
 	fn()
 }
 
 type resolveFlags struct {
-	skipCache bool
+	skipCache       bool
+	databaseContext sqlbase.ID
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
@@ -156,6 +161,12 @@ func (p *planner) ResolveType(
 	}
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
 	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
+
+	if p.databaseContext != sqlbase.InvalidID && tdesc.ParentID != sqlbase.InvalidID && tdesc.ParentID != p.databaseContext {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
+	}
+
 	return tdesc.MakeTypesT(&tn, p.makeTypeLookupFn(ctx))
 }
 
