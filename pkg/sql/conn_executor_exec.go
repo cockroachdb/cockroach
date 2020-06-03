@@ -863,7 +863,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 ) (bytesRead, rowsRead int64, _ error) {
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
-		ex.server.cfg.RangeDescriptorCache, ex.server.cfg.LeaseHolderCache,
+		ex.server.cfg.RangeDescriptorCache,
 		planner.txn,
 		func(ts hlc.Timestamp) {
 			ex.server.cfg.Clock.Update(ts)
