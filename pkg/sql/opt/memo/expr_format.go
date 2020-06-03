@@ -553,7 +553,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				fmt.Fprintf(f.Buffer, "@%s", dep.DataSource.(cat.Table).Index(dep.Index).Name())
 			}
 			if !dep.ColumnOrdinals.Empty() {
-				fmt.Fprintf(f.Buffer, " [columns: %s]", dep.ColumnOrdinals)
+				fmt.Fprintf(f.Buffer, " [column ordinals: %s]", dep.ColumnOrdinals)
+			}
+			if len(dep.ColumnNames) > 0 {
+				// Create slice to pretty print column names in sorted order.
+				colNames := make([]string, 0)
+				for colName := range dep.ColumnNames {
+					colNames = append(colNames, colName.String())
+				}
+				sort.Strings(colNames)
+				fmt.Fprintf(f.Buffer, " [column names: %s]", colNames)
 			}
 			n.Child(f.Buffer.String())
 		}

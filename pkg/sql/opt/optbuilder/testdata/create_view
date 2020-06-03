@@ -20,13 +20,13 @@ create-view t.public.v1
  └── dependencies
 
 build
-CREATE VIEW v1 AS SELECT a FROM ab 
+CREATE VIEW v1 AS SELECT a FROM ab
 ----
 create-view t.public.v1
  ├── SELECT a FROM t.public.ab
  ├── columns: a:1
  └── dependencies
-      └── ab [columns: (0,1)]
+      └── ab [column ordinals: (0)] [column names: [a]]
 
 # Test dependency on specific index.
 build
@@ -36,7 +36,7 @@ create-view t.public.v1
  ├── SELECT a FROM t.public.ab@idx
  ├── columns: a:1
  └── dependencies
-      └── ab@idx [columns: (0,1)]
+      └── ab@idx [column ordinals: (0)] [column names: [a]]
 
 build
 CREATE VIEW v1 AS SELECT a FROM ab@primary
@@ -45,7 +45,7 @@ create-view t.public.v1
  ├── SELECT a FROM t.public.ab@primary
  ├── columns: a:1
  └── dependencies
-      └── ab@primary [columns: (0,1)]
+      └── ab@primary [column ordinals: (0)] [column names: [a]]
 
 # Test dependency on view.
 exec-ddl
@@ -59,7 +59,7 @@ create-view t.public.v1
  ├── SELECT a FROM t.public.av
  ├── columns: a:1
  └── dependencies
-      └── av [columns: (0)]
+      └── av [column ordinals: (0)]
 
 build
 CREATE VIEW v1 AS SELECT av.a, ab.a FROM av, ab
@@ -68,8 +68,8 @@ create-view t.public.v1
  ├── SELECT av.a, ab.a FROM t.public.av, t.public.ab
  ├── columns: a:1 a:3
  └── dependencies
-      ├── av [columns: (0)]
-      └── ab [columns: (0,1)]
+      ├── av [column ordinals: (0)]
+      └── ab [column ordinals: (0)] [column names: [a]]
 
 # Test that we don't report virtual table dependencies.
 build
@@ -79,7 +79,7 @@ create-view t.public.v1
  ├── SELECT a, table_schema FROM t.public.ab, "".information_schema.columns
  ├── columns: a:1 table_schema:5
  └── dependencies
-      └── ab [columns: (0,1)]
+      └── ab [column ordinals: (0)] [column names: [a]]
 
 # Test cases with specified column names.
 build
@@ -89,9 +89,9 @@ create-view t.public.v2
  ├── SELECT ab.a FROM t.public.ab, t.public.ab AS ab2, t.public.cd
  ├── columns: x:1
  └── dependencies
-      ├── ab [columns: (0,1)]
-      ├── ab [columns: (0,1)]
-      └── cd [columns: (0,1)]
+      ├── ab [column ordinals: (0)] [column names: [a]]
+      ├── ab
+      └── cd
 
 build
 CREATE VIEW v3 (x, y) AS SELECT a FROM ab
@@ -103,7 +103,6 @@ CREATE VIEW v3 (x) AS SELECT a, b FROM ab
 ----
 error (42601): CREATE VIEW specifies 1 column name, but data source has 2 columns
 
-# Verify that we disallow * in view definitions (#10028).
 build
 CREATE VIEW v4 AS SELECT * FROM ab
 ----
@@ -116,7 +115,7 @@ create-view t.public.v5
  ├── SELECT a FROM [53 AS t]
  ├── columns: a:1
  └── dependencies
-      └── ab [columns: (0,1)]
+      └── ab [column ordinals: (0)] [column names: [a]]
 
 # Verify that we only depend on the specified column.
 build
@@ -126,7 +125,7 @@ create-view t.public.v6
  ├── SELECT a FROM [53(1) AS t]
  ├── columns: a:1
  └── dependencies
-      └── ab [columns: (0)]
+      └── ab [column ordinals: (0)] [column names: [a]]
 
 # Verify dependency on sequence.
 build
@@ -148,7 +147,7 @@ create-view t.public.v8
  ├── WITH cd AS (SELECT a, b FROM t.public.ab) SELECT a + b FROM cd
  ├── columns: "?column?":5
  └── dependencies
-      └── ab [columns: (0,1)]
+      └── ab [column ordinals: (0,1)] [column names: [a b]]
 
 # Verify that we disallow mutation statements.
 build
@@ -165,3 +164,161 @@ build
 CREATE VIEW v9 AS SELECT a,b FROM [DELETE FROM ab WHERE a>b RETURNING a, b]
 ----
 error (42601): DELETE cannot be used inside a view definition
+
+# Regression 29021.
+
+# Dependencies should be tracked in the group by clause.
+build
+CREATE VIEW v10 AS SELECT a FROM ab GROUP BY a,b
+----
+create-view t.public.v10
+ ├── SELECT a FROM t.public.ab GROUP BY a, b
+ ├── columns: a:1
+ └── dependencies
+      └── ab [column ordinals: (0,1)] [column names: [a b]]
+
+# Dependencies should be tracked in the join on clause.
+build
+CREATE VIEW v10 as SELECT 1 FROM ab JOIN cd ON ab.a = cd.c
+----
+create-view t.public.v10
+ ├── SELECT 1 FROM t.public.ab JOIN t.public.cd ON ab.a = cd.c
+ ├── columns: "?column?":5
+ └── dependencies
+      ├── ab [column ordinals: (0)] [column names: [a]]
+      └── cd [column ordinals: (0)] [column names: [c]]
+
+exec-ddl
+CREATE TABLE ac (a INT, c INT)
+----
+
+# Dependencies should be tracked in a natural join clause.
+build
+CREATE VIEW v11 as SELECT 1 FROM ab NATURAL JOIN ac
+----
+create-view t.public.v11
+ ├── SELECT 1 FROM t.public.ab NATURAL JOIN t.public.ac
+ ├── columns: "?column?":6
+ └── dependencies
+      ├── ab [column ordinals: (0)] [column names: [a]]
+      └── ac [column ordinals: (0)] [column names: [a]]
+
+# Dependencies should be tracked in a using join clause.
+build
+CREATE VIEW v12 as SELECT 1 FROM ab JOIN ac USING (a)
+----
+create-view t.public.v12
+ ├── SELECT 1 FROM t.public.ab JOIN t.public.ac USING (a)
+ ├── columns: "?column?":6
+ └── dependencies
+      ├── ab [column ordinals: (0)] [column names: [a]]
+      └── ac [column ordinals: (0)] [column names: [a]]
+
+# Dependencies should be tracked in the where clause.
+build
+CREATE VIEW v13 AS SELECT a FROM ab WHERE b > 0
+----
+create-view t.public.v13
+ ├── SELECT a FROM t.public.ab WHERE b > 0
+ ├── columns: a:1
+ └── dependencies
+      └── ab [column ordinals: (0,1)] [column names: [a b]]
+
+# Dependencies should be tracked in aggregate / window functions.
+build
+CREATE VIEW v14 AS SELECT sum(a) FROM ab;
+----
+create-view t.public.v14
+ ├── SELECT sum(a) FROM t.public.ab
+ ├── columns: sum:3
+ └── dependencies
+      └── ab [column ordinals: (0)] [column names: [a]]
+
+# Dependencies should be tracked in partitions.
+build
+CREATE VIEW v15 AS SELECT sum(a) OVER (PARTITION by b) FROM ab;
+----
+create-view t.public.v15
+ ├── SELECT sum(a) OVER (PARTITION BY b) FROM t.public.ab
+ ├── columns: sum:3
+ └── dependencies
+      └── ab [column ordinals: (0,1)] [column names: [a b]]
+
+# Dependencies should be tracked in subqueries.
+build
+CREATE VIEW v16 AS SELECT a FROM (SELECT a,b FROM ab);
+----
+create-view t.public.v16
+ ├── SELECT a FROM (SELECT a, b FROM t.public.ab)
+ ├── columns: a:1
+ └── dependencies
+      └── ab [column ordinals: (0,1)] [column names: [a b]]
+
+# Dependencies should be tracked in the order by clause.
+build
+CREATE VIEW v16 AS SELECT a FROM ab ORDER BY b
+----
+create-view t.public.v16
+ ├── SELECT a FROM t.public.ab ORDER BY b
+ ├── columns: a:1
+ └── dependencies
+      └── ab [column ordinals: (0,1)] [column names: [a b]]
+
+exec-ddl
+CREATE TABLE tf (f FLOAT)
+----
+
+# Dependencies should be tracked in ordered-set aggregate functions.
+build
+CREATE VIEW v17 AS SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY f) FROM tf
+----
+create-view t.public.v17
+ ├── SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY f) FROM t.public.tf
+ ├── columns: percentile_cont:4
+ └── dependencies
+      └── tf [column ordinals: (0)] [column names: [f]]
+
+# Dependencies should be tracked with multiple table statements.
+build
+CREATE VIEW v18 AS SELECT ab.a, ab2.b FROM ab, ab as ab2
+----
+create-view t.public.v18
+ ├── SELECT ab.a, ab2.b FROM t.public.ab, t.public.ab AS ab2
+ ├── columns: a:1 b:4
+ └── dependencies
+      ├── ab [column ordinals: (0)] [column names: [a]]
+      └── ab [column ordinals: (1)] [column names: [b]]
+
+build
+CREATE VIEW v19 AS SELECT 1 FROM (SELECT a FROM ab) t1 JOIN (SELECT b FROM AB) t2 on t1.a = t2.b
+----
+create-view t.public.v19
+ ├── SELECT 1 FROM (SELECT a FROM t.public.ab) AS t1 JOIN (SELECT b FROM t.public.ab) AS t2 ON t1.a = t2.b
+ ├── columns: "?column?":5
+ └── dependencies
+      ├── ab [column ordinals: (0)] [column names: [a]]
+      └── ab [column ordinals: (1)] [column names: [b]]
+
+# Dependencies should be tracked if the column is used in a projection.
+build
+CREATE VIEW v20 AS SELECT a + b FROM ab
+----
+create-view t.public.v20
+ ├── SELECT a + b FROM t.public.ab
+ ├── columns: "?column?":3
+ └── dependencies
+      └── ab [column ordinals: (0,1)] [column names: [a b]]
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT)
+----
+
+# Dependencies should be tracked in an ORDER BY inside a partition.
+build
+CREATE VIEW v21 AS SELECT sum(a) OVER (PARTITION BY b ORDER BY c) FROM abc
+----
+create-view t.public.v21
+ ├── SELECT sum(a) OVER (PARTITION BY b ORDER BY c) FROM t.public.abc
+ ├── columns: sum:5
+ └── dependencies
+      └── abc [column ordinals: (0,1)] [column names: [a b]]

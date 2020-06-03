@@ -12,6 +12,7 @@ package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -27,6 +28,12 @@ type ViewDep struct {
 	// of the table; the only exception is when a table is referenced by table ID
 	// with a specific list of column IDs.
 	ColumnOrdinals util.FastIntSet
+
+	ColumnIDToOrd map[ColumnID]int
+
+	// ColumnNames is a set of column names used to display column names
+	// for testing view dependencies.
+	ColumnNames map[tree.Name]struct{}
 
 	// If an index is referenced specifically (via an index hint), SpecificIndex
 	// is true and Index is the ordinal of that index.
