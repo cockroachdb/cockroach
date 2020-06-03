@@ -108,6 +108,9 @@ type DistanceCalculator interface {
 	// ClosestPointToEdge returns the closest point to the infinite line denoted by
 	// the edge, and a bool on whether this point lies on the edge segment.
 	ClosestPointToEdge(edge Edge, point Point) (Point, bool)
+	// BoundingBoxIntersects returns whether the bounding boxes of the shapes in
+	// question intersect.
+	BoundingBoxIntersects() bool
 }
 
 // ShapeDistance returns the distance between two given shapes.
@@ -203,8 +206,10 @@ func onPointToPolygon(c DistanceCalculator, a Point, b Polygon) bool {
 	//   - The point P is contained in the polygon. One can again prove the same property.
 	//   So we only need to compare with the exterior ring.
 	// MinDistance: If the exterior ring does not contain the point, we just need to calculate the distance to
-	// the exterior ring.
-	if c.DistanceUpdater().IsMaxDistance() || !c.PointInLinearRing(a, b.LinearRing(0)) {
+	//   the exterior ring.
+	// BoundingBoxIntersects: if the bounding box of the shape being calculated does not intersect,
+	//   then we only need to compare the outer loop.
+	if c.DistanceUpdater().IsMaxDistance() || !c.BoundingBoxIntersects() || !c.PointInLinearRing(a, b.LinearRing(0)) {
 		return onPointToEdgesExceptFirstEdgeStart(c, a, b.LinearRing(0))
 	}
 	// At this point it may be inside a hole.
@@ -226,42 +231,52 @@ func onPointToPolygon(c DistanceCalculator, a Point, b Polygon) bool {
 func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWithEdges) bool {
 	for aEdgeIdx := 0; aEdgeIdx < a.NumEdges(); aEdgeIdx++ {
 		aEdge := a.Edge(aEdgeIdx)
-		crosser := c.NewEdgeCrosser(aEdge, b.Edge(0).V0)
+		var crosser EdgeCrosser
+		// MaxDistance: the max distance between 2 edges is the maximum of the distance across
+		//   pairs of vertices chosen from each edge.
+		//   It does not matter whether the edges cross, so we skip this check.
+		// BoundingBoxIntersects: if the bounding box of the two shapes do not intersect,
+		//   then we don't need to check whether edges intersect either.
+		if !c.DistanceUpdater().IsMaxDistance() && c.BoundingBoxIntersects() {
+			crosser = c.NewEdgeCrosser(aEdge, b.Edge(0).V0)
+		}
 		for bEdgeIdx := 0; bEdgeIdx < b.NumEdges(); bEdgeIdx++ {
 			bEdge := b.Edge(bEdgeIdx)
-			// Max distance between 2 edges is the maximum of the distance across pairs of vertices chosen from each edge.
-			// It does not matter whether the edges cross, so we skip this check.
-			if !c.DistanceUpdater().IsMaxDistance() {
+			if crosser != nil {
 				// If the edges cross, the distance is 0.
 				if crosser.ChainCrossing(bEdge.V1) {
 					return c.DistanceUpdater().OnIntersects()
 				}
 			}
 
-			// Compare each vertex against the edge of the other.
-			for _, toCheck := range []struct {
-				vertex Point
-				edge   Edge
-			}{
-				{aEdge.V0, bEdge},
-				{aEdge.V1, bEdge},
-				{bEdge.V0, aEdge},
-				{bEdge.V1, aEdge},
-			} {
-				// Check the vertex against the ends of the edges.
-				if c.DistanceUpdater().Update(toCheck.vertex, toCheck.edge.V0) ||
-					c.DistanceUpdater().Update(toCheck.vertex, toCheck.edge.V1) {
+			// Check the vertex against the ends of the edges.
+			if c.DistanceUpdater().Update(aEdge.V0, bEdge.V0) ||
+				c.DistanceUpdater().Update(aEdge.V0, bEdge.V1) ||
+				c.DistanceUpdater().Update(aEdge.V1, bEdge.V0) ||
+				c.DistanceUpdater().Update(aEdge.V1, bEdge.V1) {
+				return true
+			}
+			// Only project vertexes to edges if we are looking at the edges.
+			if !c.DistanceUpdater().IsMaxDistance() {
+				if projectVertexToEdge(c, aEdge.V0, bEdge) ||
+					projectVertexToEdge(c, aEdge.V1, bEdge) ||
+					projectVertexToEdge(c, bEdge.V0, aEdge) ||
+					projectVertexToEdge(c, bEdge.V1, aEdge) {
 					return true
 				}
-				if !c.DistanceUpdater().IsMaxDistance() {
-					// Also check the projection of the vertex onto the edge.
-					if closestPoint, ok := c.ClosestPointToEdge(toCheck.edge, toCheck.vertex); ok {
-						if c.DistanceUpdater().Update(toCheck.vertex, closestPoint) {
-							return true
-						}
-					}
-				}
 			}
+		}
+	}
+	return false
+}
+
+// projectVertexToEdge attempts to project the point onto the given edge.
+// Returns true if the calling function should early exit.
+func projectVertexToEdge(c DistanceCalculator, vertex Point, edge Edge) bool {
+	// Also check the projection of the vertex onto the edge.
+	if closestPoint, ok := c.ClosestPointToEdge(edge, vertex); ok {
+		if c.DistanceUpdater().Update(vertex, closestPoint) {
+			return true
 		}
 	}
 	return false
@@ -280,7 +295,11 @@ func onLineStringToPolygon(c DistanceCalculator, a LineString, b Polygon) bool {
 	// MaxDistance: the furthest distance from a LineString to a Polygon is always against the
 	//   exterior ring. This follows the reasoning under "onPointToPolygon", but we must now
 	//   check each point in the LineString.
-	if c.DistanceUpdater().IsMaxDistance() || !c.PointInLinearRing(a.Vertex(0), b.LinearRing(0)) {
+	// BoundingBoxIntersects: if the bounding box of the two shapes do not intersect,
+	//   then the distance is always from the LineString to the exterior ring.
+	if c.DistanceUpdater().IsMaxDistance() ||
+		!c.BoundingBoxIntersects() ||
+		!c.PointInLinearRing(a.Vertex(0), b.LinearRing(0)) {
 		return onShapeEdgesToShapeEdges(c, a, b.LinearRing(0))
 	}
 
@@ -335,12 +354,15 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	// As such, we only need to compare the exterior rings if we detect this.
 	//
 	// MaxDistance:
-	// The furthest distance between two polygons is always against the exterior rings of each other.
-	// This closely follows the reasoning pointed out in "onPointToPolygon". Holes are always located
-	// inside the exterior ring of a polygon, so the exterior ring will always contain a point
-	// with a larger max distance.
+	//   The furthest distance between two polygons is always against the exterior rings of each other.
+	//   This closely follows the reasoning pointed out in "onPointToPolygon". Holes are always located
+	//   inside the exterior ring of a polygon, so the exterior ring will always contain a point
+	//   with a larger max distance.
+	// BoundingBoxIntersects: if the bounding box of the two shapes do not intersect,
+	//   then the distance is always between the two exterior rings.
 	if c.DistanceUpdater().IsMaxDistance() ||
-		(!c.PointInLinearRing(bFirstPoint, a.LinearRing(0)) && !c.PointInLinearRing(aFirstPoint, b.LinearRing(0))) {
+		!c.BoundingBoxIntersects() ||
+		!c.PointInLinearRing(bFirstPoint, a.LinearRing(0)) && !c.PointInLinearRing(aFirstPoint, b.LinearRing(0)) {
 		return onShapeEdgesToShapeEdges(c, a.LinearRing(0), b.LinearRing(0))
 	}
 
