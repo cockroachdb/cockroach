@@ -28,12 +28,48 @@ import (
 type distSQLSpecExecFactory struct {
 	planner *planner
 	dsp     *DistSQLPlanner
+	// planContexts is a utility struct that stores already instantiated
+	// planning contexts. It should not be accessed directly, use getPlanCtx()
+	// instead. The struct allows for lazy instantiation of the planning
+	// contexts which are then reused between different calls to Construct*
+	// methods. We need to keep both because every stage of processors can
+	// either be distributed or local regardless of the distribution of the
+	// previous stages.
+	planContexts struct {
+		distPlanCtx *PlanningCtx
+		// localPlanCtx stores the local planning context of the gateway.
+		localPlanCtx *PlanningCtx
+	}
+	singleTenant bool
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
 func newDistSQLSpecExecFactory(p *planner) exec.Factory {
-	return &distSQLSpecExecFactory{planner: p, dsp: p.extendedEvalCtx.DistSQLPlanner}
+	return &distSQLSpecExecFactory{
+		planner:      p,
+		dsp:          p.extendedEvalCtx.DistSQLPlanner,
+		singleTenant: p.execCfg.Codec.ForSystemTenant(),
+	}
+}
+
+func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *PlanningCtx {
+	distribute := false
+	if e.singleTenant {
+		distribute = shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
+	}
+	if distribute {
+		if e.planContexts.distPlanCtx == nil {
+			evalCtx := e.planner.ExtendedEvalContext()
+			e.planContexts.distPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+		}
+		return e.planContexts.distPlanCtx
+	}
+	if e.planContexts.localPlanCtx == nil {
+		evalCtx := e.planner.ExtendedEvalContext()
+		e.planContexts.localPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+	}
+	return e.planContexts.localPlanCtx
 }
 
 func (e *distSQLSpecExecFactory) ConstructValues(
@@ -153,15 +189,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.LimitHint = softLimit
 	}
 
-	distribute := shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
-	if _, singleTenant := e.planner.execCfg.NodeID.OptionalNodeID(); !singleTenant {
-		distribute = false
-	}
-
-	evalCtx := e.planner.ExtendedEvalContext()
-	planCtx := e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
 	err = e.dsp.planTableReaders(
-		planCtx,
+		e.getPlanCtx(recommendation),
 		&p,
 		&tableReaderPlanningInfo{
 			spec:                   trSpec,
@@ -184,10 +213,31 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 func (e *distSQLSpecExecFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// TODO(yuzefovich): figure out how to push the filter into the table
-	// reader when it already doesn't have a filter and it doesn't have a hard
-	// limit.
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	if err := checkExpr(filter); err != nil {
+		plan.recommendation = cannotDistribute
+		if len(physPlan.ResultRouters) > 1 {
+			// The plan so far has been distributed, but filter expression
+			// cannot be distributed, so we need to merge the streams on a
+			// single node. We could do so on one of the nodes that streams
+			// originate from, but for now we choose the gateway.
+			gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
+			physPlan.AddSingleGroupStage(
+				gatewayNodeID,
+				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+				execinfrapb.PostProcessSpec{},
+				physPlan.ResultTypes,
+			)
+		}
+	}
+	// AddFilter will attempt to push the filter into the last stage of
+	// processors.
+	if err := physPlan.AddFilter(filter, e.getPlanCtx(plan.recommendation), physPlan.PlanToStreamColMap); err != nil {
+		return nil, err
+	}
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
