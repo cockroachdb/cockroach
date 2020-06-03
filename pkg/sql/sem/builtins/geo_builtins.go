@@ -1455,43 +1455,6 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			tree.VolatilityImmutable,
 		),
 	),
-	"st_centroid": makeBuiltin(
-		defProps(),
-		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				centroid, err := geomfn.Centroid(g.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(centroid), err
-			},
-			types.Geometry,
-			infoBuilder{
-				info:         "Returns the centroid of the given geometry.",
-				libraryUsage: usesGEOS,
-			},
-			tree.VolatilityImmutable,
-		),
-		stringOverload1(
-			func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeometry(s)
-				if err != nil {
-					return nil, err
-				}
-				centroid, err := geomfn.Centroid(g)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(centroid), err
-			},
-			types.Geometry,
-			infoBuilder{
-				info:         "Returns the centroid of the given string, which will be parsed as a geometry object.",
-				libraryUsage: usesGEOS,
-			}.String(),
-			tree.VolatilityImmutable,
-		),
-	),
 	"st_geometrytype": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -1936,6 +1899,99 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
+	),
+
+	// Topology operations
+	"st_centroid": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				centroid, err := geomfn.Centroid(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(centroid), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the centroid of the given geometry.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+		stringOverload1(
+			func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
+				g, err := geo.ParseGeometry(s)
+				if err != nil {
+					return nil, err
+				}
+				centroid, err := geomfn.Centroid(g)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(centroid), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the centroid of the given string, which will be parsed as a geometry object.",
+				libraryUsage: usesGEOS,
+			}.String(),
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_pointonsurface": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				pointOnSurface, err := geomfn.PointOnSurface(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(pointOnSurface), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns a point that intersects with the given Geometry.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_intersection": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+				intersection, err := geomfn.Intersection(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(intersection), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the point intersections of the given geometries.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_union": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+				union, err := geomfn.Union(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(union), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the union of the given geometries as a single Geometry object.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
 	),
 
 	//
