@@ -382,9 +382,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		MaxBackoff:     5 * time.Second,
 		Multiplier:     1,
 	}
-	if err := retry.WithMaxAttempts(ctx, retryOpts, 20, func() error {
+	if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
 		o, err := decommission(ctx, 2, c.Node(1),
-			"decommission", "--wait", "none", "--format", "csv")
+			"decommission", "--wait=none", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
@@ -403,7 +403,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	// Check that even though the node is decommissioned, we still see it (since
 	// it remains live) in `node ls`.
 	{
-		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format=csv")
 		if err != nil {
 			t.Fatalf("node-ls failed: %v", err)
 		}
@@ -420,7 +420,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 	// Ditto `node status`.
 	{
-		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format=csv")
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
@@ -442,7 +442,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	t.l.Printf("decommissioning second node from third, using --wait=all\n")
 	{
 		o, err := decommission(ctx, 3, c.Node(2),
-			"decommission", "--wait", "all", "--format", "csv")
+			"decommission", "--wait=all", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
@@ -462,20 +462,25 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		t.Fatalf("recommission failed: %v", err)
 	}
 
-	// TODO(knz): quit --decommission is deprecated in 20.1. Remove
-	// this part of the roachtest in 20.2.
-	t.l.Printf("decommissioning third node via `quit --decommission`\n")
+	t.l.Printf("decommissioning third node (from itself)\n")
 	func() {
 		// This should not take longer than five minutes, and if it does, it's
 		// likely stuck forever and we want to see the output.
 		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
-		if _, err := execCLI(timeoutCtx, t, c, 3, "quit", "--decommission"); err != nil {
-			if timeoutCtx.Err() != nil {
-				t.Fatalf("quit --decommission failed: %s", err)
-			}
-			// TODO(tschottdorf): grep the process output for the string announcing success?
-			t.l.Errorf("WARNING: ignoring error on quit --decommission: %s\n", err)
+		o, err := decommission(timeoutCtx, 3, c.Node(3),
+			"decommission", "--wait=all", "--format=csv")
+		if err != nil {
+			t.Fatalf("decommission failed: %v", err)
+		}
+
+		exp := [][]string{
+			decommissionHeader,
+			{"3", "true", "0", "true", "false"},
+			decommissionFooter,
+		}
+		if err := matchCSV(o, exp); err != nil {
+			t.Fatal(err)
 		}
 	}()
 
@@ -485,19 +490,14 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	t.l.Printf("checking that other nodes see node three as successfully decommissioned\n")
 	{
 		o, err := decommission(ctx, 2, c.Node(3),
-			"decommission", "--format", "csv") // wait=all is implied
+			"decommission", "--format=csv") // wait=all is implied
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
 
 		exp := [][]string{
 			decommissionHeader,
-			// Expect the same as usual, except this time the node should be draining
-			// because it shut down cleanly (thanks to `quit --decommission`). It turns
-			// out that while it will always manage to mark itself as draining during a
-			// graceful shutdown, gossip may not yet have told this node. It's rare,
-			// but seems to happen (#41249).
-			{"3", "true", "0", "true", "true|false"},
+			{"3", "true", "0", "true", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -521,7 +521,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	t.l.Printf("decommission first node, starting with it down but restarting it for verification\n")
 	{
 		o, err := decommission(ctx, 2, c.Node(1),
-			"decommission", "--wait", "live")
+			"decommission", "--wait=live")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
@@ -540,7 +540,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		// Note that we specify "all" because even though the first node is
 		// now running, it may not be live by the time the command runs.
 		o, err = decommission(ctx, 2, c.Node(1),
-			"decommission", "--wait", "all", "--format", "csv")
+			"decommission", "--wait=all", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
@@ -577,7 +577,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	t.l.Printf("decommission first node in absentia using --wait=live\n")
 	{
 		o, err := decommission(ctx, 3, c.Node(1),
-			"decommission", "--wait", "live", "--format", "csv")
+			"decommission", "--wait=live", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
@@ -611,7 +611,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	// Check that (at least after a bit) the node disappears from `node ls`
 	// because it is decommissioned and not live.
 	for {
-		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format=csv")
 		if err != nil {
 			t.Fatalf("node-ls failed: %v", err)
 		}
@@ -630,7 +630,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		break
 	}
 	for {
-		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format", "csv")
+		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format=csv")
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
@@ -656,8 +656,8 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 			c.InternalAddr(ctx, c.Node(2))[0])))
 	}
 
-	if err := retry.WithMaxAttempts(ctx, retryOpts, 20, func() error {
-		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format", "csv")
+	if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
+		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format=csv")
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
@@ -724,7 +724,7 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 	//
 	// Specify wait=none because the command would block forever (the replicas have
 	// nowhere to go).
-	if _, err := decommission(ctx, 2, c.All(), "decommission", "--wait", "none"); err != nil {
+	if _, err := decommission(ctx, 2, c.All(), "decommission", "--wait=none"); err != nil {
 		t.Fatalf("decommission failed: %v", err)
 	}
 
