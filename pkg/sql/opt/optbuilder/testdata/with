@@ -93,8 +93,8 @@ create-view t.public.v1
  ├── WITH t AS (SELECT a FROM t.public.y WHERE a < 3) SELECT 1 FROM t.public.x NATURAL JOIN t
  ├── columns: "?column?":7
  └── dependencies
-      ├── y [columns: (0,1)]
-      └── x [columns: (0-2)]
+      ├── y [column names: [a]]
+      └── x [column names: [a]]
 
 build
 CREATE TABLE t1 AS

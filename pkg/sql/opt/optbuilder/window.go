@@ -346,6 +346,9 @@ func (b *Builder) buildWindowArgs(
 	argList := make(memo.ScalarListExpr, len(argExprs))
 	for j, a := range argExprs {
 		col := outScope.findExistingCol(a, false /* allowSideEffects */)
+		if col != nil {
+			b.TrackReferencedColumnForViews(col)
+		}
 		if col == nil {
 			col = b.synthesizeColumn(
 				outScope,
@@ -374,6 +377,9 @@ func (b *Builder) buildWindowPartition(
 	cols := flattenTuples(partition)
 	for j, e := range cols {
 		col := outScope.findExistingCol(e, false /* allowSideEffects */)
+		if col != nil {
+			b.TrackReferencedColumnForViews(col)
+		}
 		if col == nil {
 			col = b.synthesizeColumn(
 				outScope,

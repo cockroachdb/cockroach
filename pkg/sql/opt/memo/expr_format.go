@@ -552,8 +552,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if dep.SpecificIndex {
 				fmt.Fprintf(f.Buffer, "@%s", dep.DataSource.(cat.Table).Index(dep.Index).Name())
 			}
-			if !dep.ColumnOrdinals.Empty() {
-				fmt.Fprintf(f.Buffer, " [columns: %s]", dep.ColumnOrdinals)
+			colNames, isTable := dep.GetColumnNames()
+			if len(colNames) > 0 {
+				fmt.Fprintf(f.Buffer, " [column names: %s]", colNames)
+			} else if isTable {
+				fmt.Fprintf(f.Buffer, " [no columns]")
 			}
 			n.Child(f.Buffer.String())
 		}
