@@ -344,3 +344,100 @@ CREATE TABLE test.tt (x test.t);
 	// Ensure that we can clone this table.
 	_ = protoutil.Clone(desc).(*TableDescriptor)
 }
+
+// TestSerializedUDTsInTableDescriptor tests that expressions containing
+// explicit type references and members of user defined types are serialized
+// in a way that is stable across changes to the type itself. For example,
+// we want to ensure that enum members are serialized in a way that is stable
+// across renames to the member itself.
+func TestSerializedUDTsInTableDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	getDefault := func(desc *TableDescriptor) string {
+		return *desc.Columns[0].DefaultExpr
+	}
+	getComputed := func(desc *TableDescriptor) string {
+		return *desc.Columns[0].ComputeExpr
+	}
+	getCheck := func(desc *TableDescriptor) string {
+		return desc.Checks[0].Expr
+	}
+	testdata := []struct {
+		colSQL       string
+		expectedExpr string
+		getExpr      func(desc *TableDescriptor) string
+	}{
+		// Test a simple UDT as the default value.
+		{
+			"x greeting DEFAULT ('hello')",
+			`b'\x80':::@53`,
+			getDefault,
+		},
+		{
+			"x greeting DEFAULT ('hello':::greeting)",
+			`b'\x80':::@53`,
+			getDefault,
+		},
+		// Test when a UDT is used in a default value, but isn't the
+		// final type of the column.
+		{
+			"x INT DEFAULT (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END)",
+			`CASE WHEN b'\x80':::@53::@53 = b'\x80':::@53::@53 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			getDefault,
+		},
+		{
+			"x BOOL DEFAULT ('hello'::greeting IS OF (greeting, greeting))",
+			`b'\x80':::@53::@53 IS OF (@53, @53)`,
+			getDefault,
+		},
+		// Test check constraints.
+		{
+			"x greeting, CHECK (x = 'hello')",
+			`x = b'\x80':::@53`,
+			getCheck,
+		},
+		{
+			"x greeting, y STRING, CHECK (y::greeting = x)",
+			`y::@53 = x`,
+			getCheck,
+		},
+		// Test a computed column in the same cases as above.
+		{
+			"x greeting AS ('hello') STORED",
+			`b'\x80':::@53`,
+			getComputed,
+		},
+		{
+			"x INT AS (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END) STORED",
+			`CASE WHEN b'\x80':::@53::@53 = b'\x80':::@53::@53 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			getComputed,
+		},
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	if _, err := sqlDB.Exec(`
+	CREATE DATABASE test;
+	USE test;
+	SET experimental_enable_enums=true;
+	CREATE TYPE greeting AS ENUM ('hello');
+`); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range testdata {
+		create := "CREATE TABLE t (" + tc.colSQL + ")"
+		if _, err := sqlDB.Exec(create); err != nil {
+			t.Fatal(err)
+		}
+		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		found := tc.getExpr(desc)
+		if tc.expectedExpr != found {
+			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, tc.expectedExpr)
+		}
+		if _, err := sqlDB.Exec("DROP TABLE t"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

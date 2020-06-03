@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1629,7 +1630,11 @@ CREATE TABLE crdb_internal.table_columns (
 						col := &table.Columns[i]
 						defStr := tree.DNull
 						if col.DefaultExpr != nil {
-							defStr = tree.NewDString(*col.DefaultExpr)
+							def, err := schemaexpr.DeserializeTableDescExpr(ctx, &p.semaCtx, table, *col.DefaultExpr)
+							if err != nil {
+								return err
+							}
+							defStr = tree.NewDString(tree.SerializeForDisplay(def))
 						}
 						row = row[:0]
 						row = append(row,

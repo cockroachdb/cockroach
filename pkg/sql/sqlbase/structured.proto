@@ -127,7 +127,10 @@ message ColumnDescriptor {
   optional bool nullable = 4 [(gogoproto.nullable) = false];
   reserved 8;
   // Default expression to use to populate the column on insert if no
-  // value is provided.
+  // value is provided. Note that it is not correct to use DefaultExpr
+  // as output to display to a user. User defined types within DefaultExpr
+  // have been serialized in a internal format. Instead, format the result
+  // of DeserializeTableDescExpr.
   optional string default_expr = 5;
   reserved 9;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
@@ -137,7 +140,10 @@ message ColumnDescriptor {
   // Ids of sequences that the column owns.
   repeated uint32 owns_sequence_ids = 12 [(gogoproto.casttype) = "ID"];
   // Expression to use to compute the value of this column if this is a
-  // computed column.
+  // computed column. Note that it is not correct to use ComputeExpr
+  // as output to display to a user. User defined types within ComputeExpr
+  // have been serialized in a internal format. Instead, format the result
+  // of DeserializeTableDescExpr.
   optional string compute_expr = 11;
   // LogicalColumnID must be accessed through the accessor, since it is set
   // lazily, it is incorrect to access it directly.
@@ -723,6 +729,11 @@ message TableDescriptor {
 
   message CheckConstraint {
     option (gogoproto.equal) = true;
+    // Expr is the expression that this check constraint represents.
+    // Note that it is not correct to use Expr as output to display
+    // to a user. User defined types within Expr have been serialized
+    // in a internal format. Instead, format the result of
+    // DeserializeTableDescExpr.
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];

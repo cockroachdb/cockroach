@@ -159,12 +159,13 @@ func (p *planner) ResolveType(
 	return tdesc.MakeTypesT(&tn, p.makeTypeLookupFn(ctx))
 }
 
-// ResolveTypeByID implements the tree.TypeResolver interface. We disallow
-// accessing types directly by their ID in standard SQL contexts, so error
-// out nicely here.
-// TODO (rohany): Is there a need to disable this in the general case?
+// ResolveTypeByID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	return nil, errors.Newf("type id reference @%d not allowed in this context", id)
+	name, desc, err := resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return desc.MakeTypesT(name, p.makeTypeLookupFn(ctx))
 }
 
 // maybeHydrateTypesInDescriptor hydrates any types.T's in the input descriptor.

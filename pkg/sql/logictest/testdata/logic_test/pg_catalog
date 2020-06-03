@@ -779,7 +779,7 @@ ORDER BY con.oid
 ----
 oid         conname    connamespace  contype
 2143281868  fk         2332901747    f
-3236224800  check_b    2332901747    c
+2792001267  check_b    2332901747    c
 3572320190  primary    2332901747    p
 4089604113  fk         2332901747    f
 4243354484  t1_a_key   2332901747    u
@@ -854,11 +854,11 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
-conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin    consrc
-check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)  (b > 11)
-primary    NULL     NULL       NULL       NULL       NULL       NULL      NULL
-t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL      NULL
-index_key  NULL     NULL       NULL       NULL       NULL       NULL      NULL
+conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin           consrc
+check_b    NULL     NULL       NULL       NULL       NULL       (b > 11:::INT8)  (b > 11:::INT8)
+primary    NULL     NULL       NULL       NULL       NULL       NULL             NULL
+t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL             NULL
+index_key  NULL     NULL       NULL       NULL       NULL       NULL             NULL
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
