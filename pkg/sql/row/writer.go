@@ -34,8 +34,8 @@ const (
 )
 
 // ColIDtoRowIndexFromCols groups a slice of ColumnDescriptors by their ID
-// field, returning a map from ID to ColumnDescriptor. It assumes there are no
-// duplicate descriptors in the input.
+// field, returning a map from ID to the index of the column in the input slice.
+// It assumes there are no duplicate descriptors in the input.
 func ColIDtoRowIndexFromCols(cols []sqlbase.ColumnDescriptor) map[sqlbase.ColumnID]int {
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(cols))
 	for i := range cols {

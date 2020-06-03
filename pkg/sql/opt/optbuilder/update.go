@@ -276,7 +276,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	mb.addSynthesizedColsForUpdate()
 }
 
-// addComputedColsForUpdate wraps an Update input expression with a Project
+// addSynthesizedColsForUpdate wraps an Update input expression with a Project
 // operator containing any computed columns that need to be updated. This
 // includes write-only mutation columns that are computed.
 func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
@@ -321,6 +321,10 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
+	// Disambiguate names so that references in any expressions, such as a
+	// check constraint, refer to the correct columns.
+	mb.disambiguateColumns()
+
 	mb.addCheckConstraintCols()
 
 	mb.buildFKChecksForUpdate()

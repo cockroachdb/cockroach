@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -169,7 +170,10 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 // result rows are needed, saves it in the result row container
 func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
 	// Queue the deletion in the KV batch.
-	if err := d.run.td.row(params.ctx, sourceVals, d.run.traceKV); err != nil {
+	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+	// not delete entries from.
+	var ignoreIndexes util.FastIntSet
+	if err := d.run.td.row(params.ctx, sourceVals, ignoreIndexes, d.run.traceKV); err != nil {
 		return err
 	}
 

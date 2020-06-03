@@ -469,7 +469,10 @@ func (n *createTableNode) startExec(params runParams) error {
 					}
 				}
 
-				if err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+				// not add entries to.
+				var ignoreIndexes util.FastIntSet
+				if err := tw.row(params.ctx, rowBuffer, ignoreIndexes, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}
