@@ -225,7 +225,9 @@ func (b *Builder) finishBuildScalar(
 	}
 
 	// Avoid synthesizing a new column if possible.
-	if col := outScope.findExistingCol(texpr, false /* allowSideEffects */); col != nil && col != outCol {
+	if col := outScope.findExistingCol(
+		texpr, false, /* allowSideEffects */
+	); col != nil && col != outCol {
 		outCol.id = col.id
 		outCol.scalar = scalar
 		return scalar
@@ -253,6 +255,8 @@ func (b *Builder) finishBuildScalar(
 func (b *Builder) finishBuildScalarRef(
 	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
+
+	b.TrackReferencedColumnForViews(col)
 	// Update the sets of column references and outer columns if needed.
 	if colRefs != nil {
 		colRefs.Add(col.id)

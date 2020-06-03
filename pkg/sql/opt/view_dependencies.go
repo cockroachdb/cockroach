@@ -11,6 +11,8 @@
 package opt
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -23,13 +25,35 @@ type ViewDep struct {
 	DataSource cat.DataSource
 
 	// ColumnOrdinals is the set of column ordinals that are referenced by the
-	// view for this table. In most cases, this consists of all "public" columns
-	// of the table; the only exception is when a table is referenced by table ID
-	// with a specific list of column IDs.
+	// view for this table.
 	ColumnOrdinals util.FastIntSet
+
+	// ColumnIDToOrd maps a scopeColumn's ColumnID to its ColumnOrdinal.
+	// This helps us add only the columns that are actually referenced
+	// by the view's query into the view dependencies. We add a
+	// dependency on a column only when the column is referenced by the view
+	// and created as a scopeColumn.
+	ColumnIDToOrd map[ColumnID]int
 
 	// If an index is referenced specifically (via an index hint), SpecificIndex
 	// is true and Index is the ordinal of that index.
 	SpecificIndex bool
 	Index         cat.IndexOrdinal
+}
+
+// GetColumnNames returns a sorted list of the names of the column dependencies
+// and a boolean to determine if the dependency was a table.
+// We only track column dependencies on tables.
+func (dep ViewDep) GetColumnNames() ([]string, bool) {
+	colNames := make([]string, 0)
+	if table, ok := dep.DataSource.(cat.Table); ok {
+		dep.ColumnOrdinals.ForEach(func(i int) {
+			name := table.Column(i).ColName()
+			colNames = append(colNames, name.String())
+		})
+		sort.Strings(colNames)
+		return colNames, ok
+	}
+
+	return nil, false
 }

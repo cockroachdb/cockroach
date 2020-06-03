@@ -340,6 +340,8 @@ func (jb *usingJoinBuilder) buildUsingJoin(using *tree.UsingJoinCond) {
 			jb.raiseUndefinedColError(name, "right")
 		}
 
+		jb.b.TrackReferencedColumnForViews(leftCol)
+		jb.b.TrackReferencedColumnForViews(rightCol)
 		jb.addEqualityCondition(leftCol, rightCol)
 	}
 
@@ -370,6 +372,8 @@ func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
 
 		rightCol := jb.findUsingColumn(jb.rightScope.cols, leftCol.name, "right table")
 		if rightCol != nil {
+			jb.b.TrackReferencedColumnForViews(leftCol)
+			jb.b.TrackReferencedColumnForViews(rightCol)
 			jb.addEqualityCondition(leftCol, rightCol)
 		}
 	}

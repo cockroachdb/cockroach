@@ -321,14 +321,6 @@ ALTER TABLE t DROP COLUMN y
 statement error cannot drop column "e" because view "v" depends on it
 ALTER TABLE t DROP COLUMN e
 
-# TODO(knz): this statement should succeed after #17269 is fixed.
-statement error cannot drop column "d" because view "v" depends on it
-ALTER TABLE t DROP COLUMN d
-
-# TODO(knz): remove the following once the test above succeeds.
-statement ok
-ALTER TABLE t DROP COLUMN d CASCADE
-
 statement ok
 ALTER TABLE t DROP COLUMN e CASCADE
 
