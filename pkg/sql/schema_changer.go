@@ -87,7 +87,6 @@ type SchemaChanger struct {
 	job *jobs.Job
 	// Caches updated by DistSQL.
 	rangeDescriptorCache *kvcoord.RangeDescriptorCache
-	leaseHolderCache     *kvcoord.LeaseHolderCache
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
@@ -253,7 +252,6 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 			rw,
 			tree.Rows,
 			sc.execCfg.RangeDescriptorCache,
-			sc.execCfg.LeaseHolderCache,
 			txn,
 			func(ts hlc.Timestamp) {
 				sc.clock.Update(ts)
@@ -1676,7 +1674,6 @@ func (r schemaChangeResumer) Resume(
 			jobRegistry:          p.ExecCfg().JobRegistry,
 			job:                  r.job,
 			rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
-			leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
@@ -1793,7 +1790,6 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 		jobRegistry:          p.ExecCfg().JobRegistry,
 		job:                  r.job,
 		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
-		leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
