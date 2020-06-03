@@ -394,10 +394,6 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 					colComputed = tree.NewDString(tree.SerializeForDisplay(colExpr))
 				}
-				crdbSQLType := column.Type.SQLString()
-				if column.Type.UserDefined() {
-					crdbSQLType = column.Type.TypeMeta.Name.Basename()
-				}
 				return addRow(
 					dbNameStr,                    // table_catalog
 					scNameStr,                    // table_schema
@@ -446,8 +442,8 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 						!table.IsVirtualTable() &&
 						!column.IsComputed(),
 					), // is_updatable
-					yesOrNoDatum(column.Hidden),  // is_hidden
-					tree.NewDString(crdbSQLType), // crdb_sql_type
+					yesOrNoDatum(column.Hidden),              // is_hidden
+					tree.NewDString(column.Type.SQLString()), // crdb_sql_type
 				)
 			})
 		})
