@@ -264,11 +264,11 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		)
 		defer recv.Release()
 
-		willDistribute := willDistributePlan(
+		willDistribute := getPlanDistribution(
 			ctx, localPlanner.execCfg.NodeID,
 			localPlanner.extendedEvalCtx.SessionData.DistSQLMode,
 			localPlanner.curPlan.main,
-		)
+		).willDistribute()
 		var planAndRunErr error
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
 			// Resolve subqueries before running the queries' physical plan.
