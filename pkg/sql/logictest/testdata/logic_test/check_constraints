@@ -19,13 +19,13 @@ ALTER TABLE t1 DROP COLUMN to_delete
 statement ok
 INSERT INTO t1 (a, b) VALUES (4, -2)
 
-statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a > 0\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a > 0:::INT8\)
 INSERT INTO t1 VALUES (-3, -1)
 
-statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b < 0\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b < 0:::INT8\)
 INSERT INTO t1 VALUES (3, 1)
 
-statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b > -100\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b > \(-100\):::INT8\)
 INSERT INTO t1 VALUES (3, -101)
 
 statement ok
@@ -40,7 +40,7 @@ INSERT INTO t1 (b) VALUES (-1)
 statement ok
 CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a >= 0), b INT CHECK (b <= 0), CHECK (b < a))
 
-statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a >= 0\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a >= 0:::INT8\)
 INSERT INTO t2 (b) VALUES (-2)
 
 ### Rename column with check constraint
@@ -48,7 +48,7 @@ INSERT INTO t2 (b) VALUES (-2)
 statement ok
 ALTER TABLE t2 RENAME COLUMN b TO c
 
-statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(c <= 0\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(c <= 0:::INT8\)
 INSERT INTO t2 (a, c) VALUES (2, 1)
 
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(c < a\)
@@ -221,11 +221,11 @@ t7  CREATE TABLE t7 (
     y INT8 NULL,
     z INT8 NULL,
     FAMILY "primary" (x, y, z, rowid),
-    CONSTRAINT check_x CHECK (x > 0),
-    CONSTRAINT check_x_y CHECK ((x + y) > 0),
-    CONSTRAINT check_y_z CHECK ((y + z) > 0),
-    CONSTRAINT check_y_z1 CHECK ((y + z) = 0),
-    CONSTRAINT named_constraint CHECK (z = 1)
+    CONSTRAINT check_x CHECK (x > 0:::INT8),
+    CONSTRAINT check_x_y CHECK ((x + y) > 0:::INT8),
+    CONSTRAINT check_y_z CHECK ((y + z) > 0:::INT8),
+    CONSTRAINT check_y_z1 CHECK ((y + z) = 0:::INT8),
+    CONSTRAINT named_constraint CHECK (z = 1:::INT8)
 )
 
 # Check that table references are dequalified in their stored representation.
@@ -256,9 +256,9 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE t8 (
     a INT8 NULL,
     FAMILY "primary" (a, rowid),
-    CONSTRAINT check_a CHECK (a > 0),
-    CONSTRAINT check_a1 CHECK (a > 0),
-    CONSTRAINT check_a2 CHECK (a > 0)
+    CONSTRAINT check_a CHECK (a > 0:::INT8),
+    CONSTRAINT check_a1 CHECK (a > 0:::INT8),
+    CONSTRAINT check_a2 CHECK (a > 0:::INT8)
 )
 
 statement ok

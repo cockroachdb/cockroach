@@ -1427,6 +1427,9 @@ func (d *DBytes) Format(ctx *FmtCtx) {
 	} else {
 		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
 		if withQuotes {
+			if f.HasFlags(fmtFormatByteLiterals) {
+				ctx.WriteByte('b')
+			}
 			ctx.WriteByte('\'')
 		}
 		ctx.WriteString("\\x")
@@ -3836,8 +3839,22 @@ func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error
 
 // Format implements the NodeFormatter interface.
 func (d *DEnum) Format(ctx *FmtCtx) {
-	s := DString(d.LogicalRep)
-	s.Format(ctx)
+	if ctx.HasFlags(fmtStaticallyFormatUserDefinedTypes) {
+		s := DBytes(d.PhysicalRep)
+		// We use the fmtFormatByteLiterals flag here so that the bytes
+		// get formatted as byte literals. Consider an enum of type t with physical
+		// representation \x80. If we don't format this as a bytes literal then
+		// it gets emitted as '\x80':::t. '\x80' is scanned as a string, and we try
+		// to find a logical representation matching '\x80', which won't exist.
+		// Instead, we want to emit b'\x80'::: so that '\x80' is scanned as bytes,
+		// triggering the logic to cast the bytes \x80 to t.
+		ctx.WithFlags(ctx.flags|fmtFormatByteLiterals, func() {
+			s.Format(ctx)
+		})
+	} else {
+		s := DString(d.LogicalRep)
+		s.Format(ctx)
+	}
 }
 
 func (d *DEnum) String() string {

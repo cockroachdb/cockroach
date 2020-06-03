@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -99,88 +100,66 @@ func iterColDescriptors(
 	return err
 }
 
-// dummyColumn represents a variable column that can type-checked. It is used
-// in validating check constraint and partial index predicate expressions. This
-// validation requires that the expression can be both both typed-checked and
-// examined for variable expressions.
-type dummyColumn struct {
-	typ *types.T
-	// name is only used for error-reporting.
-	name tree.Name
+// DeserializeTableDescExpr takes in a serialized expression and a table, and
+// returns an expression that has all user defined types resolved for
+// formatting. It is intended to be used when displaying a serialized
+// expression within a TableDescriptor. For example, a DEFAULT expression
+// of a table containing a user defined type t with id 50 would have all
+// references to t replaced with the id 50. In order to display this expression
+// back to an end user, the serialized id 50 needs to be replaced back with t.
+// DeserializeTableDescExpr performs this logic, but only returns a
+// tree.Expr to be clear that these returned expressions are not safe to Eval.
+func DeserializeTableDescExpr(
+	ctx context.Context, semaCtx *tree.SemaContext, desc *sqlbase.TableDescriptor, exprStr string,
+) (tree.Expr, error) {
+	expr, err := parser.ParseExpr(exprStr)
+	if err != nil {
+		return nil, err
+	}
+	expr, _, err = desc.ReplaceColumnVarsInExprWithDummies(expr)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := expr.TypeCheck(ctx, semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	return typed, nil
 }
 
-// String implements the Stringer interface.
-func (d *dummyColumn) String() string {
-	return tree.AsString(d)
-}
-
-// Format implements the NodeFormatter interface.
-func (d *dummyColumn) Format(ctx *tree.FmtCtx) {
-	d.name.Format(ctx)
-}
-
-// Walk implements the Expr interface.
-func (d *dummyColumn) Walk(_ tree.Visitor) tree.Expr {
-	return d
-}
-
-// TypeCheck implements the Expr interface.
-func (d *dummyColumn) TypeCheck(
-	_ context.Context, _ *tree.SemaContext, desired *types.T,
-) (tree.TypedExpr, error) {
-	return d, nil
-}
-
-// Eval implements the TypedExpr interface.
-func (*dummyColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic("dummyColumnItem.Eval() is undefined")
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (d *dummyColumn) ResolvedType() *types.T {
-	return d.typ
-}
-
-// replaceVars replaces the occurrences of column names in an expression with
-// dummyColumns containing their type, so that they may be type-checked. It
-// returns this new expression tree alongside a set containing the ColumnID of
-// each column seen in the expression.
-//
-// If the expression references a column that does not exist in the table
-// descriptor, replaceVars errs with pgcode.UndefinedColumn.
-// TODO(mgartner): The set should be a util.FastIntSet.
-func replaceVars(
-	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr,
-) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
-	colIDs := make(map[sqlbase.ColumnID]struct{})
-
-	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		vBase, ok := expr.(tree.VarName)
-		if !ok {
-			// Not a VarName, don't do anything to this node.
-			return true, expr, nil
-		}
-
-		v, err := vBase.NormalizeVarName()
+// FormatColumnForDisplay formats a column descriptor as a SQL string, and displays
+// user defined types in serialized expressions with human friendly formatting.
+func FormatColumnForDisplay(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	tbl *sqlbase.TableDescriptor,
+	desc *sqlbase.ColumnDescriptor,
+) (string, error) {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.FormatNameP(&desc.Name)
+	f.WriteByte(' ')
+	f.WriteString(desc.Type.SQLString())
+	if desc.Nullable {
+		f.WriteString(" NULL")
+	} else {
+		f.WriteString(" NOT NULL")
+	}
+	if desc.DefaultExpr != nil {
+		f.WriteString(" DEFAULT ")
+		typed, err := DeserializeTableDescExpr(ctx, semaCtx, tbl, *desc.DefaultExpr)
 		if err != nil {
-			return false, nil, err
+			return "", err
 		}
-
-		c, ok := v.(*tree.ColumnItem)
-		if !ok {
-			return true, expr, nil
+		f.WriteString(tree.SerializeForDisplay(typed))
+	}
+	if desc.IsComputed() {
+		f.WriteString(" AS (")
+		typed, err := DeserializeTableDescExpr(ctx, semaCtx, tbl, *desc.ComputeExpr)
+		if err != nil {
+			return "", err
 		}
-
-		col, dropped, err := desc.FindColumnByName(c.ColumnName)
-		if err != nil || dropped {
-			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
-				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
-		}
-		colIDs[col.ID] = struct{}{}
-
-		// Convert to a dummyColumn of the correct type.
-		return false, &dummyColumn{typ: col.Type, name: c.ColumnName}, nil
-	})
-
-	return newExpr, colIDs, err
+		f.WriteString(tree.SerializeForDisplay(typed))
+		f.WriteString(") STORED")
+	}
+	return f.CloseAndGetString(), nil
 }

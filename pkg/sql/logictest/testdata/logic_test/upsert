@@ -534,7 +534,7 @@ CREATE TABLE ab(
 statement count 1
 INSERT INTO ab(a, b) VALUES (1, 0);
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
 statement count 1
@@ -552,34 +552,34 @@ CREATE TABLE abc_check(
 statement count 1
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2);
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (1, 1);
 
-statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (-1, 1);
 
 statement count 1
 INSERT INTO abc_check(a, b, c) VALUES (2, 0, 3);
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(c, a, b) VALUES (3, 2, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
-statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
 INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET c=1;
 
-statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
 INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET c=1;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
 
 subtest 29495

@@ -983,3 +983,53 @@ func runBatchApplyBatchRepr(
 
 	b.StopTimer()
 }
+
+func runExportToSst(
+	ctx context.Context,
+	b *testing.B,
+	emk engineMaker,
+	numKeys int,
+	numRevisions int,
+	exportAllRevisions bool,
+	contention bool,
+) {
+	dir, cleanup := testutils.TempDir(b)
+	defer cleanup()
+	engine := emk(b, dir)
+	defer engine.Close()
+
+	batch := engine.NewWriteOnlyBatch()
+	for i := 0; i < numKeys; i++ {
+		key := make([]byte, 16)
+		key = append(key, 'a', 'a', 'a')
+		key = encoding.EncodeUint32Ascending(key, uint32(i))
+
+		for j := 0; j < numRevisions; j++ {
+			err := batch.Put(MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}, []byte("foobar"))
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+	if err := batch.Commit(true); err != nil {
+		b.Fatal(err)
+	}
+	batch.Close()
+	if err := engine.Flush(); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
+		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
+		_, _, _, err := engine.ExportToSst(roachpb.KeyMin, roachpb.KeyMax, startTS, endTS, exportAllRevisions, 0 /* targetSize */, 0 /* maxSize */, IterOptions{
+			LowerBound: roachpb.KeyMin,
+			UpperBound: roachpb.KeyMax,
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+}
