@@ -92,11 +92,12 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		return err
 	}
 
-	// Redirect stderr to the current INFO log file in order to capture panic
-	// stack traces that are written by the Go runtime to stderr. Note that if
-	// --logtostderr is true we'll never enter this code path and panic stack
-	// traces will go to the original stderr as you would expect.
-	if sb.logger.stderrRedirected() {
+	// If this logger is responsible for capturing direct writes to the
+	// process' file descriptor 2, then do it here.
+	//
+	// This captures e.g. all writes performed by internal
+	// assertions in the Go runtime.
+	if sb.logger.redirectInternalStderrWrites() {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.
