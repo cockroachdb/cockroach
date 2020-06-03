@@ -231,6 +231,10 @@ func (ef *execFactory) ConstructFilter(
 	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
 		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 		// Note: if the filter statically evaluates to true, s.filter stays nil.
+		// TODO(yuzefovich): I think this is unnecessary - ConstructScan should
+		// set the required ordering itself, right? Or is it possible that the
+		// required ordering is different between ConstructScan and
+		// ConstructFilter?
 		s.reqOrdering = ReqOrdering(reqOrdering)
 		return s, nil
 	}

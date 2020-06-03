@@ -49,6 +49,8 @@ SELECT v, k FROM kv
 statement error pq: unimplemented: experimental opt-driven distsql planning
 SELECT k + v FROM kv
 
-# Filters are not yet supported.
-statement error pq: unimplemented: experimental opt-driven distsql planning
+query II rowsort
 SELECT * FROM kv WHERE k > v
+----
+2 1
+3 2
