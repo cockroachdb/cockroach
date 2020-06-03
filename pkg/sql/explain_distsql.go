@@ -75,14 +75,14 @@ func willDistributePlanForExplainPurposes(
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
-) bool {
+) planDistribution {
 	if !plan.isPhysicalPlan() {
 		if _, ok := plan.planNode.(distSQLExplainable); ok {
 			// This is a special case for plans that will be actually distributed
 			// but are represented using local plan nodes (for example, "create
 			// statistics" is handled by the jobs framework which is responsible
 			// for setting up the correct DistSQL infrastructure).
-			return true
+			return fullyDistributedPlan
 		}
 	}
 	return willDistributePlan(ctx, nodeID, distSQLMode, plan)
@@ -90,10 +90,11 @@ func willDistributePlanForExplainPurposes(
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistribute := willDistributePlanForExplainPurposes(
+	distribution := willDistributePlanForExplainPurposes(
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
+	willDistribute := distribution.willDistribute()
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, willDistribute)
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p

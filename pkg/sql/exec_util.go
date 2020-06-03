@@ -900,12 +900,12 @@ func willDistributePlan(
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
-) bool {
+) planDistribution {
 	if _, singleTenant := nodeID.OptionalNodeID(); !singleTenant {
-		return false
+		return localPlan
 	}
 	if distSQLMode == sessiondata.DistSQLOff {
-		return false
+		return localPlan
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
@@ -915,30 +915,30 @@ func willDistributePlan(
 		if len(plan.physPlan.Processors) == 1 {
 			if valuesSpec := plan.physPlan.Processors[0].Spec.Core.Values; valuesSpec != nil {
 				if valuesSpec.NumRows == 0 {
-					return false
+					return localPlan
 				}
 			}
 		}
 	} else {
 		if _, ok := plan.planNode.(*zeroNode); ok {
-			return false
+			return localPlan
 		}
 	}
 
-	var rec distRecommendation
 	if plan.isPhysicalPlan() {
-		rec = plan.recommendation
-	} else {
-		var err error
-		rec, err = checkSupportForPlanNode(plan.planNode)
-		if err != nil {
-			// Don't use distSQL for this request.
-			log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-			return false
-		}
+		return plan.distribution
+	}
+	rec, err := checkSupportForPlanNode(plan.planNode)
+	if err != nil {
+		// Don't use distSQL for this request.
+		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
+		return localPlan
 	}
 
-	return shouldDistributeGivenRecAndMode(rec, distSQLMode)
+	if shouldDistributeGivenRecAndMode(rec, distSQLMode) {
+		return fullyDistributedPlan
+	}
+	return localPlan
 }
 
 // golangFillQueryArguments transforms Go values into datums.
