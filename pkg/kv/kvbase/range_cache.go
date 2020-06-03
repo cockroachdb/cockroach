@@ -28,7 +28,8 @@ type RangeDescriptorCache interface {
 // RangeCacheEntry represents one cache entry.
 type RangeCacheEntry struct {
 	Desc roachpb.RangeDescriptor
-	// Lease can be Empty() if no lease information is known for the range.
+	// Lease can be Empty() if no lease information is known for the range. When a
+	// lease is known, it will correspond to one of the replicas in Desc.
 	Lease roachpb.Lease
 }
 

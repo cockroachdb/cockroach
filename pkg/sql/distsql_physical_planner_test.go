@@ -261,10 +261,12 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 		context.Background(), nil /* resultWriter */, tree.Rows,
 		rangeCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
 
+	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
+
 	descs := []roachpb.RangeDescriptor{
-		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
-		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
-		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
+		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c"), InternalReplicas: replicas},
+		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e"), InternalReplicas: replicas},
+		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z"), InternalReplicas: replicas},
 	}
 
 	// Push some metadata and check that the caches are updated with it.

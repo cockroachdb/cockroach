@@ -617,9 +617,17 @@ func (rdc *RangeDescriptorCache) Insert(ctx context.Context, rs ...*kvbase.Range
 // insertLocked is like Insert, but it assumes that the caller holds a write
 // lock on rdc.rangeCache.
 func (rdc *RangeDescriptorCache) insertLocked(ctx context.Context, rs ...*kvbase.RangeCacheEntry) {
-	for i := range rs {
-		if !rs[i].Desc.IsInitialized() {
+	for i, ent := range rs {
+		if !ent.Desc.IsInitialized() {
 			panic(fmt.Sprintf("inserting uninitialized desc: %s", rs[i]))
+		}
+		if !ent.Lease.Empty() {
+			replID := ent.Lease.Replica.ReplicaID
+			_, ok := ent.Desc.GetReplicaDescriptorByID(replID)
+			if !ok {
+				panic(fmt.Sprintf("leaseholder replicaID: %d not part of descriptor: %s. lease: %s",
+					replID, ent.Desc, ent.Lease))
+			}
 		}
 		// Note: we append the end key of each range to meta records
 		// so that calls to rdc.rangeCache.cache.Ceil() for a key will return
