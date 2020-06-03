@@ -338,3 +338,19 @@ func (b *Builder) allocScope() *scope {
 	r.builder = b
 	return r
 }
+
+// TrackReferencedColumnForViews is used to add a column to a views dependencies.
+// This should be called whenever a column reference is made in a view query.
+func (b *Builder) TrackReferencedColumnForViews(col *scopeColumn) {
+	if b.trackViewDeps {
+		for i := range b.viewDeps {
+			dep := b.viewDeps[i]
+			for id, ord := range dep.ColumnIDToOrd {
+				if col.id == id {
+					dep.ColumnOrdinals.Add(ord)
+				}
+			}
+			b.viewDeps[i] = dep
+		}
+	}
+}

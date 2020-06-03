@@ -688,3 +688,120 @@ statement ok
 CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
 
 user root
+
+# Subtest 29021
+# Views should track fine-grained dependencies.
+
+# Should be able to drop columns views don't depend on.
+statement ok
+CREATE TABLE tv8 (x INT, y INT);
+CREATE VIEW v8 AS SELECT x FROM tv8;
+ALTER TABLE tv8 DROP COLUMN y;
+
+statement error pq: cannot drop column \"x\" because view \"v8\" depends on it
+ALTER TABLE tv8 DROP COLUMN x
+
+# Dependencies should be tracked in the group by clause.
+statement ok
+CREATE TABLE tv9(x INT, y INT);
+CREATE VIEW v9 AS SELECT x FROM tv9 GROUP BY x,y
+
+statement error pq: cannot drop column \"y\" because view \"v9\" depends on it
+ALTER TABLE tv9 DROP COLUMN y
+
+# Dependencies should be tracked in the join on clause.
+statement ok
+CREATE TABLE tv10a(x INT, y INT);
+CREATE TABLE tv10b(x INT, y INT);
+CREATE VIEW v10 as SELECT tv10a.x, tv10b.y FROM tv10a JOIN tv10b ON tv10a.y = tv10b.y;
+
+statement ok
+ALTER TABLE tv10b DROP COLUMN x
+
+statement error pq: cannot drop column \"x\" because view \"v10\" depends on it
+ALTER TABLE tv10a DROP COLUMN x
+
+statement error pq: cannot drop column \"y\" because view \"v10\" depends on it
+ALTER TABLE tv10a DROP COLUMN y
+
+statement error pq: cannot drop column \"y\" because view \"v10\" depends on it
+ALTER TABLE tv10a DROP COLUMN y
+
+# Dependencies should be tracked in a natural join clause.
+statement ok
+CREATE TABLE tv11a(x INT, y INT);
+CREATE TABLE tv11b(x INT, y INT);
+CREATE VIEW v11 as SELECT 1 FROM tv11a NATURAL JOIN tv11b
+
+statement error pq: cannot drop column \"x\" because view \"v11\" depends on it
+ALTER TABLE tv11a DROP COLUMN x
+
+statement error pq: cannot drop column \"x\" because view \"v11\" depends on it
+ALTER TABLE tv11b DROP COLUMN x
+
+statement error pq: cannot drop column \"y\" because view \"v11\" depends on it
+ALTER TABLE tv11a DROP COLUMN y
+
+statement error pq: cannot drop column \"y\" because view \"v11\" depends on it
+ALTER TABLE tv11b DROP COLUMN y
+
+# Dependencies should be tracked in a using join clause.
+
+statement ok
+CREATE TABLE tv12a(x INT, y INT);
+CREATE TABLE tv12b(x INT, y INT);
+CREATE VIEW v12 as SELECT 1 FROM tv12a JOIN tv12b USING (x)
+
+statement error pq: cannot drop column \"x\" because view \"v12\" depends on it
+ALTER TABLE tv12a DROP COLUMN x
+
+statement error pq: cannot drop column \"x\" because view \"v12\" depends on it
+ALTER TABLE tv12b DROP COLUMN x
+
+statement ok
+ALTER TABLE tv12a DROP COLUMN y
+
+statement ok
+ALTER TABLE tv12b DROP COLUMN y
+
+# Dependencies should be tracked in the where clause.
+statement ok
+CREATE TABLE tv13(x INT, y INT);
+CREATE VIEW v13 AS SELECT x FROM tv13 WHERE y > 0
+
+statement error pq: cannot drop column \"x\" because view \"v13\" depends on it
+ALTER TABLE tv13 DROP COLUMN x
+
+statement error pq: cannot drop column \"y\" because view \"v13\" depends on it
+ALTER TABLE tv13 DROP COLUMN y
+
+# Dependencies should be tracked in window functions.
+statement ok
+CREATE TABLE tv14(x INT);
+CREATE VIEW v14 AS SELECT sum(x) FROM tv14;
+
+statement error pq: cannot drop column \"x\" because view \"v14\" depends on it
+ALTER TABLE tv14 DROP COLUMN x
+
+# Dependencies should be tracked in partitions.
+statement ok
+CREATE TABLE tv15(x INT, y INT);
+CREATE VIEW v15 AS SELECT sum(x) OVER (PARTITION by y) FROM tv15;
+
+statement error pq: cannot drop column \"x\" because view \"v15\" depends on it
+ALTER TABLE tv15 DROP COLUMN x
+
+statement error pq: cannot drop column \"y\" because view \"v15\" depends on it
+ALTER TABLE tv15 DROP COLUMN y
+
+# Dependencies should be tracked in subqueries.
+statement ok
+CREATE TABLE tv16(x INT, y INT);
+CREATE VIEW v16 AS SELECT x FROM (SELECT x,y FROM tv16);
+
+statement error pq: cannot drop column \"x\" because view \"v16\" depends on it
+ALTER TABLE tv16 DROP COLUMN x
+
+statement error pq: cannot drop column \"y\" because view \"v16\" depends on it
+ALTER TABLE tv16 DROP COLUMN y
+

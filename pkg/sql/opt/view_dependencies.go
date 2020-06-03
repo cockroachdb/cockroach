@@ -28,6 +28,8 @@ type ViewDep struct {
 	// with a specific list of column IDs.
 	ColumnOrdinals util.FastIntSet
 
+	ColumnIDToOrd map[ColumnID]int
+
 	// If an index is referenced specifically (via an index hint), SpecificIndex
 	// is true and Index is the ordinal of that index.
 	SpecificIndex bool
