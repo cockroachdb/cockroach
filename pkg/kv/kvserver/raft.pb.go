@@ -22,7 +22,7 @@ var _ = math.Inf
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
-// proto package needs to be new.
+// proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type SnapshotRequest_Priority int32
@@ -446,7 +446,7 @@ var xxx_messageInfo_SnapshotRequest proto.InternalMessageInfo
 type SnapshotRequest_Header struct {
 	// The replica state at the time the snapshot was generated. Note
 	// that ReplicaState.Desc differs from the above range_descriptor
-	// field which holds the new descriptor after the new replica
+	// field which holds the updated descriptor after the new replica
 	// has been added while ReplicaState.Desc holds the descriptor
 	// before the new replica has been added.
 	State kvserverpb.ReplicaState `protobuf:"bytes,5,opt,name=state" json:"state"`

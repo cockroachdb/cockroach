@@ -1689,10 +1689,10 @@ func (s *adminServer) DecommissionStatus(
 			return nil, errors.Wrapf(err, "unable to get liveness for %d", nodeID)
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
-			NodeID:          l.NodeID,
-			ReplicaCount:    replicaCounts[l.NodeID],
-			Decommissioning: l.DeprecatedDecommissioning,
-			Draining:        l.Draining,
+			NodeID:                    l.NodeID,
+			ReplicaCount:              replicaCounts[l.NodeID],
+			DeprecatedDecommissioning: l.DeprecatedDecommissioning,
+			Draining:                  l.Draining,
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
@@ -1718,9 +1718,18 @@ func (s *adminServer) Decommission(
 		return nil, status.Errorf(codes.InvalidArgument, "no node ID specified")
 	}
 
-	// Mark the target nodes as decommissioning. They'll find out as they
-	// heartbeat their liveness.
-	if err := s.server.Decommission(ctx, req.Decommissioning, nodeIDs); err != nil {
+	// Mark the target nodes with their new commission status. They'll find out
+	// as they heartbeat their liveness.
+	var targetStatus kvserverpb.CommissionStatus
+	if !req.CommissionStatus.Unknown() {
+		// DecommissionRequest is from node running v20.2, we simply use the
+		// provided CommissionStatus.
+		targetStatus = req.CommissionStatus
+	} else {
+		// DecommissionRequest is from node running v20.1, we convert it into the v20.2 enum representation.
+		targetStatus = kvserverpb.CommissionStatusFromBooleanForm(req.DeprecatedDecommissioning)
+	}
+	if err := s.server.Decommission(ctx, targetStatus, nodeIDs); err != nil {
 		return nil, err
 	}
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})

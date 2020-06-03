@@ -354,9 +354,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 // updateLocalStoreAfterRebalance is used to update the local copy of the
 // target store immediately after a replica addition or removal.
 func (sp *StorePool) updateLocalStoreAfterRebalance(
-	storeID roachpb.StoreID,
-	rangeUsageInfo RangeUsageInfo,
-	changeType roachpb.ReplicaChangeType,
+	storeID roachpb.StoreID, rangeUsageInfo RangeUsageInfo, changeType roachpb.ReplicaChangeType,
 ) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()

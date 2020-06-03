@@ -3026,8 +3026,8 @@ func TestDecommission(t *testing.T) {
 	// Decommission the first node, which holds most of the leases.
 	_, err = admin.Decommission(
 		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:         []roachpb.NodeID{1},
-			Decommissioning: true,
+			NodeIDs:                   []roachpb.NodeID{1},
+			DeprecatedDecommissioning: true,
 		},
 	)
 	require.NoError(t, err)
@@ -3063,8 +3063,8 @@ func TestDecommission(t *testing.T) {
 
 	_, err = admin.Decommission(
 		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:         []roachpb.NodeID{2},
-			Decommissioning: true,
+			NodeIDs:                   []roachpb.NodeID{2},
+			DeprecatedDecommissioning: true,
 		},
 	)
 	require.NoError(t, err)
@@ -3091,8 +3091,8 @@ func TestDecommission(t *testing.T) {
 	// can't use atomic replica swaps because the leaseholder can't be removed.
 	_, err = admin.Decommission(
 		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:         []roachpb.NodeID{3, 4},
-			Decommissioning: true,
+			NodeIDs:                   []roachpb.NodeID{3, 4},
+			DeprecatedDecommissioning: true,
 		},
 	)
 	require.NoError(t, err)

@@ -43,7 +43,10 @@ var (
 	// about a node for which nothing is known.
 	ErrNoLivenessRecord = errors.New("node not in the liveness table")
 
-	errChangeDecommissioningFailed = errors.New("failed to change the decommissioning status")
+	// errChangeCommissionStatusFailed is returned when we're not able to
+	// conditionally write the target commissioning status. It's safe to retry
+	// when encountering this error.
+	errChangeCommissionStatusFailed = errors.New("failed to change the commissioning status")
 
 	// ErrEpochIncremented is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
@@ -260,15 +263,14 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter fu
 	}
 }
 
-// SetDecommissioning runs a best-effort attempt of marking the the liveness
-// record as decommissioning. It returns whether the function committed a
-// transaction that new the liveness record.
-//
-// TODO(irfansharif): Remove this decommission bool API to set enum state
-// instead.
-func (nl *NodeLiveness) SetDecommissioning(
-	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
-) (changeCommitted bool, err error) {
+// SetCommissionStatus changes the liveness record to reflect the target status.
+// It does so idempotently, and may retry internally until it observes its
+// target state durably persisted. It returns whether it was able to change the
+// commissioning status (as opposed to it returning early when finding the
+// target status possibly set by another node).
+func (nl *NodeLiveness) SetCommissionStatus(
+	ctx context.Context, nodeID roachpb.NodeID, targetStatus kvserverpb.CommissionStatus,
+) (statusChanged bool, err error) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 
 	attempt := func() (bool, error) {
@@ -325,29 +327,28 @@ func (nl *NodeLiveness) SetDecommissioning(
 			return false, errors.Wrap(err, "invalid liveness record")
 		}
 
-		// XXX: Do we need to reconcile here? We could ge reading from the key
-		// written by the old version.
-
 		oldLivenessRec := LivenessRecord{
 			Liveness: oldLiveness,
 			raw:      kv.Value,
 		}
 
-		// We may have discovered a Liveness not yet received via Gossip. Offer it
-		// to make sure that when we actually try to update the liveness, the
+		// We may have discovered a Liveness not yet received via Gossip. Offer
+		// it to make sure that when we actually try to update the liveness, the
 		// previous view is correct. This, too, is required to de-flake
 		// TestNodeLivenessDecommissionAbsent.
 		nl.maybeUpdate(oldLivenessRec)
 
-		return nl.setDecommissioningInternal(ctx, nodeID, oldLivenessRec, decommission)
+		return nl.setCommissionStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus)
 	}
 
 	for {
-		changeCommitted, err := attempt()
-		if errors.Is(err, errChangeDecommissioningFailed) {
-			continue // expected when epoch incremented
+		statusChanged, err := attempt()
+		if errors.Is(err, errChangeCommissionStatusFailed) {
+			// Expected when epoch incremented, or when running in mixed version
+			// clusters. It's safe to retry.
+			continue
 		}
-		return changeCommitted, err
+		return statusChanged, err
 	}
 }
 
@@ -435,68 +436,76 @@ type livenessUpdate struct {
 	oldRaw *roachpb.Value
 }
 
-func (nl *NodeLiveness) setDecommissioningInternal(
+func (nl *NodeLiveness) setCommissionStatusInternal(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	oldLivenessRec LivenessRecord,
-	decommission bool,
-) (changeCommitted bool, err error) {
+	targetStatus kvserverpb.CommissionStatus,
+) (statusChanged bool, err error) {
+	// Lets compute what our new liveness record should be.
+	var newLiveness kvserverpb.Liveness
+	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
+		// Liveness record didn't previously exist, so we create one.
+		newLiveness = kvserverpb.Liveness{
+			NodeID: nodeID,
+			Epoch:  1,
+		}
+	} else {
+		// We start off with a copy of our existing liveness record.
+		newLiveness = oldLivenessRec.Liveness
+	}
+
+	newLiveness.CommissionStatus = targetStatus
+	// We backfill in the boolean representation to ensure v20.1 nodes are able
+	// to interpret it correctly.
+	newLiveness.DeprecatedDecommissioning = targetStatus.ToBooleanForm()
 	update := livenessUpdate{
+		new:         newLiveness,
 		old:         oldLivenessRec.Liveness,
 		oldRaw:      oldLivenessRec.raw,
 		ignoreCache: true,
 	}
-	if oldLivenessRec.Liveness != (kvserverpb.Liveness{}) {
-		update.new = oldLivenessRec.Liveness
-	} else {
-		// Liveness record didn't previously exist, so we create one.
-		update.new = kvserverpb.Liveness{
-			NodeID: nodeID,
-			Epoch:  1,
-		}
-	}
-	// We need to reconcile correctly here. We're setting a boolean
-	// decommisioning to either:
-	// (a) a liveness record written by a 20.1 node, or
-	// (b) a liveness record written by a 20.2 node
-	// (c) a liveness record that didn't previously exist (could belong to a
-	// node from v20.1, or v20.2).
-	//
-	// TODO(irfansharif): Test the following scenario.
-	// 		- Decommission n2 from n1, where n2 has no liveness record. n1
-	// 		  running v20.2
-	//		- n2 is running v20.1, tries to update it's liveness record. Finds
-	// 		  it's own liveness record written by n1 (but the new proto,
-	// 		  which it doesn't know how to read fully). Will it parse
-	// 		  properly? It's important for v20.2 nodes to be able to read v20.1 and
-	// 		  v20.2 representations. It's important for v20.2 to write a representation
-	//  	  understood by both v20.1 and v20.2.
-	if update.new.Status == kvserverpb.CommissionStatus_UNKNOWN_ {
-		// (a), (c).
-		update.new.DeprecatedDecommissioning = decommission
-		update.new = reconcileMixedVersionLiveness(update.new)
-	} else {
-		// (b).
-		// TODO(irfansharif): Once the API for the function accepts an enum,
-		// change the status here appropriately. Right now we're only
-		// representing the decommissioning state.
-		update.new.Status = kvserverpb.CommissionStatus_DECOMMISSIONING_
-		update.new = reconcileMixedVersionLiveness(update.new)
-	}
 
-	var conditionFailed bool
+	// XXX: I want to add asserts on status found on oldLivenessRec.Liveness,
+	// does the following suffice? It's not, it's only catching other changes
+	// sneaking in from under us. Why can't we just blindly retry? Do the whole
+	// read+write all over again? It's to dedup events in the event log.
+	// (newLiveness.CommissionStatus != oldLivenessRec.CommissionStatus)
+
+	statusChanged = true
 	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
-		conditionFailed = true
-		if actual.DeprecatedDecommissioning == update.new.DeprecatedDecommissioning {
-			return nil
+		if actual.CommissionStatus.Unknown() {
+			// A v20.1 node was racing with us in updating the liveness record,
+			// we error out in order to retry.
+			return errChangeCommissionStatusFailed
 		}
-		return errChangeDecommissioningFailed
+		// Now that we're guaranteed to be seeing a record written by a v20.2
+		// node, we can assert on the CommissionStatus field.
+		if actual.CommissionStatus != update.new.CommissionStatus {
+			// A v20.2 node was racing with us in updating the liveness record,
+			// we error out in order to retry.
+			return errChangeCommissionStatusFailed
+		}
+		// The found liveness commission status is the same as the target one,
+		// so we consider our work done.
+		statusChanged = false
+		return nil
 	}); err != nil {
 		return false, err
 	}
-	committed := !conditionFailed && oldLivenessRec.DeprecatedDecommissioning != decommission
-	return committed, nil
+
+	return statusChanged, nil
 }
+
+// XXX: Add a test for the following scenario.
+//	- Decommission n2 from n1, where n2 has no liveness record. n1
+//	  running v20.2
+//	- n2 is running v20.1, tries to update it's liveness record. Finds
+//	  it's own liveness record written by n1 (but the new proto,
+//	  which it doesn't know how to read fully). Will it parse
+//	  properly? It's important for v20.2 nodes to be able to read v20.1 and
+//	  v20.2 representations. It's important for v20.2 to write a representation
+//	  understood by both v20.1 and v20.2.
 
 // GetLivenessThreshold returns the maximum duration between heartbeats
 // before a node is considered not-live.
@@ -523,10 +532,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 // liveness. The slice of engines will be written to before each heartbeat to
 // avoid maintaining liveness in the presence of disk stalls.
 func (nl *NodeLiveness) StartHeartbeat(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	engines []storage.Engine,
-	alive HeartbeatCallback,
+	ctx context.Context, stopper *stop.Stopper, engines []storage.Engine, alive HeartbeatCallback,
 ) {
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 	retryOpts := base.DefaultRetryOptions()
@@ -692,9 +698,10 @@ func (nl *NodeLiveness) heartbeatInternal(
 	// We may have read a liveness record written by a v20.1 node, so we
 	// reconcile.
 	//
-	// XXX: Mental note. What's the guarantee that v21.1 nodes will never see
-	// v20.1 representation? Updates on heartbeats? Does that guarantee what we
-	// want?
+	// XXX: What's the guarantee that v21.1 nodes will never see v20.1
+	// representation? A: Heartbeats are only ever sent out by live nodes, and
+	// operators aren't allowed to deploy clusters such that there's a 20.1
+	// node heartbeating a 21.1 cluster. Still, can we foolproof this somehow?
 	update.new = reconcileMixedVersionLiveness(update.new)
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
@@ -924,9 +931,7 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 // This includes the encoded bytes, and it can be used to update the local
 // cache.
 func (nl *NodeLiveness) updateLiveness(
-	ctx context.Context,
-	update livenessUpdate,
-	handleCondFailed func(actual LivenessRecord) error,
+	ctx context.Context, update livenessUpdate, handleCondFailed func(actual LivenessRecord) error,
 ) (LivenessRecord, error) {
 	for {
 		// Before each attempt, ensure that the context has not expired.
@@ -960,9 +965,7 @@ func (nl *NodeLiveness) updateLiveness(
 }
 
 func (nl *NodeLiveness) updateLivenessAttempt(
-	ctx context.Context,
-	update livenessUpdate,
-	handleCondFailed func(actual LivenessRecord) error,
+	ctx context.Context, update livenessUpdate, handleCondFailed func(found LivenessRecord) error,
 ) (LivenessRecord, error) {
 	var oldRaw *roachpb.Value
 	if update.ignoreCache {
@@ -1190,36 +1193,27 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	return count
 }
 
-// reconcileMixedVersionLiveness converts kvserverpb.Liveness updates from the
-// v20.1 representation (using the deprecated decommissioning bool) into the
-// v20.2 representation (using the commissioning status enum instead).
+// reconcileMixedVersionLiveness is able to reconcile Liveness protos
+// across both v20.1 and v20.2 representations. v20.1 used the now deprecated
+// decommissioning bool to represent commissioning status. v20.2 uses a
+// dedicated enum instead. reconcileMixedVersionLiveness then generates a
+// liveness record that can be understood by both v20.1 and v20.2 nodes (by
+// keeping the representations internally consistent). If what's passed in is
+// the deprecated representation, the boolean state is considered authoritative.
+// If what's passed in is the newer representation, the enum state is considered
+// authoritative.
 //
 // TODO(irfansharif): Remove this once v20.2 is cut.
 func reconcileMixedVersionLiveness(old kvserverpb.Liveness) (new kvserverpb.Liveness) {
 	new = old
-	if old.Status != kvserverpb.CommissionStatus_UNKNOWN_ {
+	if !old.CommissionStatus.Unknown() {
 		// Liveness is from node running v20.2, we fill in the deprecated
-		// decommissioning state.
-		new.DeprecatedDecommissioning = !(old.Status == kvserverpb.CommissionStatus_COMMISSIONED_)
-		return new
+		// boolean decommissioning state.
+		new.DeprecatedDecommissioning = old.CommissionStatus.ToBooleanForm()
+	} else {
+		// Liveness is from node running v20.1, we fill in the commission state.
+		new.CommissionStatus = kvserverpb.CommissionStatusFromBooleanForm(old.DeprecatedDecommissioning)
 	}
 
-	// Liveness is from node running v20.1, we fill in the appropriate
-	// commission state.
-	if old.DeprecatedDecommissioning {
-		// We take the conservative opinion and assume the node to be
-		// decommissioning, not fully decommissioned (after all, that's all
-		// one can infer from a boolean decommissioning state). If operators
-		// decommissioned nodes in a cluster running v20.1 and v20.2 nodes,
-		// they may have to decommission the nodes again once fully onto
-		// v20.2 in order to durably mark said nodes as decommissioned.
-		new.Status = kvserverpb.CommissionStatus_DECOMMISSIONING_
-	} else {
-		// We take the optimistic route here and assume the node is fully
-		// commissioned (we don't have a way of representing a node in the
-		// 'recommissioning' state, see comment on CommissionStatus for why
-		// that is).
-		new.Status = kvserverpb.CommissionStatus_COMMISSIONED_
-	}
 	return new
 }

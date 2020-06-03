@@ -845,14 +845,14 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	decommissioningNodeID := tc.Server(2).NodeID()
 	log.Infof(ctx, "decommissioning node %d", decommissioningNodeID)
-	if err := firstServer.Decommission(ctx, true, []roachpb.NodeID{decommissioningNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, storagepb.CommissionStatus_DECOMMISSIONING_, []roachpb.NodeID{decommissioningNodeID}); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "done decommissioning node %d", decommissioningNodeID)
 
 	removedNodeID := tc.Server(3).NodeID()
 	log.Infof(ctx, "decommissioning and shutting down node %d", removedNodeID)
-	if err := firstServer.Decommission(ctx, true, []roachpb.NodeID{removedNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, storagepb.CommissionStatus_DECOMMISSIONING_, []roachpb.NodeID{removedNodeID}); err != nil {
 		t.Fatal(err)
 	}
 	tc.StopServer(3)
@@ -1037,6 +1037,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 //
 // TODO(irfansharif): Remove this in v20.2.
 func TestMixedVersionNodeLiveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// XXX: Fill this in.
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}

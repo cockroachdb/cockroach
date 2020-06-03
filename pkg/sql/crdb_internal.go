@@ -2730,12 +2730,13 @@ var crdbInternalGossipLivenessTable = virtualSchemaTable{
 	comment: "locally known gossiped node liveness (RAM; local node only)",
 	schema: `
 CREATE TABLE crdb_internal.gossip_liveness (
-  node_id         INT NOT NULL,
-  epoch           INT NOT NULL,
-  expiration      STRING NOT NULL,
-  draining        BOOL NOT NULL,
-  decommissioning BOOL NOT NULL,
-  updated_at      TIMESTAMP
+  node_id         	INT NOT NULL,
+  epoch           	INT NOT NULL,
+  expiration      	STRING NOT NULL,
+  draining        	BOOL NOT NULL,
+  decommissioning 	BOOL NOT NULL,
+  commission_status STRING NOT NULL,
+  updated_at      	TIMESTAMP
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2796,6 +2797,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 				tree.NewDString(l.Expiration.String()),
 				tree.MakeDBool(tree.DBool(l.Draining)),
 				tree.MakeDBool(tree.DBool(l.DeprecatedDecommissioning)),
+				tree.NewDString(l.CommissionStatus.String()), // XXX: Make this string form nicer.
 				updatedTSDatum,
 			); err != nil {
 				return err

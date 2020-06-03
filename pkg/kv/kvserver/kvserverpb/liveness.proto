@@ -46,24 +46,60 @@ message Liveness {
   bool draining = 4;
   bool deprecated_decommissioning = 5;
 
-  CommissionStatus status = 6;
+  CommissionStatus commission_status = 6;
 }
 
-// XXX: Document.
-// We've intentionally elided a recommissioning state. Recommissioning, in some
-// sense, is an "instantanous" op in that we've fully recommissioned as soon as
-// we've persisted a liveness record stating so. It then makes no sense to
-// bother with persisting a recommissioning state before persisting a
-// commissioned state, so we need only concern ourselves with the final
-// commissioned state.
+// CommissionStatus enumerates the possible "commission" states a node could be
+// in.
+//
+//    +--------------------+                                        +--------------------+
+//    |                    |     cockroach node decommission        |                    |
+//    |                    |--------------------------------------->|                    |
+//    |    Commissioned    |                                        |  Decommissioning   |
+//    |                    |<---------------------------------------|                    |
+//    |                    |     cockroach node recommission        |                    |
+//    +--------------------+                                        +--------------------+
+//                                                                             ^
+//                                                                             |
+//                                                                             |
+//                                                                             |
+//                                                                             |
+//                                                                             v
+//                                                                  +--------------------+
+//                                                                  |                    |
+//                                                                  |                    |
+//                                                                  |   Decommissioned   |
+//                                                                  |                    |
+//                                                                  |                    |
+//                                                                  +--------------------+
+//
+// Note that we've intentionally elided a 'recommissioning' state. To
+// recommission a node is to simply cancel an inflight decommissioning process,
+// which we do by persisting the appropriate commission status in the liveness
+// record. It then makes no sense to bother with persisting an explicit
+// in-progress state.
 enum CommissionStatus {
+  option (gogoproto.goproto_enum_stringer) = false;
+  // Unknown is the placeholder default value we use for wire compatibility in
+  // mixed version clusters where earlier version nodes don't make use of this
+  // commission status enum.
+  //
   // TODO(irfansharif): Remove this `UNKNOWN_` state once v20.2 is cut. We only
   // need it as a stopgap when migrating from v20.1.
   UNKNOWN_ = 0;
-  DECOMMISSIONING_ = 1;
-  DECOMMISSIONED_ = 2;
-  COMMISSIONED_ = 3;
 
+  // Commissioned represents a node that is neither decommissioning or already
+  // fully decommissioned.
+  COMMISSIONED_ = 1;
+  // Decommissioning represents a node that we've only started decommissioning,
+  // but has not yet fully decommissioned. It is safe to recommission it during
+  // this time, in order to cancel the inflight decommissioning process.
+  DECOMMISSIONING_ = 2;
+  // Decommissioned represents a node that has been fully decommissioned. It
+  // will no longer be allowed to join the cluster.
+  //
+  // TODO(irfansharif): We don't disallow the joining as yet.
+  DECOMMISSIONED_ = 3;
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the

@@ -347,8 +347,8 @@ func TestPartialZip(t *testing.T) {
 	}
 	as := serverpb.NewAdminClient(conn)
 	req := &serverpb.DecommissionRequest{
-		NodeIDs:         []roachpb.NodeID{2},
-		Decommissioning: true,
+		NodeIDs:                   []roachpb.NodeID{2},
+		DeprecatedDecommissioning: true,
 	}
 	if _, err := as.Decommission(context.Background(), req); err != nil {
 		t.Fatal(err)
