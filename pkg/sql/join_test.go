@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -27,7 +28,11 @@ func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 	p := planner{alloc: &sqlbase.DatumAlloc{}}
 	scan := p.Scan()
 	scan.desc = desc
-	err := scan.initDescDefaults(publicColumnsCfg)
+	var colCfg scanColumnsConfig
+	for _, col := range desc.Columns {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ID))
+	}
+	err := scan.initDescDefaults(colCfg)
 	if err != nil {
 		return nil, err
 	}
