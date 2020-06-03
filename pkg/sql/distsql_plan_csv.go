@@ -286,7 +286,6 @@ func DistIngest(
 		&MetadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn},
 		tree.Rows,
 		nil, /* rangeCache */
-		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
