@@ -222,11 +222,11 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32, pseudoIDs []uint32) (uin
 	searchSlice := s.Values[lowIndex:highIndex]
 	var err error
 	maxIdx := sort.Search(len(searchSlice), func(i int) bool {
-		var id uint32
-		id, err = keys.TODOSQLCodec.DecodeDescMetadataID(searchSlice[i].Key)
 		if err != nil {
 			return false
 		}
+		var id uint32
+		id, err = keys.TODOSQLCodec.DecodeDescMetadataID(searchSlice[i].Key)
 		return uint32(id) >= maxID
 	})
 	if err != nil {
