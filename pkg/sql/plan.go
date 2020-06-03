@@ -318,13 +318,9 @@ type planMaybePhysical struct {
 	// physPlan (when non-nil) contains the physical plan that has not yet
 	// been finalized.
 	physPlan *PhysicalPlan
-	// recommendation (when physPlan is non-nil) is the recommendation about
-	// the distribution of the physical plan. Note that it is possible that
-	// the plan is "partially distributed" (meaning that some stages of the
-	// processors are distributed whereas other stages are not).
-	// TODO(yuzefovich): introduce ternary planDistribution to show that plans
-	// can be local, partially distributed, and fully distributed.
-	recommendation distRecommendation
+	// distribution (when physPlan is non-nil) is the indicator of the
+	// distribution of the physical plan.
+	distribution planDistribution
 }
 
 func (p planMaybePhysical) isPhysicalPlan() bool {

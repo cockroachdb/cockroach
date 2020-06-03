@@ -128,7 +128,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		physPlan, err := e.dsp.createValuesPlan(
 			getTypesFromResultColumns(p.ResultColumns), 0 /* numRows */, nil, /* rawBytes */
 		)
-		return planMaybePhysical{physPlan: physPlan, recommendation: canDistribute}, err
+		return planMaybePhysical{physPlan: physPlan, distribution: localPlan}, err
 	}
 
 	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
@@ -189,8 +189,13 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.LimitHint = softLimit
 	}
 
+	planCtx := e.getPlanCtx(recommendation)
+	distribution := fullyDistributedPlan
+	if planCtx.isLocal {
+		distribution = localPlan
+	}
 	err = e.dsp.planTableReaders(
-		e.getPlanCtx(recommendation),
+		planCtx,
 		&p,
 		&tableReaderPlanningInfo{
 			spec:                   trSpec,
@@ -207,7 +212,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return planMaybePhysical{physPlan: &p, recommendation: recommendation}, err
+	return planMaybePhysical{physPlan: &p, distribution: distribution}, err
 }
 
 func (e *distSQLSpecExecFactory) ConstructFilter(
@@ -216,10 +221,16 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	plan := n.(planMaybePhysical)
 	physPlan := plan.physPlan
 	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	// We recommend for filter's distribution to be the same as the last stage
+	// of processors.
+	recommendation := shouldNotDistribute
+	if physPlan.IsLastStageDistributed() {
+		recommendation = shouldDistribute
+	}
 	if err := checkExpr(filter); err != nil {
-		plan.recommendation = cannotDistribute
-		if len(physPlan.ResultRouters) > 1 {
-			// The plan so far has been distributed, but filter expression
+		recommendation = cannotDistribute
+		if physPlan.IsLastStageDistributed() {
+			// The last stage has been distributed, but filter expression
 			// cannot be distributed, so we need to merge the streams on a
 			// single node. We could do so on one of the nodes that streams
 			// originate from, but for now we choose the gateway.
@@ -234,9 +245,14 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	}
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
-	if err := physPlan.AddFilter(filter, e.getPlanCtx(plan.recommendation), physPlan.PlanToStreamColMap); err != nil {
+	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
 		return nil, err
 	}
+	distribution := localPlan
+	if physPlan.IsLastStageDistributed() {
+		distribution = fullyDistributedPlan
+	}
+	plan.distribution = plan.distribution.compose(distribution)
 	return plan, nil
 }
 
