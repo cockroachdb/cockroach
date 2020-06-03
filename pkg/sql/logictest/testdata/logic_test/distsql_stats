@@ -107,9 +107,36 @@ NULL             {b}           256        4               0           true
 let $json_stats
 SHOW STATISTICS USING JSON FOR TABLE data
 
+# ANALYZE is syntactic sugar for CREATE STATISTICS with default columns.
+statement ok
+ANALYZE data
+
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data];
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {a}           256        4               0           true
+NULL             {a,b}         256        16              0           false
+NULL             {a,b,c}       256        64              0           false
+NULL             {a,b,c,d}     256        256             0           false
+NULL             {c}           256        4               0           true
+NULL             {c,d}         256        16              0           false
+NULL             {b}           256        4               0           false
+NULL             {d}           256        4               0           false
+NULL             {e}           256        2               0           true
+
 statement ok
 DELETE FROM system.table_statistics
 
+# Restore the old stats.
 statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
 

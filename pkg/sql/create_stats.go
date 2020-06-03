@@ -54,6 +54,14 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 	}, nil
 }
 
+// Analyze is syntactic sugar for CreateStatistics.
+func (p *planner) Analyze(ctx context.Context, n *tree.Analyze) (planNode, error) {
+	return &createStatsNode{
+		CreateStats: tree.CreateStats{Table: n.Table},
+		p:           p,
+	}, nil
+}
+
 // createStatsNode is a planNode implemented in terms of a function. The
 // startJob function starts a Job during Start, and the remainder of the
 // CREATE STATISTICS planning and execution is performed within the jobs
