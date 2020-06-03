@@ -64,7 +64,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	dbDesc *sqlbase.DatabaseDescriptor,
+	dbDesc sqlbase.DatabaseDescriptorInterface,
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
@@ -73,7 +73,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 		desc := entry.Desc().TableDesc()
 		entry.VisitTables(func(table catalog.VirtualObject) {
 			name := tree.MakeTableNameWithSchema(
-				tree.Name(dbDesc.Name), tree.Name(desc.Name), tree.Name(table.Desc().TableDesc().Name))
+				tree.Name(dbDesc.GetName()), tree.Name(desc.Name), tree.Name(table.Desc().TableDesc().Name))
 			name.ExplicitCatalog = flags.ExplicitPrefix
 			name.ExplicitSchema = flags.ExplicitPrefix
 			names = append(names, name)

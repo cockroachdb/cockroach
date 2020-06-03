@@ -282,7 +282,7 @@ func importPlanHook(
 			//  UnresolvedObjectNames here, rather than TableNames.
 			// We have a target table, so it might specify a DB in its name.
 			un := table.ToUnresolvedObjectName()
-			found, prefix, descI, err := tree.ResolveTarget(ctx,
+			found, prefix, dbDescI, err := tree.ResolveTarget(ctx,
 				un, p, p.SessionData().Database, p.SessionData().SearchPath)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedTable,
@@ -295,7 +295,7 @@ func importPlanHook(
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"database does not exist: %q", table)
 			}
-			dbDesc := descI.(*sqlbase.DatabaseDescriptor)
+			dbDesc := dbDescI.(*sqlbase.ImmutableDatabaseDescriptor)
 			// If this is a non-INTO import that will thus be making a new table, we
 			// need the CREATE priv in the target DB.
 			if !importStmt.Into {

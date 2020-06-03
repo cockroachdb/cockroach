@@ -68,7 +68,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	codec keys.SQLCodec,
 	name string,
 	flags tree.DatabaseLookupFlags,
-) (desc *sqlbase.DatabaseDescriptor, err error) {
+) (desc sqlbase.DatabaseDescriptorInterface, err error) {
 	isSystemDB := name == sqlbase.SystemDB.Name
 	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
 		refuseFurtherLookup, dbID, err := a.tc.GetUncommittedDatabaseID(name, flags.Required)
@@ -82,13 +82,21 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 			desc, err := a.tc.DatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
 			if desc == nil && flags.Required {
 				return nil, sqlbase.NewUndefinedDatabaseError(name)
+			} else if desc == nil {
+				// NB: We must return the actual value nil here as a typed nil will not
+				// be easily detectable by the caller.
+				return nil, nil
 			}
 			return desc, err
 		}
 
 		// The database was not known in the uncommitted list. Have the db
 		// cache look it up by name for us.
-		return a.tc.DatabaseCache().GetDatabaseDesc(ctx, a.tc.LeaseManager().DB().Txn, name, flags.Required)
+		desc, err := a.tc.DatabaseCache().GetDatabaseDesc(ctx, a.tc.LeaseManager().DB().Txn, name, flags.Required)
+		if desc == nil || err != nil {
+			return nil, err
+		}
+		return desc, nil
 	}
 
 	// We avoided the cache. Go lower.

@@ -394,15 +394,18 @@ var (
 	singleID1 = []ColumnID{1}
 )
 
+// SystemDatabaseName is the name of the system database.
+const SystemDatabaseName = "system"
+
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
-func MakeSystemDatabaseDesc() DatabaseDescriptor {
-	return DatabaseDescriptor{
-		Name: "system",
-		ID:   keys.SystemDatabaseID,
+func MakeSystemDatabaseDesc() *ImmutableDatabaseDescriptor {
+	return NewInitialDatabaseDescriptorWithPrivileges(
+		keys.SystemDatabaseID,
+		SystemDatabaseName,
 		// Assign max privileges to root user.
-		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
-	}
+		NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
+	)
 }
 
 // These system config TableDescriptor literals should match the descriptor
@@ -1649,7 +1652,7 @@ var (
 // can be used to persist these descriptors to the cockroach store.
 func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
+	target.AddDescriptor(keys.RootNamespaceID, SystemDB)
 
 	// Add system config tables.
 	target.AddDescriptor(keys.SystemDatabaseID, DeprecatedNamespaceTable)

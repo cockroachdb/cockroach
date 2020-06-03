@@ -77,8 +77,8 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := sqlbase.MakeImmutableDatabaseDescriptor(id, database)
-	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, &desc, nil, jobDesc); err != nil {
+	desc := sqlbase.NewInitialDatabaseDescriptor(id, string(database.Name))
+	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
 
@@ -91,7 +91,7 @@ func (p *planner) createDatabase(
 		}
 	}
 
-	return &desc, true, nil
+	return desc, true, nil
 }
 
 func (p *planner) createDescriptorWithID(

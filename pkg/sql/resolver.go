@@ -34,11 +34,15 @@ var _ resolver.SchemaResolver = &planner{}
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
-) (res *UncachedDatabaseDescriptor, err error) {
+) (res *sqlbase.ImmutableDatabaseDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		res, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
+		var desc sqlbase.DatabaseDescriptorInterface
+		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
 			ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(required),
 		)
+		if desc != nil {
+			res = desc.(*sqlbase.ImmutableDatabaseDescriptor)
+		}
 	})
 	return res, err
 }
@@ -101,11 +105,11 @@ func (p *planner) LookupSchema(
 	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
-	found, _, err = sc.IsValidSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID, scName)
+	found, _, err = sc.IsValidSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName)
 	if err != nil {
 		return false, nil, err
 	}
-	return found, dbDesc, nil
+	return found, dbDesc.(*sqlbase.ImmutableDatabaseDescriptor), nil
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
@@ -480,7 +484,7 @@ func (r *fkSelfResolver) LookupObject(
 type internalLookupCtx struct {
 	dbNames  map[sqlbase.ID]string
 	dbIDs    []sqlbase.ID
-	dbDescs  map[sqlbase.ID]*DatabaseDescriptor
+	dbDescs  map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor
 	tbDescs  map[sqlbase.ID]*ImmutableTableDescriptor
 	tbIDs    []sqlbase.ID
 	typDescs map[sqlbase.ID]*TypeDescriptor
@@ -492,16 +496,19 @@ type internalLookupCtx struct {
 type tableLookupFn = *internalLookupCtx
 
 func newInternalLookupCtx(
-	descs []sqlbase.Descriptor, prefix *DatabaseDescriptor,
+	descs []sqlbase.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
 	return newInternalLookupCtxFromDescriptors(descs, prefix)
 }
 
+// TODO(ajwerner): This should take already unwrapped descriptors in the form of
+// a []sqlbase.DescriptorInterface rather than constructing the wrapper structs
+// a new.
 func newInternalLookupCtxFromDescriptors(
-	descs []sqlbase.Descriptor, prefix *DatabaseDescriptor,
+	descs []sqlbase.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
 	dbNames := make(map[sqlbase.ID]string)
-	dbDescs := make(map[sqlbase.ID]*DatabaseDescriptor)
+	dbDescs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
 	tbDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
 	typDescs := make(map[sqlbase.ID]*TypeDescriptor)
 	var tbIDs, typIDs, dbIDs []sqlbase.ID
@@ -510,7 +517,7 @@ func newInternalLookupCtxFromDescriptors(
 		desc := &descs[i]
 		if database := desc.GetDatabase(); database != nil {
 			dbNames[database.ID] = database.Name
-			dbDescs[database.ID] = database
+			dbDescs[database.ID] = sqlbase.NewImmutableDatabaseDescriptor(*database)
 			if prefix == nil || prefix.ID == database.ID {
 				dbIDs = append(dbIDs, database.ID)
 			}
@@ -539,7 +546,9 @@ func newInternalLookupCtxFromDescriptors(
 	}
 }
 
-func (l *internalLookupCtx) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error) {
+func (l *internalLookupCtx) getDatabaseByID(
+	id sqlbase.ID,
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
 		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
@@ -680,6 +689,6 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 }
 
 type simpleSchemaResolver interface {
-	getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error)
+	getDatabaseByID(id sqlbase.ID) (*sqlbase.ImmutableDatabaseDescriptor, error)
 	getTableByID(id sqlbase.ID) (*TableDescriptor, error)
 }
