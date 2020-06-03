@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -41,21 +42,26 @@ type ReplicaSlice []ReplicaInfo
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
+//
+// If there's no info in gossip for any of the nodes in the descriptor, a
+// SendError is returned.
 func NewReplicaSlice(
+	ctx context.Context,
 	gossip interface {
 		GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
 	},
-	replicas []roachpb.ReplicaDescriptor,
-) ReplicaSlice {
-	if gossip == nil {
-		return nil
-	}
-	rs := make(ReplicaSlice, 0, len(replicas))
-	for _, r := range replicas {
+	desc *roachpb.RangeDescriptor,
+) (ReplicaSlice, error) {
+	// Learner replicas won't serve reads/writes, so we'll send only to the
+	// `Voters` replicas. This is just an optimization to save a network hop,
+	// everything would still work if we had `All` here.
+	voters := desc.Replicas().Voters()
+	rs := make(ReplicaSlice, 0, len(voters))
+	for _, r := range voters {
 		nd, err := gossip.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {
-				log.Infof(context.TODO(), "node %d is not gossiped: %v", r.NodeID, err)
+				log.Infof(ctx, "node %d is not gossiped: %v", r.NodeID, err)
 			}
 			continue
 		}
@@ -64,7 +70,11 @@ func NewReplicaSlice(
 			NodeDesc:          nd,
 		})
 	}
-	return rs
+	if len(rs) == 0 {
+		return nil, roachpb.NewSendError(
+			fmt.Sprintf("no replica node addresses available via gossip for r%d", desc.RangeID))
+	}
+	return rs, nil
 }
 
 // ReplicaSlice implements shuffle.Interface.
