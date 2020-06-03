@@ -82,6 +82,7 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 			typeconv.DatumVecCanonicalTypeFamily,
 			types.BoolFamily,
 			types.IntervalFamily,
+			types.BytesFamily,
 		}, numericCanonicalTypeFamilies...,
 	),
 }
@@ -159,11 +160,16 @@ func registerBinOpOutputTypes() {
 		{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}:                                       types.Bytes,
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
 	}
+
+	binOpOutputTypes[tree.JSONFetchVal] = map[typePair]*types.T{
+		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, anyWidth}:   types.Any,
+		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BytesFamily, anyWidth}: types.Any,
+	}
 }
 
 func populateBinOpOverloads() {
 	registerBinOpOutputTypes()
-	for _, op := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div, tree.Concat} {
+	for _, op := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div, tree.Concat, tree.JSONFetchVal} {
 		ob := &overloadBase{
 			kind:  binaryOverload,
 			Name:  execgen.BinaryOpName[op],
@@ -623,7 +629,7 @@ func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 // convertNativeToDatum returns a string that converts nativeElem to a
 // tree.Datum that is stored in local variable named datumElemVarName.
 func convertNativeToDatum(
-	canonicalTypeFamily types.Family, nativeElem, datumElemVarName string,
+	op tree.BinaryOperator, canonicalTypeFamily types.Family, nativeElem, datumElemVarName string,
 ) string {
 	var runtimeConversion string
 	switch canonicalTypeFamily {
@@ -639,6 +645,13 @@ func convertNativeToDatum(
 		runtimeConversion = fmt.Sprintf("tree.DDecimal{Decimal: %s}", nativeElem)
 	case types.IntervalFamily:
 		runtimeConversion = fmt.Sprintf("tree.DInterval{Duration: %s}", nativeElem)
+	case types.BytesFamily:
+		switch op {
+		case tree.JSONFetchVal:
+			runtimeConversion = fmt.Sprintf("tree.DString(%s)", nativeElem)
+		default:
+			runtimeConversion = fmt.Sprintf("tree.DBytes(%s)", nativeElem)
+		}
 	default:
 		colexecerror.InternalError(fmt.Sprintf("unexpected canonical type family: %s", canonicalTypeFamily))
 	}
@@ -653,7 +666,7 @@ func (c datumNonDatumCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		const rightDatumElem = "_nonDatumArgAsDatum"
 		prelude := convertNativeToDatum(
-			op.lastArgTypeOverload.CanonicalTypeFamily, rightElem, rightDatumElem,
+			op.BinOp, op.lastArgTypeOverload.CanonicalTypeFamily, rightElem, rightDatumElem,
 		)
 		return executeBinOpOnDatums(
 			prelude, targetElem,
@@ -673,7 +686,7 @@ func (c nonDatumDatumCustomizer) getBinOpAssignFunc() assignFunc {
 			%s
 			%s := &coldataext.Datum{Datum: %s}
 			`,
-			convertNativeToDatum(c.leftCanonicalTypeFamily, leftElem, leftDatumElem),
+			convertNativeToDatum(op.BinOp, c.leftCanonicalTypeFamily, leftElem, leftDatumElem),
 			leftColdataExtDatum, leftDatumElem,
 		)
 		return executeBinOpOnDatums(
