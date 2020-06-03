@@ -12,6 +12,7 @@ package keys
 
 import (
 	"bytes"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -230,6 +231,9 @@ func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint32, error) {
 	_, id, err := encoding.DecodeUvarintAscending(remaining)
 	if err != nil {
 		return 0, err
+	}
+	if id > math.MaxUint32 {
+		return 0, errors.Errorf("descriptor ID %d exceeds uint32 bounds", id)
 	}
 	return uint32(id), nil
 }

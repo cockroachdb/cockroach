@@ -11,6 +11,7 @@
 package config_test
 
 import (
+	"math"
 	"sort"
 	"testing"
 
@@ -146,6 +147,19 @@ func TestGetLargestID(t *testing.T) {
 			sqlKV(keys.NamespaceTableID, 1, 2),
 			sqlKV(keys.UsersTableID, 1, 3),
 		}, 0, 0, nil, "descriptor table not found"},
+
+		// Decoding error, unbounded max.
+		{[]roachpb.KeyValue{
+			sqlKV(keys.DescriptorTableID, 1, 1),
+			sqlKV(keys.DescriptorTableID, 1, math.MaxUint64),
+		}, 0, 0, nil, "descriptor ID 18446744073709551615 exceeds uint32 bounds"},
+
+		// Decoding error, bounded max.
+		{[]roachpb.KeyValue{
+			sqlKV(keys.DescriptorTableID, 1, 1),
+			sqlKV(keys.DescriptorTableID, 1, math.MaxUint64),
+			sqlKV(keys.DescriptorTableID, 2, 1),
+		}, 0, 5, nil, "descriptor ID 18446744073709551615 exceeds uint32 bounds"},
 
 		// Single correct descriptor entry.
 		{[]roachpb.KeyValue{sqlKV(keys.DescriptorTableID, 1, 1)}, 1, 0, nil, ""},
