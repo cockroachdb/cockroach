@@ -241,7 +241,7 @@ func (r *resumingHTTPReader) Read(p []byte) (n int, err error) {
 		// Resume download if the http server supports this.
 		if r.canResume && isResumableHTTPError(err) {
 			log.Errorf(r.ctx, "HTTP:Retry: error %s", err)
-			if retries > maxNoProgressReads {
+			if retries >= maxNoProgressReads {
 				err = errors.Wrap(err, "multiple Read calls return no data")
 				return
 			}
