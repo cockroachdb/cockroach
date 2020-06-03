@@ -1995,17 +1995,37 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				segmentMaxLength := float64(*args[1].(*tree.DFloat))
-				segGeometry, err := geogfn.Segmentize(g.Geography, segmentMaxLength)
+				segGeography, err := geogfn.Segmentize(g.Geography, segmentMaxLength)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeography(segGeometry), nil
+				return tree.NewDGeography(segGeography), nil
 			},
 			Info: infoBuilder{
 				info: `Returns a modified Geography having no segment longer than the given max_segment_length meters.
 
 The calculations are done on a sphere.`,
 				libraryUsage: usesS2,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"max_segment_length_meters", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				segmentMaxLength := float64(*args[1].(*tree.DFloat))
+				segGeometry, err := geomfn.Segmentize(g.Geometry, segmentMaxLength)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(segGeometry), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry having no segment longer than the given max_segment_length meters.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},

@@ -97,7 +97,7 @@ func TestSegmentize(t *testing.T) {
 		},
 	}
 	for _, test := range segmentizeTestCases {
-		t.Run(fmt.Sprintf("%s, maximum segment length: %v", test.wkt, test.maxSegmentLength), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s, maximum segment length: %f", test.wkt, test.maxSegmentLength), func(t *testing.T) {
 			geog, err := geo.ParseGeography(test.wkt)
 			require.NoError(t, err)
 			modifiedGeog, err := Segmentize(geog, test.maxSegmentLength)
@@ -107,8 +107,8 @@ func TestSegmentize(t *testing.T) {
 			require.Equal(t, expectedGeog, modifiedGeog)
 		})
 	}
-	// Test for segment maximum length as negative for geometry collection.
-	t.Run(fmt.Sprintf("%s, maximum segment length: %v", segmentizeTestCases[9].wkt, 0.0), func(t *testing.T) {
+	// Test for segment maximum length as negative for multiline string.
+	t.Run(fmt.Sprintf("%s, maximum segment length: %f", segmentizeTestCases[9].wkt, 0.0), func(t *testing.T) {
 		geog, err := geo.ParseGeography(segmentizeTestCases[9].wkt)
 		require.NoError(t, err)
 		_, err = Segmentize(geog, 0)
@@ -150,6 +150,20 @@ func TestSegmentizeCoords(t *testing.T) {
 			a:                    geom.Coord{85, 85},
 			b:                    geom.Coord{0, 0},
 			segmentMaxLength:     -1,
+			resultantCoordinates: []float64{85, 85},
+		},
+		{
+			desc:                 `Coordinate(0, 0) to Coordinate(0, 0), 0.29`,
+			a:                    geom.Coord{0, 0},
+			b:                    geom.Coord{0, 0},
+			segmentMaxLength:     0.29,
+			resultantCoordinates: []float64{0, 0},
+		},
+		{
+			desc:                 `Coordinate(85, 85) to Coordinate(0, 0), 1.563200444168918`,
+			a:                    geom.Coord{85, 85},
+			b:                    geom.Coord{0, 0},
+			segmentMaxLength:     1.563200444168918,
 			resultantCoordinates: []float64{85, 85},
 		},
 	}

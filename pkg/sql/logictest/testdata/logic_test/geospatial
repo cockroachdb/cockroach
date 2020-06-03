@@ -1434,6 +1434,33 @@ MULTIPOINT (0 0, 1 1)
 statement error st_segmentize\(\): maximum segment length must be positive
 SELECT ST_Segmentize('POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geography, 0)
 
+query TTT
+SELECT
+  dsc,
+  ST_AsText(ST_Segmentize(geom, 1)),
+  ST_AsText(ST_Segmentize(geom, 0.3))
+FROM geom_operators_test
+ORDER BY dsc
+----
+Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                                      GEOMETRYCOLLECTION EMPTY
+Empty LineString                          LINESTRING EMPTY                                              LINESTRING EMPTY
+Faraway point                             POINT (5 5)                                                   POINT (5 5)
+Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)                                LINESTRING (-0.5 0.5, -0.25 0.5, 0 0.5, 0.25 0.5, 0.5 0.5)
+NULL                                      NULL                                                          NULL
+Point middle of Left Square               POINT (-0.5 0.5)                                              POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)                                               POINT (0.5 0.5)
+Square (left)                             POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                        POLYGON ((-1 0, -0.75 0, -0.5 0, -0.25 0, 0 0, 0 0.25, 0 0.5, 0 0.75, 0 1, -0.25 1, -0.5 1, -0.75 1, -1 1, -1 0.75, -1 0.5, -1 0.25, -1 0))
+Square (right)                            POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                           POLYGON ((0 0, 0.25 0, 0.5 0, 0.75 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.75 1, 0.5 1, 0.25 1, 0 1, 0 0.75, 0 0.5, 0 0.25, 0 0))
+Square overlapping left and right square  POLYGON ((-0.1 0, 0.45 0, 1 0, 1 1, 0.45 1, -0.1 1, -0.1 0))  POLYGON ((-0.1 0, 0.175 0, 0.45 0, 0.725 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.725 1, 0.45 1, 0.175 1, -0.1 1, -0.1 0.75, -0.1 0.5, -0.1 0.25, -0.1 0))
+
+query T
+SELECT ST_AsText(ST_Segmentize('MULTIPOINT (0 0, 1 1)'::geometry, -1))
+----
+MULTIPOINT (0 0, 1 1)
+
+statement error st_segmentize\(\): maximum segment length must be positive
+SELECT ST_Segmentize('POLYGON ((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geometry, -1)
+
 subtest pg_extension
 
 statement ok

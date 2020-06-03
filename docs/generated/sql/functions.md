@@ -1114,6 +1114,8 @@ given Geometry.</p>
 <p>The calculations are done on a sphere.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 </span></td></tr>
+<tr><td><a name="st_segmentize"></a><code>st_segmentize(geometry: geometry, max_segment_length_meters: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry having no segment longer than the given max_segment_length meters.</p>
+</span></td></tr>
 <tr><td><a name="st_setsrid"></a><code>st_setsrid(geography: geography, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Sets a Geography to a new SRID without transforming the coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_setsrid"></a><code>st_setsrid(geometry: geometry, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Sets a Geometry to a new SRID without transforming the coordinates.</p>
