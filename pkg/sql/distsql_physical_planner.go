@@ -1031,21 +1031,12 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *PlanningCtx, n *scanNode,
 ) (*PhysicalPlan, error) {
-	// scanNodeToTableOrdinalMap is a map from scan node column ordinal to
-	// table reader column ordinal.
-	//
-	// scanNodes can have columns set up in a few different ways, depending on the
-	// colCfg. The heuristic planner always creates scanNodes with all public
-	// columns (even if some of them aren't even in the index we are scanning).
-	// The optimizer creates scanNodes with a specific set of wanted columns; in
-	// this case we have to create a map from scanNode column ordinal to table
-	// column ordinal (which is what the TableReader uses).
-	var scanNodeToTableOrdinalMap []int
 	if n.colCfg.addUnwantedAsHidden {
 		panic("addUnwantedAsHidden not supported")
-	} else if n.colCfg.wantedColumns != nil {
-		scanNodeToTableOrdinalMap = toTableOrdinals(n.cols, n.desc, n.colCfg.visibility)
 	}
+	// scanNodeToTableOrdinalMap is a map from scan node column ordinal to
+	// table reader column ordinal.
+	scanNodeToTableOrdinalMap := toTableOrdinals(n.cols, n.desc, n.colCfg.visibility)
 	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
 	if err != nil {
 		return nil, err

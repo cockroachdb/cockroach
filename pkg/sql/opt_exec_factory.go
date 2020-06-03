@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -2038,24 +2037,4 @@ func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []sqlbase
 		colDescs = append(colDescs, *table.Column(i).(*sqlbase.ColumnDescriptor))
 	}
 	return colDescs
-}
-
-// makeScanColumnsConfig builds a scanColumnsConfig struct by constructing a
-// list of descriptor IDs for columns in the given cols set. Columns are
-// identified by their ordinal position in the table schema.
-func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) scanColumnsConfig {
-	// Set visibility=execinfra.ScanVisibilityPublicAndNotPublic, since all
-	// columns in the "cols" set should be projected, regardless of whether
-	// they're public or non- public. The caller decides which columns to
-	// include (or not include). Note that when wantedColumns is non-empty,
-	// the visibility flag will never trigger the addition of more columns.
-	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
-		visibility:    execinfra.ScanVisibilityPublicAndNotPublic,
-	}
-	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		desc := table.Column(c).(*sqlbase.ColumnDescriptor)
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
-	}
-	return colCfg
 }

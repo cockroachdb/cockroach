@@ -110,23 +110,16 @@ type scanNode struct {
 	lockingWaitPolicy sqlbase.ScanLockingWaitPolicy
 }
 
-// scanColumnsConfig controls the "schema" of a scan node. The zero value is the
-// default: all "public" columns.
-// Note that not all columns in the schema are read and decoded; that is further
-// controlled by scanNode.valNeededForCol.
+// scanColumnsConfig controls the "schema" of a scan node.
 type scanColumnsConfig struct {
-	// If set, only these columns are part of the scan node schema, in this order
-	// (with the caveat that the addUnwantedAsHidden flag below can add more
-	// columns). Non public columns can only be added if allowed by the visibility
-	// flag below.
-	// If not set, then all visible columns will be part of the scan node schema,
-	// as specified by the visibility flag below. The addUnwantedAsHidden flag
-	// is ignored in this case.
+	// wantedColumns contains all the columns are part of the scan node schema,
+	// in this order (with the caveat that the addUnwantedAsHidden flag below
+	// can add more columns). Non public columns can only be added if allowed
+	// by the visibility flag below.
 	wantedColumns []tree.ColumnID
 
 	// When set, the columns that are not in the wantedColumns list are added to
-	// the list of columns as hidden columns. Only useful in conjunction with
-	// wantedColumns.
+	// the list of columns as hidden columns.
 	addUnwantedAsHidden bool
 
 	// If visibility is set to execinfra.ScanVisibilityPublicAndNotPublic, then
@@ -142,8 +135,6 @@ func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrder
 	}
 	return nil
 }
-
-var publicColumnsCfg = scanColumnsConfig{}
 
 func (p *planner) Scan() *scanNode {
 	n := scanNodePool.Get().(*scanNode)
@@ -291,13 +282,7 @@ func initColsForScan(
 	desc *sqlbase.ImmutableTableDescriptor, colCfg scanColumnsConfig,
 ) (cols []sqlbase.ColumnDescriptor, err error) {
 	if colCfg.wantedColumns == nil {
-		// Add all active and maybe mutation columns.
-		if colCfg.visibility == execinfra.ScanVisibilityPublic {
-			cols = desc.Columns
-		} else {
-			cols = desc.ReadableColumns
-		}
-		return cols, nil
+		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
 	cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.ReadableColumns))
