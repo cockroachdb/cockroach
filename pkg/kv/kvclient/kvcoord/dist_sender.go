@@ -457,9 +457,6 @@ func (ds *DistSender) sendRPC(
 
 	ba.RangeID = rangeID
 
-	tracing.AnnotateTrace()
-	defer tracing.AnnotateTrace()
-
 	return ds.sendToReplicas(
 		ctx,
 		ba,
