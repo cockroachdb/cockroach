@@ -3094,30 +3094,23 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 		switch t := m.Descriptor_.(type) {
 		case *DescriptorMutation_Column:
 			desc.AddColumn(t.Column)
-
 		case *DescriptorMutation_Index:
 			if err := desc.AddIndex(*t.Index, false); err != nil {
 				return err
 			}
-
 		case *DescriptorMutation_Constraint:
 			switch t.Constraint.ConstraintType {
 			case ConstraintToUpdate_CHECK:
-				switch t.Constraint.Check.Validity {
-				case ConstraintValidity_Validating:
-					// Constraint already added, just mark it as Validated
-					for _, c := range desc.Checks {
-						if c.Name == t.Constraint.Name {
-							c.Validity = ConstraintValidity_Validated
-							break
-						}
+				var found bool
+				for _, c := range desc.Checks {
+					if t.Constraint.Check.Name == c.Name {
+						c.Validity = ConstraintValidity_Validated
+						found = true
 					}
-				case ConstraintValidity_Unvalidated:
-					// add the constraint to the list of check constraints on the table
-					// descriptor
+				}
+				if !found {
+					t.Constraint.Check.Validity = ConstraintValidity_Validated
 					desc.Checks = append(desc.Checks, &t.Constraint.Check)
-				default:
-					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case ConstraintToUpdate_FOREIGN_KEY:
 				switch t.Constraint.ForeignKey.Validity {
