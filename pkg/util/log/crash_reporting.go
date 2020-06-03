@@ -13,7 +13,6 @@ package log
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -106,6 +105,15 @@ var Safe = errors.Safe
 
 // ReportPanic reports a panic has occurred on the real stderr.
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
+	// Announce the panic has occurred to all places. The purpose
+	// of this call is double:
+	// - it ensures there's a notice on the terminal, in case
+	//   logging would only go to file otherwise;
+	// - it places a timestamp in front of the panic object,
+	//   in case the various configuration options make
+	//   the Go runtime solely responsible for printing
+	//   out the panic object to the log file.
+	//   (The go runtime doesn't time stamp its output.)
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
 	if stderrLog.redirectInternalStderrWrites() {
@@ -121,9 +129,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 		// as an indication they also want to see panic details
 		// there. Do it here.
 		if LoggingToStderr(Severity_FATAL) {
-			// TODO(knz): Produce a log entry header to get a timestamp
-			// here.
-			fmt.Fprintf(OrigStderr, "%v\n\n%s\n", r, debug.Stack())
+			stderrLog.printPanicToExternalStderr(depth+1, r)
 		}
 	} else {
 		// If we are not redirecting internal stderr writes, then the
@@ -132,7 +138,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 		//
 		// However, we actually want to persist these details. So print
 		// them in the log file ourselves.
-		stderrLog.printPanicToFile(r)
+		stderrLog.printPanicToFile(depth+1, r)
 	}
 
 	sendCrashReport(ctx, sv, PanicAsError(depth+1, r), ReportTypePanic)
