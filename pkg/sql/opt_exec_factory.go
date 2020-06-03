@@ -231,7 +231,8 @@ func (ef *execFactory) ConstructFilter(
 	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
 		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 		// Note: if the filter statically evaluates to true, s.filter stays nil.
-		s.reqOrdering = ReqOrdering(reqOrdering)
+		// Note: we don't need to update the required ordering because scanNode
+		// has already been set up with the same reqOrdering.
 		return s, nil
 	}
 	// Create a filterNode.
