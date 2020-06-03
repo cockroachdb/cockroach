@@ -126,6 +126,9 @@ func backgroundJobsTestTPCCImport(t *test, warehouses int) backgroundStepper {
 			// workload).
 			return nil
 		}
+		if err != nil {
+			t.l.Printf("Loading data failed with %s", err.Error())
+		}
 		return err
 	},
 		onStop: overrideErrorFromJobsTable,

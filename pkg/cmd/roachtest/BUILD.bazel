@@ -59,6 +59,7 @@ go_library(
         "log.go",
         "main.go",
         "many_splits.go",
+        "mixed_version_backup.go",
         "mixed_version_decommission.go",
         "mixed_version_jobs.go",
         "mixed_version_schemachange.go",
