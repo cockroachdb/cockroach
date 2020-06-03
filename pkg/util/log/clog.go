@@ -363,14 +363,14 @@ func DumpStacks(ctx context.Context) {
 	Infof(ctx, "stack traces:\n%s", allStacks)
 }
 
-// printPanicToFile copies the panic details to the log file. This is
-// useful when the internal stderr writes are not redirected to the
-// log file (!stderrRedirected), as the go runtime hardcodes
-// its writes to file descriptor 2.
+// printPanicToFile is used by ReportPanic() to copy the panic details to the log file. This is
+// used when we understand that the Go runtime will only automatically
+// print the panic details to the external stderr stream (e.g.
+// when we're not redirecting that to a file).
 //
-// TODO(knz): Create a log entry header for the panic details, to
-// get a timestamp and later a redactable marker.
-func (l *loggerT) printPanicToFile(r interface{}) {
+// This function is a lightweight version of outputLogEntry() which
+// does not exit the process in case of error.
+func (l *loggerT) printPanicToFile(depth int, r interface{}) {
 	if !l.logDir.IsSet() {
 		// There's no log file. Can't do anything.
 		return
@@ -386,11 +386,34 @@ func (l *loggerT) printPanicToFile(r interface{}) {
 		return
 	}
 
-	panicBytes := []byte(fmt.Sprintf("%v\n\n%s\n", r, debug.Stack()))
-	if err := l.writeToFile(panicBytes); err != nil {
+	// Create a fully structured log entry. This ensures there a
+	// timestamp in front of the panic object.
+	entry := makeEntryForPanicObject(depth+1, r)
+	buf := logging.processForFile(entry, debug.Stack())
+	defer putBuffer(buf)
+
+	// Actually write the panic object to a file.
+	if err := l.writeToFile(buf.Bytes()); err != nil {
 		// Ditto; report the error but continue. We're terminating anyway.
 		l.reportErrorEverywhereLocked(err)
-		return
+	}
+}
+
+func makeEntryForPanicObject(depth int, r interface{}) Entry {
+	file, line, _ := caller.Lookup(depth + 1)
+	return MakeEntry(Severity_ERROR, timeutil.Now().UnixNano(), file, line, fmt.Sprintf("panic: %v", r))
+}
+
+// printPanicToExternalStderr is used by ReportPanic() in case we
+// understand that the Go runtime will not print the panic object to
+// the external stderr itself (e.g.  because we've redirected it to a
+// file).
+func (l *loggerT) printPanicToExternalStderr(depth int, r interface{}) {
+	entry := makeEntryForPanicObject(depth+1, r)
+	if err := l.outputToStderr(entry, debug.Stack()); err != nil {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.reportErrorEverywhereLocked(err)
 	}
 }
 
