@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // DequalifyColumnRefs returns an expression with database nad table names
@@ -148,11 +149,10 @@ func (d *dummyColumn) ResolvedType() *types.T {
 //
 // If the expression references a column that does not exist in the table
 // descriptor, replaceVars errs with pgcode.UndefinedColumn.
-// TODO(mgartner): The set should be a util.FastIntSet.
 func replaceVars(
 	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr,
-) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
-	colIDs := make(map[sqlbase.ColumnID]struct{})
+) (tree.Expr, util.FastIntSet, error) {
+	var colIDs util.FastIntSet
 
 	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
@@ -176,7 +176,7 @@ func replaceVars(
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
-		colIDs[col.ID] = struct{}{}
+		colIDs.Add(int(col.ID))
 
 		// Convert to a dummyColumn of the correct type.
 		return false, &dummyColumn{typ: col.Type, name: c.ColumnName}, nil

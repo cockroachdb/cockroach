@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -89,7 +88,7 @@ func (b *CheckConstraintBuilder) Build(
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, colIDsUsed, err := replaceVars(b.desc, c.Expr)
+	replacedExpr, colSet, err := replaceVars(b.desc, c.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -108,12 +107,12 @@ func (b *CheckConstraintBuilder) Build(
 		return nil, err
 	}
 
-	// Collect and sort the column IDs referenced in the check expression.
-	colIDs := make(sqlbase.ColumnIDs, 0, len(colIDsUsed))
-	for colID := range colIDsUsed {
-		colIDs = append(colIDs, colID)
-	}
-	sort.Sort(colIDs)
+	// Collect the column IDs that are referenced in the check expression in
+	// increasing order.
+	colIDs := make([]sqlbase.ColumnID, 0, colSet.Len())
+	colSet.ForEach(func(id int) {
+		colIDs = append(colIDs, sqlbase.ColumnID(id))
+	})
 
 	source := sqlbase.NewSourceInfoForSingleTable(
 		b.tableName, sqlbase.ResultColumnsFromColDescs(

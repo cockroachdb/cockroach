@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -57,15 +58,14 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		)
 	}
 
-	// TODO(mgartner): Use util.FastIntSet here instead.
-	dependencies := make(map[sqlbase.ColumnID]struct{})
+	var dependencies util.FastIntSet
 	// First, check that no column in the expression is a computed column.
 	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *sqlbase.ColumnDescriptor) error {
 		if c.IsComputed() {
 			return pgerror.New(pgcode.InvalidTableDefinition,
 				"computed columns cannot reference other computed columns")
 		}
-		dependencies[c.ID] = struct{}{}
+		dependencies.Add(int(c.ID))
 
 		return nil
 	})
@@ -79,7 +79,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	for i := range v.desc.OutboundFKs {
 		fk := &v.desc.OutboundFKs[i]
 		for _, id := range fk.OriginColumnIDs {
-			if _, ok := dependencies[id]; !ok {
+			if !dependencies.Contains(int(id)) {
 				// We don't depend on this column.
 				continue
 			}
