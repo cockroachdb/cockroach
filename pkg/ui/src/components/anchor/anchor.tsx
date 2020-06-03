@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import cn from "classnames";
+import classnames from "classnames/bind";
 import styles from "./anchor.module.styl";
 
 interface AnchorProps {
@@ -18,11 +18,14 @@ interface AnchorProps {
   target?: "_blank" | "_parent" | "_self";
   className?: string;
 }
+
+const cx = classnames.bind(styles);
+
 export function Anchor(props: React.PropsWithChildren<AnchorProps>) {
   const { href, target, children, onClick, className } = props;
   return (
     <a
-      className={cn(styles[`crl-anchor`], className)}
+      className={cx("crl-anchor", className)}
       href={href}
       target={target}
       onClick={onClick}

@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import moment from "moment";
 import Long from "long";
 import emptyTracingBackground from "assets/statementsPage/emptyTracingBackground.svg";
+import classnames from "classnames/bind";
 
 import {
   Button,
@@ -58,6 +59,8 @@ interface DiagnosticsViewState {
   };
 }
 
+const cx = classnames.bind(styles);
+
 export class DiagnosticsView extends React.Component<DiagnosticsViewProps, DiagnosticsViewState> {
   columns: ColumnsConfig<IStatementDiagnosticsReport> = [
     {
@@ -93,7 +96,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
       render: (_text, record) => {
         if (record.completed) {
           return (
-            <div className={styles[`crl-statements-diagnostics-view__actions-column`]}>
+            <div className={cx("crl-statements-diagnostics-view__actions-column")}>
               <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
                  onClick={() => trackDownloadDiagnosticsBundle(record.statement_fingerprint)}>
                 <Button
@@ -102,7 +105,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
                   iconPosition="left"
                   icon={() => (
                     <span
-                      className={styles[`crl-statements-diagnostics-view__icon`]}
+                      className={cx("crl-statements-diagnostics-view__icon")}
                       dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
                     />
                   )}
@@ -149,7 +152,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
 
     if (!hasData) {
       return (
-        <SummaryCard className={styles[`summary--card__empty-state`]}>
+        <SummaryCard className={cx("summary--card__empty-state")}>
           <EmptyDiagnosticsView {...this.props} />
         </SummaryCard>
       );
@@ -157,7 +160,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     return (
       <SummaryCard>
         <div
-          className={styles[`crl-statements-diagnostics-view__title`]}
+          className={cx("crl-statements-diagnostics-view__title")}
         >
           <Text
             textType={TextTypes.Heading3}
@@ -170,7 +173,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
                 onClick={this.onActivateButtonClick}
                 disabled={!canRequestDiagnostics}
                 type="secondary"
-                className={styles[`crl-statements-diagnostics-view__activate-button`]}
+                className={cx("crl-statements-diagnostics-view__activate-button")}
               >
                 Activate diagnostics
               </Button>
@@ -181,7 +184,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
           dataSource={dataSource}
           columns={this.columns}
         />
-        <div className={styles[`crl-statements-diagnostics-view__footer`]}>
+        <div className={cx("crl-statements-diagnostics-view__footer")}>
           <Link to="/reports/statements/diagnosticshistory">All statement diagnostics</Link>
         </div>
         <DownloadFile ref={this.downloadRef}/>
