@@ -20,6 +20,8 @@
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
 /pkg/cli/dump.go             @cockroachdb/bulk-prs
 
+/pkg/geo                     @cockroachdb/geospatial
+
 /pkg/ui/                     @cockroachdb/admin-ui-prs
 /pkg/ui/embedded.go
 /pkg/ui/src/js/protos.d.ts
