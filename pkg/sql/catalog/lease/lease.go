@@ -1931,14 +1931,20 @@ func (m *Manager) watchForGossipUpdates(
 	g gossip.DeprecatedGossip,
 	tableUpdateCh chan<- *sqlbase.TableDescriptor,
 ) {
-	if _, err := g.OptionalErr(47150); err != nil {
-		log.Fatalf(ctx, "required gossip until %v is active: %v", clusterversion.VersionRangefeedLeases, err)
+	rawG, err := g.OptionalErr(47150)
+	if err != nil {
+		if v := clusterversion.VersionRangefeedLeases; !m.settings.Version.IsActive(ctx, v) {
+			log.Fatalf(ctx, "required gossip until %v is active: %v", clusterversion.VersionRangefeedLeases, err)
+		}
+		return
 	}
 
 	s.RunWorker(ctx, func(ctx context.Context) {
 		descKeyPrefix := m.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		// TODO(ajwerner): Add a mechanism to unregister this channel upon return.
-		gossipUpdateC := g.DeprecatedRegisterSystemConfigChannel(47150)
+		// NB: this call is allowed to bypass DeprecatedGossip because we'll never
+		// get here after VersionRangefeedLeases.
+		gossipUpdateC := rawG.RegisterSystemConfigChannel()
 		filter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 
 		ctx, cancel := s.WithCancelOnQuiesce(ctx)
@@ -1946,7 +1952,7 @@ func (m *Manager) watchForGossipUpdates(
 		for {
 			select {
 			case <-gossipUpdateC:
-				m.handleUpdatedSystemCfg(ctx, g, &filter, tableUpdateCh)
+				m.handleUpdatedSystemCfg(ctx, rawG, &filter, tableUpdateCh)
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -2051,11 +2057,11 @@ func (m *Manager) watchForRangefeedUpdates(
 
 func (m *Manager) handleUpdatedSystemCfg(
 	ctx context.Context,
-	g gossip.DeprecatedGossip,
+	rawG *gossip.Gossip,
 	cfgFilter *gossip.SystemConfigDeltaFilter,
 	tableUpdateChan chan<- *sqlbase.TableDescriptor,
 ) {
-	cfg := g.DeprecatedSystemConfig(47150)
+	cfg := rawG.GetSystemConfig()
 	// Read all tables and their versions
 	if log.V(2) {
 		log.Info(ctx, "received a new config; will refresh leases")
