@@ -3665,67 +3665,6 @@ func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
 	return exprs
 }
 
-// TypeName returns the plain type of this descriptor.
-func (desc *DatabaseDescriptor) TypeName() string {
-	return "database"
-}
-
-// SetName implements the DescriptorProto interface.
-func (desc *DatabaseDescriptor) SetName(name string) {
-	desc.Name = name
-}
-
-// DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) DatabaseDesc() *DatabaseDescriptor {
-	return desc
-}
-
-// SchemaDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) SchemaDesc() *SchemaDescriptor {
-	return nil
-}
-
-// TableDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) TableDesc() *TableDescriptor {
-	return nil
-}
-
-// TypeDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
-	return nil
-}
-
-// NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) NameResolutionResult() {}
-
-// DescriptorProto wraps a DatabaseDescriptor in a Descriptor.
-//
-// TODO(ajwerner): Lift this into the DatabaseDescriptorInterface
-// implementations.
-func (desc *DatabaseDescriptor) DescriptorProto() *Descriptor {
-	return wrapDescriptor(desc)
-}
-
-// Validate validates that the database descriptor is well formed.
-// Checks include validate the database name, and verifying that there
-// is at least one read and write user.
-func (desc *DatabaseDescriptor) Validate() error {
-	if err := validateName(desc.Name, "descriptor"); err != nil {
-		return err
-	}
-	if desc.ID == 0 {
-		return fmt.Errorf("invalid database ID %d", desc.ID)
-	}
-
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
-	desc.Privileges.MaybeFixPrivileges(desc.GetID())
-
-	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
-}
-
 // GetID returns the ID of the descriptor.
 func (desc *Descriptor) GetID() ID {
 	switch t := desc.Union.(type) {
@@ -4185,12 +4124,6 @@ func (desc *TableDescriptor) SetAuditMode(mode tree.AuditMode) (bool, error) {
 			"unknown audit mode: %s (%d)", mode, mode)
 	}
 	return prev != desc.AuditMode, nil
-}
-
-// GetAuditMode is part of the DescriptorProto interface.
-// This is a stub until per-database auditing is enabled.
-func (desc *DatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
 }
 
 // FindAllReferences returns all the references from a table.
