@@ -4081,28 +4081,30 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 func TestTruncateWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/43990")
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 50 * time.Millisecond
 
 	backfillNotification := make(chan struct{})
 	backfillCount := int64(0)
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		// Runs schema changes asynchronously.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): if/when this test gets reinstated, figure out what knobs are
-			// needed.
+			BackfillChunkSize: 100,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				switch atomic.LoadInt64(&backfillCount) {
-				case 3:
+				case 2:
 					// Notify in the middle of a backfill.
 					if backfillNotification != nil {
 						close(backfillNotification)
 						backfillNotification = nil
 					}
 					// Never complete the backfill.
-					return context.DeadlineExceeded
+					//return context.DeadlineExceeded
+					return nil
 				default:
 					atomic.AddInt64(&backfillCount, 1)
 				}
@@ -4121,44 +4123,44 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
-	const maxValue = 5000
+	maxValue := 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		// We expect this to also reduce the memory footprint of the test.
+		maxValue = 300
+	}
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
 	notify := backfillNotification
 
-	const add_column = `ALTER TABLE t.public.test ADD COLUMN x DECIMAL NOT NULL DEFAULT 1.4::DECIMAL, ADD CHECK (x >= 0)`
-	if _, err := sqlDB.Exec(add_column); err != nil {
-		t.Fatal(err)
-	}
-
-	const drop_column = `ALTER TABLE t.public.test DROP COLUMN v`
-	if _, err := sqlDB.Exec(drop_column); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check that an outstanding schema change exists.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	oldID := tableDesc.ID
-	if lenMutations := len(tableDesc.Mutations); lenMutations != 3 {
-		t.Fatalf("%d outstanding schema change", lenMutations)
-	}
-
-	// Run TRUNCATE.
 	var wg sync.WaitGroup
 	wg.Add(1)
+	const add_column = `ALTER TABLE t.test ADD COLUMN x DECIMAL NOT NULL DEFAULT 1.4::DECIMAL, ADD CHECK (x >= 0)`
 	go func() {
-		<-notify
-		if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+		if _, err := sqlDB.Exec(add_column); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
 	}()
+
+	const drop_column = `ALTER TABLE t.test DROP COLUMN v`
+	if _, err := sqlDB.Exec(drop_column); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for backfill to have started.
+	<-notify
+	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for ADD COLUMN to complete.
 	wg.Wait()
 
 	// The new table is truncated.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(context.Background(), tablePrefix, tableEnd, 0); err != nil {
@@ -4179,26 +4181,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) != 1 {
 		t.Fatalf("expected 1 check, found %d", len(checks))
-	}
-
-	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
-		Description: add_column,
-		DescriptorIDs: sqlbase.IDs{
-			oldID,
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
-		Description: drop_column,
-		DescriptorIDs: sqlbase.IDs{
-			oldID,
-		},
-	}); err != nil {
-		t.Fatal(err)
 	}
 }
 

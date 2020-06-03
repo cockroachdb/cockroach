@@ -3208,47 +3208,40 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 		switch t := m.Descriptor_.(type) {
 		case *DescriptorMutation_Column:
 			desc.AddColumn(t.Column)
-
 		case *DescriptorMutation_Index:
 			if err := desc.AddIndex(*t.Index, false); err != nil {
 				return err
 			}
-
 		case *DescriptorMutation_Constraint:
 			switch t.Constraint.ConstraintType {
 			case ConstraintToUpdate_CHECK:
-				switch t.Constraint.Check.Validity {
-				case ConstraintValidity_Validating:
-					// Constraint already added, just mark it as Validated
-					for _, c := range desc.Checks {
-						if c.Name == t.Constraint.Name {
-							c.Validity = ConstraintValidity_Validated
-							break
-						}
+				var found bool
+				for _, c := range desc.Checks {
+					if t.Constraint.Check.Name == c.Name {
+						c.Validity = ConstraintValidity_Validated
+						found = true
+						break
 					}
-				case ConstraintValidity_Unvalidated:
-					// add the constraint to the list of check constraints on the table
-					// descriptor
+				}
+				if !found {
+					t.Constraint.Check.Validity = ConstraintValidity_Validated
 					desc.Checks = append(desc.Checks, &t.Constraint.Check)
-				default:
-					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case ConstraintToUpdate_FOREIGN_KEY:
-				switch t.Constraint.ForeignKey.Validity {
-				case ConstraintValidity_Validating:
-					// Constraint already added, just mark it as Validated
-					for i := range desc.OutboundFKs {
-						fk := &desc.OutboundFKs[i]
-						if fk.Name == t.Constraint.Name {
-							fk.Validity = ConstraintValidity_Validated
-							break
-						}
+				var found bool
+				for i := range desc.OutboundFKs {
+					fk := &desc.OutboundFKs[i]
+					if fk.Name == t.Constraint.Name {
+						found = true
+						fk.Validity = ConstraintValidity_Validated
+						break
 					}
-				case ConstraintValidity_Unvalidated:
+				}
+				if !found {
+					t.Constraint.ForeignKey.Validity = ConstraintValidity_Validated
 					// Takes care of adding the Foreign Key to the table index. Adding the
 					// backreference to the referenced table index must be taken care of
 					// in another call.
-					// TODO (tyler): Combine both of these tasks in the same place.
 					desc.OutboundFKs = append(desc.OutboundFKs, t.Constraint.ForeignKey)
 				}
 			case ConstraintToUpdate_NOT_NULL:
