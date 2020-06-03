@@ -138,7 +138,6 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			rw,
 			stmt.AST.StatementType(),
 			execCfg.RangeDescriptorCache,
-			execCfg.LeaseHolderCache,
 			txn,
 			func(ts hlc.Timestamp) {
 				execCfg.Clock.Update(ts)
@@ -201,7 +200,6 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		rw,
 		tree.Rows, /* StatementType */
 		nil,       /* rangeCache */
-		nil,       /* leaseCache */
 		txn,
 		func(hlc.Timestamp) {}, /* updateClock */
 		&SessionTracing{},

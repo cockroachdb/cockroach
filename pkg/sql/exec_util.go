@@ -661,9 +661,9 @@ type ExecutorConfig struct {
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
-	// Caches updated by DistSQL.
+	// RangeDescriptorCache is updated by DistSQL when it finds out about
+	// misplanned spans.
 	RangeDescriptorCache *kvcoord.RangeDescriptorCache
-	LeaseHolderCache     *kvcoord.LeaseHolderCache
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache

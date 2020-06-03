@@ -285,7 +285,7 @@ func TestClusterFlow(t *testing.T) {
 }
 
 // ignoreMisplannedRanges takes a slice of metadata and returns the entries that
-// are not about range info from mis-planned ranges.
+// are not about range info from misplanned ranges.
 func ignoreMisplannedRanges(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
 	res := make([]execinfrapb.ProducerMetadata, 0)
 	for _, m := range metas {
