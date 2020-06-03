@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -55,15 +55,6 @@ import (
 // but we want to exclude these violations, focusing only on cases in which we
 // know old CRDB versions (<19.1 at time of writing) were not involved.
 var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
-
-const (
-	// collectChecksumTimeout controls how long we'll wait to collect a checksum
-	// for a CheckConsistency request. We need to bound the time that we wait
-	// because the checksum might never be computed for a replica if that replica
-	// is caught up via a snapshot and never performs the ComputeChecksum
-	// operation.
-	collectChecksumTimeout = 15 * time.Second
-)
 
 // ReplicaChecksum contains progress on a replica checksum computation.
 type ReplicaChecksum struct {
@@ -372,17 +363,11 @@ func (r *Replica) RunConsistencyCheck(
 			func(ctx context.Context) {
 				defer wg.Done()
 
-				var resp CollectChecksumResponse
-				err := contextutil.RunWithTimeout(ctx, "collect checksum", collectChecksumTimeout,
-					func(ctx context.Context) error {
-						var masterChecksum []byte
-						if len(results) > 0 {
-							masterChecksum = results[0].Response.Checksum
-						}
-						var err error
-						resp, err = r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
-						return err
-					})
+				var masterChecksum []byte
+				if len(results) > 0 {
+					masterChecksum = results[0].Response.Checksum
+				}
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
@@ -505,6 +490,7 @@ func (r *Replica) sha512(
 	snap storage.Reader,
 	snapshot *roachpb.RaftSnapshotData,
 	mode roachpb.ChecksumMode,
+	limiter *limit.LimiterBurstDisabled,
 ) (*replicaHash, error) {
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
@@ -519,6 +505,11 @@ func (r *Replica) sha512(
 	hasher := sha512.New()
 
 	visitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
+		// Rate Limit the scan through the range
+		if err := limiter.WaitN(ctx, len(unsafeKey.Key)+len(unsafeValue)); err != nil {
+			return err
+		}
+
 		if snapshot != nil {
 			// Add (a copy of) the kv pair into the debug message.
 			kv := roachpb.RaftSnapshotData_KeyValue{
