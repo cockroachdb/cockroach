@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
@@ -332,8 +333,11 @@ func (ru *Updater) UpdateRow(
 		// deletes of keys that aren't present. We choose to make this
 		// compromise in order to avoid having to read all values of
 		// the row that is being updated.
+		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+		// not delete entries from.
+		var ignoreIndexes util.FastIntSet
 		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(
-			ru.FetchColIDtoRowIndex, oldValues, true /* includeEmpty */)
+			ru.FetchColIDtoRowIndex, oldValues, ignoreIndexes, true /* includeEmpty */)
 		if err != nil {
 			return nil, err
 		}
@@ -442,8 +446,11 @@ func (ru *Updater) UpdateRow(
 		if err := ru.rd.DeleteRow(ctx, batch, oldValues, SkipFKs, traceKV); err != nil {
 			return nil, err
 		}
+		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+		// not write entries to.
+		var ignoreIndexes util.FastIntSet
 		if err := ru.ri.InsertRow(
-			ctx, batch, ru.newValues, false /* ignoreConflicts */, SkipFKs, traceKV,
+			ctx, batch, ru.newValues, ignoreIndexes, false /* ignoreConflicts */, SkipFKs, traceKV,
 		); err != nil {
 			return nil, err
 		}

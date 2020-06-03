@@ -733,6 +733,9 @@ type Index struct {
 	// partitionBy is the partitioning clause that corresponds to this index. Used
 	// to implement PartitionByListPrefixes.
 	partitionBy *tree.PartitionBy
+
+	// predicate is the partial index predicate expression, if it exists.
+	predicate string
 }
 
 // ID is part of the cat.Index interface.
@@ -793,6 +796,13 @@ func (ti *Index) Zone() cat.Zone {
 // Span is part of the cat.Index interface.
 func (ti *Index) Span() roachpb.Span {
 	panic("not implemented")
+}
+
+// Predicate is part of the cat.Index interface. It returns the predicate
+// expression and true if the index is a partial index. If the index is not
+// partial, the empty string and false is returned.
+func (ti *Index) Predicate() (string, bool) {
+	return ti.predicate, ti.predicate != ""
 }
 
 // PartitionByListPrefixes is part of the cat.Index interface.
