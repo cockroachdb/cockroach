@@ -985,13 +985,7 @@ func runBatchApplyBatchRepr(
 }
 
 func runExportToSst(
-	ctx context.Context,
-	b *testing.B,
-	emk engineMaker,
-	numKeys int,
-	numRevisions int,
-	exportAllRevisions bool,
-	contention bool,
+	b *testing.B, emk engineMaker, numKeys int, numRevisions int, exportAllRevisions bool,
 ) {
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
