@@ -1077,6 +1077,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`.*\.lock`),
 			stream.GrepNot(`^storage\/rocksdb_error_dict\.go$`),
 			stream.GrepNot(`^workload/tpcds/tpcds.go$`),
+			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)
 			}),
