@@ -753,6 +753,7 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store
 // TODO(andrei): This method takes inexplicably long.
 // I think it shouldn't need any retries. See #38565.
 func (tc *TestCluster) WaitForFullReplication() error {
+	log.Infof(context.TODO(), "WaitForFullReplication")
 	start := timeutil.Now()
 	defer func() {
 		end := timeutil.Now()
@@ -872,6 +873,17 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 // ReplicationMode implements TestClusterInterface.
 func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 	return tc.replicationMode
+}
+
+// ToggleReplicateQueues activates or deactivates the replication queues on all
+// the stores on all the nodes.
+func (tc *TestCluster) ToggleReplicateQueues(active bool) {
+	for _, s := range tc.Servers {
+		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
+			store.SetReplicateQueueActive(active)
+			return nil
+		})
+	}
 }
 
 type testClusterFactoryImpl struct{}
