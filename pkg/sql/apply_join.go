@@ -234,7 +234,6 @@ func runPlanInsidePlan(
 	recv := MakeDistSQLReceiver(
 		params.ctx, rowResultWriter, tree.Rows,
 		params.extendedEvalCtx.ExecCfg.RangeDescriptorCache,
-		params.extendedEvalCtx.ExecCfg.LeaseHolderCache,
 		params.p.Txn(),
 		func(ts hlc.Timestamp) {
 			params.extendedEvalCtx.ExecCfg.Clock.Update(ts)
