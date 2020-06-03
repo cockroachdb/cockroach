@@ -126,7 +126,7 @@ type Collection struct {
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
-	allDatabaseDescriptors []*sqlbase.DatabaseDescriptor
+	allDatabaseDescriptors []*sqlbase.ImmutableDatabaseDescriptor
 
 	// allSchemasForDatabase maps databaseID -> schemaID -> schemaName.
 	// For each databaseID, all schemas visible under the database can be
@@ -799,7 +799,7 @@ func (tc *Collection) GetAllDescriptors(
 // in the database cache, if necessary.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]*sqlbase.DatabaseDescriptor, error) {
+) ([]*sqlbase.ImmutableDatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {

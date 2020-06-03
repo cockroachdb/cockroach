@@ -33,7 +33,7 @@ import (
 
 type dropDatabaseNode struct {
 	n               *tree.DropDatabase
-	dbDesc          *sqlbase.DatabaseDescriptor
+	dbDesc          *sqlbase.ImmutableDatabaseDescriptor
 	td              []toDelete
 	schemasToDelete []string
 }

@@ -77,11 +77,11 @@ func (oc *optCatalog) reset() {
 	oc.cfg = oc.planner.execCfg.Gossip.DeprecatedSystemConfig(47150)
 }
 
-// optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
-// cat.Object and cat.Schema interfaces.
+// optSchema is a wrapper around sqlbase.ImmutableDatabaseDescriptor that
+// implements the cat.Object and cat.Schema interfaces.
 type optSchema struct {
 	planner *planner
-	desc    *sqlbase.DatabaseDescriptor
+	desc    *sqlbase.ImmutableDatabaseDescriptor
 
 	name cat.SchemaName
 }
@@ -153,7 +153,7 @@ func (oc *optCatalog) ResolveSchema(
 	}
 	return &optSchema{
 		planner: oc.planner,
-		desc:    desc.(*DatabaseDescriptor),
+		desc:    desc.(*sqlbase.ImmutableDatabaseDescriptor),
 		name:    oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil
 }
@@ -1324,7 +1324,7 @@ func newOptVirtualTable(
 			// both cases.
 			id |= cat.StableID(math.MaxUint32) << 32
 		} else {
-			id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
+			id |= cat.StableID(dbDesc.(*sqlbase.ImmutableDatabaseDescriptor).ID) << 32
 		}
 	}
 

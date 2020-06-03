@@ -142,7 +142,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *sqlbase.DatabaseDescriptor:
+		case *sqlbase.ImmutableDatabaseDescriptor:
 			if err := d.Validate(); err != nil {
 				return err
 			}

@@ -75,7 +75,7 @@ func UnwrapDescriptor(desc *Descriptor) DescriptorInterface {
 		return schemaDesc
 	}
 	if dbDesc := desc.GetDatabase(); dbDesc != nil {
-		return dbDesc
+		return NewImmutableDatabaseDescriptor(*dbDesc)
 	}
 	panic(errors.Errorf("unknown descriptor type %+v", desc))
 }

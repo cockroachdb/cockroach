@@ -36,7 +36,7 @@ type createViewNode struct {
 	ifNotExists bool
 	replace     bool
 	temporary   bool
-	dbDesc      *sqlbase.DatabaseDescriptor
+	dbDesc      *sqlbase.ImmutableDatabaseDescriptor
 	columns     sqlbase.ResultColumns
 
 	// planDeps tracks which tables and views the view being created

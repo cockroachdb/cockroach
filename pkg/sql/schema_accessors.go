@@ -40,7 +40,7 @@ type (
 	DatabaseDescriptor = sqlbase.DatabaseDescriptor
 	// UncachedDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	UncachedDatabaseDescriptor = sqlbase.DatabaseDescriptor
+	UncachedDatabaseDescriptor = sqlbase.ImmutableDatabaseDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	MutableTableDescriptor = sqlbase.MutableTableDescriptor
