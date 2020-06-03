@@ -56,12 +56,13 @@ type flowWithNode struct {
 func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistribute := willDistributePlanForExplainPurposes(
+	distribution := getPlanDistributionForExplainPurposes(
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan,
 	)
+	willDistribute := distribution.willDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistribute)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.stmtType, n.subqueryPlans, distribution)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
@@ -145,9 +146,9 @@ func newPlanningCtxForExplainPurposes(
 	params runParams,
 	stmtType tree.StatementType,
 	subqueryPlans []subquery,
-	willDistribute bool,
+	distribution planDistribution,
 ) *PlanningCtx {
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, willDistribute)
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, distribution.willDistribute())
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = stmtType

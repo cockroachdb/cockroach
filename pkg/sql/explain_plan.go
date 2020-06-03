@@ -188,14 +188,15 @@ func populateExplain(
 ) error {
 	// Determine the "distributed" and "vectorized" values, which we will emit as
 	// special rows.
-	var willDistribute, willVectorize bool
+	var willVectorize bool
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistribute = willDistributePlanForExplainPurposes(
+	distribution := getPlanDistributionForExplainPurposes(
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)
+	willDistribute := distribution.willDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, stmtType, plan.subqueryPlans, willDistribute)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, stmtType, plan.subqueryPlans, distribution)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()

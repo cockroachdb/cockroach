@@ -249,6 +249,55 @@ func (a distRecommendation) compose(b distRecommendation) distRecommendation {
 	return canDistribute
 }
 
+type planDistribution int
+
+const (
+	// localPlan indicates that the whole plan is executed on a single node.
+	localPlan planDistribution = iota
+
+	// partiallyDistributedPlan indicates that some parts of the plan are
+	// distributed while other parts are not (due to limitations of DistSQL).
+	// Note that such plans can only be created by distSQLSpecExecFactory.
+	//
+	// An example of such plan is the plan with distributed scans that have a
+	// filter which operates with an OID type (DistSQL currently doesn't
+	// support distributed operations with such type). As a result, we end
+	// up planning a noop processor on a local node that receives all scanned
+	// rows from the remote nodes while performing the filtering locally.
+	partiallyDistributedPlan
+
+	// fullyDistributedPlan indicates the the whole plan is distributed.
+	fullyDistributedPlan
+)
+
+// willDistribute is a small helper that returns whether at least a part of the
+// plan is distributed.
+func (a planDistribution) willDistribute() bool {
+	return a != localPlan
+}
+
+func (a planDistribution) String() string {
+	switch a {
+	case localPlan:
+		return "local"
+	case partiallyDistributedPlan:
+		return "partial"
+	case fullyDistributedPlan:
+		return "full"
+	default:
+		panic(fmt.Sprintf("unsupported planDistribution %d", a))
+	}
+}
+
+// compose returns the distribution indicator of a plan given indicators for
+// two parts of it.
+func (a planDistribution) compose(b planDistribution) planDistribution {
+	if a != b {
+		return partiallyDistributedPlan
+	}
+	return a
+}
+
 type queryNotSupportedError struct {
 	msg string
 }
