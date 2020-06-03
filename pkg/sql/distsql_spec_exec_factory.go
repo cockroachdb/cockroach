@@ -168,7 +168,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	evalCtx := e.planner.ExtendedEvalContext()
 	planCtx := e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
 	err = e.dsp.planTableReaders(
-		planCtx, &p, trSpec, post, tabDesc, spans, reverse, colCfg, maxResults,
+		planCtx, &p, trSpec, post, tabDesc, spans, reverse, colCfg.visibility, maxResults,
 		uint64(rowCount), ReqOrdering(reqOrdering), cols, colsForScanToTableOrdinalMap,
 	)
 
