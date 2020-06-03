@@ -125,7 +125,6 @@ func (dsp *DistSQLPlanner) Exec(
 		rw,
 		stmt.AST.StatementType(),
 		execCfg.RangeDescriptorCache,
-		execCfg.LeaseHolderCache,
 		p.txn,
 		func(ts hlc.Timestamp) {
 			execCfg.Clock.Update(ts)

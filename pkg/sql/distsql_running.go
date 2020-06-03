@@ -439,8 +439,8 @@ func (dsp *DistSQLPlanner) Run(
 // This is where the DistSQL execution meets the SQL Session - the RowContainer
 // comes from a client Session.
 //
-// DistSQLReceiver also update the RangeDescriptorCache and the LeaseholderCache
-// in response to DistSQL metadata about misplanned ranges.
+// DistSQLReceiver also update the RangeDescriptorCache in response to DistSQL
+// metadata about misplanned ranges.
 type DistSQLReceiver struct {
 	ctx context.Context
 
@@ -480,7 +480,6 @@ type DistSQLReceiver struct {
 	closed bool
 
 	rangeCache *kvcoord.RangeDescriptorCache
-	leaseCache *kvcoord.LeaseHolderCache
 	tracing    *SessionTracing
 	cleanup    func()
 
@@ -574,7 +573,6 @@ func MakeDistSQLReceiver(
 	resultWriter rowResultWriter,
 	stmtType tree.StatementType,
 	rangeCache *kvcoord.RangeDescriptorCache,
-	leaseCache *kvcoord.LeaseHolderCache,
 	txn *kv.Txn,
 	updateClock func(observedTs hlc.Timestamp),
 	tracing *SessionTracing,
@@ -586,7 +584,6 @@ func MakeDistSQLReceiver(
 		cleanup:      cleanup,
 		resultWriter: resultWriter,
 		rangeCache:   rangeCache,
-		leaseCache:   leaseCache,
 		txn:          txn,
 		updateClock:  updateClock,
 		stmtType:     stmtType,
@@ -609,7 +606,6 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 		ctx:         r.ctx,
 		cleanup:     func() {},
 		rangeCache:  r.rangeCache,
-		leaseCache:  r.leaseCache,
 		txn:         r.txn,
 		updateClock: r.updateClock,
 		stmtType:    tree.Rows,
@@ -793,26 +789,16 @@ func (r *DistSQLReceiver) Types() []*types.T {
 
 // updateCaches takes information about some ranges that were mis-planned and
 // updates the range descriptor and lease-holder caches accordingly.
-//
-// TODO(andrei): updating these caches is not perfect: we can clobber newer
-// information that someone else has populated because there's no timing info
-// anywhere. We also may fail to remove stale info from the LeaseHolderCache if
-// the ids of the ranges that we get are different than the ids in that cache.
 func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) {
 	// Update the RangeDescriptorCache.
-	rngDescs := make([]*kvbase.RangeCacheEntry, len(ranges))
+	rngInfos := make([]*kvbase.RangeCacheEntry, len(ranges))
 	for i, ri := range ranges {
-		rngDescs[i] = &kvbase.RangeCacheEntry{
+		rngInfos[i] = &kvbase.RangeCacheEntry{
 			Desc:  ri.Desc,
 			Lease: ri.Lease,
 		}
 	}
-	r.rangeCache.Insert(ctx, rngDescs...)
-
-	// Update the LeaseHolderCache.
-	for _, ri := range ranges {
-		r.leaseCache.Update(ctx, ri.Desc.RangeID, ri.Lease.Replica.StoreID)
-	}
+	r.rangeCache.Insert(ctx, rngInfos...)
 }
 
 // PlanAndRunSubqueries returns false if an error was encountered and sets that

@@ -245,7 +245,6 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		resultRows,
 		tree.DDL,
 		evalCtx.ExecCfg.RangeDescriptorCache,
-		evalCtx.ExecCfg.LeaseHolderCache,
 		txn,
 		func(ts hlc.Timestamp) {
 			evalCtx.ExecCfg.Clock.Update(ts)

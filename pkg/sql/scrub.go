@@ -477,7 +477,6 @@ func scrubRunDistSQL(
 		rowResultWriter,
 		tree.Rows,
 		p.ExecCfg().RangeDescriptorCache,
-		p.ExecCfg().LeaseHolderCache,
 		p.txn,
 		func(ts hlc.Timestamp) {
 			p.ExecCfg().Clock.Update(ts)

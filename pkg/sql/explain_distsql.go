@@ -126,7 +126,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			rw,
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
-			execCfg.LeaseHolderCache,
 			params.p.txn,
 			func(ts hlc.Timestamp) {
 				execCfg.Clock.Update(ts)
@@ -199,7 +198,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			rw,
 			stmtType,
 			execCfg.RangeDescriptorCache,
-			execCfg.LeaseHolderCache,
 			newParams.p.txn,
 			func(ts hlc.Timestamp) {
 				execCfg.Clock.Update(ts)
@@ -254,7 +252,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			rw,
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
-			execCfg.LeaseHolderCache,
 			params.p.txn,
 			func(ts hlc.Timestamp) {
 				execCfg.Clock.Update(ts)
