@@ -1375,9 +1375,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := idalloc.NewAllocator(
-		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, rangeIDAllocCount, s.stopper,
-	)
+	idAlloc, err := idalloc.NewAllocator(idalloc.Options{
+		AmbientCtx:  s.cfg.AmbientCtx,
+		Key:         keys.RangeIDGenerator,
+		Incrementer: idalloc.DBIncrementer(s.db),
+		BlockSize:   rangeIDAllocCount,
+		Stopper:     s.stopper,
+	})
 	if err != nil {
 		return err
 	}
