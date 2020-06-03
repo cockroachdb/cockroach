@@ -96,7 +96,7 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 53             test_kv          NULL      54               fk                 NULL                   NULL               NULL
 53             test_kv          NULL      55               fk                 NULL                   NULL               NULL
 53             test_kv          NULL      56               fk                 NULL                   NULL               NULL
-53             test_kv          NULL      59               view               0                      NULL               Columns: [1 2 3]
+53             test_kv          NULL      59               view               0                      NULL               Columns: [2]
 53             test_kv          1         57               interleave         1                      NULL               SharedPrefixLen: 0
 53             test_kv          1         58               interleave         2                      NULL               SharedPrefixLen: 0
 59             test_v1          NULL      60               view               0                      NULL               Columns: [1]
@@ -116,7 +116,7 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-61             moretest_t       NULL      62               view               0                      NULL               Columns: [1 2 3]
+61             moretest_t       NULL      62               view               0                      NULL               Columns: [2]
 
 # Check sequence dependencies.
 
