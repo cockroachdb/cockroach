@@ -376,23 +376,113 @@ Square (left)                             1     1     0     4
 Square (right)                            1     1     0     4
 Square overlapping left and right square  1.1   1.1   0     4.2
 
-query TT
+# Topology operators.
+
+query TTT
 SELECT
   a.dsc,
-  ST_AsEWKT(ST_Centroid(a.geom))
+  b.dsc,
+  ST_AsEWKT(ST_Union(a.geom, b.geom))
+FROM geom_operators_test a
+JOIN geom_operators_test b ON (1=1)
+WHERE a.dsc NOT LIKE '%Empty%' and b.dsc NOT LIKE '%Empty%' -- Remove after #49209 is resolved.
+ORDER BY a.dsc, b.dsc
+----
+Faraway point                             Faraway point                             POINT (5 5)
+Faraway point                             Line going through left and right square  GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))
+Faraway point                             NULL                                      NULL
+Faraway point                             Point middle of Left Square               MULTIPOINT (5 5, -0.5 0.5)
+Faraway point                             Point middle of Right Square              MULTIPOINT (5 5, 0.5 0.5)
+Faraway point                             Square (left)                             GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
+Faraway point                             Square (right)                            GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
+Faraway point                             Square overlapping left and right square  GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
+Line going through left and right square  Faraway point                             GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))
+Line going through left and right square  Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
+Line going through left and right square  NULL                                      NULL
+Line going through left and right square  Point middle of Left Square               LINESTRING (-0.5 0.5, 0.5 0.5)
+Line going through left and right square  Point middle of Right Square              LINESTRING (-0.5 0.5, 0.5 0.5)
+Line going through left and right square  Square (left)                             GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))
+Line going through left and right square  Square (right)                            GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))
+Line going through left and right square  Square overlapping left and right square  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))
+NULL                                      Faraway point                             NULL
+NULL                                      Line going through left and right square  NULL
+NULL                                      NULL                                      NULL
+NULL                                      Point middle of Left Square               NULL
+NULL                                      Point middle of Right Square              NULL
+NULL                                      Square (left)                             NULL
+NULL                                      Square (right)                            NULL
+NULL                                      Square overlapping left and right square  NULL
+Point middle of Left Square               Faraway point                             MULTIPOINT (-0.5 0.5, 5 5)
+Point middle of Left Square               Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
+Point middle of Left Square               NULL                                      NULL
+Point middle of Left Square               Point middle of Left Square               POINT (-0.5 0.5)
+Point middle of Left Square               Point middle of Right Square              MULTIPOINT (-0.5 0.5, 0.5 0.5)
+Point middle of Left Square               Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Point middle of Left Square               Square (right)                            GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
+Point middle of Left Square               Square overlapping left and right square  GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
+Point middle of Right Square              Faraway point                             MULTIPOINT (0.5 0.5, 5 5)
+Point middle of Right Square              Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
+Point middle of Right Square              NULL                                      NULL
+Point middle of Right Square              Point middle of Left Square               MULTIPOINT (0.5 0.5, -0.5 0.5)
+Point middle of Right Square              Point middle of Right Square              POINT (0.5 0.5)
+Point middle of Right Square              Square (left)                             GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
+Point middle of Right Square              Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+Point middle of Right Square              Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
+Square (left)                             Faraway point                             GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))
+Square (left)                             Line going through left and right square  GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))
+Square (left)                             NULL                                      NULL
+Square (left)                             Point middle of Left Square               POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Square (left)                             Point middle of Right Square              GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (0.5 0.5))
+Square (left)                             Square (left)                             POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0))
+Square (left)                             Square (right)                            POLYGON ((0 0, -1 0, -1 1, 0 1, 1 1, 1 0, 0 0))
+Square (left)                             Square overlapping left and right square  POLYGON ((-0.1 0, -1 0, -1 1, -0.1 1, 0 1, 1 1, 1 0, 0 0, -0.1 0))
+Square (right)                            Faraway point                             GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))
+Square (right)                            Line going through left and right square  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))
+Square (right)                            NULL                                      NULL
+Square (right)                            Point middle of Left Square               GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (-0.5 0.5))
+Square (right)                            Point middle of Right Square              POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+Square (right)                            Square (left)                             POLYGON ((0 1, 1 1, 1 0, 0 0, -1 0, -1 1, 0 1))
+Square (right)                            Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))
+Square (right)                            Square overlapping left and right square  POLYGON ((1 0, 0 0, -0.1 0, -0.1 1, 0 1, 1 1, 1 0))
+Square overlapping left and right square  Faraway point                             GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))
+Square overlapping left and right square  Line going through left and right square  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))
+Square overlapping left and right square  NULL                                      NULL
+Square overlapping left and right square  Point middle of Left Square               GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (-0.5 0.5))
+Square overlapping left and right square  Point middle of Right Square              POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
+Square overlapping left and right square  Square (left)                             POLYGON ((0 0, -0.1 0, -1 0, -1 1, -0.1 1, 0 1, 1 1, 1 0, 0 0))
+Square overlapping left and right square  Square (right)                            POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 1 1, 1 0, 0 0))
+Square overlapping left and right square  Square overlapping left and right square  POLYGON ((1 0, -0.1 0, -0.1 1, 1 1, 1 0))
+
+query TTT
+SELECT
+  a.dsc,
+  b.dsc,
+  ST_AsEWKT(ST_Intersection(a.geom, b.geom))
+FROM geom_operators_test a
+JOIN geom_operators_test b ON (1=1)
+WHERE a.dsc = 'Square (left)' and b.dsc = 'Square (right)' -- Remove after #49209 is resolved.
+ORDER BY a.dsc, b.dsc
+----
+Square (left)  Square (right)  LINESTRING (0 0, 0 1)
+
+query TTT
+SELECT
+  a.dsc,
+  ST_AsEWKT(ST_Centroid(a.geom)),
+  ST_AsEWKT(ST_PointOnSurface(a.geom))
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  POINT EMPTY
-Empty LineString                          POINT EMPTY
-Faraway point                             POINT (5 5)
-Line going through left and right square  POINT (0 0.5)
-NULL                                      NULL
-Point middle of Left Square               POINT (-0.5 0.5)
-Point middle of Right Square              POINT (0.5 0.5)
-Square (left)                             POINT (-0.5 0.5)
-Square (right)                            POINT (0.5 0.5)
-Square overlapping left and right square  POINT (0.4499999999999999 0.5)
+Empty GeometryCollection                  POINT EMPTY                     POINT EMPTY
+Empty LineString                          POINT EMPTY                     POINT EMPTY
+Faraway point                             POINT (5 5)                     POINT (5 5)
+Line going through left and right square  POINT (0 0.5)                   POINT (-0.5 0.5)
+NULL                                      NULL                            NULL
+Point middle of Left Square               POINT (-0.5 0.5)                POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)                 POINT (0.5 0.5)
+Square (left)                             POINT (-0.5 0.5)                POINT (-0.5 0.5)
+Square (right)                            POINT (0.5 0.5)                 POINT (0.5 0.5)
+Square overlapping left and right square  POINT (0.4499999999999999 0.5)  POINT (0.45 0.5)
 
 # Functions which take in strings as input as well.
 query TT

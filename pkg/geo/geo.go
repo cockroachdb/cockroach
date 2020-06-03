@@ -241,6 +241,12 @@ func (g *Geometry) BoundingBoxIntersects(o *Geometry) bool {
 	return g.SpatialObject.BoundingBox.Intersects(o.SpatialObject.BoundingBox)
 }
 
+// Layout returns the geom layout of the given geometry.
+func (g *Geometry) Layout() geom.Layout {
+	// We are currently always 2D.
+	return geom.XY
+}
+
 //
 // Geography
 //

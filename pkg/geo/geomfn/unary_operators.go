@@ -19,25 +19,6 @@ import (
 	"github.com/twpayne/go-geom/encoding/ewkb"
 )
 
-// Centroid returns the Centroid of a given Geometry.
-func Centroid(g *geo.Geometry) (*geo.Geometry, error) {
-	// Empty geometries do not react well in GEOS, so we have to
-	// convert and check beforehand.
-	// Remove after #49209 is resolved.
-	t, err := g.AsGeomT()
-	if err != nil {
-		return nil, err
-	}
-	if t.Empty() {
-		return geo.NewGeometryFromGeom(geom.NewPointEmpty(geom.XY))
-	}
-	centroidEWKB, err := geos.Centroid(g.EWKB())
-	if err != nil {
-		return nil, err
-	}
-	return geo.ParseGeometryFromEWKB(centroidEWKB)
-}
-
 // Length returns the length of a given Geometry.
 // Note only (MULTI)LINESTRING objects have a length.
 // (MULTI)POLYGON objects should use Perimeter.
