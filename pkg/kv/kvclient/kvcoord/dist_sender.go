@@ -450,10 +450,6 @@ func (ds *DistSender) sendRPC(
 	li leaseholderInfo,
 	withCommit bool,
 ) (*roachpb.BatchResponse, error) {
-	if len(replicas) == 0 {
-		return nil, roachpb.NewSendError(
-			fmt.Sprintf("no replica node addresses available via gossip for r%d", rangeID))
-	}
 
 	ba.RangeID = rangeID
 
@@ -533,10 +529,10 @@ func (ds *DistSender) getDescriptor(
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor, withCommit bool,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Try to send the call. Learner replicas won't serve reads/writes, so send
-	// only to the `Voters` replicas. This is just an optimization to save a
-	// network hop, everything would still work if we had `All` here.
-	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
+	replicas, err := NewReplicaSlice(ctx, ds.gossip, desc)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// Rearrange the replicas so that they're ordered in expectation of
 	// request latency.

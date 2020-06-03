@@ -50,7 +50,7 @@ func TestClosest(t *testing.T) {
 		return time.Millisecond, true
 	}
 	o := of.Oracle(nil)
-	info, err := o.ChoosePreferredReplica(context.Background(), roachpb.RangeDescriptor{
+	info, err := o.ChoosePreferredReplica(context.Background(), &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
