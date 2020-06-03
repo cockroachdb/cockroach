@@ -11,25 +11,6 @@
 /*
 Package schemaexpr provides utilities for dealing with expressions with table
 schemas, such as check constraints, computed columns, and partial index
-predicates. It provides the following utilities.
-
-CheckConstraintBuilder
-
-  Validates and builds sql.TableDescriptor_CheckConstraints from
-  tree.CheckConstraintTableDefs.
-
-ComputedColumnValidator
-
-  Validates computed columns and can determine if a non-computed column has
-  dependent computed columns.
-
-PartialIndexValidator
-
-  Validates partial index predicates and dequalifies the columns referenced.
-
-DequalifyColumnRefs
-
-  Strips database and table names from qualified columns.
-
+predicates.
 */
 package schemaexpr
