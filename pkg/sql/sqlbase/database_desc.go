@@ -13,7 +13,7 @@ package sqlbase
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // DatabaseDescriptorInterface will eventually be called dbdesc.Descriptor.
@@ -31,12 +31,31 @@ type ImmutableDatabaseDescriptor struct {
 	DatabaseDescriptor
 }
 
-// MakeImmutableDatabaseDescriptor constructs a DatabaseDescriptor from an AST node.
-func MakeImmutableDatabaseDescriptor(id ID, p *tree.CreateDatabase) ImmutableDatabaseDescriptor {
-	return makeImmutableDatabaseDesc(DatabaseDescriptor{
-		Name:       string(p.Name),
+// MutableDatabaseDescriptor wraps a database descriptor and provides methods
+// on it. It can be mutated and generally has not been committed.
+type MutableDatabaseDescriptor struct {
+	ImmutableDatabaseDescriptor
+
+	ClusterVersion *DatabaseDescriptor
+}
+
+// NewInitialDatabaseDescriptor constructs a new DatabaseDescriptor for an
+// initial version from an id and name.
+func NewInitialDatabaseDescriptor(id ID, name string) *ImmutableDatabaseDescriptor {
+	return NewInitialDatabaseDescriptorWithPrivileges(id, name,
+		NewDefaultPrivilegeDescriptor())
+}
+
+// NewInitialDatabaseDescriptorWithPrivileges constructs a new DatabaseDescriptor for an
+// initial version from an id and name.
+func NewInitialDatabaseDescriptorWithPrivileges(
+	id ID, name string, privileges *PrivilegeDescriptor,
+) *ImmutableDatabaseDescriptor {
+	return NewImmutableDatabaseDescriptor(DatabaseDescriptor{
+		Name:       name,
 		ID:         id,
-		Privileges: NewDefaultPrivilegeDescriptor(),
+		Version:    1,
+		Privileges: privileges,
 	})
 }
 
@@ -44,24 +63,27 @@ func makeImmutableDatabaseDesc(desc DatabaseDescriptor) ImmutableDatabaseDescrip
 	return ImmutableDatabaseDescriptor{DatabaseDescriptor: desc}
 }
 
-// Defeat the linter.
-
-var _ = NewImmutableDatabaseDescriptor
-
 // NewImmutableDatabaseDescriptor makes a new database descriptor.
 func NewImmutableDatabaseDescriptor(desc DatabaseDescriptor) *ImmutableDatabaseDescriptor {
 	ret := makeImmutableDatabaseDesc(desc)
 	return &ret
 }
 
+// NewMutableDatabaseDescriptor creates a new MutableDatabaseDescriptor. The
+// version of the returned descriptor will be the successor of the descriptor
+// from which it was constructed.
+func NewMutableDatabaseDescriptor(mutationOf DatabaseDescriptor) *MutableDatabaseDescriptor {
+	mut := &MutableDatabaseDescriptor{
+		ImmutableDatabaseDescriptor: makeImmutableDatabaseDesc(*protoutil.Clone(&mutationOf).(*DatabaseDescriptor)),
+		ClusterVersion:              &mutationOf,
+	}
+	mut.Version++
+	return mut
+}
+
 // TypeName returns the plain type of this descriptor.
 func (desc *DatabaseDescriptor) TypeName() string {
 	return "database"
-}
-
-// SetName implements the DescriptorProto interface.
-func (desc *DatabaseDescriptor) SetName(name string) {
-	desc.Name = name
 }
 
 // DatabaseDesc implements the ObjectDescriptor interface.
@@ -85,11 +107,20 @@ func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
 }
 
 // NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) NameResolutionResult() {}
+func (desc *ImmutableDatabaseDescriptor) NameResolutionResult() {}
 
 // DescriptorProto wraps a DatabaseDescriptor in a Descriptor.
-func (desc *DatabaseDescriptor) DescriptorProto() *Descriptor {
-	return wrapDescriptor(desc)
+func (desc *ImmutableDatabaseDescriptor) DescriptorProto() *Descriptor {
+	return &Descriptor{
+		Union: &Descriptor_Database{
+			Database: &desc.DatabaseDescriptor,
+		},
+	}
+}
+
+// SetName sets the name on the descriptor.
+func (desc *MutableDatabaseDescriptor) SetName(name string) {
+	desc.Name = name
 }
 
 // Validate validates that the database descriptor is well formed.

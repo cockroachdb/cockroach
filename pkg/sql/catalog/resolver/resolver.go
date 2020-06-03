@@ -59,7 +59,7 @@ func GetObjectNames(
 	txn *kv.Txn,
 	sc SchemaResolver,
 	codec keys.SQLCodec,
-	dbDesc *sqlbase.DatabaseDescriptor,
+	dbDesc sqlbase.DatabaseDescriptorInterface,
 	scName string,
 	explicitPrefix bool,
 ) (res tree.TableNames, err error) {
@@ -199,7 +199,7 @@ func ResolveExistingObject(
 // prefix for the input object.
 func ResolveTargetObject(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName,
-) (*sqlbase.DatabaseDescriptor, tree.ObjectNamePrefix, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, tree.ObjectNamePrefix, error) {
 	found, prefix, descI, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, prefix, err
@@ -218,7 +218,7 @@ func ResolveTargetObject(
 		return nil, prefix, pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
-	return descI.(*sqlbase.DatabaseDescriptor), prefix, nil
+	return descI.(*sqlbase.ImmutableDatabaseDescriptor), prefix, nil
 }
 
 // ResolveRequiredType can be passed to the ResolveExistingTableObject function to

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -40,12 +41,12 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	codec keys.SQLCodec,
 	name string,
 	flags tree.DatabaseLookupFlags,
-) (desc *sqlbase.DatabaseDescriptor, err error) {
+) (desc sqlbase.DatabaseDescriptorInterface, err error) {
 	if name == sqlbase.SystemDB.Name {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
 		sysDB := sqlbase.MakeSystemDatabaseDesc()
-		return &sysDB, nil
+		return sysDB, nil
 	}
 
 	found, descID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
@@ -58,7 +59,16 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return nil, nil
 	}
 
-	return GetDatabaseDescByID(ctx, txn, codec, descID)
+	// NB: Take care to actually return nil here rather than a typed nil which
+	// will not compare to nil when wrapped in the returned interface.
+	desc, err = GetDatabaseDescByID(ctx, txn, codec, descID)
+	if err != nil {
+		return nil, err
+	}
+	if desc == nil {
+		return nil, nil
+	}
+	return desc, err
 }
 
 // IsValidSchema implements the Accessor interface.
@@ -73,24 +83,24 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	dbDesc *sqlbase.DatabaseDescriptor,
+	dbDesc sqlbase.DatabaseDescriptorInterface,
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-	ok, schemaID, err := a.IsValidSchema(ctx, txn, codec, dbDesc.ID, scName)
+	ok, schemaID, err := a.IsValidSchema(ctx, txn, codec, dbDesc.GetID(), scName)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		if flags.Required {
-			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), "")
+			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), "")
 			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.ObjectNamePrefix))
 		}
 		return nil, nil
 	}
 
-	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.Name)
-	prefix := sqlbase.NewTableKey(dbDesc.ID, schemaID, "").Key(codec)
+	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.GetName())
+	prefix := sqlbase.NewTableKey(dbDesc.GetID(), schemaID, "").Key(codec)
 	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -113,7 +123,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	// will only be present in the older system.namespace. To account for this
 	// scenario, we must do this filtering logic.
 	// TODO(solon): This complexity can be removed in  20.2.
-	dprefix := sqlbase.NewDeprecatedTableKey(dbDesc.ID, "").Key(codec)
+	dprefix := sqlbase.NewDeprecatedTableKey(dbDesc.GetID(), "").Key(codec)
 	dsr, err := txn.Scan(ctx, dprefix, dprefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -129,7 +139,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 			return nil, err
 		}
 		alreadySeen[tableName] = true
-		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), tree.Name(tableName))
+		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(tableName))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
 		tableNames = append(tableNames, tn)
@@ -145,7 +155,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 		if alreadySeen[tableName] {
 			continue
 		}
-		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), tree.Name(tableName))
+		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(tableName))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
 		tableNames = append(tableNames, tn)
@@ -207,7 +217,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	if err != nil {
 		return nil, err
 	}
-	if tableDesc := rawDesc.GetTable(); tableDesc != nil {
+	if tableDesc := rawDesc.Table(hlc.Timestamp{}); tableDesc != nil {
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
 		acceptableStates := map[sqlbase.TableDescriptor_State]bool{

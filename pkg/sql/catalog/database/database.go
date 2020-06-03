@@ -71,7 +71,7 @@ func (dc *Cache) setID(name string, id sqlbase.ID) {
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name. Returns nil and no error if the name is not present in the
 // cache.
-func (dc *Cache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+func (dc *Cache) getCachedDatabaseDesc(name string) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	dbID, err := dc.GetCachedDatabaseID(name)
 	if dbID == sqlbase.InvalidID || err != nil {
 		return nil, err
@@ -82,12 +82,14 @@ func (dc *Cache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor
 
 // getCachedDatabaseDescByID looks up the database descriptor from the descriptor cache,
 // given its ID.
-func (dc *Cache) getCachedDatabaseDescByID(id sqlbase.ID) (*sqlbase.DatabaseDescriptor, error) {
+func (dc *Cache) getCachedDatabaseDescByID(
+	id sqlbase.ID,
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	if id == sqlbase.SystemDB.ID {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
 		sysDB := sqlbase.MakeSystemDatabaseDesc()
-		return &sysDB, nil
+		return sysDB, nil
 	}
 
 	descKey := sqlbase.MakeDescMetadataKey(dc.codec, id)
@@ -105,8 +107,11 @@ func (dc *Cache) getCachedDatabaseDescByID(id sqlbase.ID) (*sqlbase.DatabaseDesc
 	if database == nil {
 		return nil, pgerror.Newf(pgcode.WrongObjectType, "[%d] is not a database", id)
 	}
-
-	return database, database.Validate()
+	if err := database.Validate(); err != nil {
+		return nil, err
+	}
+	// TODO(ajwerner): Set ModificationTime.
+	return sqlbase.NewImmutableDatabaseDescriptor(*database), nil
 }
 
 // GetDatabaseDesc returns the database descriptor given its name
@@ -116,7 +121,7 @@ func (dc *Cache) GetDatabaseDesc(
 	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
 	name string,
 	required bool,
-) (*sqlbase.DatabaseDescriptor, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
@@ -136,9 +141,15 @@ func (dc *Cache) GetDatabaseDesc(
 				return err
 			}
 			a := catalogkv.UncachedPhysicalAccessor{}
-			desc, err = a.GetDatabaseDesc(ctx, txn, dc.codec, name,
+			descI, err := a.GetDatabaseDesc(ctx, txn, dc.codec, name,
 				tree.DatabaseLookupFlags{Required: required})
-			return err
+			if err != nil {
+				return err
+			}
+			if descI != nil {
+				desc = descI.(*sqlbase.ImmutableDatabaseDescriptor)
+			}
+			return nil
 		}); err != nil {
 			return nil, err
 		}
@@ -153,7 +164,7 @@ func (dc *Cache) GetDatabaseDesc(
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *Cache) GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
-) (*sqlbase.DatabaseDescriptor, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	desc, err := dc.getCachedDatabaseDescByID(id)
 	if desc == nil || err != nil {
 		if err != nil {

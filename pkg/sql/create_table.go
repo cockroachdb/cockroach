@@ -46,7 +46,7 @@ import (
 
 type createTableNode struct {
 	n          *tree.CreateTable
-	dbDesc     *sqlbase.DatabaseDescriptor
+	dbDesc     *sqlbase.ImmutableDatabaseDescriptor
 	sourcePlan planNode
 
 	run createTableRun

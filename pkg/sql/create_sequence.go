@@ -27,7 +27,7 @@ import (
 
 type createSequenceNode struct {
 	n      *tree.CreateSequence
-	dbDesc *sqlbase.DatabaseDescriptor
+	dbDesc *sqlbase.ImmutableDatabaseDescriptor
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
@@ -76,7 +76,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 func doCreateSequence(
 	params runParams,
 	context string,
-	dbDesc *DatabaseDescriptor,
+	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
 	schemaID sqlbase.ID,
 	name *TableName,
 	isTemporary bool,

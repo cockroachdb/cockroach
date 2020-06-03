@@ -50,7 +50,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 
 func resolveNewTypeName(
 	params runParams, name *tree.UnresolvedObjectName,
-) (*tree.TypeName, *DatabaseDescriptor, error) {
+) (*tree.TypeName, *sqlbase.ImmutableDatabaseDescriptor, error) {
 	// Resolve the target schema and database.
 	db, prefix, err := params.p.ResolveUncachedDatabase(params.ctx, name)
 	if err != nil {
@@ -75,7 +75,7 @@ func resolveNewTypeName(
 // TypeName and returns the key for the new type descriptor, the ID of the
 // new type, the parent database and parent schema id.
 func getCreateTypeParams(
-	params runParams, name *tree.TypeName, db *DatabaseDescriptor,
+	params runParams, name *tree.TypeName, db *sqlbase.ImmutableDatabaseDescriptor,
 ) (sqlbase.DescriptorKey, sqlbase.ID, error) {
 	// TODO (rohany): This should be named object key.
 	typeKey := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings, db.ID, name.Type())
@@ -112,7 +112,7 @@ func (p *planner) createArrayType(
 	n *tree.CreateType,
 	typ *tree.TypeName,
 	typDesc *sqlbase.MutableTypeDescriptor,
-	db *DatabaseDescriptor,
+	db *sqlbase.ImmutableDatabaseDescriptor,
 ) (sqlbase.ID, error) {
 	// Postgres starts off trying to create the type as _<typename>. It then
 	// continues adding "_" to the front of the name until it doesn't find

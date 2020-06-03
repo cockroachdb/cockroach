@@ -26,7 +26,7 @@ func TestMakeDatabaseDesc(t *testing.T) {
 		t.Fatal(err)
 	}
 	const id = 17
-	desc := MakeImmutableDatabaseDescriptor(id, stmt.AST.(*tree.CreateDatabase))
+	desc := NewInitialDatabaseDescriptor(id, string(stmt.AST.(*tree.CreateDatabase).Name))
 	if desc.Name != "test" {
 		t.Fatalf("expected Name == test, got %s", desc.Name)
 	}

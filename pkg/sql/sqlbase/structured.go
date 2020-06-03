@@ -348,18 +348,19 @@ type protoGetter interface {
 // descriptor doesn't exist or if it exists and is not a database.
 func GetDatabaseDescFromID(
 	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
-) (*DatabaseDescriptor, error) {
+) (*ImmutableDatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(codec, id)
 	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
 		return nil, err
 	}
+	// TODO(ajwerner): Set the Modification time.
 	db := desc.GetDatabase()
 	if db == nil {
 		return nil, ErrDescriptorNotFound
 	}
-	return db, nil
+	return NewImmutableDatabaseDescriptor(*db), nil
 }
 
 // GetTableDescFromID retrieves the table descriptor for the table

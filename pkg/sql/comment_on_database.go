@@ -22,7 +22,7 @@ import (
 
 type commentOnDatabaseNode struct {
 	n      *tree.CommentOnDatabase
-	dbDesc *sqlbase.DatabaseDescriptor
+	dbDesc *sqlbase.ImmutableDatabaseDescriptor
 }
 
 // CommentOnDatabase add comment on a database.
@@ -35,7 +35,6 @@ func (p *planner) CommentOnDatabase(
 	if err != nil {
 		return nil, err
 	}
-
 	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}

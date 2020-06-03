@@ -25,7 +25,7 @@ import (
 )
 
 type renameDatabaseNode struct {
-	dbDesc  *sqlbase.DatabaseDescriptor
+	dbDesc  *sqlbase.ImmutableDatabaseDescriptor
 	newName string
 }
 

@@ -31,11 +31,12 @@ import (
 
 // renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
-	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
+	ctx context.Context, oldDesc *sqlbase.ImmutableDatabaseDescriptor, newName string,
 ) error {
 	oldName := oldDesc.Name
-	oldDesc.SetName(newName)
-	if err := oldDesc.Validate(); err != nil {
+	newDesc := sqlbase.NewMutableDatabaseDescriptor(*oldDesc.DatabaseDesc())
+	newDesc.SetName(newName)
+	if err := newDesc.Validate(); err != nil {
 		return err
 	}
 
@@ -48,9 +49,9 @@ func (p *planner) renameDatabase(
 
 	newKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key(p.ExecCfg().Codec)
 
-	descID := oldDesc.GetID()
+	descID := newDesc.GetID()
 	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
-	descDesc := oldDesc.DescriptorProto()
+	descDesc := newDesc.DescriptorProto()
 
 	b := &kv.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {

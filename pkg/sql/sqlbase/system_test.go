@@ -21,9 +21,9 @@ func TestShouldSplitAtDesc(t *testing.T) {
 	for inner, should := range map[DescriptorInterface]bool{
 		NewImmutableTableDescriptor(TableDescriptor{}):                    true,
 		NewImmutableTableDescriptor(TableDescriptor{ViewQuery: "SELECT"}): false,
-		&DatabaseDescriptor{}: false,
-		&TypeDescriptor{}:     false,
-		&SchemaDescriptor{}:   false,
+		NewInitialDatabaseDescriptor(42, "db"):                            false,
+		&TypeDescriptor{}:                                                 false,
+		&SchemaDescriptor{}:                                               false,
 	} {
 		var rawDesc roachpb.Value
 		require.NoError(t, rawDesc.SetProto(inner.DescriptorProto()))

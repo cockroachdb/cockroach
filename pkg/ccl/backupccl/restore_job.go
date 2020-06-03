@@ -430,7 +430,7 @@ func splitAndScatter(
 func WriteTableDescs(
 	ctx context.Context,
 	txn *kv.Txn,
-	databases []*sqlbase.DatabaseDescriptor,
+	databases []*sqlbase.ImmutableDatabaseDescriptor,
 	tables []sqlbase.TableDescriptorInterface,
 	descCoverage tree.DescriptorCoverage,
 	settings *cluster.Settings,
@@ -440,7 +440,7 @@ func WriteTableDescs(
 	defer tracing.FinishSpan(span)
 	err := func() error {
 		b := txn.NewBatch()
-		wroteDBs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+		wroteDBs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
 		for _, desc := range databases {
 			// If the restore is not a full cluster restore we cannot know that
 			// the users on the restoring cluster match the ones that were on the
@@ -790,7 +790,7 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job                *jobs.Job
 	settings           *cluster.Settings
-	databases          []*sqlbase.DatabaseDescriptor
+	databases          []*sqlbase.ImmutableDatabaseDescriptor
 	tables             []sqlbase.TableDescriptorInterface
 	descriptorCoverage tree.DescriptorCoverage
 	latestStats        []*stats.TableStatisticProto
@@ -835,7 +835,7 @@ func remapRelevantStatistics(
 func isDatabaseEmpty(
 	ctx context.Context,
 	db *kv.DB,
-	dbDesc *sql.DatabaseDescriptor,
+	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
 	ignoredTables map[sqlbase.ID]struct{},
 ) (bool, error) {
 	var allDescs []sqlbase.Descriptor
@@ -867,7 +867,7 @@ func isDatabaseEmpty(
 func createImportingTables(
 	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
 ) (
-	[]*sqlbase.DatabaseDescriptor,
+	[]*sqlbase.ImmutableDatabaseDescriptor,
 	[]sqlbase.TableDescriptorInterface,
 	[]sqlbase.ID,
 	[]roachpb.Span,
@@ -875,7 +875,7 @@ func createImportingTables(
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	var databases []*sqlbase.DatabaseDescriptor
+	var databases []*sqlbase.ImmutableDatabaseDescriptor
 	var tables []sqlbase.TableDescriptorInterface
 	var oldTableIDs []sqlbase.ID
 	for _, desc := range sqlDescs {
@@ -886,8 +886,9 @@ func createImportingTables(
 		}
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			if rewrite, ok := details.TableRewrites[dbDesc.ID]; ok {
-				dbDesc.ID = rewrite.TableID
-				databases = append(databases, dbDesc)
+				rewriteDesc := sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
+					rewrite.TableID, dbDesc.Name, dbDesc.Privileges)
+				databases = append(databases, rewriteDesc)
 			}
 		}
 	}
@@ -898,11 +899,8 @@ func createImportingTables(
 		}
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		databases = append(databases, &sqlbase.DatabaseDescriptor{
-			ID:         sqlbase.ID(tempSystemDBID),
-			Name:       restoreTempSystemDB,
-			Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
-		})
+		databases = append(databases, sqlbase.NewInitialDatabaseDescriptor(
+			sqlbase.ID(tempSystemDBID), restoreTempSystemDB))
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,

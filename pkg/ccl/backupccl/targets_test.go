@@ -35,24 +35,23 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	{
 		// Make shorthand type names for syntactic sugar.
 		type tbDesc = sqlbase.TableDescriptor
-		type dbDesc = sqlbase.DatabaseDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
 		mkTable := func(descriptor tbDesc) sqlbase.Descriptor {
 			desc := sqlbase.NewImmutableTableDescriptor(descriptor)
 			desc.ModificationTime = ts1
 			return *desc.DescriptorProto()
 		}
-		mkDB := func(descriptor dbDesc) sqlbase.Descriptor {
-			return *descriptor.DescriptorProto()
+		mkDB := func(id sqlbase.ID, name string) sqlbase.Descriptor {
+			return *sqlbase.NewInitialDatabaseDescriptor(id, name).DescriptorProto()
 		}
 		descriptors = []sqlbase.Descriptor{
-			mkDB(dbDesc{ID: 0, Name: "system"}),
+			mkDB(0, "system"),
 			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
 			mkTable(tbDesc{ID: 2, Name: "bar", ParentID: 0}),
 			mkTable(tbDesc{ID: 4, Name: "baz", ParentID: 3}),
 			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: sqlbase.TableDescriptor_OFFLINE}),
-			mkDB(dbDesc{ID: 3, Name: "data"}),
-			mkDB(dbDesc{ID: 5, Name: "empty"}),
+			mkDB(3, "data"),
+			mkDB(5, "empty"),
 		}
 	}
 

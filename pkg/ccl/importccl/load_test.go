@@ -54,19 +54,19 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	aliceDesc := &sqlbase.DatabaseDescriptor{Name: "alice"}
-	bobDesc := &sqlbase.DatabaseDescriptor{Name: "bob"}
+	aliceDesc := sqlbase.NewInitialDatabaseDescriptor(10000, "alice")
+	bobDesc := sqlbase.NewInitialDatabaseDescriptor(9999, "bob")
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
 		batch := txn.NewBatch()
-		batch.Put(sqlbase.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), 9999)
-		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), 10000)
+		batch.Put(sqlbase.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), bobDesc.GetID())
+		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), aliceDesc.GetID())
 
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 9999), bobDesc.DescriptorProto())
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 10000), aliceDesc.DescriptorProto())
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, bobDesc.GetID()), bobDesc.DescriptorProto())
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, aliceDesc.GetID()), aliceDesc.DescriptorProto())
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)
@@ -77,8 +77,8 @@ func TestGetDescriptorFromDB(t *testing.T) {
 		expected    *sqlbase.DatabaseDescriptor
 		expectedErr error
 	}{
-		{"bob", bobDesc, nil},
-		{"alice", aliceDesc, nil},
+		{"bob", bobDesc.DatabaseDesc(), nil},
+		{"alice", aliceDesc.DatabaseDesc(), nil},
 		{"not_found", nil, gosql.ErrNoRows},
 	} {
 		t.Run(tc.dbName, func(t *testing.T) {
