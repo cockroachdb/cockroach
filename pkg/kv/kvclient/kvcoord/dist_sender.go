@@ -450,10 +450,6 @@ func (ds *DistSender) sendRPC(
 	li leaseholderInfo,
 	withCommit bool,
 ) (*roachpb.BatchResponse, error) {
-	if len(replicas) == 0 {
-		return nil, roachpb.NewSendError(
-			fmt.Sprintf("no replica node addresses available via gossip for r%d", rangeID))
-	}
 
 	ba.RangeID = rangeID
 
@@ -537,6 +533,10 @@ func (ds *DistSender) sendSingleRange(
 	// only to the `Voters` replicas. This is just an optimization to save a
 	// network hop, everything would still work if we had `All` here.
 	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
+	if len(replicas) == 0 {
+		return nil, roachpb.NewError(roachpb.NewSendError(
+			fmt.Sprintf("no replica node addresses available via gossip for r%d", desc.RangeID)))
+	}
 
 	// Rearrange the replicas so that they're ordered in expectation of
 	// request latency.
