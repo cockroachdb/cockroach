@@ -24,14 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
 
@@ -117,11 +118,26 @@ func runDump(cmd *cobra.Command, args []string) error {
 		tableNames = args[1:]
 	}
 
+	// Get the cluster timestamp at which to dump at.
+	clusterTS, err := getAsOf(conn, dumpCtx.asOf)
+	if err != nil {
+		return err
+	}
+
 	var fullMds []basicMetadata
 	w := os.Stdout
 
 	for _, dbName := range dbNames {
-		mds, err := getDumpMetadata(conn, dbName, tableNames, dumpCtx.asOf)
+		// Collect all user defined types present in this database.
+		typContext, err := collectUserDefinedTypes(conn, dbName, clusterTS)
+		if err != nil {
+			return err
+		}
+		// Following pg_dump, we only dump types when dumping the database
+		// is requested, not when specific tables are requested to be dumped.
+		shouldDumpTypes := len(tableNames) == 0
+
+		mds, err := getDumpMetadata(conn, dbName, tableNames, clusterTS)
 		if err != nil {
 			return err
 		}
@@ -169,6 +185,20 @@ func runDump(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		if shouldDumpTypes && dumpCtx.dumpMode != dumpDataOnly {
+			// Only emit the settings change if there are any user defined types.
+			if len(typContext.createStatements) > 0 {
+				if _, err := fmt.Fprintf(w, "SET experimental_enable_enums = true;\n"); err != nil {
+					return err
+				}
+			}
+			for _, stmt := range typContext.createStatements {
+				if _, err := fmt.Fprintf(w, "%s;\n\n", stmt); err != nil {
+					return err
+				}
+			}
+		}
+
 		if dumpCtx.dumpMode != dumpDataOnly {
 			for i, md := range mds {
 				if i > 0 {
@@ -183,7 +213,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 			for _, md := range mds {
 				switch md.kind {
 				case "table":
-					if err := dumpTableData(w, conn, md); err != nil {
+					if err := dumpTableData(w, conn, typContext, md); err != nil {
 						return err
 					}
 				case "sequence":
@@ -260,30 +290,172 @@ type tableMetadata struct {
 	basicMetadata
 
 	columnNames string
-	columnTypes map[string]*types.T
+	columnTypes map[string]tree.ResolvableTypeReference
+}
+
+// dumpTypeContext acts as a collection of user defined types to resolve
+// references to user defined types in the dump process.
+type dumpTypeContext struct {
+	typMap           map[types.UserDefinedTypeName]*types.T
+	createStatements []string
+}
+
+// ResolveType implements the tree.TypeReferenceResolver interface.
+func (d *dumpTypeContext) ResolveType(
+	_ context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	key := types.UserDefinedTypeName{
+		Name:   name.Object(),
+		Schema: name.Schema(),
+	}
+	typ, ok := d.typMap[key]
+	if !ok {
+		return nil, errors.Newf("type %s not found", name.String())
+	}
+	return typ, nil
+}
+
+// ResolveTypeByID implements the tree.TypeReferenceResolver interface.
+func (d *dumpTypeContext) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
+	return nil, errors.AssertionFailedf("cannot resolve types in dump by ID")
+}
+
+// collectUserDefinedTypes constructs a dumpTypeContext consisting of all user
+// defined types in the requested database.
+func collectUserDefinedTypes(conn *sqlConn, dbName string, ts string) (*dumpTypeContext, error) {
+	query := `
+SELECT
+	descriptor_id, schema_name, descriptor_name, create_statement, enum_members
+FROM
+	"".crdb_internal.create_type_statements
+AS OF SYSTEM TIME %s
+WHERE 
+	database_name = $1
+`
+	rows, err := conn.Query(fmt.Sprintf(query, lex.EscapeSQLString(ts)), []driver.Value{dbName})
+	if err != nil {
+		// On versions before 20.2, the cluster won't have the
+		// crdb_internal.create_type_statements table. If we can't find it,
+		// continue with an empty type context.
+		if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+			if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedTable {
+				return &dumpTypeContext{}, nil
+			}
+		}
+		return nil, err
+	}
+	vals := make([]driver.Value, 5)
+	var createStatements []string
+	typContext := &dumpTypeContext{
+		typMap: make(map[types.UserDefinedTypeName]*types.T),
+	}
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Pull out the needed values from the query.
+		idI := vals[0]
+		id, ok := idI.(int64)
+		if !ok {
+			return nil, errors.AssertionFailedf("unexpected value %T", idI)
+		}
+		scNameI := vals[1]
+		scName, ok := scNameI.(string)
+		if !ok {
+			return nil, errors.AssertionFailedf("unexpected value %T", scName)
+		}
+		nameI := vals[2]
+		name, ok := nameI.(string)
+		if !ok {
+			return nil, errors.AssertionFailedf("unexpected value %T", name)
+		}
+		createStatementI := vals[3]
+		createStatement, ok := createStatementI.(string)
+		if !ok {
+			return nil, errors.AssertionFailedf("unexpected value %T", createStatementI)
+		}
+		// Remember all of the create statements.
+		createStatements = append(createStatements, createStatement)
+		enumMembersI := vals[4]
+		enumMembersS, ok := enumMembersI.([]byte)
+		if !ok {
+			return nil, errors.AssertionFailedf("unexpected value %T", enumMembersI)
+		}
+		var enumMembers []string
+		if enumMembersS != nil {
+			// The driver sends back arrays as bytes, so we have to parse the array
+			// if we want to access its elements.
+			arr, err := tree.ParseDArrayFromString(
+				tree.NewTestingEvalContext(serverCfg.Settings), string(enumMembersS), types.String)
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range arr.Array {
+				enumMembers = append(enumMembers, string(tree.MustBeDString(d)))
+			}
+		}
+
+		// Based on the retrieved information, construct an entry of the correct
+		// type kind in the typing context.
+		switch {
+		case len(enumMembers) != 0:
+			typ := types.MakeEnum(uint32(id), 0 /* arrayTypeID */)
+			typ.TypeMeta = types.UserDefinedTypeMetadata{
+				Name: &types.UserDefinedTypeName{
+					Name:   name,
+					Schema: scName,
+				},
+				EnumData: &types.EnumMetadata{
+					LogicalRepresentations: enumMembers,
+					// Make an array of empty physical representations for the enum.
+					// We won't need the physical representations while dumping, but enum
+					// internals expect that there are as many physical representations
+					// as there are logical representations.
+					PhysicalRepresentations: make([][]byte, len(enumMembers)),
+				},
+			}
+			typContext.typMap[*typ.TypeMeta.Name] = typ
+		default:
+			// TODO (rohany): Not sure if assertion failed is the right kind of error
+			//  here. I could see an argument of just continuing -- this allows an
+			//  older version of cockroach to not error out when attempting to dump
+			//  against a newer version of cockroach with new kinds of UDTs.
+			return nil, errors.AssertionFailedf("unsupported type kind")
+		}
+	}
+	typContext.createStatements = createStatements
+	return typContext, nil
+}
+
+// getAsOf converts the input AS OF argument into a usable cluster timestamp,
+// or returns a default if the argument was not specified.
+func getAsOf(conn *sqlConn, asOf string) (string, error) {
+	var clusterTS string
+	if asOf == "" {
+		vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()", nil)
+		if err != nil {
+			return "", err
+		}
+		clusterTS = string(vals[0].([]byte))
+	} else {
+		// Validate the timestamp. This prevents SQL injection.
+		if _, err := tree.ParseDTimestamp(nil, asOf, time.Nanosecond); err != nil {
+			return "", err
+		}
+		clusterTS = asOf
+	}
+	return clusterTS, nil
 }
 
 // getDumpMetadata retrieves the table information for the specified table(s).
 // It also retrieves the cluster timestamp at which the metadata was
 // retrieved.
 func getDumpMetadata(
-	conn *sqlConn, dbName string, tableNames []string, asOf string,
+	conn *sqlConn, dbName string, tableNames []string, clusterTS string,
 ) (mds []basicMetadata, err error) {
-	var clusterTS string
-	if asOf == "" {
-		vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()", nil)
-		if err != nil {
-			return nil, err
-		}
-		clusterTS = string(vals[0].([]byte))
-	} else {
-		// Validate the timestamp. This prevents SQL injection.
-		if _, err := tree.ParseDTimestamp(nil, asOf, time.Nanosecond); err != nil {
-			return nil, err
-		}
-		clusterTS = asOf
-	}
-
 	if tableNames == nil {
 		tableNames, err = getTableNames(conn, dbName, clusterTS)
 		if err != nil {
@@ -500,7 +672,7 @@ func fetchColumnsNamesAndTypes(conn *sqlConn, md basicMetadata, noHidden bool) (
 
 func constructTableMetadata(rows *sqlRows, md basicMetadata) (tableMetadata, error) {
 	vals := make([]driver.Value, 2)
-	coltypes := make(map[string]*types.T)
+	coltypes := make(map[string]tree.ResolvableTypeReference)
 	colnames := tree.NewFmtCtx(tree.FmtSimple)
 	defer colnames.Close()
 	for {
@@ -525,13 +697,7 @@ func constructTableMetadata(rows *sqlRows, md basicMetadata) (tableMetadata, err
 		if err != nil {
 			return tableMetadata{}, fmt.Errorf("type %s is not a valid CockroachDB type", typ)
 		}
-		ref := stmt.AST.(*tree.CreateTable).Defs[0].(*tree.ColumnTableDef).Type
-
-		coltyp, ok := tree.GetStaticallyKnownType(ref)
-		if !ok {
-			return tableMetadata{}, unimplemented.NewWithIssue(47765, "user defined types are unsupported")
-		}
-		coltypes[name] = coltyp
+		coltypes[name] = stmt.AST.(*tree.CreateTable).Defs[0].(*tree.ColumnTableDef).Type
 		if colnames.Len() > 0 {
 			colnames.WriteString(", ")
 		}
@@ -639,7 +805,9 @@ func dumpSequenceData(w io.Writer, conn *sqlConn, bmd basicMetadata) error {
 }
 
 // dumpTableData dumps the data of the specified table to w.
-func dumpTableData(w io.Writer, conn *sqlConn, bmd basicMetadata) error {
+func dumpTableData(
+	w io.Writer, conn *sqlConn, typContext tree.TypeReferenceResolver, bmd basicMetadata,
+) error {
 	md, err := getMetadataForTable(conn, bmd)
 	if err != nil {
 		return err
@@ -702,6 +870,10 @@ func dumpTableData(w io.Writer, conn *sqlConn, bmd basicMetadata) error {
 				if si > 0 {
 					f.WriteString(", ")
 				}
+				ct, err := tree.ResolveType(ctx, md.columnTypes[cols[si]], typContext)
+				if err != nil {
+					return err
+				}
 				var d tree.Datum
 				// TODO(knz): this approach is brittle+flawed, see #28948.
 				// TODO(mjibson): can we use tree.ParseDatumStringAs here?
@@ -715,7 +887,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, bmd basicMetadata) error {
 				case float64:
 					d = tree.NewDFloat(tree.DFloat(t))
 				case string:
-					switch ct := md.columnTypes[cols[si]]; ct.Family() {
+					switch ct.Family() {
 					case types.StringFamily:
 						d = tree.NewDString(t)
 					case types.CollatedStringFamily:
@@ -728,7 +900,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, bmd basicMetadata) error {
 					}
 				case []byte:
 					// TODO(knz): this approach is brittle+flawed, see #28948.
-					switch ct := md.columnTypes[cols[si]]; ct.Family() {
+					switch ct.Family() {
 					case types.IntervalFamily:
 						d, err = tree.ParseDInterval(string(t))
 						if err != nil {
@@ -786,11 +958,17 @@ func dumpTableData(w io.Writer, conn *sqlConn, bmd basicMetadata) error {
 							return err
 						}
 						d = tree.NewDOid(*i)
+					case types.EnumFamily:
+						// Enum values are streamed back in their logical representation.
+						d, err = tree.MakeDEnumFromLogicalRepresentation(ct, string(t))
+						if err != nil {
+							return err
+						}
 					default:
 						return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
 				case time.Time:
-					switch ct := md.columnTypes[cols[si]]; ct.Family() {
+					switch ct.Family() {
 					case types.DateFamily:
 						d, err = tree.NewDDateFromTime(t)
 						if err != nil {

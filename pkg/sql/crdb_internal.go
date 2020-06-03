@@ -1379,6 +1379,7 @@ CREATE TABLE crdb_internal.create_type_statements (
   descriptor_id      INT,
   descriptor_name    STRING,
   create_statement   STRING,
+  enum_members       STRING[], -- populated only for ENUM types
 	INDEX (descriptor_id)
 )
 `,
@@ -1387,10 +1388,15 @@ CREATE TABLE crdb_internal.create_type_statements (
 			switch typeDesc.Kind {
 			case sqlbase.TypeDescriptor_ENUM:
 				var enumLabels []string
+				enumLabelsDatum := tree.NewDArray(types.String)
 				for i := range typeDesc.EnumMembers {
-					enumLabels = append(enumLabels, typeDesc.EnumMembers[i].LogicalRepresentation)
+					rep := typeDesc.EnumMembers[i].LogicalRepresentation
+					enumLabels = append(enumLabels, rep)
+					if err := enumLabelsDatum.Append(tree.NewDString(rep)); err != nil {
+						return err
+					}
 				}
-				name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.Name, sc, db.Name}, 0)
+				name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.Name, sc}, 0)
 				if err != nil {
 					return err
 				}
@@ -1406,6 +1412,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 					tree.NewDInt(tree.DInt(typeDesc.ID)), // descriptor_id
 					tree.NewDString(typeDesc.Name),       // descriptor_name
 					tree.NewDString(tree.AsString(node)), // create_statement
+					enumLabelsDatum,
 				); err != nil {
 					return err
 				}
