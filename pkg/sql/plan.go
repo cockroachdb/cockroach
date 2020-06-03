@@ -319,7 +319,11 @@ type planMaybePhysical struct {
 	// been finalized.
 	physPlan *PhysicalPlan
 	// recommendation (when physPlan is non-nil) is the recommendation about
-	// the distribution of the physical plan.
+	// the distribution of the physical plan. Note that it is possible that
+	// the plan is "partially distributed" (meaning that some stages of the
+	// processors are distributed whereas other stages are not).
+	// TODO(yuzefovich): introduce ternary planDistribution to show that plans
+	// can be local, partially distributed, and fully distributed.
 	recommendation distRecommendation
 }
 
