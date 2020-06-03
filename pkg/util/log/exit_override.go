@@ -56,6 +56,28 @@ func ResetExitFunc() {
 func (l *loggerT) exitLocked(err error) {
 	l.mu.AssertHeld()
 
+	l.reportErrorEverywhereLocked(err)
+
+	logging.mu.Lock()
+	f := logging.mu.exitOverride.f
+	logging.mu.Unlock()
+	if f != nil {
+		// Avoid conflicting lock order between l.mu and locks in f.
+		l.mu.Unlock()
+		f(2, err)
+		// Avoid double unlock on l.mu.
+		l.mu.Lock()
+	} else {
+		os.Exit(2)
+	}
+}
+
+// reportErrorEverywhereLocked writes the error details to both the
+// process' original stderr and the log file if configured.
+//
+// TODO(knz): Create a log entry header for this error, to get a
+// timestamp and later a redactable marker.
+func (l *loggerT) reportErrorEverywhereLocked(err error) {
 	// Either stderr or our log file is broken. Try writing the error to both
 	// streams in the hope that one still works or else the user will have no idea
 	// why we crashed.
@@ -75,16 +97,4 @@ func (l *loggerT) exitLocked(err error) {
 		fmt.Fprintf(w, "log: exiting because of error: %s\n", err)
 	}
 	l.flushAndSync(true /*doSync*/)
-	logging.mu.Lock()
-	f := logging.mu.exitOverride.f
-	logging.mu.Unlock()
-	if f != nil {
-		// Avoid conflicting lock order between l.mu and locks in f.
-		l.mu.Unlock()
-		f(2, err)
-		// Avoid double unlock on l.mu.
-		l.mu.Lock()
-	} else {
-		os.Exit(2)
-	}
 }

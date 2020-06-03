@@ -30,6 +30,13 @@ import (
 // mainLog is the primary logger instance.
 var mainLog loggerT
 
+// stderrLog is the logger where writes performed directly
+// to the stderr file descriptor (such as that performed
+// by the go runtime) *may* be redirected.
+// NB: whether they are actually redirected is determined
+// by stderrLog.redirectInternalStderrWrites().
+var stderrLog = &mainLog
+
 // logging is the global state of the logging setup.
 var logging loggingT
 
@@ -37,9 +44,6 @@ var logging loggingT
 //
 // TODO(knz): better separate global state and per-logger state.
 type loggingT struct {
-	// Level flag for output to stderr. Handled atomically.
-	stderrThreshold Severity
-
 	// pool for entry formatting buffers.
 	bufPool sync.Pool
 
@@ -82,13 +86,36 @@ type loggerT struct {
 	// Name prefix for log files.
 	prefix string
 
-	// Level flag for output to files.
+	// Level beyond which entries submitted to this logger are written
+	// to the output file. This acts as a filter between the log entry
+	// producers and the file sink.
 	fileThreshold Severity
 
-	// noStderrRedirect, when set, disables redirecting this logger's
-	// log entries to stderr (even when the shared stderr threshold is
-	// matched).
-	noStderrRedirect bool
+	// Level beyond which entries submitted to this logger are written
+	// to the process' external standard error stream (OrigStderr).
+	// This acts as a filter between the log entry producers and the
+	// stderr sink.
+	stderrThreshold Severity
+
+	// noRedirectInternalStderrWrites, when UNset (set to false), causes
+	// this logger to capture writes to system-wide file descriptor 2
+	// (the standard error stream) and os.Stderr and redirect them to this
+	// logger's output file.
+	// Users of the logging package should ensure that at most one
+	// logger has this flag set to redirect the system-wide stderr.
+	//
+	// Note that this mechanism redirects file descriptor 2, and does
+	// not only assign a different *os.File reference to
+	// os.Stderr. This is because the Go runtime hardcodes stderr writes
+	// as writes to file descriptor 2 and disregards the value of
+	// os.Stderr entirely.
+	//
+	// Callers are encouraged to use the redirectInternalStderrWrites()
+	// accessor method for clarity.
+	//
+	// TODO(knz): The double negative is somewhat inconvenient. We could
+	// consider flipping the meaning for enhanced clarity.
+	noRedirectInternalStderrWrites bool
 
 	// notify GC daemon that a new log file was created
 	gcNotify chan struct{}
@@ -109,12 +136,18 @@ type loggerT struct {
 func init() {
 	logging.bufPool.New = newBuffer
 	logging.mu.fatalCh = make(chan struct{})
-	// Default stderrThreshold and fileThreshold to log everything.
+	mainLog.prefix = program
+	// Default stderrThreshold and fileThreshold to log everything
+	// both to the output file and to the process' external stderr
+	// (OrigStderr).
 	// This will be the default in tests unless overridden; the CLI
 	// commands set their default separately in cli/flags.go.
-	logging.stderrThreshold = Severity_INFO
-	mainLog.prefix = program
+	mainLog.stderrThreshold = Severity_INFO
 	mainLog.fileThreshold = Severity_INFO
+	// In addition, we want all writes performed directly to the
+	// internal stderr file descriptor (fd 2) to go to the stderr log
+	// file.
+	stderrLog.noRedirectInternalStderrWrites = false
 }
 
 // FatalChan is closed when Fatal is called. This can be used to make
@@ -169,6 +202,12 @@ func (l *loggerT) ensureFile() error {
 		return l.createFile()
 	}
 	return nil
+}
+
+// redirectInternalStderrWrites is the positive accessor
+// for the noRedirectInternalStderrWrites flag.
+func (l *loggerT) redirectInternalStderrWrites() bool {
+	return !l.noRedirectInternalStderrWrites
 }
 
 // writeToFile writes to the file and applies the synchronization policy.
@@ -262,18 +301,30 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 		}()
 	}
 
-	if s >= logging.stderrThreshold.get() || (s == Severity_FATAL && l.stderrRedirected()) {
-		// We force-copy FATAL messages to stderr, because the process is bound
-		// to terminate and the user will want to know why.
-		l.outputToStderr(entry, stacks)
+	if s >= l.stderrThreshold.get() {
+		if err := l.outputToStderr(entry, stacks); err != nil {
+			// The external stderr log is unavailable.  However, stderr was
+			// chosen by the stderrThreshold configuration, so abandoning
+			// the stderr write would be a contract violation.
+			//
+			// We definitely do not like to lose log entries, so we stop
+			// here. Note that exitLocked() shouts the error to both stderr
+			// and the log file, so even though stderr is not available any
+			// more, we'll keep a trace of the error in the file.
+			l.exitLocked(err)
+			l.mu.Unlock() // unreachable except in tests
+			return        // unreachable except in tests
+		}
 	}
 	if l.logDir.IsSet() && s >= l.fileThreshold.get() {
 		if err := l.ensureFile(); err != nil {
-			// Make sure the message appears somewhere.
-			l.outputToStderr(entry, stacks)
+			// We definitely do not like to lose log entries, so we stop
+			// here. Note that exitLocked() shouts the error to both stderr
+			// and the log file, so even though the file is not available
+			// any more, we'll likely keep a trace of the error in stderr.
 			l.exitLocked(err)
-			l.mu.Unlock()
-			return
+			l.mu.Unlock() // unreachable except in tests
+			return        // unreachable except in tests
 		}
 
 		buf := logging.processForFile(entry, stacks)
@@ -281,9 +332,9 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 
 		if err := l.writeToFile(data); err != nil {
 			l.exitLocked(err)
-			l.mu.Unlock()
-			putBuffer(buf)
-			return
+			l.mu.Unlock()  // unreachable except in tests
+			putBuffer(buf) // unreachable except in tests
+			return         // unreachable except in tests
 		}
 
 		putBuffer(buf)
@@ -313,12 +364,15 @@ func DumpStacks(ctx context.Context) {
 }
 
 // printPanicToFile copies the panic details to the log file. This is
-// useful when the standard error is not redirected to the log file
-// (!stderrRedirected), as the go runtime will only print panics to
-// stderr.
+// useful when the internal stderr writes are not redirected to the
+// log file (!stderrRedirected), as the go runtime hardcodes
+// its writes to file descriptor 2.
+//
+// TODO(knz): Create a log entry header for the panic details, to
+// get a timestamp and later a redactable marker.
 func (l *loggerT) printPanicToFile(r interface{}) {
 	if !l.logDir.IsSet() {
-		// There's no log file. Nothing to do.
+		// There's no log file. Can't do anything.
 		return
 	}
 
@@ -326,24 +380,27 @@ func (l *loggerT) printPanicToFile(r interface{}) {
 	defer l.mu.Unlock()
 
 	if err := l.ensureFile(); err != nil {
-		fmt.Fprintf(OrigStderr, "log: %v", err)
+		// We're already exiting; no need to pile an error upon an
+		// error. Simply report the logging error and continue.
+		l.reportErrorEverywhereLocked(err)
 		return
 	}
 
 	panicBytes := []byte(fmt.Sprintf("%v\n\n%s\n", r, debug.Stack()))
 	if err := l.writeToFile(panicBytes); err != nil {
-		fmt.Fprintf(OrigStderr, "log: %v", err)
+		// Ditto; report the error but continue. We're terminating anyway.
+		l.reportErrorEverywhereLocked(err)
 		return
 	}
 }
 
-func (l *loggerT) outputToStderr(entry Entry, stacks []byte) {
+// outputToStderr writes the provided entry and potential stack
+// trace(s) to the process' external stderr stream.
+func (l *loggerT) outputToStderr(entry Entry, stacks []byte) error {
 	buf := logging.processForStderr(entry, stacks)
 	_, err := OrigStderr.Write(buf.Bytes())
 	putBuffer(buf)
-	if err != nil {
-		l.exitLocked(err)
-	}
+	return err
 }
 
 const fatalErrorPostamble = `
