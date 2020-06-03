@@ -452,7 +452,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	case 0: // first in line, proceed with mutation.
 	default: // not first in line, abort.
 		log.Infof(ctx,
-			"schema change on %s (%d v%d) mutation %d: other changes still in progress %+v",
+			"schema change on %q (%d v%d) mutation %d: other changes still in progress %+v",
 			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID, tableDesc.Mutations[0:idx],
 		)
 		return errSchemaChangeNotFirstInLine
