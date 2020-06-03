@@ -176,8 +176,6 @@ func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) bool {
 // the spheroid are different than the two closest points on the sphere.
 // See distance_test.go for examples of the "truer" distance values.
 // Since we aim to be compatible with PostGIS, we adopt the same approach.
-//
-// TODO(otan): accelerate checks with bounding boxes.
 func distanceGeographyRegions(
 	spheroid geographiclib.Spheroid,
 	useSphereOrSpheroid UseSphereOrSpheroid,
@@ -303,6 +301,13 @@ var _ geodist.DistanceCalculator = (*geographyDistanceCalculator)(nil)
 // DistanceUpdater implements geodist.DistanceCalculator.
 func (c *geographyDistanceCalculator) DistanceUpdater() geodist.DistanceUpdater {
 	return c.updater
+}
+
+// BoundingBoxIntersects implements geodist.DistanceCalculator.
+func (c *geographyDistanceCalculator) BoundingBoxIntersects() bool {
+	// Return true, as it does the safer thing beneath.
+	// TODO(otan): update bounding box intersects.
+	return true
 }
 
 // NewEdgeCrosser implements geodist.DistanceCalculator.
