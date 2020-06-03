@@ -103,6 +103,7 @@ func (b *Builder) addOrderByOrDistinctOnColumn(
 	// the SQL99 rules described in analyzeExtraArgument). Otherwise, build a new
 	// projection.
 	if col := projectionsScope.findExistingCol(
+		b,
 		extraCol.getExpr(),
 		true, /* allowSideEffects */
 	); col != nil {

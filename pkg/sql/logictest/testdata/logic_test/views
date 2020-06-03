@@ -688,3 +688,32 @@ statement ok
 CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
 
 user root
+
+# Ensure a table that is referenced multiple times with different column sets
+# depends on the correct columns. Depended on columns should not be droppable.
+
+# Only column a should be depended on in this case.
+statement ok
+DROP TABLE ab CASCADE;
+CREATE TABLE ab (a INT, b INT);
+CREATE VIEW vab (x) AS SELECT ab.a FROM ab, ab AS ab2
+
+statement ok
+ALTER TABLE ab DROP COLUMN b
+
+statement error pq: cannot drop column "a" because view "vab" depends on it
+ALTER TABLE ab DROP COLUMN a
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT);
+CREATE VIEW vabc AS SELECT abc.a, abc2.b, abc3.c FROM abc, abc AS abc2, abc AS abc3
+
+# All three columns a,b,c should not be droppable.
+statement error pq: cannot drop column "a" because view "vabc" depends on it
+ALTER TABLE abc DROP COLUMN a
+
+statement error pq: cannot drop column "b" because view "vabc" depends on it
+ALTER TABLE abc DROP COLUMN b
+
+statement error pq: cannot drop column "c" because view "vabc" depends on it
+ALTER TABLE abc DROP COLUMN c
