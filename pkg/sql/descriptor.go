@@ -50,7 +50,7 @@ var (
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
 	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
-) (*sqlbase.DatabaseDescriptor, bool, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, bool, error) {
 
 	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
@@ -77,7 +77,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := sqlbase.MakeDatabaseDesc(id, database)
+	desc := sqlbase.MakeImmutableDatabaseDescriptor(id, database)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, &desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
