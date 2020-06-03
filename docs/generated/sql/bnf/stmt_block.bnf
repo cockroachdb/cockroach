@@ -4,6 +4,7 @@ stmt_block ::=
 stmt ::=
 	'HELPTOKEN'
 	| preparable_stmt
+	| analyze_stmt
 	| copy_from_stmt
 	| comment_stmt
 	| execute_stmt
@@ -41,6 +42,10 @@ preparable_stmt ::=
 	| truncate_stmt
 	| update_stmt
 	| upsert_stmt
+
+analyze_stmt ::=
+	'ANALYZE' analyze_target
+	| 'ANALYSE' analyze_target
 
 copy_from_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_options
@@ -205,6 +210,9 @@ update_stmt ::=
 
 upsert_stmt ::=
 	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
+
+analyze_target ::=
+	table_name
 
 table_name ::=
 	db_object_name

@@ -75,14 +75,20 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 - For filing bugs, suggesting improvements, or requesting new features, help us out by
   [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
 
+## Building from source
+
+See [our wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181338446/Getting+and+building+from+source) for more details.
+
 ## Contributing
 
 We welcome your contributions! If you're looking for issues to work on, try
 looking at the [good first issue](https://github.com/cockroachdb/cockroach/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 list. We do our best to tag issues suitable for new external contributors with
-that label, so it's a great way to find something you can help with! See our
-[Wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB)
-for more details. 
+that label, so it's a great way to find something you can help with!
+
+See [our
+wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB)
+for more details.
 
 Engineering discussion takes place on our public mailing list,
 [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db),

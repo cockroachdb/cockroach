@@ -762,6 +762,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 
+%type <tree.Statement> analyze_stmt
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
 %type <tree.Statement> preparable_stmt
@@ -887,7 +888,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <str> schema_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
-%type <tree.TableExpr> insert_target create_stats_target
+%type <tree.TableExpr> insert_target create_stats_target analyze_target
 
 %type <*tree.TableIndexName> table_index_name
 %type <tree.TableIndexNames> table_index_name_list
@@ -1169,7 +1170,8 @@ stmt_block:
 
 stmt:
   HELPTOKEN { return helpWith(sqllex, "") }
-| preparable_stmt  // help texts in sub-rule
+| preparable_stmt   // help texts in sub-rule
+| analyze_stmt      // EXTEND WITH HELP: ANALYZE
 | copy_from_stmt
 | comment_stmt
 | execute_stmt      // EXTEND WITH HELP: EXECUTE
@@ -2842,6 +2844,34 @@ table_name_list:
   {
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = append($1.tableNames(), name)
+  }
+
+// %Help: ANALYZE - collect table statistics
+// %Category: Misc
+// %Text:
+// ANALYZE <tablename>
+//
+// %SeeAlso: CREATE STATISTICS
+analyze_stmt:
+  ANALYZE analyze_target
+  {
+    $$.val = &tree.Analyze{
+      Table: $2.tblExpr(),
+    }
+  }
+| ANALYZE error // SHOW HELP: ANALYZE
+| ANALYSE analyze_target
+  {
+    $$.val = &tree.Analyze{
+      Table: $2.tblExpr(),
+    }
+  }
+| ANALYSE error // SHOW HELP: ANALYZE
+
+analyze_target:
+  table_name
+  {
+    $$.val = $1.unresolvedObjectName()
   }
 
 // %Help: EXPLAIN - show the logical plan of a query
