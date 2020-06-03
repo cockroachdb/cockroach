@@ -84,7 +84,7 @@ func maxDistanceInternal(
 	a *geo.Geometry, b *geo.Geometry, stopAfterGT float64, emptyBehavior geo.EmptyBehavior,
 ) (float64, error) {
 	u := newGeomMaxDistanceUpdater(stopAfterGT)
-	c := &geomDistanceCalculator{updater: u}
+	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.BoundingBoxIntersects(b)}
 	return distanceInternal(a, b, c, emptyBehavior)
 }
 
@@ -94,7 +94,7 @@ func minDistanceInternal(
 	a *geo.Geometry, b *geo.Geometry, stopAfterLE float64, emptyBehavior geo.EmptyBehavior,
 ) (float64, error) {
 	u := newGeomMinDistanceUpdater(stopAfterLE)
-	c := &geomDistanceCalculator{updater: u}
+	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.BoundingBoxIntersects(b)}
 	return distanceInternal(a, b, c, emptyBehavior)
 }
 
@@ -381,7 +381,8 @@ func (u *geomMaxDistanceUpdater) IsMaxDistance() bool {
 
 // geomDistanceCalculator implements geodist.DistanceCalculator
 type geomDistanceCalculator struct {
-	updater geodist.DistanceUpdater
+	updater               geodist.DistanceUpdater
+	boundingBoxIntersects bool
 }
 
 var _ geodist.DistanceCalculator = (*geomDistanceCalculator)(nil)
@@ -389,6 +390,11 @@ var _ geodist.DistanceCalculator = (*geomDistanceCalculator)(nil)
 // DistanceUpdater implements geodist.DistanceCalculator.
 func (c *geomDistanceCalculator) DistanceUpdater() geodist.DistanceUpdater {
 	return c.updater
+}
+
+// BoundingBoxIntersects implements geodist.DistanceCalculator.
+func (c *geomDistanceCalculator) BoundingBoxIntersects() bool {
+	return c.boundingBoxIntersects
 }
 
 // NewEdgeCrosser implements geodist.DistanceCalculator.
