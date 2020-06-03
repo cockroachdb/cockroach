@@ -60,15 +60,14 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		)
 	}
 
-	// TODO(mgartner): Use util.FastIntSet here instead.
-	dependencies := make(map[sqlbase.ColumnID]struct{})
+	var depColIDs sqlbase.TableColSet
 	// First, check that no column in the expression is a computed column.
 	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *sqlbase.ColumnDescriptor) error {
 		if c.IsComputed() {
 			return pgerror.New(pgcode.InvalidTableDefinition,
 				"computed columns cannot reference other computed columns")
 		}
-		dependencies[c.ID] = struct{}{}
+		depColIDs.Add(c.ID)
 
 		return nil
 	})
@@ -82,7 +81,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	for i := range v.desc.OutboundFKs {
 		fk := &v.desc.OutboundFKs[i]
 		for _, id := range fk.OriginColumnIDs {
-			if _, ok := dependencies[id]; !ok {
+			if !depColIDs.Contains(id) {
 				// We don't depend on this column.
 				continue
 			}
@@ -103,7 +102,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := v.desc.ReplaceColumnVarsInExprWithDummies(d.Computed.Expr)
+	replacedExpr, _, err := replaceVars(&v.desc.TableDescriptor, d.Computed.Expr)
 	if err != nil {
 		return err
 	}
