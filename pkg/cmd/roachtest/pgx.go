@@ -17,6 +17,7 @@ import (
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedTag = "v4.6.0"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
@@ -58,6 +59,7 @@ func registerPgx(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest jackc/pgx release is %s.", latestTag)
+		c.l.Printf("Supported release is %s.", supportedTag)
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
@@ -109,7 +111,7 @@ func registerPgx(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeAll(
-			t, "pgx", blacklistName, expectedFailures, version, latestTag,
+			t, "pgx", blacklistName, expectedFailures, version, supportedTag,
 		)
 	}
 
