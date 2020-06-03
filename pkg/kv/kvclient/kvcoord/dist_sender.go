@@ -432,42 +432,6 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 	return nil
 }
 
-// sendRPC sends one or more RPCs to replicas from the supplied
-// roachpb.Replica slice. Returns an RPC error if the request could
-// not be sent. Note that the reply may contain a higher level error
-// and must be checked in addition to the RPC error.
-//
-// The replicas are assumed to be ordered by preference, with closer
-// ones (i.e. expected lowest latency) first.
-//
-// See sendToReplicas for a description of the withCommit parameter.
-func (ds *DistSender) sendRPC(
-	ctx context.Context,
-	ba roachpb.BatchRequest,
-	class rpc.ConnectionClass,
-	rangeID roachpb.RangeID,
-	replicas ReplicaSlice,
-	li leaseholderInfo,
-	withCommit bool,
-) (*roachpb.BatchResponse, error) {
-
-	ba.RangeID = rangeID
-
-	return ds.sendToReplicas(
-		ctx,
-		ba,
-		SendOptions{
-			class:   class,
-			metrics: &ds.metrics,
-		},
-		rangeID,
-		replicas,
-		ds.nodeDialer,
-		li,
-		withCommit,
-	)
-}
-
 // CountRanges returns the number of ranges that encompass the given key span.
 func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
@@ -566,8 +530,13 @@ func (ds *DistSender) sendSingleRange(
 		cachedLeaseholder: cachedLeaseHolder,
 	}
 
-	class := rpc.ConnectionClassForKey(desc.RSpan().Key)
-	br, err := ds.sendRPC(ctx, ba, class, desc.RangeID, replicas, li, withCommit)
+	ba.RangeID = desc.RangeID
+
+	opt := SendOptions{
+		class:   rpc.ConnectionClassForKey(desc.RSpan().Key),
+		metrics: &ds.metrics,
+	}
+	br, err := ds.sendToReplicas(ctx, ba, opt, desc.RangeID, replicas, ds.nodeDialer, li, withCommit)
 	if err != nil {
 		log.VErrEventf(ctx, 2, "%v", err)
 		return nil, roachpb.NewError(err)
@@ -1668,6 +1637,13 @@ type leaseholderInfo struct {
 // reply. If an error occurs which is not specific to a single
 // replica, it's returned immediately. Otherwise, when all replicas
 // have been tried and failed, returns a send error.
+//
+// Note that, if a BatchResponse is returned, it might itself contain an error
+// that must be checked (BatchResponse.Error).
+//
+// The replicas are tried in order; the caller should put the leaseholder first
+// (if routing to the leaseholder is necessary) and otherwise sort by
+// preference.
 //
 // The method accepts a boolean declaring whether a transaction commit
 // is either in this batch or in-flight concurrently with this batch.
