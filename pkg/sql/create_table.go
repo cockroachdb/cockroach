@@ -1097,7 +1097,7 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	// We use tree.FormatNode merely as a traversal method; its output buffer is
 	// discarded immediately after the traversal because it is not needed
 	// further.
-	f := tree.NewFmtCtx(tree.FmtParsable)
+	f := tree.NewFmtCtx(tree.FmtSerializable)
 	f.SetReformatTableNames(
 		func(_ *tree.FmtCtx, tn *tree.TableName) {
 			// Persist the database prefix expansion.
@@ -1113,7 +1113,7 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	f.Close()
 
 	// Substitute placeholders with their values.
-	ctx := tree.NewFmtCtx(tree.FmtParsable)
+	ctx := tree.NewFmtCtx(tree.FmtSerializable)
 	ctx.SetPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 		d, err := placeholder.Eval(evalCtx)
 		if err != nil {
@@ -1833,7 +1833,7 @@ func makeTableDesc(
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
 	// See the comment at the start of MakeTableDesc() and resolveFK().
-	params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
+	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: parentID}, func() {
 		ret, err = MakeTableDesc(
 			params.ctx,
 			params.p.txn,
