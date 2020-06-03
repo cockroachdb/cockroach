@@ -1830,7 +1830,7 @@ func makeTableDesc(
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
 	// See the comment at the start of MakeTableDesc() and resolveFK().
-	params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
+	params.p.runWithOptions(resolveFlags{skipCache: true, databaseContext: parentID}, func() {
 		ret, err = MakeTableDesc(
 			params.ctx,
 			params.p.txn,

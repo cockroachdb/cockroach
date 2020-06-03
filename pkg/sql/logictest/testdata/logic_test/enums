@@ -395,7 +395,7 @@ query TT
 SHOW CREATE t1
 ----
 t1  CREATE TABLE t1 (
-    x test.public.greeting NULL,
+    x public.greeting NULL,
     INDEX i (x ASC),
     FAMILY "primary" (x, rowid)
 )
@@ -406,7 +406,7 @@ query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
 ----
 CREATE TABLE t1 (
-   x test.public.greeting NULL,
+   x public.greeting NULL,
    INDEX i (x ASC),
    FAMILY "primary" (x, rowid)
 )
@@ -418,7 +418,7 @@ SELECT ARRAY['hello']::_greeting, ARRAY['hello'::greeting]
 {hello} {hello}
 
 # Test that we can't mix enums in an array.
-query error pq: expected 'cockroach'::test.public.dbs to be of type greeting, found type dbs
+query error pq: expected 'cockroach'::public.dbs to be of type greeting, found type dbs
 SELECT ARRAY['hello'::greeting, 'cockroach'::dbs]
 
 statement ok
@@ -434,7 +434,7 @@ SELECT * FROM enum_array
 query TTT
 SELECT pg_typeof(x), pg_typeof(x[1]), pg_typeof(ARRAY['hello']::_greeting) FROM enum_array LIMIT 1
 ----
-test.public.greeting[] test.public.greeting test.public.greeting[]
+public.greeting[]  public.greeting  public.greeting[]
 
 # Ensure that the implicitly created array type will tolerate collisions.
 # _collision will create __collision as its implicit array type, so the
@@ -492,8 +492,8 @@ SHOW CREATE enum_default
 ----
 enum_default  CREATE TABLE enum_default (
               x INT8 NULL,
-              y test.public.greeting NULL DEFAULT 'hello':::test.public.greeting,
-              z BOOL NULL DEFAULT 'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting),
+              y public.greeting NULL DEFAULT 'hello':::public.greeting,
+              z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
               FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
 )
 
@@ -508,8 +508,8 @@ WHERE
 ORDER BY
   column_name
 ----
-y  'hello':::test.public.greeting
-z  'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting)
+y  'hello':::public.greeting
+z  'hello':::public.greeting IS OF (public.greeting, public.greeting)
 
 # Test information_schema.columns.
 query TT
@@ -522,8 +522,8 @@ WHERE
 ORDER BY
   column_name
 ----
-y  'hello':::test.public.greeting
-z  'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting)
+y  'hello':::public.greeting
+z  'hello':::public.greeting IS OF (public.greeting, public.greeting)
 
 # Test computed columns with enum values.
 statement ok
@@ -547,9 +547,9 @@ SHOW CREATE enum_computed
 ----
 enum_computed  CREATE TABLE enum_computed (
                x INT8 NULL,
-               y test.public.greeting NULL AS ('hello':::test.public.greeting) STORED,
-               z BOOL NULL AS (w = 'howdy':::test.public.greeting) STORED,
-               w test.public.greeting NULL,
+               y public.greeting NULL AS ('hello':::public.greeting) STORED,
+               z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
+               w public.greeting NULL,
                FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
 )
 
@@ -564,8 +564,8 @@ WHERE
 ORDER BY
   column_name
 ----
-y  'hello':::test.public.greeting
-z  w = 'howdy':::test.public.greeting
+y  'hello':::public.greeting
+z  w = 'howdy':::public.greeting
 
 # Test check constraints with enum values.
 statement ok
@@ -580,8 +580,48 @@ query TT
 SHOW CREATE enum_checks
 ----
 enum_checks  CREATE TABLE enum_checks (
-             x test.public.greeting NULL,
+             x public.greeting NULL,
              FAMILY "primary" (x, rowid),
-             CONSTRAINT check_x CHECK (x = 'hello':::test.public.greeting::test.public.greeting),
-             CONSTRAINT "check" CHECK ('hello':::test.public.greeting = 'hello':::test.public.greeting)
+             CONSTRAINT check_x CHECK (x = 'hello':::public.greeting::public.greeting),
+             CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
 )
+
+# Test that cross database type references are disallowed.
+statement ok
+CREATE DATABASE other;
+CREATE TYPE other.t AS ENUM ('other')
+
+# We can still reference other databases types when creating objects
+# within those databases.
+statement ok
+CREATE TABLE other.tt (x other.t)
+
+# Referencing other databases in this database's objects will error.
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x other.t)
+
+# Test that we can't hide cross database references in expressions.
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x BOOL DEFAULT ('other':::other.t = 'other':::other.t))
+
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x BOOL AS ('other':::other.t = 'other':::other.t) STORED)
+
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x INT, CHECK ('other':::other.t = 'other':::other.t))
+
+# Test that we can't add columns or checks that use these either.
+statement ok
+CREATE TABLE cross_error (x INT)
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD COLUMN y other.t
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD COLUMN y BOOL DEFAULT ('other':::other.t = 'other':::other.t)
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD COLUMN y BOOL AS ('other':::other.t = 'other':::other.t) STORED
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD CHECK ('other':::other.t = 'other':::other.t)
