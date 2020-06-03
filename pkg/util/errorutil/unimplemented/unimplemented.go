@@ -109,5 +109,5 @@ func unimplementedInternal(
 }
 
 func makeURL(issue int) string {
-	return fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issue)
+	return fmt.Sprintf("https://go.crdb.dev/issue/%d", issue)
 }
