@@ -11,6 +11,10 @@
 import React from "react";
 import { Drawer, Button, Divider } from "antd";
 import { Link } from "react-router-dom";
+import classNames from "classnames/bind";
+import styles from "./drawer.module.styl";
+
+const cx = classNames.bind(styles);
 
 interface IDrawerProps {
   visible: boolean;
@@ -32,7 +36,7 @@ const openDetails = (data: any) => {
 export const DrawerComponent = ({ visible, onClose, children, data, details, ...props }: IDrawerProps) => (
   <Drawer
     title={
-      <div className="__actions">
+      <div className={cx("__actions")}>
         <Button type="default" ghost block onClick={onClose}>
           Close
         </Button>
@@ -48,7 +52,7 @@ export const DrawerComponent = ({ visible, onClose, children, data, details, ...
     closable={false}
     onClose={onClose}
     visible={visible}
-    className="drawer--preset-black"
+    className={cx("drawer--preset-black")}
     // getContainer={false}
     {...props}
   >
