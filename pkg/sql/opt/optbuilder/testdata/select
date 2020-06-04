@@ -1268,3 +1268,26 @@ with &1
                           │         └──  xyzw.w:7 => w:11
                           └── projections
                                └── a:1 + x:8 [as="?column?":12]
+
+# Populates table metadata with partial index predicates.
+exec-ddl
+CREATE TABLE partial_index (
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    INDEX u (u) WHERE u = 1,
+    INDEX uv (u, v),
+    INDEX v (v) WHERE v > 100 AND v < 200 AND u > 50
+)
+----
+
+build
+SELECT k FROM partial_index
+----
+project
+ ├── columns: k:1!null
+ └── scan partial_index
+      ├── columns: k:1!null u:2 v:3
+      └── partial index predicates: (u, v)
+           ├── u:2 = 1
+           └── ((v:3 > 100) AND (v:3 < 200)) AND (u:2 > 50)
