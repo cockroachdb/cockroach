@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -144,7 +145,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 		defer state.Unlock()
 		if ba.IsSingleComputeChecksumRequest() && !state.forcedRetry {
 			state.forcedRetry = true
-			return roachpb.NewError(roachpb.NewSendError("injected failure"))
+			return roachpb.NewError(errors.New(magicMultiTestContextKVTransportError))
 		}
 		return nil
 	}
@@ -164,6 +165,9 @@ func TestCheckConsistencyReplay(t *testing.T) {
 	if _, err := kv.SendWrapped(ctx, mtc.Store(0).TestSender(), &checkArgs); err != nil {
 		t.Fatal(err)
 	}
+	// Check that the request was evaluated twice (first time when forcedRetry was
+	// set, and a 2nd time such that kv.SendWrapped() returned success).
+	require.True(t, state.forcedRetry)
 
 	state.Lock()
 	defer state.Unlock()
