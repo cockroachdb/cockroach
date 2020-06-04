@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"strings"
 
@@ -78,7 +79,15 @@ func (l *localFileStorage) WriteFile(
 }
 
 func (l *localFileStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	return l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename))
+	var err error
+	var reader io.ReadCloser
+	if reader, err = l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename)); err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrFileDoesNotExist
+		}
+		return nil, err
+	}
+	return reader, nil
 }
 
 func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
