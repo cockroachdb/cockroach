@@ -35,9 +35,9 @@ const (
 	// is populated.
 	HasHoistableSubquery
 
-	// UnfilteredCols is set when the Relational.Rule.UnfilteredCols field is
-	// populated.
-	UnfilteredCols
+	// UnfilteredColumns is set when the Relational.Rule.UnfilteredColumns field
+	// is populated.
+	UnfilteredColumns
 
 	// JoinSize is set when the Relational.Rule.JoinSize field is populated.
 	JoinSize
@@ -334,15 +334,19 @@ type Relational struct {
 		// been set.
 		InterestingOrderings opt.OrderingSet
 
-		// UnfilteredCols is the set of output columns that have values for every
-		// row in their owner table. Rows may be duplicated, but no rows can be
-		// missing. For example, an unconstrained, unlimited Scan operator can
-		// add all of its output columns to this property, but a Select operator
-		// cannot add any columns, as it may have filtered rows.
+		// UnfilteredColumns contains the first ColumnID from each table for which
+		// all columns are guaranteed to have values for every row in the base
+		// table. Rows may be duplicated, but no rows can be missing. For example,
+		// an unconstrained, unlimited Scan operator can add the table's first
+		// column to this property, but a Select operator cannot pass through any
+		// columns, as it may have filtered rows. A project operator can pass
+		// through UnfilteredColumns because while it may remove columns from its
+		// output, it will not remove any rows.
 		//
-		// UnfilteredCols is lazily populated by GetJoinMultiplicityFromInputs. It
-		// is only valid once the Rule.Available.UnfilteredCols bit has been set.
-		UnfilteredCols opt.ColSet
+		// UnfilteredColumns is lazily populated by GetJoinMultiplicityFromInputs.
+		// It is only valid once the Rule.Available.UnfilteredColumns bit has been
+		// set.
+		UnfilteredColumns opt.ColSet
 
 		// JoinSize is the number of relations being *inner* joined underneath
 		// this node. It is used to only reorder joins via AssociateJoin up to

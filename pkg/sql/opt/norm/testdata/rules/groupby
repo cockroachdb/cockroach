@@ -280,30 +280,15 @@ group-by
       └── max [as=max:7, outer=(2)]
            └── y:2
 
-# Currently a no-op case even though we could hypothetically remove the join,
-# since the presence of a not-null foreign key in fks implies that either both
-# tables will have a cardinality of at least one, or both will have a
-# cardinality of zero.
-norm expect-not=EliminateJoinUnderGroupByLeft
+# Cross join case where neither the not-null foreign key nor its referenced
+# column are in the output of the scans.
+norm expect=EliminateJoinUnderGroupByLeft
 SELECT DISTINCT ON (k) k, v FROM fks INNER JOIN xy ON True
 ----
-distinct-on
+scan fks
  ├── columns: k:1!null v:2
- ├── grouping columns: k:1!null
  ├── key: (1)
- ├── fd: (1)-->(2)
- ├── inner-join (cross)
- │    ├── columns: k:1!null v:2
- │    ├── fd: (1)-->(2)
- │    ├── scan fks
- │    │    ├── columns: k:1!null v:2
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
- │    ├── scan xy
- │    └── filters (true)
- └── aggregations
-      └── first-agg [as=v:2, outer=(2)]
-           └── v:2
+ └── fd: (1)-->(2)
 
 # No-op case because the InnerJoin will return no rows if fks is empty.
 norm expect-not=EliminateJoinUnderGroupByLeft
@@ -338,7 +323,7 @@ distinct-on
  ├── fd: (1)-->(2,3)
  ├── left-join (cross)
  │    ├── columns: x:1!null y:2 k:3
- │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2)
  │    ├── scan xy
@@ -367,6 +352,7 @@ group-by
  ├── fd: (1)-->(7)
  ├── inner-join (cross)
  │    ├── columns: k:1!null r1:3!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── fd: (1)-->(3)
  │    ├── scan fks
  │    │    ├── columns: k:1!null r1:3!null
@@ -423,7 +409,7 @@ group-by
  │    ├── ordering: +1,+3
  │    └── left-join (cross)
  │         ├── columns: x:1!null y:2 k:3
- │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │         ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │         ├── key: (1,3)
  │         ├── fd: (1)-->(2)
  │         ├── scan xy

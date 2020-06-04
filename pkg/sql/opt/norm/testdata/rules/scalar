@@ -1936,7 +1936,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k != a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1949,7 +1949,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k > a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1962,7 +1962,7 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k < a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
