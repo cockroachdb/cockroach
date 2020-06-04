@@ -151,10 +151,10 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				return encoding.EncodeStringAscending(append([]byte{}, prefix...), fmt.Sprintf("k%d", i))
 			}
 
-			if err := kvDB.AdminSplit(ctx, key(split1), key(split1), hlc.MaxTimestamp /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.AdminSplit(ctx, key(split2), key(split2), hlc.MaxTimestamp /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(ctx, key(split2), hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
 

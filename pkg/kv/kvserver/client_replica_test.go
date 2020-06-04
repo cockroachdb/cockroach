@@ -2840,7 +2840,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		err = db.AdminMerge(ctx, lhs)
 		require.NoError(t, err)
 		if resplit {
-			require.NoError(t, db.AdminSplit(ctx, lhs, rhs, hlc.Timestamp{WallTime: math.MaxInt64}))
+			require.NoError(t, db.AdminSplit(ctx, rhs, hlc.Timestamp{WallTime: math.MaxInt64}))
 			err = tc.WaitForSplitAndInitialization(rhs)
 			require.NoError(t, err)
 		}

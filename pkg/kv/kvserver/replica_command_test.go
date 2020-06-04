@@ -40,7 +40,7 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	bKey := roachpb.Key("b")
-	if err := kvDB.AdminSplit(ctx, bKey, bKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, bKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,7 +85,7 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	// merges and replica changes, but they all go through updateRangeDescriptor
 	// so it's unnecessary.
 	cKey := roachpb.Key("c")
-	if err := kvDB.AdminSplit(ctx, cKey, cKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, cKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 }

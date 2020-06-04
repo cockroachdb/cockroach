@@ -188,7 +188,7 @@ func presplitTableBoundaries(
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
 		for _, span := range tbl.Desc.AllIndexSpans(cfg.Codec) {
-			if err := cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
 			}
 

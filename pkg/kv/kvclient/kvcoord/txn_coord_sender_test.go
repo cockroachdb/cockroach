@@ -294,7 +294,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyC := roachpb.Key("c")
 	splitKey := roachpb.Key("b")
-	if err := s.DB.AdminSplit(ctx, splitKey /* spanKey */, splitKey /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */); err != nil {
 		t.Fatal(err)
 	}
 
