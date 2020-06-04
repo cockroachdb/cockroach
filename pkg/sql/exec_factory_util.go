@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -103,4 +104,46 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
 	return colCfg
+}
+
+func constructExplainPlanNode(
+	options *tree.ExplainOptions, stmtType tree.StatementType, p *planTop, planner *planner,
+) (exec.Node, error) {
+	analyzeSet := options.Flags[tree.ExplainFlagAnalyze]
+
+	if options.Flags[tree.ExplainFlagEnv] {
+		return nil, errors.New("ENV only supported with (OPT) option")
+	}
+
+	switch options.Mode {
+	case tree.ExplainDistSQL:
+		return &explainDistSQLNode{
+			options:  options,
+			plan:     p.planComponents,
+			analyze:  analyzeSet,
+			stmtType: stmtType,
+		}, nil
+
+	case tree.ExplainVec:
+		return &explainVecNode{
+			options:       options,
+			plan:          p.main,
+			subqueryPlans: p.subqueryPlans,
+			stmtType:      stmtType,
+		}, nil
+
+	case tree.ExplainPlan:
+		if analyzeSet {
+			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")
+		}
+		return planner.makeExplainPlanNodeWithPlan(
+			context.TODO(),
+			options,
+			&p.planComponents,
+			stmtType,
+		)
+
+	default:
+		panic(fmt.Sprintf("unsupported explain mode %v", options.Mode))
+	}
 }
