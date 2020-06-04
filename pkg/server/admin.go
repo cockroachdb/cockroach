@@ -78,6 +78,7 @@ func nonTableDescriptorRangeCount() int64 {
 		keys.TimeseriesRangesID,
 		keys.LivenessRangesID,
 		keys.PublicSchemaID,
+		keys.TenantsRangesID,
 	}))
 }
 
@@ -699,9 +700,8 @@ func (s *adminServer) NonTableStats(
 		}
 	}
 
-	// There are four empty ranges for table descriptors 17, 18, 19, and 22 that
-	// aren't actually tables (a.k.a. MetaRangesID, SystemRangesID,
-	// TimeseriesRangesID, and LivenessRangesID in pkg/keys).
+	// There are six empty ranges for table descriptors 17, 18, 19, 22, 29, and
+	// 37 that aren't actually tables (a.k.a. the PseudoTableIDs in pkg/keys).
 	// No data is ever really written to them since they don't have actual
 	// tables. Some backend work could probably be done to eliminate these empty
 	// ranges, but it may be more trouble than it's worth. In the meantime,

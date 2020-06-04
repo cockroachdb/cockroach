@@ -998,7 +998,7 @@ func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
 	table *sqlbase.TableDescriptor,
 	swapInfo *sqlbase.PrimaryKeySwap,
 ) error {
-	zone, err := getZoneConfigRaw(ctx, txn, table.ID)
+	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, table.ID)
 	if err != nil {
 		return err
 	}

@@ -21,14 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestDecodeObjectID(t *testing.T) {
+func TestDecodeSystemTenantObjectID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		key       roachpb.RKey
 		keySuffix []byte
 		success   bool
-		id        uint32
+		id        config.SystemTenantObjectID
 	}{
 		// Before the structured span.
 		{roachpb.RKeyMin, nil, false, 0},
@@ -43,7 +43,7 @@ func TestDecodeObjectID(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		id, keySuffix, success := config.DecodeObjectID(tc.key)
+		id, keySuffix, success := config.DecodeSystemTenantObjectID(tc.key)
 		if success != tc.success {
 			t.Errorf("#%d: expected success=%t", tcNum, tc.success)
 			continue

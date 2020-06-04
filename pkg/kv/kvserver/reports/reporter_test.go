@@ -511,9 +511,9 @@ func TestZoneChecker(t *testing.T) {
 	p2SubzoneIndex := 1
 	require.Equal(t, "p1", t1Zone.Subzones[p1SubzoneIndex].PartitionName)
 	require.Equal(t, "p2", t1Zone.Subzones[p2SubzoneIndex].PartitionName)
-	t1ZoneKey := MakeZoneKey(uint32(t1ID), NoSubzone)
-	p1ZoneKey := MakeZoneKey(uint32(t1ID), base.SubzoneIDFromIndex(p1SubzoneIndex))
-	p2ZoneKey := MakeZoneKey(uint32(t1ID), base.SubzoneIDFromIndex(p2SubzoneIndex))
+	t1ZoneKey := MakeZoneKey(config.SystemTenantObjectID(t1ID), NoSubzone)
+	p1ZoneKey := MakeZoneKey(config.SystemTenantObjectID(t1ID), base.SubzoneIDFromIndex(p1SubzoneIndex))
+	p2ZoneKey := MakeZoneKey(config.SystemTenantObjectID(t1ID), base.SubzoneIDFromIndex(p2SubzoneIndex))
 
 	ranges := []tc{
 		{

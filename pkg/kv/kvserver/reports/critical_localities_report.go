@@ -113,7 +113,7 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 	r.previousVersion = make(LocalityReport, len(rows))
 	for _, row := range rows {
 		key := localityKey{}
-		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
+		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
 		key.locality = (LocalityRepr)(*row[2].(*tree.DString))
 		r.previousVersion[key] = localityStatus{(int32)(*row[3].(*tree.DInt))}

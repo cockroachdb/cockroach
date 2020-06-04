@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -120,7 +121,7 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 	r.previousVersion = make(RangeReport, len(rows))
 	for _, row := range rows {
 		key := ZoneKey{}
-		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
+		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
 		r.previousVersion[key] = zoneRangeStatus{
 			(int32)(*row[2].(*tree.DInt)),
@@ -298,11 +299,13 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 	// Iterate through all the zone configs to create report entries for all the
 	// zones that have constraints. Otherwise, just iterating through the ranges
 	// wouldn't create entries for zones that don't apply to any ranges.
-	maxObjectID, err := v.cfg.GetLargestObjectID(0 /* maxID - return the largest ID in the config */)
+	maxObjectID, err := v.cfg.GetLargestObjectID(
+		0 /* maxID - return the largest ID in the config */, keys.PseudoTableIDs,
+	)
 	if err != nil {
 		log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
 	}
-	for i := uint32(1); i <= maxObjectID; i++ {
+	for i := config.SystemTenantObjectID(1); i <= maxObjectID; i++ {
 		zone, err := getZoneByID(i, v.cfg)
 		if err != nil {
 			log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)

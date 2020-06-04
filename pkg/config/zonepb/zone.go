@@ -35,6 +35,7 @@ const (
 	MetaZoneName       = "meta"
 	SystemZoneName     = "system"
 	TimeseriesZoneName = "timeseries"
+	TenantsZoneName    = "tenants"
 )
 
 // NamedZones maps named zones to their pseudo-table ID that can be used to
@@ -45,6 +46,7 @@ var NamedZones = map[string]uint32{
 	MetaZoneName:       keys.MetaRangesID,
 	SystemZoneName:     keys.SystemRangesID,
 	TimeseriesZoneName: keys.TimeseriesRangesID,
+	TenantsZoneName:    keys.TenantsRangesID,
 }
 
 // NamedZonesByID is the inverse of NamedZones: it maps pseudo-table IDs to

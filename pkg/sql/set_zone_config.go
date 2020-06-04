@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -100,6 +101,9 @@ func loadYAML(dst interface{}, yamlString string) {
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
 		return nil, err
+	}
+	if !p.ExecCfg().Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy()
 	}
 
 	var yamlConfig tree.TypedExpr
@@ -382,7 +386,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 
 		// Retrieve the partial zone configuration
-		partialZone, err := getZoneConfigRaw(params.ctx, params.p.txn, targetID)
+		partialZone, err := getZoneConfigRaw(params.ctx, params.p.txn, params.ExecCfg().Codec, targetID)
 		if err != nil {
 			return err
 		}
@@ -413,7 +417,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// These zones are only used for validations. The merged zone is will
 		// not be written.
 		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
-			uint32(targetID), index, partition, n.setDefault)
+			config.SystemTenantObjectID(targetID), index, partition, n.setDefault)
 
 		if errors.Is(err, errNoZoneConfigApplies) {
 			// No zone config yet.
@@ -444,7 +448,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// inherit from its parent. We do this by using an empty zoneConfig
 				// and completing at the level of the current zone.
 				zoneInheritedFields := zonepb.ZoneConfig{}
-				if err := completeZoneConfig(&zoneInheritedFields, uint32(targetID), getKey); err != nil {
+				if err := completeZoneConfig(&zoneInheritedFields, config.SystemTenantObjectID(targetID), getKey); err != nil {
 					return err
 				}
 				partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
@@ -452,7 +456,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// If we are operating on a subZone, we need to inherit all remaining
 				// unset fields in its parent zone, which is partialZone.
 				zoneInheritedFields := *partialZone
-				if err := completeZoneConfig(&zoneInheritedFields, uint32(targetID), getKey); err != nil {
+				if err := completeZoneConfig(&zoneInheritedFields, config.SystemTenantObjectID(targetID), getKey); err != nil {
 					return err
 				}
 				// In the case we have just an index, we should copy from the inherited
@@ -602,7 +606,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// here to complete the missing fields. The reason is because we don't know
 				// here if a zone is a placeholder or not. Can we do a GetConfigInTxn here?
 				// And if it is a placeholder, we use getZoneConfigRaw to create one.
-				completeZone, err = getZoneConfigRaw(params.ctx, params.p.txn, targetID)
+				completeZone, err = getZoneConfigRaw(params.ctx, params.p.txn, params.ExecCfg().Codec, targetID)
 				if err != nil {
 					return err
 				} else if completeZone == nil {
@@ -866,8 +870,14 @@ func writeZoneConfig(
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
 // getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
 // zone config exists for the given ID, it returns nil.
-func getZoneConfigRaw(ctx context.Context, txn *kv.Txn, id sqlbase.ID) (*zonepb.ZoneConfig, error) {
-	kv, err := txn.Get(ctx, config.MakeZoneKey(uint32(id)))
+func getZoneConfigRaw(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+) (*zonepb.ZoneConfig, error) {
+	if !codec.ForSystemTenant() {
+		// Secondary tenants do not have zone configs for individual objects.
+		return nil, nil
+	}
+	kv, err := txn.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(id)))
 	if err != nil {
 		return nil, err
 	}
@@ -899,7 +909,7 @@ func RemoveIndexZoneConfigs(
 		return err
 	}
 
-	zone, err := getZoneConfigRaw(ctx, txn, tableID)
+	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
 	if err != nil {
 		return err
 	} else if zone == nil {
