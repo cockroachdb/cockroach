@@ -525,6 +525,7 @@ func (b *Builder) buildScan(
 
 		b.addCheckConstraintsForTable(tabMeta)
 		b.addComputedColsForTable(tabMeta)
+		b.addPartialIndexPredicatesForTable(tabMeta)
 
 		outScope.expr = b.factory.ConstructScan(&private)
 
@@ -615,7 +616,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 		}
 		expr, err := parser.ParseExpr(tabCol.ComputedExprStr())
 		if err != nil {
-			continue
+			panic(err)
 		}
 
 		if tableScope == nil {
@@ -628,6 +629,53 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
 			tabMeta.AddComputedCol(colID, scalar)
 		}
+	}
+}
+
+// addPartialIndexPredicatesForTable finds all partial indexes in the table and
+// adds their predicates to the table metadata (see
+// TableMeta.PartialIndexPredicates). The predicates are converted from strings
+// to ScalarExprs here.
+func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
+	tab := tabMeta.Table
+
+	// Find the first partial index.
+	numIndexes := tab.IndexCount()
+	indexOrd := 0
+	for ; indexOrd < numIndexes; indexOrd++ {
+		if _, ok := tab.Index(indexOrd).Predicate(); ok {
+			break
+		}
+	}
+
+	// Return early if there are no partial indexes. Only partial indexes have
+	// predicates.
+	if indexOrd == numIndexes {
+		return
+	}
+
+	// Create a scope that can be used for building the scalar expressions.
+	tableScope := b.allocScope()
+	tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+
+	// Skip to the first partial index we found above.
+	for ; indexOrd < numIndexes; indexOrd++ {
+		index := tab.Index(indexOrd)
+		pred, ok := index.Predicate()
+
+		// If the index is not a partial index, do nothing.
+		if !ok {
+			continue
+		}
+
+		expr, err := parser.ParseExpr(pred)
+		if err != nil {
+			panic(err)
+		}
+
+		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+		scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
+		tabMeta.AddPartialIndexPredicate(indexOrd, scalar)
 	}
 }
 
