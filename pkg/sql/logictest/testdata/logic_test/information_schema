@@ -1138,6 +1138,7 @@ system         public        jobs                             created           
 system         public        jobs                             created_by_id             7
 system         public        jobs                             created_by_type           6
 system         public        jobs                             id                        1
+system         public        jobs                             lease                     8
 system         public        jobs                             payload                   4
 system         public        jobs                             progress                  5
 system         public        jobs                             status                    2
