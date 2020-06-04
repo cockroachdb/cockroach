@@ -57,12 +57,10 @@ limit
  ├── fd: ()-->(2,4)
  ├── sort (segmented)
  │    ├── columns: i:2 s:4
- │    ├── cardinality: [0 - 10]
  │    ├── ordering: +4,+2
  │    ├── limit hint: 1.00
  │    └── scan a@s_idx
  │         ├── columns: i:2 s:4
- │         ├── limit: 10
  │         └── ordering: +4
  └── 1
 

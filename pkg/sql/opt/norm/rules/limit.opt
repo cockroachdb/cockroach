@@ -202,3 +202,25 @@ $input
     $limitExpr
     $ordering
 )
+
+# FoldLimits replaces a Limit on top of a Limit with a single Limit operator
+# when the outer limit value is smaller than or equal to the inner limit value
+# and the orderings intersect.
+[FoldLimits, Normalize]
+(Limit
+    (Limit
+        $innerInput:*
+        $innerLimitExpr:(Const $innerLimit:*)
+        $innerOrdering:*
+    )
+    $outerLimitExpr:(Const $outerLimit:*) &
+        ^(IsGreaterThan $outerLimit $innerLimit)
+    $outerOrdering:* &
+        (OrderingIntersects $innerOrdering $outerOrdering)
+)
+=>
+(Limit
+    $innerInput
+    $outerLimitExpr
+    (OrderingIntersection $innerOrdering $outerOrdering)
+)
