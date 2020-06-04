@@ -352,6 +352,30 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 					f.formatExpr(tab.ComputedCols[col], c.Child(f.ColumnString(col)))
 				}
 			}
+			if tab.PartialIndexPredicates != nil {
+				f.Buffer.Reset()
+				indexOrds := make([]cat.IndexOrdinal, 0, len(tab.PartialIndexPredicates))
+				for ord := range tab.PartialIndexPredicates {
+					indexOrds = append(indexOrds, ord)
+				}
+				sort.Slice(indexOrds, func(i, j cat.IndexOrdinal) bool {
+					return indexOrds[i] < indexOrds[j]
+				})
+				f.Buffer.WriteString("partial index predicates: (")
+				for i, ord := range indexOrds {
+					name := string(tab.Table.Index(ord).Name())
+					if i > 0 {
+						f.Buffer.WriteString(", ")
+					}
+					f.Buffer.WriteString(name)
+				}
+				f.Buffer.WriteString(")")
+				c := tp.Childf(f.Buffer.String())
+				for _, ord := range indexOrds {
+					f.Buffer.Reset()
+					f.formatExpr(tab.PartialIndexPredicates[ord], c)
+				}
+			}
 		}
 		if c := t.Constraint; c != nil {
 			if c.IsContradiction() {
