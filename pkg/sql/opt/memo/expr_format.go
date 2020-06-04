@@ -717,8 +717,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if r.JoinSize > 1 {
 			tp.Childf("join-size: %d", r.JoinSize)
 		}
-		if !r.UnfilteredCols.Empty() {
-			tp.Childf("unfiltered-cols: %s", r.UnfilteredCols.String())
+		if !r.UnfilteredColumns.Empty() {
+			tp.Childf("unfiltered-cols: %v", r.UnfilteredColumns)
 		}
 		if withUses := relational.Shared.Rule.WithUses; len(withUses) > 0 {
 			n := tp.Childf("cte-uses")

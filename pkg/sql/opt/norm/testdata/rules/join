@@ -84,7 +84,7 @@ SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
 left-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-7)
  ├── scan a
@@ -103,7 +103,7 @@ SELECT * FROM a FULL JOIN b ON i=5 AND ((k<1 AND k>2) OR (k<4 AND k>5)) AND s='f
 ----
 full-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6 y:7
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
