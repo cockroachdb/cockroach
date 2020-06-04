@@ -103,8 +103,11 @@ func readBackupManifestFromStore(
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
 	r, err := exportStore.ReadFile(ctx, BackupManifestName)
 	if err != nil {
-		//nolint:returnerrcheck
-		return false, nil /* TODO(dt): only silence non-exists errors */
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			//nolint:returnerrcheck
+			return false, nil
+		}
+		return false, err
 	}
 	r.Close()
 	return true, nil
@@ -661,28 +664,30 @@ func VerifyUsableExportTarget(
 	readable string,
 	encryption *roachpb.FileEncryptionOptions,
 ) error {
-	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
-		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
-		// returns (and then wrap/tag them), we could narrow this check.
+	r, err := exportStore.ReadFile(ctx, BackupManifestName)
+	if err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
 			readable, BackupManifestName)
 	}
-	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
-		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
-		// returns (and then wrap/tag them), we could narrow this check.
-		r.Close()
-		return pgerror.Newf(pgcode.FileAlreadyExists,
-			"%s already contains a %s file",
-			readable, BackupManifestName)
+
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return errors.Wrapf(err, "%s returned an unexpected error when checking for the existence of %s file", readable, BackupManifestName)
 	}
-	if r, err := exportStore.ReadFile(ctx, BackupManifestCheckpointName); err == nil {
+
+	r, err = exportStore.ReadFile(ctx, BackupManifestCheckpointName)
+	if err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
 			readable, BackupManifestCheckpointName)
 	}
+
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return errors.Wrapf(err, "%s returned an unexpected error when checking for the existence of %s file", readable, BackupManifestCheckpointName)
+	}
+
 	if err := writeBackupManifest(
 		ctx, settings, exportStore, BackupManifestCheckpointName, encryption, &BackupManifest{},
 	); err != nil {
