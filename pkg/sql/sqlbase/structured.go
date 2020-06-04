@@ -3691,8 +3691,10 @@ func (desc *Descriptor) GetName() string {
 		return t.Database.Name
 	case *Descriptor_Type:
 		return t.Type.Name
+	case *Descriptor_Schema:
+		return t.Schema.Name
 	default:
-		return ""
+		panic(errors.AssertionFailedf("unknown Descriptor type %T", t))
 	}
 }
 

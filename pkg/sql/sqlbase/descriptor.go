@@ -10,11 +10,7 @@
 
 package sqlbase
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // DescriptorInterface provides table information for results from a name
 // lookup.
@@ -56,26 +52,4 @@ type BaseDescriptorInterface interface {
 
 	// DescriptorProto prepares this descriptor for serialization.
 	DescriptorProto() *Descriptor
-}
-
-// UnwrapDescriptor is a hack to construct a DescriptorInterface from a
-// Descriptor.
-//
-// TODO(ajwerner): In practice, the function which retrieved the value should
-// be unwrapping it.
-func UnwrapDescriptor(desc *Descriptor) DescriptorInterface {
-	if typDesc := desc.GetType(); typDesc != nil {
-		return NewImmutableTypeDescriptor(*typDesc)
-	}
-	if tbDesc := desc.Table(hlc.Timestamp{}); tbDesc != nil {
-		// TODO(ajwerner): Fix the constructor here to take desc.
-		return NewImmutableTableDescriptor(*tbDesc)
-	}
-	if schemaDesc := desc.GetSchema(); schemaDesc != nil {
-		return schemaDesc
-	}
-	if dbDesc := desc.GetDatabase(); dbDesc != nil {
-		return NewImmutableDatabaseDescriptor(*dbDesc)
-	}
-	panic(errors.Errorf("unknown descriptor type %+v", desc))
 }

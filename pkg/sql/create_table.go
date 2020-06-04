@@ -203,7 +203,7 @@ func getTableCreateParams(
 			return nil, 0, err
 		}
 		// Still return data in this case.
-		return tKey, schemaID, makeObjectAlreadyExistsError(desc, tableName)
+		return tKey, schemaID, makeObjectAlreadyExistsError(desc.DescriptorProto(), tableName)
 	} else if err != nil {
 		return nil, 0, err
 	}

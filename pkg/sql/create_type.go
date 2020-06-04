@@ -89,7 +89,7 @@ func getCreateTypeParams(
 		if err != nil {
 			return nil, 0, err
 		}
-		return nil, 0, makeObjectAlreadyExistsError(desc, name.String())
+		return nil, 0, makeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
 	}
 	if err != nil {
 		return nil, 0, err
@@ -158,7 +158,7 @@ func (p *planner) createArrayType(
 	var elemTyp *types.T
 	switch t := typDesc.Kind; t {
 	case sqlbase.TypeDescriptor_ENUM:
-		elemTyp = types.MakeEnum(uint32(typDesc.ID), uint32(id))
+		elemTyp = types.MakeEnum(uint32(typDesc.GetID()), uint32(id))
 	default:
 		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}
