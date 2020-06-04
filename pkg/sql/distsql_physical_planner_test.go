@@ -250,7 +250,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 }
 
 // Test that DistSQLReceiver uses inbound metadata to update the
-// RangeDescriptorCache and the LeaseHolderCache.
+// RangeDescriptorCache.
 func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -511,7 +511,6 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 func TestDistSQLDrainingHosts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("!!! skip until following commit that switches DistSender to update the combined cache")
 
 	const numNodes = 2
 	tc := serverutils.StartTestCluster(

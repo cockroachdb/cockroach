@@ -82,15 +82,23 @@ func (rs ReplicaSlice) Len() int { return len(rs) }
 // Swap swaps the replicas with indexes i and j.
 func (rs ReplicaSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
 
-// FindReplica returns the index of the replica which matches the specified store
-// ID. If no replica matches, -1 is returned.
-func (rs ReplicaSlice) FindReplica(storeID roachpb.StoreID) int {
+// Find returns the index of the specified ReplicaID, or -1 if missing.
+func (rs ReplicaSlice) Find(id roachpb.ReplicaID) int {
 	for i := range rs {
-		if rs[i].StoreID == storeID {
+		if rs[i].ReplicaID == id {
 			return i
 		}
 	}
 	return -1
+}
+
+// FindOrDie returns the index of the specified ReplicaID, or panics if missing.
+func (rs ReplicaSlice) FindOrDie(id roachpb.ReplicaID) int {
+	i := rs.Find(id)
+	if i == -1 {
+		panic(fmt.Sprintf("replica id: %d not found. replicas: %s", id, rs))
+	}
+	return i
 }
 
 // MoveToFront moves the replica at the given index to the front
