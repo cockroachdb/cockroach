@@ -32,7 +32,7 @@ NULL       /1       {1}       1
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
-·                distributed     true               ·             ·
+·                distribution    full               ·             ·
 ·                vectorized      true               ·             ·
 render           ·               ·                  (a, b)        ·
  │               render 0        a                  ·             ·
@@ -112,19 +112,19 @@ render           ·               ·                  (a, b)        ·
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
-·               distributed  true             ·             ·
-·               vectorized   true             ·             ·
-sort            ·            ·                (a, b, c, d)  +b,+a
- │              order        +b,+a            ·             ·
- └── hash-join  ·            ·                (a, b, c, d)  ·
-      │         type         inner            ·             ·
-      │         equality     (a, b) = (c, d)  ·             ·
-      ├── scan  ·            ·                (a, b)        ·
-      │         table        data@primary     ·             ·
-      │         spans        FULL SCAN        ·             ·
-      └── scan  ·            ·                (c, d)        ·
-·               table        data@primary     ·             ·
-·               spans        FULL SCAN        ·             ·
+·               distribution  full             ·             ·
+·               vectorized    true             ·             ·
+sort            ·             ·                (a, b, c, d)  +b,+a
+ │              order         +b,+a            ·             ·
+ └── hash-join  ·             ·                (a, b, c, d)  ·
+      │         type          inner            ·             ·
+      │         equality      (a, b) = (c, d)  ·             ·
+      ├── scan  ·             ·                (a, b)        ·
+      │         table         data@primary     ·             ·
+      │         spans         FULL SCAN        ·             ·
+      └── scan  ·             ·                (c, d)        ·
+·               table         data@primary     ·             ·
+·               spans         FULL SCAN        ·             ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)]

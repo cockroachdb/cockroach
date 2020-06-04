@@ -259,8 +259,8 @@ func populateExplain(
 		return err
 	}
 
-	// First, emit the "distributed" and "vectorized" information rows.
-	if err := emitRow("", 0, "", "distributed", fmt.Sprintf("%t", willDistribute), "", ""); err != nil {
+	// First, emit the "distribution" and "vectorized" information rows.
+	if err := emitRow("", 0, "", "distribution", distribution.String(), "", ""); err != nil {
 		return err
 	}
 	if err := emitRow("", 0, "", "vectorized", fmt.Sprintf("%t", willVectorize), "", ""); err != nil {

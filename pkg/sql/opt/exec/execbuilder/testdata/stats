@@ -18,12 +18,12 @@ set enable_zigzag_join = false
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_v_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       u = 1        ·       ·
+·     distribution  full         ·       ·
+·     vectorized    true         ·       ·
+scan  ·             ·            (u, v)  ·
+·     table         uv@uv_v_idx  ·       ·
+·     spans         /1-/2        ·       ·
+·     filter        u = 1        ·       ·
 
 # Verify that injecting different statistics changes the plan.
 statement ok
@@ -45,12 +45,12 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_u_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       v = 1        ·       ·
+·     distribution  full         ·       ·
+·     vectorized    true         ·       ·
+scan  ·             ·            (u, v)  ·
+·     table         uv@uv_u_idx  ·       ·
+·     spans         /1-/2        ·       ·
+·     filter        v = 1        ·       ·
 
 # Verify that injecting different statistics with null counts
 # changes the plan.
@@ -75,12 +75,12 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_u_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       v = 1        ·       ·
+·     distribution  full         ·       ·
+·     vectorized    true         ·       ·
+scan  ·             ·            (u, v)  ·
+·     table         uv@uv_u_idx  ·       ·
+·     spans         /1-/2        ·       ·
+·     filter        v = 1        ·       ·
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[
@@ -103,12 +103,12 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_v_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       u = 1        ·       ·
+·     distribution  full         ·       ·
+·     vectorized    true         ·       ·
+scan  ·             ·            (u, v)  ·
+·     table         uv@uv_v_idx  ·       ·
+·     spans         /1-/2        ·       ·
+·     filter        u = 1        ·       ·
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[

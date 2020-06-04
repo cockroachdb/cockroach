@@ -3,19 +3,19 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
 ----
-·              distributed  false             ·                                                                  ·
-·              vectorized   false             ·                                                                  ·
-virtual table  ·            ·                 (catalog_name, schema_name, default_character_set_name, sql_path)  ·
-·              source       schemata@primary  ·                                                                  ·
+·              distribution  local             ·                                                                  ·
+·              vectorized    false             ·                                                                  ·
+virtual table  ·             ·                 (catalog_name, schema_name, default_character_set_name, sql_path)  ·
+·              source        schemata@primary  ·                                                                  ·
 
 query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
-·              distributed  false
-·              vectorized   false
-virtual table  ·            ·
-·              source       tables@tables_table_name_idx
-·              constraint   /4: [/'foo' - /'foo']
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              source        tables@tables_table_name_idx
+·              constraint    /4: [/'foo' - /'foo']
 
 statement error use of crdb_internal_vtable_pk column not allowed
 SELECT crdb_internal_vtable_pk FROM system.information_schema.schemata
