@@ -46,6 +46,7 @@ ORDER BY
 sort
  ├── save-table-name: q11_sort_1
  ├── columns: ps_partkey:1(int!null) value:18(float!null)
+ ├── immutable
  ├── stats: [rows=9927.82897, distinct(1)=9927.82897, null(1)=0, distinct(18)=9927.82897, null(18)=0]
  ├── key: (1)
  ├── fd: (1)-->(18)
@@ -53,6 +54,7 @@ sort
  └── select
       ├── save-table-name: q11_select_2
       ├── columns: ps_partkey:1(int!null) sum:18(float!null)
+      ├── immutable
       ├── stats: [rows=9927.82897, distinct(1)=9927.82897, null(1)=0, distinct(18)=9927.82897, null(18)=0]
       ├── key: (1)
       ├── fd: (1)-->(18)
@@ -60,12 +62,14 @@ sort
       │    ├── save-table-name: q11_group_by_3
       │    ├── columns: ps_partkey:1(int!null) sum:18(float!null)
       │    ├── grouping columns: ps_partkey:1(int!null)
+      │    ├── immutable
       │    ├── stats: [rows=29783.4869, distinct(1)=29783.4869, null(1)=0, distinct(18)=29783.4869, null(18)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(18)
       │    ├── project
       │    │    ├── save-table-name: q11_project_4
       │    │    ├── columns: column17:17(float!null) ps_partkey:1(int!null)
+      │    │    ├── immutable
       │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(17)=31617.9161, null(17)=0]
       │    │    ├── inner-join (lookup partsupp)
       │    │    │    ├── save-table-name: q11_lookup_join_5
@@ -109,18 +113,19 @@ sort
       │    │    │    │    └── filters (true)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── ps_supplycost:4 * ps_availqty:3::FLOAT8 [as=column17:17, type=float, outer=(3,4)]
+      │    │         └── ps_supplycost:4 * ps_availqty:3::FLOAT8 [as=column17:17, type=float, outer=(3,4), immutable]
       │    └── aggregations
       │         └── sum [as=sum:18, type=float, outer=(17)]
       │              └── column17:17 [type=float]
       └── filters
-           └── gt [type=bool, outer=(18), subquery, constraints=(/18: (/NULL - ])]
+           └── gt [type=bool, outer=(18), immutable, subquery, constraints=(/18: (/NULL - ])]
                 ├── sum:18 [type=float]
                 └── subquery [type=float]
                      └── project
                           ├── save-table-name: q11_project_10
                           ├── columns: "?column?":37(float)
                           ├── cardinality: [1 - 1]
+                          ├── immutable
                           ├── stats: [rows=1, distinct(37)=1, null(37)=0]
                           ├── key: ()
                           ├── fd: ()-->(37)
@@ -128,12 +133,14 @@ sort
                           │    ├── save-table-name: q11_scalar_group_by_11
                           │    ├── columns: sum:36(float)
                           │    ├── cardinality: [1 - 1]
+                          │    ├── immutable
                           │    ├── stats: [rows=1, distinct(36)=1, null(36)=0]
                           │    ├── key: ()
                           │    ├── fd: ()-->(36)
                           │    ├── project
                           │    │    ├── save-table-name: q11_project_12
                           │    │    ├── columns: column35:35(float!null)
+                          │    │    ├── immutable
                           │    │    ├── stats: [rows=32258.0645, distinct(35)=31617.9161, null(35)=0]
                           │    │    ├── inner-join (lookup partsupp)
                           │    │    │    ├── save-table-name: q11_lookup_join_13
@@ -176,7 +183,7 @@ sort
                           │    │    │    │    └── filters (true)
                           │    │    │    └── filters (true)
                           │    │    └── projections
-                          │    │         └── ps_supplycost:22 * ps_availqty:21::FLOAT8 [as=column35:35, type=float, outer=(21,22)]
+                          │    │         └── ps_supplycost:22 * ps_availqty:21::FLOAT8 [as=column35:35, type=float, outer=(21,22), immutable]
                           │    └── aggregations
                           │         └── sum [as=sum:36, type=float, outer=(35)]
                           │              └── column35:35 [type=float]

@@ -203,13 +203,13 @@ SELECT column1+1, 3 FROM (VALUES ($1::int, $2::int))
 project
  ├── columns: "?column?":3 "?column?":4!null
  ├── cardinality: [1 - 1]
- ├── has-placeholder
+ ├── immutable, has-placeholder
  ├── key: ()
  ├── fd: ()-->(3,4)
  ├── values
  │    ├── columns: column1:1
  │    ├── cardinality: [1 - 1]
- │    ├── has-placeholder
+ │    ├── immutable, has-placeholder
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── ($1::INT8,)

@@ -413,6 +413,10 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	if err := b.buildFKCascades(ups.WithID, ups.FKCascades); err != nil {
+		return execPlan{}, err
+	}
+
 	// If UPSERT returns rows, they contain all non-mutation columns from the
 	// table, in the same order they're defined in the table. Each output column
 	// value is taken from an insert, fetch, or update column, depending on the

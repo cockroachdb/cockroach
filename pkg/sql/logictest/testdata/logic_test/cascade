@@ -3786,3 +3786,215 @@ SELECT * FROM self_abcd ORDER BY (a, b, c, d)
 # Clean up.
 statement ok
 DROP TABLE self_abcd
+
+subtest UpsertCascade
+
+statement ok
+CREATE TABLE parent (pk INT PRIMARY KEY, p INT UNIQUE)
+
+statement ok
+CREATE TABLE child (pk INT PRIMARY KEY, p INT REFERENCES parent(p) ON UPDATE CASCADE)
+
+statement ok
+INSERT INTO parent VALUES (1, 1), (2, 2);
+INSERT INTO child VALUES (1, 1), (2, 1), (3, 2), (4, 2)
+
+statement ok
+UPSERT INTO parent VALUES (2, 20), (3, 3)
+
+query II rowsort
+SELECT * FROM child
+----
+1  1
+2  1
+3  20
+4  20
+
+statement ok
+INSERT INTO parent VALUES (1, 1), (4, 4) ON CONFLICT (pk) DO UPDATE SET p = parent.pk * 10
+
+query II rowsort
+SELECT * FROM child
+----
+1  10
+2  10
+3  20
+4  20
+
+statement ok
+INSERT INTO parent VALUES (100, 20) ON CONFLICT(p) DO UPDATE SET p = 50
+
+query II rowsort
+SELECT * FROM child
+----
+1  10
+2  10
+3  50
+4  50
+
+statement ok
+DROP TABLE child, parent
+
+subtest UpsertMultiColCascade
+
+statement ok
+CREATE TABLE parent (pk INT PRIMARY KEY, p INT, q INT, UNIQUE (p,q))
+
+statement ok
+CREATE TABLE child (pk INT PRIMARY KEY, p INT, q INT, CONSTRAINT fk FOREIGN KEY (p,q) REFERENCES parent(p,q) ON UPDATE CASCADE)
+
+statement ok
+INSERT INTO parent VALUES (1, 1, 1), (2, 2, 2);
+INSERT INTO child VALUES (1, 1, 1), (2, 1, 1), (3, 2, 2), (4, 2, 2)
+
+statement ok
+UPSERT INTO parent(pk, p) VALUES (1, 1)
+
+query III rowsort
+SELECT * FROM child
+----
+1  1  1
+2  1  1
+3  2  2
+4  2  2
+
+statement ok
+UPSERT INTO parent(pk, q) VALUES (2, 20)
+
+query III rowsort
+SELECT * FROM child
+----
+1  1  1
+2  1  1
+3  2  20
+4  2  20
+
+statement ok
+UPSERT INTO parent VALUES (1, 10, 10)
+
+query III rowsort
+SELECT * FROM child
+----
+1  10  10
+2  10  10
+3  2   20
+4  2   20
+
+statement ok
+DROP TABLE child, parent
+
+subtest UpsertSetNull
+
+statement ok
+CREATE TABLE parent (pk INT PRIMARY KEY, p INT UNIQUE)
+
+statement ok
+CREATE TABLE child (pk INT PRIMARY KEY, p INT REFERENCES parent(p) ON UPDATE SET NULL)
+
+statement ok
+INSERT INTO parent VALUES (1, 1), (2, 2);
+INSERT INTO child VALUES (1, 1), (2, 1), (3, 2), (4, 2)
+
+statement ok
+UPSERT INTO parent VALUES (2, 20), (3, 3)
+
+query II rowsort
+SELECT * FROM child
+----
+1  1
+2  1
+3  NULL
+4  NULL
+
+# Verify that updating to the same value does not trigger the action.
+statement ok
+UPSERT INTO parent VALUES (1, 1)
+
+query II rowsort
+SELECT * FROM child
+----
+1  1
+2  1
+3  NULL
+4  NULL
+
+# Verify that a partial update that does not touch the FK column
+# does not trigger the action.
+statement ok
+UPSERT INTO parent(pk) VALUES (1)
+
+query II rowsort
+SELECT * FROM child
+----
+1  1
+2  1
+3  NULL
+4  NULL
+
+statement ok
+INSERT INTO parent VALUES (100, 1) ON CONFLICT(p) DO UPDATE SET p = 50
+
+query II rowsort
+SELECT * FROM child
+----
+1  NULL
+2  NULL
+3  NULL
+4  NULL
+
+statement ok
+DROP TABLE child, parent
+
+subtest UpsertSetDefault
+
+statement ok
+CREATE TABLE parent (pk INT PRIMARY KEY, p INT UNIQUE)
+
+statement ok
+CREATE TABLE child (pk INT PRIMARY KEY, p INT DEFAULT 1 REFERENCES parent(p) ON UPDATE SET DEFAULT)
+
+statement ok
+INSERT INTO parent VALUES (1, 1), (2, 2);
+INSERT INTO child VALUES (1, 1), (2, 1), (3, 2), (4, 2)
+
+# Verify that updating to the same value does not trigger the action.
+statement ok
+UPSERT INTO parent VALUES (2, 2)
+
+query II rowsort
+SELECT * FROM child
+----
+1  1
+2  1
+3  2
+4  2
+
+# Verify that a partial update that does not touch the FK column
+# does not trigger the action.
+statement ok
+UPSERT INTO parent(pk) VALUES (2)
+
+query II rowsort
+SELECT * FROM child
+----
+1  1
+2  1
+3  2
+4  2
+
+statement ok
+UPSERT INTO parent VALUES (2, 20), (3, 3)
+
+query II rowsort
+SELECT * FROM child
+----
+1  1
+2  1
+3  1
+4  1
+
+statement error foreign key violation: values \[1\] in columns \[p\] referenced in table "child"
+INSERT INTO parent VALUES (100, 1) ON CONFLICT(p) DO UPDATE SET p = 50
+
+statement ok
+DROP TABLE child, parent

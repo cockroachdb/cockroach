@@ -421,10 +421,36 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		}
 
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
-			// Bail, so that exec FK checks pick up on FK checks and perform them.
-			mb.setFKFallback()
-			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-			return
+			if !mb.b.evalCtx.SessionData.OptimizerFKCascades {
+				// Bail, so that exec FK checks pick up on FK checks and perform them.
+				mb.setFKFallback()
+				telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
+				return
+			}
+			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a)
+
+			oldCols := make(opt.ColList, len(h.tabOrdinals))
+			newCols := make(opt.ColList, len(h.tabOrdinals))
+			for i, tabOrd := range h.tabOrdinals {
+				fetchOrd := mb.fetchOrds[tabOrd]
+				// Here we don't need to use the upsertOrds because the rows that
+				// correspond to inserts will be ignored in the cascade.
+				updateOrd := mb.updateOrds[tabOrd]
+				if updateOrd == -1 {
+					updateOrd = fetchOrd
+				}
+
+				oldCols[i] = mb.scopeOrdToColID(fetchOrd)
+				newCols[i] = mb.scopeOrdToColID(updateOrd)
+			}
+			mb.cascades = append(mb.cascades, memo.FKCascade{
+				FKName:    h.fk.Name(),
+				Builder:   builder,
+				WithID:    mb.withID,
+				OldValues: oldCols,
+				NewValues: newCols,
+			})
+			continue
 		}
 
 		// Construct an Except expression for the set difference between "old" FK
