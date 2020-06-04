@@ -59,13 +59,13 @@ export function makeStatementsColumns(
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: StatementTableTitle.statements,
-      className: "cl-table__col-query-text",
+      className: cx("cl-table__col-query-text"),
       cell: StatementTableCell.statements(search, selectedApp),
       sort: (stmt) => stmt.label,
     },
     {
       title: StatementTableTitle.txtType,
-      className: "statements-table__col-time",
+      className: cx("statements-table__col-time"),
       cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
     },
@@ -142,25 +142,25 @@ function makeCommonColumns(statements: AggregateStatistics[])
   return [
     {
       title: StatementTableTitle.retries,
-      className: "statements-table__col-retries",
+      className: cx("statements-table__col-retries"),
       cell: retryBar,
       sort: (stmt) => (longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count)),
     },
     {
       title: StatementTableTitle.executionCount,
-      className: "statements-table__col-count",
+      className: cx("statements-table__col-count"),
       cell: countBar,
       sort: (stmt) => FixLong(stmt.stats.count).toInt(),
     },
     {
       title: StatementTableTitle.rowsAffected,
-      className: "statements-table__col-rows",
+      className: cx("statements-table__col-rows"),
       cell: rowsBar,
       sort: (stmt) => stmt.stats.num_rows.mean,
     },
     {
       title: StatementTableTitle.latency,
-      className: "statements-table__col-latency",
+      className: cx("statements-table__col-latency"),
       cell: latencyBar,
       sort: (stmt) => stmt.stats.service_lat.mean,
     },

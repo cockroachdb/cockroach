@@ -18,6 +18,7 @@ import { Bytes } from "src/util/format";
 import Loading from "src/views/shared/components/loading";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { NonTableStatsResponseMessage } from "src/util/api";
+import "src/views/shared/components/sortabletable/sortabletable.styl";
 
 interface TimeSeriesSummaryProps {
   nonTableStats: protos.cockroach.server.serverpb.NonTableStatsResponse;

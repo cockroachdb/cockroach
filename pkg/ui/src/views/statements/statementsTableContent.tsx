@@ -10,6 +10,7 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
+import classNames from "classnames/bind";
 import { Anchor, Tooltip } from "src/components";
 import { statementDiagnostics, statementsRetries, statementsSql, statementsTimeInterval, transactionalPipelining } from "src/util/docs";
 import getHighlightedText from "src/util/highlightedText";
@@ -17,15 +18,18 @@ import { summarize } from "src/util/sql/summarize";
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { shortStatement } from "./statementsTable";
+import styles from "./statementsTableContent.module.styl";
 
 export type NodeNames = { [nodeId: string]: string };
+
+const cx = classNames.bind(styles);
 
 export const StatementTableTitle = {
   statements: (
     <Tooltip
       placement="bottom"
       title={
-        <div className="tooltip__table--title">
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"SQL statement "}
             <Anchor
@@ -48,7 +52,7 @@ export const StatementTableTitle = {
     <Tooltip
       placement="bottom"
       title={
-        <div className="tooltip__table--title">
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Type of transaction (implicit or explicit). Explicit transactions refer to statements that are wrapped by "}
             <code>BEGIN</code>
@@ -76,7 +80,7 @@ export const StatementTableTitle = {
     <Tooltip
       placement="bottom"
       title={
-        <div className="tooltip__table--title">
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Option to activate "}
             <Anchor
@@ -98,7 +102,7 @@ export const StatementTableTitle = {
     <Tooltip
       placement="bottom"
       title={
-        <div className="tooltip__table--title">
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Cumulative number of "}
             <Anchor
@@ -119,7 +123,7 @@ export const StatementTableTitle = {
     <Tooltip
       placement="bottom"
       title={
-        <div className="tooltip__table--title">
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Cumulative number of executions of statements with this fingerprint within the last hour or specified "}
             <Anchor
@@ -149,7 +153,7 @@ export const StatementTableTitle = {
     <Tooltip
       placement="bottom"
       title={
-        <div className="tooltip__table--title">
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Average number of rows returned while executing statements with this fingerprint within the last hour or specified "}
             <Anchor
@@ -172,7 +176,7 @@ export const StatementTableTitle = {
     <Tooltip
       placement="bottom"
       title={
-        <div className="tooltip__table--title">
+        <div className={cx("tooltip__table--title")}>
           <p>
             Average service latency of statements with this fingerprint within the last hour or specified time interval.
           </p>
@@ -216,13 +220,13 @@ export const StatementLink = (props: { statement: string, app: string, implicitT
   const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="cl-table-link__tooltip">
+      <div>
         <Tooltip
           placement="bottom"
-          title={<pre className="cl-table-link__description">
+          title={<pre className={cx("cl-table-link__description")}>
             { getHighlightedText(props.statement, props.search) }
           </pre>}
-          overlayClassName="cl-table-link__statement-tooltip--fixed-width"
+          overlayClassName={cx("cl-table-link__statement-tooltip--fixed-width")}
         >
           <div className="cl-table-link__tooltip-hover-area">
             { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }

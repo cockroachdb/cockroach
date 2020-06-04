@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import classNames from "classnames";
+import classNames from "classnames/bind";
 import map from "lodash/map";
 import isUndefined from "lodash/isUndefined";
 import times from "lodash/times";
@@ -18,11 +18,12 @@ import getHighlightedText from "src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
 import { trackTableSort } from "src/util/analytics";
 
-import "./sortabletable.styl";
+import styles from "./sortabletable.module.styl";
 import { Spin, Icon } from "antd";
 import SpinIcon from "src/components/icon/spin";
 import { Empty, IEmptyProps } from "src/components/empty";
 
+const cx = classNames.bind(styles);
 /**
  * SortableColumn describes the contents a single column of a
  * sortable table.
@@ -151,7 +152,7 @@ export class SortableTable extends React.Component<TableProps> {
   expansionControl(expanded: boolean) {
     const content = expanded ? "▼" : "▶";
     return (
-      <td className="sort-table__cell sort-table__cell__expansion-control">
+      <td className={cx("sort-table__cell", "sort-table__cell__expansion-control")}>
         <div>
           {content}
         </div>
@@ -161,7 +162,7 @@ export class SortableTable extends React.Component<TableProps> {
 
   renderRow = (rowIndex: number) => {
     const { columns, expandableConfig, drawer, firstCellBordered } = this.props;
-    const classes = classNames(
+    const classes = cx(
       "sort-table__row",
       "sort-table__row--body",
       this.state.activeIndex === rowIndex ? "drawer-active" : "",
@@ -187,7 +188,15 @@ export class SortableTable extends React.Component<TableProps> {
         {expandableConfig ? this.expansionControl(expanded) : null}
         {map(columns, (c: SortableColumn, colIndex: number) => {
           return (
-            <td className={classNames("sort-table__cell", { "sort-table__cell--header": firstCellBordered && colIndex === 0 }, c.className)} key={colIndex}>
+            <td
+              className={cx(
+                "sort-table__cell",
+                {
+                  "sort-table__cell--header": firstCellBordered && colIndex === 0,
+                },
+                c.className,
+              )}
+              key={colIndex}>
               {c.cell(rowIndex)}
             </td>
           );
@@ -196,7 +205,7 @@ export class SortableTable extends React.Component<TableProps> {
       </tr>,
     ];
     if (expandableConfig && expandableConfig.rowIsExpanded(rowIndex)) {
-      const expandedAreaClasses = classNames(
+      const expandedAreaClasses = cx(
         "sort-table__row",
         "sort-table__row--body",
         "sort-table__row--expanded-area",
@@ -208,7 +217,7 @@ export class SortableTable extends React.Component<TableProps> {
         <tr className={expandedAreaClasses} key={output.length + 2} >
           <td />
           <td
-            className="sort-table__cell"
+            className={cx("sort-table__cell")}
             colSpan={columns.length}
           >
             {expandableConfig.expandedContent(rowIndex)}
@@ -253,39 +262,39 @@ export class SortableTable extends React.Component<TableProps> {
       return <Empty {...emptyProps}/>;
     }
     return (
-      <div className="cl-table-wrapper">
-        <table className={classNames("sort-table", className)}>
+      <div className={cx("cl-table-wrapper")}>
+        <table className={cx("sort-table", className)}>
           <thead>
-            <tr className="sort-table__row sort-table__row--header">
-              {expandableConfig ? <th className="sort-table__cell" /> : null}
+            <tr className={cx("sort-table__row", "sort-table__row--header")}>
+              {expandableConfig ? <th className={cx("sort-table__cell")} /> : null}
               {map(columns, (c: SortableColumn, colIndex: number) => {
-                const classes = ["sort-table__cell"];
+                const classes = [cx("sort-table__cell")];
                 const style = {
                   textAlign: c.titleAlign,
                 };
                 let onClick: (e: any) => void = undefined;
 
                 if (!isUndefined(c.sortKey)) {
-                  classes.push("sort-table__cell--sortable");
+                  classes.push(cx("sort-table__cell--sortable"));
                   onClick = () => {
                     trackTableSort(className, c, sortSetting);
                     this.clickSort(c.sortKey);
                   };
                   if (c.sortKey === sortSetting.sortKey) {
                     if (sortSetting.ascending) {
-                      classes.push(" sort-table__cell--ascending");
+                      classes.push(cx("sort-table__cell--ascending"));
                     } else {
-                      classes.push("sort-table__cell--descending");
+                      classes.push(cx("sort-table__cell--descending"));
                     }
                   }
                 }
                 if (firstCellBordered && colIndex === 0) {
-                  classes.push("sort-table__cell--header");
+                  classes.push(cx("sort-table__cell--header"));
                 }
                 return (
                   <th className={classNames(classes)} key={colIndex} onClick={onClick} style={style}>
                     {c.title}
-                    {!isUndefined(c.sortKey) && <span className="sortable__actions" />}
+                    {!isUndefined(c.sortKey) && <span className={cx("sortable__actions")} />}
                   </th>
                 );
               })}
@@ -296,18 +305,18 @@ export class SortableTable extends React.Component<TableProps> {
           </tbody>
         </table>
         {loading && (
-          <div className="table__loading">
-            <Spin className="table__loading--spin" indicator={<Icon component={SpinIcon} spin />} />
-            {loadingLabel && <span className="table__loading--label">{loadingLabel}</span>}
+          <div className={cx("table__loading")}>
+            <Spin className={cx("table__loading--spin")} indicator={<Icon component={SpinIcon} spin />} />
+            {loadingLabel && <span className={cx("table__loading--label")}>{loadingLabel}</span>}
           </div>
         )}
         {drawer && (
           <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
-            <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
+            <span className={cx("drawer__content")}>{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
           </DrawerComponent>
         )}
         {count === 0 && (
-          <div className="table__no-results">
+          <div className={cx("table__no-results")}>
             {renderNoResult}
           </div>
         )}

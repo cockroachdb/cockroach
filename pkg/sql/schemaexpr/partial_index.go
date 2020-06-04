@@ -58,7 +58,7 @@ func NewIndexPredicateValidator(
 func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := v.desc.ReplaceColumnVarsInExprWithDummies(expr)
+	replacedExpr, _, err := replaceVars(&v.desc.TableDescriptor, expr)
 	if err != nil {
 		return nil, err
 	}
