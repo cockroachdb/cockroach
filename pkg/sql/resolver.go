@@ -161,6 +161,7 @@ func (p *planner) ResolveType(
 	}
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
 	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
+
 	return tdesc.MakeTypesT(&tn, p.makeTypeLookupFn(ctx))
 }
 
@@ -528,10 +529,10 @@ func newInternalLookupCtxFromDescriptors(
 				tbIDs = append(tbIDs, table.ID)
 			}
 		} else if typ := desc.GetType(); typ != nil {
-			typDescs[typ.ID] = typ
+			typDescs[typ.GetID()] = typ
 			if prefix == nil || prefix.ID == typ.ParentID {
 				// Only make the type visible for iteration if the prefix was included.
-				typIDs = append(typIDs, typ.ID)
+				typIDs = append(typIDs, typ.GetID())
 			}
 		}
 	}

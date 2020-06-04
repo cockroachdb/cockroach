@@ -286,18 +286,18 @@ func ResolveTypeDescByID(
 	id sqlbase.ID,
 	lookupFlags tree.ObjectLookupFlags,
 ) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-	rawDesc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id)
+	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id)
 	if err != nil {
 		return nil, nil, err
 	}
-	typDesc := rawDesc.GetType()
-	if typDesc == nil {
-		return nil, nil, errors.AssertionFailedf("%s was not a type descriptor", rawDesc)
+	if desc.TypeDesc() == nil {
+		return nil, nil, errors.AssertionFailedf("%s was not a type descriptor", desc)
 	}
 	// Get the parent database and schema names to create a fully qualified
 	// name for the type.
 	// TODO (SQLSchema): As we add leasing for all descriptors, these calls
 	//  should look into those leased copies, rather than do raw reads.
+	typDesc := desc.(*sqlbase.ImmutableTypeDescriptor)
 	db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, codec, typDesc.ParentID)
 	if err != nil {
 		return nil, nil, err
@@ -306,19 +306,19 @@ func ResolveTypeDescByID(
 	if err != nil {
 		return nil, nil, err
 	}
-	name := tree.MakeNewQualifiedTypeName(db.Name, schemaName, typDesc.Name)
-	var desc sqlbase.TypeDescriptorInterface
+	name := tree.MakeNewQualifiedTypeName(db.Name, schemaName, typDesc.GetName())
+	var ret sqlbase.TypeDescriptorInterface
 	if lookupFlags.RequireMutable {
 		// TODO(ajwerner): Figure this out later when we construct this inside of
 		// the name resolution. This really shouldn't be happening here. Instead we
 		// should be taking a SchemaResolver and resolving through it which should
 		// be able to hit a descs.Collection and determine whether this is a new
 		// type or not.
-		desc = sqlbase.NewMutableExistingTypeDescriptor(*typDesc)
+		desc = sqlbase.NewMutableExistingTypeDescriptor(*typDesc.TypeDesc())
 	} else {
-		desc = sqlbase.NewImmutableTypeDescriptor(*typDesc)
+		ret = typDesc
 	}
-	return &name, desc, nil
+	return &name, ret, nil
 }
 
 // GetForDatabase looks up and returns all available

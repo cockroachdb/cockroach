@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -213,11 +212,11 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	// Look up the object using the discovered database descriptor.
-	rawDesc, err := GetDescriptorByID(ctx, txn, codec, descID)
+	desc, err := GetDescriptorByID(ctx, txn, codec, descID)
 	if err != nil {
 		return nil, err
 	}
-	if tableDesc := rawDesc.Table(hlc.Timestamp{}); tableDesc != nil {
+	if tableDesc := desc.TableDesc(); tableDesc != nil {
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
 		acceptableStates := map[sqlbase.TableDescriptor_State]bool{
@@ -243,7 +242,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			}
 		}
 		return nil, nil
-	} else if typeDesc := rawDesc.GetType(); typeDesc != nil {
+	} else if typeDesc := desc.TypeDesc(); typeDesc != nil {
 		if flags.RequireMutable {
 			return sqlbase.NewMutableExistingTypeDescriptor(*typeDesc), nil
 		}
