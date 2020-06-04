@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -151,4 +152,57 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 	require.Nil(t, s3)
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "implicit"))
+}
+
+// S3 has two "does not exist" errors - ErrCodeNoSuchBucket and ErrCodeNoSuchKey.
+// ErrCodeNoSuchKey is tested via the general test in external_storage_test.go.
+// This test attempts to ReadFile from a bucket which does not exist.
+func TestS3BucketDoesNotExist(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_S3_ENDPOINT":        S3EndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    S3AccessKeyParam,
+		"AWS_S3_ENDPOINT_REGION": S3RegionParam,
+		"AWS_S3_ENDPOINT_SECRET": S3SecretParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			t.Skipf("%s env var must be set", env)
+		}
+		q.Add(param, v)
+	}
+
+	bucket := "invalid-bucket"
+	u := url.URL{
+		Scheme:   "s3",
+		Host:     bucket,
+		Path:     "backup-test",
+		RawQuery: q.Encode(),
+	}
+
+	ctx := context.Background()
+
+	conf, err := ExternalStorageConfFromURI(u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup a sink for the given args.
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings, clientFactory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	if readConf := s.Conf(); readConf != conf {
+		t.Fatalf("conf does not roundtrip: started with %+v, got back %+v", conf, readConf)
+	}
+
+	_, err = s.ReadFile(ctx, "")
+	require.Error(t, err, "")
+	require.True(t, errors.Is(err, ErrFileDoesNotExist))
 }
