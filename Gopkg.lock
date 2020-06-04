@@ -864,7 +864,7 @@
   revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
 
 [[projects]]
-  digest = "1:59a826b72bb40d1f541f1438cfdfcea63948327478b82c72fc1349b33ddff7ca"
+  digest = "1:7852a48216dd9d7b8f09af45e5641a04fbe1947126081b546fe92ddd5e02256a"
   name = "github.com/golang/protobuf"
   packages = [
     "descriptor",
@@ -879,8 +879,8 @@
     "ptypes/wrappers",
   ]
   pruneopts = "UT"
-  revision = "6c66de79d66478d166c7ea05f5d2ccaf016fbd6b"
-  version = "v1.4.1"
+  revision = "d04d7b157bb510b1e0c10132224b616ac0e26b17"
+  version = "v1.4.2"
 
 [[projects]]
   branch = "master"
