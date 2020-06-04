@@ -235,6 +235,12 @@ func newTestDescriptorDB() *testDescriptorDB {
 	return db
 }
 
+func staticSize(size int64) func() int64 {
+	return func() int64 {
+		return size
+	}
+}
+
 func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	st := cluster.MakeTestingClusterSettings()
 	db := newTestDescriptorDB()

@@ -653,7 +653,8 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 		require.NoError(t, err)
 
 		// Query again just in case the previous query executed on the gateway
-		// because the leaseholder cache wasn't populated and we fooled ourselves.
+		// because the we didn't have a leaseholder in the cache and we fooled
+		// ourselves.
 		_, err = db.Exec("SELECT cluster_logical_timestamp() FROM t")
 		require.NoError(t, err)
 	})

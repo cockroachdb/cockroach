@@ -172,13 +172,13 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	// Retry loop for looking up next range in the span. The retry loop
 	// deals with retryable range descriptor lookups.
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
-		_, tok, err := ri.ds.getDescriptor(ctx, ri.key, ri.token, ri.scanDir == Descending)
+		rngInfo, err := ri.ds.getRoutingInfo(ctx, ri.key, ri.token, ri.scanDir == Descending)
 
 		if log.V(2) {
-			log.Infof(ctx, "key: %s, desc: %s err: %v", ri.key, ri.Desc(), err)
+			log.Infof(ctx, "key: %s, desc: %s err: %v", ri.key, rngInfo.Desc(), err)
 		}
 
-		// getDescriptor may fail retryably if, for example, the first
+		// getRoutingInfo may fail retryably if, for example, the first
 		// range isn't available via Gossip. Assume that all errors at
 		// this level are retryable. Non-retryable errors would be for
 		// things like malformed requests which we should have checked
@@ -188,7 +188,7 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			continue
 		}
 
-		ri.token = tok
+		ri.token = rngInfo
 		if log.V(2) {
 			log.Infof(ctx, "returning; key: %s, desc: %s", ri.key, ri.Desc())
 		}

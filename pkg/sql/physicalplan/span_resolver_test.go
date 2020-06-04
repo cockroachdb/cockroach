@@ -102,8 +102,8 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 			})
 	}
 
-	// Resolve the spans. Since the LeaseHolderCache is empty, all the ranges
-	// should be grouped and "assigned" to replica 0.
+	// Resolve the spans. Since the range descriptor cache doesn't have any
+	// leases, all the ranges should be grouped and "assigned" to replica 0.
 	replicas, err := resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil), spans...)
 	if err != nil {
 		t.Fatal(err)
