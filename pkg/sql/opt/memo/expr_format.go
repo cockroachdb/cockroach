@@ -352,6 +352,19 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 					f.formatExpr(tab.ComputedCols[col], c.Child(f.ColumnString(col)))
 				}
 			}
+			if tab.PartialIndexPredicates != nil {
+				c := tp.Child("partial index predicates")
+				indexOrds := make([]cat.IndexOrdinal, 0, len(tab.PartialIndexPredicates))
+				for ord := range tab.PartialIndexPredicates {
+					indexOrds = append(indexOrds, ord)
+				}
+				sort.Ints(indexOrds)
+				for _, ord := range indexOrds {
+					name := string(tab.Table.Index(ord).Name())
+					f.Buffer.Reset()
+					f.formatScalarWithLabel(name, tab.PartialIndexPredicates[ord], c)
+				}
+			}
 		}
 		if c := t.Constraint; c != nil {
 			if c.IsContradiction() {
@@ -726,6 +739,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 }
 
 func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
+	f.formatScalarWithLabel("", scalar, tp)
+}
+
+func (f *ExprFmtCtx) formatScalarWithLabel(
+	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
+) {
+	f.Buffer.Reset()
+	if label != "" {
+		f.Buffer.WriteString(label)
+		f.Buffer.WriteString(": ")
+	}
 	switch scalar.Op() {
 	case opt.ProjectionsOp, opt.AggregationsOp, opt.FKChecksOp, opt.KVOptionsOp:
 		// Omit empty lists (except filters).
@@ -741,7 +765,6 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		}
 
 	case opt.IfErrOp:
-		f.Buffer.Reset()
 		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
 		f.FormatScalarProps(scalar)
 
@@ -758,7 +781,6 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		return
 
 	case opt.AggFilterOp:
-		f.Buffer.Reset()
 		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
 		f.FormatScalarProps(scalar)
 		tp = tp.Child(f.Buffer.String())
@@ -825,7 +847,6 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 	}
 
 	var intercepted bool
-	f.Buffer.Reset()
 	if f.HasFlags(ExprFmtHideScalars) && ScalarFmtInterceptor != nil {
 		if str := ScalarFmtInterceptor(f, scalar); str != "" {
 			f.Buffer.WriteString(str)
