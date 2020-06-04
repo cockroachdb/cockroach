@@ -591,7 +591,7 @@ func (t *multiTestContextKVTransport) SendNext(
 
 	if s == nil {
 		t.setPending(rep.ReplicaID, false)
-		return nil, roachpb.NewSendError("store is stopped")
+		return nil, errors.New("store is stopped")
 	}
 
 	// Clone txn of ba args for sending.
