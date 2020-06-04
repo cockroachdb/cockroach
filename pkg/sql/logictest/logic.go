@@ -2152,7 +2152,7 @@ func (t *logicTest) verifyError(
 	if err != nil {
 		if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) &&
 			strings.HasPrefix(string(pqErr.Code), "XX" /* internal error, corruption, etc */) &&
-			string(pqErr.Code) != pgcode.Uncategorized /* this is also XX but innocuous */ {
+			pgcode.MakeCode(string(pqErr.Code)) != pgcode.Uncategorized /* this is also XX but innocuous */ {
 			if expectErrCode != string(pqErr.Code) {
 				return false, errors.Errorf(
 					"%s: %s: serious error with code %q occurred; if expected, must use 'error pgcode %s ...' in test:\n%s",
@@ -2193,7 +2193,7 @@ func formatErr(err error) string {
 		if pqErr.Detail != "" {
 			fmt.Fprintf(&buf, "\nDETAIL: %s", pqErr.Detail)
 		}
-		if pqErr.Code == pgcode.Internal {
+		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.Internal {
 			fmt.Fprintln(&buf, "\nNOTE: internal errors may have more details in logs. Use -show-logs.")
 		}
 		return buf.String()

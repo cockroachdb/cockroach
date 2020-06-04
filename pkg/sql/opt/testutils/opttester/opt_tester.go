@@ -397,7 +397,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			pgerr := pgerror.Flatten(err)
 			text := strings.TrimSpace(pgerr.Error())
-			if pgerr.Code != pgcode.Uncategorized {
+			if pgcode.MakeCode(pgerr.Code) != pgcode.Uncategorized {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}
@@ -414,7 +414,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			pgerr := pgerror.Flatten(err)
 			text := strings.TrimSpace(pgerr.Error())
-			if pgerr.Code != pgcode.Uncategorized {
+			if pgcode.MakeCode(pgerr.Code) != pgcode.Uncategorized {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}

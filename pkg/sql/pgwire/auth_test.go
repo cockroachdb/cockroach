@@ -407,7 +407,7 @@ func fmtErr(err error) string {
 		errStr := ""
 		if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 			errStr = pqErr.Message
-			if pqErr.Code != pgcode.Uncategorized {
+			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.Uncategorized {
 				errStr += fmt.Sprintf(" (SQLSTATE %s)", pqErr.Code)
 			}
 			if pqErr.Hint != "" {

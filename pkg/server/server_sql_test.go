@@ -67,5 +67,5 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	var pqErr *pq.Error
 	ok := errors.As(err, &pqErr)
 	require.True(t, ok, "expected err to be a *pq.Error but is of type %T. error is: %v", err)
-	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege), pqErr.Code, "err %v has unexpected code", err)
+	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege.String()), pqErr.Code, "err %v has unexpected code", err)
 }

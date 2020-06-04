@@ -749,7 +749,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		err)
 	var pgErr pgx.PgError
 	require.True(t, errors.As(err, &pgErr))
-	require.Equal(t, pgcode.SerializationFailure, pgErr.Code)
+	require.Equal(t, pgcode.SerializationFailure, pgcode.MakeCode(pgErr.Code))
 
 	// Clear the error producing filter, restart the transaction, and run it to
 	// completion.

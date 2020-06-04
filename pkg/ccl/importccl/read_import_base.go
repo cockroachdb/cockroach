@@ -336,13 +336,15 @@ func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 	return false
 }
 
-func makeRowErr(_ string, row int64, code, format string, args ...interface{}) error {
+func makeRowErr(_ string, row int64, code pgcode.Code, format string, args ...interface{}) error {
 	err := pgerror.NewWithDepthf(1, code, format, args...)
 	err = errors.WrapWithDepthf(1, err, "row %d", row)
 	return err
 }
 
-func wrapRowErr(err error, _ string, row int64, code, format string, args ...interface{}) error {
+func wrapRowErr(
+	err error, _ string, row int64, code pgcode.Code, format string, args ...interface{},
+) error {
 	if format != "" || len(args) > 0 {
 		err = errors.WrapWithDepthf(1, err, format, args...)
 	}

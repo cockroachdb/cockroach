@@ -175,7 +175,7 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		if _, err := sqlDB.Exec(`INSERT INTO test.t (v) VALUES (1)`); ambiguousSuccess {
 			if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-				if pqErr.Code != pgcode.StatementCompletionUnknown {
+				if pgcode.MakeCode(string(pqErr.Code)) != pgcode.StatementCompletionUnknown {
 					t.Errorf("expected code %q, got %q (err: %s)",
 						pgcode.StatementCompletionUnknown, pqErr.Code, err)
 				}
