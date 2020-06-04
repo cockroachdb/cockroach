@@ -636,8 +636,7 @@ with &2 (cte)
  │                   │    ├── cost: 1020.02
  │                   │    ├── key: (6)
  │                   │    ├── prune: (6)
- │                   │    ├── interesting orderings: (+6)
- │                   │    └── unfiltered-cols: (6)
+ │                   │    └── interesting orderings: (+6)
  │                   └── filters
  │                        └── eq [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
  │                             ├── variable: column2:5 [type=int]

@@ -956,8 +956,7 @@ inner-join (hash)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1100.02
  │    ├── prune: (1,2)
- │    ├── interesting orderings: (+1)
- │    └── unfiltered-cols: (1,2)
+ │    └── interesting orderings: (+1)
  ├── scan t
  │    ├── columns: k:4 v:5
  │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0]
@@ -965,8 +964,7 @@ inner-join (hash)
  │    ├── key: (4)
  │    ├── fd: (4)-->(5)
  │    ├── prune: (4,5)
- │    ├── interesting orderings: (+4)
- │    └── unfiltered-cols: (4,5)
+ │    └── interesting orderings: (+4)
  └── filters
       └── k:4 = a:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 

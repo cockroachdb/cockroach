@@ -147,8 +147,7 @@ project
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
            │    │    │    │    ├── prune: (10-13)
-           │    │    │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
-           │    │    │    │    └── unfiltered-cols: (10-13)
+           │    │    │    │    └── interesting orderings: (+13) (+10) (+11,+12,+13)
            │    │    │    └── filters
            │    │    │         ├── eq [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
            │    │    │         │    ├── variable: y:6 [type=int]
@@ -314,7 +313,6 @@ project
            │         │    │    │         │    │    │         │    │    ├── fd: (5)-->(6,8), (6)-->(9)
            │         │    │    │         │    │    │         │    │    ├── prune: (5,6,8,9)
            │         │    │    │         │    │    │         │    │    ├── interesting orderings: (+5) (+6)
-           │         │    │    │         │    │    │         │    │    ├── unfiltered-cols: (5,6)
            │         │    │    │         │    │    │         │    │    ├── project
            │         │    │    │         │    │    │         │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int)
            │         │    │    │         │    │    │         │    │    │    ├── volatile, side-effects
@@ -322,21 +320,18 @@ project
            │         │    │    │         │    │    │         │    │    │    ├── fd: (5)-->(6,8)
            │         │    │    │         │    │    │         │    │    │    ├── prune: (5,6,8)
            │         │    │    │         │    │    │         │    │    │    ├── interesting orderings: (+5) (+6)
-           │         │    │    │         │    │    │         │    │    │    ├── unfiltered-cols: (5,6)
            │         │    │    │         │    │    │         │    │    │    ├── project
            │         │    │    │         │    │    │         │    │    │    │    ├── columns: x:5(int!null) y:6(int)
            │         │    │    │         │    │    │         │    │    │    │    ├── key: (5)
            │         │    │    │         │    │    │         │    │    │    │    ├── fd: (5)-->(6)
            │         │    │    │         │    │    │         │    │    │    │    ├── prune: (5,6)
            │         │    │    │         │    │    │         │    │    │    │    ├── interesting orderings: (+5) (+6)
-           │         │    │    │         │    │    │         │    │    │    │    ├── unfiltered-cols: (5,6)
            │         │    │    │         │    │    │         │    │    │    │    └── scan xyz
            │         │    │    │         │    │    │         │    │    │    │         ├── columns: x:5(int!null) y:6(int) z:7(int)
            │         │    │    │         │    │    │         │    │    │    │         ├── key: (5)
            │         │    │    │         │    │    │         │    │    │    │         ├── fd: (5)-->(6,7), (6,7)~~>(5)
            │         │    │    │         │    │    │         │    │    │    │         ├── prune: (5-7)
-           │         │    │    │         │    │    │         │    │    │    │         ├── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
-           │         │    │    │         │    │    │         │    │    │    │         └── unfiltered-cols: (5-7)
+           │         │    │    │         │    │    │         │    │    │    │         └── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
            │         │    │    │         │    │    │         │    │    │    └── projections
            │         │    │    │         │    │    │         │    │    │         └── function: unique_rowid [as=column8:8, type=int, volatile, side-effects]
            │         │    │    │         │    │    │         │    │    └── projections
@@ -353,8 +348,7 @@ project
            │         │    │    │         │    │    │         │    │    ├── key: (13)
            │         │    │    │         │    │    │         │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
            │         │    │    │         │    │    │         │    │    ├── prune: (10-13)
-           │         │    │    │         │    │    │         │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
-           │         │    │    │         │    │    │         │    │    └── unfiltered-cols: (10-13)
+           │         │    │    │         │    │    │         │    │    └── interesting orderings: (+13) (+10) (+11,+12,+13)
            │         │    │    │         │    │    │         │    └── filters
            │         │    │    │         │    │    │         │         └── eq [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
            │         │    │    │         │    │    │         │              ├── variable: column8:8 [type=int]
@@ -380,8 +374,7 @@ project
            │         │    │    │         │    │    ├── key: (17)
            │         │    │    │         │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17)
            │         │    │    │         │    │    ├── prune: (14-17)
-           │         │    │    │         │    │    ├── interesting orderings: (+17) (+14) (+15,+16,+17)
-           │         │    │    │         │    │    └── unfiltered-cols: (14-17)
+           │         │    │    │         │    │    └── interesting orderings: (+17) (+14) (+15,+16,+17)
            │         │    │    │         │    └── filters
            │         │    │    │         │         └── eq [type=bool, outer=(5,14), constraints=(/5: (/NULL - ]; /14: (/NULL - ]), fd=(5)==(14), (14)==(5)]
            │         │    │    │         │              ├── variable: x:5 [type=int]
@@ -407,8 +400,7 @@ project
            │         │    │    ├── key: (21)
            │         │    │    ├── fd: (21)-->(18-20), (18)-->(19-21), (19,20)~~>(18,21)
            │         │    │    ├── prune: (18-21)
-           │         │    │    ├── interesting orderings: (+21) (+18) (+19,+20,+21)
-           │         │    │    └── unfiltered-cols: (18-21)
+           │         │    │    └── interesting orderings: (+21) (+18) (+19,+20,+21)
            │         │    └── filters
            │         │         ├── eq [type=bool, outer=(6,19), constraints=(/6: (/NULL - ]; /19: (/NULL - ]), fd=(6)==(19), (19)==(6)]
            │         │         │    ├── variable: y:6 [type=int]
@@ -534,8 +526,7 @@ project
  │         │    │    │    ├── key: (12)
  │         │    │    │    ├── fd: (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12)
  │         │    │    │    ├── prune: (9-12)
- │         │    │    │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
- │         │    │    │    └── unfiltered-cols: (9-12)
+ │         │    │    │    └── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         │    │    └── filters
  │         │    │         └── eq [type=bool, outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
  │         │    │              ├── variable: column7:7 [type=int]
@@ -692,8 +683,7 @@ upsert abc
       │    │    │    │    ├── key: (14)
       │    │    │    │    ├── fd: (14)-->(11-13), (11)-->(12-14), (12,13)~~>(11,14)
       │    │    │    │    ├── prune: (11-14)
-      │    │    │    │    ├── interesting orderings: (+14) (+11) (+12,+13,+14)
-      │    │    │    │    └── unfiltered-cols: (11-14)
+      │    │    │    │    └── interesting orderings: (+14) (+11) (+12,+13,+14)
       │    │    │    └── filters
       │    │    │         └── eq [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
       │    │    │              ├── variable: y:6 [type=int]

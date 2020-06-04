@@ -48,15 +48,13 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── prune: (5-7)
- │    ├── interesting orderings: (+7)
- │    └── unfiltered-cols: (5-7)
+ │    └── interesting orderings: (+7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x:1 [type=int]
@@ -152,8 +150,7 @@ project
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    │    │    ├── prune: (1-4)
-      │    │    │    ├── interesting orderings: (+1) (-3,+4,+1)
-      │    │    │    └── unfiltered-cols: (1-4)
+      │    │    │    └── interesting orderings: (+1) (-3,+4,+1)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: v:6(int!null) n:9(int!null)
       │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -162,13 +159,13 @@ project
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: v:6(int!null)
       │    │    │    │    ├── prune: (6)
-      │    │    │    │    └── unfiltered-cols: (6)
+      │    │    │    │    └── unfiltered-tables: [8589934597]
       │    │    │    ├── scan mn
       │    │    │    │    ├── columns: n:9(int)
       │    │    │    │    ├── lax-key: (9)
       │    │    │    │    ├── prune: (9)
       │    │    │    │    ├── interesting orderings: (+9)
-      │    │    │    │    └── unfiltered-cols: (9)
+      │    │    │    │    └── unfiltered-tables: [12884901896]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
       │    │    │              ├── variable: n:9 [type=int]
@@ -226,21 +223,20 @@ project
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: v:6(int!null)
       │    │    │    │    ├── prune: (6)
-      │    │    │    │    └── unfiltered-cols: (6)
+      │    │    │    │    └── unfiltered-tables: [8589934597]
       │    │    │    ├── scan mn
       │    │    │    │    ├── columns: m:8(int!null)
       │    │    │    │    ├── key: (8)
       │    │    │    │    ├── prune: (8)
       │    │    │    │    ├── interesting orderings: (+8)
-      │    │    │    │    └── unfiltered-cols: (8)
+      │    │    │    │    └── unfiltered-tables: [12884901896]
       │    │    │    └── filters (true)
       │    │    ├── scan xysd
       │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    │    │    ├── prune: (1-4)
-      │    │    │    ├── interesting orderings: (+1) (-3,+4,+1)
-      │    │    │    └── unfiltered-cols: (1-4)
+      │    │    │    └── interesting orderings: (+1) (-3,+4,+1)
       │    │    └── filters
       │    │         ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       │    │         │    ├── variable: x:1 [type=int]
@@ -279,15 +275,13 @@ left-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── prune: (5-7)
- │    ├── interesting orderings: (+7)
- │    └── unfiltered-cols: (5-7)
+ │    └── interesting orderings: (+7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x:1 [type=int]
@@ -326,12 +320,10 @@ project
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    │    │    ├── prune: (1-4)
-      │    │    │    ├── interesting orderings: (+1) (-3,+4,+1)
-      │    │    │    └── unfiltered-cols: (1-4)
+      │    │    │    └── interesting orderings: (+1) (-3,+4,+1)
       │    │    ├── scan uv
       │    │    │    ├── columns: u:5(int)
-      │    │    │    ├── prune: (5)
-      │    │    │    └── unfiltered-cols: (5)
+      │    │    │    └── prune: (5)
       │    │    └── filters
       │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    │              ├── variable: u:5 [type=int]
@@ -395,15 +387,13 @@ full-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── prune: (5-7)
- │    ├── interesting orderings: (+7)
- │    └── unfiltered-cols: (5-7)
+ │    └── interesting orderings: (+7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x:1 [type=int]
@@ -430,8 +420,7 @@ project
       │    ├── key: (5)
       │    └── scan uv
       │         ├── columns: u:5(int)
-      │         ├── prune: (5)
-      │         └── unfiltered-cols: (5)
+      │         └── prune: (5)
       └── filters (true)
 
 # Semi-join-apply.
@@ -491,13 +480,13 @@ semi-join-apply
  │    ├── scan uv
  │    │    ├── columns: v:6(int!null)
  │    │    ├── prune: (6)
- │    │    └── unfiltered-cols: (6)
+ │    │    └── unfiltered-tables: [8589934597]
  │    ├── scan mn
  │    │    ├── columns: m:8(int!null)
  │    │    ├── key: (8)
  │    │    ├── prune: (8)
  │    │    ├── interesting orderings: (+8)
- │    │    └── unfiltered-cols: (8)
+ │    │    └── unfiltered-tables: [12884901896]
  │    └── filters
  │         ├── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  │         │    ├── variable: x:1 [type=int]
@@ -522,12 +511,10 @@ anti-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int)
- │    ├── prune: (5)
- │    └── unfiltered-cols: (5)
+ │    └── prune: (5)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x:1 [type=int]
@@ -588,14 +575,14 @@ project
       │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    ├── prune: (1-4)
       │    ├── interesting orderings: (+1) (-3,+4,+1)
-      │    └── unfiltered-cols: (1-4)
+      │    └── unfiltered-tables: [4294967297]
       ├── scan uv
       │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
       │    ├── key: (7)
       │    ├── fd: (7)-->(5,6)
       │    ├── prune: (5-7)
       │    ├── interesting orderings: (+7)
-      │    └── unfiltered-cols: (5-7)
+      │    └── unfiltered-tables: [8589934597]
       └── filters (true)
 
 # Self-join.
@@ -614,14 +601,14 @@ inner-join (cross)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── unfiltered-tables: [4294967297]
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── unfiltered-tables: [8589934597]
  └── filters (true)
 
 # Propagate outer columns.
@@ -768,8 +755,7 @@ anti-join (hash)
  │         └── const: 2 [type=int]
  ├── scan uv
  │    ├── columns: u:2(int)
- │    ├── prune: (2)
- │    └── unfiltered-cols: (2)
+ │    └── prune: (2)
  └── filters
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
            ├── variable: u:2 [type=int]
@@ -1026,8 +1012,7 @@ full-join (cross)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── values
  │    ├── columns: column1:5(int!null)
  │    ├── cardinality: [2 - 2]
@@ -1101,7 +1086,7 @@ left-join (cross)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── unfiltered-tables: [4294967297]
  ├── group-by
  │    ├── columns: u:5(int) sum:8(decimal!null)
  │    ├── grouping columns: u:5(int)
@@ -1143,7 +1128,7 @@ left-join (cross)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── unfiltered-tables: [4294967297]
  ├── group-by
  │    ├── columns: u:5(int!null) sum:8(decimal!null)
  │    ├── grouping columns: u:5(int!null)
@@ -1280,8 +1265,7 @@ full-join (cross)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── group-by
  │    ├── columns: u:5(int) sum:8(decimal!null)
  │    ├── grouping columns: u:5(int)
@@ -1340,8 +1324,7 @@ full-join (cross)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
- │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
            ├── variable: u:1 [type=int]
@@ -1656,12 +1639,10 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
- │    ├── prune: (5,6)
- │    └── unfiltered-cols: (5,6)
+ │    └── prune: (5,6)
  └── filters
       └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── variable: x:1 [type=int]
@@ -1685,15 +1666,14 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── unfiltered-tables: [8589934597]
  └── filters
       └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
            ├── variable: x:5 [type=int]
@@ -1715,15 +1695,13 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
- │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters
       └── eq [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
            ├── variable: x:5 [type=int]
@@ -1747,14 +1725,14 @@ inner-join (cross)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── unfiltered-tables: [4294967297]
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── unfiltered-tables: [8589934597]
  └── filters (true)
 
 # LeftJoin case with a not-null foreign key. Since fk rows are all guaranteed
@@ -1775,15 +1753,14 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── unfiltered-tables: [8589934597]
  └── filters
       └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
            ├── variable: x:5 [type=int]
@@ -1808,15 +1785,13 @@ left-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
- │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters
       └── eq [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
            ├── variable: x:5 [type=int]
@@ -1841,15 +1816,13 @@ full-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2), (2)~~>(1)
  │    ├── prune: (1,2)
- │    ├── interesting orderings: (+1) (+2,+1)
- │    └── unfiltered-cols: (1,2)
+ │    └── interesting orderings: (+1) (+2,+1)
  ├── scan xysd
  │    ├── columns: x:3(int!null) y:4(int) s:5(string) d:6(decimal!null)
  │    ├── key: (3)
  │    ├── fd: (3)-->(4-6), (5,6)~~>(3,4)
  │    ├── prune: (3-6)
- │    ├── interesting orderings: (+3) (-5,+6,+3)
- │    └── unfiltered-cols: (3-6)
+ │    └── interesting orderings: (+3) (-5,+6,+3)
  └── filters
       └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
            ├── variable: m:1 [type=int]
@@ -1874,14 +1847,14 @@ inner-join (hash)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── unfiltered-tables: [4294967297]
  ├── scan a
  │    ├── columns: a.x:5(int!null) a.y:6(int) a.s:7(string) a.d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── unfiltered-tables: [8589934597]
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: xysd.x:1 [type=int]
@@ -1903,22 +1876,21 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── inner-join (cross)
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null) column1:9(int!null)
  │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-9)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    ├── unfiltered-cols: (5-8)
+ │    ├── unfiltered-tables: [8589934597]
  │    ├── scan xysd
  │    │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    │    ├── key: (5)
  │    │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    │    ├── prune: (5-8)
  │    │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    │    └── unfiltered-cols: (5-8)
+ │    │    └── unfiltered-tables: [8589934597]
  │    ├── values
  │    │    ├── columns: column1:9(int!null)
  │    │    ├── cardinality: [2 - 2]
@@ -1950,8 +1922,7 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── inner-join (hash)
  │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null) a.x:9(int!null) a.y:10(int) a.s:11(string) a.d:12(decimal!null)
  │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
@@ -1959,21 +1930,20 @@ inner-join (hash)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (9)-->(10-12), (11,12)~~>(9,10), (5)==(9), (9)==(5)
  │    ├── prune: (6-8,10-12)
  │    ├── interesting orderings: (+5) (-7,+8,+5) (+9) (-11,+12,+9)
- │    ├── unfiltered-cols: (5-12)
  │    ├── scan xysd
  │    │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
  │    │    ├── key: (5)
  │    │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    │    ├── prune: (5-8)
  │    │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    │    └── unfiltered-cols: (5-8)
+ │    │    └── unfiltered-tables: [8589934597]
  │    ├── scan a
  │    │    ├── columns: a.x:9(int!null) a.y:10(int) a.s:11(string) a.d:12(decimal!null)
  │    │    ├── key: (9)
  │    │    ├── fd: (9)-->(10-12), (11,12)~~>(9,10)
  │    │    ├── prune: (9-12)
  │    │    ├── interesting orderings: (+9) (-11,+12,+9)
- │    │    └── unfiltered-cols: (9-12)
+ │    │    └── unfiltered-tables: [12884901897]
  │    └── filters
  │         └── eq [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
  │              ├── variable: xysd.x:5 [type=int]
@@ -2008,14 +1978,12 @@ project
       │    ├── fd: (1)-->(2), (2)~~>(1), (2)-->(7)
       │    ├── prune: (1,2,7)
       │    ├── interesting orderings: (+1) (+2,+1)
-      │    ├── unfiltered-cols: (1,2)
       │    ├── scan mn
       │    │    ├── columns: m:1(int!null) n:2(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2), (2)~~>(1)
       │    │    ├── prune: (1,2)
-      │    │    ├── interesting orderings: (+1) (+2,+1)
-      │    │    └── unfiltered-cols: (1,2)
+      │    │    └── interesting orderings: (+1) (+2,+1)
       │    └── projections
       │         └── mult [as=column7:7, type=int, outer=(2)]
       │              ├── variable: n:2 [type=int]
@@ -2025,8 +1993,7 @@ project
       │    ├── key: (3)
       │    ├── fd: (3)-->(4-6), (5,6)~~>(3,4)
       │    ├── prune: (3-6)
-      │    ├── interesting orderings: (+3) (-5,+6,+3)
-      │    └── unfiltered-cols: (3-6)
+      │    └── interesting orderings: (+3) (-5,+6,+3)
       └── filters
            └── eq [type=bool, outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
                 ├── variable: column7:7 [type=int]
@@ -2059,8 +2026,7 @@ inner-join (hash)
  │    ├── key: (9)
  │    ├── fd: (9)-->(10-12), (11,12)~~>(9,10)
  │    ├── prune: (9-12)
- │    ├── interesting orderings: (+9) (-11,+12,+9)
- │    └── unfiltered-cols: (9-12)
+ │    └── interesting orderings: (+9) (-11,+12,+9)
  └── filters
       └── eq [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
            ├── variable: v:8 [type=int]
@@ -2082,15 +2048,13 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan a
  │    ├── columns: a.x:5(int!null) a.y:6(int) a.s:7(string) a.d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
- │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters
       └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── variable: xysd.x:1 [type=int]
@@ -2112,15 +2076,13 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-8)
- │    ├── interesting orderings: (+5) (-7,+8,+5)
- │    └── unfiltered-cols: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters
       └── eq [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
            ├── variable: r1:3 [type=int]
@@ -2143,15 +2105,13 @@ inner-join (hash)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
- │    └── unfiltered-cols: (1-4)
+ │    └── interesting orderings: (+1) (+3,+1) (+4,+1)
  ├── scan mn
  │    ├── columns: m:5(int!null) n:6(int)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6), (6)~~>(5)
  │    ├── prune: (5,6)
- │    ├── interesting orderings: (+5) (+6,+5)
- │    └── unfiltered-cols: (5,6)
+ │    └── interesting orderings: (+5) (+6,+5)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: k:1 [type=int]
@@ -2172,14 +2132,12 @@ inner-join (hash)
  ├── scan ref
  │    ├── columns: r1:1(int!null) r2:2(int) r3:3(int!null)
  │    ├── prune: (1-3)
- │    ├── interesting orderings: (+1,+2,+3)
- │    └── unfiltered-cols: (1-3)
+ │    └── interesting orderings: (+1,+2,+3)
  ├── scan abc
  │    ├── columns: a:5(int!null) b:6(int!null) c:7(int!null)
  │    ├── key: (5-7)
  │    ├── prune: (5-7)
- │    ├── interesting orderings: (+5,+6,+7)
- │    └── unfiltered-cols: (5-7)
+ │    └── interesting orderings: (+5,+6,+7)
  └── filters
       ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    ├── variable: r1:1 [type=int]
@@ -2220,7 +2178,7 @@ inner-join (hash)
  │    ├── key: (5-7)
  │    ├── prune: (5-7)
  │    ├── interesting orderings: (+5,+6,+7)
- │    └── unfiltered-cols: (5-7)
+ │    └── unfiltered-tables: [8589934597]
  └── filters
       ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    ├── variable: r1:1 [type=int]
@@ -2308,7 +2266,7 @@ limit
  │    │    │    │    ├── key: (6)
  │    │    │    │    ├── prune: (6)
  │    │    │    │    ├── interesting orderings: (+6)
- │    │    │    │    └── unfiltered-cols: (6)
+ │    │    │    │    └── unfiltered-tables: [12884901894]
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
  │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
@@ -2317,20 +2275,20 @@ limit
  │    │    │    │    ├── prune: (7,8)
  │    │    │    │    ├── interesting orderings: (+7) (+8,+7) (+9,+7) (+10)
  │    │    │    │    ├── join-size: 2
- │    │    │    │    ├── unfiltered-cols: (7-9)
+ │    │    │    │    ├── unfiltered-tables: [17179869191]
  │    │    │    │    ├── scan security
  │    │    │    │    │    ├── columns: s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null)
  │    │    │    │    │    ├── key: (7)
  │    │    │    │    │    ├── fd: (7)-->(8,9)
  │    │    │    │    │    ├── prune: (7-9)
  │    │    │    │    │    ├── interesting orderings: (+7) (+8,+7) (+9,+7)
- │    │    │    │    │    └── unfiltered-cols: (7-9)
+ │    │    │    │    │    └── unfiltered-tables: [17179869191]
  │    │    │    │    ├── scan exchange
  │    │    │    │    │    ├── columns: ex_id:10(int!null)
  │    │    │    │    │    ├── key: (10)
  │    │    │    │    │    ├── prune: (10)
  │    │    │    │    │    ├── interesting orderings: (+10)
- │    │    │    │    │    └── unfiltered-cols: (10)
+ │    │    │    │    │    └── unfiltered-tables: [21474836490]
  │    │    │    │    └── filters
  │    │    │    │         └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
  │    │    │    │              ├── variable: ex_id:10 [type=int]
@@ -2341,13 +2299,12 @@ limit
  │    │    │    ├── key: (5)
  │    │    │    ├── prune: (5)
  │    │    │    ├── interesting orderings: (+5)
- │    │    │    └── unfiltered-cols: (5)
+ │    │    │    └── unfiltered-tables: [8589934597]
  │    │    └── filters (true)
  │    ├── scan trade
  │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null)
  │    │    ├── prune: (1-3)
- │    │    ├── interesting orderings: (+1) (+2) (+3)
- │    │    └── unfiltered-cols: (1-3)
+ │    │    └── interesting orderings: (+1) (+2) (+3)
  │    └── filters
  │         ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │         │    ├── variable: st_id:5 [type=int]

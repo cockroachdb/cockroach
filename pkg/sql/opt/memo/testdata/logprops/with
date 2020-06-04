@@ -194,7 +194,9 @@ project
  ├── prune: (7)
  ├── inner-join (cross)
  │    ├── scan t40930
+ │    │    └── unfiltered-tables: [8589934596]
  │    ├── scan tab_10102
+ │    │    └── unfiltered-tables: [4294967297]
  │    └── filters (true)
  └── projections
       └── null [as="?column?":7, type=unknown]

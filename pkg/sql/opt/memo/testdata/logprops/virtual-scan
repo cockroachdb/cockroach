@@ -39,8 +39,7 @@ project
       │    ├── key: (6)
       │    ├── fd: (6)-->(7-12)
       │    ├── prune: (6-12)
-      │    ├── interesting orderings: (+6)
-      │    └── unfiltered-cols: (6-12)
+      │    └── interesting orderings: (+6)
       └── filters
            └── and [type=bool, outer=(2,3,7,8), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; /7: (/NULL - ]; /8: (/NULL - ])]
                 ├── eq [type=bool]
