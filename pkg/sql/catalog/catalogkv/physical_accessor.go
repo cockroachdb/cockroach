@@ -41,7 +41,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	name string,
 	flags tree.DatabaseLookupFlags,
 ) (desc sqlbase.DatabaseDescriptorInterface, err error) {
-	if name == sqlbase.SystemDB.Name {
+	if name == sqlbase.SystemDatabaseName {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
 		sysDB := sqlbase.MakeSystemDatabaseDesc()

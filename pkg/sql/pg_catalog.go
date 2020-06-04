@@ -671,7 +671,7 @@ CREATE TABLE pg_catalog.pg_class (
 			relKind = relKindSequence
 			relAm = oidZero
 		}
-		namespaceOid := h.NamespaceOid(db.DatabaseDesc(), scName)
+		namespaceOid := h.NamespaceOid(db, scName)
 		if err := addRow(
 			tableOid(table.ID),        // oid
 			tree.NewDName(table.Name), // relname
@@ -767,7 +767,7 @@ CREATE TABLE pg_catalog.pg_collation (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false /* requiresPrivileges */, func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-			namespaceOid := h.NamespaceOid(db.DatabaseDesc(), pgCatalogName)
+			namespaceOid := h.NamespaceOid(db, pgCatalogName)
 			for _, tag := range collate.Supported() {
 				collName := tag.String()
 				if err := addRow(
@@ -840,7 +840,7 @@ func populateTableConstraints(
 	if err != nil {
 		return err
 	}
-	namespaceOid := h.NamespaceOid(db.DatabaseDesc(), scName)
+	namespaceOid := h.NamespaceOid(db, scName)
 	tblOid := tableOid(table.ID)
 	for conName, con := range conInfo {
 		oid := tree.DNull
@@ -860,7 +860,7 @@ func populateTableConstraints(
 		var err error
 		switch con.Kind {
 		case sqlbase.ConstraintTypePK:
-			oid = h.PrimaryKeyConstraintOid(db.DatabaseDesc(), scName, table.TableDesc(), con.Index)
+			oid = h.PrimaryKeyConstraintOid(db, scName, table.TableDesc(), con.Index)
 			contype = conTypePKey
 			conindid = h.IndexOid(table.ID, con.Index.ID)
 
@@ -871,7 +871,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(table.PrimaryKeyString())
 
 		case sqlbase.ConstraintTypeFK:
-			oid = h.ForeignKeyConstraintOid(db.DatabaseDesc(), scName, table.TableDesc(), con.FK)
+			oid = h.ForeignKeyConstraintOid(db, scName, table.TableDesc(), con.FK)
 			contype = conTypeFK
 			// Foreign keys don't have a single linked index. Pick the first one
 			// that matches on the referenced table.
@@ -902,13 +902,13 @@ func populateTableConstraints(
 				return err
 			}
 			var buf bytes.Buffer
-			if err := showForeignKeyConstraint(&buf, db.Name, table, con.FK, tableLookup); err != nil {
+			if err := showForeignKeyConstraint(&buf, db.GetName(), table, con.FK, tableLookup); err != nil {
 				return err
 			}
 			condef = tree.NewDString(buf.String())
 
 		case sqlbase.ConstraintTypeUnique:
-			oid = h.UniqueConstraintOid(db.DatabaseDesc(), scName, table.TableDesc(), con.Index)
+			oid = h.UniqueConstraintOid(db, scName, table.TableDesc(), con.Index)
 			contype = conTypeUnique
 			conindid = h.IndexOid(table.ID, con.Index.ID)
 			var err error
@@ -1044,14 +1044,14 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					// Don't include tables that aren't in the current database unless
 					// they're virtual, dropped tables, or ones that the user can't see.
-					if (!table.Desc.IsVirtualTable() && table.Desc.ParentID != db.ID) ||
+					if (!table.Desc.IsVirtualTable() && table.Desc.ParentID != db.GetID()) ||
 						table.Desc.Dropped() ||
 						!userCanSeeTable(ctx, p, table.Desc, true /*allowAdding*/) {
 						return false, nil
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					scName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, table.Desc.GetParentSchemaID())
+					scName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), table.Desc.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
@@ -1177,9 +1177,9 @@ CREATE TABLE pg_catalog.pg_database (
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
 				return addRow(
-					dbOid(db.ID),           // oid
-					tree.NewDName(db.Name), // datname
-					tree.DNull,             // datdba
+					dbOid(db.GetID()),           // oid
+					tree.NewDName(db.GetName()), // datname
+					tree.DNull,                  // datdba
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
 					builtins.DatEncodingUTFId,  // encoding
@@ -1310,7 +1310,7 @@ CREATE TABLE pg_catalog.pg_depend (
 				} else {
 					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
-				constraintOid := h.ForeignKeyConstraintOid(db.DatabaseDesc(), scName, table.TableDesc(), con.FK)
+				constraintOid := h.ForeignKeyConstraintOid(db, scName, table.TableDesc(), con.FK)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid
@@ -1726,7 +1726,7 @@ func indexDefFromDescriptor(
 ) (string, error) {
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.Name),
-		Table:    tree.MakeTableName(tree.Name(db.Name), tree.Name(table.Name)),
+		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.Name)),
 		Unique:   index.Unique,
 		Columns:  make(tree.IndexElemList, len(index.ColumnNames)),
 		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
@@ -1761,7 +1761,7 @@ func indexDefFromDescriptor(
 		}
 		fields := index.ColumnNames[:sharedPrefixLen]
 		intlDef := &tree.InterleaveDef{
-			Parent: tree.MakeTableName(tree.Name(parentDb.Name), tree.Name(parentTable.Name)),
+			Parent: tree.MakeTableName(tree.Name(parentDb.GetName()), tree.Name(parentTable.Name)),
 			Fields: make(tree.NameList, len(fields)),
 		}
 		for i, field := range fields {
@@ -1870,10 +1870,10 @@ CREATE TABLE pg_catalog.pg_namespace (
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
 				return forEachSchemaName(ctx, p, db, func(s string) error {
 					return addRow(
-						h.NamespaceOid(db.DatabaseDesc(), s), // oid
-						tree.NewDString(s),                   // nspname
-						tree.DNull,                           // nspowner
-						tree.DNull,                           // nspacl
+						h.NamespaceOid(db, s), // oid
+						tree.NewDString(s),    // nspname
+						tree.DNull,            // nspowner
+						tree.DNull,            // nspacl
 					)
 				})
 			})
@@ -1912,7 +1912,7 @@ CREATE TABLE pg_catalog.pg_operator (
 )`,
 	populate: func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		nspOid := h.NamespaceOid(db.DatabaseDesc(), pgCatalogName)
+		nspOid := h.NamespaceOid(db, pgCatalogName)
 		addOp := func(opName string, kind tree.Datum, params tree.TypeList, returnTyper tree.ReturnTyper) error {
 			var leftType, rightType *tree.DOid
 			switch params.Length() {
@@ -2121,7 +2121,7 @@ CREATE TABLE pg_catalog.pg_proc (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db.DatabaseDesc(), pgCatalogName)
+				nspOid := h.NamespaceOid(db, pgCatalogName)
 				for _, name := range builtins.AllBuiltinNames {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
@@ -2734,7 +2734,7 @@ CREATE TABLE pg_catalog.pg_type (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db.DatabaseDesc(), pgCatalogName)
+				nspOid := h.NamespaceOid(db, pgCatalogName)
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
@@ -3177,8 +3177,8 @@ func (h oidHasher) getOid() *tree.DOid {
 	return tree.NewDOid(tree.DInt(i))
 }
 
-func (h oidHasher) writeDB(db *sqlbase.DatabaseDescriptor) {
-	h.writeUInt32(uint32(db.ID))
+func (h oidHasher) writeDB(db *sqlbase.ImmutableDatabaseDescriptor) {
+	h.writeUInt32(uint32(db.GetID()))
 }
 
 func (h oidHasher) writeSchema(scName string) {
@@ -3203,7 +3203,7 @@ func (h oidHasher) writeForeignKeyConstraint(fk *sqlbase.ForeignKeyConstraint) {
 	h.writeStr(fk.Name)
 }
 
-func (h oidHasher) NamespaceOid(db *sqlbase.DatabaseDescriptor, scName string) *tree.DOid {
+func (h oidHasher) NamespaceOid(db *sqlbase.ImmutableDatabaseDescriptor, scName string) *tree.DOid {
 	h.writeTypeTag(namespaceTypeTag)
 	h.writeDB(db)
 	h.writeSchema(scName)
@@ -3231,7 +3231,7 @@ func (h oidHasher) CheckConstraintOid(
 	check *sqlbase.TableDescriptor_CheckConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(checkConstraintTypeTag)
-	h.writeDB(db.DatabaseDesc())
+	h.writeDB(db)
 	h.writeSchema(scName)
 	h.writeTable(table.ID)
 	h.writeCheckConstraint(check)
@@ -3239,7 +3239,7 @@ func (h oidHasher) CheckConstraintOid(
 }
 
 func (h oidHasher) PrimaryKeyConstraintOid(
-	db *sqlbase.DatabaseDescriptor,
+	db *sqlbase.ImmutableDatabaseDescriptor,
 	scName string,
 	table *sqlbase.TableDescriptor,
 	pkey *sqlbase.IndexDescriptor,
@@ -3253,7 +3253,7 @@ func (h oidHasher) PrimaryKeyConstraintOid(
 }
 
 func (h oidHasher) ForeignKeyConstraintOid(
-	db *sqlbase.DatabaseDescriptor,
+	db *sqlbase.ImmutableDatabaseDescriptor,
 	scName string,
 	table *sqlbase.TableDescriptor,
 	fk *sqlbase.ForeignKeyConstraint,
@@ -3267,7 +3267,7 @@ func (h oidHasher) ForeignKeyConstraintOid(
 }
 
 func (h oidHasher) UniqueConstraintOid(
-	db *sqlbase.DatabaseDescriptor,
+	db *sqlbase.ImmutableDatabaseDescriptor,
 	scName string,
 	table *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,

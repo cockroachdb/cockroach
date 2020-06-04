@@ -307,7 +307,7 @@ func cleanupSchemaObjects(
 					for _, col := range dTableDesc.Columns {
 						if dependentColIDs.Contains(int(col.ID)) {
 							tbName := tree.MakeTableNameWithSchema(
-								tree.Name(db.Name),
+								tree.Name(db.GetName()),
 								tree.Name(schema),
 								tree.Name(dTableDesc.Name),
 							)

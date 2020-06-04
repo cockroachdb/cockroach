@@ -78,7 +78,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	var replacingDesc *sqlbase.MutableTableDescriptor
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, viewName)
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, viewName)
 	if err != nil {
 		switch {
 		case !sqlbase.IsRelationAlreadyExistsError(err):
@@ -137,7 +137,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			params.ctx,
 			viewName,
 			n.viewQuery,
-			n.dbDesc.ID,
+			n.dbDesc.GetID(),
 			schemaID,
 			id,
 			n.columns,
@@ -203,7 +203,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	tn := tree.MakeTableNameWithSchema(tree.Name(n.dbDesc.Name), schemaName, n.viewName)
+	tn := tree.MakeTableNameWithSchema(tree.Name(n.dbDesc.GetName()), schemaName, n.viewName)
 	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,

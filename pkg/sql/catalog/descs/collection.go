@@ -330,7 +330,7 @@ func (tc *Collection) GetTableVersion(
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-table.
 	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		(tn.Catalog() == sqlbase.SystemDB.Name && tn.ObjectName.String() != sqlbase.RoleMembersTable.Name)
+		(tn.Catalog() == sqlbase.SystemDatabaseName && tn.ObjectName.String() != sqlbase.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
 		dbID,
@@ -748,11 +748,12 @@ func (tc *Collection) GetAllDescriptors(
 
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
-		dbDescs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+		dbDescs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
 		typDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor)
 		for i := range descs {
 			desc := &descs[i]
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
+				dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
 				dbDescs[desc.GetID()] = dbDesc
 			} else if typDesc := desc.GetType(); typDesc != nil {
 				typDescs[desc.GetID()] = sqlbase.NewImmutableTypeDescriptor(*typDesc)
@@ -767,11 +768,11 @@ func (tc *Collection) GetAllDescriptors(
 			typeLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
-				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.ID, typDesc.ParentSchemaID)
+				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.GetID(), typDesc.ParentSchemaID)
 				if err != nil {
 					return nil, nil, err
 				}
-				name := tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaName, typDesc.GetName())
+				name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), schemaName, typDesc.GetName())
 				return &name, typDesc, nil
 			}
 			// Now hydrate all table descriptors.

@@ -132,18 +132,18 @@ func maybeFilterMissingViews(
 func allocateTableRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
-	databasesByID map[sqlbase.ID]*sql.DatabaseDescriptor,
+	databasesByID map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor,
 	tablesByID map[sqlbase.ID]*sql.TableDescriptor,
-	restoreDBs []*sqlbase.DatabaseDescriptor,
+	restoreDBs []*sqlbase.ImmutableDatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
 	opts map[string]string,
 ) (TableRewriteMap, error) {
 	tableRewrites := make(TableRewriteMap)
 	overrideDB, renaming := opts[restoreOptIntoDB]
 
-	restoreDBNames := make(map[string]*sqlbase.DatabaseDescriptor, len(restoreDBs))
+	restoreDBNames := make(map[string]*sqlbase.ImmutableDatabaseDescriptor, len(restoreDBs))
 	for _, db := range restoreDBs {
-		restoreDBNames[db.Name] = db
+		restoreDBNames[db.GetName()] = db
 	}
 
 	if len(restoreDBNames) > 0 && renaming {
@@ -248,7 +248,7 @@ func allocateTableRewrites(
 					return err
 				}
 
-				if table.ParentID == sqlbase.SystemDB.ID {
+				if table.ParentID == sqlbase.SystemDB.GetID() {
 					// For full cluster backups, put the system tables in the temporary
 					// system table.
 					targetDB = restoreTempSystemDB
@@ -264,7 +264,7 @@ func allocateTableRewrites(
 					return errors.Errorf("no database with ID %d in backup for table %q",
 						table.ParentID, table.Name)
 				}
-				targetDB = database.Name
+				targetDB = database.GetName()
 			}
 
 			if _, ok := restoreDBNames[targetDB]; ok {
@@ -333,7 +333,7 @@ func allocateTableRewrites(
 		var newID sqlbase.ID
 		var err error
 		if descriptorCoverage == tree.AllDescriptors {
-			newID = db.ID
+			newID = db.GetID()
 		} else {
 			newID, err = catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
@@ -341,8 +341,8 @@ func allocateTableRewrites(
 			}
 		}
 
-		tableRewrites[db.ID] = &jobspb.RestoreDetails_TableRewrite{TableID: newID}
-		for _, tableID := range needsNewParentIDs[db.Name] {
+		tableRewrites[db.GetID()] = &jobspb.RestoreDetails_TableRewrite{TableID: newID}
+		for _, tableID := range needsNewParentIDs[db.GetName()] {
 			tableRewrites[tableID] = &jobspb.RestoreDetails_TableRewrite{ParentID: newID}
 		}
 	}
@@ -354,7 +354,7 @@ func allocateTableRewrites(
 	tablesToRemap := make([]*sqlbase.TableDescriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		if descriptorCoverage == tree.AllDescriptors {
-			if table.ParentID == sqlbase.SystemDB.ID {
+			if table.ParentID == sqlbase.SystemDB.GetID() {
 				// This is a system table that should be marked for descriptor creation.
 				tablesToRemap = append(tablesToRemap, table)
 			} else {
@@ -735,11 +735,15 @@ func doRestorePlan(
 		return err
 	}
 
-	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+	databasesByID := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
 	tablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, desc := range sqlDescs {
+		// TODO(ajwerner): make sqlDescs into a []sqlbase.DescriptorInterface so
+		// we don't need to do this duplicate construction of the unwrapped
+		// descriptor.
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			databasesByID[dbDesc.ID] = dbDesc
+			dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
+			databasesByID[dbDesc.GetID()] = dbDesc
 		} else if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
 			tablesByID[tableDesc.ID] = tableDesc
 		}

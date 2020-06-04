@@ -214,7 +214,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 	isTemporary := n.n.Temporary
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, n.n.Table.Table())
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, n.n.Table.Table())
 	if err != nil {
 		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
@@ -270,7 +270,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	privs := n.dbDesc.GetPrivileges()
-	if n.dbDesc.ID == keys.SystemDatabaseID {
+	if n.dbDesc.GetID() == keys.SystemDatabaseID {
 		privs = sqlbase.NewDefaultPrivilegeDescriptor()
 	}
 
@@ -289,7 +289,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		desc, err = makeTableDescIfAs(params,
-			n.n, n.dbDesc.ID, schemaID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
+			n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, schemaID, id, creationTime, privs, affected, isTemporary)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, privs, affected, isTemporary)
 		if err != nil {
 			return err
 		}
@@ -523,11 +523,11 @@ func qualifyFKColErrorWithDB(
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
-	schema, err := resolver.ResolveSchemaNameByID(ctx, txn, codec, db.ID, tbl.GetParentSchemaID())
+	schema, err := resolver.ResolveSchemaNameByID(ctx, txn, codec, db.GetID(), tbl.GetParentSchemaID())
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
-	return tree.ErrString(tree.NewUnresolvedName(db.Name, schema, tbl.Name, col))
+	return tree.ErrString(tree.NewUnresolvedName(db.GetName(), schema, tbl.Name, col))
 }
 
 // FKTableState is the state of the referencing table resolveFK() is called on.

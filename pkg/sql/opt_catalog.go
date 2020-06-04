@@ -88,18 +88,18 @@ type optSchema struct {
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (os *optSchema) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
 func (os *optSchema) Equals(other cat.Object) bool {
 	otherSchema, ok := other.(*optSchema)
-	return ok && os.desc.ID == otherSchema.desc.ID
+	return ok && os.desc.GetID() == otherSchema.desc.GetID()
 }
 
 // Name is part of the cat.Schema interface.
@@ -292,7 +292,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
-	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name)), nil
+	return tree.MakeTableName(tree.Name(dbDesc.GetName()), tree.Name(desc.Name)), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -1324,7 +1324,7 @@ func newOptVirtualTable(
 			// both cases.
 			id |= cat.StableID(math.MaxUint32) << 32
 		} else {
-			id |= cat.StableID(dbDesc.(*sqlbase.ImmutableDatabaseDescriptor).ID) << 32
+			id |= cat.StableID(dbDesc.(*sqlbase.ImmutableDatabaseDescriptor).GetID()) << 32
 		}
 	}
 
