@@ -1782,7 +1782,6 @@ func addSystemDatabaseToSchema(
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
 	addSystemDescriptorsToSchema(target)
-	// TODO(nvanbenschoten): only do this for the system tenant. Tracked in #48774.
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 }
