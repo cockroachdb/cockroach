@@ -2030,11 +2030,34 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 
 	// Outer joins return minimum number of rows, depending on type.
 	switch h.joinType {
+	case opt.InnerJoinOp:
+		if joinWithMult, isJoinWithMult := h.join.(joinWithMultiplicity); isJoinWithMult {
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows() && innerJoinCard.Max > left.Max {
+				// If left rows aren't duplicated, the max join cardinality is at most the
+				// max left cardinality.
+				innerJoinCard.Max = left.Max
+			}
+			if multiplicity.JoinDoesNotDuplicateRightRows() && innerJoinCard.Max > right.Max {
+				// If right rows aren't duplicated, the max join cardinality is at most
+				// the max right cardinality.
+				innerJoinCard.Max = right.Max
+			}
+		}
+
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		return innerJoinCard.AtLeast(left)
+		if joinWithMult, isJoinWithMult := h.join.(joinWithMultiplicity); isJoinWithMult {
+			// If left rows aren't duplicated, the max join cardinality is at most the
+			// max left cardinality.
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows() && innerJoinCard.Max > left.Max {
+				innerJoinCard.Max = left.Max
+			}
+		}
+		innerJoinCard = innerJoinCard.AtLeast(left)
 
 	case opt.RightJoinOp:
-		return innerJoinCard.AtLeast(right)
+		innerJoinCard = innerJoinCard.AtLeast(right)
 
 	case opt.FullJoinOp:
 		if innerJoinCard.IsZero() {
@@ -2051,11 +2074,20 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 		// We could get left.Max + right.Max rows (if the filter doesn't match
 		// anything). We use Add here because it handles overflow.
 		c.Max = left.Add(right).Max
-		return innerJoinCard.AtLeast(c)
 
-	default:
-		return innerJoinCard
+		if joinWithMult, isJoinWithMult := h.join.(joinWithMultiplicity); isJoinWithMult {
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows() &&
+				multiplicity.JoinDoesNotDuplicateRightRows() && innerJoinCard.Max > c.Max {
+				// If neither left rows nor right rows are duplicated, the join max
+				// cardinality is at most the sum of the left and right maxes.
+				innerJoinCard.Max = c.Max
+			}
+		}
+		innerJoinCard = innerJoinCard.AtLeast(c)
 	}
+
+	return innerJoinCard
 }
 
 func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Relational) {

@@ -1262,7 +1262,7 @@ upsert transactiondetails
  ├── stable+volatile, side-effects, mutations
  ├── project
  │    ├── columns: upsert_dealerid:38 upsert_isbuy:39 upsert_transactiondate:40 upsert_cardid:41 upsert_discount:44 sellprice:35 buyprice:36 "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 discount:24!null transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondate:27 cardid:28 quantity:29 transactiondetails.sellprice:30 transactiondetails.buyprice:31 transactiondetails.version:32 transactiondetails.discount:33 transactiondetails.extra:34
- │    ├── cardinality: [1 - ]
+ │    ├── cardinality: [1 - 2]
  │    ├── stable+volatile, side-effects
  │    ├── lax-key: (15-17,25-29)
  │    ├── fd: ()-->(13,14,24), (15-17)~~>(20), (25-29)-->(30-34), (25)-->(38), (25,26)-->(39), (15,25,27)-->(40), (16,25,28)-->(41), (15-17,25-29)~~>(20,35,36,44)
@@ -1270,7 +1270,7 @@ upsert transactiondetails
  │    │    ├── columns: "?column?":13!null bool:14!null current_timestamp:15 int8:16 int8:17 column20:20 sellprice:22 buyprice:23 discount:24!null transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondate:27 cardid:28 quantity:29 transactiondetails.sellprice:30 transactiondetails.buyprice:31 transactiondetails.version:32 transactiondetails.discount:33 transactiondetails.extra:34
  │    │    ├── key columns: [13 14 15 16 17] = [25 26 27 28 29]
  │    │    ├── lookup columns are key
- │    │    ├── cardinality: [1 - ]
+ │    │    ├── cardinality: [1 - 2]
  │    │    ├── stable+volatile, side-effects
  │    │    ├── lax-key: (15-17,25-29)
  │    │    ├── fd: ()-->(13,14,24), (15-17)~~>(20,22,23), (25-29)-->(30-34)
@@ -1330,24 +1330,26 @@ upsert transactiondetails
       │         ├── columns: upsert_dealerid:45 upsert_isbuy:46 upsert_transactiondate:47
       │         ├── key columns: [45 46 47] = [48 49 50]
       │         ├── lookup columns are key
+      │         ├── cardinality: [0 - 2]
       │         ├── with-scan &2
       │         │    ├── columns: upsert_dealerid:45 upsert_isbuy:46 upsert_transactiondate:47
       │         │    ├── mapping:
       │         │    │    ├──  upsert_dealerid:38 => upsert_dealerid:45
       │         │    │    ├──  upsert_isbuy:39 => upsert_isbuy:46
       │         │    │    └──  upsert_transactiondate:40 => upsert_transactiondate:47
-      │         │    └── cardinality: [1 - ]
+      │         │    └── cardinality: [1 - 2]
       │         └── filters (true)
       └── f-k-checks-item: transactiondetails(cardid) -> cards(id)
            └── anti-join (lookup cards)
                 ├── columns: upsert_cardid:57
                 ├── key columns: [57] = [58]
                 ├── lookup columns are key
+                ├── cardinality: [0 - 2]
                 ├── with-scan &2
                 │    ├── columns: upsert_cardid:57
                 │    ├── mapping:
                 │    │    └──  upsert_cardid:41 => upsert_cardid:57
-                │    └── cardinality: [1 - ]
+                │    └── cardinality: [1 - 2]
                 └── filters (true)
 
 # Delete inventory detail rows to reflect card transfers.
@@ -1411,17 +1413,20 @@ update ci
       │    │    ├── fd: ()-->(19), (20)-->(21-33), (27)-->(20-26,28-31), (20)==(32), (32)==(20)
       │    │    ├── project
       │    │    │    ├── columns: "project_const_col_@34":51!null ci.dealerid:19!null ci.cardid:20!null buyprice:21!null sellprice:22!null discount:23!null desiredinventory:24!null actualinventory:25!null maxinventory:26!null ci.version:27!null ci.discountbuyprice:28 notes:29 oldinventory:30 ci.extra:31 c:32!null q:33!null
+      │    │    │    ├── cardinality: [0 - 2]
       │    │    │    ├── key: (20)
       │    │    │    ├── fd: ()-->(19,51), (20)-->(21-33), (27)-->(20-26,28-31), (20)==(32), (32)==(20)
       │    │    │    ├── distinct-on
       │    │    │    │    ├── columns: ci.dealerid:19!null ci.cardid:20!null buyprice:21!null sellprice:22!null discount:23!null desiredinventory:24!null actualinventory:25!null maxinventory:26!null ci.version:27!null ci.discountbuyprice:28 notes:29 oldinventory:30 ci.extra:31 c:32!null q:33!null
       │    │    │    │    ├── grouping columns: ci.cardid:20!null
+      │    │    │    │    ├── cardinality: [0 - 2]
       │    │    │    │    ├── key: (20)
       │    │    │    │    ├── fd: ()-->(19), (20)-->(19,21-33), (27)-->(20-26,28-31), (20)==(32), (32)==(20)
       │    │    │    │    ├── inner-join (lookup cardsinfo)
       │    │    │    │    │    ├── columns: ci.dealerid:19!null ci.cardid:20!null buyprice:21!null sellprice:22!null discount:23!null desiredinventory:24!null actualinventory:25!null maxinventory:26!null ci.version:27!null ci.discountbuyprice:28 notes:29 oldinventory:30 ci.extra:31 c:32!null q:33!null
       │    │    │    │    │    ├── key columns: [48 32] = [19 20]
       │    │    │    │    │    ├── lookup columns are key
+      │    │    │    │    │    ├── cardinality: [0 - 2]
       │    │    │    │    │    ├── fd: ()-->(19), (20)-->(21-31), (27)-->(20-26,28-31), (20)==(32), (32)==(20)
       │    │    │    │    │    ├── project
       │    │    │    │    │    │    ├── columns: "project_const_col_@19":48!null c:32!null q:33!null
