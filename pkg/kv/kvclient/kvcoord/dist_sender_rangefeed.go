@@ -28,7 +28,6 @@ import (
 )
 
 type singleRangeInfo struct {
-	desc  *roachpb.RangeDescriptor
 	rs    roachpb.RSpan
 	ts    hlc.Timestamp
 	token EvictionToken
@@ -106,7 +105,6 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 		nextRS.Key = partialRS.EndKey
 		select {
 		case rangeCh <- singleRangeInfo{
-			desc:  desc,
 			rs:    partialRS,
 			ts:    ts,
 			token: ri.Token(),
@@ -139,19 +137,18 @@ func (ds *DistSender) partialRangeFeed(
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 		// If we've cleared the descriptor on a send failure, re-lookup.
-		if rangeInfo.desc == nil {
+		if rangeInfo.token.Empty() {
 			var err error
-			ri, tok, err := ds.getDescriptor(ctx, rangeInfo.rs.Key, EvictionToken{}, false)
+			ri, err := ds.getRoutingInfo(ctx, rangeInfo.rs.Key, EvictionToken{}, false)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				continue
 			}
-			rangeInfo.desc = &ri.Desc
-			rangeInfo.token = tok
+			rangeInfo.token = ri
 		}
 
 		// Establish a RangeFeed for a single Range.
-		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.desc, eventCh)
+		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.token.Desc(), eventCh)
 
 		// Forward the timestamp in case we end up sending it again.
 		ts.Forward(maxTS)
@@ -170,7 +167,7 @@ func (ds *DistSender) partialRangeFeed(
 			case errors.HasType(err, (*sendError)(nil)), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
 				rangeInfo.token.Evict(ctx)
-				rangeInfo.desc = nil
+				rangeInfo.token = EvictionToken{}
 				continue
 			case errors.HasType(err, (*roachpb.RangeKeyMismatchError)(nil)):
 				// Evict the descriptor from the cache.
@@ -232,7 +229,7 @@ func (ds *DistSender) singleRangeFeed(
 	if ds.rpcContext != nil {
 		latencyFn = ds.rpcContext.RemoteClocks.Latency
 	}
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc)
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, nil /* leaseholder */)
 	if err != nil {
 		return args.Timestamp, err
 	}
