@@ -9,7 +9,7 @@ CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=11)
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
 ----
-·                           distributed    false                                          ·                           ·
+·                           distribution   local                                          ·                           ·
 ·                           vectorized     false                                          ·                           ·
 count                       ·              ·                                              ()                          ·
  └── insert                 ·              ·                                              ()                          ·
@@ -34,7 +34,7 @@ CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=1
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
 ----
-·                           distributed    false                                                  ·                                    ·
+·                           distribution   local                                                  ·                                    ·
 ·                           vectorized     false                                                  ·                                    ·
 count                       ·              ·                                                      ()                                   ·
  └── insert                 ·              ·                                                      ()                                   ·

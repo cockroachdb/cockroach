@@ -272,9 +272,9 @@ public  kv  table
 query TTT
 EXPLAIN ALTER TABLE kv RENAME TO kv2
 ----
-·             distributed  false
-·             vectorized   false
-rename table  ·            ·
+·             distribution  local
+·             vectorized    false
+rename table  ·             ·
 
 # Verify that the EXPLAIN above does not actually rename the table (#30543)
 query TTT

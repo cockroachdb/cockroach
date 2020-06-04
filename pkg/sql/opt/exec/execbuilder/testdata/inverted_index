@@ -164,177 +164,177 @@ InitPut /Table/55/2/15/0/0 -> /BYTES/
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
-·           distributed  false                        ·       ·
-·           vectorized   true                         ·       ·
-index-join  ·            ·                            (a, b)  ·
- │          table        d@primary                    ·       ·
- │          key columns  a                            ·       ·
- └── scan   ·            ·                            (a)     ·
-·           table        d@foo_inv                    ·       ·
-·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+·           distribution  local                        ·       ·
+·           vectorized    true                         ·       ·
+index-join  ·             ·                            (a, b)  ·
+ │          table         d@primary                    ·       ·
+ │          key columns   a                            ·       ·
+ └── scan   ·             ·                            (a)     ·
+·           table         d@foo_inv                    ·       ·
+·           spans         /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": {"b": [1]}}'
 ----
-·           distributed  false                                    ·       ·
-·           vectorized   true                                     ·       ·
-index-join  ·            ·                                        (a, b)  ·
- │          table        d@primary                                ·       ·
- │          key columns  a                                        ·       ·
- └── scan   ·            ·                                        (a)     ·
-·           table        d@foo_inv                                ·       ·
-·           spans        /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
+·           distribution  local                                    ·       ·
+·           vectorized    true                                     ·       ·
+index-join  ·             ·                                        (a, b)  ·
+ │          table         d@primary                                ·       ·
+ │          key columns   a                                        ·       ·
+ └── scan   ·             ·                                        (a)     ·
+·           table         d@foo_inv                                ·       ·
+·           spans         /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": [[2]]}}';
 ----
-·           distributed  false                                            ·       ·
-·           vectorized   true                                             ·       ·
-index-join  ·            ·                                                (a, b)  ·
- │          table        d@primary                                        ·       ·
- │          key columns  a                                                ·       ·
- └── scan   ·            ·                                                (a)     ·
-·           table        d@foo_inv                                        ·       ·
-·           spans        /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
+·           distribution  local                                            ·       ·
+·           vectorized    true                                             ·       ·
+index-join  ·             ·                                                (a, b)  ·
+ │          table         d@primary                                        ·       ·
+ │          key columns   a                                                ·       ·
+ └── scan   ·             ·                                                (a)     ·
+·           table         d@foo_inv                                        ·       ·
+·           spans         /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b":true}}';
 ----
-·           distributed  false                         ·       ·
-·           vectorized   true                          ·       ·
-index-join  ·            ·                             (a, b)  ·
- │          table        d@primary                     ·       ·
- │          key columns  a                             ·       ·
- └── scan   ·            ·                             (a)     ·
-·           table        d@foo_inv                     ·       ·
-·           spans        /"a"/"b"/True-/"a"/"b"/False  ·       ·
+·           distribution  local                         ·       ·
+·           vectorized    true                          ·       ·
+index-join  ·             ·                             (a, b)  ·
+ │          table         d@primary                     ·       ·
+ │          key columns   a                             ·       ·
+ └── scan   ·             ·                             (a)     ·
+·           table         d@foo_inv                     ·       ·
+·           spans         /"a"/"b"/True-/"a"/"b"/False  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
 ----
-·           distributed  false                    ·       ·
-·           vectorized   true                     ·       ·
-index-join  ·            ·                        (a, b)  ·
- │          table        d@primary                ·       ·
- │          key columns  a                        ·       ·
- └── scan   ·            ·                        (a)     ·
-·           table        d@foo_inv                ·       ·
-·           spans        /Arr/1-/Arr/1/PrefixEnd  ·       ·
+·           distribution  local                    ·       ·
+·           vectorized    true                     ·       ·
+index-join  ·             ·                        (a, b)  ·
+ │          table         d@primary                ·       ·
+ │          key columns   a                        ·       ·
+ └── scan   ·             ·                        (a)     ·
+·           table         d@foo_inv                ·       ·
+·           spans         /Arr/1-/Arr/1/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a": {"b": [1]}}]'
 ----
-·           distributed  false                                            ·       ·
-·           vectorized   true                                             ·       ·
-index-join  ·            ·                                                (a, b)  ·
- │          table        d@primary                                        ·       ·
- │          key columns  a                                                ·       ·
- └── scan   ·            ·                                                (a)     ·
-·           table        d@foo_inv                                        ·       ·
-·           spans        /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
+·           distribution  local                                            ·       ·
+·           vectorized    true                                             ·       ·
+index-join  ·             ·                                                (a, b)  ·
+ │          table         d@primary                                        ·       ·
+ │          key columns   a                                                ·       ·
+ └── scan   ·             ·                                                (a)     ·
+·           table         d@foo_inv                                        ·       ·
+·           spans         /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ----
-·     distributed  false      ·       ·
-·     vectorized   true       ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        d@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b @> '[]'  ·       ·
+·     distribution  local      ·       ·
+·     vectorized    true       ·       ·
+scan  ·             ·          (a, b)  ·
+·     table         d@primary  ·       ·
+·     spans         FULL SCAN  ·       ·
+·     filter        b @> '[]'  ·       ·
 
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ----
-·     distributed  false      ·       ·
-·     vectorized   true       ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        d@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b @> '{}'  ·       ·
+·     distribution  local      ·       ·
+·     vectorized    true       ·       ·
+scan  ·             ·          (a, b)  ·
+·     table         d@primary  ·       ·
+·     spans         FULL SCAN  ·       ·
+·     filter        b @> '{}'  ·       ·
 
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ----
-·           distributed  false                        ·       ·
-·           vectorized   true                         ·       ·
-index-join  ·            ·                            (a, b)  ·
- │          table        d@primary                    ·       ·
- │          key columns  a                            ·       ·
- └── scan   ·            ·                            (a)     ·
-·           table        d@foo_inv                    ·       ·
-·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+·           distribution  local                        ·       ·
+·           vectorized    true                         ·       ·
+index-join  ·             ·                            (a, b)  ·
+ │          table         d@primary                    ·       ·
+ │          key columns   a                            ·       ·
+ └── scan   ·             ·                            (a)     ·
+·           table         d@foo_inv                    ·       ·
+·           spans         /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
 ----
-·           distributed  false                                ·       ·
-·           vectorized   true                                 ·       ·
-index-join  ·            ·                                    (a, b)  ·
- │          table        d@primary                            ·       ·
- │          key columns  a                                    ·       ·
- └── scan   ·            ·                                    (a)     ·
-·           table        d@foo_inv                            ·       ·
-·           spans        /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
+·           distribution  local                                ·       ·
+·           vectorized    true                                 ·       ·
+index-join  ·             ·                                    (a, b)  ·
+ │          table         d@primary                            ·       ·
+ │          key columns   a                                    ·       ·
+ └── scan   ·             ·                                    (a)     ·
+·           table         d@foo_inv                            ·       ·
+·           spans         /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
 ----
-·       distributed  false  ·       ·
-·       vectorized   true   ·       ·
-norows  ·            ·      (a, b)  ·
+·       distribution  local  ·       ·
+·       vectorized    true   ·       ·
+norows  ·             ·      (a, b)  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
-·           distributed  false                        ·       ·
-·           vectorized   true                         ·       ·
-index-join  ·            ·                            (a, b)  ·
- │          table        d@primary                    ·       ·
- │          key columns  a                            ·       ·
- └── scan   ·            ·                            (a)     ·
-·           table        d@foo_inv                    ·       ·
-·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+·           distribution  local                        ·       ·
+·           vectorized    true                         ·       ·
+index-join  ·             ·                            (a, b)  ·
+ │          table         d@primary                    ·       ·
+ │          key columns   a                            ·       ·
+ └── scan   ·             ·                            (a)     ·
+·           table         d@foo_inv                    ·       ·
+·           spans         /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
 # Make sure that querying for NULL equality doesn't use the inverted index.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ----
-·     distributed  false      ·       ·
-·     vectorized   true       ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        d@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b IS NULL  ·       ·
+·     distribution  local      ·       ·
+·     vectorized    true       ·       ·
+scan  ·             ·          (a, b)  ·
+·     table         d@primary  ·       ·
+·     spans         FULL SCAN  ·       ·
+·     filter        b IS NULL  ·       ·
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        d@primary
-·     spans        FULL SCAN
-·     filter       b @> '{"a": []}'
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         d@primary
+·     spans         FULL SCAN
+·     filter        b @> '{"a": []}'
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        d@primary
-·     spans        FULL SCAN
-·     filter       b @> '{"a": {}}'
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         d@primary
+·     spans         FULL SCAN
+·     filter        b @> '{"a": {}}'
 
 # Multi-path contains queries. Should create zigzag joins.
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distributed            false                                ·       ·
+·                 distribution           local                                ·       ·
 ·                 vectorized             true                                 ·       ·
 lookup-join       ·                      ·                                    (a, b)  ·
  │                table                  d@primary                            ·       ·
@@ -355,7 +355,7 @@ lookup-join       ·                      ·                                    
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-·                 distributed            false                                          ·       ·
+·                 distribution           local                                          ·       ·
 ·                 vectorized             true                                           ·       ·
 lookup-join       ·                      ·                                              (a, b)  ·
  │                table                  d@primary                                      ·       ·
@@ -376,7 +376,7 @@ lookup-join       ·                      ·                                    
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-·                 distributed            false                               ·       ·
+·                 distribution           local                               ·       ·
 ·                 vectorized             true                                ·       ·
 lookup-join       ·                      ·                                   (a, b)  ·
  │                table                  d@primary                           ·       ·
@@ -400,7 +400,7 @@ SET enable_zigzag_join = true
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distributed            false                                ·       ·
+·                 distribution           local                                ·       ·
 ·                 vectorized             true                                 ·       ·
 lookup-join       ·                      ·                                    (a, b)  ·
  │                table                  d@primary                            ·       ·
@@ -421,7 +421,7 @@ lookup-join       ·                      ·                                    
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-·                 distributed            false                                          ·       ·
+·                 distribution           local                                          ·       ·
 ·                 vectorized             true                                           ·       ·
 lookup-join       ·                      ·                                              (a, b)  ·
  │                table                  d@primary                                      ·       ·
@@ -442,7 +442,7 @@ lookup-join       ·                      ·                                    
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-·                 distributed            false                               ·       ·
+·                 distribution           local                               ·       ·
 ·                 vectorized             true                                ·       ·
 lookup-join       ·                      ·                                   (a, b)  ·
  │                table                  d@primary                           ·       ·
@@ -463,26 +463,26 @@ lookup-join       ·                      ·                                   (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ----
-·                distributed  false                     ·       ·
-·                vectorized   true                      ·       ·
-filter           ·            ·                         (a, b)  ·
- │               filter       b @> '{"a": {}, "b": 2}'  ·       ·
- └── index-join  ·            ·                         (a, b)  ·
-      │          table        d@primary                 ·       ·
-      │          key columns  a                         ·       ·
-      └── scan   ·            ·                         (a)     ·
-·                table        d@foo_inv                 ·       ·
-·                spans        /"b"/2-/"b"/2/PrefixEnd   ·       ·
+·                distribution  local                     ·       ·
+·                vectorized    true                      ·       ·
+filter           ·             ·                         (a, b)  ·
+ │               filter        b @> '{"a": {}, "b": 2}'  ·       ·
+ └── index-join  ·             ·                         (a, b)  ·
+      │          table         d@primary                 ·       ·
+      │          key columns   a                         ·       ·
+      └── scan   ·             ·                         (a)     ·
+·                table         d@foo_inv                 ·       ·
+·                spans         /"b"/2-/"b"/2/PrefixEnd   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ----
-·     distributed  false                      ·       ·
-·     vectorized   true                       ·       ·
-scan  ·            ·                          (a, b)  ·
-·     table        d@primary                  ·       ·
-·     spans        FULL SCAN                  ·       ·
-·     filter       b @> '{"a": {}, "b": {}}'  ·       ·
+·     distribution  local                      ·       ·
+·     vectorized    true                       ·       ·
+scan  ·             ·                          (a, b)  ·
+·     table         d@primary                  ·       ·
+·     spans         FULL SCAN                  ·       ·
+·     filter        b @> '{"a": {}, "b": {}}'  ·       ·
 
 subtest array
 
@@ -490,57 +490,57 @@ subtest array
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1]
 ----
-·           distributed  false      ·       ·
-·           vectorized   true       ·       ·
-index-join  ·            ·          (a, b)  ·
- │          table        e@primary  ·       ·
- │          key columns  a          ·       ·
- └── scan   ·            ·          (a)     ·
-·           table        e@e_b_idx  ·       ·
-·           spans        /1-/2      ·       ·
+·           distribution  local      ·       ·
+·           vectorized    true       ·       ·
+index-join  ·             ·          (a, b)  ·
+ │          table         e@primary  ·       ·
+ │          key columns   a          ·       ·
+ └── scan   ·             ·          (a)     ·
+·           table         e@e_b_idx  ·       ·
+·           spans         /1-/2      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[]::INT[]
 ----
-·     distributed  false         ·       ·
-·     vectorized   true          ·       ·
-scan  ·            ·             (a, b)  ·
-·     table        e@primary     ·       ·
-·     spans        FULL SCAN     ·       ·
-·     filter       b @> ARRAY[]  ·       ·
+·     distribution  local         ·       ·
+·     vectorized    true          ·       ·
+scan  ·             ·             (a, b)  ·
+·     table         e@primary     ·       ·
+·     spans         FULL SCAN     ·       ·
+·     filter        b @> ARRAY[]  ·       ·
 
 # Test that searching for a NULL element using the inverted index.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ----
-·            distributed  false      ·       ·
-·            vectorized   true       ·       ·
-index-join   ·            ·          (a, b)  ·
- │           table        e@primary  ·       ·
- │           key columns  a          ·       ·
- └── norows  ·            ·          (a)     ·
+·            distribution  local      ·       ·
+·            vectorized    true       ·       ·
+index-join   ·             ·          (a, b)  ·
+ │           table         e@primary  ·       ·
+ │           key columns   a          ·       ·
+ └── norows  ·             ·          (a)     ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> NULL
 ----
-·       distributed  false  ·       ·
-·       vectorized   true   ·       ·
-norows  ·            ·      (a, b)  ·
+·       distribution  local  ·       ·
+·       vectorized    true   ·       ·
+norows  ·             ·      (a, b)  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 ----
-·     distributed  false      ·       ·
-·     vectorized   true       ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        e@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b IS NULL  ·       ·
+·     distribution  local      ·       ·
+·     vectorized    true       ·       ·
+scan  ·             ·          (a, b)  ·
+·     table         e@primary  ·       ·
+·     spans         FULL SCAN  ·       ·
+·     filter        b IS NULL  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
-·                 distributed            false             ·       ·
+·                 distribution           local             ·       ·
 ·                 vectorized             true              ·       ·
 lookup-join       ·                      ·                 (a, b)  ·
  │                table                  e@primary         ·       ·
@@ -561,7 +561,7 @@ lookup-join       ·                      ·                 (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ----
-·                 distributed            false                                  ·       ·
+·                 distribution           local                                  ·       ·
 ·                 vectorized             true                                   ·       ·
 lookup-join       ·                      ·                                      (a, b)  ·
  │                table                  e@primary                              ·       ·

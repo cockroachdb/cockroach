@@ -254,7 +254,7 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pid1 >= 31 AND pid1 <= 33
   OR pa1 > 0
 ----
-·                distributed         true
+·                distribution        full
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -298,7 +298,7 @@ EXPLAIN
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
-·           distributed        true
+·           distribution       full
 ·           vectorized         true
 merge-join  ·                  ·
  │          type               inner

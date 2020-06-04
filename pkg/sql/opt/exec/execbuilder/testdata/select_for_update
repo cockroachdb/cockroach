@@ -16,7 +16,7 @@ CREATE VIEW v AS SELECT a FROM t AS t2
 query TTT
 EXPLAIN SELECT * FROM t FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -26,7 +26,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t FOR NO KEY UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -36,7 +36,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t FOR SHARE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -46,7 +46,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t FOR KEY SHARE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -56,7 +56,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -66,7 +66,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -76,7 +76,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -86,7 +86,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t FOR UPDATE OF t
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -99,7 +99,7 @@ EXPLAIN SELECT * FROM t FOR UPDATE OF t2
 query TTT
 EXPLAIN SELECT 1 FROM t FOR UPDATE OF t
 ----
-·          distributed       false
+·          distribution      local
 ·          vectorized        true
 render     ·                 ·
  └── scan  ·                 ·
@@ -110,7 +110,7 @@ render     ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -120,7 +120,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -130,7 +130,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR SHARE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -140,7 +140,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -150,7 +150,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -160,7 +160,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -170,7 +170,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -180,7 +180,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -193,7 +193,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2
 query TTT
 EXPLAIN SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
 ----
-·          distributed       false
+·          distribution      local
 ·          vectorized        true
 render     ·                 ·
  └── scan  ·                 ·
@@ -208,7 +208,7 @@ render     ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t AS t2 FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -221,7 +221,7 @@ EXPLAIN SELECT * FROM t AS t2 FOR UPDATE OF t
 query TTT
 EXPLAIN SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -236,7 +236,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -246,7 +246,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE OF t
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -263,7 +263,7 @@ EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE OF t2
 query TTT
 EXPLAIN SELECT * FROM v FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -273,7 +273,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM v FOR UPDATE OF v
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -296,7 +296,7 @@ EXPLAIN SELECT * FROM v FOR UPDATE OF t2
 query TTT
 EXPLAIN SELECT * FROM v AS v2 FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -309,7 +309,7 @@ EXPLAIN SELECT * FROM v AS v2 FOR UPDATE OF v
 query TTT
 EXPLAIN SELECT * FROM v AS v2 FOR UPDATE OF v2
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -327,7 +327,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t) FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -337,7 +337,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE)
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -347,7 +347,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -357,7 +357,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -370,7 +370,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -380,7 +380,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -390,7 +390,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -403,7 +403,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
 query TTT
 EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
-·     distributed       false
+·     distribution      local
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
@@ -413,7 +413,7 @@ scan  ·                 ·
 query TTT
 EXPLAIN SELECT (SELECT a FROM t) FOR UPDATE
 ----
-·                    distributed   false
+·                    distribution  local
 ·                    vectorized    false
 root                 ·             ·
  ├── values          ·             ·
@@ -430,7 +430,7 @@ root                 ·             ·
 query TTT
 EXPLAIN SELECT (SELECT a FROM t FOR UPDATE)
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 root                 ·                 ·
  ├── values          ·                 ·
@@ -451,7 +451,7 @@ EXPLAIN SELECT (SELECT a FROM t) FOR UPDATE OF t
 query TTT
 EXPLAIN SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 root                 ·                 ·
  ├── values          ·                 ·
@@ -469,7 +469,7 @@ root                 ·                 ·
 query TTT
 EXPLAIN SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
-·                    distributed   false
+·                    distribution  local
 ·                    vectorized    false
 root                 ·             ·
  ├── values          ·             ·
@@ -486,7 +486,7 @@ root                 ·             ·
 query TTT
 EXPLAIN SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 root                 ·                 ·
  ├── values          ·                 ·
@@ -507,7 +507,7 @@ EXPLAIN SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
 query TTT
 EXPLAIN SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 root                 ·                 ·
  ├── values          ·                 ·
@@ -525,7 +525,7 @@ root                 ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
 ----
-·           distributed         false
+·           distribution        local
 ·           vectorized          true
 merge-join  ·                   ·
  │          type                semi
@@ -544,7 +544,7 @@ merge-join  ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
 ----
-·           distributed         false
+·           distribution        local
 ·           vectorized          true
 merge-join  ·                   ·
  │          type                semi
@@ -563,7 +563,7 @@ merge-join  ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
 ----
-·           distributed         false
+·           distribution        local
 ·           vectorized          true
 merge-join  ·                   ·
  │          type                semi
@@ -582,7 +582,7 @@ merge-join  ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
 ----
-·           distributed         false
+·           distribution        local
 ·           vectorized          true
 merge-join  ·                   ·
  │          type                semi
@@ -612,27 +612,27 @@ merge-join  ·                   ·
 query TTT
 EXPLAIN SELECT * FROM [SELECT a FROM t] FOR UPDATE
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
-·                      distributed       false
+·                      distribution      local
 ·                      vectorized        false
 root                   ·                 ·
  ├── scan buffer node  ·                 ·
@@ -651,7 +651,7 @@ root                   ·                 ·
 query TTT
 EXPLAIN WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
-·                      distributed       false
+·                      distribution      local
 ·                      vectorized        false
 root                   ·                 ·
  ├── scan buffer node  ·                 ·
@@ -673,7 +673,7 @@ query TTT
 EXPLAIN WITH sfu AS (SELECT a FROM t FOR UPDATE)
 SELECT c FROM u
 ----
-·                      distributed       false
+·                      distribution      local
 ·                      vectorized        true
 root                   ·                 ·
  ├── scan              ·                 ·
@@ -697,7 +697,7 @@ root                   ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -718,7 +718,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -738,7 +738,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -758,7 +758,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -779,7 +779,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -803,7 +803,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -824,7 +824,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -845,7 +845,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -866,7 +866,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -891,7 +891,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -921,7 +921,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, u
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -941,7 +941,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -961,7 +961,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -986,7 +986,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -1016,7 +1016,7 @@ EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
 query TTT
 EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -1041,7 +1041,7 @@ render           ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t, u FOR UPDATE
 ----
-·           distributed       false
+·           distribution      local
 ·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
@@ -1057,7 +1057,7 @@ cross-join  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t, u FOR UPDATE OF t
 ----
-·           distributed       false
+·           distribution      local
 ·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
@@ -1072,7 +1072,7 @@ cross-join  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
-·           distributed       false
+·           distribution      local
 ·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
@@ -1088,7 +1088,7 @@ cross-join  ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
-·           distributed       false
+·           distribution      local
 ·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
@@ -1107,7 +1107,7 @@ EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
 query TTT
 EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
-·           distributed       false
+·           distribution      local
 ·           vectorized        true
 cross-join  ·                 ·
  │          type              cross
