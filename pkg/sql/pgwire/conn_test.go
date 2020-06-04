@@ -364,8 +364,8 @@ func sendResult(
 	for _, row := range rows {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 		c.msgBuilder.putInt16(int16(len(row)))
-		for _, col := range row {
-			c.msgBuilder.writeTextDatum(ctx, col, defaultConv)
+		for i, col := range row {
+			c.msgBuilder.writeTextDatum(ctx, col, defaultConv, cols[i].Typ)
 		}
 
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {

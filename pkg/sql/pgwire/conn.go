@@ -1111,7 +1111,7 @@ func (c *conn) bufferRow(
 	row tree.Datums,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
-	oids []oid.Oid,
+	types []*types.T,
 ) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
@@ -1122,9 +1122,9 @@ func (c *conn) bufferRow(
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, conv)
+			c.msgBuilder.writeTextDatum(ctx, col, conv, types[i])
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location, oids[i])
+			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location, types[i])
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
