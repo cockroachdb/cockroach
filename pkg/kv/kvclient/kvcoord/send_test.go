@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 type Node time.Duration
@@ -97,7 +98,7 @@ func (f *firstNErrorTransport) SendNext(
 ) (*roachpb.BatchResponse, error) {
 	var err error
 	if f.numSent < f.numErrors {
-		err = roachpb.NewSendError("test")
+		err = errors.New("firstNErrorTransport injected error")
 	}
 	f.numSent++
 	return &roachpb.BatchResponse{}, err
