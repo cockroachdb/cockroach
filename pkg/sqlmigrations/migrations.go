@@ -333,6 +333,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAddScheduledJobsTable),
 		newDescriptorIDs:    staticIDs(keys.ScheduledJobsTableID),
 	},
+	{
+		// Introduced in v20.2.
+		name:   "add lease column to system.jobs",
+		workFn: alterSystemJobsAddLeasColumn,
+		includedInBootstrap: clusterversion.VersionByKey(
+			clusterversion.VersionAlterSystemJobsAddLeaseColumn),
+	},
 }
 
 func staticIDs(
@@ -1894,4 +1901,15 @@ STORING (status)
 
 func createScheduledJobsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.ScheduledJobsTable)
+}
+
+func alterSystemJobsAddLeasColumn(ctx context.Context, r runner) error {
+	addColStmt := `
+ALTER TABLE system.jobs ADD COLUMN IF NOT EXISTS lease STRING CREATE FAMILY lease
+`
+	asNode := sqlbase.InternalExecutorSessionDataOverride{
+		User: security.NodeUser,
+	}
+	_, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-lease-col", nil, asNode, addColStmt)
+	return err
 }

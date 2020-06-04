@@ -147,6 +147,7 @@ payload          BYTES      false  NULL               ·  {}                    
 progress         BYTES      true   NULL               ·  {}                                                                        false
 created_by_type  STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
 created_by_id    INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
+lease            BYTES      true   NULL               ·  {}                                                                        false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings

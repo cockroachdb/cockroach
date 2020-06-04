@@ -1280,3 +1280,16 @@ func (r *Registry) unregister(jobID int64) {
 func (r *Registry) TestingNudgeAdoptionQueue() {
 	r.adoptionCh <- struct{}{}
 }
+
+func makeJobLeaseKey(codec keys.SQLCodec, jobID int64) roachpb.Key {
+	const leaseFamilyID = 2
+	prefix := codec.IndexPrefix(keys.JobsTableID, 1)
+	k := encoding.EncodeVarintAscending(prefix, jobID)
+	k = keys.MakeFamilyKey(k, leaseFamilyID)
+	return k
+}
+
+// AcquireLease acquires a new lease for the job with given id.
+func (r *Registry) AcquireLease(ctx context.Context, jobID int64) (*leasemanager.Lease, error) {
+	return r.lm.AcquireLease(ctx, makeJobLeaseKey(r.codec, jobID))
+}

@@ -125,4 +125,3 @@ t6  CREATE TABLE t6 (
     INDEX t6i3 (a DESC) WHERE a > 8,
     FAMILY "primary" (a, rowid)
 )
-
