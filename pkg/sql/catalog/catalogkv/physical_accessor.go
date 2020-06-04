@@ -41,7 +41,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	name string,
 	flags tree.DatabaseLookupFlags,
 ) (desc sqlbase.DatabaseDescriptorInterface, err error) {
-	if name == sqlbase.SystemDB.Name {
+	if name == sqlbase.SystemDatabaseName {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
 		sysDB := sqlbase.MakeSystemDatabaseDesc()
@@ -234,7 +234,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// As this table can not be renamed by users, it is okay that the first
 			// check fails.
 			if tableDesc.Name == object ||
-				object == sqlbase.NamespaceTableName && db == sqlbase.SystemDB.Name {
+				object == sqlbase.NamespaceTableName && db == sqlbase.SystemDatabaseName {
 				if flags.RequireMutable {
 					return sqlbase.NewMutableExistingTableDescriptor(*tableDesc), nil
 				}

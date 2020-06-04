@@ -228,7 +228,7 @@ var systemTableIDCache = func() [2]map[string]ID {
 		addSystemDescriptorsToSchema(&ms)
 		for _, d := range ms.descs {
 			t := d.desc.TableDesc()
-			if t == nil || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
+			if t == nil || t.ParentID != keys.SystemDatabaseID || t.ID > keys.MaxReservedDescID {
 				// We only cache table descriptors under 'system' with a
 				// reserved table ID.
 				continue
@@ -271,7 +271,7 @@ func boolToInt(b bool) int {
 func LookupSystemTableDescriptorID(
 	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, dbID ID, tableName string,
 ) ID {
-	if dbID != SystemDB.ID {
+	if dbID != SystemDB.GetID() {
 		return InvalidID
 	}
 

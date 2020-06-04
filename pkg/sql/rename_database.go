@@ -86,7 +86,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
 	lookupFlags.AvoidCached = true
-	schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, dbDesc.ID)
+	schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 					dependedOn,
 					tbDesc,
 					dependentDesc,
-					dbDesc.Name,
+					dbDesc.GetName(),
 				)
 				if err != nil {
 					return err
@@ -145,12 +145,12 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				}
 
 				tbTableName := tree.MakeTableNameWithSchema(
-					tree.Name(dbDesc.Name),
+					tree.Name(dbDesc.GetName()),
 					tree.Name(schema),
 					tree.Name(tbDesc.Name),
 				)
 				var dependentDescQualifiedString string
-				if dbDesc.ID != dependentDesc.ParentID || tbDesc.GetParentSchemaID() != dependentDesc.GetParentSchemaID() {
+				if dbDesc.GetID() != dependentDesc.ParentID || tbDesc.GetParentSchemaID() != dependentDesc.GetParentSchemaID() {
 					var err error
 					dependentDescQualifiedString, err = p.getQualifiedTableName(ctx, dependentDesc)
 					if err != nil {
@@ -167,7 +167,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 					}
 				} else {
 					dependentDescTableName := tree.MakeTableNameWithSchema(
-						tree.Name(dbDesc.Name),
+						tree.Name(dbDesc.GetName()),
 						tree.Name(schema),
 						tree.Name(dependentDesc.Name),
 					)
@@ -187,10 +187,10 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 						tbTableName.String(),
 						dependentDescQualifiedString,
 					)
-					if dependentDesc.GetParentID() == dbDesc.ID {
+					if dependentDesc.GetParentID() == dbDesc.GetID() {
 						hint += fmt.Sprintf(
 							" or modify the default to not reference the database name %q",
-							dbDesc.Name,
+							dbDesc.GetName(),
 						)
 					}
 					return errors.WithHint(depErr, hint)

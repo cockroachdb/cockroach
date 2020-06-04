@@ -77,6 +77,10 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
+	// TODO(ajwerner): Consider whether this should be returning a
+	// MutableDatabaseDescriptor and where/how this will interact with the
+	// descs.Collection (now it happens well above this call, which is probably
+	// fine).
 	desc := sqlbase.NewInitialDatabaseDescriptor(id, string(database.Name))
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err

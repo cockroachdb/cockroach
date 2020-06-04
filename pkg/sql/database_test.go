@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -33,15 +32,15 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if _, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, keys.SystemDatabaseID); err != nil {
 			return err
 		}
-		if _, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, keys.SystemDatabaseID); err != nil {
 			return err
 		}
 
 		databaseCache := database.NewCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
-		_, err := databaseCache.GetDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
+		_, err := databaseCache.GetDatabaseDescByID(ctx, txn, keys.SystemDatabaseID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

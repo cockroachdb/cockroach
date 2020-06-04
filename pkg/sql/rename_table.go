@@ -114,10 +114,10 @@ func (n *renameTableNode) startExec(params runParams) error {
 	}
 
 	tableDesc.SetName(newTn.Table())
-	tableDesc.ParentID = targetDbDesc.ID
+	tableDesc.ParentID = targetDbDesc.GetID()
 
 	newTbKey := sqlbase.MakePublicTableNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.ID, newTn.Table()).Key(p.ExecCfg().Codec)
+		targetDbDesc.GetID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
 	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
@@ -127,7 +127,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	parentSchemaID := tableDesc.GetParentSchemaID()
 
 	renameDetails := sqlbase.NameInfo{
-		ParentID:       prevDbDesc.ID,
+		ParentID:       prevDbDesc.GetID(),
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
@@ -151,7 +151,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	}
 
 	exists, id, err := sqlbase.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.ID, newTn.Table(),
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.

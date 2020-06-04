@@ -268,7 +268,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 			if err != nil {
 				return err
 			}
-			dbNameStr := tree.NewDString(db.Name)
+			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			for conName, con := range conInfo {
 				// Only Check constraints are included.
@@ -304,7 +304,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
 				// We might as well do the same.
 				conNameStr := tree.NewDString(fmt.Sprintf(
-					"%s_%s_%d_not_null", h.NamespaceOid(db.DatabaseDesc(), scName), tableOid(table.ID), colNum,
+					"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
 				))
 				chkExprStr := tree.NewDString(fmt.Sprintf(
 					"%s IS NOT NULL", column.Name,
@@ -329,7 +329,7 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor,
 		) error {
-			dbNameStr := tree.NewDString(db.Name)
+			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
 			for _, u := range table.Privileges.Users {
@@ -367,7 +367,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor,
 		) error {
-			dbNameStr := tree.NewDString(db.Name)
+			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				collationCatalog := tree.DNull
@@ -601,7 +601,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 				return err
 			}
 			scNameStr := tree.NewDString(scName)
-			dbNameStr := tree.NewDString(db.Name)
+			dbNameStr := tree.NewDString(db.GetName())
 
 			for conName, con := range conInfo {
 				conTable := table.TableDesc()
@@ -665,7 +665,7 @@ CREATE TABLE information_schema.key_column_usage (
 			if err != nil {
 				return err
 			}
-			dbNameStr := tree.NewDString(db.Name)
+			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.Name)
 			for conName, con := range conInfo {
@@ -811,7 +811,7 @@ CREATE TABLE information_schema.referential_constraints (
 			table *sqlbase.ImmutableTableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			dbNameStr := tree.NewDString(db.Name)
+			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.Name)
 			for i := range table.OutboundFKs {
@@ -976,10 +976,10 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
 				return forEachSchemaName(ctx, p, db, func(sc string) error {
 					return addRow(
-						tree.NewDString(db.Name), // catalog_name
-						tree.NewDString(sc),      // schema_name
-						tree.DNull,               // default_character_set_name
-						tree.DNull,               // sql_path
+						tree.NewDString(db.GetName()), // catalog_name
+						tree.NewDString(sc),           // schema_name
+						tree.DNull,                    // default_character_set_name
+						tree.DNull,                    // sql_path
 					)
 				})
 			})
@@ -1003,7 +1003,7 @@ CREATE TABLE information_schema.schema_privileges (
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
 				return forEachSchemaName(ctx, p, db, func(scName string) error {
 					privs := db.Privileges.Show()
-					dbNameStr := tree.NewDString(db.Name)
+					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(scName)
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
@@ -1218,7 +1218,7 @@ CREATE TABLE information_schema.table_constraints (
 					return err
 				}
 
-				dbNameStr := tree.NewDString(db.Name)
+				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.Name)
 
@@ -1247,7 +1247,7 @@ CREATE TABLE information_schema.table_constraints (
 					colNum++
 					// NOT NULL column constraints are implemented as a CHECK in postgres.
 					conNameStr := tree.NewDString(fmt.Sprintf(
-						"%s_%s_%d_not_null", h.NamespaceOid(db.DatabaseDesc(), scName), tableOid(table.ID), colNum,
+						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
 					))
 					if !col.Nullable {
 						if err := addRow(
@@ -1285,7 +1285,7 @@ CREATE TABLE information_schema.user_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(dbDesc *sqlbase.ImmutableDatabaseDescriptor) error {
-				dbNameStr := tree.NewDString(dbDesc.Name)
+				dbNameStr := tree.NewDString(dbDesc.GetName())
 				for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
 					grantee := tree.NewDString(u)
 					for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
@@ -1332,7 +1332,7 @@ func populateTablePrivileges(
 ) error {
 	return forEachTableDesc(ctx, p, dbContext, virtualMany,
 		func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
-			dbNameStr := tree.NewDString(db.Name)
+			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.Name)
 			// TODO(knz): This should filter for the current user, see
@@ -1383,7 +1383,7 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				if err != nil || desc == nil {
 					return false, err
 				}
-				schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.ID, desc.GetParentSchemaID())
+				schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), desc.GetParentSchemaID())
 				if err != nil {
 					return false, err
 				}
@@ -1412,7 +1412,7 @@ func addTablesTableRow(
 		} else if table.Temporary {
 			tableType = tableTypeTemporary
 		}
-		dbNameStr := tree.NewDString(db.Name)
+		dbNameStr := tree.NewDString(db.GetName())
 		scNameStr := tree.NewDString(scName)
 		tbNameStr := tree.NewDString(table.Name)
 		return addRow(
@@ -1460,7 +1460,7 @@ CREATE TABLE information_schema.views (
 				// TODO(a-robinson): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDString(db.Name),         // table_catalog
+					tree.NewDString(db.GetName()),    // table_catalog
 					tree.NewDString(scName),          // table_schema
 					tree.NewDString(table.Name),      // table_name
 					tree.NewDString(table.ViewQuery), // view_definition
@@ -1489,7 +1489,7 @@ func forEachSchemaName(
 		scNames = append(scNames, name)
 	}
 	for _, schema := range vtableEntries {
-		scNames = append(scNames, schema.desc.Name)
+		scNames = append(scNames, schema.desc.GetName())
 	}
 	sort.Strings(scNames)
 	for _, sc := range scNames {
@@ -1521,7 +1521,7 @@ func forEachDatabaseDesc(
 	} else {
 		// We can't just use dbContext here because we need to fetch the descriptor
 		// with privileges from kv.
-		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []sqlbase.ID{dbContext.ID})
+		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []sqlbase.ID{dbContext.GetID()})
 		if err != nil {
 			return err
 		}
@@ -1529,9 +1529,6 @@ func forEachDatabaseDesc(
 	}
 
 	// Ignore databases that the user cannot see.
-	// TODO(ajwerner): The need to construct an ImmutableDatabase here is awful.
-	// When this refactor is all done, this should be an interface that gets
-	// plumbed through here.
 	for _, dbDesc := range dbDescs {
 		if !requiresPrivileges || userCanSeeDatabase(ctx, p, dbDesc) {
 			if err := fn(dbDesc); err != nil {
@@ -1676,7 +1673,7 @@ func getSchemaNames(
 	ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor,
 ) (map[sqlbase.ID]string, error) {
 	if dbContext != nil {
-		return p.Tables().GetSchemasForDatabase(ctx, p.txn, dbContext.ID)
+		return p.Tables().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
 	}
 	ret := make(map[sqlbase.ID]string)
 	dbs, err := p.Tables().GetAllDatabaseDescriptors(ctx, p.txn)
@@ -1684,7 +1681,7 @@ func getSchemaNames(
 		return nil, err
 	}
 	for _, db := range dbs {
-		schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, db.ID)
+		schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, db.GetID())
 		if err != nil {
 			return nil, err
 		}

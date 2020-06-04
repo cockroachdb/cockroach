@@ -57,7 +57,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
 	isTemporary := n.n.Temporary
 
-	_, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, n.n.Name.Table())
+	_, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, n.n.Name.Table())
 	if err != nil {
 		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
@@ -98,7 +98,7 @@ func doCreateSequence(
 	desc, err := MakeSequenceTableDesc(
 		name.Table(),
 		opts,
-		dbDesc.ID,
+		dbDesc.GetID(),
 		schemaID,
 		id,
 		params.creationTimeForNewTableDescriptor(),
@@ -116,7 +116,7 @@ func doCreateSequence(
 	key := sqlbase.MakeObjectNameKey(
 		params.ctx,
 		params.ExecCfg().Settings,
-		dbDesc.ID,
+		dbDesc.GetID(),
 		schemaID,
 		name.Table(),
 	).Key(params.ExecCfg().Codec)

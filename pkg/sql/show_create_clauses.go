@@ -159,8 +159,8 @@ func showForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
-		fkTableName = tree.MakeTableName(tree.Name(fkDb.Name), tree.Name(fkTable.Name))
-		fkTableName.ExplicitSchema = fkDb.Name != dbPrefix
+		fkTableName = tree.MakeTableName(tree.Name(fkDb.GetName()), tree.Name(fkTable.Name))
+		fkTableName.ExplicitSchema = fkDb.GetName() != dbPrefix
 		originNames, err = originTable.NamesForColumnIDs(fk.OriginColumnIDs)
 		if err != nil {
 			return err

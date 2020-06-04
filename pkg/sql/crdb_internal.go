@@ -251,8 +251,8 @@ CREATE TABLE crdb_internal.tables (
 			dbNames := make(map[sqlbase.ID]string)
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
-				if db := desc.GetDatabase(); db != nil {
-					dbNames[db.ID] = db.Name
+				if desc.GetDatabase() != nil {
+					dbNames[desc.GetID()] = desc.GetName()
 				}
 			}
 
@@ -1389,7 +1389,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 				for i := range typeDesc.EnumMembers {
 					enumLabels = append(enumLabels, typeDesc.EnumMembers[i].LogicalRepresentation)
 				}
-				name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.GetName(), sc, db.Name}, 0)
+				name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.GetName(), sc, db.GetName()}, 0)
 				if err != nil {
 					return err
 				}
@@ -1399,8 +1399,8 @@ CREATE TABLE crdb_internal.create_type_statements (
 					EnumLabels: enumLabels,
 				}
 				if err := addRow(
-					tree.NewDInt(tree.DInt(db.ID)),            // database_id
-					tree.NewDString(db.Name),                  // database_name
+					tree.NewDInt(tree.DInt(db.GetID())),       // database_id
+					tree.NewDString(db.GetName()),             // database_name
 					tree.NewDString(sc),                       // schema_name
 					tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
 					tree.NewDString(typeDesc.GetName()),       // descriptor_name
@@ -1452,8 +1452,8 @@ CREATE TABLE crdb_internal.create_statements (
 		contextName := ""
 		parentNameStr := tree.DNull
 		if db != nil {
-			contextName = db.Name
-			parentNameStr = tree.NewDString(db.Name)
+			contextName = db.GetName()
+			parentNameStr = tree.NewDString(contextName)
 		}
 		scNameStr := tree.NewDString(scName)
 
@@ -1772,7 +1772,7 @@ CREATE TABLE crdb_internal.index_columns (
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 			func(parent *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
-				parentName := parent.Name
+				parentName := parent.GetName()
 				tableName := tree.NewDString(table.Name)
 
 				reportIndex := func(idx *sqlbase.IndexDescriptor) error {
@@ -3085,7 +3085,7 @@ CREATE TABLE crdb_internal.partitions (
 	generator: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		dbName := ""
 		if dbContext != nil {
-			dbName = dbContext.Name
+			dbName = dbContext.GetName()
 		}
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/

@@ -303,7 +303,7 @@ func importPlanHook(
 					return err
 				}
 			}
-			parentID = dbDesc.ID
+			parentID = dbDesc.GetID()
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
@@ -319,7 +319,7 @@ func importPlanHook(
 					return err
 				}
 			}
-			parentID = dbDesc.ID
+			parentID = dbDesc.GetID()
 		}
 
 		format := roachpb.IOFileFormat{}

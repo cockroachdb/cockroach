@@ -96,7 +96,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 					if f.Len() > 0 {
 						f.WriteString(", ")
 					}
-					f.FormatNameP(&db.Name)
+					f.FormatName(db.GetName())
 					break
 				}
 			}

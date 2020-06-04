@@ -269,7 +269,7 @@ func (p *planner) getQualifiedTableName(
 		return "", err
 	}
 	tbName := tree.MakeTableNameWithSchema(
-		tree.Name(dbDesc.Name),
+		tree.Name(dbDesc.GetName()),
 		tree.Name(schemaName),
 		tree.Name(desc.Name),
 	)
@@ -517,21 +517,21 @@ func newInternalLookupCtxFromDescriptors(
 	for i := range descs {
 		desc := &descs[i]
 		if database := desc.GetDatabase(); database != nil {
-			dbNames[database.ID] = database.Name
-			dbDescs[database.ID] = sqlbase.NewImmutableDatabaseDescriptor(*database)
-			if prefix == nil || prefix.ID == database.ID {
-				dbIDs = append(dbIDs, database.ID)
+			dbNames[database.GetID()] = database.GetName()
+			dbDescs[database.GetID()] = sqlbase.NewImmutableDatabaseDescriptor(*database)
+			if prefix == nil || prefix.GetID() == database.GetID() {
+				dbIDs = append(dbIDs, database.GetID())
 			}
 		} else if table := desc.Table(hlc.Timestamp{}); table != nil {
 			tbDescs[table.ID] = sqlbase.NewImmutableTableDescriptor(*table)
-			if prefix == nil || prefix.ID == table.ParentID {
+			if prefix == nil || prefix.GetID() == table.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
 				tbIDs = append(tbIDs, table.ID)
 			}
 		} else if typ := desc.GetType(); typ != nil {
 			typ := sqlbase.NewImmutableTypeDescriptor(*typ)
 			typDescs[typ.GetID()] = typ
-			if prefix == nil || prefix.ID == typ.ParentID {
+			if prefix == nil || prefix.GetID() == typ.ParentID {
 				// Only make the type visible for iteration if the prefix was included.
 				typIDs = append(typIDs, typ.GetID())
 			}
@@ -594,8 +594,8 @@ func getParentAsTableName(
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
-	parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
+	parentName = tree.MakeTableName(tree.Name(parentDbDesc.GetName()), tree.Name(parentTable.Name))
+	parentName.ExplicitSchema = parentDbDesc.GetName() != dbPrefix
 	return parentName, nil
 }
 
@@ -608,8 +608,8 @@ func getTableAsTableName(
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
-	tableName.ExplicitSchema = tableDbDesc.Name != dbPrefix
+	tableName = tree.MakeTableName(tree.Name(tableDbDesc.GetName()), tree.Name(table.Name))
+	tableName.ExplicitSchema = tableDbDesc.GetName() != dbPrefix
 	return tableName, nil
 }
 
