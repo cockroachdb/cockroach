@@ -22,7 +22,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 		NewImmutableTableDescriptor(TableDescriptor{}):                    true,
 		NewImmutableTableDescriptor(TableDescriptor{ViewQuery: "SELECT"}): false,
 		NewInitialDatabaseDescriptor(42, "db"):                            false,
-		&TypeDescriptor{}:                                                 false,
+		NewImmutableTypeDescriptor(TypeDescriptor{}):                      false,
 		&SchemaDescriptor{}:                                               false,
 	} {
 		var rawDesc roachpb.Value

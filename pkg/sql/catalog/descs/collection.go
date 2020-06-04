@@ -749,13 +749,13 @@ func (tc *Collection) GetAllDescriptors(
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
-		typDescs := make(map[sqlbase.ID]*sqlbase.TypeDescriptor)
+		typDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor)
 		for i := range descs {
 			desc := &descs[i]
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
 				dbDescs[desc.GetID()] = dbDesc
 			} else if typDesc := desc.GetType(); typDesc != nil {
-				typDescs[desc.GetID()] = typDesc
+				typDescs[desc.GetID()] = sqlbase.NewImmutableTypeDescriptor(*typDesc)
 			}
 		}
 		// If we found any type descriptors, that means that some of the tables we

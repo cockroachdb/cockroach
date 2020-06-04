@@ -27,7 +27,7 @@ import (
 // TODO(ajwerner): Move this to catalogkv or something like it.
 func GetTypeDescFromID(
 	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
-) (*TypeDescriptor, error) {
+) (*ImmutableTypeDescriptor, error) {
 	descKey := MakeDescMetadataKey(codec, id)
 	desc := &Descriptor{}
 	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
@@ -38,7 +38,8 @@ func GetTypeDescFromID(
 	if typ == nil {
 		return nil, ErrDescriptorNotFound
 	}
-	return typ, nil
+	// TODO(ajwerner): Fill in ModificationTime.
+	return NewImmutableTypeDescriptor(*typ), nil
 }
 
 // TypeDescriptorInterface will eventually be called typedesc.Descriptor.
@@ -83,7 +84,7 @@ type MutableTypeDescriptor struct {
 
 	// ClusterVersion represents the version of the type descriptor read
 	// from the store.
-	ClusterVersion ImmutableTypeDescriptor
+	ClusterVersion *ImmutableTypeDescriptor
 }
 
 // ImmutableTypeDescriptor is a custom type for wrapping TypeDescriptors
@@ -107,7 +108,7 @@ func NewMutableCreatedTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor
 func NewMutableExistingTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor {
 	return &MutableTypeDescriptor{
 		ImmutableTypeDescriptor: makeImmutableTypeDescriptor(*protoutil.Clone(&desc).(*TypeDescriptor)),
-		ClusterVersion:          makeImmutableTypeDescriptor(desc),
+		ClusterVersion:          NewImmutableTypeDescriptor(desc),
 	}
 }
 
@@ -123,57 +124,53 @@ func makeImmutableTypeDescriptor(desc TypeDescriptor) ImmutableTypeDescriptor {
 }
 
 // DescriptorProto returns a Descriptor for serialization.
-func (desc *TypeDescriptor) DescriptorProto() *Descriptor {
-
-	// TODO(ajwerner): Copy over the metadata fields.
-	// TODO(ajwerner): This ultimately should be cleaner.
-	return wrapDescriptor(desc)
+func (desc *ImmutableTypeDescriptor) DescriptorProto() *Descriptor {
+	return &Descriptor{
+		Union: &Descriptor_Type{
+			Type: &desc.TypeDescriptor,
+		},
+	}
 }
 
-// TODO(ajwerner): Change the receiver of these methods to the
-// ImmutableTypeDescriptor.
-//
-// In many ways it seems better if these methods were just the getters from
-// the descriptor union and we had each of the descriptor types just embed
-// that union.
-
 // DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
+func (desc *ImmutableTypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
 	return nil
 }
 
 // SchemaDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) SchemaDesc() *SchemaDescriptor {
+func (desc *ImmutableTypeDescriptor) SchemaDesc() *SchemaDescriptor {
 	return nil
 }
 
 // TableDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) TableDesc() *TableDescriptor {
+func (desc *ImmutableTypeDescriptor) TableDesc() *TableDescriptor {
 	return nil
 }
 
 // TypeDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) TypeDesc() *TypeDescriptor {
-	return desc
+func (desc *ImmutableTypeDescriptor) TypeDesc() *TypeDescriptor {
+	return &desc.TypeDescriptor
 }
 
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *TypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
+func (desc *ImmutableTypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 	return TableDescriptor_DISABLED
 }
 
 // GetPrivileges implements the DescriptorProto interface.
-func (desc *TypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
+//
+// Types do not carry privileges.
+func (desc *ImmutableTypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
 	return nil
 }
 
 // TypeName implements the DescriptorProto interface.
-func (desc *TypeDescriptor) TypeName() string {
+func (desc *ImmutableTypeDescriptor) TypeName() string {
 	return "type"
 }
 
 // MakeTypesT creates a types.T from the input type descriptor.
-func (desc *TypeDescriptor) MakeTypesT(
+func (desc *ImmutableTypeDescriptor) MakeTypesT(
 	name *tree.TypeName, typeLookup TypeLookupFunc,
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
@@ -227,7 +224,7 @@ func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupF
 // TODO (rohany): This method should eventually be defined on an
 // ImmutableTypeDescriptor so that pointers to the cached info
 // can be shared among callers.
-func (desc *TypeDescriptor) HydrateTypeInfoWithName(
+func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc,
 ) error {
 	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
