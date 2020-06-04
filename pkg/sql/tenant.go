@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -94,16 +95,27 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64, tenInfo []byte
 		return err
 	}
 
-	// TODO(nvanbenschoten): we currently neither split ranges between a single
-	// tenant's tables nor split ranges between different tenant keyspaces. We
-	// should do both. Performing the splits here won't have the desired effect
-	// until we also teach SystemConfig.ComputeSplitKey about tenant tables and
-	// tenant boundaries. Tracked in #48774.
-	_ = splits
+	// Create initial splits for the new tenant. This is performed
+	// non-transactionally, so the range splits will remain even if the
+	// statement's transaction is rolled back. In this case, the manual splits
+	// can and will be merged away after its 1h expiration elapses.
+	//
+	// If the statement's transaction commits and updates the system.tenants
+	// table, the manual splits' expirations will no longer be necessary to
+	// prevent the split points from being merged away. Likewise, if the
+	// transaction did happen to take long enough that the manual splits'
+	// expirations did elapse and the splits were merged away, they would
+	// quickly (but asynchronously) be recreated once the KV layer notices the
+	// updated system.tenants table in the gossipped SystemConfig.
+	expTime := p.ExecCfg().Clock.Now().Add(time.Hour.Nanoseconds(), 0)
+	for _, key := range splits {
+		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime); err != nil {
+			return err
+		}
+	}
 
 	// Tenant creation complete! Note that sqlmigrations have not been run yet.
 	// They will be run when a sqlServer bound to this tenant is first launched.
-
 	return nil
 }
 
