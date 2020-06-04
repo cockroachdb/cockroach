@@ -300,23 +300,6 @@ message LeaseRejectedError {
   optional Lease existing = 3 [(gogoproto.nullable) = false];
 }
 
-// A SendError indicates that there was a problem communicating with a replica
-// that can evaluate the request. It's possible that the request was, in fact,
-// evaluated by a replica successfully but then the server connection dropped.
-//
-// This error is produced by the DistSender. Note that the DistSender generates
-// AmbiguousResultError instead of SendError when there's an EndTxn(commit) in
-// the BatchRequest. But also note that the sever can return
-// AmbiguousResultErrors too, in which case the DistSender will pipe it through.
-// TODO(andrei): clean up this stuff and tighten the meaning of the different
-// errors.
-message SendError {
-  option (gogoproto.equal) = true;
-
-  optional string message = 1 [(gogoproto.nullable) = false];
-  reserved 2;
-}
-
 // An AmbiguousResultError indicates that a request may have succeeded or
 // failed, but the response was not received and the final result is ambiguous.
 //
@@ -521,7 +504,6 @@ message ErrorDetail {
     ConditionFailedError condition_failed = 12;
     LeaseRejectedError lease_rejected = 13;
     NodeUnavailableError node_unavailable = 14;
-    SendError send = 15;
     // TODO(kaneda): Following three are added to preserve the type when
     // converting Go errors from/to proto Errors. Revisit this design.
     RaftGroupDeletedError raft_group_deleted = 16;
