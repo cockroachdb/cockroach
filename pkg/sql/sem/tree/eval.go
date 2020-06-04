@@ -3446,7 +3446,7 @@ type regTypeInfo struct {
 	// objName is a human-readable name describing the objects in the table.
 	objName string
 	// errType is the pg error code in case the object does not exist.
-	errType string
+	errType pgcode.Code
 }
 
 // regTypeInfos maps an oid.Oid to a regTypeInfo that describes the pg_catalog
@@ -3742,7 +3742,7 @@ func (expr *IfErrExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return nil, evalErr
 		}
 		errpatStr := string(MustBeDString(errpat))
-		if code := pgerror.GetPGCode(evalErr); code != errpatStr {
+		if code := pgerror.GetPGCode(evalErr); code != pgcode.MakeCode(errpatStr) {
 			return nil, evalErr
 		}
 	}

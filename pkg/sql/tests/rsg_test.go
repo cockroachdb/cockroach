@@ -137,7 +137,7 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		if err != nil {
 			if pqerr := (*pq.Error)(nil); errors.As(err, &pqerr) {
 				// Output Postgres error code if it's available.
-				if pqerr.Code == pgcode.CrashShutdown {
+				if pgcode.MakeCode(string(pqerr.Code)) == pgcode.CrashShutdown {
 					return &crasher{
 						sql:    sql,
 						err:    err,

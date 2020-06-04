@@ -40,10 +40,10 @@ func TestOutputError(t *testing.T) {
 		// Check the basic with/without severity.
 		{errBase, false, false, "woo"},
 		{errBase, true, false, "ERROR: woo"},
-		{pgerror.WithCandidateCode(errBase, pgcode.Syntax), false, false, "woo\nSQLSTATE: " + pgcode.Syntax},
+		{pgerror.WithCandidateCode(errBase, pgcode.Syntax), false, false, "woo\nSQLSTATE: " + pgcode.Syntax.String()},
 		// Check the verbose output. This includes the uncategorized sqlstate.
-		{errBase, false, true, "woo\nSQLSTATE: " + pgcode.Uncategorized + "\nLOCATION: " + refLoc},
-		{errBase, true, true, "ERROR: woo\nSQLSTATE: " + pgcode.Uncategorized + "\nLOCATION: " + refLoc},
+		{errBase, false, true, "woo\nSQLSTATE: " + pgcode.Uncategorized.String() + "\nLOCATION: " + refLoc},
+		{errBase, true, true, "ERROR: woo\nSQLSTATE: " + pgcode.Uncategorized.String() + "\nLOCATION: " + refLoc},
 		// Check the same over pq.Error objects.
 		{&pq.Error{Message: "woo"}, false, false, "woo"},
 		{&pq.Error{Message: "woo"}, true, false, "ERROR: woo"},
@@ -54,7 +54,7 @@ func TestOutputError(t *testing.T) {
 		// Check hint printed after message.
 		{errors.WithHint(errBase, "hello"), false, false, "woo\nHINT: hello"},
 		// Check sqlstate printed before hint, location after hint.
-		{errors.WithHint(errBase, "hello"), false, true, "woo\nSQLSTATE: " + pgcode.Uncategorized + "\nHINT: hello\nLOCATION: " + refLoc},
+		{errors.WithHint(errBase, "hello"), false, true, "woo\nSQLSTATE: " + pgcode.Uncategorized.String() + "\nHINT: hello\nLOCATION: " + refLoc},
 		// Check detail printed after message.
 		{errors.WithDetail(errBase, "hello"), false, false, "woo\nDETAIL: hello"},
 		// Check hint/detail collection, hint printed after detail.
@@ -71,7 +71,7 @@ func TestOutputError(t *testing.T) {
 		// Check sqlstate printed before detail, location after hint.
 		{errors.WithDetail(
 			errors.WithHint(errBase, "a"), "b"),
-			false, true, "woo\nSQLSTATE: " + pgcode.Uncategorized + "\nDETAIL: b\nHINT: a\nLOCATION: " + refLoc},
+			false, true, "woo\nSQLSTATE: " + pgcode.Uncategorized.String() + "\nDETAIL: b\nHINT: a\nLOCATION: " + refLoc},
 	}
 
 	for _, tc := range testData {

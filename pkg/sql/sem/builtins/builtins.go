@@ -3367,7 +3367,7 @@ may increase either contention or retry errors, or both.`,
 				if errCode == "" {
 					return nil, errors.Newf("%s", msg)
 				}
-				return nil, pgerror.Newf(errCode, "%s", msg)
+				return nil, pgerror.Newf(pgcode.MakeCode(errCode), "%s", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityVolatile,

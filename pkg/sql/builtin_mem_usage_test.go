@@ -84,7 +84,7 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 		}
 
 		_, err := sqlDB.Exec(statement)
-		if pqErr := (*pq.Error)(nil); !errors.As(err, &pqErr) || pqErr.Code != pgcode.OutOfMemory {
+		if pqErr := (*pq.Error)(nil); !errors.As(err, &pqErr) || pgcode.MakeCode(string(pqErr.Code)) != pgcode.OutOfMemory {
 			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
 		}
 	}
@@ -110,7 +110,7 @@ func TestEvaluatedMemoryIsChecked(t *testing.T) {
 			_, err := sqlDB.Exec(
 				statement,
 			)
-			if pqErr := (*pq.Error)(nil); !errors.As(err, &pqErr) || pqErr.Code != pgcode.ProgramLimitExceeded {
+			if pqErr := (*pq.Error)(nil); !errors.As(err, &pqErr) || pgcode.MakeCode(string(pqErr.Code)) != pgcode.ProgramLimitExceeded {
 				t.Errorf("Expected \"%s\" to OOM, but it didn't", statement)
 			}
 		})
