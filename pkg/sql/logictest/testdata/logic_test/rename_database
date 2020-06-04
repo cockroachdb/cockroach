@@ -162,9 +162,9 @@ v
 query TTT
 EXPLAIN ALTER DATABASE v RENAME TO x
 ----
-·                distributed  false
-·                vectorized   false
-rename database  ·            ·
+·                distribution  local
+·                vectorized    false
+rename database  ·             ·
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
 query T colnames

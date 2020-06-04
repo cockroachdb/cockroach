@@ -10,7 +10,7 @@ CREATE TABLE t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 AS r
 ----
-·       distributed    false            ·    ·
+·       distribution   local            ·    ·
 ·       vectorized     false            ·    ·
 values  ·              ·                (r)  ·
 ·       size           1 column, 1 row  ·    ·
@@ -19,7 +19,7 @@ values  ·              ·                (r)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT true AS r
 ----
-·       distributed    false            ·    ·
+·       distribution   local            ·    ·
 ·       vectorized     false            ·    ·
 values  ·              ·                (r)  ·
 ·       size           1 column, 1 row  ·    ·
@@ -28,7 +28,7 @@ values  ·              ·                (r)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT false AS r
 ----
-·       distributed    false            ·    ·
+·       distribution   local            ·    ·
 ·       vectorized     false            ·    ·
 values  ·              ·                (r)  ·
 ·       size           1 column, 1 row  ·    ·
@@ -37,7 +37,7 @@ values  ·              ·                (r)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (1, 2) AS r
 ----
-·       distributed    false            ·    ·
+·       distribution   local            ·    ·
 ·       vectorized     false            ·    ·
 values  ·              ·                (r)  ·
 ·       size           1 column, 1 row  ·    ·
@@ -46,7 +46,7 @@ values  ·              ·                (r)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (true, false) AS r
 ----
-·       distributed    false            ·    ·
+·       distribution   local            ·    ·
 ·       vectorized     false            ·    ·
 values  ·              ·                (r)  ·
 ·       size           1 column, 1 row  ·    ·
@@ -55,333 +55,333 @@ values  ·              ·                (r)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     3          ·    ·
- └── scan  ·            ·          ()   ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      3          ·    ·
+ └── scan  ·             ·          ()   ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + 2 AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     a + 2      ·    ·
- └── scan  ·            ·          (a)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      a + 2      ·    ·
+ └── scan  ·             ·          (a)  ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 AND b <= 10 AND c < 4 AS r FROM t
 ----
-·          distributed  false                                 ·          ·
-·          vectorized   true                                  ·          ·
-render     ·            ·                                     (r)        ·
- │         render 0     ((a >= 5) AND (b <= 10)) AND (c < 4)  ·          ·
- └── scan  ·            ·                                     (a, b, c)  ·
-·          table        t@primary                             ·          ·
-·          spans        FULL SCAN                             ·          ·
+·          distribution  local                                 ·          ·
+·          vectorized    true                                  ·          ·
+render     ·             ·                                     (r)        ·
+ │         render 0      ((a >= 5) AND (b <= 10)) AND (c < 4)  ·          ·
+ └── scan  ·             ·                                     (a, b, c)  ·
+·          table         t@primary                             ·          ·
+·          spans         FULL SCAN                             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 OR b <= 10 OR c < 4 AS r FROM t
 ----
-·          distributed  false                               ·          ·
-·          vectorized   true                                ·          ·
-render     ·            ·                                   (r)        ·
- │         render 0     ((a >= 5) OR (b <= 10)) OR (c < 4)  ·          ·
- └── scan  ·            ·                                   (a, b, c)  ·
-·          table        t@primary                           ·          ·
-·          spans        FULL SCAN                           ·          ·
+·          distribution  local                               ·          ·
+·          vectorized    true                                ·          ·
+render     ·             ·                                   (r)        ·
+ │         render 0      ((a >= 5) OR (b <= 10)) OR (c < 4)  ·          ·
+ └── scan  ·             ·                                   (a, b, c)  ·
+·          table         t@primary                           ·          ·
+·          spans         FULL SCAN                           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a = 5) AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     a != 5     ·    ·
- └── scan  ·            ·          (a)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      a != 5     ·    ·
+ └── scan  ·             ·          (a)  ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a > 5 AND b >= 10) AS r FROM t
 ----
-·          distributed  false                 ·       ·
-·          vectorized   true                  ·       ·
-render     ·            ·                     (r)     ·
- │         render 0     (a <= 5) OR (b < 10)  ·       ·
- └── scan  ·            ·                     (a, b)  ·
-·          table        t@primary             ·       ·
-·          spans        FULL SCAN             ·       ·
+·          distribution  local                 ·       ·
+·          vectorized    true                  ·       ·
+render     ·             ·                     (r)     ·
+ │         render 0      (a <= 5) OR (b < 10)  ·       ·
+ └── scan  ·             ·                     (a, b)  ·
+·          table         t@primary             ·       ·
+·          spans         FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) AS r FROM t
 ----
-·          distributed  false                                                ·          ·
-·          vectorized   true                                                 ·          ·
-render     ·            ·                                                    (r)        ·
- │         render 0     ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))  ·          ·
- └── scan  ·            ·                                                    (a, b, c)  ·
-·          table        t@primary                                            ·          ·
-·          spans        FULL SCAN                                            ·          ·
+·          distribution  local                                                ·          ·
+·          vectorized    true                                                 ·          ·
+render     ·             ·                                                    (r)        ·
+ │         render 0      ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))  ·          ·
+ └── scan  ·             ·                                                    (a, b, c)  ·
+·          table         t@primary                                            ·          ·
+·          spans         FULL SCAN                                            ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) AS r FROM t
 ----
-·          distributed  false                                ·          ·
-·          vectorized   true                                 ·          ·
-render     ·            ·                                    (r)        ·
- │         render 0     ((a < 5) AND (b > 10)) AND (c < 10)  ·          ·
- └── scan  ·            ·                                    (a, b, c)  ·
-·          table        t@primary                            ·          ·
-·          spans        FULL SCAN                            ·          ·
+·          distribution  local                                ·          ·
+·          vectorized    true                                 ·          ·
+render     ·             ·                                    (r)        ·
+ │         render 0      ((a < 5) AND (b > 10)) AND (c < 10)  ·          ·
+ └── scan  ·             ·                                    (a, b, c)  ·
+·          table         t@primary                            ·          ·
+·          spans         FULL SCAN                            ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) = (1, 2)  AS r FROM t
 ----
-·          distributed  false                ·       ·
-·          vectorized   true                 ·       ·
-render     ·            ·                    (r)     ·
- │         render 0     (a = 1) AND (b = 2)  ·       ·
- └── scan  ·            ·                    (a, b)  ·
-·          table        t@primary            ·       ·
-·          spans        FULL SCAN            ·       ·
+·          distribution  local                ·       ·
+·          vectorized    true                 ·       ·
+render     ·             ·                    (r)     ·
+ │         render 0      (a = 1) AND (b = 2)  ·       ·
+ └── scan  ·             ·                    (a, b)  ·
+·          table         t@primary            ·       ·
+·          spans         FULL SCAN            ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IN (1, 2) AS r FROM t
 ----
-·          distributed  false        ·    ·
-·          vectorized   true         ·    ·
-render     ·            ·            (r)  ·
- │         render 0     a IN (1, 2)  ·    ·
- └── scan  ·            ·            (a)  ·
-·          table        t@primary    ·    ·
-·          spans        FULL SCAN    ·    ·
+·          distribution  local        ·    ·
+·          vectorized    true         ·    ·
+render     ·             ·            (r)  ·
+ │         render 0      a IN (1, 2)  ·    ·
+ └── scan  ·             ·            (a)  ·
+·          table         t@primary    ·    ·
+·          spans         FULL SCAN    ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) IN ((1, 2), (3, 4)) AS r FROM t
 ----
-·          distributed  false                       ·       ·
-·          vectorized   true                        ·       ·
-render     ·            ·                           (r)     ·
- │         render 0     (a, b) IN ((1, 2), (3, 4))  ·       ·
- └── scan  ·            ·                           (a, b)  ·
-·          table        t@primary                   ·       ·
-·          spans        FULL SCAN                   ·       ·
+·          distribution  local                       ·       ·
+·          vectorized    true                        ·       ·
+render     ·             ·                           (r)     ·
+ │         render 0      (a, b) IN ((1, 2), (3, 4))  ·       ·
+ └── scan  ·             ·                           (a, b)  ·
+·          table         t@primary                   ·       ·
+·          spans         FULL SCAN                   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  AS r FROM t
 ----
-·          distributed  false                                                            ·             ·
-·          vectorized   true                                                             ·             ·
-render     ·            ·                                                                (r)           ·
- │         render 0     ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·             ·
- └── scan  ·            ·                                                                (a, b, c, d)  ·
-·          table        t@primary                                                        ·             ·
-·          spans        FULL SCAN                                                        ·             ·
+·          distribution  local                                                            ·             ·
+·          vectorized    true                                                             ·             ·
+render     ·             ·                                                                (r)           ·
+ │         render 0      ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·             ·
+ └── scan  ·             ·                                                                (a, b, c, d)  ·
+·          table         t@primary                                                        ·             ·
+·          spans         FULL SCAN                                                        ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  AS r FROM t
 ----
-·          distributed  false                                            ·             ·
-·          vectorized   true                                             ·             ·
-render     ·            ·                                                (r)           ·
- │         render 0     (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)  ·             ·
- └── scan  ·            ·                                                (a, b, c, d)  ·
-·          table        t@primary                                        ·             ·
-·          spans        FULL SCAN                                        ·             ·
+·          distribution  local                                            ·             ·
+·          vectorized    true                                             ·             ·
+render     ·             ·                                                (r)           ·
+ │         render 0      (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)  ·             ·
+ └── scan  ·             ·                                                (a, b, c, d)  ·
+·          table         t@primary                                        ·             ·
+·          spans         FULL SCAN                                        ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) AS r FROM t
 ----
-·          distributed  false                                                                                  ·             ·
-·          vectorized   true                                                                                   ·             ·
-render     ·            ·                                                                                      (r)           ·
- │         render 0     (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)  ·             ·
- └── scan  ·            ·                                                                                      (a, b, c, s)  ·
-·          table        t@primary                                                                              ·             ·
-·          spans        FULL SCAN                                                                              ·             ·
+·          distribution  local                                                                                  ·             ·
+·          vectorized    true                                                                                   ·             ·
+render     ·             ·                                                                                      (r)           ·
+ │         render 0      (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)  ·             ·
+ └── scan  ·             ·                                                                                      (a, b, c, s)  ·
+·          table         t@primary                                                                              ·             ·
+·          spans         FULL SCAN                                                                              ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NULL AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     a IS NULL  ·    ·
- └── scan  ·            ·          (a)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      a IS NULL  ·    ·
+ └── scan  ·             ·          (a)  ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     a IS NULL  ·    ·
- └── scan  ·            ·          (a)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      a IS NULL  ·    ·
+ └── scan  ·             ·          (a)  ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) IS NULL AS r FROM t
 ----
-·          distributed  false           ·       ·
-·          vectorized   true            ·       ·
-render     ·            ·               (r)     ·
- │         render 0     (a, b) IS NULL  ·       ·
- └── scan  ·            ·               (a, b)  ·
-·          table        t@primary       ·       ·
-·          spans        FULL SCAN       ·       ·
+·          distribution  local           ·       ·
+·          vectorized    true            ·       ·
+render     ·             ·               (r)     ·
+ │         render 0      (a, b) IS NULL  ·       ·
+ └── scan  ·             ·               (a, b)  ·
+·          table         t@primary       ·       ·
+·          spans         FULL SCAN       ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) IS NOT DISTINCT FROM NULL AS r FROM t
 ----
-·          distributed  false                             ·       ·
-·          vectorized   true                              ·       ·
-render     ·            ·                                 (r)     ·
- │         render 0     (a, b) IS NOT DISTINCT FROM NULL  ·       ·
- └── scan  ·            ·                                 (a, b)  ·
-·          table        t@primary                         ·       ·
-·          spans        FULL SCAN                         ·       ·
+·          distribution  local                             ·       ·
+·          vectorized    true                              ·       ·
+render     ·             ·                                 (r)     ·
+ │         render 0      (a, b) IS NOT DISTINCT FROM NULL  ·       ·
+ └── scan  ·             ·                                 (a, b)  ·
+·          table         t@primary                         ·       ·
+·          spans         FULL SCAN                         ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM b AS r FROM t
 ----
-·          distributed  false                     ·       ·
-·          vectorized   true                      ·       ·
-render     ·            ·                         (r)     ·
- │         render 0     a IS NOT DISTINCT FROM b  ·       ·
- └── scan  ·            ·                         (a, b)  ·
-·          table        t@primary                 ·       ·
-·          spans        FULL SCAN                 ·       ·
+·          distribution  local                     ·       ·
+·          vectorized    true                      ·       ·
+render     ·             ·                         (r)     ·
+ │         render 0      a IS NOT DISTINCT FROM b  ·       ·
+ └── scan  ·             ·                         (a, b)  ·
+·          table         t@primary                 ·       ·
+·          spans         FULL SCAN                 ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL AS r FROM t
 ----
-·          distributed  false          ·    ·
-·          vectorized   true           ·    ·
-render     ·            ·              (r)  ·
- │         render 0     a IS NOT NULL  ·    ·
- └── scan  ·            ·              (a)  ·
-·          table        t@primary      ·    ·
-·          spans        FULL SCAN      ·    ·
+·          distribution  local          ·    ·
+·          vectorized    true           ·    ·
+render     ·             ·              (r)  ·
+ │         render 0      a IS NOT NULL  ·    ·
+ └── scan  ·             ·              (a)  ·
+·          table         t@primary      ·    ·
+·          spans         FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL AS r FROM t
 ----
-·          distributed  false          ·    ·
-·          vectorized   true           ·    ·
-render     ·            ·              (r)  ·
- │         render 0     a IS NOT NULL  ·    ·
- └── scan  ·            ·              (a)  ·
-·          table        t@primary      ·    ·
-·          spans        FULL SCAN      ·    ·
+·          distribution  local          ·    ·
+·          vectorized    true           ·    ·
+render     ·             ·              (r)  ·
+ │         render 0      a IS NOT NULL  ·    ·
+ └── scan  ·             ·              (a)  ·
+·          table         t@primary      ·    ·
+·          spans         FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) IS NOT NULL AS r FROM t
 ----
-·          distributed  false               ·       ·
-·          vectorized   true                ·       ·
-render     ·            ·                   (r)     ·
- │         render 0     (a, b) IS NOT NULL  ·       ·
- └── scan  ·            ·                   (a, b)  ·
-·          table        t@primary           ·       ·
-·          spans        FULL SCAN           ·       ·
+·          distribution  local               ·       ·
+·          vectorized    true                ·       ·
+render     ·             ·                   (r)     ·
+ │         render 0      (a, b) IS NOT NULL  ·       ·
+ └── scan  ·             ·                   (a, b)  ·
+·          table         t@primary           ·       ·
+·          spans         FULL SCAN           ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) IS DISTINCT FROM NULL AS r FROM t
 ----
-·          distributed  false                         ·       ·
-·          vectorized   true                          ·       ·
-render     ·            ·                             (r)     ·
- │         render 0     (a, b) IS DISTINCT FROM NULL  ·       ·
- └── scan  ·            ·                             (a, b)  ·
-·          table        t@primary                     ·       ·
-·          spans        FULL SCAN                     ·       ·
+·          distribution  local                         ·       ·
+·          vectorized    true                          ·       ·
+render     ·             ·                             (r)     ·
+ │         render 0      (a, b) IS DISTINCT FROM NULL  ·       ·
+ └── scan  ·             ·                             (a, b)  ·
+·          table         t@primary                     ·       ·
+·          spans         FULL SCAN                     ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM b AS r FROM t
 ----
-·          distributed  false                 ·       ·
-·          vectorized   true                  ·       ·
-render     ·            ·                     (r)     ·
- │         render 0     a IS DISTINCT FROM b  ·       ·
- └── scan  ·            ·                     (a, b)  ·
-·          table        t@primary             ·       ·
-·          spans        FULL SCAN             ·       ·
+·          distribution  local                 ·       ·
+·          vectorized    true                  ·       ·
+render     ·             ·                     (r)     ·
+ │         render 0      a IS DISTINCT FROM b  ·       ·
+ └── scan  ·             ·                     (a, b)  ·
+·          table         t@primary             ·       ·
+·          spans         FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT +a + (-b) AS r FROM t
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (r)     ·
- │         render 0     a + (-b)   ·       ·
- └── scan  ·            ·          (a, b)  ·
-·          table        t@primary  ·       ·
-·          spans        FULL SCAN  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+render     ·             ·          (r)     ·
+ │         render 0      a + (-b)   ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         t@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END AS r FROM t
 ----
-·          distributed  false                                          ·    ·
-·          vectorized   true                                           ·    ·
-render     ·            ·                                              (r)  ·
- │         render 0     CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END  ·    ·
- └── scan  ·            ·                                              (a)  ·
-·          table        t@primary                                      ·    ·
-·          spans        FULL SCAN                                      ·    ·
+·          distribution  local                                          ·    ·
+·          vectorized    true                                           ·    ·
+render     ·             ·                                              (r)  ·
+ │         render 0      CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END  ·    ·
+ └── scan  ·             ·                                              (a)  ·
+·          table         t@primary                                      ·    ·
+·          spans         FULL SCAN                                      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END AS r FROM t
 ----
-·          distributed  false                              ·    ·
-·          vectorized   true                               ·    ·
-render     ·            ·                                  (r)  ·
- │         render 0     CASE WHEN a = 2 THEN 1 ELSE 2 END  ·    ·
- └── scan  ·            ·                                  (a)  ·
-·          table        t@primary                          ·    ·
-·          spans        FULL SCAN                          ·    ·
+·          distribution  local                              ·    ·
+·          vectorized    true                               ·    ·
+render     ·             ·                                  (r)  ·
+ │         render 0      CASE WHEN a = 2 THEN 1 ELSE 2 END  ·    ·
+ └── scan  ·             ·                                  (a)  ·
+·          table         t@primary                          ·    ·
+·          spans         FULL SCAN                          ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END AS r FROM t
 ----
-·          distributed  false                                                       ·       ·
-·          vectorized   true                                                        ·       ·
-render     ·            ·                                                           (r)     ·
- │         render 0     CASE a + 3 WHEN b * 5 THEN 1 % b WHEN 6 THEN 2 ELSE -1 END  ·       ·
- └── scan  ·            ·                                                           (a, b)  ·
-·          table        t@primary                                                   ·       ·
-·          spans        FULL SCAN                                                   ·       ·
+·          distribution  local                                                       ·       ·
+·          vectorized    true                                                        ·       ·
+render     ·             ·                                                           (r)     ·
+ │         render 0      CASE a + 3 WHEN b * 5 THEN 1 % b WHEN 6 THEN 2 ELSE -1 END  ·       ·
+ └── scan  ·             ·                                                           (a, b)  ·
+·          table         t@primary                                                   ·       ·
+·          spans         FULL SCAN                                                   ·       ·
 
 # Tests for CASE with no ELSE statement
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 END AS r FROM t
 ----
-·          distributed  false                       ·    ·
-·          vectorized   true                        ·    ·
-render     ·            ·                           (r)  ·
- │         render 0     CASE WHEN a = 2 THEN 1 END  ·    ·
- └── scan  ·            ·                           (a)  ·
-·          table        t@primary                   ·    ·
-·          spans        FULL SCAN                   ·    ·
+·          distribution  local                       ·    ·
+·          vectorized    true                        ·    ·
+render     ·             ·                           (r)  ·
+ │         render 0      CASE WHEN a = 2 THEN 1 END  ·    ·
+ └── scan  ·             ·                           (a)  ·
+·          table         t@primary                   ·    ·
+·          spans         FULL SCAN                   ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 2 THEN 1 END AS r FROM t
 ----
-·          distributed  false                     ·    ·
-·          vectorized   true                      ·    ·
-render     ·            ·                         (r)  ·
- │         render 0     CASE a WHEN 2 THEN 1 END  ·    ·
- └── scan  ·            ·                         (a)  ·
-·          table        t@primary                 ·    ·
-·          spans        FULL SCAN                 ·    ·
+·          distribution  local                     ·    ·
+·          vectorized    true                      ·    ·
+render     ·             ·                         (r)  ·
+ │         render 0      CASE a WHEN 2 THEN 1 END  ·    ·
+ └── scan  ·             ·                         (a)  ·
+·          table         t@primary                 ·    ·
+·          spans         FULL SCAN                 ·    ·
 
 # TODO(radu): IS OF not supported yet.
 #query TTTTT
@@ -396,152 +396,152 @@ render     ·            ·                         (r)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT length(s) FROM t
 ----
-·          distributed  false      ·         ·
-·          vectorized   true       ·         ·
-render     ·            ·          (length)  ·
- │         render 0     length(s)  ·         ·
- └── scan  ·            ·          (s)       ·
-·          table        t@primary  ·         ·
-·          spans        FULL SCAN  ·         ·
+·          distribution  local      ·         ·
+·          vectorized    true       ·         ·
+render     ·             ·          (length)  ·
+ │         render 0      length(s)  ·         ·
+ └── scan  ·             ·          (s)       ·
+·          table         t@primary  ·         ·
+·          spans         FULL SCAN  ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' AS r FROM t
 ----
-·          distributed  false            ·    ·
-·          vectorized   true             ·    ·
-render     ·            ·                (r)  ·
- │         render 0     j @> '{"a": 1}'  ·    ·
- └── scan  ·            ·                (j)  ·
-·          table        t@primary        ·    ·
-·          spans        FULL SCAN        ·    ·
+·          distribution  local            ·    ·
+·          vectorized    true             ·    ·
+render     ·             ·                (r)  ·
+ │         render 0      j @> '{"a": 1}'  ·    ·
+ └── scan  ·             ·                (j)  ·
+·          table         t@primary        ·    ·
+·          spans         FULL SCAN        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j AS r FROM t
 ----
-·          distributed  false            ·    ·
-·          vectorized   true             ·    ·
-render     ·            ·                (r)  ·
- │         render 0     j @> '{"a": 1}'  ·    ·
- └── scan  ·            ·                (j)  ·
-·          table        t@primary        ·    ·
-·          spans        FULL SCAN        ·    ·
+·          distribution  local            ·    ·
+·          vectorized    true             ·    ·
+render     ·             ·                (r)  ·
+ │         render 0      j @> '{"a": 1}'  ·    ·
+ └── scan  ·             ·                (j)  ·
+·          table         t@primary        ·    ·
+·          spans         FULL SCAN        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j->>'a' AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     j->>'a'    ·    ·
- └── scan  ·            ·          (j)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      j->>'a'    ·    ·
+ └── scan  ·             ·          (j)  ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j->'a' AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     j->'a'     ·    ·
- └── scan  ·            ·          (j)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      j->'a'     ·    ·
+ └── scan  ·             ·          (j)  ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ? 'a' AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     j ? 'a'    ·    ·
- └── scan  ·            ·          (j)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (r)  ·
+ │         render 0      j ? 'a'    ·    ·
+ └── scan  ·             ·          (j)  ·
+·          table         t@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] AS r FROM t
 ----
-·          distributed  false                    ·    ·
-·          vectorized   true                     ·    ·
-render     ·            ·                        (r)  ·
- │         render 0     j ?| ARRAY['a','b','c']  ·    ·
- └── scan  ·            ·                        (j)  ·
-·          table        t@primary                ·    ·
-·          spans        FULL SCAN                ·    ·
+·          distribution  local                    ·    ·
+·          vectorized    true                     ·    ·
+render     ·             ·                        (r)  ·
+ │         render 0      j ?| ARRAY['a','b','c']  ·    ·
+ └── scan  ·             ·                        (j)  ·
+·          table         t@primary                ·    ·
+·          spans         FULL SCAN                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] AS r FROM t
 ----
-·          distributed  false                    ·    ·
-·          vectorized   true                     ·    ·
-render     ·            ·                        (r)  ·
- │         render 0     j ?& ARRAY['a','b','c']  ·    ·
- └── scan  ·            ·                        (j)  ·
-·          table        t@primary                ·    ·
-·          spans        FULL SCAN                ·    ·
+·          distribution  local                    ·    ·
+·          vectorized    true                     ·    ·
+render     ·             ·                        (r)  ·
+ │         render 0      j ?& ARRAY['a','b','c']  ·    ·
+ └── scan  ·             ·                        (j)  ·
+·          table         t@primary                ·    ·
+·          spans         FULL SCAN                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] AS r FROM t
 ----
-·          distributed  false          ·    ·
-·          vectorized   true           ·    ·
-render     ·            ·              (r)  ·
- │         render 0     j#>ARRAY['a']  ·    ·
- └── scan  ·            ·              (j)  ·
-·          table        t@primary      ·    ·
-·          spans        FULL SCAN      ·    ·
+·          distribution  local          ·    ·
+·          vectorized    true           ·    ·
+render     ·             ·              (r)  ·
+ │         render 0      j#>ARRAY['a']  ·    ·
+ └── scan  ·             ·              (j)  ·
+·          table         t@primary      ·    ·
+·          spans         FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] AS r FROM t
 ----
-·          distributed  false           ·    ·
-·          vectorized   true            ·    ·
-render     ·            ·               (r)  ·
- │         render 0     j#>>ARRAY['a']  ·    ·
- └── scan  ·            ·               (j)  ·
-·          table        t@primary       ·    ·
-·          spans        FULL SCAN       ·    ·
+·          distribution  local           ·    ·
+·          vectorized    true            ·    ·
+render     ·             ·               (r)  ·
+ │         render 0      j#>>ARRAY['a']  ·    ·
+ └── scan  ·             ·               (j)  ·
+·          table         t@primary       ·    ·
+·          spans         FULL SCAN       ·    ·
 
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CAST(a AS string), b::float FROM t
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (a, b)  ·
- │         render 0     a::STRING  ·       ·
- │         render 1     b::FLOAT8  ·       ·
- └── scan  ·            ·          (a, b)  ·
-·          table        t@primary  ·       ·
-·          spans        FULL SCAN  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+render     ·             ·          (a, b)  ·
+ │         render 0      a::STRING  ·       ·
+ │         render 1      b::FLOAT8  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         t@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CAST(a + b + c AS string) FROM t
 ----
-·          distributed  false                  ·          ·
-·          vectorized   true                   ·          ·
-render     ·            ·                      (text)     ·
- │         render 0     (c + (a + b))::STRING  ·          ·
- └── scan  ·            ·                      (a, b, c)  ·
-·          table        t@primary              ·          ·
-·          spans        FULL SCAN              ·          ·
+·          distribution  local                  ·          ·
+·          vectorized    true                   ·          ·
+render     ·             ·                      (text)     ·
+ │         render 0      (c + (a + b))::STRING  ·          ·
+ └── scan  ·             ·                      (a, b, c)  ·
+·          table         t@primary              ·          ·
+·          spans         FULL SCAN              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s::VARCHAR(2) FROM t
 ----
-·          distributed  false          ·    ·
-·          vectorized   true           ·    ·
-render     ·            ·              (s)  ·
- │         render 0     s::VARCHAR(2)  ·    ·
- └── scan  ·            ·              (s)  ·
-·          table        t@primary      ·    ·
-·          spans        FULL SCAN      ·    ·
+·          distribution  local          ·    ·
+·          vectorized    true           ·    ·
+render     ·             ·              (s)  ·
+ │         render 0      s::VARCHAR(2)  ·    ·
+ └── scan  ·             ·              (s)  ·
+·          table         t@primary      ·    ·
+·          spans         FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
-·            distributed    false                       ·                   ·
+·            distribution   local                       ·                   ·
 ·            vectorized     false                       ·                   ·
 render       ·              ·                           ("coalesce")        ·
  │           render 0       COALESCE(column1, column2)  ·                   ·
@@ -559,7 +559,7 @@ render       ·              ·                           ("coalesce")        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
-·            distributed    false                                ·                            ·
+·            distribution   local                                ·                            ·
 ·            vectorized     false                                ·                            ·
 render       ·              ·                                    ("coalesce")                 ·
  │           render 0       COALESCE(column1, column2, column3)  ·                            ·
@@ -581,139 +581,139 @@ render       ·              ·                                    ("coalesce") 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
 ----
-·          distributed  false                  ·          ·
-·          vectorized   true                   ·          ·
-render     ·            ·                      (a)        ·
- │         render 0     a                      ·          ·
- └── scan  ·            ·                      (a, b, d)  ·
-·          table        t@primary              ·          ·
-·          spans        FULL SCAN              ·          ·
-·          filter       (a >= b) AND (a <= d)  ·          ·
+·          distribution  local                  ·          ·
+·          vectorized    true                   ·          ·
+render     ·             ·                      (a)        ·
+ │         render 0      a                      ·          ·
+ └── scan  ·             ·                      (a, b, d)  ·
+·          table         t@primary              ·          ·
+·          spans         FULL SCAN              ·          ·
+·          filter        (a >= b) AND (a <= d)  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
-·          distributed  false               ·          ·
-·          vectorized   true                ·          ·
-render     ·            ·                   (a)        ·
- │         render 0     a                   ·          ·
- └── scan  ·            ·                   (a, b, d)  ·
-·          table        t@primary           ·          ·
-·          spans        FULL SCAN           ·          ·
-·          filter       (a < b) OR (a > d)  ·          ·
+·          distribution  local               ·          ·
+·          vectorized    true                ·          ·
+render     ·             ·                   (a)        ·
+ │         render 0      a                   ·          ·
+ └── scan  ·             ·                   (a, b, d)  ·
+·          table         t@primary           ·          ·
+·          spans         FULL SCAN           ·          ·
+·          filter        (a < b) OR (a > d)  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
-·          distributed  false                                               ·          ·
-·          vectorized   true                                                ·          ·
-render     ·            ·                                                   (r)        ·
- │         render 0     ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·          ·
- └── scan  ·            ·                                                   (a, b, d)  ·
-·          table        t@primary                                           ·          ·
-·          spans        FULL SCAN                                           ·          ·
+·          distribution  local                                               ·          ·
+·          vectorized    true                                                ·          ·
+render     ·             ·                                                   (r)        ·
+ │         render 0      ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·          ·
+ └── scan  ·             ·                                                   (a, b, d)  ·
+·          table         t@primary                                           ·          ·
+·          spans         FULL SCAN                                           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a NOT BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
-·          distributed  false                                          ·          ·
-·          vectorized   true                                           ·          ·
-render     ·            ·                                              (r)        ·
- │         render 0     ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·          ·
- └── scan  ·            ·                                              (a, b, d)  ·
-·          table        t@primary                                      ·          ·
-·          spans        FULL SCAN                                      ·          ·
+·          distribution  local                                          ·          ·
+·          vectorized    true                                           ·          ·
+render     ·             ·                                              (r)        ·
+ │         render 0      ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·          ·
+ └── scan  ·             ·                                              (a, b, d)  ·
+·          table         t@primary                                      ·          ·
+·          spans         FULL SCAN                                      ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[]:::int[] FROM t
 ----
-·          distributed  false      ·          ·
-·          vectorized   true       ·          ·
-render     ·            ·          ("array")  ·
- │         render 0     ARRAY[]    ·          ·
- └── scan  ·            ·          ()         ·
-·          table        t@primary  ·          ·
-·          spans        FULL SCAN  ·          ·
+·          distribution  local      ·          ·
+·          vectorized    true       ·          ·
+render     ·             ·          ("array")  ·
+ │         render 0      ARRAY[]    ·          ·
+ └── scan  ·             ·          ()         ·
+·          table         t@primary  ·          ·
+·          spans         FULL SCAN  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[1, 2, 3] FROM t
 ----
-·          distributed  false         ·          ·
-·          vectorized   true          ·          ·
-render     ·            ·             ("array")  ·
- │         render 0     ARRAY[1,2,3]  ·          ·
- └── scan  ·            ·             ()         ·
-·          table        t@primary     ·          ·
-·          spans        FULL SCAN     ·          ·
+·          distribution  local         ·          ·
+·          vectorized    true          ·          ·
+render     ·             ·             ("array")  ·
+ │         render 0      ARRAY[1,2,3]  ·          ·
+ └── scan  ·             ·             ()         ·
+·          table         t@primary     ·          ·
+·          spans         FULL SCAN     ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
 ----
-·          distributed  false               ·          ·
-·          vectorized   true                ·          ·
-render     ·            ·                   ("array")  ·
- │         render 0     ARRAY[a + 1, 2, 3]  ·          ·
- └── scan  ·            ·                   (a)        ·
-·          table        t@primary           ·          ·
-·          spans        FULL SCAN           ·          ·
+·          distribution  local               ·          ·
+·          vectorized    true                ·          ·
+render     ·             ·                   ("array")  ·
+ │         render 0      ARRAY[a + 1, 2, 3]  ·          ·
+ └── scan  ·             ·                   (a)        ·
+·          table         t@primary           ·          ·
+·          spans         FULL SCAN           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 > ANY ARRAY[a + 1, 2, 3] FROM t
 ----
-·          distributed  false                       ·             ·
-·          vectorized   true                        ·             ·
-render     ·            ·                           ("?column?")  ·
- │         render 0     1 > ANY ARRAY[a + 1, 2, 3]  ·             ·
- └── scan  ·            ·                           (a)           ·
-·          table        t@primary                   ·             ·
-·          spans        FULL SCAN                   ·             ·
+·          distribution  local                       ·             ·
+·          vectorized    true                        ·             ·
+render     ·             ·                           ("?column?")  ·
+ │         render 0      1 > ANY ARRAY[a + 1, 2, 3]  ·             ·
+ └── scan  ·             ·                           (a)           ·
+·          table         t@primary                   ·             ·
+·          spans         FULL SCAN                   ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY (1, 2, 3) FROM t
 ----
-·          distributed  false      ·             ·
-·          vectorized   true       ·             ·
-render     ·            ·          ("?column?")  ·
- │         render 0     true       ·             ·
- └── scan  ·            ·          ()            ·
-·          table        t@primary  ·             ·
-·          spans        FULL SCAN  ·             ·
+·          distribution  local      ·             ·
+·          vectorized    true       ·             ·
+render     ·             ·          ("?column?")  ·
+ │         render 0      true       ·             ·
+ └── scan  ·             ·          ()            ·
+·          table         t@primary  ·             ·
+·          spans         FULL SCAN  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY () FROM t
 ----
-·          distributed  false      ·             ·
-·          vectorized   true       ·             ·
-render     ·            ·          ("?column?")  ·
- │         render 0     false      ·             ·
- └── scan  ·            ·          ()            ·
-·          table        t@primary  ·             ·
-·          spans        FULL SCAN  ·             ·
+·          distribution  local      ·             ·
+·          vectorized    true       ·             ·
+render     ·             ·          ("?column?")  ·
+ │         render 0      false      ·             ·
+ └── scan  ·             ·          ()            ·
+·          table         t@primary  ·             ·
+·          spans         FULL SCAN  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT least(NULL, greatest(NULL, least(1, NULL), 2, 3), greatest(5, 6), a) FROM t
 ----
-·          distributed  false                 ·          ·
-·          vectorized   true                  ·          ·
-render     ·            ·                     ("least")  ·
- │         render 0     least(NULL, 3, 6, a)  ·          ·
- └── scan  ·            ·                     (a)        ·
-·          table        t@primary             ·          ·
-·          spans        FULL SCAN             ·          ·
+·          distribution  local                 ·          ·
+·          vectorized    true                  ·          ·
+render     ·             ·                     ("least")  ·
+ │         render 0      least(NULL, 3, 6, a)  ·          ·
+ └── scan  ·             ·                     (a)        ·
+·          table         t@primary             ·          ·
+·          spans         FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='t'::regclass
 ----
-·              distributed  false                                   ·                                                                                                                                                                                                                                              ·
-·              vectorized   false                                   ·                                                                                                                                                                                                                                              ·
-virtual table  ·            ·                                       (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
-·              source       pg_attribute@pg_attribute_attrelid_idx  ·                                                                                                                                                                                                                                              ·
-·              constraint   /2: [/t - /t]                           ·                                                                                                                                                                                                                                              ·
+·              distribution  local                                   ·                                                                                                                                                                                                                                              ·
+·              vectorized    false                                   ·                                                                                                                                                                                                                                              ·
+virtual table  ·             ·                                       (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
+·              source        pg_attribute@pg_attribute_attrelid_idx  ·                                                                                                                                                                                                                                              ·
+·              constraint    /2: [/t - /t]                           ·                                                                                                                                                                                                                                              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
 ----
-·       distributed    false            ·         ·
+·       distribution   local            ·         ·
 ·       vectorized     false            ·         ·
 values  ·              ·                ("case")  ·
 ·       size           1 column, 1 row  ·         ·
@@ -723,7 +723,7 @@ values  ·              ·                ("case")  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/0 END
 ----
-·       distributed    false                                  ·         ·
+·       distribution   local                                  ·         ·
 ·       vectorized     false                                  ·         ·
 values  ·              ·                                      ("case")  ·
 ·       size           1 column, 1 row                        ·         ·
@@ -733,7 +733,7 @@ values  ·              ·                                      ("case")  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT random(), current_database(), now()
 ----
-·       distributed    false             ·                                ·
+·       distribution   local             ·                                ·
 ·       vectorized     false             ·                                ·
 values  ·              ·                 (random, current_database, now)  ·
 ·       size           3 columns, 1 row  ·                                ·
@@ -746,19 +746,19 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT 1::FLOAT + length(upper(concat('a', 'b', 'c')))::FLOAT AS r1,
                          1::FLOAT + length(upper(concat('a', 'b', s)))::FLOAT AS r2 FROM t
 ----
-·          distributed  false                                             ·         ·
-·          vectorized   true                                              ·         ·
-render     ·            ·                                                 (r1, r2)  ·
- │         render 0     4.0                                               ·         ·
- │         render 1     length(upper(concat('a', 'b', s)))::FLOAT8 + 1.0  ·         ·
- └── scan  ·            ·                                                 (s)       ·
-·          table        t@primary                                         ·         ·
-·          spans        FULL SCAN                                         ·         ·
+·          distribution  local                                             ·         ·
+·          vectorized    true                                              ·         ·
+render     ·             ·                                                 (r1, r2)  ·
+ │         render 0      4.0                                               ·         ·
+ │         render 1      length(upper(concat('a', 'b', s)))::FLOAT8 + 1.0  ·         ·
+ └── scan  ·             ·                                                 (s)       ·
+·          table         t@primary                                         ·         ·
+·          spans         FULL SCAN                                         ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC)
 ----
-·                             distributed    false                                            ·                  ·
+·                             distribution   local                                            ·                  ·
 ·                             vectorized     false                                            ·                  ·
 root                          ·              ·                                                ("array")          ·
  ├── values                   ·              ·                                                ("array")          ·
@@ -777,7 +777,7 @@ root                          ·              ·                                
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT a FROM t ORDER BY b)
 ----
-·                         distributed    false                         ·          ·
+·                         distribution   local                         ·          ·
 ·                         vectorized     false                         ·          ·
 root                      ·              ·                             ("array")  ·
  ├── values               ·              ·                             ("array")  ·
@@ -802,8 +802,8 @@ CREATE TABLE t0(c0 DECIMAL UNIQUE); INSERT INTO t0(c0) VALUES(0);
 query TTTTT
 EXPLAIN (VERBOSE) SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-1'::DECIMAL
 ----
-·     distributed  false                 ·     ·
-·     vectorized   true                  ·     ·
-scan  ·            ·                     (c0)  ·
-·     table        t0@t0_c0_key          ·     ·
-·     spans        /!NULL-/-1/PrefixEnd  ·     ·
+·     distribution  local                 ·     ·
+·     vectorized    true                  ·     ·
+scan  ·             ·                     (c0)  ·
+·     table         t0@t0_c0_key          ·     ·
+·     spans         /!NULL-/-1/PrefixEnd  ·     ·

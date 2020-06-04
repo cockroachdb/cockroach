@@ -12,24 +12,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                              distributed  false
-·                              vectorized   false
-count                          ·            ·
- └── upsert                    ·            ·
-      │                        into         kv(k, v)
-      │                        strategy     opt upserter
-      │                        auto commit  ·
-      └── render               ·            ·
-           │                   render 0     k
-           │                   render 1     v
-           │                   render 2     v
-           └── limit           ·            ·
-                │              count        2
-                └── sort       ·            ·
-                     │         order        -v
-                     └── scan  ·            ·
-·                              table        kv@primary
-·                              spans        FULL SCAN
+·                              distribution  local
+·                              vectorized    false
+count                          ·             ·
+ └── upsert                    ·             ·
+      │                        into          kv(k, v)
+      │                        strategy      opt upserter
+      │                        auto commit   ·
+      └── render               ·             ·
+           │                   render 0      k
+           │                   render 1      v
+           │                   render 2      v
+           └── limit           ·             ·
+                │              count         2
+                └── sort       ·             ·
+                     │         order         -v
+                     └── scan  ·             ·
+·                              table         kv@primary
+·                              spans         FULL SCAN
 
 # Use explicit target columns (which can use blind KV Put).
 query TTT
@@ -37,24 +37,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                              distributed  false
-·                              vectorized   false
-count                          ·            ·
- └── upsert                    ·            ·
-      │                        into         kv(k, v)
-      │                        strategy     opt upserter
-      │                        auto commit  ·
-      └── render               ·            ·
-           │                   render 0     k
-           │                   render 1     v
-           │                   render 2     v
-           └── limit           ·            ·
-                │              count        2
-                └── sort       ·            ·
-                     │         order        -v
-                     └── scan  ·            ·
-·                              table        kv@primary
-·                              spans        FULL SCAN
+·                              distribution  local
+·                              vectorized    false
+count                          ·             ·
+ └── upsert                    ·             ·
+      │                        into          kv(k, v)
+      │                        strategy      opt upserter
+      │                        auto commit   ·
+      └── render               ·             ·
+           │                   render 0      k
+           │                   render 1      v
+           │                   render 2      v
+           └── limit           ·             ·
+                │              count         2
+                └── sort       ·             ·
+                     │         order         -v
+                     └── scan  ·             ·
+·                              table         kv@primary
+·                              spans         FULL SCAN
 
 # Add RETURNING clause (should still use blind KV Put).
 query TTT
@@ -62,24 +62,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2 RETURNING *
 ]
 ----
-·                              distributed  false
-·                              vectorized   false
-run                            ·            ·
- └── upsert                    ·            ·
-      │                        into         kv(k, v)
-      │                        strategy     opt upserter
-      │                        auto commit  ·
-      └── render               ·            ·
-           │                   render 0     k
-           │                   render 1     v
-           │                   render 2     v
-           └── limit           ·            ·
-                │              count        2
-                └── sort       ·            ·
-                     │         order        -v
-                     └── scan  ·            ·
-·                              table        kv@primary
-·                              spans        FULL SCAN
+·                              distribution  local
+·                              vectorized    false
+run                            ·             ·
+ └── upsert                    ·             ·
+      │                        into          kv(k, v)
+      │                        strategy      opt upserter
+      │                        auto commit   ·
+      └── render               ·             ·
+           │                   render 0      k
+           │                   render 1      v
+           │                   render 2      v
+           └── limit           ·             ·
+                │              count         2
+                └── sort       ·             ·
+                     │         order         -v
+                     └── scan  ·             ·
+·                              table         kv@primary
+·                              spans         FULL SCAN
 
 # Use subset of explicit target columns (which cannot use blind KV Put).
 query TTT
@@ -87,7 +87,7 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                                             distributed            false
+·                                             distribution           local
 ·                                             vectorized             false
 count                                         ·                      ·
  └── upsert                                   ·                      ·
@@ -138,7 +138,7 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
 ]
 ----
-·                                distributed    false
+·                                distribution   local
 ·                                vectorized     false
 count                            ·              ·
  └── upsert                      ·              ·
@@ -190,7 +190,7 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1) RETURNING *
 ]
 ----
-·                      distributed    false
+·                      distribution   local
 ·                      vectorized     false
 run                    ·              ·
  └── upsert            ·              ·
@@ -349,7 +349,7 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-·                                                  distributed   false                                                ·                            ·
+·                                                  distribution  local                                                ·                            ·
 ·                                                  vectorized    false                                                ·                            ·
 root                                               ·             ·                                                    (z)                          +z
  ├── sort                                          ·             ·                                                    (z)                          +z
@@ -432,7 +432,7 @@ BEGIN; ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
 query TTTTT
 EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
 ----
-·                           distributed            false               ·                      ·
+·                           distribution           local               ·                      ·
 ·                           vectorized             false               ·                      ·
 count                       ·                      ·                   ()                     ·
  └── upsert                 ·                      ·                   ()                     ·
@@ -472,7 +472,7 @@ query TTTTT
 EXPLAIN (VERBOSE)
 INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
 ----
-·                                     distributed            false                                        ·                                                  ·
+·                                     distribution           local                                        ·                                                  ·
 ·                                     vectorized             false                                        ·                                                  ·
 count                                 ·                      ·                                            ()                                                 ·
  └── upsert                           ·                      ·                                            ()                                                 ·
@@ -528,7 +528,7 @@ EXPLAIN (VERBOSE)
 INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
 ON CONFLICT (b, c) DO UPDATE SET b=5
 ----
-·                                   distributed         false                                  ·                                ·
+·                                   distribution        local                                  ·                                ·
 ·                                   vectorized          false                                  ·                                ·
 count                               ·                   ·                                      ()                               ·
  └── upsert                         ·                   ·                                      ()                               ·

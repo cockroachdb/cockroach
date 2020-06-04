@@ -8,47 +8,47 @@ CREATE TABLE t (x INT[] PRIMARY KEY)
 query TTT
 EXPLAIN SELECT x FROM t WHERE x = ARRAY[1,4,6]
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        t@primary
-·     spans        /ARRAY[1,4,6]-/ARRAY[1,4,6]/#
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         t@primary
+·     spans         /ARRAY[1,4,6]-/ARRAY[1,4,6]/#
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x < ARRAY[1, 4, 3]
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        t@primary
-·     spans        -/ARRAY[1,4,3]
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         t@primary
+·     spans         -/ARRAY[1,4,3]
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x > ARRAY [1, NULL]
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        t@primary
-·     spans        /ARRAY[1,NULL,NULL]-
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         t@primary
+·     spans         /ARRAY[1,NULL,NULL]-
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        t@primary
-·     spans        /ARRAY[1,3,NULL]-/ARRAY[1,4,10]
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         t@primary
+·     spans         /ARRAY[1,3,NULL]-/ARRAY[1,4,10]
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x DESC
 ----
-·        distributed  false
-·        vectorized   true
-revscan  ·            ·
-·        table        t@primary
-·        spans        /ARRAY[1,3,NULL]-/ARRAY[1,4,10]
+·        distribution  local
+·        vectorized    true
+revscan  ·             ·
+·        table         t@primary
+·        spans         /ARRAY[1,3,NULL]-/ARRAY[1,4,10]
 
 statement ok
 DROP TABLE t
@@ -59,11 +59,11 @@ CREATE TABLE t (x INT, y INT[], z INT, INDEX i (x, y, z))
 query TTT
 EXPLAIN SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        t@i
-·     spans        /2/!NULL-/2/ARRAY[10]
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         t@i
+·     spans         /2/!NULL-/2/ARRAY[10]
 
 # Test span generation on interleaved tables.
 statement ok
@@ -73,29 +73,29 @@ CREATE TABLE child (x INT, y INT[], z INT[], PRIMARY KEY (x, y, z), FAMILY (x, y
 query TTT
 EXPLAIN SELECT x, y FROM parent WHERE x > 1 AND y > ARRAY[1, NULL]
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        parent@primary
-·     spans        /2/ARRAY[1,NULL,NULL]-
-·     filter       y > ARRAY[1,NULL]
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         parent@primary
+·     spans         /2/ARRAY[1,NULL,NULL]-
+·     filter        y > ARRAY[1,NULL]
 
 query TTT
 EXPLAIN SELECT y FROM parent WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        parent@primary
-·          spans        /1/ARRAY[NULL,NULL]-/1/ARRAY[NULL,NULL]/#
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         parent@primary
+·          spans         /1/ARRAY[NULL,NULL]-/1/ARRAY[NULL,NULL]/#
 
 query TTT
 EXPLAIN SELECT z FROM child WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        child@primary
-·          spans        /1/ARRAY[NULL,NULL]/#/56/1-/1/ARRAY[NULL,NULL]/#/56/2
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         child@primary
+·          spans         /1/ARRAY[NULL,NULL]/#/56/1-/1/ARRAY[NULL,NULL]/#/56/2
