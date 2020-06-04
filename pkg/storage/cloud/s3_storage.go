@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -171,6 +172,14 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 		Key:    aws.String(path.Join(s.prefix, basename)),
 	})
 	if err != nil {
+		if errors.HasType(err, (awserr.Error)(nil)) {
+			aerr := err.(awserr.Error)
+			switch aerr.Code() {
+			// Relevant 404 errors reported by AWS.
+			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
+				return nil, errors.Wrap(ErrFileDoesNotExist, "s3 object does not exist")
+			}
+		}
 		return nil, errors.Wrap(err, "failed to get s3 object")
 	}
 	return out.Body, nil

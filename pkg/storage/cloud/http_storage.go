@@ -346,11 +346,15 @@ func (h *httpStorage) req(
 
 	switch resp.StatusCode {
 	case 200, 201, 204, 206:
-		// Pass.
+	// Pass.
 	default:
 		body, _ := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		return nil, errors.Errorf("error response from server: %s %q", resp.Status, body)
+		err := errors.Errorf("error response from server: %s %q", resp.Status, body)
+		if resp.StatusCode == 404 {
+			err = errors.Wrap(ErrFileDoesNotExist, "")
+		}
+		return nil, err
 	}
 	return resp, nil
 }
