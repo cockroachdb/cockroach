@@ -75,13 +75,24 @@ CR_GEOS_Status CR_GEOS_Buffer(CR_GEOS* lib, CR_GEOS_Slice ewkb, CR_GEOS_BufferPa
 
 CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double* ret);
 CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret);
+
+//
+// Topology operators.
+//
+
 CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* centroidEWKB);
+CR_GEOS_Status CR_GEOS_Union(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                             CR_GEOS_String* unionEWKB);
+CR_GEOS_Status CR_GEOS_PointOnSurface(CR_GEOS* lib, CR_GEOS_Slice a,
+                                      CR_GEOS_String* pointOnSurfaceEWKB);
+CR_GEOS_Status CR_GEOS_Intersection(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                    CR_GEOS_String* intersectionEWKB);
 
 //
 // Linear reference.
 //
-CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS *lib, CR_GEOS_Slice a, double distance,
-                                   CR_GEOS_String *interpolatedPoint);
+CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS* lib, CR_GEOS_Slice a, double distance,
+                                   CR_GEOS_String* interpolatedPoint);
 
 //
 // Binary operators.

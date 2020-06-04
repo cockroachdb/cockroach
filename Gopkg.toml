@@ -133,7 +133,7 @@ ignored = [
   # (google.golang.org/protobuf) so there's no pressing reason
   # to do anything.
   name = "github.com/golang/protobuf"
-  version = "=v1.4.1"
+  version = "=v1.4.2"
 
 [[constraint]]
   name = "github.com/gogo/protobuf"

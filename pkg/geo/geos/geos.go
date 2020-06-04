@@ -320,6 +320,45 @@ func Centroid(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// PointOnSurface returns an EWKB with a point that is on the surface of the given EWKB.
+func PointOnSurface(ewkb geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_PointOnSurface(g, goToCSlice(ewkb), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
+// Intersection returns an EWKB which contains the geometries of intersection between A and B.
+func Intersection(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Intersection(g, goToCSlice(a), goToCSlice(b), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
+// Union returns an EWKB which is a union of shapes A and B.
+func Union(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Union(g, goToCSlice(a), goToCSlice(b), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // InterpolateLine returns the point along the given LineString which is at
 // a given distance from starting point.
 // Note: For distance less than 0 it returns start point similarly for distance
