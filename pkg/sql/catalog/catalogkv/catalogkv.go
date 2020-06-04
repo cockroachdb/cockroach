@@ -103,10 +103,11 @@ func GetDescriptorByID(
 		}
 		return sqlbase.NewImmutableTableDescriptor(*table), nil
 	case database != nil:
-		if err := database.Validate(); err != nil {
+		dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*database)
+		if err := dbDesc.Validate(); err != nil {
 			return nil, err
 		}
-		return sqlbase.NewImmutableDatabaseDescriptor(*database), nil
+		return dbDesc, nil
 	case typ != nil:
 		return sqlbase.NewImmutableTypeDescriptor(*typ), nil
 	case schema != nil:
@@ -135,6 +136,9 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 }
 
 // GetAllDescriptors looks up and returns all available descriptors.
+//
+// TODO(ajwerner): This really should return "unwrapped" descriptors as a
+// slice of DescriptorInterface.
 func GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) ([]sqlbase.Descriptor, error) {
@@ -244,8 +248,8 @@ func WriteNewDescToBatch(
 func GetDatabaseID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string, required bool,
 ) (sqlbase.ID, error) {
-	if name == sqlbase.SystemDB.Name {
-		return sqlbase.SystemDB.ID, nil
+	if name == sqlbase.SystemDatabaseName {
+		return keys.SystemDatabaseID, nil
 	}
 	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {

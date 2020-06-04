@@ -306,7 +306,7 @@ func ResolveTypeDescByID(
 	if err != nil {
 		return nil, nil, err
 	}
-	name := tree.MakeNewQualifiedTypeName(db.Name, schemaName, typDesc.GetName())
+	name := tree.MakeNewQualifiedTypeName(db.GetName(), schemaName, typDesc.GetName())
 	var ret sqlbase.TypeDescriptorInterface
 	if lookupFlags.RequireMutable {
 		// TODO(ajwerner): Figure this out later when we construct this inside of

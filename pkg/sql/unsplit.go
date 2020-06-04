@@ -107,7 +107,7 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryEx(
 		params.ctx, "split points query", params.p.txn, sqlbase.InternalExecutorSessionDataOverride{},
 		statement,
-		dbDesc.Name,
+		dbDesc.GetName(),
 		n.tableDesc.Name,
 		indexName,
 	)

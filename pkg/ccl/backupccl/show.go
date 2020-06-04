@@ -191,9 +191,9 @@ func backupShowerDefault(
 			for _, manifest := range manifests {
 				descs := make(map[sqlbase.ID]string)
 				for _, descriptor := range manifest.Descriptors {
-					if database := descriptor.GetDatabase(); database != nil {
-						if _, ok := descs[database.ID]; !ok {
-							descs[database.ID] = database.Name
+					if descriptor.GetDatabase() != nil {
+						if _, ok := descs[descriptor.GetID()]; !ok {
+							descs[descriptor.GetID()] = descriptor.GetName()
 						}
 					}
 				}

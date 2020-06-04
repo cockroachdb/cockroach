@@ -448,15 +448,15 @@ func WriteTableDescs(
 			if descCoverage != tree.AllDescriptors {
 				desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
 			}
-			wroteDBs[desc.ID] = desc
-			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.ID, desc); err != nil {
+			wroteDBs[desc.GetID()] = desc
+			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.GetID(), desc); err != nil {
 				return err
 			}
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
-			dKey := sqlbase.MakeDatabaseNameKey(ctx, settings, desc.Name)
-			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.ID, nil)
+			dKey := sqlbase.MakeDatabaseNameKey(ctx, settings, desc.GetName())
+			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.GetID(), nil)
 		}
 		for i := range tables {
 			table := tables[i].TableDesc()
@@ -464,7 +464,7 @@ func WriteTableDescs(
 			if wrote, ok := wroteDBs[table.ParentID]; ok {
 				// Leave the privileges of the temp system tables as
 				// the default.
-				if descCoverage != tree.AllDescriptors || wrote.Name == restoreTempSystemDB {
+				if descCoverage != tree.AllDescriptors || wrote.GetName() == restoreTempSystemDB {
 					table.Privileges = wrote.GetPrivileges()
 				}
 			} else {
@@ -854,7 +854,7 @@ func isDatabaseEmpty(
 			if _, ok := ignoredTables[t.GetID()]; ok {
 				continue
 			}
-			if t.GetParentID() == dbDesc.ID {
+			if t.GetParentID() == dbDesc.GetID() {
 				return false, nil
 			}
 		}
@@ -885,9 +885,9 @@ func createImportingTables(
 			oldTableIDs = append(oldTableIDs, tableDesc.ID)
 		}
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			if rewrite, ok := details.TableRewrites[dbDesc.ID]; ok {
+			if rewrite, ok := details.TableRewrites[dbDesc.GetID()]; ok {
 				rewriteDesc := sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
-					rewrite.TableID, dbDesc.Name, dbDesc.Privileges)
+					rewrite.TableID, dbDesc.GetName(), dbDesc.Privileges)
 				databases = append(databases, rewriteDesc)
 			}
 		}
@@ -1234,13 +1234,13 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 		// We need to ignore details.TableDescs since we haven't committed the txn that deletes these.
 		isDBEmpty, err = isDatabaseEmpty(ctx, r.execCfg.DB, dbDesc, ignoredTables)
 		if err != nil {
-			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", dbDesc.Name)
+			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", dbDesc.GetName())
 		}
 
 		if isDBEmpty {
-			descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.ID)
+			descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.GetID())
 			b.Del(descKey)
-			b.Del(sqlbase.NewDatabaseKey(dbDesc.Name).Key(keys.SystemSQLCodec))
+			b.Del(sqlbase.NewDatabaseKey(dbDesc.GetName()).Key(keys.SystemSQLCodec))
 		}
 	}
 	if err := txn.Run(ctx, b); err != nil {

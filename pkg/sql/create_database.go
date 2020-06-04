@@ -90,7 +90,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			params.ctx,
 			params.p.txn,
 			EventLogCreateDatabase,
-			int32(desc.ID),
+			int32(desc.GetID()),
 			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			struct {
 				DatabaseName string
@@ -101,7 +101,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			return err
 		}
 		params.extendedEvalCtx.Descs.AddUncommittedDatabase(
-			desc.Name, desc.ID, descs.DBCreated)
+			desc.GetName(), desc.GetID(), descs.DBCreated)
 	}
 	return nil
 }

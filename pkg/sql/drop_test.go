@@ -126,9 +126,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	dbDesc := desc.GetDatabase()
-
-	tbNameKey := sqlbase.NewPublicTableKey(dbDesc.ID, "kv").Key(keys.SystemSQLCodec)
+	dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*desc.GetDatabase())
+	tbNameKey := sqlbase.NewPublicTableKey(dbDesc.GetID(), "kv").Key(keys.SystemSQLCodec)
 	gr, err := kvDB.Get(ctx, tbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -152,14 +151,14 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.GetID(), buf); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := zoneExists(sqlDB, &cfg, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := zoneExists(sqlDB, &cfg, dbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, dbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -188,11 +187,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("table descriptor key still exists after database is dropped")
 	}
 
-	if err := descExists(sqlDB, false, dbDesc.ID); err != nil {
+	if err := descExists(sqlDB, false, dbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 	// Database zone config is removed once all table data and zone configs are removed.
-	if err := zoneExists(sqlDB, &cfg, dbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, dbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -209,7 +208,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	// There are no more namespace entries referencing this database as its
 	// parent.
-	namespaceQuery := fmt.Sprintf(`SELECT * FROM system.namespace WHERE "parentID"  = %d`, dbDesc.ID)
+	namespaceQuery := fmt.Sprintf(`SELECT * FROM system.namespace WHERE "parentID"  = %d`, dbDesc.GetID())
 	sqlRun.CheckQueryResults(t, namespaceQuery, [][]string{})
 
 	// Job still running, waiting for GC.
@@ -309,9 +308,9 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	dbDesc := desc.GetDatabase()
+	dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*desc.GetDatabase())
 
-	tKey := sqlbase.NewPublicTableKey(dbDesc.ID, "kv")
+	tKey := sqlbase.NewPublicTableKey(dbDesc.GetID(), "kv")
 	gr, err := kvDB.Get(ctx, tKey.Key(keys.SystemSQLCodec))
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +325,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 	tbDesc := desc.Table(ts)
 
-	t2Key := sqlbase.NewPublicTableKey(dbDesc.ID, "kv2")
+	t2Key := sqlbase.NewPublicTableKey(dbDesc.GetID(), "kv2")
 	gr2, err := kvDB.Get(ctx, t2Key.Key(keys.SystemSQLCodec))
 	if err != nil {
 		t.Fatal(err)
@@ -346,7 +345,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
-	if _, err := sqltestutils.AddDefaultZoneConfig(sqlDB, dbDesc.ID); err != nil {
+	if _, err := sqltestutils.AddDefaultZoneConfig(sqlDB, dbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -395,7 +394,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
 	def := zonepb.DefaultZoneConfig()
-	if err := zoneExists(sqlDB, &def, dbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &def, dbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -412,7 +411,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tb2Desc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, dbDesc.ID); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, dbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -438,7 +437,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 
 	// Database zone config is removed once all table data and zone configs are removed.
-	if err := zoneExists(sqlDB, nil, dbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, nil, dbDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 }

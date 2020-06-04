@@ -85,7 +85,7 @@ func (dc *Cache) getCachedDatabaseDesc(name string) (*sqlbase.ImmutableDatabaseD
 func (dc *Cache) getCachedDatabaseDescByID(
 	id sqlbase.ID,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
-	if id == sqlbase.SystemDB.ID {
+	if id == keys.SystemDatabaseID {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
 		sysDB := sqlbase.MakeSystemDatabaseDesc()
@@ -103,15 +103,16 @@ func (dc *Cache) getCachedDatabaseDescByID(
 		return nil, err
 	}
 
-	database := desc.GetDatabase()
-	if database == nil {
+	dbDesc := desc.GetDatabase()
+	if dbDesc == nil {
 		return nil, pgerror.Newf(pgcode.WrongObjectType, "[%d] is not a database", id)
 	}
+	database := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
 	if err := database.Validate(); err != nil {
 		return nil, err
 	}
 	// TODO(ajwerner): Set ModificationTime.
-	return sqlbase.NewImmutableDatabaseDescriptor(*database), nil
+	return database, nil
 }
 
 // GetDatabaseDesc returns the database descriptor given its name
@@ -155,7 +156,7 @@ func (dc *Cache) GetDatabaseDesc(
 		}
 	}
 	if desc != nil {
-		dc.setID(name, desc.ID)
+		dc.setID(name, desc.GetID())
 	}
 	return desc, err
 }
@@ -218,8 +219,8 @@ func (dc *Cache) GetCachedDatabaseID(name string) (sqlbase.ID, error) {
 		return id, nil
 	}
 
-	if name == sqlbase.SystemDB.Name {
-		return sqlbase.SystemDB.ID, nil
+	if name == sqlbase.SystemDB.GetName() {
+		return sqlbase.SystemDB.GetID(), nil
 	}
 
 	var nameKey sqlbase.DescriptorKey = sqlbase.NewDatabaseKey(name)

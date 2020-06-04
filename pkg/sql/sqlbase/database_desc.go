@@ -109,6 +109,12 @@ func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
 // NameResolutionResult implements the ObjectDescriptor interface.
 func (desc *ImmutableDatabaseDescriptor) NameResolutionResult() {}
 
+// GetAuditMode is part of the DescriptorProto interface.
+// This is a stub until per-database auditing is enabled.
+func (desc *ImmutableDatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
+	return TableDescriptor_DISABLED
+}
+
 // DescriptorProto wraps a DatabaseDescriptor in a Descriptor.
 func (desc *ImmutableDatabaseDescriptor) DescriptorProto() *Descriptor {
 	return &Descriptor{
@@ -126,12 +132,12 @@ func (desc *MutableDatabaseDescriptor) SetName(name string) {
 // Validate validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
-func (desc *DatabaseDescriptor) Validate() error {
-	if err := validateName(desc.Name, "descriptor"); err != nil {
+func (desc *ImmutableDatabaseDescriptor) Validate() error {
+	if err := validateName(desc.GetName(), "descriptor"); err != nil {
 		return err
 	}
-	if desc.ID == 0 {
-		return fmt.Errorf("invalid database ID %d", desc.ID)
+	if desc.GetID() == 0 {
+		return fmt.Errorf("invalid database ID %d", desc.GetID())
 	}
 
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
@@ -141,10 +147,4 @@ func (desc *DatabaseDescriptor) Validate() error {
 
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
-}
-
-// GetAuditMode is part of the DescriptorProto interface.
-// This is a stub until per-database auditing is enabled.
-func (desc *DatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
 }

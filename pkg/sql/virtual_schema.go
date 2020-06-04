@@ -325,8 +325,8 @@ func (v virtualSchemaEntry) GetObjectByName(
 			return &def, nil
 		}
 		if _, ok := v.allTableNames[name]; ok {
-			return nil, unimplemented.Newf(v.desc.Name+"."+name,
-				"virtual schema table not implemented: %s.%s", v.desc.Name, name)
+			return nil, unimplemented.Newf(v.desc.GetName()+"."+name,
+				"virtual schema table not implemented: %s.%s", v.desc.GetName(), name)
 		}
 		return nil, nil
 	case tree.TypeObject:

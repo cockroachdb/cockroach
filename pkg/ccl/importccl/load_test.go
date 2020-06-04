@@ -88,7 +88,7 @@ func TestGetDescriptorFromDB(t *testing.T) {
 				assert.Equal(t, tc.expectedErr, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, ret)
+				assert.Equal(t, tc.expected, ret.DatabaseDesc())
 			}
 		})
 	}

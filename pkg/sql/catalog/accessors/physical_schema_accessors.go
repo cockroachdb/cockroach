@@ -69,7 +69,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	name string,
 	flags tree.DatabaseLookupFlags,
 ) (desc sqlbase.DatabaseDescriptorInterface, err error) {
-	isSystemDB := name == sqlbase.SystemDB.Name
+	isSystemDB := name == sqlbase.SystemDatabaseName
 	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
 		refuseFurtherLookup, dbID, err := a.tc.GetUncommittedDatabaseID(name, flags.Required)
 		if refuseFurtherLookup || err != nil {
