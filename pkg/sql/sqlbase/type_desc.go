@@ -175,7 +175,7 @@ func (desc *ImmutableTypeDescriptor) MakeTypesT(
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
 	case TypeDescriptor_ENUM:
-		typ := types.MakeEnum(uint32(desc.ID), uint32(desc.ArrayTypeID))
+		typ := types.MakeEnum(uint32(desc.GetID()), uint32(desc.ArrayTypeID))
 		if err := desc.HydrateTypeInfoWithName(typ, name, typeLookup); err != nil {
 			return nil, err
 		}

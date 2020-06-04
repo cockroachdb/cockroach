@@ -1389,7 +1389,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 				for i := range typeDesc.EnumMembers {
 					enumLabels = append(enumLabels, typeDesc.EnumMembers[i].LogicalRepresentation)
 				}
-				name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.Name, sc, db.Name}, 0)
+				name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.GetName(), sc, db.Name}, 0)
 				if err != nil {
 					return err
 				}
@@ -1403,7 +1403,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 					tree.NewDString(db.Name),                  // database_name
 					tree.NewDString(sc),                       // schema_name
 					tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
-					tree.NewDString(typeDesc.Name),            // descriptor_name
+					tree.NewDString(typeDesc.GetName()),       // descriptor_name
 					tree.NewDString(tree.AsString(node)),      // create_statement
 				); err != nil {
 					return err
