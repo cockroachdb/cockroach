@@ -39,11 +39,11 @@ CREATE TABLE level4 (
 query TTT
 EXPLAIN SELECT * FROM level4
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        level4@primary
-·     spans        FULL SCAN
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         level4@primary
+·     spans         FULL SCAN
 
 # The span below ends at the end of the first index of table 53, and is not
 # constraining the value of k2 or k3. This is confusing on first glance because
@@ -52,39 +52,39 @@ scan  ·            ·
 query TTT
 EXPLAIN SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        level4@primary
-·     spans        /2/#/54/1/#/55/1-/2/#/54/1/#/55/2
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         level4@primary
+·     spans         /2/#/54/1/#/55/1-/2/#/54/1/#/55/2
 
 query TTT
 EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        level4@primary
-·     spans        /2/#/54/1/#/55/1/11-/2/#/54/1/#/55/1/30
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         level4@primary
+·     spans         /2/#/54/1/#/55/1/11-/2/#/54/1/#/55/1/30
 
 query TTT
 EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        level4@primary
-·     spans        /2/#/54/1/#/55/1/20/101/#/56/1-/2/#/54/1/#/55/1/20/299/#/56/1/#
-·     parallel     ·
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         level4@primary
+·     spans         /2/#/54/1/#/55/1/20/101/#/56/1-/2/#/54/1/#/55/1/20/299/#/56/1/#
+·     parallel      ·
 
 query TTT
 EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
 ----
-·     distributed  false
-·     vectorized   true
-scan  ·            ·
-·     table        level4@primary
-·     spans        /2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         level4@primary
+·     spans         /2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
 
 # ------------------------------------------------------------------------------
 # Trace of interleaved fetches from interesting interleaved hierarchy.

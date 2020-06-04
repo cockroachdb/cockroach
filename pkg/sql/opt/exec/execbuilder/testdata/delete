@@ -60,59 +60,59 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-tree          field        description
-·             distributed  false
-·             vectorized   false
-delete range  ·            ·
-·             from         unindexed
-·             spans        FULL SCAN
+tree          field         description
+·             distribution  local
+·             vectorized    false
+delete range  ·             ·
+·             from          unindexed
+·             spans         FULL SCAN
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
-·                         distributed  false
-·                         vectorized   false
-count                     ·            ·
- └── delete               ·            ·
-      │                   from         unindexed
-      │                   strategy     deleter
-      │                   auto commit  ·
-      └── render          ·            ·
-           └── limit      ·            ·
-                │         count        10
-                └── scan  ·            ·
-·                         table        unindexed@primary
-·                         spans        FULL SCAN
-·                         filter       v = 7
+·                         distribution  local
+·                         vectorized    false
+count                     ·             ·
+ └── delete               ·             ·
+      │                   from          unindexed
+      │                   strategy      deleter
+      │                   auto commit   ·
+      └── render          ·             ·
+           └── limit      ·             ·
+                │         count         10
+                └── scan  ·             ·
+·                         table         unindexed@primary
+·                         spans         FULL SCAN
+·                         filter        v = 7
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-·                         distributed  false
-·                         vectorized   false
-count                     ·            ·
- └── delete               ·            ·
-      │                   from         unindexed
-      │                   strategy     deleter
-      │                   auto commit  ·
-      └── render          ·            ·
-           └── limit      ·            ·
-                │         count        10
-                └── scan  ·            ·
-·                         table        unindexed@primary
-·                         spans        FULL SCAN
-·                         filter       v = 5
+·                         distribution  local
+·                         vectorized    false
+count                     ·             ·
+ └── delete               ·             ·
+      │                   from          unindexed
+      │                   strategy      deleter
+      │                   auto commit   ·
+      └── render          ·             ·
+           └── limit      ·             ·
+                │         count         10
+                └── scan  ·             ·
+·                         table         unindexed@primary
+·                         spans         FULL SCAN
+·                         filter        v = 5
 
 # Check fast DELETE.
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE k > 0
 ----
-·             distributed  false
-·             vectorized   false
-delete range  ·            ·
-·             from         unindexed
-·             spans        /1-
+·             distribution  local
+·             vectorized    false
+delete range  ·             ·
+·             from          unindexed
+·             spans         /1-
 
 # Check fast DELETE with reverse scans (not supported by optimizer).
 query error DELETE statement requires LIMIT when ORDER BY is used
@@ -122,63 +122,63 @@ EXPLAIN DELETE FROM unindexed WHERE true ORDER BY k DESC
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
 ----
-·               distributed  false
-·               vectorized   false
-count           ·            ·
- └── delete     ·            ·
-      │         from         unindexed
-      │         strategy     deleter
-      │         auto commit  ·
-      └── scan  ·            ·
-·               table        unindexed@primary
-·               spans        /1-
-·               limit        1
+·               distribution  local
+·               vectorized    false
+count           ·             ·
+ └── delete     ·             ·
+      │         from          unindexed
+      │         strategy      deleter
+      │         auto commit   ·
+      └── scan  ·             ·
+·               table         unindexed@primary
+·               spans         /1-
+·               limit         1
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-·               distributed  false
-·               vectorized   false
-count           ·            ·
- └── delete     ·            ·
-      │         from         indexed
-      │         strategy     deleter
-      │         auto commit  ·
-      └── scan  ·            ·
-·               table        indexed@indexed_value_idx
-·               spans        /5-/6
-·               limit        10
+·               distribution  local
+·               vectorized    false
+count           ·             ·
+ └── delete     ·             ·
+      │         from          indexed
+      │         strategy      deleter
+      │         auto commit   ·
+      └── scan  ·             ·
+·               table         indexed@indexed_value_idx
+·               spans         /5-/6
+·               limit         10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-·               distributed  false
-·               vectorized   false
-count           ·            ·
- └── delete     ·            ·
-      │         from         indexed
-      │         strategy     deleter
-      │         auto commit  ·
-      └── scan  ·            ·
-·               table        indexed@indexed_value_idx
-·               spans        LIMITED SCAN
-·               limit        10
+·               distribution  local
+·               vectorized    false
+count           ·             ·
+ └── delete     ·             ·
+      │         from          indexed
+      │         strategy      deleter
+      │         auto commit   ·
+      └── scan  ·             ·
+·               table         indexed@indexed_value_idx
+·               spans         LIMITED SCAN
+·               limit         10
 
 # TODO(andyk): Prune columns so that index-join is not necessary.
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-·               distributed  false
-·               vectorized   false
-run             ·            ·
- └── delete     ·            ·
-      │         from         indexed
-      │         strategy     deleter
-      │         auto commit  ·
-      └── scan  ·            ·
-·               table        indexed@indexed_value_idx
-·               spans        /5-/6
-·               limit        10
+·               distribution  local
+·               vectorized    false
+run             ·             ·
+ └── delete     ·             ·
+      │         from          indexed
+      │         strategy      deleter
+      │         auto commit   ·
+      └── scan  ·             ·
+·               table         indexed@indexed_value_idx
+·               spans         /5-/6
+·               limit         10
 
 # Ensure that index hints in DELETE statements force the choice of a specific index
 # as described in #38799.
@@ -188,16 +188,16 @@ CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b))
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t38799@foo
 ----
-·               distributed  false       ·       ·
-·               vectorized   false       ·       ·
-count           ·            ·           ()      ·
- └── delete     ·            ·           ()      ·
-      │         from         t38799      ·       ·
-      │         strategy     deleter     ·       ·
-      │         auto commit  ·           ·       ·
-      └── scan  ·            ·           (a, b)  ·
-·               table        t38799@foo  ·       ·
-·               spans        FULL SCAN   ·       ·
+·               distribution  local       ·       ·
+·               vectorized    false       ·       ·
+count           ·             ·           ()      ·
+ └── delete     ·             ·           ()      ·
+      │         from          t38799      ·       ·
+      │         strategy      deleter     ·       ·
+      │         auto commit   ·           ·       ·
+      └── scan  ·             ·           (a, b)  ·
+·               table         t38799@foo  ·       ·
+·               spans         FULL SCAN   ·       ·
 
 # Tracing tests for fast delete.
 statement ok
@@ -245,11 +245,11 @@ CREATE TABLE parent (id INT PRIMARY KEY)
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distributed  false
-·             vectorized   false
-delete range  ·            ·
-·             from         parent
-·             spans        /11-
+·             distribution  local
+·             vectorized    false
+delete range  ·             ·
+·             from          parent
+·             spans         /11-
 
 statement ok
 CREATE TABLE child (
@@ -263,27 +263,27 @@ CREATE TABLE child (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distributed  false
-·             vectorized   false
-delete range  ·            ·
-·             from         parent
-·             spans        /11-
+·             distribution  local
+·             vectorized    false
+delete range  ·             ·
+·             from          parent
+·             spans         /11-
 
 # Delete range should not be used when deleting from the child.
 query TTT
 EXPLAIN DELETE FROM child WHERE id > 10
 ----
-·               distributed  false
-·               vectorized   false
-count           ·            ·
- └── delete     ·            ·
-      │         from         child
-      │         strategy     deleter
-      │         auto commit  ·
-      └── scan  ·            ·
-·               table        child@primary
-·               spans        FULL SCAN
-·               filter       id > 10
+·               distribution  local
+·               vectorized    false
+count           ·             ·
+ └── delete     ·             ·
+      │         from          child
+      │         strategy      deleter
+      │         auto commit   ·
+      └── scan  ·             ·
+·               table         child@primary
+·               spans         FULL SCAN
+·               filter        id > 10
 
 statement ok
 CREATE TABLE sibling (
@@ -297,11 +297,11 @@ CREATE TABLE sibling (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distributed  false
-·             vectorized   false
-delete range  ·            ·
-·             from         parent
-·             spans        /11-
+·             distribution  local
+·             vectorized    false
+delete range  ·             ·
+·             from          parent
+·             spans         /11-
 
 statement ok
 CREATE TABLE grandchild (
@@ -316,11 +316,11 @@ CREATE TABLE grandchild (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distributed  false
-·             vectorized   false
-delete range  ·            ·
-·             from         parent
-·             spans        /11-
+·             distribution  local
+·             vectorized    false
+delete range  ·             ·
+·             from          parent
+·             spans         /11-
 
 statement ok
 CREATE TABLE external_ref (
@@ -334,24 +334,24 @@ CREATE TABLE external_ref (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                           distributed  false
-·                           vectorized   false
-root                        ·            ·
- ├── count                  ·            ·
- │    └── delete            ·            ·
- │         │                from         parent
- │         │                strategy     deleter
- │         └── buffer node  ·            ·
- │              │           label        buffer 1
- │              └── scan    ·            ·
- │                          table        parent@primary
- │                          spans        /11-
- ├── fk-cascade             ·            ·
- │                          fk           fk_pid_ref_parent
- │                          input        buffer 1
- └── fk-cascade             ·            ·
-·                           fk           fk_pid_ref_parent
-·                           input        buffer 1
+·                           distribution  local
+·                           vectorized    false
+root                        ·             ·
+ ├── count                  ·             ·
+ │    └── delete            ·             ·
+ │         │                from          parent
+ │         │                strategy      deleter
+ │         └── buffer node  ·             ·
+ │              │           label         buffer 1
+ │              └── scan    ·             ·
+ │                          table         parent@primary
+ │                          spans         /11-
+ ├── fk-cascade             ·             ·
+ │                          fk            fk_pid_ref_parent
+ │                          input         buffer 1
+ └── fk-cascade             ·             ·
+·                           fk            fk_pid_ref_parent
+·                           input         buffer 1
 
 statement ok
 DROP TABLE external_ref
@@ -370,7 +370,7 @@ CREATE TABLE child_with_index (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -420,7 +420,7 @@ CREATE TABLE child_without_cascade (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -469,24 +469,24 @@ CREATE TABLE child_without_fk (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                           distributed  false
-·                           vectorized   false
-root                        ·            ·
- ├── count                  ·            ·
- │    └── delete            ·            ·
- │         │                from         parent
- │         │                strategy     deleter
- │         └── buffer node  ·            ·
- │              │           label        buffer 1
- │              └── scan    ·            ·
- │                          table        parent@primary
- │                          spans        /11-
- ├── fk-cascade             ·            ·
- │                          fk           fk_pid_ref_parent
- │                          input        buffer 1
- └── fk-cascade             ·            ·
-·                           fk           fk_pid_ref_parent
-·                           input        buffer 1
+·                           distribution  local
+·                           vectorized    false
+root                        ·             ·
+ ├── count                  ·             ·
+ │    └── delete            ·             ·
+ │         │                from          parent
+ │         │                strategy      deleter
+ │         └── buffer node  ·             ·
+ │              │           label         buffer 1
+ │              └── scan    ·             ·
+ │                          table         parent@primary
+ │                          spans         /11-
+ ├── fk-cascade             ·             ·
+ │                          fk            fk_pid_ref_parent
+ │                          input         buffer 1
+ └── fk-cascade             ·             ·
+·                           fk            fk_pid_ref_parent
+·                           input         buffer 1
 
 statement ok
 DROP TABLE child_without_fk
@@ -508,18 +508,18 @@ CREATE TABLE abc (
 query TTT
 EXPLAIN DELETE FROM ab WHERE a = 1
 ----
-·                           distributed  false
-·                           vectorized   false
-root                        ·            ·
- ├── count                  ·            ·
- │    └── delete            ·            ·
- │         │                from         ab
- │         │                strategy     deleter
- │         └── buffer node  ·            ·
- │              │           label        buffer 1
- │              └── scan    ·            ·
- │                          table        ab@primary
- │                          spans        /1-/2
- └── fk-cascade             ·            ·
-·                           fk           fk_b_ref_ab
-·                           input        buffer 1
+·                           distribution  local
+·                           vectorized    false
+root                        ·             ·
+ ├── count                  ·             ·
+ │    └── delete            ·             ·
+ │         │                from          ab
+ │         │                strategy      deleter
+ │         └── buffer node  ·             ·
+ │              │           label         buffer 1
+ │              └── scan    ·             ·
+ │                          table         ab@primary
+ │                          spans         /1-/2
+ └── fk-cascade             ·             ·
+·                           fk            fk_b_ref_ab
+·                           input         buffer 1

@@ -14,7 +14,7 @@ test.public.my_spatial_table.geom1 SRID:4326 TYPE:POINT DIMS:2
 query TTTTT
 EXPLAIN (VERBOSE) SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
 ----
-·                           distributed    false                                                                               ·                    ·
+·                           distribution   local                                                                               ·                    ·
 ·                           vectorized     false                                                                               ·                    ·
 root                        ·              ·                                                                                   (addgeometrycolumn)  ·
  ├── values                 ·              ·                                                                                   (addgeometrycolumn)  ·
@@ -168,7 +168,7 @@ EXPLAIN (VERBOSE) SELECT
   AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
 FROM other_table
 ----
-·                           distributed   false                                                               ·                                          ·
+·                           distribution  local                                                               ·                                          ·
 ·                           vectorized    true                                                                ·                                          ·
 root                        ·             ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
  ├── render                 ·             ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·

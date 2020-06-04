@@ -27,61 +27,61 @@ CREATE TABLE abc (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) x, y, z FROM xyz
 ----
-·          distributed  false        ·          ·
-·          vectorized   true         ·          ·
-distinct   ·            ·            (x, y, z)  ·
- │         distinct on  x, y, z      ·          ·
- └── scan  ·            ·            (x, y, z)  ·
-·          table        xyz@primary  ·          ·
-·          spans        FULL SCAN    ·          ·
+·          distribution  local        ·          ·
+·          vectorized    true         ·          ·
+distinct   ·             ·            (x, y, z)  ·
+ │         distinct on   x, y, z      ·          ·
+ └── scan  ·             ·            (x, y, z)  ·
+·          table         xyz@primary  ·          ·
+·          spans         FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (z, x, y) x FROM xyz
 ----
-·               distributed  false        ·          ·
-·               vectorized   true         ·          ·
-render          ·            ·            (x)        ·
- │              render 0     x            ·          ·
- └── distinct   ·            ·            (x, y, z)  ·
-      │         distinct on  x, y, z      ·          ·
-      └── scan  ·            ·            (x, y, z)  ·
-·               table        xyz@primary  ·          ·
-·               spans        FULL SCAN    ·          ·
+·               distribution  local        ·          ·
+·               vectorized    true         ·          ·
+render          ·             ·            (x)        ·
+ │              render 0      x            ·          ·
+ └── distinct   ·             ·            (x, y, z)  ·
+      │         distinct on   x, y, z      ·          ·
+      └── scan  ·             ·            (x, y, z)  ·
+·               table         xyz@primary  ·          ·
+·               spans         FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
 ----
-·          distributed  false        ·          ·
-·          vectorized   true         ·          ·
-render     ·            ·            (a, c, b)  ·
- │         render 0     a            ·          ·
- │         render 1     c            ·          ·
- │         render 2     b            ·          ·
- └── scan  ·            ·            (a, b, c)  ·
-·          table        abc@primary  ·          ·
-·          spans        FULL SCAN    ·          ·
+·          distribution  local        ·          ·
+·          vectorized    true         ·          ·
+render     ·             ·            (a, c, b)  ·
+ │         render 0      a            ·          ·
+ │         render 1      c            ·          ·
+ │         render 2      b            ·          ·
+ └── scan  ·             ·            (a, b, c)  ·
+·          table         abc@primary  ·          ·
+·          spans         FULL SCAN    ·          ·
 
 # Distinct node should be elided since we have a strong key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
 ----
-·     distributed  false        ·    ·
-·     vectorized   true         ·    ·
-scan  ·            ·            (a)  ·
-·     table        abc@primary  ·    ·
-·     spans        FULL SCAN    ·    ·
+·     distribution  local        ·    ·
+·     vectorized    true         ·    ·
+scan  ·             ·            (a)  ·
+·     table         abc@primary  ·    ·
+·     spans         FULL SCAN    ·    ·
 
 # Distinct node should be elided since we have a strong key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
-·          distributed  false        ·    ·
-·          vectorized   true         ·    ·
-sort       ·            ·            (b)  +b
- │         order        +b           ·    ·
- └── scan  ·            ·            (b)  ·
-·          table        abc@primary  ·    ·
-·          spans        FULL SCAN    ·    ·
+·          distribution  local        ·    ·
+·          vectorized    true         ·    ·
+sort       ·             ·            (b)  +b
+ │         order         +b           ·    ·
+ └── scan  ·             ·            (b)  ·
+·          table         abc@primary  ·    ·
+·          spans         FULL SCAN    ·    ·
 
 
 # 2/3 columns
@@ -89,86 +89,86 @@ sort       ·            ·            (b)  +b
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y) y, x FROM xyz
 ----
-·               distributed  false        ·       ·
-·               vectorized   true         ·       ·
-render          ·            ·            (y, x)  ·
- │              render 0     y            ·       ·
- │              render 1     x            ·       ·
- └── distinct   ·            ·            (x, y)  ·
-      │         distinct on  x, y         ·       ·
-      └── scan  ·            ·            (x, y)  ·
-·               table        xyz@primary  ·       ·
-·               spans        FULL SCAN    ·       ·
+·               distribution  local        ·       ·
+·               vectorized    true         ·       ·
+render          ·             ·            (y, x)  ·
+ │              render 0      y            ·       ·
+ │              render 1      x            ·       ·
+ └── distinct   ·             ·            (x, y)  ·
+      │         distinct on   x, y         ·       ·
+      └── scan  ·             ·            (x, y)  ·
+·               table         xyz@primary  ·       ·
+·               spans         FULL SCAN    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x) x FROM xyz
 ----
-·               distributed  false        ·       ·
-·               vectorized   true         ·       ·
-render          ·            ·            (x)     ·
- │              render 0     x            ·       ·
- └── distinct   ·            ·            (x, y)  ·
-      │         distinct on  x, y         ·       ·
-      └── scan  ·            ·            (x, y)  ·
-·               table        xyz@primary  ·       ·
-·               spans        FULL SCAN    ·       ·
+·               distribution  local        ·       ·
+·               vectorized    true         ·       ·
+render          ·             ·            (x)     ·
+ │              render 0      x            ·       ·
+ └── distinct   ·             ·            (x, y)  ·
+      │         distinct on   x, y         ·       ·
+      └── scan  ·             ·            (x, y)  ·
+·               table         xyz@primary  ·       ·
+·               spans         FULL SCAN    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x, x, y, x) x, y FROM xyz
 ----
-·          distributed  false        ·       ·
-·          vectorized   true         ·       ·
-distinct   ·            ·            (x, y)  ·
- │         distinct on  x, y         ·       ·
- └── scan  ·            ·            (x, y)  ·
-·          table        xyz@primary  ·       ·
-·          spans        FULL SCAN    ·       ·
+·          distribution  local        ·       ·
+·          vectorized    true         ·       ·
+distinct   ·             ·            (x, y)  ·
+ │         distinct on   x, y         ·       ·
+ └── scan  ·             ·            (x, y)  ·
+·          table         xyz@primary  ·       ·
+·          spans         FULL SCAN    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
 ----
-·               distributed  false        ·         ·
-·               vectorized   true         ·         ·
-render          ·            ·            (pk1, x)  ·
- │              render 0     pk1          ·         ·
- │              render 1     x            ·         ·
- └── distinct   ·            ·            (x, pk1)  +pk1
-      │         distinct on  x, pk1       ·         ·
-      │         order key    pk1          ·         ·
-      └── scan  ·            ·            (x, pk1)  +pk1
-·               table        xyz@primary  ·         ·
-·               spans        FULL SCAN    ·         ·
+·               distribution  local        ·         ·
+·               vectorized    true         ·         ·
+render          ·             ·            (pk1, x)  ·
+ │              render 0      pk1          ·         ·
+ │              render 1      x            ·         ·
+ └── distinct   ·             ·            (x, pk1)  +pk1
+      │         distinct on   x, pk1       ·         ·
+      │         order key     pk1          ·         ·
+      └── scan  ·             ·            (x, pk1)  +pk1
+·               table         xyz@primary  ·         ·
+·               spans         FULL SCAN    ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
 ----
-·               distributed  false        ·          ·
-·               vectorized   true         ·          ·
-render          ·            ·            (a, b)     ·
- │              render 0     a            ·          ·
- │              render 1     b            ·          ·
- └── distinct   ·            ·            (a, b, c)  ·
-      │         distinct on  a, c         ·          ·
-      │         order key    a            ·          ·
-      └── scan  ·            ·            (a, b, c)  +a
-·               table        abc@primary  ·          ·
-·               spans        FULL SCAN    ·          ·
+·               distribution  local        ·          ·
+·               vectorized    true         ·          ·
+render          ·             ·            (a, b)     ·
+ │              render 0      a            ·          ·
+ │              render 1      b            ·          ·
+ └── distinct   ·             ·            (a, b, c)  ·
+      │         distinct on   a, c         ·          ·
+      │         order key     a            ·          ·
+      └── scan  ·             ·            (a, b, c)  +a
+·               table         abc@primary  ·          ·
+·               spans         FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a) b, c, a FROM abc
 ----
-·               distributed  false        ·          ·
-·               vectorized   true         ·          ·
-render          ·            ·            (b, c, a)  ·
- │              render 0     b            ·          ·
- │              render 1     c            ·          ·
- │              render 2     a            ·          ·
- └── distinct   ·            ·            (a, b, c)  ·
-      │         distinct on  a, c         ·          ·
-      │         order key    a            ·          ·
-      └── scan  ·            ·            (a, b, c)  +a
-·               table        abc@primary  ·          ·
-·               spans        FULL SCAN    ·          ·
+·               distribution  local        ·          ·
+·               vectorized    true         ·          ·
+render          ·             ·            (b, c, a)  ·
+ │              render 0      b            ·          ·
+ │              render 1      c            ·          ·
+ │              render 2      a            ·          ·
+ └── distinct   ·             ·            (a, b, c)  ·
+      │         distinct on   a, c         ·          ·
+      │         order key     a            ·          ·
+      └── scan  ·             ·            (a, b, c)  +a
+·               table         abc@primary  ·          ·
+·               spans         FULL SCAN    ·          ·
 
 
 # 1/3 columns
@@ -178,21 +178,21 @@ render          ·            ·            (b, c, a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
 ----
-·          distributed  false        ·           ·
-·          vectorized   true         ·           ·
-distinct   ·            ·            (pk1, pk2)  ·
- │         distinct on  pk1          ·           ·
- │         order key    pk1          ·           ·
- └── scan  ·            ·            (pk1, pk2)  +pk1
-·          table        xyz@primary  ·           ·
-·          spans        FULL SCAN    ·           ·
+·          distribution  local        ·           ·
+·          vectorized    true         ·           ·
+distinct   ·             ·            (pk1, pk2)  ·
+ │         distinct on   pk1          ·           ·
+ │         order key     pk1          ·           ·
+ └── scan  ·             ·            (pk1, pk2)  +pk1
+·          table         xyz@primary  ·           ·
+·          spans         FULL SCAN    ·           ·
 
 # Ensure the distinctNode advertises an a+ ordering.
 # TODO(radu): set the ordering in the render node to fix this.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-·                    distributed      false        ·          ·
+·                    distribution     local        ·          ·
 ·                    vectorized       true         ·          ·
 render               ·                ·            (a, c)     +a
  │                   render 0         a            ·          ·
@@ -214,51 +214,51 @@ render               ·                ·            (a, c)     +a
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x FROM xyz ORDER BY x DESC
 ----
-·               distributed  false        ·    ·
-·               vectorized   true         ·    ·
-sort            ·            ·            (x)  -x
- │              order        -x           ·    ·
- └── distinct   ·            ·            (x)  ·
-      │         distinct on  x            ·    ·
-      └── scan  ·            ·            (x)  ·
-·               table        xyz@primary  ·    ·
-·               spans        FULL SCAN    ·    ·
+·               distribution  local        ·    ·
+·               vectorized    true         ·    ·
+sort            ·             ·            (x)  -x
+ │              order         -x           ·    ·
+ └── distinct   ·             ·            (x)  ·
+      │         distinct on   x            ·    ·
+      └── scan  ·             ·            (x)  ·
+·               table         xyz@primary  ·    ·
+·               spans         FULL SCAN    ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
-·                    distributed  false        ·          ·
-·                    vectorized   true         ·          ·
-render               ·            ·            (y, z, x)  ·
- │                   render 0     y            ·          ·
- │                   render 1     z            ·          ·
- │                   render 2     x            ·          ·
- └── distinct        ·            ·            (x, y, z)  +z
-      │              distinct on  x, z         ·          ·
-      │              order key    z            ·          ·
-      └── sort       ·            ·            (x, y, z)  +z
-           │         order        +z           ·          ·
-           └── scan  ·            ·            (x, y, z)  ·
-·                    table        xyz@primary  ·          ·
-·                    spans        FULL SCAN    ·          ·
+·                    distribution  local        ·          ·
+·                    vectorized    true         ·          ·
+render               ·             ·            (y, z, x)  ·
+ │                   render 0      y            ·          ·
+ │                   render 1      z            ·          ·
+ │                   render 2      x            ·          ·
+ └── distinct        ·             ·            (x, y, z)  +z
+      │              distinct on   x, z         ·          ·
+      │              order key     z            ·          ·
+      └── sort       ·             ·            (x, y, z)  +z
+           │         order         +z           ·          ·
+           └── scan  ·             ·            (x, y, z)  ·
+·                    table         xyz@primary  ·          ·
+·                    spans         FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
 ----
-·                    distributed  false        ·          ·
-·                    vectorized   true         ·          ·
-render               ·            ·            (y, z, x)  ·
- │                   render 0     y            ·          ·
- │                   render 1     z            ·          ·
- │                   render 2     x            ·          ·
- └── distinct        ·            ·            (x, y, z)  +x
-      │              distinct on  x            ·          ·
-      │              order key    x            ·          ·
-      └── sort       ·            ·            (x, y, z)  +x,-z,-y
-           │         order        +x,-z,-y     ·          ·
-           └── scan  ·            ·            (x, y, z)  ·
-·                    table        xyz@primary  ·          ·
-·                    spans        FULL SCAN    ·          ·
+·                    distribution  local        ·          ·
+·                    vectorized    true         ·          ·
+render               ·             ·            (y, z, x)  ·
+ │                   render 0      y            ·          ·
+ │                   render 1      z            ·          ·
+ │                   render 2      x            ·          ·
+ └── distinct        ·             ·            (x, y, z)  +x
+      │              distinct on   x            ·          ·
+      │              order key     x            ·          ·
+      └── sort       ·             ·            (x, y, z)  +x,-z,-y
+           │         order         +x,-z,-y     ·          ·
+           └── scan  ·             ·            (x, y, z)  ·
+·                    table         xyz@primary  ·          ·
+·                    spans         FULL SCAN    ·          ·
 
 #####################
 # With aggregations #
@@ -267,27 +267,27 @@ render               ·            ·            (y, z, x)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
-·          distributed  false        ·      ·
-·          vectorized   true         ·      ·
-group      ·            ·            (max)  ·
- │         aggregate 0  max(x)       ·      ·
- │         scalar       ·            ·      ·
- └── scan  ·            ·            (x)    ·
-·          table        xyz@primary  ·      ·
-·          spans        FULL SCAN    ·      ·
+·          distribution  local        ·      ·
+·          vectorized    true         ·      ·
+group      ·             ·            (max)  ·
+ │         aggregate 0   max(x)       ·      ·
+ │         scalar        ·            ·      ·
+ └── scan  ·             ·            (x)    ·
+·          table         xyz@primary  ·      ·
+·          spans         FULL SCAN    ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
-·             distributed  false            ·      ·
-·             vectorized   true             ·      ·
-group         ·            ·                (max)  ·
- │            aggregate 0  any_not_null(a)  ·      ·
- │            scalar       ·                ·      ·
- └── revscan  ·            ·                (a)    ·
-·             table        abc@primary      ·      ·
-·             spans        LIMITED SCAN     ·      ·
-·             limit        1                ·      ·
+·             distribution  local            ·      ·
+·             vectorized    true             ·      ·
+group         ·             ·                (max)  ·
+ │            aggregate 0   any_not_null(a)  ·      ·
+ │            scalar        ·                ·      ·
+ └── revscan  ·             ·                (a)    ·
+·             table         abc@primary      ·      ·
+·             spans         LIMITED SCAN     ·      ·
+·             limit         1                ·      ·
 
 #################
 # With GROUP BY #
@@ -297,36 +297,36 @@ group         ·            ·                (max)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
-·               distributed  false        ·         ·
-·               vectorized   true         ·         ·
-render          ·            ·            (min)     ·
- │              render 0     min          ·         ·
- └── group      ·            ·            (y, min)  ·
-      │         aggregate 0  y            ·         ·
-      │         aggregate 1  min(x)       ·         ·
-      │         group by     y            ·         ·
-      └── scan  ·            ·            (x, y)    ·
-·               table        xyz@primary  ·         ·
-·               spans        FULL SCAN    ·         ·
+·               distribution  local        ·         ·
+·               vectorized    true         ·         ·
+render          ·             ·            (min)     ·
+ │              render 0      min          ·         ·
+ └── group      ·             ·            (y, min)  ·
+      │         aggregate 0   y            ·         ·
+      │         aggregate 1   min(x)       ·         ·
+      │         group by      y            ·         ·
+      └── scan  ·             ·            (x, y)    ·
+·               table         xyz@primary  ·         ·
+·               spans         FULL SCAN    ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
-·                         distributed  false        ·         ·
-·                         vectorized   true         ·         ·
-render                    ·            ·            (min)     ·
- │                        render 0     min          ·         ·
- └── limit                ·            ·            (y, min)  ·
-      │                   count        1            ·         ·
-      └── filter          ·            ·            (y, min)  ·
-           │              filter       min = 1      ·         ·
-           └── group      ·            ·            (y, min)  ·
-                │         aggregate 0  y            ·         ·
-                │         aggregate 1  min(x)       ·         ·
-                │         group by     y            ·         ·
-                └── scan  ·            ·            (x, y)    ·
-·                         table        xyz@primary  ·         ·
-·                         spans        FULL SCAN    ·         ·
+·                         distribution  local        ·         ·
+·                         vectorized    true         ·         ·
+render                    ·             ·            (min)     ·
+ │                        render 0      min          ·         ·
+ └── limit                ·             ·            (y, min)  ·
+      │                   count         1            ·         ·
+      └── filter          ·             ·            (y, min)  ·
+           │              filter        min = 1      ·         ·
+           └── group      ·             ·            (y, min)  ·
+                │         aggregate 0   y            ·         ·
+                │         aggregate 1   min(x)       ·         ·
+                │         group by      y            ·         ·
+                └── scan  ·             ·            (x, y)    ·
+·                         table         xyz@primary  ·         ·
+·                         spans         FULL SCAN    ·         ·
 
 #########################
 # With window functions #
@@ -335,18 +335,18 @@ render                    ·            ·            (min)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
-·                    distributed  false                                                                  ·                ·
-·                    vectorized   true                                                                   ·                ·
-render               ·            ·                                                                      (y)              ·
- │                   render 0     y                                                                      ·                ·
- └── distinct        ·            ·                                                                      (y, row_number)  ·
-      │              distinct on  row_number                                                             ·                ·
-      └── window     ·            ·                                                                      (y, row_number)  ·
-           │         window 0     row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
-           │         render 1     row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
-           └── scan  ·            ·                                                                      (y)              ·
-·                    table        xyz@primary                                                            ·                ·
-·                    spans        FULL SCAN                                                              ·                ·
+·                    distribution  local                                                                  ·                ·
+·                    vectorized    true                                                                   ·                ·
+render               ·             ·                                                                      (y)              ·
+ │                   render 0      y                                                                      ·                ·
+ └── distinct        ·             ·                                                                      (y, row_number)  ·
+      │              distinct on   row_number                                                             ·                ·
+      └── window     ·             ·                                                                      (y, row_number)  ·
+           │         window 0      row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
+           │         render 1      row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
+           └── scan  ·             ·                                                                      (y)              ·
+·                    table         xyz@primary                                                            ·                ·
+·                    spans         FULL SCAN                                                              ·                ·
 
 ###########################
 # With ordinal references #
@@ -355,23 +355,23 @@ render               ·            ·                                           
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1) x, y, z FROM xyz
 ----
-·          distributed  false        ·          ·
-·          vectorized   true         ·          ·
-distinct   ·            ·            (x, y, z)  ·
- │         distinct on  x            ·          ·
- └── scan  ·            ·            (x, y, z)  ·
-·          table        xyz@primary  ·          ·
-·          spans        FULL SCAN    ·          ·
+·          distribution  local        ·          ·
+·          vectorized    true         ·          ·
+distinct   ·             ·            (x, y, z)  ·
+ │         distinct on   x            ·          ·
+ └── scan  ·             ·            (x, y, z)  ·
+·          table         xyz@primary  ·          ·
+·          spans         FULL SCAN    ·          ·
 
 # Distinct node elided because of strong key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
 ----
-·     distributed  false        ·          ·
-·     vectorized   true         ·          ·
-scan  ·            ·            (a, b, c)  ·
-·     table        abc@primary  ·          ·
-·     spans        FULL SCAN    ·          ·
+·     distribution  local        ·          ·
+·     vectorized    true         ·          ·
+scan  ·             ·            (a, b, c)  ·
+·     table         abc@primary  ·          ·
+·     spans         FULL SCAN    ·          ·
 
 #########################
 # With alias references #
@@ -381,25 +381,25 @@ scan  ·            ·            (a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz
 ----
-·          distributed  false        ·       ·
-·          vectorized   true         ·       ·
-distinct   ·            ·            (y, x)  ·
- │         distinct on  y            ·       ·
- └── scan  ·            ·            (y, x)  ·
-·          table        xyz@primary  ·       ·
-·          spans        FULL SCAN    ·       ·
+·          distribution  local        ·       ·
+·          vectorized    true         ·       ·
+distinct   ·             ·            (y, x)  ·
+ │         distinct on   y            ·       ·
+ └── scan  ·             ·            (y, x)  ·
+·          table         xyz@primary  ·       ·
+·          spans         FULL SCAN    ·       ·
 
 # Ignores the alias.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(x) x AS y FROM xyz
 ----
-·          distributed  false        ·    ·
-·          vectorized   true         ·    ·
-distinct   ·            ·            (y)  ·
- │         distinct on  y            ·    ·
- └── scan  ·            ·            (y)  ·
-·          table        xyz@primary  ·    ·
-·          spans        FULL SCAN    ·    ·
+·          distribution  local        ·    ·
+·          vectorized    true         ·    ·
+distinct   ·             ·            (y)  ·
+ │         distinct on   y            ·    ·
+ └── scan  ·             ·            (y)  ·
+·          table         xyz@primary  ·    ·
+·          spans         FULL SCAN    ·    ·
 
 ##################################
 # With nested parentheses/tuples #
@@ -408,13 +408,13 @@ distinct   ·            ·            (y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(((x)), (x, y)) x, y FROM xyz
 ----
-·          distributed  false        ·       ·
-·          vectorized   true         ·       ·
-distinct   ·            ·            (x, y)  ·
- │         distinct on  x, y         ·       ·
- └── scan  ·            ·            (x, y)  ·
-·          table        xyz@primary  ·       ·
-·          spans        FULL SCAN    ·       ·
+·          distribution  local        ·       ·
+·          vectorized    true         ·       ·
+distinct   ·             ·            (x, y)  ·
+ │         distinct on   x, y         ·       ·
+ └── scan  ·             ·            (x, y)  ·
+·          table         xyz@primary  ·       ·
+·          spans         FULL SCAN    ·       ·
 
 ################################
 # Hybrid PK and non-PK queries #
@@ -424,59 +424,59 @@ distinct   ·            ·            (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
 ----
-·          distributed  false        ·          ·
-·          vectorized   true         ·          ·
-sort       ·            ·            (x, y, z)  +x,+y
- │         order        +x,+y        ·          ·
- └── scan  ·            ·            (x, y, z)  ·
-·          table        xyz@primary  ·          ·
-·          spans        FULL SCAN    ·          ·
+·          distribution  local        ·          ·
+·          vectorized    true         ·          ·
+sort       ·             ·            (x, y, z)  +x,+y
+ │         order         +x,+y        ·          ·
+ └── scan  ·             ·            (x, y, z)  ·
+·          table         xyz@primary  ·          ·
+·          spans         FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
-·                    distributed  false        ·               ·
-·                    vectorized   true         ·               ·
-render               ·            ·            (pk1)           ·
- │                   render 0     pk1          ·               ·
- └── distinct        ·            ·            (x, y, z, pk1)  +x
-      │              distinct on  x, y, z      ·               ·
-      │              order key    x            ·               ·
-      └── sort       ·            ·            (x, y, z, pk1)  +x
-           │         order        +x           ·               ·
-           └── scan  ·            ·            (x, y, z, pk1)  ·
-·                    table        xyz@primary  ·               ·
-·                    spans        FULL SCAN    ·               ·
+·                    distribution  local        ·               ·
+·                    vectorized    true         ·               ·
+render               ·             ·            (pk1)           ·
+ │                   render 0      pk1          ·               ·
+ └── distinct        ·             ·            (x, y, z, pk1)  +x
+      │              distinct on   x, y, z      ·               ·
+      │              order key     x            ·               ·
+      └── sort       ·             ·            (x, y, z, pk1)  +x
+           │         order         +x           ·               ·
+           └── scan  ·             ·            (x, y, z, pk1)  ·
+·                    table         xyz@primary  ·               ·
+·                    spans         FULL SCAN    ·               ·
 
 # Regression tests for #34112: distinct on constant column.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
 ----
-·               distributed  false        ·       ·
-·               vectorized   true         ·       ·
-limit           ·            ·            (x, y)  +y
- │              count        1            ·       ·
- └── sort       ·            ·            (x, y)  +y
-      │         order        +y           ·       ·
-      └── scan  ·            ·            (x, y)  ·
-·               table        xyz@primary  ·       ·
-·               spans        FULL SCAN    ·       ·
-·               filter       x = 1        ·       ·
+·               distribution  local        ·       ·
+·               vectorized    true         ·       ·
+limit           ·             ·            (x, y)  +y
+ │              count         1            ·       ·
+ └── sort       ·             ·            (x, y)  +y
+      │         order         +y           ·       ·
+      └── scan  ·             ·            (x, y)  ·
+·               table         xyz@primary  ·       ·
+·               spans         FULL SCAN    ·       ·
+·               filter        x = 1        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
 ----
-·                         distributed  false         ·        ·
-·                         vectorized   true          ·        ·
-group                     ·            ·             (count)  ·
- │                        aggregate 0  count_rows()  ·        ·
- │                        scalar       ·             ·        ·
- └── render               ·            ·             ()       ·
-      └── limit           ·            ·             (x, y)   +y
-           │              count        1             ·        ·
-           └── sort       ·            ·             (x, y)   +y
-                │         order        +y            ·        ·
-                └── scan  ·            ·             (x, y)   ·
-·                         table        xyz@primary   ·        ·
-·                         spans        FULL SCAN     ·        ·
-·                         filter       x = 1         ·        ·
+·                         distribution  local         ·        ·
+·                         vectorized    true          ·        ·
+group                     ·             ·             (count)  ·
+ │                        aggregate 0   count_rows()  ·        ·
+ │                        scalar        ·             ·        ·
+ └── render               ·             ·             ()       ·
+      └── limit           ·             ·             (x, y)   +y
+           │              count         1             ·        ·
+           └── sort       ·             ·             (x, y)   +y
+                │         order         +y            ·        ·
+                └── scan  ·             ·             (x, y)   ·
+·                         table         xyz@primary   ·        ·
+·                         spans         FULL SCAN     ·        ·
+·                         filter        x = 1         ·        ·

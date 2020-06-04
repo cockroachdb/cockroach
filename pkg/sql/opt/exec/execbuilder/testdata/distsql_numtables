@@ -80,7 +80,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVGL4jwUhu-_XxHO1QxksG
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-·                distributed         true                 ·            ·
+·                distribution        full                 ·            ·
 ·                vectorized          true                 ·            ·
 render           ·                   ·                    (x, str)     ·
  │               render 0            x                    ·            ·
@@ -150,11 +150,11 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUM0Ok0AQvvsUk_HSJtuw1P
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-·     distributed  true                 ·    ·
-·     vectorized   true                 ·    ·
-scan  ·            ·                    (x)  ·
-·     table        numtosquare@primary  ·    ·
-·     spans        FULL SCAN            ·    ·
+·     distribution  full                 ·    ·
+·     vectorized    true                 ·    ·
+scan  ·             ·                    (x)  ·
+·     table         numtosquare@primary  ·    ·
+·     spans         FULL SCAN            ·    ·
 
 # Verifies that unused renders don't cause us to do rendering instead of a
 # simple projection.
@@ -166,42 +166,42 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMT01L80AYvL-_YplT-7pi43
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
-·                    distributed  true               ·              ·
-·                    vectorized   true               ·              ·
-render               ·            ·                  (y, str, res)  ·
- │                   render 0     y                  ·              ·
- │                   render 1     str                ·              ·
- │                   render 2     res                ·              ·
- └── sort            ·            ·                  (res, y, str)  +res
-      │              order        +res               ·              ·
-      └── render     ·            ·                  (res, y, str)  ·
-           │         render 0     repeat('test', y)  ·              ·
-           │         render 1     y                  ·              ·
-           │         render 2     str                ·              ·
-           └── scan  ·            ·                  (y, str)       ·
-·                    table        numtostr@primary   ·              ·
-·                    spans        FULL SCAN          ·              ·
+·                    distribution  full               ·              ·
+·                    vectorized    true               ·              ·
+render               ·             ·                  (y, str, res)  ·
+ │                   render 0      y                  ·              ·
+ │                   render 1      str                ·              ·
+ │                   render 2      res                ·              ·
+ └── sort            ·             ·                  (res, y, str)  +res
+      │              order         +res               ·              ·
+      └── render     ·             ·                  (res, y, str)  ·
+           │         render 0      repeat('test', y)  ·              ·
+           │         render 1      y                  ·              ·
+           │         render 2      str                ·              ·
+           └── scan  ·             ·                  (y, str)       ·
+·                    table         numtostr@primary   ·              ·
+·                    spans         FULL SCAN          ·              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
-·                         distributed  true               ·              ·
-·                         vectorized   true               ·              ·
-render                    ·            ·                  (y, str, res)  ·
- │                        render 0     y                  ·              ·
- │                        render 1     str                ·              ·
- │                        render 2     res                ·              ·
- └── limit                ·            ·                  (res, y, str)  +res
-      │                   count        10                 ·              ·
-      └── sort            ·            ·                  (res, y, str)  +res
-           │              order        +res               ·              ·
-           └── render     ·            ·                  (res, y, str)  ·
-                │         render 0     repeat('test', y)  ·              ·
-                │         render 1     y                  ·              ·
-                │         render 2     str                ·              ·
-                └── scan  ·            ·                  (y, str)       ·
-·                         table        numtostr@primary   ·              ·
-·                         spans        FULL SCAN          ·              ·
+·                         distribution  full               ·              ·
+·                         vectorized    true               ·              ·
+render                    ·             ·                  (y, str, res)  ·
+ │                        render 0      y                  ·              ·
+ │                        render 1      str                ·              ·
+ │                        render 2      res                ·              ·
+ └── limit                ·             ·                  (res, y, str)  +res
+      │                   count         10                 ·              ·
+      └── sort            ·             ·                  (res, y, str)  +res
+           │              order         +res               ·              ·
+           └── render     ·             ·                  (res, y, str)  ·
+                │         render 0      repeat('test', y)  ·              ·
+                │         render 1      y                  ·              ·
+                │         render 2      str                ·              ·
+                └── scan  ·             ·                  (y, str)       ·
+·                         table         numtostr@primary   ·              ·
+·                         spans         FULL SCAN          ·              ·
 
 # Regression test for #20481.
 query T
