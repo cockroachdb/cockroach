@@ -316,7 +316,7 @@ ALTER TABLE t10 ALTER COLUMN y TYPE STRING
 statement ok
 CREATE TABLE t11 (x INT)
 
-statement error pq: unimplemented: ALTER COLUMN TYPE USING EXPRESSION is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://github.com/cockroachdb/cockroach/issues/47706
+statement error pq: unimplemented: ALTER COLUMN TYPE USING EXPRESSION is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue/47706
 ALTER TABLE t11 ALTER COLUMN x TYPE STRING USING CAST(x AS STRING)
 
 # Ensure ALTER COLUMN TYPE is disallowed if the column has a constraint.
