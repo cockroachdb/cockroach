@@ -12,6 +12,7 @@ default:
 	$(ROACHPROD_EXEC) start local
 	# Decrease delay for recognizing unavailable node as dead (unfortunately 1m15s is min allowed value)
 	$(ROACHPROD_EXEC) sql local:1 -- -e "SET CLUSTER SETTING server.time_until_store_dead = '1m15s';"
+	$(ROACHPROD_EXEC) sql local:1 -- -e "CREATE USER craig WITH PASSWORD 'cockroach';"
 
 decommission-node:
 	$(COCKROACH_EXEC) node decommission $(NODE_ID) --insecure

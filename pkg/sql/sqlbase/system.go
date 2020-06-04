@@ -309,6 +309,28 @@ create table system.statement_diagnostics(
 
 	FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error)
 );`
+
+	ScheduledJobsTableSchema = `
+CREATE TABLE system.scheduled_jobs (
+    schedule_id      INT DEFAULT unique_rowid() PRIMARY KEY NOT NULL,
+    schedule_name    STRING NOT NULL,
+    created          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    owner            STRING,
+    next_run         TIMESTAMPTZ,
+    schedule_expr    STRING,
+    schedule_details BYTES,
+    executor_type    STRING NOT NULL,
+    execution_args   BYTES NOT NULL,
+    schedule_changes BYTES,
+
+    INDEX "next_run_idx" (next_run),
+
+    FAMILY sched (schedule_id, next_run),
+    FAMILY other (
+       schedule_name, created, owner, schedule_expr, 
+       schedule_details, executor_type, execution_args, schedule_changes 
+    )
+)`
 )
 
 func pk(name string) IndexDescriptor {
@@ -363,6 +385,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.StatementBundleChunksTableID:         privilege.ReadWriteData,
 	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
 	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
+	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -808,7 +831,8 @@ var (
 		NextMutationID: 1,
 	}
 
-	nowString = "now():::TIMESTAMP"
+	nowString   = "now():::TIMESTAMP"
+	nowTZString = "now():::TIMESTAMPTZ"
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = TableDescriptor{
@@ -1561,6 +1585,62 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	// ScheduledJobsTable is the descriptor for the scheduled jobs table.
+	ScheduledJobsTable = TableDescriptor{
+		Name:                    "scheduled_jobs",
+		ID:                      keys.ScheduledJobsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "schedule_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+			{Name: "schedule_name", ID: 2, Type: types.String, Nullable: false},
+			{Name: "created", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
+			{Name: "owner", ID: 4, Type: types.String, Nullable: true},
+			{Name: "next_run", ID: 5, Type: types.TimestampTZ, Nullable: true},
+			{Name: "schedule_expr", ID: 6, Type: types.String, Nullable: true},
+			{Name: "schedule_details", ID: 7, Type: types.Bytes, Nullable: true},
+			{Name: "executor_type", ID: 8, Type: types.String, Nullable: false},
+			{Name: "execution_args", ID: 9, Type: types.Bytes, Nullable: false},
+			{Name: "schedule_changes", ID: 10, Type: types.Bytes, Nullable: true},
+		},
+		NextColumnID: 11,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:            "sched",
+				ID:              0,
+				ColumnNames:     []string{"schedule_id", "next_run"},
+				ColumnIDs:       []ColumnID{1, 5},
+				DefaultColumnID: 5,
+			},
+			{
+				Name: "other",
+				ID:   1,
+				ColumnNames: []string{"schedule_name", "created", "owner", "schedule_expr", "schedule_details",
+					"executor_type", "execution_args", "schedule_changes"},
+				ColumnIDs: []ColumnID{2, 3, 4, 6, 7, 8, 9, 10},
+			},
+		},
+		NextFamilyID: 2,
+		PrimaryIndex: pk("schedule_id"),
+		Indexes: []IndexDescriptor{
+			{
+				Name:             "next_run_idx",
+				ID:               2,
+				Unique:           false,
+				ColumnNames:      []string{"next_run"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{5},
+				ExtraColumnIDs:   []ColumnID{1},
+				Version:          SecondaryIndexFamilyFormatVersion,
+			},
+		},
+		NextIndexID:    3,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ScheduledJobsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -1618,6 +1698,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementBundleChunksTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsRequestsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsTable)
+
+	// Tables introduced in 20.2.
+	target.AddDescriptor(keys.SystemDatabaseID, &ScheduledJobsTable)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied

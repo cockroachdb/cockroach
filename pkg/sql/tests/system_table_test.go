@@ -181,6 +181,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.StatementBundleChunksTableID, sqlbase.StatementBundleChunksTableSchema, sqlbase.StatementBundleChunksTable},
 		{keys.StatementDiagnosticsRequestsTableID, sqlbase.StatementDiagnosticsRequestsTableSchema, sqlbase.StatementDiagnosticsRequestsTable},
 		{keys.StatementDiagnosticsTableID, sqlbase.StatementDiagnosticsTableSchema, sqlbase.StatementDiagnosticsTable},
+		{keys.ScheduledJobsTableID, sqlbase.ScheduledJobsTableSchema, sqlbase.ScheduledJobsTable},
 	} {
 		privs := *test.pkg.Privileges
 		gen, err := sql.CreateTestTableDescriptor(
