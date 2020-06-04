@@ -1195,7 +1195,7 @@ project
  │    │    │    ├── fd: ()-->(15)
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── outer: (2)
- │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
  │    │    │    │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
  │    │    │    │    ├── scan table1
  │    │    │    │    │    └── stats: [rows=1000]
@@ -1427,10 +1427,9 @@ FROM
                     (SELECT NULL)::STRING
                 );
 ----
-full-join (cross)
- ├── columns: a:1(int) b:2(int) c:3(int) a:4(int) b:5(int) c:6(int)
+left-join (cross)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) a:4(int) b:5(int) c:6(int)
  ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
- ├── immutable
  ├── stats: [rows=100]
  ├── key: (1,2)
  ├── fd: (1,2)-->(3-6)
@@ -1445,21 +1444,7 @@ full-join (cross)
  │    ├── stats: [rows=0]
  │    ├── key: ()
  │    └── fd: ()-->(4-6)
- └── filters
-      └── is [type=bool, immutable, subquery]
-           ├── function: not_like_escape [type=bool]
-           │    ├── '' [type=string]
-           │    ├── CAST(NULL AS STRING) [type=string]
-           │    └── cast: STRING [type=string]
-           │         └── subquery [type=unknown]
-           │              └── values
-           │                   ├── columns: "?column?":7(unknown)
-           │                   ├── cardinality: [1 - 1]
-           │                   ├── stats: [rows=1]
-           │                   ├── key: ()
-           │                   ├── fd: ()-->(7)
-           │                   └── (NULL,) [type=tuple{unknown}]
-           └── false [type=bool]
+ └── filters (true)
 
 expr
 (SemiJoin
