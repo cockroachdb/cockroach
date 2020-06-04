@@ -98,14 +98,14 @@ func TestWriteBinaryArray(t *testing.T) {
 	defaultConv := makeTestingConvCfg()
 
 	writeBuf1 := newWriteBuffer(nil /* bytecount */)
-	writeBuf1.writeTextDatum(context.Background(), ary, defaultConv)
-	writeBuf1.writeBinaryDatum(context.Background(), ary, time.UTC, 0 /* oid */)
+	writeBuf1.writeTextDatum(context.Background(), ary, defaultConv, nil /* T */)
+	writeBuf1.writeBinaryDatum(context.Background(), ary, time.UTC, nil /* T */)
 
 	writeBuf2 := newWriteBuffer(nil /* bytecount */)
-	writeBuf2.writeTextDatum(context.Background(), ary, defaultConv)
+	writeBuf2.writeTextDatum(context.Background(), ary, defaultConv, nil /* T */)
 
 	writeBuf3 := newWriteBuffer(nil /* bytecount */)
-	writeBuf3.writeBinaryDatum(context.Background(), ary, defaultConv.Location, 0 /* oid */)
+	writeBuf3.writeBinaryDatum(context.Background(), ary, defaultConv.Location, nil /* T */)
 
 	concatted := bytes.Join([][]byte{writeBuf2.wrapped.Bytes(), writeBuf3.wrapped.Bytes()}, nil)
 
@@ -127,7 +127,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	}
 
 	defaultConv := makeTestingConvCfg()
-	buf.writeTextDatum(context.Background(), d, defaultConv)
+	buf.writeTextDatum(context.Background(), d, defaultConv, nil /* T */)
 
 	b := buf.wrapped.Bytes()
 
@@ -170,7 +170,7 @@ func TestFloatConversion(t *testing.T) {
 			defaultConv.ExtraFloatDigits = test.extraFloatDigits
 
 			d := tree.NewDFloat(tree.DFloat(test.val))
-			buf.writeTextDatum(context.Background(), d, defaultConv)
+			buf.writeTextDatum(context.Background(), d, defaultConv, nil /* T */)
 			b := buf.wrapped.Bytes()
 
 			got := string(b[4:])
@@ -204,7 +204,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 
 					defaultConv := makeTestingConvCfg()
 					defaultConv.BytesEncodeFormat = be
-					buf.writeTextDatum(context.Background(), d, defaultConv)
+					buf.writeTextDatum(context.Background(), d, defaultConv, nil /* T */)
 					b := buf.wrapped.Bytes()
 					t.Logf("encoded: %v (%q)", b, b)
 
@@ -239,12 +239,12 @@ func TestCanWriteAllDatums(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			d := sqlbase.RandDatum(rng, typ, true)
 
-			buf.writeTextDatum(context.Background(), d, defaultConv)
+			buf.writeTextDatum(context.Background(), d, defaultConv, typ)
 			if buf.err != nil {
 				t.Fatalf("got %s while attempting to write datum %s as text", buf.err, d)
 			}
 
-			buf.writeBinaryDatum(context.Background(), d, defaultConv.Location, d.ResolvedType().Oid())
+			buf.writeBinaryDatum(context.Background(), d, defaultConv.Location, d.ResolvedType())
 			if buf.err != nil {
 				t.Fatalf("got %s while attempting to write datum %s as binary", buf.err, d)
 			}
@@ -261,11 +261,11 @@ func benchmarkWriteType(b *testing.B, d tree.Datum, format pgwirebase.FormatCode
 	writeMethod := func(ctx context.Context, d tree.Datum, loc *time.Location) {
 		defaultConv := makeTestingConvCfg()
 		defaultConv.Location = loc
-		buf.writeTextDatum(ctx, d, defaultConv)
+		buf.writeTextDatum(ctx, d, defaultConv, d.ResolvedType())
 	}
 	if format == pgwirebase.FormatBinary {
 		writeMethod = func(ctx context.Context, d tree.Datum, loc *time.Location) {
-			buf.writeBinaryDatum(ctx, d, loc, d.ResolvedType().Oid())
+			buf.writeBinaryDatum(ctx, d, loc, d.ResolvedType())
 		}
 	}
 
@@ -462,7 +462,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	if err := expected.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", s)
 	}
-	wbuf.writeBinaryDatum(context.Background(), expected, nil /* sessionLoc */, 0 /* oid */)
+	wbuf.writeBinaryDatum(context.Background(), expected, nil /* sessionLoc */, nil /* T */)
 
 	rbuf := pgwirebase.ReadBuffer{Msg: wbuf.wrapped.Bytes()}
 

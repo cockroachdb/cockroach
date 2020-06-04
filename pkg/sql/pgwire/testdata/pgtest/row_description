@@ -116,7 +116,7 @@ until
 ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
-{"Type":"DataRow","Values":[{"text":"hello"}]}
+{"Type":"DataRow","Values":[{"text":"hello   "}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -135,6 +135,6 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
-{"Type":"DataRow","Values":[{"text":"hello"}]}
+{"Type":"DataRow","Values":[{"text":"hello   "}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
