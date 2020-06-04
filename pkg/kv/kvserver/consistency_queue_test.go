@@ -451,7 +451,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		// Split off a range so that we get away from the timeseries writes, which
 		// pollute the stats with ContainsEstimates=true. Note that the split clears
 		// the right hand side (which is what we operate on) from that flag.
-		if err := db0.AdminSplit(ctx, key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db0.AdminSplit(ctx, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 

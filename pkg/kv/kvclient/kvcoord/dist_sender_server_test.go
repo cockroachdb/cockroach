@@ -126,7 +126,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 func setupMultipleRanges(ctx context.Context, db *kv.DB, splitAt ...string) error {
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
-		if err := db.AdminSplit(ctx, key /* spanKey */, key /* splitKey */, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(ctx, key /* splitKey */, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			return err
 		}
 	}
@@ -1261,7 +1261,7 @@ func TestParallelSender(t *testing.T) {
 	// Split into multiple ranges.
 	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 	for _, key := range splitKeys {
-		if err := db.AdminSplit(context.Background(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1306,7 +1306,7 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
 	for _, key := range []string{"b", "e", "g"} {
 		// Split the keyspace at the given key.
-		if err := db.AdminSplit(context.Background(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1404,7 +1404,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	// Split first using the default client and scan to make sure that
 	// the range descriptor cache reflects the split.
 	for _, key := range []string{"b", "f"} {
-		if err := db.AdminSplit(context.Background(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1460,7 +1460,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
-	if err := db.AdminSplit(context.Background(), "c", "c", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(context.Background(), "c", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
