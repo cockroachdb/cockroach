@@ -75,6 +75,7 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 func (e *distSQLSpecExecFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
+	// TODO(yuzefovich): make sure to not distribute when rows == 0.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
@@ -427,7 +428,18 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) RenameColumns(
 	input exec.Node, colNames []string,
 ) (exec.Node, error) {
-	inputCols := input.(planMaybePhysical).physPlan.ResultColumns
+	var inputCols sqlbase.ResultColumns
+	// distSQLSpecExecFactory still constructs some of the planNodes (for
+	// example, some variants of EXPLAIN), and we need to be able to rename
+	// the columns on them.
+	switch plan := input.(type) {
+	case planMaybePhysical:
+		inputCols = plan.physPlan.ResultColumns
+	case planNode:
+		inputCols = planMutableColumns(plan)
+	default:
+		panic("unexpected node")
+	}
 	for i := range inputCols {
 		inputCols[i].Name = colNames[i]
 	}
@@ -453,7 +465,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	// TODO(yuzefovich): make sure that local plan nodes that create
 	// distributed jobs are shown as "distributed". See distSQLExplainable.
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return constructExplainPlanNode(options, stmtType, plan.(*planTop), e.planner)
 }
 
 func (e *distSQLSpecExecFactory) ConstructShowTrace(
