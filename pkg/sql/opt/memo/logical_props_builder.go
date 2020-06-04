@@ -2060,7 +2060,31 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 
 	// Outer joins return minimum number of rows, depending on type.
 	switch h.joinType {
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		if joinWithMult, isJoinWithMult := h.join.(joinWithMultiplicity); isJoinWithMult {
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows() && innerJoinCard.Max > left.Max {
+				// If left rows aren't duplicated, the max join cardinality is at most the
+				// max left cardinality.
+				innerJoinCard.Max = left.Max
+			}
+			if multiplicity.JoinDoesNotDuplicateRightRows() && innerJoinCard.Max > right.Max {
+				// If right rows aren't duplicated, the max join cardinality is at most
+				// the max right cardinality.
+				innerJoinCard.Max = right.Max
+			}
+		}
+		return innerJoinCard
+
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		if joinWithMult, isJoinWithMult := h.join.(joinWithMultiplicity); isJoinWithMult {
+			// If left rows aren't duplicated, the max join cardinality is at most the
+			// max left cardinality.
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows() && innerJoinCard.Max > left.Max {
+				innerJoinCard.Max = left.Max
+			}
+		}
 		return innerJoinCard.AtLeast(left)
 
 	case opt.RightJoinOp:
@@ -2081,10 +2105,20 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 		// We could get left.Max + right.Max rows (if the filter doesn't match
 		// anything). We use Add here because it handles overflow.
 		c.Max = left.Add(right).Max
+
+		if joinWithMult, isJoinWithMult := h.join.(joinWithMultiplicity); isJoinWithMult {
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows() &&
+				multiplicity.JoinDoesNotDuplicateRightRows() && innerJoinCard.Max > c.Max {
+				// If neither left rows nor right rows are duplicated, the join max
+				// cardinality is at most the sum of the left and right maxes.
+				innerJoinCard.Max = c.Max
+			}
+		}
 		return innerJoinCard.AtLeast(c)
 
 	default:
-		return innerJoinCard
+		panic(errors.AssertionFailedf("unexpected operator: %v", h.joinType))
 	}
 }
 

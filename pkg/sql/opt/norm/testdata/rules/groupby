@@ -1932,13 +1932,15 @@ WHERE x > 100 OR b > 100
 ----
 project
  ├── columns: x:1!null y:2!null z:3!null a:4 b:5 c:6 "?column?":7!null
+ ├── cardinality: [0 - 2]
  ├── immutable
  ├── fd: (1)-->(7)
  ├── select
  │    ├── columns: column1:1!null column2:2!null column3:3!null a:4 b:5 c:6
+ │    ├── cardinality: [0 - 2]
  │    ├── left-join (hash)
  │    │    ├── columns: column1:1!null column2:2!null column3:3!null a:4 b:5 c:6
- │    │    ├── cardinality: [2 - ]
+ │    │    ├── cardinality: [2 - 2]
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null column2:2!null column3:3!null
@@ -2206,13 +2208,15 @@ insert a
  ├── volatile, side-effects, mutations
  └── project
       ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10
+      ├── cardinality: [0 - 2]
       ├── fd: ()-->(9,10)
       └── select
            ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 i:12 s:14
+           ├── cardinality: [0 - 2]
            ├── fd: ()-->(9,10,14)
            ├── left-join (hash)
            │    ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 i:12 s:14
-           │    ├── cardinality: [2 - ]
+           │    ├── cardinality: [2 - 2]
            │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    ├── fd: ()-->(9,10)
            │    ├── project
@@ -2257,11 +2261,11 @@ upsert a
  ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_f:19 column1:6!null column2:7 column3:8 column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
-      ├── cardinality: [2 - ]
+      ├── cardinality: [2 - 2]
       ├── fd: ()-->(9,10), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
       ├── left-join (hash)
       │    ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
-      │    ├── cardinality: [2 - ]
+      │    ├── cardinality: [2 - 2]
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    ├── fd: ()-->(9,10), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
       │    ├── project
@@ -2307,12 +2311,12 @@ upsert a
  ├── volatile, side-effects, mutations
  └── project
       ├── columns: upsert_f:19 column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
-      ├── cardinality: [1 - ]
+      ├── cardinality: [1 - 3]
       ├── key: (7,8)
       ├── fd: ()-->(9,10), (7,8)-->(6,11-15,19), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
       ├── left-join (hash)
       │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
-      │    ├── cardinality: [1 - ]
+      │    ├── cardinality: [1 - 3]
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── key: (7,8)
       │    ├── fd: ()-->(9,10), (7,8)-->(6,11-15), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
@@ -2370,27 +2374,33 @@ insert a
  ├── volatile, side-effects, mutations
  └── project
       ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10
+      ├── cardinality: [0 - 3]
       ├── fd: ()-->(10)
       └── select
            ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19 i:22 f:23
+           ├── cardinality: [0 - 3]
            ├── fd: ()-->(10,11,19,22)
            ├── left-join (hash)
            │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19 i:22 f:23
+           │    ├── cardinality: [0 - 3]
            │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    ├── fd: ()-->(10,11,19)
            │    ├── select
            │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
+           │    │    ├── cardinality: [0 - 3]
            │    │    ├── fd: ()-->(10,11,19)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
+           │    │    │    ├── cardinality: [0 - 3]
            │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    ├── fd: ()-->(10,11)
            │    │    │    ├── select
            │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11
+           │    │    │    │    ├── cardinality: [0 - 3]
            │    │    │    │    ├── fd: ()-->(10,11)
            │    │    │    │    ├── left-join (hash)
            │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11
-           │    │    │    │    │    ├── cardinality: [3 - ]
+           │    │    │    │    │    ├── cardinality: [3 - 3]
            │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    │    │    ├── fd: ()-->(10)
            │    │    │    │    │    ├── project
@@ -2448,35 +2458,42 @@ insert a
  └── upsert-distinct-on
       ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       ├── grouping columns: column3:8!null column9:9
+      ├── cardinality: [0 - 3]
       ├── lax-key: (8,9)
       ├── fd: ()-->(9,10), (7,9)~~>(6,8), (8,9)~~>(6,7,10)
       ├── select
       │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 i:22 f:23
+      │    ├── cardinality: [0 - 3]
       │    ├── lax-key: (7,9,22,23)
       │    ├── fd: ()-->(9,10,22), (7,9)~~>(6,8)
       │    ├── left-join (hash)
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 i:22 f:23
+      │    │    ├── cardinality: [0 - 3]
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── lax-key: (7,9,22,23)
       │    │    ├── fd: ()-->(9,10), (7,9)~~>(6,8)
       │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       │    │    │    ├── grouping columns: column2:7!null column9:9
+      │    │    │    ├── cardinality: [0 - 3]
       │    │    │    ├── lax-key: (7,9)
       │    │    │    ├── fd: ()-->(9,10), (7,9)~~>(6,8,10)
       │    │    │    ├── select
       │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19
+      │    │    │    │    ├── cardinality: [0 - 3]
       │    │    │    │    ├── fd: ()-->(9-11,19)
       │    │    │    │    ├── left-join (hash)
       │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19
+      │    │    │    │    │    ├── cardinality: [0 - 3]
       │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    │    │    │    ├── fd: ()-->(9-11)
       │    │    │    │    │    ├── select
       │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11
+      │    │    │    │    │    │    ├── cardinality: [0 - 3]
       │    │    │    │    │    │    ├── fd: ()-->(9-11)
       │    │    │    │    │    │    ├── left-join (hash)
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11
-      │    │    │    │    │    │    │    ├── cardinality: [3 - ]
+      │    │    │    │    │    │    │    ├── cardinality: [3 - 3]
       │    │    │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    │    │    │    │    │    ├── fd: ()-->(9,10)
       │    │    │    │    │    │    │    ├── project
@@ -2549,26 +2566,31 @@ insert a
  ├── volatile, side-effects, mutations
  └── project
       ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
+      ├── cardinality: [0 - 2]
       ├── volatile, side-effects
       ├── fd: ()-->(10), (6)~~>(7-9)
       └── select
            ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
+           ├── cardinality: [0 - 2]
            ├── volatile, side-effects
            ├── lax-key: (6,17,19,22,23)
            ├── fd: ()-->(10,19,22), (6)~~>(7-9)
            ├── left-join (hash)
            │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
+           │    ├── cardinality: [0 - 2]
            │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    ├── volatile, side-effects
            │    ├── lax-key: (6,17,19,22,23)
            │    ├── fd: ()-->(10,19), (6)~~>(7-9)
            │    ├── select
            │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
+           │    │    ├── cardinality: [0 - 2]
            │    │    ├── volatile, side-effects
            │    │    ├── lax-key: (6,17,19)
            │    │    ├── fd: ()-->(10,19), (6)~~>(7-9)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
+           │    │    │    ├── cardinality: [0 - 2]
            │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    ├── volatile, side-effects
            │    │    │    ├── lax-key: (6,17,19)
@@ -2576,16 +2598,18 @@ insert a
            │    │    │    ├── upsert-distinct-on
            │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
            │    │    │    │    ├── grouping columns: column1:6
+           │    │    │    │    ├── cardinality: [0 - 2]
            │    │    │    │    ├── volatile, side-effects
            │    │    │    │    ├── lax-key: (6)
            │    │    │    │    ├── fd: ()-->(10), (6)~~>(7-10)
            │    │    │    │    ├── select
            │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
+           │    │    │    │    │    ├── cardinality: [0 - 2]
            │    │    │    │    │    ├── volatile, side-effects
            │    │    │    │    │    ├── fd: ()-->(10,11)
            │    │    │    │    │    ├── left-join (hash)
            │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
-           │    │    │    │    │    │    ├── cardinality: [2 - ]
+           │    │    │    │    │    │    ├── cardinality: [2 - 2]
            │    │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    │    │    │    ├── volatile, side-effects
            │    │    │    │    │    │    ├── fd: ()-->(10)

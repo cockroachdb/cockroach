@@ -1778,10 +1778,12 @@ ORDER BY b
 ----
 sort
  ├── columns: a:14!null b:15!null c:16!null
+ ├── cardinality: [0 - 2]
  ├── volatile, side-effects, mutations
  ├── ordering: +15
  └── with &1
       ├── columns: a:14!null b:15!null c:16!null
+      ├── cardinality: [0 - 2]
       ├── volatile, side-effects, mutations
       ├── upsert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
@@ -1797,15 +1799,18 @@ sort
       │    │    ├── upsert_a:11 => abc.a:1
       │    │    ├── upsert_b:12 => abc.b:2
       │    │    └── upsert_c:13 => abc.c:3
+      │    ├── cardinality: [0 - 2]
       │    ├── volatile, side-effects, mutations
       │    └── project
       │         ├── columns: upsert_a:11!null upsert_b:12 upsert_c:13 x:4!null y:5!null z:6!null abc.a:7 abc.b:8 abc.c:9
+      │         ├── cardinality: [0 - 2]
       │         ├── key: (4-6)
       │         ├── fd: (4-6)-->(7-9), (4,7)-->(11), (5,7,8)-->(12), (6,7,9)-->(13)
       │         ├── left-join (lookup abc)
       │         │    ├── columns: x:4!null y:5!null z:6!null abc.a:7 abc.b:8 abc.c:9
       │         │    ├── key columns: [4 5 6] = [7 8 9]
       │         │    ├── lookup columns are key
+      │         │    ├── cardinality: [0 - 2]
       │         │    ├── key: (4-6)
       │         │    ├── fd: (4-6)-->(7-9)
       │         │    ├── ensure-upsert-distinct-on
@@ -1837,10 +1842,11 @@ sort
       │              └── CASE WHEN abc.a:7 IS NULL THEN z:6 ELSE abc.c:9 END [as=upsert_c:13, outer=(6,7,9)]
       └── with-scan &1
            ├── columns: a:14!null b:15!null c:16!null
-           └── mapping:
-                ├──  abc.a:1 => a:14
-                ├──  abc.b:2 => b:15
-                └──  abc.c:3 => c:16
+           ├── mapping:
+           │    ├──  abc.a:1 => a:14
+           │    ├──  abc.b:2 => b:15
+           │    └──  abc.c:3 => c:16
+           └── cardinality: [0 - 2]
 
 # --------------------------------------------------
 # Delete operator.
