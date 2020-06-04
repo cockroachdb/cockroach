@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"math/big"
 	"net"
@@ -64,8 +65,22 @@ func pgTypeForParserType(t *types.T) pgType {
 	}
 }
 
+// resolveBlankPaddedChar pads the given string with spaces if blank padding is
+// required or returns the string unmodified otherwise.
+func resolveBlankPaddedChar(s string, t *types.T) string {
+	if t.Oid() == oid.T_bpchar {
+		// Pad spaces on the right of the string to make it of length specified in
+		// the type t.
+		return fmt.Sprintf("%-*v", t.Width(), s)
+	}
+	return s
+}
+
+// writeTextDatum writes d to the buffer. Type t must be specified for types
+// that have various width encodings and therefore need padding (chars).
+// It is ignored (and can be nil) for types which do not need padding.
 func (b *writeBuffer) writeTextDatum(
-	ctx context.Context, d tree.Datum, conv sessiondata.DataConversionConfig,
+	ctx context.Context, d tree.Datum, conv sessiondata.DataConversionConfig, t *types.T,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
@@ -116,7 +131,7 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.IPAddr.String())
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(string(*v))
+		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)
@@ -187,11 +202,11 @@ func (b *writeBuffer) writeTextDatum(
 	}
 }
 
-// writeBinaryDatum writes d to the buffer. Oid must be specified for types
-// that have various width encodings. It is ignored (and can be 0) for types
-// with a 1:1 datum:oid mapping.
+// writeBinaryDatum writes d to the buffer. Type t must be specified for types
+// that have various width encodings (floats, ints, chars). It is ignored
+// (and can be nil) for types with a 1:1 datum:type mapping.
 func (b *writeBuffer) writeBinaryDatum(
-	ctx context.Context, d tree.Datum, sessionLoc *time.Location, Oid oid.Oid,
+	ctx context.Context, d tree.Datum, sessionLoc *time.Location, t *types.T,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
@@ -242,7 +257,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		}
 
 	case *tree.DInt:
-		switch Oid {
+		switch t.Oid() {
 		case oid.T_int2:
 			b.putInt32(2)
 			b.putInt16(int16(*v))
@@ -253,11 +268,11 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.putInt32(8)
 			b.putInt64(int64(*v))
 		default:
-			b.setError(errors.Errorf("unsupported int oid: %v", Oid))
+			b.setError(errors.Errorf("unsupported int oid: %v", t.Oid()))
 		}
 
 	case *tree.DFloat:
-		switch Oid {
+		switch t.Oid() {
 		case oid.T_float4:
 			b.putInt32(4)
 			b.putInt32(int32(math.Float32bits(float32(*v))))
@@ -265,7 +280,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.putInt32(8)
 			b.putInt64(int64(math.Float64bits(float64(*v))))
 		default:
-			b.setError(errors.Errorf("unsupported float oid: %v", Oid))
+			b.setError(errors.Errorf("unsupported float oid: %v", t.Oid()))
 		}
 
 	case *tree.DDecimal:
@@ -398,7 +413,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedString(v.LogicalRep)
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(string(*v))
+		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)
@@ -438,7 +453,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		for _, elem := range v.D {
 			oid := elem.ResolvedType().Oid()
 			subWriter.putInt32(int32(oid))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, oid)
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, elem.ResolvedType())
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
@@ -476,7 +491,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			// Lower bound, we only support a lower bound of 1.
 			subWriter.putInt32(1)
 			for _, elem := range v.Array {
-				subWriter.writeBinaryDatum(ctx, elem, sessionLoc, oid)
+				subWriter.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
 			}
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
