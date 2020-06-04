@@ -9,7 +9,7 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 query TTT
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
-·                 distributed   false
+·                 distribution  local
 ·                 vectorized    false
 root              ·             ·
  ├── split        ·             ·
@@ -28,7 +28,7 @@ ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 query TTT
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
-·               distributed   false
+·               distribution  local
 ·               vectorized    false
 root            ·             ·
  ├── values     ·             ·
@@ -45,7 +45,7 @@ root            ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
-·                            distributed   false                                                                        ·               ·
+·                            distribution  local                                                                        ·               ·
 ·                            vectorized    true                                                                         ·               ·
 root                         ·             ·                                                                            (a, b, c)       ·
  ├── scan                    ·             ·                                                                            (a, b, c)       ·
@@ -80,7 +80,7 @@ root                         ·             ·                                  
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc)
 ----
-·           distributed         false        ·    ·
+·           distribution        local        ·    ·
 ·           vectorized          true         ·    ·
 merge-join  ·                   ·            (a)  ·
  │          type                semi         ·    ·
@@ -98,18 +98,18 @@ merge-join  ·                   ·            (a)  ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
-·            distributed  false
-·            vectorized   false
-sort         ·            ·
- │           order        +foo1
- └── values  ·            ·
-·            size         3 columns, 3 rows
+·            distribution  local
+·            vectorized    false
+sort         ·             ·
+ │           order         +foo1
+ └── values  ·             ·
+·            size          3 columns, 3 rows
 
 # the subquery's plan must be visible in EXPLAIN
 query TTT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
-·                 distributed   false
+·                 distribution  local
 ·                 vectorized    false
 root              ·             ·
  ├── values       ·             ·
@@ -139,17 +139,17 @@ WHERE
     OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-·                distributed  false            ·                                  ·
-·                vectorized   true             ·                                  ·
-render           ·            ·                (col0)                             ·
- │               render 0     col0             ·                                  ·
- └── index-join  ·            ·                (col0, col3, col4, rowid[hidden])  ·
-      │          table        tab4@primary     ·                                  ·
-      │          key columns  rowid            ·                                  ·
-      └── scan   ·            ·                (col0, col4, rowid[hidden])        ·
-·                table        tab4@idx_tab4_0  ·                                  ·
-·                spans        /!NULL-/5.38/1   ·                                  ·
-·                filter       col0 <= 0        ·                                  ·
+·                distribution  local            ·                                  ·
+·                vectorized    true             ·                                  ·
+render           ·             ·                (col0)                             ·
+ │               render 0      col0             ·                                  ·
+ └── index-join  ·             ·                (col0, col3, col4, rowid[hidden])  ·
+      │          table         tab4@primary     ·                                  ·
+      │          key columns   rowid            ·                                  ·
+      └── scan   ·             ·                (col0, col4, rowid[hidden])        ·
+·                table         tab4@idx_tab4_0  ·                                  ·
+·                spans         /!NULL-/5.38/1   ·                                  ·
+·                filter        col0 <= 0        ·                                  ·
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.
@@ -161,7 +161,7 @@ CREATE TABLE b (x INT PRIMARY KEY, z INT);
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
 ----
-·           distributed         false      ·       ·
+·           distribution        local      ·       ·
 ·           vectorized          true       ·       ·
 merge-join  ·                   ·          (x, y)  ·
  │          type                semi       ·       ·
@@ -179,7 +179,7 @@ merge-join  ·                   ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
-·               distributed        false            ·          ·
+·               distribution       local            ·          ·
 ·               vectorized         true             ·          ·
 hash-join       ·                  ·                (x, y)     ·
  │              type               semi             ·          ·
@@ -197,7 +197,7 @@ hash-join       ·                  ·                (x, y)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
 ----
-·           distributed         false      ·       ·
+·           distribution        local      ·       ·
 ·           vectorized          true       ·       ·
 merge-join  ·                   ·          (x, y)  ·
  │          type                anti       ·       ·
@@ -215,7 +215,7 @@ merge-join  ·                   ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
-·               distributed        false            ·          ·
+·               distribution       local            ·          ·
 ·               vectorized         true             ·          ·
 hash-join       ·                  ·                (x, z)     ·
  │              type               anti             ·          ·
@@ -233,7 +233,7 @@ hash-join       ·                  ·                (x, z)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
 ----
-·               distributed    false              ·          ·
+·               distribution   local              ·          ·
 ·               vectorized     false              ·          ·
 root            ·              ·                  ("array")  ·
  ├── values     ·              ·                  ("array")  ·
@@ -251,14 +251,14 @@ root            ·              ·                  ("array")  ·
 query TTTTT
 EXPLAIN(verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
-·           distributed  false        ·          ·
-·           vectorized   false        ·          ·
-apply-join  ·            ·            (a, b, c)  ·
- │          type         semi         ·          ·
- │          pred         column1 = a  ·          ·
- └── scan   ·            ·            (a, b, c)  ·
-·           table        abc@primary  ·          ·
-·           spans        FULL SCAN    ·          ·
+·           distribution  local        ·          ·
+·           vectorized    false        ·          ·
+apply-join  ·             ·            (a, b, c)  ·
+ │          type          semi         ·          ·
+ │          pred          column1 = a  ·          ·
+ └── scan   ·             ·            (a, b, c)  ·
+·           table         abc@primary  ·          ·
+·           spans         FULL SCAN    ·          ·
 
 # Case where the EXISTS subquery still has outer columns in the subquery
 # (regression test for #28816).

@@ -34,7 +34,7 @@ WHERE
   t.z IS NULL
 ----
 tree                  field               description
-·                     distributed         false
+·                     distribution        local
 ·                     vectorized          true
 render                ·                   ·
  └── filter           ·                   ·
@@ -65,8 +65,8 @@ FROM
 WHERE
   t.z IS NULL
 ----
-tree         field        description
-·            distributed  false
-·            vectorized   true
-render       ·            ·
- └── norows  ·            ·
+tree         field         description
+·            distribution  local
+·            vectorized    true
+render       ·             ·
+ └── norows  ·             ·

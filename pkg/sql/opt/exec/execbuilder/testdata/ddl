@@ -95,14 +95,14 @@ CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
 query TTTTT colnames
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
-tree       field        description   columns                              ordering
-·          distributed  false         ·                                    ·
-·          vectorized   false         ·                                    ·
-split      ·            ·             (key, pretty, split_enforced_until)  ·
- └── scan  ·            ·             (k1, k2)                             +k1
-·          table        s@primary     ·                                    ·
-·          spans        LIMITED SCAN  ·                                    ·
-·          limit        3             ·                                    ·
+tree       field         description   columns                              ordering
+·          distribution  local         ·                                    ·
+·          vectorized    false         ·                                    ·
+split      ·             ·             (key, pretty, split_enforced_until)  ·
+ └── scan  ·             ·             (k1, k2)                             +k1
+·          table         s@primary     ·                                    ·
+·          spans         LIMITED SCAN  ·                                    ·
+·          limit         3             ·                                    ·
 
 statement ok
 DROP TABLE t; DROP TABLE other

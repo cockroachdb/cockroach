@@ -18,14 +18,14 @@ SET vectorize_row_count_threshold = 1000
 query TTT
 EXPLAIN SELECT count(*) from small
 ----
-·          distributed  true
-·          vectorized   false
-group      ·            ·
- │         aggregate 0  count_rows()
- │         scalar       ·
- └── scan  ·            ·
-·          table        small@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    false
+group      ·             ·
+ │         aggregate 0   count_rows()
+ │         scalar        ·
+ └── scan  ·             ·
+·          table         small@primary
+·          spans         FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 0
@@ -35,14 +35,14 @@ SET vectorize_row_count_threshold = 0
 query TTT
 EXPLAIN SELECT count(*) from small
 ----
-·          distributed  true
-·          vectorized   true
-group      ·            ·
- │         aggregate 0  count_rows()
- │         scalar       ·
- └── scan  ·            ·
-·          table        small@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    true
+group      ·             ·
+ │         aggregate 0   count_rows()
+ │         scalar        ·
+ └── scan  ·             ·
+·          table         small@primary
+·          spans         FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -61,14 +61,14 @@ ALTER TABLE small INJECT STATISTICS '[
 query TTT
 EXPLAIN SELECT count(*) from small
 ----
-·          distributed  true
-·          vectorized   false
-group      ·            ·
- │         aggregate 0  count_rows()
- │         scalar       ·
- └── scan  ·            ·
-·          table        small@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    false
+group      ·             ·
+ │         aggregate 0   count_rows()
+ │         scalar        ·
+ └── scan  ·             ·
+·          table         small@primary
+·          spans         FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1
@@ -78,14 +78,14 @@ SET vectorize_row_count_threshold = 1
 query TTT
 EXPLAIN SELECT count(*) from small
 ----
-·          distributed  true
-·          vectorized   true
-group      ·            ·
- │         aggregate 0  count_rows()
- │         scalar       ·
- └── scan  ·            ·
-·          table        small@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    true
+group      ·             ·
+ │         aggregate 0   count_rows()
+ │         scalar        ·
+ └── scan  ·             ·
+·          table         small@primary
+·          spans         FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -107,14 +107,14 @@ ALTER TABLE large INJECT STATISTICS '[
 query TTT
 EXPLAIN SELECT count(*) from large
 ----
-·          distributed  true
-·          vectorized   true
-group      ·            ·
- │         aggregate 0  count_rows()
- │         scalar       ·
- └── scan  ·            ·
-·          table        large@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    true
+group      ·             ·
+ │         aggregate 0   count_rows()
+ │         scalar        ·
+ └── scan  ·             ·
+·          table         large@primary
+·          spans         FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000000
@@ -124,11 +124,11 @@ SET vectorize_row_count_threshold = 1000000
 query TTT
 EXPLAIN SELECT count(*) from large
 ----
-·          distributed  true
-·          vectorized   false
-group      ·            ·
- │         aggregate 0  count_rows()
- │         scalar       ·
- └── scan  ·            ·
-·          table        large@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    false
+group      ·             ·
+ │         aggregate 0   count_rows()
+ │         scalar        ·
+ └── scan  ·             ·
+·          table         large@primary
+·          spans         FULL SCAN

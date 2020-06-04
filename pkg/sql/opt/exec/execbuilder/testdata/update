@@ -101,7 +101,7 @@ CREATE TABLE xyz (
 query TTT
 EXPLAIN UPDATE xyz SET y = x
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 count                ·                 ·
  └── update          ·                 ·
@@ -118,7 +118,7 @@ count                ·                 ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-·                    distributed       false        ·                        ·
+·                    distribution      local        ·                        ·
 ·                    vectorized        false        ·                        ·
 count                ·                 ·            ()                       ·
  └── update          ·                 ·            ()                       ·
@@ -140,7 +140,7 @@ count                ·                 ·            ()                       �
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
 ----
-·                    distributed       false        ·                ·
+·                    distribution      local        ·                ·
 ·                    vectorized        false        ·                ·
 count                ·                 ·            ()               ·
  └── update          ·                 ·            ()               ·
@@ -162,7 +162,7 @@ count                ·                 ·            ()               ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
 ----
-·                         distributed       false        ·                        ·
+·                         distribution      local        ·                        ·
 ·                         vectorized        false        ·                        ·
 count                     ·                 ·            ()                       ·
  └── update               ·                 ·            ()                       ·
@@ -232,28 +232,28 @@ CREATE TABLE kv (
 query TTT
 EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 10
 ----
-·                              distributed  false
-·                              vectorized   false
-count                          ·            ·
- └── update                    ·            ·
-      │                        table        kv
-      │                        set          v
-      │                        strategy     updater
-      │                        auto commit  ·
-      └── render               ·            ·
-           └── limit           ·            ·
-                │              count        10
-                └── sort       ·            ·
-                     │         order        -v
-                     └── scan  ·            ·
-·                              table        kv@primary
-·                              spans        FULL SCAN
+·                              distribution  local
+·                              vectorized    false
+count                          ·             ·
+ └── update                    ·             ·
+      │                        table         kv
+      │                        set           v
+      │                        strategy      updater
+      │                        auto commit   ·
+      └── render               ·             ·
+           └── limit           ·             ·
+                │              count         10
+                └── sort       ·             ·
+                     │         order         -v
+                     └── scan  ·             ·
+·                              table         kv@primary
+·                              spans         FULL SCAN
 
 # Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
 query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 count                ·                 ·
  └── update          ·                 ·
@@ -281,7 +281,7 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
 ]
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 count                ·                 ·
  └── update          ·                 ·
@@ -339,7 +339,7 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
-·                                             distributed       false                             ·                         ·
+·                                             distribution      local                             ·                         ·
 ·                                             vectorized        false                             ·                         ·
 root                                          ·                 ·                                 (a)                       +a
  ├── sort                                     ·                 ·                                 (a)                       +a
@@ -402,27 +402,27 @@ CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b), FAMILY "prim
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t38799@foo SET c=2 WHERE a=1
 ----
-·                               distributed  false           ·                 ·
-·                               vectorized   false           ·                 ·
-count                           ·            ·               ()                ·
- └── update                     ·            ·               ()                ·
-      │                         table        t38799          ·                 ·
-      │                         set          c               ·                 ·
-      │                         strategy     updater         ·                 ·
-      │                         auto commit  ·               ·                 ·
-      └── render                ·            ·               (a, b, c, c_new)  ·
-           │                    render 0     a               ·                 ·
-           │                    render 1     b               ·                 ·
-           │                    render 2     c               ·                 ·
-           │                    render 3     2               ·                 ·
-           └── filter           ·            ·               (a, b, c)         ·
-                │               filter       a = 1           ·                 ·
-                └── index-join  ·            ·               (a, b, c)         ·
-                     │          table        t38799@primary  ·                 ·
-                     │          key columns  a               ·                 ·
-                     └── scan   ·            ·               (a, b)            ·
-·                               table        t38799@foo      ·                 ·
-·                               spans        FULL SCAN       ·                 ·
+·                               distribution  local           ·                 ·
+·                               vectorized    false           ·                 ·
+count                           ·             ·               ()                ·
+ └── update                     ·             ·               ()                ·
+      │                         table         t38799          ·                 ·
+      │                         set           c               ·                 ·
+      │                         strategy      updater         ·                 ·
+      │                         auto commit   ·               ·                 ·
+      └── render                ·             ·               (a, b, c, c_new)  ·
+           │                    render 0      a               ·                 ·
+           │                    render 1      b               ·                 ·
+           │                    render 2      c               ·                 ·
+           │                    render 3      2               ·                 ·
+           └── filter           ·             ·               (a, b, c)         ·
+                │               filter        a = 1           ·                 ·
+                └── index-join  ·             ·               (a, b, c)         ·
+                     │          table         t38799@primary  ·                 ·
+                     │          key columns   a               ·                 ·
+                     └── scan   ·             ·               (a, b)            ·
+·                               table         t38799@foo      ·                 ·
+·                               spans         FULL SCAN       ·                 ·
 
 # ------------------------------------------------------------------------------
 # Test without implicit SELECT FOR UPDATE.
@@ -432,7 +432,7 @@ count                           ·            ·               ()               
 query TTT
 EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 count                ·                 ·
  └── update          ·                 ·
@@ -449,7 +449,7 @@ count                ·                 ·
 query TTT
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 count                ·                 ·
  └── update          ·                 ·
@@ -467,7 +467,7 @@ count                ·                 ·
 query TTT
 EXPLAIN UPDATE kv SET v = 10
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 count                ·                 ·
  └── update          ·                 ·
@@ -493,7 +493,7 @@ CREATE TABLE kv3 (
 query TTT
 EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
 ----
-·                          distributed       false
+·                          distribution      local
 ·                          vectorized        false
 count                      ·                 ·
  └── update                ·                 ·
@@ -513,7 +513,7 @@ count                      ·                 ·
 query TTT
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
 ----
-·                          distributed       false
+·                          distribution      local
 ·                          vectorized        false
 count                      ·                 ·
  └── update                ·                 ·
@@ -536,127 +536,127 @@ SET enable_implicit_select_for_update = false
 query TTT
 EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        kv
-      │              set          v
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        /3-/3/#
+·                    distribution  local
+·                    vectorized    false
+count                ·             ·
+ └── update          ·             ·
+      │              table         kv
+      │              set           v
+      │              strategy      updater
+      │              auto commit   ·
+      └── render     ·             ·
+           └── scan  ·             ·
+·                    table         kv@primary
+·                    spans         /3-/3/#
 
 query TTT
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        kv
-      │              set          v
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        /2-/9/#
-·                    parallel     ·
+·                    distribution  local
+·                    vectorized    false
+count                ·             ·
+ └── update          ·             ·
+      │              table         kv
+      │              set           v
+      │              strategy      updater
+      │              auto commit   ·
+      └── render     ·             ·
+           └── scan  ·             ·
+·                    table         kv@primary
+·                    spans         /2-/9/#
+·                    parallel      ·
 
 query TTT
 EXPLAIN UPDATE kv SET v = 10
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        kv
-      │              set          v
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        FULL SCAN
+·                    distribution  local
+·                    vectorized    false
+count                ·             ·
+ └── update          ·             ·
+      │              table         kv
+      │              set           v
+      │              strategy      updater
+      │              auto commit   ·
+      └── render     ·             ·
+           └── scan  ·             ·
+·                    table         kv@primary
+·                    spans         FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-·                    distributed  false        ·                        ·
-·                    vectorized   false        ·                        ·
-count                ·            ·            ()                       ·
- └── update          ·            ·            ()                       ·
-      │              table        xyz          ·                        ·
-      │              set          x, y         ·                        ·
-      │              strategy     updater      ·                        ·
-      │              auto commit  ·            ·                        ·
-      └── render     ·            ·            (x, y, z, x_new, y_new)  ·
-           │         render 0     x            ·                        ·
-           │         render 1     y            ·                        ·
-           │         render 2     z            ·                        ·
-           │         render 3     1            ·                        ·
-           │         render 4     2            ·                        ·
-           └── scan  ·            ·            (x, y, z)                ·
-·                    table        xyz@primary  ·                        ·
-·                    spans        FULL SCAN    ·                        ·
+·                    distribution  local        ·                        ·
+·                    vectorized    false        ·                        ·
+count                ·             ·            ()                       ·
+ └── update          ·             ·            ()                       ·
+      │              table         xyz          ·                        ·
+      │              set           x, y         ·                        ·
+      │              strategy      updater      ·                        ·
+      │              auto commit   ·            ·                        ·
+      └── render     ·             ·            (x, y, z, x_new, y_new)  ·
+           │         render 0      x            ·                        ·
+           │         render 1      y            ·                        ·
+           │         render 2      z            ·                        ·
+           │         render 3      1            ·                        ·
+           │         render 4      2            ·                        ·
+           └── scan  ·             ·            (x, y, z)                ·
+·                    table         xyz@primary  ·                        ·
+·                    spans         FULL SCAN    ·                        ·
 
 query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        kv
-      │              set          v
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        -/2/#
-·                    limit        1
+·                    distribution  local
+·                    vectorized    false
+count                ·             ·
+ └── update          ·             ·
+      │              table         kv
+      │              set           v
+      │              strategy      updater
+      │              auto commit   ·
+      └── render     ·             ·
+           └── scan  ·             ·
+·                    table         kv@primary
+·                    spans         -/2/#
+·                    limit         1
 
 query TTT
 EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
 ----
-·                          distributed  false
-·                          vectorized   false
-count                      ·            ·
- └── update                ·            ·
-      │                    table        kv3
-      │                    set          k
-      │                    strategy     updater
-      │                    auto commit  ·
-      └── render           ·            ·
-           └── index-join  ·            ·
-                │          table        kv3@primary
-                │          key columns  k
-                └── scan   ·            ·
-·                          table        kv3@kv3_v_idx
-·                          spans        /10-/11
+·                          distribution  local
+·                          vectorized    false
+count                      ·             ·
+ └── update                ·             ·
+      │                    table         kv3
+      │                    set           k
+      │                    strategy      updater
+      │                    auto commit   ·
+      └── render           ·             ·
+           └── index-join  ·             ·
+                │          table         kv3@primary
+                │          key columns   k
+                └── scan   ·             ·
+·                          table         kv3@kv3_v_idx
+·                          spans         /10-/11
 
 query TTT
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
 ----
-·                          distributed  false
-·                          vectorized   false
-count                      ·            ·
- └── update                ·            ·
-      │                    table        kv3
-      │                    set          k
-      │                    strategy     updater
-      │                    auto commit  ·
-      └── render           ·            ·
-           └── index-join  ·            ·
-                │          table        kv3@primary
-                │          key columns  k
-                └── scan   ·            ·
-·                          table        kv3@kv3_v_idx
-·                          spans        /2-/10
+·                          distribution  local
+·                          vectorized    false
+count                      ·             ·
+ └── update                ·             ·
+      │                    table         kv3
+      │                    set           k
+      │                    strategy      updater
+      │                    auto commit   ·
+      └── render           ·             ·
+           └── index-join  ·             ·
+                │          table         kv3@primary
+                │          key columns   k
+                └── scan   ·             ·
+·                          table         kv3@kv3_v_idx
+·                          spans         /2-/10
 
 # Update single column family.
 query TTT
@@ -664,18 +664,18 @@ SELECT tree, field, description FROM [
 EXPLAIN UPDATE tu SET c=c+1
 ]
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        tu
-      │              set          c
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        tu@primary
-·                    spans        FULL SCAN
+·                    distribution  local
+·                    vectorized    false
+count                ·             ·
+ └── update          ·             ·
+      │              table         tu
+      │              set           c
+      │              strategy      updater
+      │              auto commit   ·
+      └── render     ·             ·
+           └── scan  ·             ·
+·                    table         tu@primary
+·                    spans         FULL SCAN
 
 # Reset for rest of test.
 statement ok

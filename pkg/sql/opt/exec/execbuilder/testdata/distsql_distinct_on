@@ -67,13 +67,13 @@ NULL             /NULL/NULL/NULL  {5}       5
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
-·          distributed  true         ·          ·
-·          vectorized   true         ·          ·
-distinct   ·            ·            (x, y, z)  ·
- │         distinct on  x, y, z      ·          ·
- └── scan  ·            ·            (x, y, z)  ·
-·          table        xyz@primary  ·          ·
-·          spans        FULL SCAN    ·          ·
+·          distribution  full         ·          ·
+·          vectorized    true         ·          ·
+distinct   ·             ·            (x, y, z)  ·
+ │         distinct on   x, y, z      ·          ·
+ └── scan  ·             ·            (x, y, z)  ·
+·          table         xyz@primary  ·          ·
+·          spans         FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
@@ -84,16 +84,16 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF1vmzAUhu_3K6xz1UpGYC
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-·               distributed  true         ·          ·
-·               vectorized   true         ·          ·
-distinct        ·            ·            (x, y, z)  +x
- │              distinct on  x, y, z      ·          ·
- │              order key    x            ·          ·
- └── sort       ·            ·            (x, y, z)  +x
-      │         order        +x           ·          ·
-      └── scan  ·            ·            (x, y, z)  ·
-·               table        xyz@primary  ·          ·
-·               spans        FULL SCAN    ·          ·
+·               distribution  full         ·          ·
+·               vectorized    true         ·          ·
+distinct        ·             ·            (x, y, z)  +x
+ │              distinct on   x, y, z      ·          ·
+ │              order key     x            ·          ·
+ └── sort       ·             ·            (x, y, z)  +x
+      │         order         +x           ·          ·
+      └── scan  ·             ·            (x, y, z)  ·
+·               table         xyz@primary  ·          ·
+·               spans         FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
@@ -105,16 +105,16 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lU2P2jwUhffvr7DuakavUX
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-·               distributed  true         ·       ·
-·               vectorized   true         ·       ·
-distinct        ·            ·            (x, y)  +y
- │              distinct on  y            ·       ·
- │              order key    y            ·       ·
- └── sort       ·            ·            (x, y)  +y,+x
-      │         order        +y,+x        ·       ·
-      └── scan  ·            ·            (x, y)  ·
-·               table        xyz@primary  ·       ·
-·               spans        FULL SCAN    ·       ·
+·               distribution  full         ·       ·
+·               vectorized    true         ·       ·
+distinct        ·             ·            (x, y)  +y
+ │              distinct on   y            ·       ·
+ │              order key     y            ·       ·
+ └── sort       ·             ·            (x, y)  +y,+x
+      │         order         +y,+x        ·       ·
+      └── scan  ·             ·            (x, y)  ·
+·               table         xyz@primary  ·       ·
+·               spans         FULL SCAN    ·       ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
@@ -125,11 +125,11 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslV9v2jAUxd_3Kaz71KpGwU
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-·     distributed  true         ·          ·
-·     vectorized   true         ·          ·
-scan  ·            ·            (a, b, c)  ·
-·     table        abc@primary  ·          ·
-·     spans        FULL SCAN    ·          ·
+·     distribution  full         ·          ·
+·     vectorized    true         ·          ·
+scan  ·             ·            (a, b, c)  ·
+·     table         abc@primary  ·          ·
+·     spans         FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
@@ -139,17 +139,17 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJykk0-L2zAQxe_9FOKddkHG8Z
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-·               distributed  true         ·          ·
-·               vectorized   true         ·          ·
-render          ·            ·            (a, b)     +a,+b
- │              render 0     a            ·          ·
- │              render 1     b            ·          ·
- └── distinct   ·            ·            (a, b, c)  +a,+b
-      │         distinct on  a, b         ·          ·
-      │         order key    a, b         ·          ·
-      └── scan  ·            ·            (a, b, c)  +a,+b,+c
-·               table        abc@primary  ·          ·
-·               spans        FULL SCAN    ·          ·
+·               distribution  full         ·          ·
+·               vectorized    true         ·          ·
+render          ·             ·            (a, b)     +a,+b
+ │              render 0      a            ·          ·
+ │              render 1      b            ·          ·
+ └── distinct   ·             ·            (a, b, c)  +a,+b
+      │         distinct on   a, b         ·          ·
+      │         order key     a, b         ·          ·
+      └── scan  ·             ·            (a, b, c)  +a,+b,+c
+·               table         abc@primary  ·          ·
+·               spans         FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]

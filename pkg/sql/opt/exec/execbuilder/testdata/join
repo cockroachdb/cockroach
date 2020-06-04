@@ -11,79 +11,79 @@ CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51
 query TTT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
-·               distributed  false
-·               vectorized   true
-render          ·            ·
- └── hash-join  ·            ·
-      │         type         inner
-      │         equality     (x) = (x)
-      ├── scan  ·            ·
-      │         table        onecolumn@primary
-      │         spans        FULL SCAN
-      └── scan  ·            ·
-·               table        twocolumn@primary
-·               spans        FULL SCAN
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ └── hash-join  ·             ·
+      │         type          inner
+      │         equality      (x) = (x)
+      ├── scan  ·             ·
+      │         table         onecolumn@primary
+      │         spans         FULL SCAN
+      └── scan  ·             ·
+·               table         twocolumn@primary
+·               spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
-·          distributed  false
-·          vectorized   true
-hash-join  ·            ·
- │         type         inner
- │         equality     (x) = (y)
- ├── scan  ·            ·
- │         table        twocolumn@primary
- │         spans        FULL SCAN
- └── scan  ·            ·
-·          table        twocolumn@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+hash-join  ·             ·
+ │         type          inner
+ │         equality      (x) = (y)
+ ├── scan  ·             ·
+ │         table         twocolumn@primary
+ │         spans         FULL SCAN
+ └── scan  ·             ·
+·          table         twocolumn@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-·                distributed  false
-·                vectorized   true
-render           ·            ·
- └── cross-join  ·            ·
-      │          type         cross
-      ├── scan   ·            ·
-      │          table        twocolumn@primary
-      │          spans        FULL SCAN
-      └── scan   ·            ·
-·                table        twocolumn@primary
-·                spans        FULL SCAN
-·                filter       x = 44
+·                distribution  local
+·                vectorized    true
+render           ·             ·
+ └── cross-join  ·             ·
+      │          type          cross
+      ├── scan   ·             ·
+      │          table         twocolumn@primary
+      │          spans         FULL SCAN
+      └── scan   ·             ·
+·                table         twocolumn@primary
+·                spans         FULL SCAN
+·                filter        x = 44
 
 query TTT
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
-·          distributed  false
-·          vectorized   true
-hash-join  ·            ·
- │         type         inner
- │         equality     (x) = (y)
- ├── scan  ·            ·
- │         table        onecolumn@primary
- │         spans        FULL SCAN
- └── scan  ·            ·
-·          table        twocolumn@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+hash-join  ·             ·
+ │         type          inner
+ │         equality      (x) = (y)
+ ├── scan  ·             ·
+ │         table         onecolumn@primary
+ │         spans         FULL SCAN
+ └── scan  ·             ·
+·          table         twocolumn@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
-·          distributed  false
-·          vectorized   true
-hash-join  ·            ·
- │         type         inner
- │         equality     (x) = (y)
- ├── scan  ·            ·
- │         table        onecolumn@primary
- │         spans        FULL SCAN
- └── scan  ·            ·
-·          table        twocolumn@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+hash-join  ·             ·
+ │         type          inner
+ │         equality      (x) = (y)
+ ├── scan  ·             ·
+ │         table         onecolumn@primary
+ │         spans         FULL SCAN
+ └── scan  ·             ·
+·          table         twocolumn@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM
@@ -93,129 +93,129 @@ EXPLAIN SELECT * FROM
   JOIN twocolumn AS c (d, e) ON a.b = c.d AND c.d = onecolumn.x
 LIMIT 1
 ----
-·                    distributed  false
-·                    vectorized   true
-limit                ·            ·
- │                   count        1
- └── hash-join       ·            ·
-      │              type         inner
-      │              equality     (x) = (x)
-      ├── hash-join  ·            ·
-      │    │         type         inner
-      │    │         equality     (x) = (x)
-      │    ├── scan  ·            ·
-      │    │         table        onecolumn@primary
-      │    │         spans        FULL SCAN
-      │    └── scan  ·            ·
-      │              table        twocolumn@primary
-      │              spans        FULL SCAN
-      └── hash-join  ·            ·
-           │         type         inner
-           │         equality     (x) = (x)
-           ├── scan  ·            ·
-           │         table        onecolumn@primary
-           │         spans        FULL SCAN
-           └── scan  ·            ·
-·                    table        twocolumn@primary
-·                    spans        FULL SCAN
+·                    distribution  local
+·                    vectorized    true
+limit                ·             ·
+ │                   count         1
+ └── hash-join       ·             ·
+      │              type          inner
+      │              equality      (x) = (x)
+      ├── hash-join  ·             ·
+      │    │         type          inner
+      │    │         equality      (x) = (x)
+      │    ├── scan  ·             ·
+      │    │         table         onecolumn@primary
+      │    │         spans         FULL SCAN
+      │    └── scan  ·             ·
+      │              table         twocolumn@primary
+      │              spans         FULL SCAN
+      └── hash-join  ·             ·
+           │         type          inner
+           │         equality      (x) = (x)
+           ├── scan  ·             ·
+           │         table         onecolumn@primary
+           │         spans         FULL SCAN
+           └── scan  ·             ·
+·                    table         twocolumn@primary
+·                    spans         FULL SCAN
 
 # The following queries verify that only the necessary columns are scanned.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-·           distributed  false              ·       ·
-·           vectorized   true               ·       ·
-cross-join  ·            ·                  (x, y)  ·
- │          type         cross              ·       ·
- ├── scan   ·            ·                  (x)     ·
- │          table        twocolumn@primary  ·       ·
- │          spans        FULL SCAN          ·       ·
- └── scan   ·            ·                  (y)     ·
-·           table        twocolumn@primary  ·       ·
-·           spans        FULL SCAN          ·       ·
+·           distribution  local              ·       ·
+·           vectorized    true               ·       ·
+cross-join  ·             ·                  (x, y)  ·
+ │          type          cross              ·       ·
+ ├── scan   ·             ·                  (x)     ·
+ │          table         twocolumn@primary  ·       ·
+ │          spans         FULL SCAN          ·       ·
+ └── scan   ·             ·                  (y)     ·
+·           table         twocolumn@primary  ·       ·
+·           spans         FULL SCAN          ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
-·               distributed  false              ·          ·
-·               vectorized   true               ·          ·
-render          ·            ·                  (y)        ·
- │              render 0     y                  ·          ·
- └── hash-join  ·            ·                  (x, x, y)  ·
-      │         type         inner              ·          ·
-      │         equality     (x) = (x)          ·          ·
-      ├── scan  ·            ·                  (x)        ·
-      │         table        twocolumn@primary  ·          ·
-      │         spans        FULL SCAN          ·          ·
-      └── scan  ·            ·                  (x, y)     ·
-·               table        twocolumn@primary  ·          ·
-·               spans        FULL SCAN          ·          ·
+·               distribution  local              ·          ·
+·               vectorized    true               ·          ·
+render          ·             ·                  (y)        ·
+ │              render 0      y                  ·          ·
+ └── hash-join  ·             ·                  (x, x, y)  ·
+      │         type          inner              ·          ·
+      │         equality      (x) = (x)          ·          ·
+      ├── scan  ·             ·                  (x)        ·
+      │         table         twocolumn@primary  ·          ·
+      │         spans         FULL SCAN          ·          ·
+      └── scan  ·             ·                  (x, y)     ·
+·               table         twocolumn@primary  ·          ·
+·               spans         FULL SCAN          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
-·               distributed  false              ·          ·
-·               vectorized   true               ·          ·
-render          ·            ·                  (y)        ·
- │              render 0     y                  ·          ·
- └── hash-join  ·            ·                  (x, x, y)  ·
-      │         type         inner              ·          ·
-      │         equality     (x) = (x)          ·          ·
-      ├── scan  ·            ·                  (x)        ·
-      │         table        twocolumn@primary  ·          ·
-      │         spans        FULL SCAN          ·          ·
-      └── scan  ·            ·                  (x, y)     ·
-·               table        twocolumn@primary  ·          ·
-·               spans        FULL SCAN          ·          ·
+·               distribution  local              ·          ·
+·               vectorized    true               ·          ·
+render          ·             ·                  (y)        ·
+ │              render 0      y                  ·          ·
+ └── hash-join  ·             ·                  (x, x, y)  ·
+      │         type          inner              ·          ·
+      │         equality      (x) = (x)          ·          ·
+      ├── scan  ·             ·                  (x)        ·
+      │         table         twocolumn@primary  ·          ·
+      │         spans         FULL SCAN          ·          ·
+      └── scan  ·             ·                  (x, y)     ·
+·               table         twocolumn@primary  ·          ·
+·               spans         FULL SCAN          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-·                distributed  false              ·       ·
-·                vectorized   true               ·       ·
-render           ·            ·                  (x)     ·
- │               render 0     x                  ·       ·
- └── cross-join  ·            ·                  (x, y)  ·
-      │          type         inner              ·       ·
-      │          pred         x < y              ·       ·
-      ├── scan   ·            ·                  (x)     ·
-      │          table        twocolumn@primary  ·       ·
-      │          spans        FULL SCAN          ·       ·
-      └── scan   ·            ·                  (y)     ·
-·                table        twocolumn@primary  ·       ·
-·                spans        FULL SCAN          ·       ·
+·                distribution  local              ·       ·
+·                vectorized    true               ·       ·
+render           ·             ·                  (x)     ·
+ │               render 0      x                  ·       ·
+ └── cross-join  ·             ·                  (x, y)  ·
+      │          type          inner              ·       ·
+      │          pred          x < y              ·       ·
+      ├── scan   ·             ·                  (x)     ·
+      │          table         twocolumn@primary  ·       ·
+      │          spans         FULL SCAN          ·       ·
+      └── scan   ·             ·                  (y)     ·
+·                table         twocolumn@primary  ·       ·
+·                spans         FULL SCAN          ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
 ----
-·                    distributed  false              ·                   ·
-·                    vectorized   true               ·                   ·
-render               ·            ·                  (x, two, plus1)     ·
- │                   render 0     COALESCE(x, x)     ·                   ·
- │                   render 1     two                ·                   ·
- │                   render 2     plus1              ·                   ·
- └── hash-join       ·            ·                  (two, x, plus1, x)  ·
-      │              type         full outer         ·                   ·
-      │              equality     (x) = (x)          ·                   ·
-      ├── render     ·            ·                  (two, x)            ·
-      │    │         render 0     2                  ·                   ·
-      │    │         render 1     x                  ·                   ·
-      │    └── scan  ·            ·                  (x)                 ·
-      │              table        onecolumn@primary  ·                   ·
-      │              spans        FULL SCAN          ·                   ·
-      └── render     ·            ·                  (plus1, x)          ·
-           │         render 0     y + 1              ·                   ·
-           │         render 1     x                  ·                   ·
-           └── scan  ·            ·                  (x, y)              ·
-·                    table        twocolumn@primary  ·                   ·
-·                    spans        FULL SCAN          ·                   ·
+·                    distribution  local              ·                   ·
+·                    vectorized    true               ·                   ·
+render               ·             ·                  (x, two, plus1)     ·
+ │                   render 0      COALESCE(x, x)     ·                   ·
+ │                   render 1      two                ·                   ·
+ │                   render 2      plus1              ·                   ·
+ └── hash-join       ·             ·                  (two, x, plus1, x)  ·
+      │              type          full outer         ·                   ·
+      │              equality      (x) = (x)          ·                   ·
+      ├── render     ·             ·                  (two, x)            ·
+      │    │         render 0      2                  ·                   ·
+      │    │         render 1      x                  ·                   ·
+      │    └── scan  ·             ·                  (x)                 ·
+      │              table         onecolumn@primary  ·                   ·
+      │              spans         FULL SCAN          ·                   ·
+      └── render     ·             ·                  (plus1, x)          ·
+           │         render 0      y + 1              ·                   ·
+           │         render 1      x                  ·                   ·
+           └── scan  ·             ·                  (x, y)              ·
+·                    table         twocolumn@primary  ·                   ·
+·                    spans         FULL SCAN          ·                   ·
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
                   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-·                           distributed    false                  ·                                     ·
+·                           distribution   local                  ·                                     ·
 ·                           vectorized     false                  ·                                     ·
 render                      ·              ·                      (k, u, w)                             ·
  │                          render 0       column2                ·                                     ·
@@ -312,7 +312,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
            pos.n
   ] WHERE node_type <> 'values' AND field <> 'size'
 ----
-0   ·              distributed         false
+0   ·              distribution        local
 0   ·              vectorized          false
 0   render         ·                   ·
 0   ·              render 0            pktable_cat
@@ -459,7 +459,7 @@ CREATE TABLE cards(id INT PRIMARY KEY, cust INT NOT NULL REFERENCES customers(id
 query TTT
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
-·           distributed         false
+·           distribution        local
 ·           vectorized          true
 merge-join  ·                   ·
  │          type                inner
@@ -485,7 +485,7 @@ CREATE TABLE pairs (a INT, b INT)
 query TTT
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
-·          distributed         false
+·          distribution        local
 ·          vectorized          true
 hash-join  ·                   ·
  │         type                inner
@@ -502,106 +502,106 @@ hash-join  ·                   ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
-·                    distributed  false             ·                       ·
-·                    vectorized   true              ·                       ·
-render               ·            ·                 (a, b, n, sq)           ·
- │                   render 0     a                 ·                       ·
- │                   render 1     b                 ·                       ·
- │                   render 2     n                 ·                       ·
- │                   render 3     sq                ·                       ·
- └── hash-join       ·            ·                 (column6, a, b, n, sq)  ·
-      │              type         inner             ·                       ·
-      │              equality     (column6) = (sq)  ·                       ·
-      ├── render     ·            ·                 (column6, a, b)         ·
-      │    │         render 0     a + b             ·                       ·
-      │    │         render 1     a                 ·                       ·
-      │    │         render 2     b                 ·                       ·
-      │    └── scan  ·            ·                 (a, b)                  ·
-      │              table        pairs@primary     ·                       ·
-      │              spans        FULL SCAN         ·                       ·
-      └── scan       ·            ·                 (n, sq)                 ·
-·                    table        square@primary    ·                       ·
-·                    spans        FULL SCAN         ·                       ·
+·                    distribution  local             ·                       ·
+·                    vectorized    true              ·                       ·
+render               ·             ·                 (a, b, n, sq)           ·
+ │                   render 0      a                 ·                       ·
+ │                   render 1      b                 ·                       ·
+ │                   render 2      n                 ·                       ·
+ │                   render 3      sq                ·                       ·
+ └── hash-join       ·             ·                 (column6, a, b, n, sq)  ·
+      │              type          inner             ·                       ·
+      │              equality      (column6) = (sq)  ·                       ·
+      ├── render     ·             ·                 (column6, a, b)         ·
+      │    │         render 0      a + b             ·                       ·
+      │    │         render 1      a                 ·                       ·
+      │    │         render 2      b                 ·                       ·
+      │    └── scan  ·             ·                 (a, b)                  ·
+      │              table         pairs@primary     ·                       ·
+      │              spans         FULL SCAN         ·                       ·
+      └── scan       ·             ·                 (n, sq)                 ·
+·                    table         square@primary    ·                       ·
+·                    spans         FULL SCAN         ·                       ·
 
 # Query similar to the one above, but the filter refers to a rendered
 # expression and can't "break through".
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
 ----
-·                          distributed  false           ·                   ·
-·                          vectorized   true            ·                   ·
-render                     ·            ·               (a, b, n, sq)       ·
- │                         render 0     a               ·                   ·
- │                         render 1     b               ·                   ·
- │                         render 2     n               ·                   ·
- │                         render 3     sq              ·                   ·
- └── filter                ·            ·               (div, a, b, n, sq)  ·
-      │                    filter       div = sq        ·                   ·
-      └── render           ·            ·               (div, a, b, n, sq)  ·
-           │               render 0     (a * b) / 2     ·                   ·
-           │               render 1     a               ·                   ·
-           │               render 2     b               ·                   ·
-           │               render 3     n               ·                   ·
-           │               render 4     sq              ·                   ·
-           └── cross-join  ·            ·               (a, b, n, sq)       ·
-                │          type         cross           ·                   ·
-                ├── scan   ·            ·               (a, b)              ·
-                │          table        pairs@primary   ·                   ·
-                │          spans        FULL SCAN       ·                   ·
-                └── scan   ·            ·               (n, sq)             ·
-·                          table        square@primary  ·                   ·
-·                          spans        FULL SCAN       ·                   ·
+·                          distribution  local           ·                   ·
+·                          vectorized    true            ·                   ·
+render                     ·             ·               (a, b, n, sq)       ·
+ │                         render 0      a               ·                   ·
+ │                         render 1      b               ·                   ·
+ │                         render 2      n               ·                   ·
+ │                         render 3      sq              ·                   ·
+ └── filter                ·             ·               (div, a, b, n, sq)  ·
+      │                    filter        div = sq        ·                   ·
+      └── render           ·             ·               (div, a, b, n, sq)  ·
+           │               render 0      (a * b) / 2     ·                   ·
+           │               render 1      a               ·                   ·
+           │               render 2      b               ·                   ·
+           │               render 3      n               ·                   ·
+           │               render 4      sq              ·                   ·
+           └── cross-join  ·             ·               (a, b, n, sq)       ·
+                │          type          cross           ·                   ·
+                ├── scan   ·             ·               (a, b)              ·
+                │          table         pairs@primary   ·                   ·
+                │          spans         FULL SCAN       ·                   ·
+                └── scan   ·             ·               (n, sq)             ·
+·                          table         square@primary  ·                   ·
+·                          spans         FULL SCAN       ·                   ·
 
 # The filter expression must stay on top of the outer join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
-·                    distributed  false             ·                       ·
-·                    vectorized   true              ·                       ·
-render               ·            ·                 (a, b, n, sq)           ·
- │                   render 0     a                 ·                       ·
- │                   render 1     b                 ·                       ·
- │                   render 2     n                 ·                       ·
- │                   render 3     sq                ·                       ·
- └── hash-join       ·            ·                 (column6, a, b, n, sq)  ·
-      │              type         full outer        ·                       ·
-      │              equality     (column6) = (sq)  ·                       ·
-      ├── render     ·            ·                 (column6, a, b)         ·
-      │    │         render 0     a + b             ·                       ·
-      │    │         render 1     a                 ·                       ·
-      │    │         render 2     b                 ·                       ·
-      │    └── scan  ·            ·                 (a, b)                  ·
-      │              table        pairs@primary     ·                       ·
-      │              spans        FULL SCAN         ·                       ·
-      └── scan       ·            ·                 (n, sq)                 ·
-·                    table        square@primary    ·                       ·
-·                    spans        FULL SCAN         ·                       ·
+·                    distribution  local             ·                       ·
+·                    vectorized    true              ·                       ·
+render               ·             ·                 (a, b, n, sq)           ·
+ │                   render 0      a                 ·                       ·
+ │                   render 1      b                 ·                       ·
+ │                   render 2      n                 ·                       ·
+ │                   render 3      sq                ·                       ·
+ └── hash-join       ·             ·                 (column6, a, b, n, sq)  ·
+      │              type          full outer        ·                       ·
+      │              equality      (column6) = (sq)  ·                       ·
+      ├── render     ·             ·                 (column6, a, b)         ·
+      │    │         render 0      a + b             ·                       ·
+      │    │         render 1      a                 ·                       ·
+      │    │         render 2      b                 ·                       ·
+      │    └── scan  ·             ·                 (a, b)                  ·
+      │              table         pairs@primary     ·                       ·
+      │              spans         FULL SCAN         ·                       ·
+      └── scan       ·             ·                 (n, sq)                 ·
+·                    table         square@primary    ·                       ·
+·                    spans         FULL SCAN         ·                       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-·                         distributed  false                ·                       ·
-·                         vectorized   true                 ·                       ·
-render                    ·            ·                    (a, b, n, sq)           ·
- │                        render 0     a                    ·                       ·
- │                        render 1     b                    ·                       ·
- │                        render 2     n                    ·                       ·
- │                        render 3     sq                   ·                       ·
- └── filter               ·            ·                    (column6, a, b, n, sq)  ·
-      │                   filter       (b % 2) != (sq % 2)  ·                       ·
-      └── hash-join       ·            ·                    (column6, a, b, n, sq)  ·
-           │              type         full outer           ·                       ·
-           │              equality     (column6) = (sq)     ·                       ·
-           ├── render     ·            ·                    (column6, a, b)         ·
-           │    │         render 0     a + b                ·                       ·
-           │    │         render 1     a                    ·                       ·
-           │    │         render 2     b                    ·                       ·
-           │    └── scan  ·            ·                    (a, b)                  ·
-           │              table        pairs@primary        ·                       ·
-           │              spans        FULL SCAN            ·                       ·
-           └── scan       ·            ·                    (n, sq)                 ·
-·                         table        square@primary       ·                       ·
-·                         spans        FULL SCAN            ·                       ·
+·                         distribution  local                ·                       ·
+·                         vectorized    true                 ·                       ·
+render                    ·             ·                    (a, b, n, sq)           ·
+ │                        render 0      a                    ·                       ·
+ │                        render 1      b                    ·                       ·
+ │                        render 2      n                    ·                       ·
+ │                        render 3      sq                   ·                       ·
+ └── filter               ·             ·                    (column6, a, b, n, sq)  ·
+      │                   filter        (b % 2) != (sq % 2)  ·                       ·
+      └── hash-join       ·             ·                    (column6, a, b, n, sq)  ·
+           │              type          full outer           ·                       ·
+           │              equality      (column6) = (sq)     ·                       ·
+           ├── render     ·             ·                    (column6, a, b)         ·
+           │    │         render 0      a + b                ·                       ·
+           │    │         render 1      a                    ·                       ·
+           │    │         render 2      b                    ·                       ·
+           │    └── scan  ·             ·                    (a, b)                  ·
+           │              table         pairs@primary        ·                       ·
+           │              spans         FULL SCAN            ·                       ·
+           └── scan       ·             ·                    (n, sq)                 ·
+·                         table         square@primary       ·                       ·
+·                         spans         FULL SCAN            ·                       ·
 
 # Filter propagation through outer joins.
 
@@ -613,22 +613,22 @@ SELECT *
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ]
 ----
-·               distributed  false
-·               vectorized   true
-filter          ·            ·
- │              filter       ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
- └── hash-join  ·            ·
-      │         type         left outer
-      │         equality     (b) = (sq)
-      │         pred         a > 1
-      ├── scan  ·            ·
-      │         table        pairs@primary
-      │         spans        FULL SCAN
-      │         filter       b > 1
-      └── scan  ·            ·
-·               table        square@primary
-·               spans        -/5/#
-·               filter       sq > 1
+·               distribution  local
+·               vectorized    true
+filter          ·             ·
+ │              filter        ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
+ └── hash-join  ·             ·
+      │         type          left outer
+      │         equality      (b) = (sq)
+      │         pred          a > 1
+      ├── scan  ·             ·
+      │         table         pairs@primary
+      │         spans         FULL SCAN
+      │         filter        b > 1
+      └── scan  ·             ·
+·               table         square@primary
+·               spans         -/5/#
+·               filter        sq > 1
 
 query TTT
 SELECT tree, field, description FROM [
@@ -638,26 +638,26 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-·                    distributed  false
-·                    vectorized   true
-render               ·            ·
- │                   render 0     a
- │                   render 1     b
- │                   render 2     n
- │                   render 3     sq
- └── filter          ·            ·
-      │              filter       ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
-      └── hash-join  ·            ·
-           │         type         left outer
-           │         equality     (sq) = (b)
-           │         pred         n < 6
-           ├── scan  ·            ·
-           │         table        square@primary
-           │         spans        /2-
-           └── scan  ·            ·
-·                    table        pairs@primary
-·                    spans        FULL SCAN
-·                    filter       a > 1
+·                    distribution  local
+·                    vectorized    true
+render               ·             ·
+ │                   render 0      a
+ │                   render 1      b
+ │                   render 2      n
+ │                   render 3      sq
+ └── filter          ·             ·
+      │              filter        ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+      └── hash-join  ·             ·
+           │         type          left outer
+           │         equality      (sq) = (b)
+           │         pred          n < 6
+           ├── scan  ·             ·
+           │         table         square@primary
+           │         spans         /2-
+           └── scan  ·             ·
+·                    table         pairs@primary
+·                    spans         FULL SCAN
+·                    filter        a > 1
 
 # The simpler plan for an inner join, to compare.
 query TTT
@@ -668,19 +668,19 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-·          distributed  false
-·          vectorized   true
-hash-join  ·            ·
- │         type         inner
- │         equality     (b) = (sq)
- ├── scan  ·            ·
- │         table        pairs@primary
- │         spans        FULL SCAN
- │         filter       ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
- └── scan  ·            ·
-·          table        square@primary
-·          spans        /2-/5/#
-·          parallel     ·
+·          distribution  local
+·          vectorized    true
+hash-join  ·             ·
+ │         type          inner
+ │         equality      (b) = (sq)
+ ├── scan  ·             ·
+ │         table         pairs@primary
+ │         spans         FULL SCAN
+ │         filter        ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+ └── scan  ·             ·
+·          table         square@primary
+·          spans         /2-/5/#
+·          parallel      ·
 
 
 statement ok
@@ -692,19 +692,19 @@ CREATE TABLE t2 (col3 INT, y INT, x INT, col4 INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
-·               distributed  false            ·             ·
-·               vectorized   true             ·             ·
-render          ·            ·                (x)           ·
- │              render 0     x                ·             ·
- └── hash-join  ·            ·                (x, y, y, x)  ·
-      │         type         inner            ·             ·
-      │         equality     (x, y) = (x, y)  ·             ·
-      ├── scan  ·            ·                (x, y)        ·
-      │         table        t1@primary       ·             ·
-      │         spans        FULL SCAN        ·             ·
-      └── scan  ·            ·                (y, x)        ·
-·               table        t2@primary       ·             ·
-·               spans        FULL SCAN        ·             ·
+·               distribution  local            ·             ·
+·               vectorized    true             ·             ·
+render          ·             ·                (x)           ·
+ │              render 0      x                ·             ·
+ └── hash-join  ·             ·                (x, y, y, x)  ·
+      │         type          inner            ·             ·
+      │         equality      (x, y) = (x, y)  ·             ·
+      ├── scan  ·             ·                (x, y)        ·
+      │         table         t1@primary       ·             ·
+      │         spans         FULL SCAN        ·             ·
+      └── scan  ·             ·                (y, x)        ·
+·               table         t2@primary       ·             ·
+·               spans         FULL SCAN        ·             ·
 
 # Tests for merge join ordering information.
 statement ok
@@ -722,7 +722,7 @@ CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
-·          distributed         false                  ·                         ·
+·          distribution        local                  ·                         ·
 ·          vectorized          true                   ·                         ·
 hash-join  ·                   ·                      (a, b, c, d, a, b, c, d)  ·
  │         type                inner                  ·                         ·
@@ -739,7 +739,7 @@ hash-join  ·                   ·                      (a, b, c, d, a, b, c, d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
-·               distributed         false                        ·                         ·
+·               distribution        local                        ·                         ·
 ·               vectorized          true                         ·                         ·
 render          ·                   ·                            (a, b, c, d)              ·
  │              render 0            a                            ·                         ·
@@ -761,7 +761,7 @@ render          ·                   ·                            (a, b, c, d) 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
-·                distributed         false                       ·                         ·
+·                distribution        local                       ·                         ·
 ·                vectorized          true                        ·                         ·
 render           ·                   ·                           (a, b, c, d, d)           ·
  │               render 0            a                           ·                         ·
@@ -785,7 +785,7 @@ render           ·                   ·                           (a, b, c, d, 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
-·           distributed         false                       ·                         ·
+·           distribution        local                       ·                         ·
 ·           vectorized          true                        ·                         ·
 merge-join  ·                   ·                           (a, b, c, d, a, b, c, d)  ·
  │          type                inner                       ·                         ·
@@ -810,85 +810,85 @@ CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
-·               distributed  false         ·          ·
-·               vectorized   true          ·          ·
-render          ·            ·             (s, s, s)  ·
- │              render 0     s             ·          ·
- │              render 1     s             ·          ·
- │              render 2     s             ·          ·
- └── hash-join  ·            ·             (s, s)     ·
-      │         type         inner         ·          ·
-      │         equality     (s) = (s)     ·          ·
-      ├── scan  ·            ·             (s)        ·
-      │         table        str1@primary  ·          ·
-      │         spans        FULL SCAN     ·          ·
-      └── scan  ·            ·             (s)        ·
-·               table        str2@primary  ·          ·
-·               spans        FULL SCAN     ·          ·
+·               distribution  local         ·          ·
+·               vectorized    true          ·          ·
+render          ·             ·             (s, s, s)  ·
+ │              render 0      s             ·          ·
+ │              render 1      s             ·          ·
+ │              render 2      s             ·          ·
+ └── hash-join  ·             ·             (s, s)     ·
+      │         type          inner         ·          ·
+      │         equality      (s) = (s)     ·          ·
+      ├── scan  ·             ·             (s)        ·
+      │         table         str1@primary  ·          ·
+      │         spans         FULL SCAN     ·          ·
+      └── scan  ·             ·             (s)        ·
+·               table         str2@primary  ·          ·
+·               spans         FULL SCAN     ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
 ----
-·               distributed  false         ·          ·
-·               vectorized   true          ·          ·
-render          ·            ·             (s, s, s)  ·
- │              render 0     s             ·          ·
- │              render 1     s             ·          ·
- │              render 2     s             ·          ·
- └── hash-join  ·            ·             (s, s)     ·
-      │         type         left outer    ·          ·
-      │         equality     (s) = (s)     ·          ·
-      ├── scan  ·            ·             (s)        ·
-      │         table        str1@primary  ·          ·
-      │         spans        FULL SCAN     ·          ·
-      └── scan  ·            ·             (s)        ·
-·               table        str2@primary  ·          ·
-·               spans        FULL SCAN     ·          ·
+·               distribution  local         ·          ·
+·               vectorized    true          ·          ·
+render          ·             ·             (s, s, s)  ·
+ │              render 0      s             ·          ·
+ │              render 1      s             ·          ·
+ │              render 2      s             ·          ·
+ └── hash-join  ·             ·             (s, s)     ·
+      │         type          left outer    ·          ·
+      │         equality      (s) = (s)     ·          ·
+      ├── scan  ·             ·             (s)        ·
+      │         table         str1@primary  ·          ·
+      │         spans         FULL SCAN     ·          ·
+      └── scan  ·             ·             (s)        ·
+·               table         str2@primary  ·          ·
+·               spans         FULL SCAN     ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
 ----
-·               distributed  false           ·          ·
-·               vectorized   true            ·          ·
-render          ·            ·               (s, s, s)  ·
- │              render 0     COALESCE(s, s)  ·          ·
- │              render 1     s               ·          ·
- │              render 2     s               ·          ·
- └── hash-join  ·            ·               (s, s)     ·
-      │         type         left outer      ·          ·
-      │         equality     (s) = (s)       ·          ·
-      ├── scan  ·            ·               (s)        ·
-      │         table        str2@primary    ·          ·
-      │         spans        FULL SCAN       ·          ·
-      └── scan  ·            ·               (s)        ·
-·               table        str1@primary    ·          ·
-·               spans        FULL SCAN       ·          ·
+·               distribution  local           ·          ·
+·               vectorized    true            ·          ·
+render          ·             ·               (s, s, s)  ·
+ │              render 0      COALESCE(s, s)  ·          ·
+ │              render 1      s               ·          ·
+ │              render 2      s               ·          ·
+ └── hash-join  ·             ·               (s, s)     ·
+      │         type          left outer      ·          ·
+      │         equality      (s) = (s)       ·          ·
+      ├── scan  ·             ·               (s)        ·
+      │         table         str2@primary    ·          ·
+      │         spans         FULL SCAN       ·          ·
+      └── scan  ·             ·               (s)        ·
+·               table         str1@primary    ·          ·
+·               spans         FULL SCAN       ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
 ----
-·               distributed  false           ·          ·
-·               vectorized   true            ·          ·
-render          ·            ·               (s, s, s)  ·
- │              render 0     COALESCE(s, s)  ·          ·
- │              render 1     s               ·          ·
- │              render 2     s               ·          ·
- └── hash-join  ·            ·               (s, s)     ·
-      │         type         full outer      ·          ·
-      │         equality     (s) = (s)       ·          ·
-      ├── scan  ·            ·               (s)        ·
-      │         table        str1@primary    ·          ·
-      │         spans        FULL SCAN       ·          ·
-      └── scan  ·            ·               (s)        ·
-·               table        str2@primary    ·          ·
-·               spans        FULL SCAN       ·          ·
+·               distribution  local           ·          ·
+·               vectorized    true            ·          ·
+render          ·             ·               (s, s, s)  ·
+ │              render 0      COALESCE(s, s)  ·          ·
+ │              render 1      s               ·          ·
+ │              render 2      s               ·          ·
+ └── hash-join  ·             ·               (s, s)     ·
+      │         type          full outer      ·          ·
+      │         equality      (s) = (s)       ·          ·
+      ├── scan  ·             ·               (s)        ·
+      │         table         str1@primary    ·          ·
+      │         spans         FULL SCAN       ·          ·
+      └── scan  ·             ·               (s)        ·
+·               table         str2@primary    ·          ·
+·               spans         FULL SCAN       ·          ·
 
 # Verify that we resolve the merged column a to str2.a but use IFNULL for
 # column s which is a collated string.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 ----
-·               distributed         false            ·             ·
+·               distribution        local            ·             ·
 ·               vectorized          true             ·             ·
 render          ·                   ·                (a, s)        ·
  │              render 0            a                ·             ·
@@ -915,7 +915,7 @@ CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
@@ -936,7 +936,7 @@ render           ·               ·                  (x, y, u, v)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
@@ -957,7 +957,7 @@ render           ·               ·                  (x, y, u, v)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
@@ -978,7 +978,7 @@ render           ·               ·                  (x, y, u, v)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                     distributed     false              ·                   ·
+·                     distribution    local              ·                   ·
 ·                     vectorized      true               ·                   ·
 filter                ·               ·                  (x, y, u, v)        ·
  │                    filter          x > 2              ·                   ·
@@ -1002,7 +1002,7 @@ filter                ·               ·                  (x, y, u, v)        �
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
-·           distributed     false              ·                   ·
+·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
@@ -1018,7 +1018,7 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distributed     false              ·                   ·
+·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
@@ -1034,7 +1034,7 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distributed     false              ·                   ·
+·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
@@ -1050,7 +1050,7 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, x, y, v)  ·
  │               render 0        x                  ·                   ·
@@ -1076,7 +1076,7 @@ render           ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
@@ -1097,7 +1097,7 @@ render           ·               ·                  (x, y, u, v)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
@@ -1118,7 +1118,7 @@ render           ·               ·                  (x, y, u, v)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-·                     distributed     false              ·                   ·
+·                     distribution    local              ·                   ·
 ·                     vectorized      true               ·                   ·
 filter                ·               ·                  (x, y, u, v)        ·
  │                    filter          x > 2              ·                   ·
@@ -1141,7 +1141,7 @@ filter                ·               ·                  (x, y, u, v)        �
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distributed     false              ·                   ·
+·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
@@ -1157,7 +1157,7 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, x, y, v)  ·
  │               render 0        x                  ·                   ·
@@ -1181,7 +1181,7 @@ render           ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
-·                distributed     false              ·                   ·
+·                distribution    local              ·                   ·
 ·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
@@ -1213,7 +1213,7 @@ CREATE TABLE r (a INT PRIMARY KEY, b2 INT, FAMILY (a))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-·                distributed         false       ·               ·
+·                distribution        local       ·               ·
 ·                vectorized          true        ·               ·
 render           ·                   ·           (a, b1, b2)     ·
  │               render 0            a           ·               ·
@@ -1235,7 +1235,7 @@ render           ·                   ·           (a, b1, b2)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
-·           distributed         false       ·               ·
+·           distribution        local       ·               ·
 ·           vectorized          true        ·               ·
 merge-join  ·                   ·           (a, b1, a, b2)  ·
  │          type                left outer  ·               ·
@@ -1253,7 +1253,7 @@ merge-join  ·                   ·           (a, b1, a, b2)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-·                distributed         false       ·               ·
+·                distribution        local       ·               ·
 ·                vectorized          true        ·               ·
 render           ·                   ·           (a, b1, b2)     ·
  │               render 0            a           ·               ·
@@ -1275,7 +1275,7 @@ render           ·                   ·           (a, b1, b2)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-·                distributed         false       ·               ·
+·                distribution        local       ·               ·
 ·                vectorized          true        ·               ·
 render           ·                   ·           (a, b1, a, b2)  ·
  │               render 0            a           ·               ·
@@ -1318,7 +1318,7 @@ CREATE TABLE abg (
 query TTT
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
-·                distributed         false
+·                distribution        local
 ·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
@@ -1356,23 +1356,23 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo NATURAL JOIN bar
 ]
 ----
-·               distributed  false
-·               vectorized   true
-render          ·            ·
- │              render 0     a
- │              render 1     b
- │              render 2     c
- │              render 3     d
- └── hash-join  ·            ·
-      │         type         inner
-      │         equality     (a, c) = (a, c)
-      │         pred         (b = b) AND (d = d)
-      ├── scan  ·            ·
-      │         table        foo@primary
-      │         spans        FULL SCAN
-      └── scan  ·            ·
-·               table        bar@primary
-·               spans        FULL SCAN
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ │              render 0      a
+ │              render 1      b
+ │              render 2      c
+ │              render 3      d
+ └── hash-join  ·             ·
+      │         type          inner
+      │         equality      (a, c) = (a, c)
+      │         pred          (b = b) AND (d = d)
+      ├── scan  ·             ·
+      │         table         foo@primary
+      │         spans         FULL SCAN
+      └── scan  ·             ·
+·               table         bar@primary
+·               spans         FULL SCAN
 
 # b can't be an equality column.
 query TTT
@@ -1380,25 +1380,25 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
 ]
 ----
-·                distributed  false
-·                vectorized   true
-render           ·            ·
- │               render 0     b
- │               render 1     a
- │               render 2     c
- │               render 3     d
- │               render 4     a
- │               render 5     c
- │               render 6     d
- └── cross-join  ·            ·
-      │          type         inner
-      │          pred         b = b
-      ├── scan   ·            ·
-      │          table        foo@primary
-      │          spans        FULL SCAN
-      └── scan   ·            ·
-·                table        bar@primary
-·                spans        FULL SCAN
+·                distribution  local
+·                vectorized    true
+render           ·             ·
+ │               render 0      b
+ │               render 1      a
+ │               render 2      c
+ │               render 3      d
+ │               render 4      a
+ │               render 5      c
+ │               render 6      d
+ └── cross-join  ·             ·
+      │          type          inner
+      │          pred          b = b
+      ├── scan   ·             ·
+      │          table         foo@primary
+      │          spans         FULL SCAN
+      └── scan   ·             ·
+·                table         bar@primary
+·                spans         FULL SCAN
 
 # Only a can be an equality column.
 query TTT
@@ -1406,25 +1406,25 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b)
 ]
 ----
-·               distributed  false
-·               vectorized   true
-render          ·            ·
- │              render 0     a
- │              render 1     b
- │              render 2     c
- │              render 3     d
- │              render 4     c
- │              render 5     d
- └── hash-join  ·            ·
-      │         type         inner
-      │         equality     (a) = (a)
-      │         pred         b = b
-      ├── scan  ·            ·
-      │         table        foo@primary
-      │         spans        FULL SCAN
-      └── scan  ·            ·
-·               table        bar@primary
-·               spans        FULL SCAN
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ │              render 0      a
+ │              render 1      b
+ │              render 2      c
+ │              render 3      d
+ │              render 4      c
+ │              render 5      d
+ └── hash-join  ·             ·
+      │         type          inner
+      │         equality      (a) = (a)
+      │         pred          b = b
+      ├── scan  ·             ·
+      │         table         foo@primary
+      │         spans         FULL SCAN
+      └── scan  ·             ·
+·               table         bar@primary
+·               spans         FULL SCAN
 
 # Only a and c can be equality columns.
 query TTT
@@ -1432,24 +1432,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b, c)
 ]
 ----
-·               distributed  false
-·               vectorized   true
-render          ·            ·
- │              render 0     a
- │              render 1     b
- │              render 2     c
- │              render 3     d
- │              render 4     d
- └── hash-join  ·            ·
-      │         type         inner
-      │         equality     (a, c) = (a, c)
-      │         pred         b = b
-      ├── scan  ·            ·
-      │         table        foo@primary
-      │         spans        FULL SCAN
-      └── scan  ·            ·
-·               table        bar@primary
-·               spans        FULL SCAN
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ │              render 0      a
+ │              render 1      b
+ │              render 2      c
+ │              render 3      d
+ │              render 4      d
+ └── hash-join  ·             ·
+      │         type          inner
+      │         equality      (a, c) = (a, c)
+      │         pred          b = b
+      ├── scan  ·             ·
+      │         table         foo@primary
+      │         spans         FULL SCAN
+      └── scan  ·             ·
+·               table         bar@primary
+·               spans         FULL SCAN
 
 # b can't be an equality column.
 query TTT
@@ -1457,17 +1457,17 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ]
 ----
-·           distributed  false
-·           vectorized   true
-cross-join  ·            ·
- │          type         inner
- │          pred         b = b
- ├── scan   ·            ·
- │          table        foo@primary
- │          spans        FULL SCAN
- └── scan   ·            ·
-·           table        bar@primary
-·           spans        FULL SCAN
+·           distribution  local
+·           vectorized    true
+cross-join  ·             ·
+ │          type          inner
+ │          pred          b = b
+ ├── scan   ·             ·
+ │          table         foo@primary
+ │          spans         FULL SCAN
+ └── scan   ·             ·
+·           table         bar@primary
+·           spans         FULL SCAN
 
 # Only a can be an equality column.
 query TTT
@@ -1475,35 +1475,35 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ]
 ----
-·          distributed  false
-·          vectorized   true
-hash-join  ·            ·
- │         type         inner
- │         equality     (a) = (a)
- │         pred         b = b
- ├── scan  ·            ·
- │         table        foo@primary
- │         spans        FULL SCAN
- └── scan  ·            ·
-·          table        bar@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+hash-join  ·             ·
+ │         type          inner
+ │         equality      (a) = (a)
+ │         pred          b = b
+ ├── scan  ·             ·
+ │         table         foo@primary
+ │         spans         FULL SCAN
+ └── scan  ·             ·
+·          table         bar@primary
+·          spans         FULL SCAN
 
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ]
 ----
-·           distributed  false
-·           vectorized   true
-cross-join  ·            ·
- │          type         inner
- │          pred         b = b
- ├── scan   ·            ·
- │          table        foo@primary
- │          spans        FULL SCAN
- └── scan   ·            ·
-·           table        bar@primary
-·           spans        FULL SCAN
+·           distribution  local
+·           vectorized    true
+cross-join  ·             ·
+ │          type          inner
+ │          pred          b = b
+ ├── scan   ·             ·
+ │          table         foo@primary
+ │          spans         FULL SCAN
+ └── scan   ·             ·
+·           table         bar@primary
+·           spans         FULL SCAN
 
 # Only a can be an equality column.
 query TTT
@@ -1511,36 +1511,36 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ]
 ----
-·          distributed  false
-·          vectorized   true
-hash-join  ·            ·
- │         type         inner
- │         equality     (a) = (a)
- │         pred         b = b
- ├── scan  ·            ·
- │         table        foo@primary
- │         spans        FULL SCAN
- └── scan  ·            ·
-·          table        bar@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+hash-join  ·             ·
+ │         type          inner
+ │         equality      (a) = (a)
+ │         pred          b = b
+ ├── scan  ·             ·
+ │         table         foo@primary
+ │         spans         FULL SCAN
+ └── scan  ·             ·
+·          table         bar@primary
+·          spans         FULL SCAN
 
 # Only a and c can be equality columns.
 query TTT
 EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
-·               distributed  false
-·               vectorized   true
-render          ·            ·
- └── hash-join  ·            ·
-      │         type         inner
-      │         equality     (a, c) = (a, c)
-      │         pred         (b = b) AND (d = d)
-      ├── scan  ·            ·
-      │         table        foo@primary
-      │         spans        FULL SCAN
-      └── scan  ·            ·
-·               table        bar@primary
-·               spans        FULL SCAN
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ └── hash-join  ·             ·
+      │         type          inner
+      │         equality      (a, c) = (a, c)
+      │         pred          (b = b) AND (d = d)
+      ├── scan  ·             ·
+      │         table         foo@primary
+      │         spans         FULL SCAN
+      └── scan  ·             ·
+·               table         bar@primary
+·               spans         FULL SCAN
 
 # Zigzag join tests.
 statement ok
@@ -1560,16 +1560,16 @@ SET enable_zigzag_join = false
 query TTT
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
-·                distributed  false
-·                vectorized   true
-filter           ·            ·
- │               filter       c = 6.0
- └── index-join  ·            ·
-      │          table        zigzag@primary
-      │          key columns  a
-      └── scan   ·            ·
-·                table        zigzag@b_idx
-·                spans        /5-/6
+·                distribution  local
+·                vectorized    true
+filter           ·             ·
+ │               filter        c = 6.0
+ └── index-join  ·             ·
+      │          table         zigzag@primary
+      │          key columns   a
+      └── scan   ·             ·
+·                table         zigzag@b_idx
+·                spans         /5-/6
 
 # Enable zigzag joins.
 statement ok
@@ -1579,24 +1579,24 @@ SET enable_zigzag_join = true
 query TTT
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
-·            distributed  false
-·            vectorized   true
-zigzag-join  ·            ·
- │           type         inner
- │           pred         (@2 = 5) AND (@3 = 6.0)
- ├── scan    ·            ·
- │           table        zigzag@b_idx
- │           fixedvals    1 column
- └── scan    ·            ·
-·            table        zigzag@c_idx
-·            fixedvals    1 column
+·            distribution  local
+·            vectorized    true
+zigzag-join  ·             ·
+ │           type          inner
+ │           pred          (@2 = 5) AND (@3 = 6.0)
+ ├── scan    ·             ·
+ │           table         zigzag@b_idx
+ │           fixedvals     1 column
+ └── scan    ·             ·
+·            table         zigzag@c_idx
+·            fixedvals     1 column
 
 
 # Zigzag join nested inside a lookup.
 query TTT
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
-·                 distributed            false
+·                 distribution           local
 ·                 vectorized             true
 lookup-join       ·                      ·
  │                table                  zigzag@primary
@@ -1618,7 +1618,7 @@ lookup-join       ·                      ·
 query TTT
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
-·                 distributed            false
+·                 distribution           local
 ·                 vectorized             true
 lookup-join       ·                      ·
  │                table                  zigzag@primary
@@ -1654,22 +1654,22 @@ CREATE TABLE zigzag2 (
 query TTT
 EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ----
-·                distributed  false
-·                vectorized   true
-filter           ·            ·
- │               filter       c IS NULL
- └── index-join  ·            ·
-      │          table        zigzag2@primary
-      │          key columns  rowid
-      └── scan   ·            ·
-·                table        zigzag2@a_b_idx
-·                spans        /1/2-/1/3
+·                distribution  local
+·                vectorized    true
+filter           ·             ·
+ │               filter        c IS NULL
+ └── index-join  ·             ·
+      │          table         zigzag2@primary
+      │          key columns   rowid
+      └── scan   ·             ·
+·                table         zigzag2@a_b_idx
+·                spans         /1/2-/1/3
 
 # Test that we can force a merge join.
 query TTT
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
-·                    distributed     false
+·                    distribution    local
 ·                    vectorized      true
 render               ·               ·
  └── merge-join      ·               ·
@@ -1691,7 +1691,7 @@ render               ·               ·
 query TTT
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
-·                    distributed     false
+·                    distribution    local
 ·                    vectorized      true
 render               ·               ·
  └── merge-join      ·               ·
@@ -1713,7 +1713,7 @@ render               ·               ·
 query TTT
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
-·               distributed     false
+·               distribution    local
 ·               vectorized      true
 merge-join      ·               ·
  │              type            inner
@@ -1743,7 +1743,7 @@ EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn ON onecolumn.x > twoc
 query TTT
 EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = cards.cust
 ----
-·          distributed         false
+·          distribution        local
 ·          vectorized          true
 hash-join  ·                   ·
  │         type                inner
