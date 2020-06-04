@@ -931,6 +931,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_interiorringn"></a><code>st_interiorringn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th (1-indexed) interior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon, or the ring does not exist.</p>
 </span></td></tr>
+<tr><td><a name="st_intersection"></a><code>st_intersection(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the point intersections of the given geometries.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_intersects"></a><code>st_intersects(geography_a: geography, geography_b: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geography_a shares any portion of space with geography_b.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
@@ -1088,6 +1091,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_pointn"></a><code>st_pointn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th Point of a LineString (1-indexed). Returns NULL if out of bounds or not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_pointonsurface"></a><code>st_pointonsurface(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a point that intersects with the given Geometry.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_polyfromtext"></a><code>st_polyfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not Polygon, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_polyfromtext"></a><code>st_polyfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not Polygon, NULL is returned.</p>
@@ -1113,6 +1119,8 @@ given Geometry.</p>
 <tr><td><a name="st_segmentize"></a><code>st_segmentize(geography: geography, max_segment_length_meters: <a href="float.html">float</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a modified Geography having no segment longer than the given max_segment_length meters.</p>
 <p>The calculations are done on a sphere.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
+</span></td></tr>
+<tr><td><a name="st_segmentize"></a><code>st_segmentize(geometry: geometry, max_segment_length: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry having no segment longer than the given max_segment_length. Length units are in units of spatial reference.</p>
 </span></td></tr>
 <tr><td><a name="st_setsrid"></a><code>st_setsrid(geography: geography, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Sets a Geography to a new SRID without transforming the coordinates.</p>
 </span></td></tr>
@@ -1159,6 +1167,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_transform"></a><code>st_transform(geometry: geometry, to_proj_text: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate reference system referenced by the projection text by projecting its coordinates.</p>
 <p>This function utilizes the PROJ library for coordinate projections.</p>
+</span></td></tr>
+<tr><td><a name="st_union"></a><code>st_union(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the union of the given geometries as a single Geometry object.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>

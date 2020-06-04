@@ -3247,7 +3247,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 		return err
 	})
 	if exp := "not lease holder"; !testutils.IsError(err, exp) {
-		t.Fatalf("expected %q error, but got %v", err, exp)
+		t.Fatalf("expected %q error, but got %v", exp, err)
 	}
 }
 

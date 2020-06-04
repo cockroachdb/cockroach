@@ -81,7 +81,12 @@ typedef CR_GEOS_Geometry (*CR_GEOS_BufferWithParams_r)(CR_GEOS_Handle, CR_GEOS_G
 
 typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+
 typedef CR_GEOS_Geometry (*CR_GEOS_Centroid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Union_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Intersection_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                   CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_PointOnSurface_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Interpolate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
 
@@ -147,7 +152,11 @@ struct CR_GEOS {
 
   CR_GEOS_Area_r GEOSArea_r;
   CR_GEOS_Length_r GEOSLength_r;
+
   CR_GEOS_Centroid_r GEOSGetCentroid_r;
+  CR_GEOS_Union_r GEOSUnion_r;
+  CR_GEOS_PointOnSurface_r GEOSPointOnSurface_r;
+  CR_GEOS_Intersection_r GEOSIntersection_r;
 
   CR_GEOS_Interpolate_r GEOSInterpolate_r;
 
@@ -209,6 +218,9 @@ struct CR_GEOS {
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
     INIT(GEOSGetCentroid_r);
+    INIT(GEOSUnion_r);
+    INIT(GEOSPointOnSurface_r);
+    INIT(GEOSIntersection_r);
     INIT(GEOSInterpolate_r);
     INIT(GEOSDistance_r);
     INIT(GEOSCovers_r);
@@ -442,6 +454,10 @@ CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
 }
 
+//
+// Topology operators.
+//
+
 CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* centroidEWKB) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
@@ -460,34 +476,107 @@ CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* c
   return toGEOSString(error.data(), error.length());
 }
 
+CR_GEOS_Status CR_GEOS_Union(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                             CR_GEOS_String* unionEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *unionEWKB = {.data = NULL, .len = 0};
+
+  auto geomA = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  auto geomB = CR_GEOS_GeometryFromSlice(lib, handle, b);
+  if (geomA != nullptr && geomB != nullptr) {
+    auto unionGeom = lib->GEOSUnion_r(handle, geomA, geomB);
+    if (unionGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geomA);
+      CR_GEOS_writeGeomToEWKB(lib, handle, unionGeom, unionEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, unionGeom);
+    }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_PointOnSurface(CR_GEOS* lib, CR_GEOS_Slice a,
+                                      CR_GEOS_String* pointOnSurfaceEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  *pointOnSurfaceEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto pointOnSurfaceGeom = lib->GEOSPointOnSurface_r(handle, geom);
+    if (pointOnSurfaceGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, pointOnSurfaceGeom, pointOnSurfaceEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, pointOnSurfaceGeom);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_Intersection(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                    CR_GEOS_String* intersectionEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *intersectionEWKB = {.data = NULL, .len = 0};
+
+  auto geomA = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  auto geomB = CR_GEOS_GeometryFromSlice(lib, handle, b);
+  if (geomA != nullptr && geomB != nullptr) {
+    auto intersectionGeom = lib->GEOSIntersection_r(handle, geomA, geomB);
+    if (intersectionGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geomA);
+      CR_GEOS_writeGeomToEWKB(lib, handle, intersectionGeom, intersectionEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, intersectionGeom);
+    }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
 //
 // Linear Reference
 //
 
 CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS* lib, CR_GEOS_Slice a, double distance,
                                    CR_GEOS_String* interpolatedPointEWKB) {
-   std::string error;
-   auto handle = initHandleWithErrorBuffer(lib, &error);
-   auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
-   *interpolatedPointEWKB = {.data = NULL, .len = 0};
-   if (geom != nullptr) {
-     auto interpolatedPoint = lib->GEOSInterpolate_r(handle, geom, distance);
-     if (interpolatedPoint != nullptr) {
-       auto srid = lib->GEOSGetSRID_r(handle, geom);
-       CR_GEOS_writeGeomToEWKB(lib, handle, interpolatedPoint, interpolatedPointEWKB, srid);
-       lib->GEOSGeom_destroy_r(handle, interpolatedPoint);
-     }
-     lib->GEOSGeom_destroy_r(handle, geom);
-   }
-   lib->GEOS_finish_r(handle);
-   return toGEOSString(error.data(), error.length());
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  *interpolatedPointEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto interpolatedPoint = lib->GEOSInterpolate_r(handle, geom, distance);
+    if (interpolatedPoint != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, interpolatedPoint, interpolatedPointEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, interpolatedPoint);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
 }
 
 //
 // Binary operators
 //
 
-CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double *ret) {
+CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double* ret) {
   return CR_GEOS_BinaryOperator(lib, lib->GEOSDistance_r, a, b, ret);
 }
 
