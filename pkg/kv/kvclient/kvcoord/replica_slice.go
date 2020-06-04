@@ -44,7 +44,7 @@ type ReplicaSlice []ReplicaInfo
 // that are not gossiped are omitted from the result.
 //
 // If there's no info in gossip for any of the nodes in the descriptor, a
-// SendError is returned.
+// sendError is returned.
 func NewReplicaSlice(
 	ctx context.Context,
 	gossip interface {
@@ -71,7 +71,7 @@ func NewReplicaSlice(
 		})
 	}
 	if len(rs) == 0 {
-		return nil, roachpb.NewSendError(
+		return nil, newSendError(
 			fmt.Sprintf("no replica node addresses available via gossip for r%d", desc.RangeID))
 	}
 	return rs, nil
