@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -270,6 +271,8 @@ func sendBatch(
 	g := makeGossip(t, stopper, rpcContext)
 
 	desc := new(roachpb.RangeDescriptor)
+	desc.StartKey = roachpb.RKeyMin
+	desc.EndKey = roachpb.RKeyMax
 	for i, addr := range addrs {
 		nd := &roachpb.NodeDescriptor{
 			NodeID:  roachpb.NodeID(i + 1),
@@ -295,6 +298,12 @@ func sendBatch(
 		Settings:   cluster.MakeTestingClusterSettings(),
 		NodeDialer: nodeDialer,
 	}, g)
+	ds.rangeCache.Insert(ctx, &kvbase.RangeCacheEntry{
+		Desc:  *desc,
+		Lease: roachpb.Lease{},
+	})
+	routing, err := ds.getDescriptor(ctx, desc.StartKey, nil /* evictToken */, false /* useReverseScan */)
+	require.NoError(t, err)
 
-	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, desc, false /* withCommit */)
+	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, routing, false /* withCommit */)
 }

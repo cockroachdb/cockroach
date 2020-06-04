@@ -235,6 +235,12 @@ func newTestDescriptorDB() *testDescriptorDB {
 	return db
 }
 
+func staticSize(size int64) func() int64 {
+	return func() int64 {
+		return size
+	}
+}
+
 func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	st := cluster.MakeTestingClusterSettings()
 	db := newTestDescriptorDB()
@@ -1210,4 +1216,46 @@ func TestRangeCacheGeneration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRangeCacheUpdateLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			},
+			{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			},
+		},
+		Generation: 0,
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
+
+	cache.Insert(ctx, &kvbase.RangeCacheEntry{
+		Desc:  desc,
+		Lease: roachpb.Lease{},
+	})
+
+	// Check that initially the cache has an empty lease. Then, we'll UpdateLeaseholder().
+	ent, tok, err := cache.LookupWithEvictionToken(
+		ctx, desc.StartKey, nil /* evictToken */, false /* useReverseScan */)
+	require.NoError(t, err)
+	require.True(t, ent.Lease.Empty())
+
+	tok.UpdateLeaseholder(ctx, desc.InternalReplicas[0])
+	ri := cache.GetCached(desc.StartKey, false /* inverted */)
+	require.NotNil(t, ri)
+	require.Equal(t, desc.InternalReplicas[0], ri.Lease.Replica)
 }

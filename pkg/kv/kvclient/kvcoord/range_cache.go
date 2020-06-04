@@ -230,6 +230,41 @@ func (rdc *RangeDescriptorCache) makeEvictionToken(
 	}
 }
 
+// UpdateLeaseholder updates the leaseholder in the cache entry corresponding to
+// this EvictionToken to rep.
+//
+// rep is assumed to be one of the voters in the cached range descriptor.
+func (et *EvictionToken) UpdateLeaseholder(ctx context.Context, rep roachpb.ReplicaDescriptor) {
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+	found := false
+	for _, r := range et.entry.Desc.Replicas().Voters() {
+		if r.ReplicaID == rep.ReplicaID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.Fatalf(ctx, "leaseholder is not a voter for the range. lh: %s. desc: %s", rep, et.entry.Desc)
+	}
+	l := &et.entry.Lease
+	// We don't have much information about the new lease, so we inherit
+	// everything that was in the cache already except the sequence and the
+	// leaseholder replica. We set the sequence to 0 so that any other update
+	// overrides it.
+	// TODO(andrei): Ultimately all callers should have a full descriptor on hand,
+	// and this hacky method shouldn't be necessary any more.
+	l.Sequence = 0
+	l.Replica = rep
+}
+
+// ClearLeaseholder evicts information about the current lease.
+func (et *EvictionToken) ClearLeaseholder(ctx context.Context) {
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+	et.entry.Lease = roachpb.Lease{}
+}
+
 // Evict instructs the EvictionToken to evict the RangeDescriptor it was created
 // with from the RangeDescriptorCache.
 func (et *EvictionToken) Evict(ctx context.Context) {
