@@ -46,7 +46,7 @@ project
  │    │    │    ├── fd: (3)-->(1,2)
  │    │    │    ├── prune: (1-3)
  │    │    │    ├── interesting orderings: (+3)
- │    │    │    └── unfiltered-cols: (1-3)
+ │    │    │    └── unfiltered-cols: (1)
  │    │    ├── inner-join-apply
  │    │    │    ├── columns: x:4(int!null) y:5(int) unnest:6(int)
  │    │    │    ├── outer: (1,2)

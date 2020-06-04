@@ -893,7 +893,6 @@ sort
       │    │    │    │    │    │    │    ├── fd: ()-->(59), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34)
       │    │    │    │    │    │    │    ├── inner-join (cross)
       │    │    │    │    │    │    │    │    ├── columns: c_custkey:42!null c_nationkey:45!null n1.n_nationkey:50!null n1.n_regionkey:52!null n2.n_nationkey:54!null n2.n_name:55!null r_regionkey:58!null r_name:59!null
-      │    │    │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
       │    │    │    │    │    │    │    │    ├── key: (42,54)
       │    │    │    │    │    │    │    │    ├── fd: ()-->(59), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45)
       │    │    │    │    │    │    │    │    ├── scan n2
