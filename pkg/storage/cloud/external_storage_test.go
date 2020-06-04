@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
@@ -214,6 +215,43 @@ func testExportStoreWithExternalIOConfig(
 		if !bytes.Equal(content, []byte("bbb")) {
 			t.Fatalf("wrong content")
 		}
+		if err := s.Delete(ctx, testingFilename); err != nil {
+			t.Fatal(err)
+		}
+	})
+	// This test ensures that the ReadFile method of the ExternalStorage interface
+	// raises a sentinel error indicating that a requested bucket/key/file/object
+	// (based on the storage system) could not be found.
+	t.Run("file-does-not-exist", func(t *testing.T) {
+		const testingFilename = "A"
+		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
+			t.Fatal(err)
+		}
+		singleFile := storeFromURI(ctx, t, storeURI, clientFactory)
+		defer singleFile.Close()
+
+		// Read a valid file.
+		res, err := singleFile.ReadFile(ctx, testingFilename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Close()
+		content, err := ioutil.ReadAll(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Verify the result contains what we wrote.
+		if !bytes.Equal(content, []byte("aaa")) {
+			t.Fatalf("wrong content")
+		}
+
+		// Attempt to read a file which does not exist.
+		_, err = singleFile.ReadFile(ctx, "file_does_not_exist")
+		require.Error(t, err, "")
+		if !errors.Is(err, ErrFileDoesNotExist) {
+			t.Errorf("Expected a file does not exist error but returned %s", err.Error())
+		}
+
 		if err := s.Delete(ctx, testingFilename); err != nil {
 			t.Fatal(err)
 		}

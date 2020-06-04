@@ -229,6 +229,13 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 		object: path.Join(g.prefix, basename),
 	}
 	if err := reader.openStream(); err != nil {
+		// The Google SDK has a specialized ErrBucketDoesNotExist error, but
+		// the code path from this method first triggers an ErrObjectNotExist in
+		// both scenarios - when a Bucket does not exist or an Object does not
+		// exist.
+		if errors.Is(err, gcs.ErrObjectNotExist) {
+			return nil, ErrFileDoesNotExist
+		}
 		return nil, err
 	}
 	return reader, nil
