@@ -1399,12 +1399,12 @@ CREATE TABLE crdb_internal.create_type_statements (
 					EnumLabels: enumLabels,
 				}
 				if err := addRow(
-					tree.NewDInt(tree.DInt(db.ID)),       // database_id
-					tree.NewDString(db.Name),             // database_name
-					tree.NewDString(sc),                  // schema_name
-					tree.NewDInt(tree.DInt(typeDesc.ID)), // descriptor_id
-					tree.NewDString(typeDesc.Name),       // descriptor_name
-					tree.NewDString(tree.AsString(node)), // create_statement
+					tree.NewDInt(tree.DInt(db.ID)),            // database_id
+					tree.NewDString(db.Name),                  // database_name
+					tree.NewDString(sc),                       // schema_name
+					tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
+					tree.NewDString(typeDesc.Name),            // descriptor_name
+					tree.NewDString(tree.AsString(node)),      // create_statement
 				); err != nil {
 					return err
 				}

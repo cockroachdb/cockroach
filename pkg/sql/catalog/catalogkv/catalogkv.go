@@ -79,9 +79,11 @@ func ResolveSchemaID(
 //
 // In most cases you'll want to use wrappers: `GetDatabaseDescByID` or
 // `getTableDescByID`.
+//
+// TODO(ajwerner): Consider passing mutability information into here.
 func GetDescriptorByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
-) (*sqlbase.Descriptor, error) {
+) (sqlbase.DescriptorInterface, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(codec, id)
 	desc := &sqlbase.Descriptor{}
@@ -99,16 +101,16 @@ func GetDescriptorByID(
 		if err := table.Validate(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		return desc, nil
+		return sqlbase.NewImmutableTableDescriptor(*table), nil
 	case database != nil:
 		if err := database.Validate(); err != nil {
 			return nil, err
 		}
-		return desc, nil
+		return sqlbase.NewImmutableDatabaseDescriptor(*database), nil
 	case typ != nil:
-		return desc, nil
+		return sqlbase.NewImmutableTypeDescriptor(*typ), nil
 	case schema != nil:
-		return desc, nil
+		return schema, nil
 	default:
 		return nil, nil
 	}
@@ -262,13 +264,13 @@ func GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id)
-	if err != nil {
+	if err != nil || desc == nil {
 		return nil, err
 	}
-	db := desc.GetDatabase()
+	db := desc.DatabaseDesc()
 	if db == nil {
 		return nil, pgerror.Newf(pgcode.WrongObjectType,
-			"%q is not a database", desc.String())
+			"%q with ID %d is not a database", desc, log.Safe(id))
 	}
 	// TODO(ajwerner): Set ModificationTime.
 	return sqlbase.NewImmutableDatabaseDescriptor(*db), nil

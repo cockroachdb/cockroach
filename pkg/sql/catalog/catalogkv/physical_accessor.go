@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -213,11 +212,13 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	// Look up the object using the discovered database descriptor.
-	rawDesc, err := GetDescriptorByID(ctx, txn, codec, descID)
+	// TODO(ajwerner): Consider pushing mutability down to GetDescriptorByID.
+	desc, err := GetDescriptorByID(ctx, txn, codec, descID)
 	if err != nil {
 		return nil, err
 	}
-	if tableDesc := rawDesc.Table(hlc.Timestamp{}); tableDesc != nil {
+	switch desc := desc.(type) {
+	case *sqlbase.ImmutableTableDescriptor:
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
 		acceptableStates := map[sqlbase.TableDescriptor_State]bool{
@@ -225,7 +226,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			sqlbase.TableDescriptor_PUBLIC:  true,
 			sqlbase.TableDescriptor_OFFLINE: flags.IncludeOffline,
 		}
-		if acceptableStates[tableDesc.State] {
+		if acceptableStates[desc.State] {
 			// Immediately after a RENAME an old name still points to the
 			// descriptor during the drain phase for the name. Do not
 			// return a descriptor during draining.
@@ -234,21 +235,20 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// system.namespace_deprecated table when selecting from system.namespace.
 			// As this table can not be renamed by users, it is okay that the first
 			// check fails.
-			if tableDesc.Name == object ||
-				object == sqlbase.NamespaceTableName && db == sqlbase.SystemDB.Name {
+			if desc.Name == object ||
+				object == sqlbase.NamespaceTableName && db == sqlbase.SystemDatabaseName {
 				if flags.RequireMutable {
-					return sqlbase.NewMutableExistingTableDescriptor(*tableDesc), nil
+					return sqlbase.NewMutableExistingTableDescriptor(*desc.TableDesc()), nil
 				}
-				return sqlbase.NewImmutableTableDescriptor(*tableDesc), nil
+				return desc, nil
 			}
 		}
 		return nil, nil
-	} else if typeDesc := rawDesc.GetType(); typeDesc != nil {
+	case *sqlbase.ImmutableTypeDescriptor:
 		if flags.RequireMutable {
-			return sqlbase.NewMutableExistingTypeDescriptor(*typeDesc), nil
+			return sqlbase.NewMutableExistingTypeDescriptor(*desc.TypeDesc()), nil
 		}
-		return sqlbase.NewImmutableTypeDescriptor(*typeDesc), nil
+		return desc, nil
 	}
 	return nil, nil
-
 }

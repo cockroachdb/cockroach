@@ -172,11 +172,6 @@ func (desc *TypeDescriptor) TypeName() string {
 	return "type"
 }
 
-// SetName implements the DescriptorProto interface.
-func (desc *TypeDescriptor) SetName(name string) {
-	desc.Name = name
-}
-
 // MakeTypesT creates a types.T from the input type descriptor.
 func (desc *TypeDescriptor) MakeTypesT(
 	name *tree.TypeName, typeLookup TypeLookupFunc,

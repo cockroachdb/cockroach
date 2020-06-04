@@ -771,7 +771,7 @@ func (tc *Collection) GetAllDescriptors(
 				if err != nil {
 					return nil, nil, err
 				}
-				name := tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaName, typDesc.Name)
+				name := tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaName, typDesc.GetName())
 				return &name, typDesc, nil
 			}
 			// Now hydrate all table descriptors.
