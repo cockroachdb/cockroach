@@ -171,11 +171,13 @@ CREATE TABLE system.jobs (
 	progress          BYTES,
 	created_by_type   STRING,
 	created_by_id     INT,
+	lease							BYTES,
 	INDEX (status, created),
 	INDEX (created_by_type, created_by_id) STORING (status),
 
 	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
-	FAMILY progress (progress)
+	FAMILY progress (progress),
+	FAMILY lease (lease)
 );`
 
 	// web_sessions are used to track authenticated user actions over stateless
@@ -849,8 +851,9 @@ var (
 			{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
 			{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
 			{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
+			{Name: "lease", ID: 8, Type: types.Bytes},
 		},
-		NextColumnID: 8,
+		NextColumnID: 9,
 		Families: []ColumnFamilyDescriptor{
 			{
 				// NB: We are using family name that existed prior to adding created_by_type and
@@ -868,8 +871,15 @@ var (
 				ColumnIDs:       []ColumnID{5},
 				DefaultColumnID: 5,
 			},
+			{
+				Name:            "lease",
+				ID:              2,
+				ColumnNames:     []string{"lease"},
+				ColumnIDs:       []ColumnID{8},
+				DefaultColumnID: 8,
+			},
 		},
-		NextFamilyID: 2,
+		NextFamilyID: 3,
 		PrimaryIndex: pk("id"),
 		Indexes: []IndexDescriptor{
 			{
