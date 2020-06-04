@@ -12,6 +12,7 @@ package keys
 
 import (
 	"bytes"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -217,7 +218,7 @@ func (d sqlDecoder) DecodeIndexPrefix(key roachpb.Key) ([]byte, uint32, uint32, 
 }
 
 // DecodeDescMetadataID decodes a descriptor ID from a descriptor metadata key.
-func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
+func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint32, error) {
 	// Extract table and index ID from key.
 	remaining, tableID, _, err := d.DecodeIndexPrefix(key)
 	if err != nil {
@@ -231,5 +232,8 @@ func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return id, nil
+	if id > math.MaxUint32 {
+		return 0, errors.Errorf("descriptor ID %d exceeds uint32 bounds", id)
+	}
+	return uint32(id), nil
 }

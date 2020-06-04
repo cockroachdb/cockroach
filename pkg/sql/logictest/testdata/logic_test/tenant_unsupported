@@ -31,11 +31,6 @@ SET experimental_enable_temp_tables = true
 statement ok
 CREATE TEMP TABLE users (id UUID, city STRING, CONSTRAINT "primary" PRIMARY KEY (id ASC, city ASC))
 
-# TODO(asubiotto): Uncomment this test once
-# https://github.com/cockroachdb/cockroach/issues/49318 is fixed.
-# statement error operation is unsupported
-# ALTER TABLE kv CONFIGURE ZONE USING num_replicas = 123
-
 # Missing status server
 
 statement error operation is unsupported
@@ -70,3 +65,14 @@ SELECT * FROM crdb_internal.kv_store_status
 
 statement error operation is unsupported
 SELECT * FROM crdb_internal.kv_node_status
+
+# Cannot manipulate zone configurations
+
+statement error operation is unsupported
+SELECT * FROM crdb_internal.zones
+
+statement error operation is unsupported
+SHOW ZONE CONFIGURATION FOR TABLE kv
+
+statement error operation is unsupported
+ALTER TABLE kv CONFIGURE ZONE USING num_replicas = 123

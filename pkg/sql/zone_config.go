@@ -30,16 +30,10 @@ import (
 func init() {
 	// TODO(marc): we use a hook to avoid a dependency on the sql package. We
 	// should probably move keys/protos elsewhere.
-	config.ZoneConfigHook = ZoneConfigHook
+	config.ZoneConfigHook = zoneConfigHook
 }
 
 var errNoZoneConfigApplies = errors.New("no zone config applies")
-
-// TODO(nvanbenschoten): determine how zone configurations fit into a
-// multi-tenant cluster. Does each tenant have its own Zones table? Does KV have
-// to make sure to look at the correct Zones according to the tenant prefix of
-// its key range? See #48375.
-var zoneConfigCodec = keys.TODOSQLCodec
 
 // getZoneConfig recursively looks up entries in system.zones until an
 // entry that applies to the object with the specified id is
@@ -49,13 +43,21 @@ var zoneConfigCodec = keys.TODOSQLCodec
 //
 // This function must be kept in sync with ascendZoneSpecifier.
 //
-// if getInheritedDefault is true, the direct zone configuration, if it exists, is
+// If getInheritedDefault is true, the direct zone configuration, if it exists, is
 // ignored, and the default that would apply if it did not exist is returned instead.
 func getZoneConfig(
-	id uint32, getKey func(roachpb.Key) (*roachpb.Value, error), getInheritedDefault bool,
-) (uint32, *zonepb.ZoneConfig, uint32, *zonepb.ZoneConfig, error) {
+	id config.SystemTenantObjectID,
+	getKey func(roachpb.Key) (*roachpb.Value, error),
+	getInheritedDefault bool,
+) (
+	config.SystemTenantObjectID,
+	*zonepb.ZoneConfig,
+	config.SystemTenantObjectID,
+	*zonepb.ZoneConfig,
+	error,
+) {
 	var placeholder *zonepb.ZoneConfig
-	var placeholderID uint32
+	var placeholderID config.SystemTenantObjectID
 	if !getInheritedDefault {
 		// Look in the zones table.
 		if zoneVal, err := getKey(config.MakeZoneKey(id)); err != nil {
@@ -79,7 +81,7 @@ func getZoneConfig(
 
 	// No zone config for this ID. We need to figure out if it's a table, so we
 	// look up its descriptor.
-	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(zoneConfigCodec, sqlbase.ID(id))); err != nil {
+	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(id))); err != nil {
 		return 0, nil, 0, nil, err
 	} else if descVal != nil {
 		var desc sqlbase.Descriptor
@@ -88,7 +90,7 @@ func getZoneConfig(
 		}
 		if tableDesc := desc.Table(descVal.Timestamp); tableDesc != nil {
 			// This is a table descriptor. Look up its parent database zone config.
-			dbID, zone, _, _, err := getZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
+			dbID, zone, _, _, err := getZoneConfig(config.SystemTenantObjectID(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
 				return 0, nil, 0, nil, err
 			}
@@ -116,14 +118,16 @@ func getZoneConfig(
 // NOTE: This will not work for subzones. To complete subzones, find a complete
 // parent zone (index or table) and apply InheritFromParent to it.
 func completeZoneConfig(
-	cfg *zonepb.ZoneConfig, id uint32, getKey func(roachpb.Key) (*roachpb.Value, error),
+	cfg *zonepb.ZoneConfig,
+	id config.SystemTenantObjectID,
+	getKey func(roachpb.Key) (*roachpb.Value, error),
 ) error {
 	if cfg.IsComplete() {
 		return nil
 	}
 	// Check to see if its a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(zoneConfigCodec, sqlbase.ID(id))); err != nil {
+	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(id))); err != nil {
 		return err
 	} else if descVal != nil {
 		var desc sqlbase.Descriptor
@@ -131,7 +135,7 @@ func completeZoneConfig(
 			return err
 		}
 		if tableDesc := desc.Table(descVal.Timestamp); tableDesc != nil {
-			_, dbzone, _, _, err := getZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
+			_, dbzone, _, _, err := getZoneConfig(config.SystemTenantObjectID(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
 				return err
 			}
@@ -151,12 +155,15 @@ func completeZoneConfig(
 	return nil
 }
 
-// ZoneConfigHook returns the zone config for the object with id using the
-// cached system config. If keySuffix is within a subzone, the subzone's config
-// is returned instead. The bool is set to true when the value returned is
-// cached.
-func ZoneConfigHook(
-	cfg *config.SystemConfig, id uint32,
+// zoneConfigHook returns the zone config and optional placeholder config for
+// the object with id using the cached system config. The returned boolean is
+// set to true when the zone config returned can be cached.
+//
+// zoneConfigHook is a pure function whose only inputs are a system config and
+// an object ID. It does not make any external KV calls to look up additional
+// state.
+func zoneConfigHook(
+	cfg *config.SystemConfig, id config.SystemTenantObjectID,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
@@ -174,16 +181,21 @@ func ZoneConfigHook(
 	return zone, placeholder, true, nil
 }
 
-// GetZoneConfigInTxn looks up the zone and subzone for the specified
-// object ID, index, and partition.
+// GetZoneConfigInTxn looks up the zone and subzone for the specified object ID,
+// index, and partition. See the documentation on getZoneConfig for information
+// about the getInheritedDefault parameter.
+//
+// Unlike ZoneConfigHook, GetZoneConfigInTxn does not used a cached system
+// config. Instead, it uses the provided txn to make transactionally consistent
+// KV lookups.
 func GetZoneConfigInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	id uint32,
+	id config.SystemTenantObjectID,
 	index *sqlbase.IndexDescriptor,
 	partition string,
 	getInheritedDefault bool,
-) (uint32, *zonepb.ZoneConfig, *zonepb.Subzone, error) {
+) (config.SystemTenantObjectID, *zonepb.ZoneConfig, *zonepb.Subzone, error) {
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		kv, err := txn.Get(ctx, key)
 		if err != nil {
@@ -270,7 +282,7 @@ func resolveZone(ctx context.Context, txn *kv.Txn, zs *tree.ZoneSpecifier) (sqlb
 	errMissingKey := errors.New("missing key")
 	id, err := zonepb.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
-			found, id, err := sqlbase.LookupPublicTableID(ctx, txn, zoneConfigCodec, sqlbase.ID(parentID), name)
+			found, id, err := sqlbase.LookupPublicTableID(ctx, txn, keys.SystemSQLCodec, sqlbase.ID(parentID), name)
 			if err != nil {
 				return 0, err
 			}
@@ -341,7 +353,7 @@ func deleteRemovedPartitionZoneConfigs(
 	if len(removedNames) == 0 {
 		return nil
 	}
-	zone, err := getZoneConfigRaw(ctx, txn, tableDesc.ID)
+	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableDesc.ID)
 	if err != nil {
 		return err
 	} else if zone == nil {

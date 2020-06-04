@@ -1228,7 +1228,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		last := uint32(v.ValueInt())
+		last := config.SystemTenantObjectID(v.ValueInt())
 		zoneConfig := zonepb.DefaultZoneConfig()
 		zoneConfig.RangeMaxBytes = proto.Int64(5000)
 		config.TestingSetZoneConfig(last+1, zoneConfig)
