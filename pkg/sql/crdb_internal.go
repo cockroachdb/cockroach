@@ -1382,7 +1382,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTypeDesc(ctx, p, db, func(db *sqlbase.ImmutableDatabaseDescriptor, sc string, typeDesc *TypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, db, func(db *sqlbase.ImmutableDatabaseDescriptor, sc string, typeDesc *sqlbase.ImmutableTypeDescriptor) error {
 			switch typeDesc.Kind {
 			case sqlbase.TypeDescriptor_ENUM:
 				var enumLabels []string
