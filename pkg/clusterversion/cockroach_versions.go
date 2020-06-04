@@ -66,6 +66,7 @@ const (
 	VersionRangefeedLeases
 	VersionAlterColumnTypeGeneral
 	VersionAlterSystemJobsAddCreatedByColumns
+	VersionAddScheduledJobsTable
 
 	// Add new versions here (step one of two).
 )
@@ -501,10 +502,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 5},
 	},
 	{
-		// VersionAlterSystemJobsTable is a version which modified system.jobs table
-		//
+		// VersionAlterSystemJobsTable is a version which modified system.jobs table.
 		Key:     VersionAlterSystemJobsAddCreatedByColumns,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 6},
+	},
+	{
+		// VersionAddScheduledJobsTable is a version which adds system.scheduled_jobs table.
+		Key:     VersionAddScheduledJobsTable,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 7},
 	},
 
 	// Add new versions here (step two of two).

@@ -9,14 +9,14 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-
-
-const cypressTypeScriptPreprocessor = require('./cy-ts-preprocessor');
+const requireOpt = require("./requireOptModule");
+const cypressTypeScriptPreprocessor = require("./cy-ts-preprocessor");
+const { addMatchImageSnapshotPlugin } = requireOpt("cypress-image-snapshot/plugin");
 
 /**
  * @type {Cypress.PluginConfig}
  */
 module.exports = (on, config) => {
-  on('file:preprocessor', cypressTypeScriptPreprocessor)
+  on("file:preprocessor", cypressTypeScriptPreprocessor);
+  addMatchImageSnapshotPlugin(on, config);
 };
