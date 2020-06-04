@@ -76,14 +76,29 @@ func willDistributePlanForExplainPurposes(
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
 ) planDistribution {
-	if !plan.isPhysicalPlan() {
-		if _, ok := plan.planNode.(distSQLExplainable); ok {
-			// This is a special case for plans that will be actually distributed
-			// but are represented using local plan nodes (for example, "create
-			// statistics" is handled by the jobs framework which is responsible
-			// for setting up the correct DistSQL infrastructure).
-			return fullyDistributedPlan
+	if plan.isPhysicalPlan() {
+		return plan.distribution
+	}
+	switch p := plan.planNode.(type) {
+	case *explainDistSQLNode:
+		if p.plan.main.isPhysicalPlan() {
+			return p.plan.main.distribution
 		}
+	case *explainVecNode:
+		if p.plan.isPhysicalPlan() {
+			return p.plan.distribution
+		}
+	case *explainPlanNode:
+		if p.plan.main.isPhysicalPlan() {
+			return p.plan.main.distribution
+		}
+	}
+	if _, ok := plan.planNode.(distSQLExplainable); ok {
+		// This is a special case for plans that will be actually distributed
+		// but are represented using local plan nodes (for example, "create
+		// statistics" is handled by the jobs framework which is responsible
+		// for setting up the correct DistSQL infrastructure).
+		return fullyDistributedPlan
 	}
 	return willDistributePlan(ctx, nodeID, distSQLMode, plan)
 }

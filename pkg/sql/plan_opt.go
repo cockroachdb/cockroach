@@ -202,6 +202,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			}
 			// We will fallback to the old path.
 			bld = nil
+			// TODO(yuzefovich): make the logging conditional on the verbosity
+			// level once new DistSQL planning is no longer experimental.
+			log.Infof(ctx, "%v", err)
 		}
 	}
 	if bld == nil {

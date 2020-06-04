@@ -1186,45 +1186,7 @@ func (ef *execFactory) ConstructExplainOpt(
 func (ef *execFactory) ConstructExplain(
 	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
-	p := plan.(*planTop)
-
-	analyzeSet := options.Flags[tree.ExplainFlagAnalyze]
-
-	if options.Flags[tree.ExplainFlagEnv] {
-		return nil, errors.New("ENV only supported with (OPT) option")
-	}
-
-	switch options.Mode {
-	case tree.ExplainDistSQL:
-		return &explainDistSQLNode{
-			options:  options,
-			plan:     p.planComponents,
-			analyze:  analyzeSet,
-			stmtType: stmtType,
-		}, nil
-
-	case tree.ExplainVec:
-		return &explainVecNode{
-			options:       options,
-			plan:          p.main,
-			subqueryPlans: p.subqueryPlans,
-			stmtType:      stmtType,
-		}, nil
-
-	case tree.ExplainPlan:
-		if analyzeSet {
-			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")
-		}
-		return ef.planner.makeExplainPlanNodeWithPlan(
-			context.TODO(),
-			options,
-			&p.planComponents,
-			stmtType,
-		)
-
-	default:
-		panic(fmt.Sprintf("unsupported explain mode %v", options.Mode))
-	}
+	return constructExplainPlanNode(options, stmtType, plan.(*planTop), ef.planner)
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.

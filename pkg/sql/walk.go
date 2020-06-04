@@ -660,9 +660,23 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 
 	case *explainDistSQLNode:
+		// We check whether planNode is nil because the plan might be
+		// represented physically. We don't yet have a walker over such
+		// representation, so we simply short-circuit.
+		// TODO(yuzefovich): implement that walker and use it here.
+		if n.plan.main.planNode == nil {
+			return
+		}
 		n.plan.main.planNode = v.visit(n.plan.main.planNode)
 
 	case *explainVecNode:
+		// We check whether planNode is nil because the plan might be
+		// represented physically. We don't yet have a walker over such
+		// representation, so we simply short-circuit.
+		// TODO(yuzefovich): implement that walker and use it here.
+		if n.plan.planNode == nil {
+			return
+		}
 		n.plan.planNode = v.visit(n.plan.planNode)
 
 	case *ordinalityNode:
@@ -684,6 +698,13 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.plan = v.visit(n.plan)
 
 	case *explainPlanNode:
+		// We check whether planNode is nil because the plan might be
+		// represented physically. We don't yet have a walker over such
+		// representation, so we simply short-circuit.
+		// TODO(yuzefovich): implement that walker and use it here.
+		if n.plan.main.planNode == nil {
+			return
+		}
 		n.plan.main.planNode = v.visit(n.plan.main.planNode)
 
 	case *cancelQueriesNode:
