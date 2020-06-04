@@ -197,8 +197,24 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		addDescriptor(sysObj.parentID, sysObj.desc)
 	}
 
-	for _, id := range ms.otherSplitIDs {
-		splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(id)))
+	// The splits slice currently has a split point for each of the object
+	// descriptors in ms.descs. If we're fetching the initial values for the
+	// system tenant, add any additional split point, which correspond to
+	// "pseudo" tables that don't have real descriptors.
+	//
+	// If we're fetching the initial values for a secondary tenant, things are
+	// different. Secondary tenants do not enforce split points at table
+	// boundaries. In fact, if we tried to split at table boundaries, those
+	// splits would quickly be merged away. The only enforced split points are
+	// between secondary tenants (e.g. between /tenant/<id> and /tenant/<id+1>).
+	// So we drop all descriptor split points and replace it with a single split
+	// point at the beginning of this tenant's keyspace.
+	if ms.codec.ForSystemTenant() {
+		for _, id := range ms.otherSplitIDs {
+			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(id)))
+		}
+	} else {
+		splits = []roachpb.RKey{roachpb.RKey(ms.codec.TenantPrefix())}
 	}
 
 	// Other key/value generation that doesn't fit into databases and
