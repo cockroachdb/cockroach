@@ -72,7 +72,7 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 	case *GetOperation, *PutOperation, *BatchOperation:
 		applyClientOp(ctx, db, op)
 	case *SplitOperation:
-		err := db.AdminSplit(ctx, o.Key, o.Key, hlc.MaxTimestamp)
+		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
 		o.Result = resultError(ctx, err)
 	case *MergeOperation:
 		err := db.AdminMerge(ctx, o.Key)

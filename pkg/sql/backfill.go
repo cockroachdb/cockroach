@@ -1291,7 +1291,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 
 	for _, span := range addingSpans {
-		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+		if err := sc.db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 			return err
 		}
 	}
