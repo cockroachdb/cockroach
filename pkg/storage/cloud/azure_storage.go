@@ -100,6 +100,13 @@ func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCl
 	blob := s.getBlob(basename)
 	get, err := blob.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false)
 	if err != nil {
+		if azerr := (azblob.StorageError)(nil); errors.As(err, &azerr) {
+			switch azerr.ServiceCode() {
+			// TODO(adityamaru): Investigate whether both these conditions are required.
+			case azblob.ServiceCodeBlobNotFound, azblob.ServiceCodeResourceNotFound:
+				return nil, errors.Wrapf(ErrFileDoesNotExist, "azure blob does not exist: %s", err.Error())
+			}
+		}
 		return nil, errors.Wrap(err, "failed to create azure reader")
 	}
 	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
