@@ -342,21 +342,6 @@ func (e *LeaseRejectedError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}
 
-// NewSendError creates a SendError.
-func NewSendError(msg string) *SendError {
-	return &SendError{Message: msg}
-}
-
-func (s SendError) Error() string {
-	return s.message(nil)
-}
-
-func (s *SendError) message(_ *Error) string {
-	return "failed to send RPC: " + s.Message
-}
-
-var _ ErrorDetailInterface = &SendError{}
-
 // NewRangeNotFoundError initializes a new RangeNotFoundError for the given RangeID and, optionally,
 // a StoreID.
 func NewRangeNotFoundError(rangeID RangeID, storeID StoreID) *RangeNotFoundError {

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type Node time.Duration
@@ -72,7 +74,7 @@ func TestSendToOneClient(t *testing.T) {
 		return ln.Addr(), nil
 	})
 
-	reply, err := sendBatch(context.Background(), nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
+	reply, err := sendBatch(context.Background(), t, nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,6 +163,7 @@ func TestComplexScenarios(t *testing.T) {
 
 		reply, err := sendBatch(
 			context.Background(),
+			t,
 			func(
 				_ SendOptions,
 				_ *nodedialer.Dialer,
@@ -253,40 +256,45 @@ func TestSplitHealthy(t *testing.T) {
 	}
 }
 
-func makeReplicas(addrs ...net.Addr) ReplicaSlice {
-	replicas := make(ReplicaSlice, len(addrs))
-	for i, addr := range addrs {
-		replicas[i].NodeDesc = &roachpb.NodeDescriptor{
-			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-		}
-	}
-	return replicas
-}
-
 // sendBatch sends Batch requests to specified addresses using send.
 func sendBatch(
 	ctx context.Context,
+	t *testing.T,
 	transportFactory TransportFactory,
 	addrs []net.Addr,
 	rpcContext *rpc.Context,
 	nodeDialer *nodedialer.Dialer,
 ) (*roachpb.BatchResponse, error) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	g := makeGossip(t, stopper, rpcContext)
+
+	desc := new(roachpb.RangeDescriptor)
+	for i, addr := range addrs {
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i + 1),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+		err := g.AddInfoProto(gossip.MakeNodeIDKey(nd.NodeID), nd, gossip.NodeDescriptorTTL)
+		require.NoError(t, err)
+
+		desc.InternalReplicas = append(desc.InternalReplicas,
+			roachpb.ReplicaDescriptor{
+				NodeID:    nd.NodeID,
+				StoreID:   0,
+				ReplicaID: roachpb.ReplicaID(i + 1),
+			})
+	}
+
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		RPCContext: rpcContext,
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: transportFactory,
 		},
-		Settings: cluster.MakeTestingClusterSettings(),
-	}, nil)
-	return ds.sendToReplicas(
-		ctx,
-		roachpb.BatchRequest{},
-		SendOptions{metrics: &ds.metrics},
-		0, /* rangeID */
-		makeReplicas(addrs...),
-		nodeDialer,
-		leaseholderInfo{},
-		false, /* withCommit */
-	)
+		Settings:   cluster.MakeTestingClusterSettings(),
+		NodeDialer: nodeDialer,
+	}, g)
+
+	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, desc, false /* withCommit */)
 }
