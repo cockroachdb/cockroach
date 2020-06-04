@@ -950,3 +950,9 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
 }
+
+// IsGreaterThan returns true if the first datum compares as greater than the
+// second.
+func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
+	return first.Compare(c.f.evalCtx, second) == 1
+}
