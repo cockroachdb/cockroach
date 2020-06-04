@@ -236,6 +236,111 @@ NULL
 11
 1111
 
+statement ok
+INSERT
+  INTO many_types
+VALUES (
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        2,
+        2,
+        2,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        '[1, "hello", {"a": ["foo", {"b": 3}]}]',
+        NULL,
+        NULL
+       )
+
+query T
+EXPLAIN (VEC) SELECT _json -> _int2 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValDatumInt16Op
+    └ *colexec.colBatchScan
+
+query T
+SELECT _json -> _int2 FROM many_types
+----
+NULL
+NULL
+NULL
+{"a": ["foo", {"b": 3}]}
+
+query T
+EXPLAIN (VEC) SELECT _json -> _int4 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValDatumInt32Op
+    └ *colexec.colBatchScan
+
+query T
+SELECT _json -> _int4 FROM many_types
+----
+NULL
+NULL
+NULL
+{"a": ["foo", {"b": 3}]}
+
+query T
+EXPLAIN (VEC) SELECT _json -> _int FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValDatumInt64Op
+    └ *colexec.colBatchScan
+
+query T
+SELECT _json -> _int FROM many_types
+----
+NULL
+NULL
+NULL
+{"a": ["foo", {"b": 3}]}
+
+query T
+EXPLAIN (VEC) SELECT _json -> 2 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValDatumInt64ConstOp
+    └ *colexec.colBatchScan
+
+query T
+SELECT _json -> 2 FROM many_types
+----
+NULL
+{"a": ["foo", {"b": 3}]}
+{"b": ["bar", {"c": 4}]}
+{"a": ["foo", {"b": 3}]}
+
+query T
+EXPLAIN (VEC) SELECT _json -> 2 -> 'a' FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValDatumBytesConstOp
+    └ *colexec.projJSONFetchValDatumInt64ConstOp
+      └ *colexec.colBatchScan
+
+query T
+SELECT _json -> 2 -> 'a' FROM many_types
+----
+NULL
+["foo", {"b": 3}]
+NULL
+["foo", {"b": 3}]
+
 
 # Make sure we fall back to row engine when we have a mixed-type expression
 # with dates.
