@@ -37,6 +37,7 @@ type encodingTest struct {
 	SQL          string
 	Datum        tree.Datum
 	Oid          oid.Oid
+	T            *types.T
 	Text         string
 	TextAsBinary []byte
 	Binary       []byte
@@ -84,6 +85,21 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 			t.Fatal(err)
 		}
 		tc.Datum = d
+
+		// Annotate with the type.
+		tc.T = types.OidToType[tc.Oid]
+		if tc.T == nil {
+			t.Fatalf("Unknown Oid %d not found in the OidToType map", tc.Oid)
+		}
+
+		// Populate specific type information based on OID and the specific test
+		//case.
+		switch tc.T.Oid() {
+		case oid.T_bpchar:
+			// The width of a bpchar type is fixed and equal to the length of the
+			// Text string returned by postgres.
+			tc.T.InternalType.Width = int32(len(tc.Text))
+		}
 	}
 
 	return tests
@@ -126,7 +142,7 @@ func TestEncodings(t *testing.T) {
 
 				buf.reset()
 				buf.textFormatter.Buffer.Reset()
-				buf.writeTextDatum(ctx, d, conv)
+				buf.writeTextDatum(ctx, d, conv, tc.T)
 				if buf.err != nil {
 					t.Fatal(buf.err)
 				}
@@ -140,7 +156,7 @@ func TestEncodings(t *testing.T) {
 			for _, tc := range tests {
 				d := tc.Datum
 				buf.reset()
-				buf.writeBinaryDatum(ctx, d, time.UTC, tc.Oid)
+				buf.writeBinaryDatum(ctx, d, time.UTC, tc.T)
 				if buf.err != nil {
 					t.Fatal(buf.err)
 				}
@@ -249,13 +265,13 @@ func BenchmarkEncodings(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					buf.reset()
 					buf.textFormatter.Buffer.Reset()
-					buf.writeTextDatum(ctx, d, conv)
+					buf.writeTextDatum(ctx, d, conv, tc.T)
 				}
 			})
 			b.Run("binary", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					buf.reset()
-					buf.writeBinaryDatum(ctx, d, time.UTC, tc.Oid)
+					buf.writeBinaryDatum(ctx, d, time.UTC, tc.T)
 				}
 			})
 		})
@@ -267,7 +283,7 @@ func TestEncodingErrorCounts(t *testing.T) {
 
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
 	d, _ := tree.ParseDDecimal("Inf")
-	buf.writeBinaryDatum(context.Background(), d, nil, d.ResolvedType().Oid())
+	buf.writeBinaryDatum(context.Background(), d, nil, d.ResolvedType())
 	if count := telemetry.GetRawFeatureCounts()["pgwire.#32489.binary_decimal_infinity"]; count != 1 {
 		t.Fatalf("expected 1 encoding error, got %d", count)
 	}
