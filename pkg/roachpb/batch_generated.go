@@ -40,8 +40,6 @@ func (ru ErrorDetail) GetInner() error {
 		return t.LeaseRejected
 	case *ErrorDetail_NodeUnavailable:
 		return t.NodeUnavailable
-	case *ErrorDetail_Send:
-		return t.Send
 	case *ErrorDetail_RaftGroupDeleted:
 		return t.RaftGroupDeleted
 	case *ErrorDetail_ReplicaCorruption:
@@ -297,8 +295,6 @@ func (ru *ErrorDetail) SetInner(r error) bool {
 		union = &ErrorDetail_LeaseRejected{t}
 	case *NodeUnavailableError:
 		union = &ErrorDetail_NodeUnavailable{t}
-	case *SendError:
-		union = &ErrorDetail_Send{t}
 	case *RaftGroupDeletedError:
 		union = &ErrorDetail_RaftGroupDeleted{t}
 	case *ReplicaCorruptionError:

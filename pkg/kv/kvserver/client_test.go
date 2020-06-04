@@ -274,7 +274,7 @@ type multiTestContext struct {
 	transport  *kvserver.RaftTransport
 
 	// The per-store clocks slice normally contains aliases of
-	// multiTestContext.clock, but it may be populated before Start() to
+	// multiTestContext.clock, but it may be populleaseholderInfoated before Start() to
 	// use distinct clocks per store.
 	clocks      []*hlc.Clock
 	engines     []storage.Engine
@@ -560,7 +560,7 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 // cause the DistSender to consider the result ambiguous and to try the next
 // replica. This is useful for triggering DistSender retries *after* the request
 // has already evaluated.
-var magicMultiTestContextKVTransportError = "inject RPC error (magicMultiTestContextKVTransportError)"
+const magicMultiTestContextKVTransportError = "inject RPC error (magicMultiTestContextKVTransportError)"
 
 func (t *multiTestContextKVTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,

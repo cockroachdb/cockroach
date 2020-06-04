@@ -2739,7 +2739,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	retryErr := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err")
 	abortErr := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 	conditionFailedErr := &roachpb.ConditionFailedError{}
-	sendErr := &roachpb.SendError{}
+	sendErr := sendError{}
 	ambiguousErr := &roachpb.AmbiguousResultError{}
 	randomErr := &roachpb.IntegerOverflowError{}
 
@@ -3470,11 +3470,10 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 			return br, nil
 		}
 		if !kv.TestingIsRangeLookup(ba) {
-			// Return a SendError so DistSender retries the first range lookup in the
+			// Return a sendError so DistSender retries the first range lookup in the
 			// user key-space for both batches.
 			if atomic.AddInt32(&sendErrors, 1) <= 2 {
-				br.Error = roachpb.NewError(&roachpb.SendError{})
-				return br, nil
+				return nil, newSendError("boom")
 			}
 			return br, nil
 		}

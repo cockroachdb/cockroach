@@ -143,7 +143,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2ferrors_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<31> scc_info_AmbiguousResultError;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<30> scc_info_AmbiguousResultError;
 }  // namespace protobuf_roachpb_2ferrors_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaDescriptor;

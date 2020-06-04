@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 type singleRangeInfo struct {
@@ -148,31 +149,36 @@ func (ds *DistSender) partialRangeFeed(
 		}
 
 		// Establish a RangeFeed for a single Range.
-		maxTS, pErr := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.desc, eventCh)
+		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.desc, eventCh)
 
 		// Forward the timestamp in case we end up sending it again.
 		ts.Forward(maxTS)
 
-		if pErr != nil {
+		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "RangeFeed %s disconnected with last checkpoint %s ago: %v",
-					span, timeutil.Since(ts.GoTime()), pErr)
+					span, timeutil.Since(ts.GoTime()), err)
 			}
-			switch t := pErr.GetDetail().(type) {
-			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
+			switch {
+			case errors.HasType(err, (*roachpb.StoreNotFoundError)(nil)) ||
+				errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)):
 				// These errors are likely to be unique to the replica that
 				// reported them, so no action is required before the next
 				// retry.
-			case *roachpb.SendError, *roachpb.RangeNotFoundError:
-				// Evict the decriptor from the cache and reload on next attempt.
+			case errors.HasType(err, (*sendError)(nil)), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
+				// Evict the descriptor from the cache and reload on next attempt.
 				rangeInfo.token.Evict(ctx)
 				rangeInfo.desc = nil
 				continue
-			case *roachpb.RangeKeyMismatchError:
-				// Evict the decriptor from the cache.
+			case errors.HasType(err, (*roachpb.RangeKeyMismatchError)(nil)):
+				// Evict the descriptor from the cache.
 				rangeInfo.token.Evict(ctx)
 				return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
-			case *roachpb.RangeFeedRetryError:
+			case errors.HasType(err, (*roachpb.RangeFeedRetryError)(nil)):
+				var t *roachpb.RangeFeedRetryError
+				if ok := errors.As(err, &t); !ok {
+					panic(fmt.Sprintf("wrong error type: %T", err))
+				}
 				switch t.Reason {
 				case roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 					roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
@@ -190,7 +196,7 @@ func (ds *DistSender) partialRangeFeed(
 					log.Fatalf(ctx, "unexpected RangeFeedRetryError reason %v", t.Reason)
 				}
 			default:
-				return t
+				return err
 			}
 		}
 	}
@@ -210,7 +216,7 @@ func (ds *DistSender) singleRangeFeed(
 	withDiff bool,
 	desc *roachpb.RangeDescriptor,
 	eventCh chan<- *roachpb.RangeFeedEvent,
-) (hlc.Timestamp, *roachpb.Error) {
+) (hlc.Timestamp, error) {
 	args := roachpb.RangeFeedRequest{
 		Span: span,
 		Header: roachpb.Header{
@@ -226,7 +232,7 @@ func (ds *DistSender) singleRangeFeed(
 	}
 	replicas, err := NewReplicaSlice(ctx, ds.gossip, desc)
 	if err != nil {
-		return args.Timestamp, roachpb.NewError(err)
+		return args.Timestamp, err
 	}
 	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 	// The RangeFeed is not used for system critical traffic so use a DefaultClass
@@ -234,14 +240,13 @@ func (ds *DistSender) singleRangeFeed(
 	opts := SendOptions{class: rpc.DefaultClass}
 	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
-		return args.Timestamp, roachpb.NewError(err)
+		return args.Timestamp, err
 	}
 
 	for {
 		if transport.IsExhausted() {
-			return args.Timestamp, roachpb.NewError(roachpb.NewSendError(
-				fmt.Sprintf("sending to all %d replicas failed", len(replicas)),
-			))
+			return args.Timestamp, newSendError(
+				fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
 		}
 
 		args.Replica = transport.NextReplica()
@@ -262,7 +267,7 @@ func (ds *DistSender) singleRangeFeed(
 				return args.Timestamp, nil
 			}
 			if err != nil {
-				return args.Timestamp, roachpb.NewError(err)
+				return args.Timestamp, err
 			}
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
@@ -271,12 +276,12 @@ func (ds *DistSender) singleRangeFeed(
 				}
 			case *roachpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
-				return args.Timestamp, &t.Error
+				return args.Timestamp, t.Error.GoError()
 			}
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
-				return args.Timestamp, roachpb.NewError(ctx.Err())
+				return args.Timestamp, ctx.Err()
 			}
 		}
 	}
