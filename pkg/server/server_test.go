@@ -18,6 +18,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -45,11 +46,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1090,4 +1093,19 @@ Binary built without web UI.
 			}
 		}
 	})
+}
+
+func TestGWRuntimeMarshalProto(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	// Regression test against:
+	// https://github.com/cockroachdb/cockroach/issues/49842
+	runtime.DefaultHTTPError(
+		ctx,
+		runtime.NewServeMux(),
+		&protoutil.ProtoPb{}, // calls XXX_size
+		&httptest.ResponseRecorder{},
+		nil, /* request */
+		errors.New("boom"),
+	)
 }
