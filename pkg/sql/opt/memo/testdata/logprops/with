@@ -117,14 +117,14 @@ WITH foo AS (SELECT $1::INT) SELECT 1 FROM foo
 with &1 (foo)
  ├── columns: "?column?":3(int!null)
  ├── cardinality: [1 - 1]
- ├── has-placeholder
+ ├── immutable, has-placeholder
  ├── key: ()
  ├── fd: ()-->(3)
  ├── prune: (3)
  ├── project
  │    ├── columns: int8:1(int)
  │    ├── cardinality: [1 - 1]
- │    ├── has-placeholder
+ │    ├── immutable, has-placeholder
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── prune: (1)
@@ -133,7 +133,7 @@ with &1 (foo)
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── cast: INT8 [as=int8:1, type=int]
+ │         └── cast: INT8 [as=int8:1, type=int, immutable]
  │              └── placeholder: $1 [type=string]
  └── project
       ├── columns: "?column?":3(int!null)

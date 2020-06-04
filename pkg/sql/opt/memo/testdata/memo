@@ -17,18 +17,22 @@ limit
  ├── columns: y:2(int!null) x:3(string!null) c:5(int!null)
  ├── internal-ordering: +2
  ├── cardinality: [0 - 10]
+ ├── immutable
  ├── fd: (2)-->(5)
  ├── ordering: +2
  ├── sort
  │    ├── columns: y:2(int!null) b.x:3(string!null) c:5(int!null)
+ │    ├── immutable
  │    ├── fd: (2)-->(5)
  │    ├── ordering: +2
  │    ├── limit hint: 10.00
  │    └── project
  │         ├── columns: c:5(int!null) y:2(int!null) b.x:3(string!null)
+ │         ├── immutable
  │         ├── fd: (2)-->(5)
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null) z:4(decimal!null)
+ │         │    ├── immutable
  │         │    ├── key: (1,3)
  │         │    ├── fd: (1)-->(2), (3)-->(4)
  │         │    ├── inner-join (cross)
@@ -45,7 +49,7 @@ limit
  │         │    │    │    └── fd: (3)-->(4)
  │         │    │    └── filters (true)
  │         │    └── filters
- │         │         └── and [type=bool, outer=(1-3), constraints=(/2: [/2 - ])]
+ │         │         └── and [type=bool, outer=(1-3), immutable, constraints=(/2: [/2 - ])]
  │         │              ├── gt [type=bool]
  │         │              │    ├── variable: y:2 [type=int]
  │         │              │    └── const: 1 [type=int]
@@ -69,27 +73,32 @@ LIMIT 10
 project
  ├── columns: y:2(int!null) x:3(string!null) c:6(int!null)
  ├── cardinality: [0 - 10]
+ ├── immutable
  ├── fd: (2)-->(6)
  ├── ordering: +2
  ├── limit
  │    ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
  │    ├── internal-ordering: +2
  │    ├── cardinality: [0 - 10]
+ │    ├── immutable
  │    ├── fd: (3)==(5), (5)==(3)
  │    ├── ordering: +2
  │    ├── inner-join (lookup b)
  │    │    ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
  │    │    ├── key columns: [5] = [3]
  │    │    ├── lookup columns are key
+ │    │    ├── immutable
  │    │    ├── fd: (3)==(5), (5)==(3)
  │    │    ├── ordering: +2
  │    │    ├── limit hint: 10.00
  │    │    ├── sort
  │    │    │    ├── columns: y:2(int!null) column5:5(string!null)
+ │    │    │    ├── immutable
  │    │    │    ├── ordering: +2
  │    │    │    ├── limit hint: 100.00
  │    │    │    └── project
  │    │    │         ├── columns: column5:5(string!null) y:2(int!null)
+ │    │    │         ├── immutable
  │    │    │         ├── select
  │    │    │         │    ├── columns: a.x:1(int!null) y:2(int!null)
  │    │    │         │    ├── key: (1)
@@ -103,7 +112,7 @@ project
  │    │    │         │              ├── variable: y:2 [type=int]
  │    │    │         │              └── const: 1 [type=int]
  │    │    │         └── projections
- │    │    │              └── cast: STRING [as=column5:5, type=string, outer=(1)]
+ │    │    │              └── cast: STRING [as=column5:5, type=string, outer=(1), immutable]
  │    │    │                   └── variable: a.x:1 [type=int]
  │    │    └── filters (true)
  │    └── const: 10 [type=int]

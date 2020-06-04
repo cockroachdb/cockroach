@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotransform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,6 +39,7 @@ const (
 	usesGEOS libraryUsage = (1 << (iota + 1))
 	usesS2
 	usesGeographicLib
+	usesPROJ
 )
 
 const usesSpheroidMessage = " Uses a spheroid to perform the operation."
@@ -67,6 +70,9 @@ func (ib infoBuilder) String() string {
 	}
 	if ib.libraryUsage&usesGeographicLib != 0 {
 		sb.WriteString("\n\nThis function utilizes the GeographicLib library for spheroid calculations.")
+	}
+	if ib.libraryUsage&usesPROJ != 0 {
+		sb.WriteString("\n\nThis function utilizes the PROJ library for coordinate projections.")
 	}
 	if ib.canUseIndex {
 		sb.WriteString("\n\nThis function will automatically use any available index.")
@@ -1980,6 +1986,132 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			},
 			Info: infoBuilder{
 				info: `Sets a Geography to a new SRID without transforming the coordinates.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_transform": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"srid", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				srid := geopb.SRID(*args[1].(*tree.DInt))
+
+				fromProj, exists := geoprojbase.Projection(g.SRID())
+				if !exists {
+					return nil, errors.Newf("projection for srid %d does not exist", g.SRID())
+				}
+				toProj, exists := geoprojbase.Projection(srid)
+				if !exists {
+					return nil, errors.Newf("projection for srid %d does not exist", srid)
+				}
+				ret, err := geotransform.Transform(g.Geometry, fromProj.Proj4Text, toProj.Proj4Text, srid)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info:         `Transforms a geometry into the given SRID coordinate reference system by projecting its coordinates.`,
+				libraryUsage: usesPROJ,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"to_proj_text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				toProj := string(*args[1].(*tree.DString))
+
+				fromProj, exists := geoprojbase.Projection(g.SRID())
+				if !exists {
+					return nil, errors.Newf("projection for srid %d does not exist", g.SRID())
+				}
+				ret, err := geotransform.Transform(
+					g.Geometry,
+					fromProj.Proj4Text,
+					geoprojbase.MakeProj4Text(toProj),
+					geopb.SRID(0),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info:         `Transforms a geometry into the coordinate reference system referenced by the projection text by projecting its coordinates.`,
+				libraryUsage: usesPROJ,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"from_proj_text", types.String},
+				{"to_proj_text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				fromProj := string(*args[1].(*tree.DString))
+				toProj := string(*args[2].(*tree.DString))
+
+				ret, err := geotransform.Transform(
+					g.Geometry,
+					geoprojbase.MakeProj4Text(fromProj),
+					geoprojbase.MakeProj4Text(toProj),
+					geopb.SRID(0),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info:         `Transforms a geometry into the coordinate reference system assuming the from_proj_text to the new to_proj_text by projecting its coordinates.`,
+				libraryUsage: usesPROJ,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"from_proj_text", types.String},
+				{"srid", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				fromProj := string(*args[1].(*tree.DString))
+				srid := geopb.SRID(*args[2].(*tree.DInt))
+
+				toProj, exists := geoprojbase.Projection(srid)
+				if !exists {
+					return nil, errors.Newf("projection for srid %d does not exist", srid)
+				}
+				ret, err := geotransform.Transform(
+					g.Geometry,
+					geoprojbase.MakeProj4Text(fromProj),
+					toProj.Proj4Text,
+					srid,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info:         `Transforms a geometry into the coordinate reference system assuming the from_proj_text to the new to_proj_text by projecting its coordinates. The supplied SRID is set on the new geometry.`,
+				libraryUsage: usesPROJ,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},

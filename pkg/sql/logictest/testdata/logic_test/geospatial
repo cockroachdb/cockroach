@@ -1498,6 +1498,73 @@ ORDER BY id
 2  4326  4326
 3  4004  3857
 
+subtest transform_test
+
+statement ok
+CREATE TABLE transform_test(geom geometry); INSERT INTO transform_test VALUES
+  ('SRID=4326;POINT(1.0 1.0)'::geometry),
+  ('SRID=3857;POINT(1.0 1.0)'::geometry),
+  ('SRID=4326;LINESTRING(1.0 1.0, 2.0 2.0)'::geometry),
+  ('SRID=3857;LINESTRING(1.0 1.0, 2.0 2.0)'::geometry),
+  ('SRID=4326;POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geometry),
+  ('SRID=3857;POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geometry),
+  ('SRID=4326;MULTIPOINT((1.0 1.0), (2.0 2.0))'::geometry),
+  ('SRID=3857;MULTIPOINT((1.0 1.0), (2.0 2.0))'::geometry),
+  ('SRID=4326;MULTILINESTRING((1.0 1.0, 2.0 2.0), (3.0 3.0, 4.0 4.0))'::geometry),
+  ('SRID=3857;MULTILINESTRING((1.0 1.0, 2.0 2.0), (3.0 3.0, 4.0 4.0))'::geometry),
+  ('SRID=4326;MULTIPOLYGON(((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0)))'::geometry),
+  ('SRID=3857;MULTIPOLYGON(((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0)))'::geometry),
+  ('SRID=4326;GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40))'::geometry),
+  ('SRID=3857;GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40))'::geometry)
+
+# Temporarily do not display full numbers for now, as they can be inaccurate.
+# This can be displayed when ST_AsText can have rounding.
+query TBB
+SELECT
+  ST_AsEWKT(a.geom) d,
+  ST_Transform(a.geom, 4326) = a.geom,
+  ST_Transform(a.geom, 3857) = a.geom
+FROM transform_test a
+ORDER BY d ASC
+----
+SRID=3857;GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40))  false  true
+SRID=3857;LINESTRING (1 1, 2 2)                                                 false  true
+SRID=3857;MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))                              false  true
+SRID=3857;MULTIPOINT (1 1, 2 2)                                                 false  true
+SRID=3857;MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))                            false  true
+SRID=3857;POINT (1 1)                                                           false  true
+SRID=3857;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                   false  true
+SRID=4326;GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40))  true   false
+SRID=4326;LINESTRING (1 1, 2 2)                                                 true   false
+SRID=4326;MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))                              true   false
+SRID=4326;MULTIPOINT (1 1, 2 2)                                                 true   false
+SRID=4326;MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))                            true   false
+SRID=4326;POINT (1 1)                                                           true   false
+SRID=4326;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                   true   false
+
+query TBB
+SELECT
+  ST_AsEWKT(a.geom) d,
+  ST_Transform(a.geom, '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs', '+proj=longlat +datum=WGS84 +no_defs') = a.geom,
+  ST_Transform(a.geom, '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs', 3857) = a.geom
+FROM transform_test a
+ORDER BY d ASC
+----
+SRID=3857;GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40))  false  true
+SRID=3857;LINESTRING (1 1, 2 2)                                                 false  true
+SRID=3857;MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))                              false  true
+SRID=3857;MULTIPOINT (1 1, 2 2)                                                 false  true
+SRID=3857;MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))                            false  true
+SRID=3857;POINT (1 1)                                                           false  true
+SRID=3857;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                   false  true
+SRID=4326;GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40))  false  false
+SRID=4326;LINESTRING (1 1, 2 2)                                                 false  false
+SRID=4326;MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))                              false  false
+SRID=4326;MULTIPOINT (1 1, 2 2)                                                 false  false
+SRID=4326;MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))                            false  false
+SRID=4326;POINT (1 1)                                                           false  false
+SRID=4326;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                   false  false
+
 subtest st_summary
 
 query T

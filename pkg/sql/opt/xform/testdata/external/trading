@@ -1286,8 +1286,8 @@ upsert transactiondetails
  │    │    │    │         ├── 1 [as="?column?":11]
  │    │    │    │         ├── false [as=bool:12]
  │    │    │    │         ├── current_timestamp() [as=current_timestamp:13, stable, side-effects]
- │    │    │    │         ├── (detail:10->'c')::STRING::INT8 [as=int8:14, outer=(10)]
- │    │    │    │         └── (detail:10->'q')::STRING::INT8 [as=int8:15, outer=(10)]
+ │    │    │    │         ├── (detail:10->'c')::STRING::INT8 [as=int8:14, outer=(10), immutable]
+ │    │    │    │         └── (detail:10->'q')::STRING::INT8 [as=int8:15, outer=(10), immutable]
  │    │    │    └── aggregations
  │    │    │         ├── first-agg [as=sellprice:19, outer=(19)]
  │    │    │         │    └── sellprice:19

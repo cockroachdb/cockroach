@@ -106,16 +106,18 @@ FROM a
 scalar-group-by
  ├── columns: count:7!null sum:9 sum_int:10 avg:11 stddev:12 variance:13 xor_agg:15 array_agg:16 json_agg:17
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(7,9-13,15-17)
  ├── project
  │    ├── columns: column8:8 column14:14 i:2 f:3 j:5
+ │    ├── immutable
  │    ├── fd: (2)-->(8)
  │    ├── scan a
  │    │    └── columns: i:2 f:3 s:4 j:5
  │    └── projections
  │         ├── i:2 > 5 [as=column8:8, outer=(2)]
- │         └── s:4::BYTES [as=column14:14, outer=(4)]
+ │         └── s:4::BYTES [as=column14:14, outer=(4), immutable]
  └── aggregations
       ├── agg-distinct [as=count:7, outer=(2)]
       │    └── count

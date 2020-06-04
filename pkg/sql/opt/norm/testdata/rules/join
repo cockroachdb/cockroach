@@ -368,10 +368,12 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.i=b.x AND a.i=b.y AND a.f + b.y::F
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 x:6!null y:7!null
+ ├── immutable
  ├── key: (6)
  ├── fd: (1)-->(3-5), (1)==(2,6,7), (2)==(1,6,7), (6)==(1,2,7), (7)==(1,2,6)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3!null s:4 j:5
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(3-5), (1)==(2), (2)==(1)
  │    ├── scan a
@@ -379,8 +381,8 @@ inner-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters
- │         ├── (f:3 + k:1::FLOAT8) > 5.0 [outer=(1,3)]
- │         ├── (s:4 || k:1::STRING) = 'foo1' [outer=(1,4)]
+ │         ├── (f:3 + k:1::FLOAT8) > 5.0 [outer=(1,3), immutable]
+ │         ├── (s:4 || k:1::STRING) = 'foo1' [outer=(1,4), immutable]
  │         └── k:1 = i:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
  ├── select
  │    ├── columns: x:6!null y:7!null
@@ -700,17 +702,19 @@ FROM (VALUES (1.0), (2.0)) AS t1(x), (VALUES (1.00), (2.00)) AS t2(y)WHERE x=y A
 inner-join (hash)
  ├── columns: x:1!null y:2!null
  ├── cardinality: [0 - 4]
+ ├── immutable
  ├── fd: (1)==(2), (2)==(1)
  ├── select
  │    ├── columns: column1:1!null
  │    ├── cardinality: [0 - 2]
+ │    ├── immutable
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    ├── cardinality: [2 - 2]
  │    │    ├── (1.0,)
  │    │    └── (2.0,)
  │    └── filters
- │         └── column1:1::STRING = '1.0' [outer=(1)]
+ │         └── column1:1::STRING = '1.0' [outer=(1), immutable]
  ├── values
  │    ├── columns: column1:2!null
  │    ├── cardinality: [2 - 2]
@@ -2489,6 +2493,7 @@ ON a.f>=b.z::float AND (a.k=b.x) IS True AND a.f>=b.z::float AND (a.i=b.y) IS NO
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 x:6!null y:7!null z:8!null
+ ├── immutable
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── select
@@ -2518,8 +2523,8 @@ inner-join (hash)
  │    └── projections
  │         └── y:7 + 1 [as=z:8, outer=(7)]
  └── filters
-      ├── f:3 >= z:8::FLOAT8 [outer=(3,8), constraints=(/3: (/NULL - ])]
-      ├── f:3 >= z:8::FLOAT8 [outer=(3,8), constraints=(/3: (/NULL - ])]
+      ├── f:3 >= z:8::FLOAT8 [outer=(3,8), immutable, constraints=(/3: (/NULL - ])]
+      ├── f:3 >= z:8::FLOAT8 [outer=(3,8), immutable, constraints=(/3: (/NULL - ])]
       ├── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── i:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 

@@ -10,11 +10,11 @@
 
 import React from "react";
 import classNames from "classnames";
-import getHighlightedText from "src/util/highlightedText";
 import map from "lodash/map";
 import isUndefined from "lodash/isUndefined";
 import times from "lodash/times";
 
+import getHighlightedText from "src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
 import { trackTableSort } from "src/util/analytics";
 

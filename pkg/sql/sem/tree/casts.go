@@ -114,7 +114,7 @@ var validCasts = []castInfo{
 	{from: types.GeographyFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
 	{from: types.GeometryFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
 
-	// Casts to GeographyFamily.
+	// Casts to GeometryFamily.
 	{from: types.UnknownFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.CollatedStringFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
@@ -143,7 +143,7 @@ var validCasts = []castInfo{
 	{from: types.StringFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.CollatedStringFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.BitFamily, to: types.StringFamily, volatility: VolatilityImmutable},
-	{from: types.ArrayFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.ArrayFamily, to: types.StringFamily, volatility: VolatilityStable},
 	{from: types.TupleFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.GeometryFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.GeographyFamily, to: types.StringFamily, volatility: VolatilityImmutable},
@@ -169,7 +169,7 @@ var validCasts = []castInfo{
 	{from: types.StringFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
 	{from: types.CollatedStringFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
 	{from: types.BitFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
-	{from: types.ArrayFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.ArrayFamily, to: types.CollatedStringFamily, volatility: VolatilityStable},
 	{from: types.TupleFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
 	{from: types.GeometryFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
 	{from: types.GeographyFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
@@ -301,6 +301,27 @@ func init() {
 		key := castsMapKey{from: c.from, to: c.to}
 		castsMap[key] = c
 	}
+}
+
+// lookupCast returns the information for a valid cast.
+// Returns nil if this is not a valid cast.
+func lookupCast(from, to types.Family) *castInfo {
+	return castsMap[castsMapKey{from: from, to: to}]
+}
+
+// LookupCastVolatility returns the volatility of a valid cast.
+func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
+	fromFamily := from.Family()
+	toFamily := to.Family()
+	// Special case for casting between arrays.
+	if fromFamily == types.ArrayFamily && toFamily == types.ArrayFamily {
+		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents())
+	}
+	cast := lookupCast(fromFamily, toFamily)
+	if cast == nil {
+		return 0, false
+	}
+	return cast.volatility, true
 }
 
 // PerformCast performs a cast from the provided Datum to the specified
