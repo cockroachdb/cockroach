@@ -903,6 +903,10 @@ func getPlanDistribution(
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
 ) planDistribution {
+	if plan.isPhysicalPlan() {
+		return plan.distribution
+	}
+
 	if _, singleTenant := nodeID.OptionalNodeID(); !singleTenant {
 		return localPlan
 	}
@@ -911,25 +915,10 @@ func getPlanDistribution(
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
-	if plan.isPhysicalPlan() {
-		// zeroNode as the root of the planNode tree is represented by a
-		// physical plan with a single values processor that has 0 rows.
-		if len(plan.physPlan.Processors) == 1 {
-			if valuesSpec := plan.physPlan.Processors[0].Spec.Core.Values; valuesSpec != nil {
-				if valuesSpec.NumRows == 0 {
-					return localPlan
-				}
-			}
-		}
-	} else {
-		if _, ok := plan.planNode.(*zeroNode); ok {
-			return localPlan
-		}
+	if _, ok := plan.planNode.(*zeroNode); ok {
+		return localPlan
 	}
 
-	if plan.isPhysicalPlan() {
-		return plan.distribution
-	}
 	rec, err := checkSupportForPlanNode(plan.planNode)
 	if err != nil {
 		// Don't use distSQL for this request.
