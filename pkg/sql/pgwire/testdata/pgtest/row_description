@@ -171,15 +171,10 @@ RowDescription
 # The following discrepancy is a bug.
 # See: https://github.com/cockroachdb/cockroach/issues/49639
 
-until noncrdb_only
+until
 DataRow
 ----
 {"Type":"DataRow","Values":[{"text":"hello   "}]}
-
-until crdb_only
-DataRow
-----
-{"Type":"DataRow","Values":[{"text":"hello"}]}
 
 until
 ReadyForQuery
@@ -217,15 +212,10 @@ RowDescription
 # The following discrepancy is the first bug above.
 # See: https://github.com/cockroachdb/cockroach/issues/49639
 
-until noncrdb_only
+until
 DataRow
 ----
 {"Type":"DataRow","Values":[{"text":"hello   "}]}
-
-until crdb_only
-DataRow
-----
-{"Type":"DataRow","Values":[{"text":"hello"}]}
 
 until
 ReadyForQuery
