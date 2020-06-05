@@ -179,8 +179,6 @@ func (r *NewColOperatorResult) resetToState(ctx context.Context, arg NewColOpera
 	*r = arg
 }
 
-const noFilterIdx = -1
-
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
@@ -276,7 +274,7 @@ func isSupported(
 					return false, errors.Newf("window functions with non-default window frames are not supported")
 				}
 			}
-			if wf.FilterColIdx != noFilterIdx {
+			if wf.FilterColIdx != tree.NoFilterInWindowFn {
 				return false, errors.Newf("window functions with FILTER clause are not supported")
 			}
 			if wf.Func.AggregateFunc != nil {
@@ -463,6 +461,11 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 	processorConstructor execinfra.ProcessorConstructor,
 	factory coldata.ColumnFactory,
 ) error {
+	if processorConstructor == nil {
+		// TODO(yuzefovich): update unit tests to remove panic-catcher when
+		// fallback to rowexec is not allowed.
+		return errors.New("processorConstructor is nil")
+	}
 	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
 		spec.Core.JoinReader == nil {
 		return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
@@ -1094,14 +1097,6 @@ func NewColOperator(
 		ColumnTypes: result.ColumnTypes,
 	}
 	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, factory)
-	// TODO(yuzefovich): update unit tests to remove panic-catcher when fallback
-	// to rowexec is not allowed.
-	if err != nil && processorConstructor == nil {
-		// Do not attempt to wrap as a row source if there is no
-		// processorConstructor because it would fail.
-		return result, err
-	}
-
 	if err != nil {
 		log.VEventf(
 			ctx, 2,

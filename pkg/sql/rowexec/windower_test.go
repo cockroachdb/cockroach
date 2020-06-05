@@ -30,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-const noFilterIdx = -1
-
 func TestWindowerAccountingForResults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -75,7 +73,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 			ArgsIdxs:     []uint32{0},
 			Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
 			OutputColIdx: 1,
-			FilterColIdx: noFilterIdx,
+			FilterColIdx: tree.NoFilterInWindowFn,
 			Frame: &execinfrapb.WindowerSpec_Frame{
 				Mode: execinfrapb.WindowerSpec_Frame_ROWS,
 				Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
@@ -150,7 +148,7 @@ func windows(windowTestSpecs []windowTestSpec) ([]execinfrapb.WindowerSpec, erro
 			}
 			windowFnSpec.Ordering = execinfrapb.Ordering{Columns: ordCols}
 		}
-		windowFnSpec.FilterColIdx = noFilterIdx
+		windowFnSpec.FilterColIdx = tree.NoFilterInWindowFn
 		windows[i].WindowFns[0] = windowFnSpec
 	}
 	return windows, nil

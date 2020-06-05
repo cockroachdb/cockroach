@@ -580,11 +580,13 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 	return precedingConfirmed && followingConfirmed
 }
 
-const noFilterIdx = -1
+// NoFilterInWindowFn is a special value that represents that there is no
+// FILTER clause on a window function.
+const NoFilterInWindowFn = -1
 
 // noFilter returns whether a filter is present.
 func (wfr *WindowFrameRun) noFilter() bool {
-	return wfr.FilterColIdx == noFilterIdx
+	return wfr.FilterColIdx == NoFilterInWindowFn
 }
 
 // isRowExcluded returns whether the row at index idx should be excluded from

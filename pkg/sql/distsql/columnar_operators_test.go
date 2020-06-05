@@ -909,6 +909,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 								Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
 								Ordering:     generateOrderingGivenPartitionBy(rng, nCols, nOrderingCols, partitionBy),
 								OutputColIdx: uint32(nCols),
+								FilterColIdx: tree.NoFilterInWindowFn,
 							},
 						},
 					}

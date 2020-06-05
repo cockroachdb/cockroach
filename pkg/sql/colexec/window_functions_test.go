@@ -37,7 +37,7 @@ type windowFnTestCase struct {
 
 func (tc *windowFnTestCase) init() {
 	for i := range tc.windowerSpec.WindowFns {
-		tc.windowerSpec.WindowFns[i].FilterColIdx = noFilterIdx
+		tc.windowerSpec.WindowFns[i].FilterColIdx = tree.NoFilterInWindowFn
 	}
 }
 
