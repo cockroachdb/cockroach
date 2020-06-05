@@ -877,6 +877,11 @@ func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
 	return mult.JoinPreservesRightRows()
 }
 
+// NoJoinHints returns true if no hints were specified for this join.
+func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
+	return p.Flags.Empty()
+}
+
 // ----------------------------------------------------------------------
 //
 // Constant value functions

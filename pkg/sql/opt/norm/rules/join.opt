@@ -538,3 +538,209 @@ $left
 )
 =>
 (InnerJoin $left $right (SortFilters $on) $private)
+
+# LeftAssociateJoinsLeft reorders InnerJoins so that join filters can be brought
+# closer to the relations they reference. This in done in hopes of allowing
+# other rules (for example, limit push-down) to fire. It also has the effect of
+# pushing cross joins up the operator tree. LeftAssociateJoinsLeft matches when
+# the following conditions are true:
+# 1. The lower InnerJoin is the left input of the upper InnerJoin.
+# 2. The upper InnerJoin's ON condition has an equality between the right input
+#    of the upper InnerJoin and the left input of the lower InnerJoin.
+# 3. The lower InnerJoin's ON condition does not reference the left input of the
+#    lower InnerJoin.
+#
+# The transformation:
+#
+#   SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+#   INNER JOIN ab
+#   ON a=x AND b=u
+# =>
+#   SELECT * FROM uv
+#   INNER JOIN (SELECT * FROM xy INNER JOIN ab ON a=x)
+#   ON b=u
+#
+# In this example, the neither of the filters in the original query could be
+# pushed down because they both reference ab. With the joins reordered, the a=x
+# filter can be pushed down closer to xy.
+#
+# There are three variants of LeftAssociateJoinsLeft below this rule definition.
+#
+# In the worst case scenario, LeftAssociateJoinsLeft and its variants will
+# be fired (n^2)/4 times, where n is the number of joins in the join tree.
+[LeftAssociateJoinsLeft, Normalize, LowPriority]
+(InnerJoin
+    (InnerJoin
+        $innerLeft:*
+        $innerRight:*
+        $innerOn:[]
+        $innerPrivate:* & (NoJoinHints $innerPrivate)
+    )
+    $outerRight:*
+    $outerOn:[
+        ...
+        $item:* &
+            (IsBoundBy
+                $item
+                $cols:(OutputCols2 $innerLeft $outerRight)
+            )
+        ...
+    ]
+    $outerPrivate:* & (NoJoinHints $outerPrivate)
+)
+=>
+(InnerJoin
+    $innerRight
+    (InnerJoin
+        $innerLeft
+        $outerRight
+        (ExtractBoundConditions
+            $newOn:(ConcatFilters $outerOn $innerOn)
+            $cols
+        )
+        (EmptyJoinPrivate)
+    )
+    (ExtractUnboundConditions $newOn $cols)
+    (EmptyJoinPrivate)
+)
+
+# LeftAssociateJoinsRight is a variant on LeftAssociateJoinsLeft.
+# The transformation:
+#
+#   SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+#   INNER JOIN ab
+#   ON a=x AND b=u
+# =>
+#   SELECT * FROM uv
+#   INNER JOIN (SELECT * FROM xy INNER JOIN ab ON a=x)
+#   ON b=u
+#
+[LeftAssociateJoinsRight, Normalize, LowPriority]
+(InnerJoin
+    (InnerJoin
+        $innerLeft:*
+        $innerRight:*
+        $innerOn:[]
+        $innerPrivate:* & (NoJoinHints $innerPrivate)
+    )
+    $outerRight:*
+    $outerOn:[
+        ...
+        $item:* &
+            (IsBoundBy
+                $item
+                $cols:(OutputCols2 $innerRight $outerRight)
+            )
+        ...
+    ]
+    $outerPrivate:* & (NoJoinHints $outerPrivate)
+)
+=>
+(InnerJoin
+    $innerLeft
+    (InnerJoin
+        $innerRight
+        $outerRight
+        (ExtractBoundConditions
+            $newOn:(ConcatFilters $outerOn $innerOn)
+            $cols
+        )
+        (EmptyJoinPrivate)
+    )
+    (ExtractUnboundConditions $newOn $cols)
+    (EmptyJoinPrivate)
+)
+
+# RightAssociateJoinsLeft is a variant on LeftAssociateJoinsLeft.
+# The transformation:
+#
+#   SELECT * FROM ab
+#   INNER JOIN (SELECT * FROM xy INNER JOIN uv ON True)
+#   ON a=x AND b=u
+# =>
+#   SELECT * FROM (SELECT * FROM ab INNER JOIN xy ON a=x)
+#   INNER JOIN uv
+#   ON b=u
+#
+[RightAssociateJoinsLeft, Normalize, LowPriority]
+(InnerJoin
+    $outerLeft:*
+    (InnerJoin
+        $innerLeft:*
+        $innerRight:*
+        $innerOn:[]
+        $innerPrivate:* & (NoJoinHints $innerPrivate)
+    )
+    $outerOn:[
+        ...
+        $item:* &
+            (IsBoundBy
+                $item
+                $cols:(OutputCols2 $innerLeft $outerLeft)
+            )
+        ...
+    ]
+    $outerPrivate:* & (NoJoinHints $outerPrivate)
+)
+=>
+(InnerJoin
+    (InnerJoin
+        $outerLeft
+        $innerLeft
+        (ExtractBoundConditions
+            $newOn:(ConcatFilters $outerOn $innerOn)
+            $cols
+        )
+        (EmptyJoinPrivate)
+    )
+    $innerRight
+    (ExtractUnboundConditions $newOn $cols)
+    (EmptyJoinPrivate)
+)
+
+# RightAssociateJoinsRight is a variant on LeftAssociateJoinsLeft.
+# The transformation:
+#
+#   SELECT * FROM ab
+#   INNER JOIN (SELECT * FROM xy INNER JOIN uv ON True)
+#   ON a=x AND b=u
+# =>
+#   SELECT * FROM (SELECT * FROM ab INNER JOIN uv ON b=u)
+#   INNER JOIN xy
+#   ON a=x
+#
+[RightAssociateJoinsRight, Normalize, LowPriority]
+(InnerJoin
+    $outerLeft:*
+    (InnerJoin
+        $innerLeft:*
+        $innerRight:*
+        $innerOn:[]
+        $innerPrivate:* & (NoJoinHints $innerPrivate)
+    )
+    $outerOn:[
+        ...
+        $item:* &
+            (IsBoundBy
+                $item
+                $cols:(OutputCols2 $innerRight $outerLeft)
+            )
+        ...
+    ]
+    $outerPrivate:* & (NoJoinHints $outerPrivate)
+)
+=>
+(InnerJoin
+    (InnerJoin
+        $outerLeft
+        $innerRight
+        (ExtractBoundConditions
+            $newOn:(ConcatFilters $outerOn $innerOn)
+            $cols
+        )
+        (EmptyJoinPrivate)
+    )
+    $innerLeft
+    (ExtractUnboundConditions $newOn $cols)
+    (EmptyJoinPrivate)
+)
