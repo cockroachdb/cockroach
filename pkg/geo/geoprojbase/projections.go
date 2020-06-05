@@ -12,9 +12,10 @@ package geoprojbase
 
 import "github.com/cockroachdb/cockroach/pkg/geo/geopb"
 
-// projections is a mapping of SRID to projections.
+// Projections is a mapping of SRID to projections.
+// Use the `Projection` function to obtain one.
 // This file is not spell checked.
-var projections = map[geopb.SRID]ProjInfo{
+var Projections = map[geopb.SRID]ProjInfo{
 	4326: {
 		SRID:      4326,
 		AuthName:  "EPSG",

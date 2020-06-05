@@ -27,8 +27,13 @@ type Proj4Text struct {
 // MakeProj4Text returns a new Proj4Text with spec based on the given string.
 func MakeProj4Text(str string) Proj4Text {
 	return Proj4Text{
-		cStr: []byte(str + `\0`),
+		cStr: []byte(str + "\u0000"),
 	}
+}
+
+// String returns the string representation of the given proj text.
+func (p *Proj4Text) String() string {
+	return string(p.cStr[:len(p.cStr)-1])
 }
 
 // Bytes returns the raw bytes for the given proj text.
@@ -62,6 +67,6 @@ type ProjInfo struct {
 // Projection returns the ProjInfo identifier for the given SRID, as well as an bool
 // indicating whether the projection exists.
 func Projection(srid geopb.SRID) (ProjInfo, bool) {
-	p, exists := projections[srid]
+	p, exists := Projections[srid]
 	return p, exists
 }

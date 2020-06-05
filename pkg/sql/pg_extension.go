@@ -15,11 +15,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // pgExtension is virtual schema which contains virtual tables and/or views
@@ -140,7 +140,18 @@ CREATE TABLE pg_extension.spatial_ref_sys (
 	srtext varchar(2048),
 	proj4text varchar(2048)
 )`,
-	generator: func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
-		return nil, func() {}, errors.Newf("not yet implemented")
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for _, projection := range geoprojbase.Projections {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(projection.SRID)),
+				tree.NewDString(projection.AuthName),
+				tree.NewDInt(tree.DInt(projection.AuthSRID)),
+				tree.NewDString(projection.SRText),
+				tree.NewDString(projection.Proj4Text.String()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
