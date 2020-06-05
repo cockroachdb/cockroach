@@ -1713,12 +1713,6 @@ func (s *adminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
 	nodeIDs := req.NodeIDs
-	if nodeIDs == nil {
-		// If no NodeIDs are specified, decommission the current node. This is
-		// used by `quit --decommission`.
-		// TODO(knz): This behavior is deprecated in 20.1. Remove in 20.2.
-		nodeIDs = []roachpb.NodeID{s.server.NodeID()}
-	}
 
 	// Mark the target nodes as decommissioning. They'll find out as they
 	// heartbeat their liveness.
