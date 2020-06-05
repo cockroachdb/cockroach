@@ -571,26 +571,27 @@ write its process ID to the specified file.`,
 	}
 
 	Socket = FlagInfo{
-		Name:   "socket",
-		EnvVar: "COCKROACH_SOCKET",
-		Description: `
-Accept client connections using a Unix domain socket with the
-given name.
-
-Note: for compatibility with PostgreSQL clients and drivers,
-ensure that the socket name has the form "/path/to/.s.PGSQL.NNNN",
-where NNNN is a number. PostgreSQL clients only take a port
-number and directory as input and construct the socket name
-programmatically.
-
-To use, for example: psql -h /path/to -p NNNN ...
-`,
+		Name:        "socket",
+		EnvVar:      "COCKROACH_SOCKET",
+		Description: `Deprecated in favor of --socket-dir.`,
 	}
 
 	SocketDir = FlagInfo{
-		Name:        "socket-dir",
-		EnvVar:      "COCKROACH_SOCKET_DIR",
-		Description: `Deprecated in favor of --socket-dir.`,
+		Name:   "socket-dir",
+		EnvVar: "COCKROACH_SOCKET_DIR",
+		Description: `
+Accept client connections using a Unix domain socket created
+in the specified directory.
+
+Note: for compatibility with PostgreSQL clients and drivers,
+the generated socket name has the form "/path/to/.s.PGSQL.NNNN",
+where NNNN is the port number configured via --listen-addr.
+
+PostgreSQL clients only take a port number and directory as input
+and construct the socket name programmatically.
+
+To use, for example: psql -h /path/to -p NNNN ...
+`,
 	}
 
 	ClientInsecure = FlagInfo{
