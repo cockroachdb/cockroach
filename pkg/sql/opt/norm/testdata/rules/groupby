@@ -280,6 +280,31 @@ group-by
       └── max [as=max:7, outer=(2)]
            └── y:2
 
+# Currently a no-op case even though we could hypothetically remove the join,
+# since the presence of a not-null foreign key in fks implies that either both
+# tables will have a cardinality of at least one, or both will have a
+# cardinality of zero.
+norm expect-not=EliminateJoinUnderGroupByLeft
+SELECT DISTINCT ON (k) k, v FROM fks INNER JOIN xy ON True
+----
+distinct-on
+ ├── columns: k:1!null v:2
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (cross)
+ │    ├── columns: k:1!null v:2
+ │    ├── fd: (1)-->(2)
+ │    ├── scan fks
+ │    │    ├── columns: k:1!null v:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan xy
+ │    └── filters (true)
+ └── aggregations
+      └── first-agg [as=v:2, outer=(2)]
+           └── v:2
+
 # No-op case because the InnerJoin will return no rows if fks is empty.
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT DISTINCT ON (x) x, y FROM xy INNER JOIN fks ON True
@@ -313,6 +338,7 @@ distinct-on
  ├── fd: (1)-->(2,3)
  ├── left-join (cross)
  │    ├── columns: x:1!null y:2 k:3
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2)
  │    ├── scan xy
@@ -364,6 +390,7 @@ group-by
  ├── fd: (1)-->(7)
  ├── inner-join (hash)
  │    ├── columns: k:1!null r1:3!null r2:4!null x:5!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    ├── key: (1)
  │    ├── fd: (1)-->(3,4), (4)==(5), (5)==(4)
  │    ├── scan fks
@@ -396,6 +423,7 @@ group-by
  │    ├── ordering: +1,+3
  │    └── left-join (cross)
  │         ├── columns: x:1!null y:2 k:3
+ │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │         ├── key: (1,3)
  │         ├── fd: (1)-->(2)
  │         ├── scan xy
@@ -409,31 +437,6 @@ group-by
  └── aggregations
       └── max [as=max:7, outer=(2)]
            └── y:2
-
-# Currently a no-op case even though we could hypothetically remove the join,
-# since the presence of a not-null foreign key in fks implies that either both
-# tables will have a cardinality of at least one, or both will have a
-# cardinality of zero.
-norm expect-not=EliminateJoinUnderGroupByLeft
-SELECT DISTINCT ON (k) k, v FROM fks INNER JOIN xy ON True
-----
-distinct-on
- ├── columns: k:1!null v:2
- ├── grouping columns: k:1!null
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── inner-join (cross)
- │    ├── columns: k:1!null v:2
- │    ├── fd: (1)-->(2)
- │    ├── scan fks
- │    │    ├── columns: k:1!null v:2
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
- │    ├── scan xy
- │    └── filters (true)
- └── aggregations
-      └── first-agg [as=v:2, outer=(2)]
-           └── v:2
 
 # --------------------------------------------------
 # EliminateJoinUnderGroupByRight
@@ -467,6 +470,7 @@ scalar-group-by
  ├── fd: ()-->(7)
  ├── left-join (hash)
  │    ├── columns: x:1!null r1:5
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  │    ├── scan xy
  │    │    ├── columns: x:1!null
  │    │    └── key: (1)
@@ -584,6 +588,7 @@ project
  ├── columns: y:8
  ├── left-join (cross)
  │    ├── columns: k:1!null x:6 xy.y:7
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    ├── key: (1)
  │    ├── fd: (1)-->(6,7)
  │    ├── scan a
@@ -703,6 +708,7 @@ project
  │    ├── fd: (1)-->(7)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null xy.y:7 column9:9
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null
  │    │    │    └── key: (1)
@@ -747,6 +753,7 @@ insert nullablecols
            ├── fd: ()-->(15,18), (5)-->(6)
            ├── left-join (hash)
            │    ├── columns: k:5!null i:6!null c1:15 rowid:18
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    ├── key: (5,18)
            │    ├── fd: (5)-->(6), (18)-->(15), (15)~~>(18)
            │    ├── select
@@ -805,6 +812,7 @@ upsert nullablecols
       ├── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18), (6,18)-->(22)
       ├── left-join (hash)
       │    ├── columns: i:6!null c1:15 c2:16 c3:17 rowid:18
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── key: (6,18)
       │    ├── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18)
       │    ├── ensure-upsert-distinct-on
@@ -1022,6 +1030,7 @@ insert xy
            │    ├── limit hint: 1.00
            │    ├── left-join (hash)
            │    │    ├── columns: y:4!null column5:5 x:6
+           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    ├── fd: ()-->(4,5)
            │    │    ├── limit hint: 1.00
            │    │    ├── project
@@ -1070,6 +1079,7 @@ upsert xy
       ├── left-join (hash)
       │    ├── columns: y:4!null column5:5 x:6 y:7
       │    ├── cardinality: [0 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── key: ()
       │    ├── fd: ()-->(4-7)
       │    ├── max1-row
@@ -1122,6 +1132,7 @@ insert xy
       │    ├── fd: ()-->(4-6)
       │    ├── left-join (hash)
       │    │    ├── columns: y:4 column5:5 x:6
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── fd: ()-->(4,5)
       │    │    ├── project
       │    │    │    ├── columns: column5:5 y:4
@@ -1169,6 +1180,7 @@ upsert xy
       ├── fd: ()-->(4,5), (6)-->(7), (6)-->(10)
       ├── left-join (hash)
       │    ├── columns: y:4 column5:5 x:6 y:7
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── lax-key: (4,6)
       │    ├── fd: ()-->(4,5), (6)-->(7)
       │    ├── ensure-upsert-distinct-on
@@ -1221,6 +1233,7 @@ upsert abc
  ├── volatile, side-effects, mutations
  └── left-join (hash)
       ├── columns: b:5!null "?column?":7!null "?column?":8!null a:9 b:10 c:11
+      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       ├── key: (5)
       ├── fd: ()-->(7,8), (5)-->(9-11)
       ├── ensure-upsert-distinct-on
@@ -1274,6 +1287,7 @@ upsert abc
       ├── fd: ()-->(5,7), (6,8)-->(14)
       ├── left-join (hash)
       │    ├── columns: b:5!null c:6!null "?column?":7 a:8 b:9 c:10
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── lax-key: (6-10)
       │    ├── fd: ()-->(5,7)
       │    ├── ensure-upsert-distinct-on
@@ -1748,6 +1762,7 @@ insert a
            │    ├── limit hint: 1.00
            │    ├── left-join (hash)
            │    │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 i:16 s:18
+           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    ├── fd: ()-->(7,11-14)
            │    │    ├── limit hint: 1.00
            │    │    ├── project
@@ -1801,6 +1816,7 @@ project
  │    ├── fd: ()-->(1,2,6,7)
  │    └── left-join (hash)
  │         ├── columns: k:1!null i:2!null xy.x:6 y:7
+ │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  │         ├── key: (6)
  │         ├── fd: ()-->(1,2), (6)-->(7)
  │         ├── select
@@ -1850,6 +1866,7 @@ upsert a
       ├── left-join (hash)
       │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 k:15 i:16 f:17 s:18 j:19
       │    ├── cardinality: [0 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── key: ()
       │    ├── fd: ()-->(7,11-19)
       │    ├── max1-row
@@ -1914,6 +1931,7 @@ project
  │    ├── left-join (hash)
  │    │    ├── columns: column1:1!null column2:2!null column3:3!null a:4 b:5 c:6
  │    │    ├── cardinality: [2 - ]
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null column2:2!null column3:3!null
  │    │    │    ├── cardinality: [2 - 2]
@@ -1947,6 +1965,7 @@ distinct-on
  ├── left-join (hash)
  │    ├── columns: column1:1!null a:2
  │    ├── cardinality: [2 - ]
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    ├── cardinality: [2 - 2]
@@ -1977,6 +1996,7 @@ distinct-on
  ├── left-join (hash)
  │    ├── columns: column1:1!null column2:2!null a:3 b:4 c:5
  │    ├── cardinality: [2 - ]
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── values
  │    │    ├── columns: column1:1!null column2:2!null
  │    │    ├── cardinality: [2 - 2]
@@ -2036,6 +2056,7 @@ distinct-on
  ├── fd: (6)-->(1)
  ├── left-join (hash)
  │    ├── columns: k:1!null column1:6
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
@@ -2182,6 +2203,7 @@ insert a
            ├── left-join (hash)
            │    ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 i:12 s:14
            │    ├── cardinality: [2 - ]
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    ├── fd: ()-->(9,10)
            │    ├── project
            │    │    ├── columns: column9:9 column10:10 column1:6!null column2:7 column3:8
@@ -2230,6 +2252,7 @@ upsert a
       ├── left-join (hash)
       │    ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
       │    ├── cardinality: [2 - ]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    ├── fd: ()-->(9,10), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
       │    ├── project
       │    │    ├── columns: column9:9 column10:10 column1:6!null column2:7 column3:8
@@ -2280,6 +2303,7 @@ upsert a
       ├── left-join (hash)
       │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
       │    ├── cardinality: [1 - ]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── key: (7,8)
       │    ├── fd: ()-->(9,10), (7,8)-->(6,11-15), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
       │    ├── ensure-upsert-distinct-on
@@ -2342,12 +2366,14 @@ insert a
            ├── fd: ()-->(10,11,19,22)
            ├── left-join (hash)
            │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19 i:22 f:23
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    ├── fd: ()-->(10,11,19)
            │    ├── select
            │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
            │    │    ├── fd: ()-->(10,11,19)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
+           │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    ├── fd: ()-->(10,11)
            │    │    │    ├── select
            │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11
@@ -2355,6 +2381,7 @@ insert a
            │    │    │    │    ├── left-join (hash)
            │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11
            │    │    │    │    │    ├── cardinality: [3 - ]
+           │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    │    │    ├── fd: ()-->(10)
            │    │    │    │    │    ├── project
            │    │    │    │    │    │    ├── columns: column10:10 column1:6!null column2:7!null column3:8!null column4:9!null
@@ -2419,6 +2446,7 @@ insert a
       │    ├── fd: ()-->(9,10,22), (7,9)~~>(6,8)
       │    ├── left-join (hash)
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 i:22 f:23
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── lax-key: (7,9,22,23)
       │    │    ├── fd: ()-->(9,10), (7,9)~~>(6,8)
       │    │    ├── upsert-distinct-on
@@ -2431,6 +2459,7 @@ insert a
       │    │    │    │    ├── fd: ()-->(9-11,19)
       │    │    │    │    ├── left-join (hash)
       │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19
+      │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    │    │    │    ├── fd: ()-->(9-11)
       │    │    │    │    │    ├── select
       │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11
@@ -2438,6 +2467,7 @@ insert a
       │    │    │    │    │    │    ├── left-join (hash)
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11
       │    │    │    │    │    │    │    ├── cardinality: [3 - ]
+      │    │    │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    │    │    │    │    │    ├── fd: ()-->(9,10)
       │    │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    │    ├── columns: column9:9 column10:10 column1:6!null column2:7!null column3:8!null
@@ -2518,6 +2548,7 @@ insert a
            ├── fd: ()-->(10,19,22), (6)~~>(7-9)
            ├── left-join (hash)
            │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    ├── volatile, side-effects
            │    ├── lax-key: (6,17,19,22,23)
            │    ├── fd: ()-->(10,19), (6)~~>(7-9)
@@ -2528,6 +2559,7 @@ insert a
            │    │    ├── fd: ()-->(10,19), (6)~~>(7-9)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
+           │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    ├── volatile, side-effects
            │    │    │    ├── lax-key: (6,17,19)
            │    │    │    ├── fd: ()-->(10), (6)~~>(7-9)
@@ -2544,6 +2576,7 @@ insert a
            │    │    │    │    │    ├── left-join (hash)
            │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
            │    │    │    │    │    │    ├── cardinality: [2 - ]
+           │    │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │    │    │    │    │    │    ├── volatile, side-effects
            │    │    │    │    │    │    ├── fd: ()-->(10)
            │    │    │    │    │    │    ├── project
@@ -2618,6 +2651,7 @@ insert a
       │    ├── fd: ()-->(11-13,17)
       │    ├── left-join (hash)
       │    │    ├── columns: i:7!null "?column?":11!null column12:12 column13:13 i:15 s:17
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
       │    │    ├── fd: ()-->(11-13)
       │    │    ├── project
       │    │    │    ├── columns: column12:12 column13:13 "?column?":11!null i:7!null

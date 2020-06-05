@@ -67,6 +67,7 @@ sort
       ├── inner-join (hash)
       │    ├── save-table-name: q16_inner_join_3
       │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:6(int!null) p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    ├── stats: [rows=9606.24468, distinct(1)=3555.43444, null(1)=0, distinct(2)=6153.37633, null(2)=0, distinct(6)=3555.43444, null(6)=0, distinct(9)=8.33333333, null(9)=0, distinct(10)=150, null(10)=0, distinct(11)=8, null(11)=0, distinct(9-11)=3315.43068, null(9-11)=0]
       │    ├── key: (2,6)
       │    ├── fd: (6)-->(9-11), (1)==(6), (6)==(1)

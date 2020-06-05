@@ -119,6 +119,7 @@ with &1 (t0)
            │    ├── inner-join (cross)
            │    │    ├── columns: true_agg:25(bool!null)
            │    │    ├── cardinality: [0 - 2]
+           │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
            │    │    ├── stats: [rows=2]
            │    │    ├── fd: ()-->(25)
            │    │    ├── with-scan &1 (t0)

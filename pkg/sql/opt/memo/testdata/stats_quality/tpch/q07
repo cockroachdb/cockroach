@@ -83,6 +83,7 @@ sort
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q7_inner_join_4
       │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float!null) l_discount:14(float!null) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) n1.n_nationkey:41(int!null) n1.n_name:42(char!null) n2.n_nationkey:45(int!null) n2.n_name:46(char!null)
+      │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    ├── stats: [rows=7741.78379, distinct(1)=7741.78379, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(8)=7488.03308, null(8)=0, distinct(10)=7741.78379, null(10)=0, distinct(13)=7569.91685, null(13)=0, distinct(14)=11, null(14)=0, distinct(18)=730.981616, null(18)=0, distinct(24)=7488.03308, null(24)=0, distinct(25)=4946.3467, null(25)=0, distinct(33)=4946.3467, null(33)=0, distinct(36)=1.29975178, null(36)=0, distinct(41)=1.29975178, null(41)=0, distinct(42)=1.33333333, null(42)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(13,14)=7579.92926, null(13,14)=0, distinct(18,42,46)=974.320532, null(18,42,46)=0]
       │    │    ├── fd: (1)-->(4), (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(41), (41)==(4)
       │    │    ├── inner-join (lookup lineitem)

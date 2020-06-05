@@ -28,6 +28,7 @@ sort
  ├── ordering: +2
  └── inner-join (hash)
       ├── columns: a.x:1!null y:2 b.x:3!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(3)=1000, null(3)=0]
       ├── cost: 2100.05
       ├── key: (3)

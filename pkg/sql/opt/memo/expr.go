@@ -421,6 +421,18 @@ func (jf JoinFlags) String() string {
 	return b.String()
 }
 
+func (ij *InnerJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(ij)
+}
+
+func (lj *LeftJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(lj)
+}
+
+func (fj *FullJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(fj)
+}
+
 func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
@@ -432,6 +444,42 @@ func (gj *GeoLookupJoinExpr) initUnexportedFields(mem *Memo) {
 func (zj *ZigzagJoinExpr) initUnexportedFields(mem *Memo) {
 	// leftProps and rightProps are initialized as necessary by the logical props
 	// builder.
+}
+
+// joinWithMultiplicity allows join operators for which JoinMultiplicity is
+// supported (currently InnerJoin, LeftJoin, and FullJoin) to be treated
+// polymorphically.
+type joinWithMultiplicity interface {
+	setMultiplicity(props.JoinMultiplicity)
+	getMultiplicity() props.JoinMultiplicity
+}
+
+var _ joinWithMultiplicity = &InnerJoinExpr{}
+var _ joinWithMultiplicity = &LeftJoinExpr{}
+var _ joinWithMultiplicity = &FullJoinExpr{}
+
+func (ij *InnerJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	ij.multiplicity = multiplicity
+}
+
+func (ij *InnerJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return ij.multiplicity
+}
+
+func (lj *LeftJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	lj.multiplicity = multiplicity
+}
+
+func (lj *LeftJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return lj.multiplicity
+}
+
+func (fj *FullJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	fj.multiplicity = multiplicity
+}
+
+func (fj *FullJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return fj.multiplicity
 }
 
 // WindowFrame denotes the definition of a window frame for an individual

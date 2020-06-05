@@ -77,6 +77,7 @@ limit
  │         ├── inner-join (hash)
  │         │    ├── save-table-name: q18_inner_join_4
  │         │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_quantity:22(float!null)
+ │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         │    ├── stats: [rows=2016361.14, distinct(1)=99649.071, null(1)=0, distinct(2)=149999.782, null(2)=0, distinct(9)=499392.239, null(9)=0, distinct(10)=99649.071, null(10)=0, distinct(12)=488043.529, null(12)=0, distinct(13)=2406, null(13)=0, distinct(18)=499392.239, null(18)=0, distinct(22)=50, null(22)=0]
  │         │    ├── fd: (1)-->(2), (9)-->(10,12,13), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
  │         │    ├── scan lineitem
@@ -88,6 +89,7 @@ limit
  │         │    ├── inner-join (hash)
  │         │    │    ├── save-table-name: q18_inner_join_6
  │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null)
+ │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │         │    │    ├── stats: [rows=513150.733, distinct(1)=99649.0712, null(1)=0, distinct(2)=145098.119, null(2)=0, distinct(9)=323294.803, null(9)=0, distinct(10)=99649.0712, null(10)=0, distinct(12)=322560.125, null(12)=0, distinct(13)=2406, null(13)=0]
  │         │    │    ├── key: (9)
  │         │    │    ├── fd: (9)-->(10,12,13), (1)-->(2), (1)==(10), (10)==(1)

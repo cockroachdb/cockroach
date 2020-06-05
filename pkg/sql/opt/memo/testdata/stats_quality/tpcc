@@ -1252,6 +1252,7 @@ scalar-group-by
  │    ├── full-join (hash)
  │    │    ├── save-table-name: consistency_12_full_join_3
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
  │    │    ├── stats: [rows=899134, distinct(1)=2999, null(1)=629303.857, distinct(2)=10, null(2)=629303.857, distinct(3)=10, null(3)=629303.857, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
  │    │    ├── project
  │    │    │    ├── save-table-name: consistency_12_project_4
