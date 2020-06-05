@@ -16,9 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geos"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/datadriven"
 	"github.com/golang/geo/s2"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
@@ -473,43 +470,4 @@ func TestGeographyAsS2(t *testing.T) {
 			require.Equal(t, tc.expectedOmit, shapes)
 		})
 	}
-}
-
-func TestClipEWKBByRect(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	var g *Geometry
-	var err error
-	datadriven.RunTest(t, "testdata/clip", func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "geometry":
-			g, err = ParseGeometry(d.Input)
-			if err != nil {
-				return err.Error()
-			}
-			return ""
-		case "clip":
-			var xMin, yMin, xMax, yMax int
-			d.ScanArgs(t, "xmin", &xMin)
-			d.ScanArgs(t, "ymin", &yMin)
-			d.ScanArgs(t, "xmax", &xMax)
-			d.ScanArgs(t, "ymax", &yMax)
-			ewkb, err := geos.ClipEWKBByRect(
-				g.EWKB(), float64(xMin), float64(yMin), float64(xMax), float64(yMax))
-			if err != nil {
-				return err.Error()
-			}
-			// TODO(sumeer):
-			// - add WKB to WKT and print exact output
-			// - expand test with more inputs
-			return fmt.Sprintf(
-				"%d => %d (srid: %d)",
-				len(g.EWKB()),
-				len(ewkb),
-				g.SRID(),
-			)
-		default:
-			return fmt.Sprintf("unknown command: %s", d.Cmd)
-		}
-	})
 }
