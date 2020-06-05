@@ -455,7 +455,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 						}
 					}
 					buf.WriteByte(')')
-					if agg.filterRenderIdx != noRenderIdx {
+					if agg.filterRenderIdx != tree.NoColumnIdx {
 						fmt.Fprintf(&buf, " FILTER (WHERE %s)", inputCols[agg.filterRenderIdx].Name)
 					}
 				}
