@@ -52,6 +52,7 @@ SELECT * FROM a RIGHT JOIN b ON k=x
 ----
 left-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6!null y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (6)-->(1-5,7), (1)-->(2-5)
  ├── scan b
@@ -83,6 +84,7 @@ SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
 left-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-7)
  ├── scan a
@@ -101,6 +103,7 @@ SELECT * FROM a FULL JOIN b ON i=5 AND ((k<1 AND k>2) OR (k<4 AND k>5)) AND s='f
 ----
 full-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -122,6 +125,7 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.s='foo'
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: ()-->(4), (1)-->(2,3,5), (6)-->(7), (1)==(6), (6)==(1)
  ├── select
@@ -147,6 +151,7 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.i=1
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2-7), (6)-->(7)
  ├── scan a
@@ -212,6 +217,7 @@ SELECT * FROM b INNER JOIN a ON b.x=a.k AND a.s='foo'
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2 k:3!null i:4 f:5!null s:6!null j:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (3)
  ├── fd: ()-->(6), (1)-->(2), (3)-->(4,5,7), (1)==(3), (3)==(1)
  ├── scan b
@@ -236,6 +242,7 @@ SELECT * FROM b LEFT JOIN a ON (a.i<0 OR a.i>10) AND b.y=1 AND a.s='foo' AND b.x
 ----
 left-join (hash)
  ├── columns: x:1!null y:2 k:3 i:4 f:5 s:6 j:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2-7), (3)-->(4,5,7)
  ├── scan b
@@ -263,6 +270,7 @@ SELECT * FROM b RIGHT JOIN a ON b.x=a.k AND a.i=1
 ----
 left-join (hash)
  ├── columns: x:1 y:2 k:3!null i:4 f:5!null s:6 j:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (3)
  ├── fd: (3)-->(1,2,4-7), (1)-->(2)
  ├── scan a
@@ -337,6 +345,7 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── select
@@ -368,6 +377,7 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.i=b.x AND a.i=b.y AND a.f + b.y::F
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 x:6!null y:7!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── immutable
  ├── key: (6)
  ├── fd: (1)-->(3-5), (1)==(2,6,7), (2)==(1,6,7), (6)==(1,2,7), (7)==(1,2,6)
@@ -469,6 +479,7 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2-7), (6)-->(7)
  ├── scan a
@@ -494,6 +505,7 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.k > 5 AND b.x IN (3, 7, 10)
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2-7), (6)-->(7)
  ├── scan a
@@ -520,6 +532,7 @@ SELECT * FROM a FULL JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -540,6 +553,7 @@ SELECT * FROM a FULL JOIN b ON a.k=b.x AND a.k > 5 AND b.x IN (3, 7, 10)
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -614,6 +628,7 @@ SELECT * FROM a JOIN b ON a.k = b.x AND b.x * a.i = (SELECT min(b.x) FROM b)
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── select
@@ -672,6 +687,7 @@ project
       │    ├── left-join (cross)
       │    │    ├── columns: x:6!null y:7 "?column?":10
       │    │    ├── outer: (1)
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       │    │    ├── fd: (6)-->(7)
       │    │    ├── scan b
       │    │    │    ├── columns: x:6!null y:7
@@ -782,10 +798,12 @@ project
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: b.x:4!null k:8!null
  │    │    │    ├── outer: (1)
+ │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │    ├── fd: (4)==(8), (8)==(4)
  │    │    │    ├── full-join (cross)
  │    │    │    │    ├── columns: b.x:4
  │    │    │    │    ├── outer: (1)
+ │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    │    │    │    ├── scan b
  │    │    │    │    │    ├── columns: b.x:4!null
  │    │    │    │    │    └── key: (4)
@@ -835,6 +853,7 @@ project
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: k:4!null b.x:9!null
  │    │    │    ├── outer: (1)
+ │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    │    │    ├── fd: (4)==(9), (9)==(4)
  │    │    │    ├── select
  │    │    │    │    ├── columns: k:4!null
@@ -847,6 +866,7 @@ project
  │    │    │    ├── full-join (cross)
  │    │    │    │    ├── columns: b.x:9
  │    │    │    │    ├── outer: (1)
+ │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    │    │    │    ├── scan b
  │    │    │    │    │    ├── columns: b.x:9!null
  │    │    │    │    │    └── key: (9)
@@ -979,6 +999,7 @@ WHERE (a.k = b.x) OR (a.k IN (SELECT 5 FROM b WHERE x = y));
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── scan a
@@ -1027,21 +1048,25 @@ WHERE
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6!null y:7 x:8!null y:9!null z:10!null x:11!null y:12!null z:13!null x:14!null y:15
  ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: ()
  ├── fd: ()-->(1-15)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:6!null b.y:7 c.x:8!null c.y:9!null c.z:10!null d.x:11!null d.y:12!null d.z:13!null
  │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: ()
  │    ├── fd: ()-->(1-13)
  │    ├── inner-join (hash)
  │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:6!null b.y:7 c.x:8!null c.y:9!null c.z:10!null
  │    │    ├── cardinality: [0 - 1]
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-10)
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:6!null b.y:7
  │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(1-7)
  │    │    │    ├── select
@@ -1141,6 +1166,7 @@ project
  │    │    │    ├── fd: (10-13)-->(19,40)
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19 true:39
+ │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    │    ├── fd: (10-13)-->(19)
  │    │    │    │    ├── scan order_line
  │    │    │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19
@@ -1203,10 +1229,12 @@ ON a_k = c_x AND c_x = b_x AND b_x = d_x
 ----
 inner-join (hash)
  ├── columns: a_k:1!null b_x:6!null c_x:8!null d_x:11!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (11)
  ├── fd: (1)==(6,8,11), (6)==(1,8,11), (8)==(1,6,11), (11)==(1,6,8)
  ├── inner-join (hash)
  │    ├── columns: k:1!null b.x:6!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: (6)
  │    ├── fd: (1)==(6), (6)==(1)
  │    ├── scan a
@@ -1219,6 +1247,7 @@ inner-join (hash)
  │         └── k:1 = b.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  ├── inner-join (hash)
  │    ├── columns: c.x:8!null d.x:11!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: (11)
  │    ├── fd: (8)==(11), (11)==(8)
  │    ├── scan c
@@ -1237,10 +1266,12 @@ SELECT * FROM (SELECT b.x AS b_x, c.x AS c_x FROM b, c), d WHERE b_x=d.x AND c_x
 ----
 inner-join (hash)
  ├── columns: b_x:1!null c_x:3!null x:6!null y:7!null z:8!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (1)==(3,6), (3)==(1,6), (6)-->(7,8), (6)==(1,3)
  ├── inner-join (hash)
  │    ├── columns: b.x:1!null c.x:3!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: (3)
  │    ├── fd: (1)==(3), (3)==(1)
  │    ├── scan b
@@ -1263,6 +1294,7 @@ SELECT * FROM b, c, d WHERE b.x=c.x AND b.x=d.x
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2 x:3!null y:4!null z:5!null x:6!null y:7!null z:8!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (1)-->(2), (3)-->(4,5), (6)-->(7,8), (3)==(1,6), (6)==(1,3), (1)==(3,6)
  ├── scan b
@@ -1271,6 +1303,7 @@ inner-join (hash)
  │    └── fd: (1)-->(2)
  ├── inner-join (hash)
  │    ├── columns: c.x:3!null c.y:4!null c.z:5!null d.x:6!null d.y:7!null d.z:8!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: (6)
  │    ├── fd: (3)-->(4,5), (6)-->(7,8), (3)==(6), (6)==(3)
  │    ├── scan c
@@ -1291,6 +1324,7 @@ SELECT * FROM c INNER JOIN d ON c.x = d.x AND d.x = c.y AND c.y = d.y AND d.y = 
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (4)
  ├── fd: (1)==(2-6), (2)==(1,3-6), (3)==(1,2,4-6), (4)==(1-3,5,6), (5)==(1-4,6), (6)==(1-5)
  ├── select
@@ -1323,6 +1357,7 @@ SELECT * from c, d WHERE c.x = c.y AND c.x = d.x AND c.y = d.y;
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (4)
  ├── fd: (1)-->(3), (1)==(2,4,5), (2)==(1,4,5), (4)-->(6), (4)==(1,2,5), (5)==(1,2,4)
  ├── select
@@ -1353,6 +1388,7 @@ SELECT * FROM c, d WHERE c.x = d.x AND d.x = c.y AND c.y = d.y
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (4)
  ├── fd: (1)-->(3), (1)==(2,4,5), (2)==(1,4,5), (4)-->(6), (4)==(1,2,5), (5)==(1,2,4)
  ├── select
@@ -1423,6 +1459,7 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.i=1 AND b.y=1
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 x:6!null y:7!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: ()-->(2,7), (1)-->(3-5), (1)==(6), (6)==(1)
  ├── select
@@ -1454,6 +1491,7 @@ SELECT * FROM a FULL JOIN b ON a.k=b.x AND a.i=1 AND b.y=1
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -1520,6 +1558,7 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (6)
  ├── fd: (6)-->(7-10), (1)-->(2-5), (1)==(6), (6)==(1)
  ├── scan a2
@@ -1539,6 +1578,7 @@ SELECT * FROM a FULL JOIN (SELECT * FROM a WHERE k>0) AS a2 ON a.k=a2.k
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6 i:7 f:8 s:9 j:10
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1)
  ├── fd: (1)-->(2-10), (6)-->(7-10)
  ├── scan a
@@ -1564,6 +1604,7 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.k=a2.k AND a2.f=a.f
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (6)
  ├── fd: (6)-->(7-10), (1)-->(2-5), (3)==(8), (8)==(3), (1)==(6), (6)==(1)
  ├── scan a2
@@ -1584,6 +1625,7 @@ SELECT * FROM (SELECT length(s), f FROM a) AS a FULL JOIN a AS a2 ON a.f=a2.f
 ----
 inner-join (hash)
  ├── columns: length:6 f:3!null k:7!null i:8 f:9!null s:10 j:11
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── fd: (7)-->(8-11), (3)==(9), (9)==(3)
  ├── scan a2
@@ -1606,10 +1648,12 @@ SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6!null i:7 f:8!null s:9 j:10 k:11!null i:12 f:13!null s:14 j:15
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,11)
  ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6), (1)-->(2-5), (3)==(8), (8)==(3)
  ├── inner-join (hash)
  │    ├── columns: a.k:6!null a.i:7 a.f:8!null a.s:9 a.j:10 a2.k:11!null a2.i:12 a2.f:13!null a2.s:14 a2.j:15
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  │    ├── key: (11)
  │    ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6)
  │    ├── scan a
@@ -1638,6 +1682,7 @@ ON c.y = a.k
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null k:4!null i:5 f:6!null s:7 j:8
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (4)-->(5-8), (2)==(4), (4)==(2)
  ├── scan c
@@ -1661,6 +1706,7 @@ AND d.y = c.x
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3), (2)==(4), (4)==(2)
  ├── scan d
@@ -1684,6 +1730,7 @@ ON d.z = c.z
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── key: (1,4)
  ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3)
  ├── scan d
@@ -1708,6 +1755,7 @@ ON True
 ----
 inner-join (cross)
  ├── columns: x:1!null y:2!null z:3!null x:4!null y:5!null z:6!null
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── key: (1,4)
  ├── fd: (1)-->(2,3), (4)-->(5,6)
  ├── scan d
@@ -1726,6 +1774,7 @@ SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 left-join (cross)
  ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
  ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
@@ -1749,6 +1798,7 @@ SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 left-join (cross)
  ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
  ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
@@ -1772,6 +1822,7 @@ SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 left-join (cross)
  ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
  ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
@@ -1793,6 +1844,7 @@ SELECT * FROM a LEFT JOIN (SELECT count(*) FROM b) ON True
 ----
 inner-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 count:8!null
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: ()-->(8), (1)-->(2-5)
  ├── scan a
@@ -1816,6 +1868,7 @@ SELECT * FROM a FULL JOIN (SELECT count(*) FROM b) ON True
 left-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 count:8!null
  ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (1)
  ├── fd: ()-->(8), (1)-->(2-5)
  ├── scalar-group-by
@@ -1884,6 +1937,7 @@ SELECT * FROM (SELECT count(*) FROM b) LEFT JOIN a ON True
 left-join (cross)
  ├── columns: count:3!null k:4 i:5 f:6 s:7 j:8
  ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
@@ -1907,6 +1961,7 @@ SELECT * FROM a RIGHT JOIN (SELECT count(*) FROM b) ON True
 left-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 count:8!null
  ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (1)
  ├── fd: ()-->(8), (1)-->(2-5)
  ├── scalar-group-by
@@ -1932,6 +1987,7 @@ ON c.z = a.k
 ----
 left-join (hash)
  ├── columns: x:1!null y:2!null z:3!null k:4 i:5 f:6 s:7 j:8
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-8), (4)-->(5-8)
  ├── scan c
@@ -1954,6 +2010,7 @@ ON c.x = a.k
 ----
 left-join (hash)
  ├── columns: x:1!null y:2!null z:3!null k:4 i:5 f:6 s:7 j:8
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2-8), (4)-->(5-8)
  ├── scan c
@@ -1973,6 +2030,7 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k<a2.k
 ----
 full-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -1992,6 +2050,7 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.f=1 AND a.f=a2.f
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -2012,6 +2071,7 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.s=a2.s
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -2031,6 +2091,7 @@ SELECT * FROM a FULL JOIN (SELECT k+1 AS k FROM a) AS a2 ON a.k=a2.k
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:11
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: a.k:1!null i:2 f:3!null s:4 j:5
@@ -2052,6 +2113,7 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.f
 ----
 full-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
+ ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -2071,6 +2133,7 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -2092,6 +2155,7 @@ SELECT * FROM (SELECT * FROM a, b) AS a FULL JOIN a AS a2 ON a.k=a2.k AND a.x=a2
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6 y:7 k:8 i:9 f:10 s:11 j:12
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1,6,8)
  ├── fd: (1)-->(2-5), (6)-->(7), (8)-->(9-12)
  ├── inner-join (cross)
@@ -2121,6 +2185,7 @@ SELECT * FROM a LEFT JOIN (SELECT * FROM a, b) AS a2 ON a.k=a2.x
 ----
 left-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:6 i:7 f:8 s:9 j:10 x:11 y:12
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  ├── key: (1,6,11)
  ├── fd: (1)-->(2-5), (6)-->(7-10), (11)-->(12)
  ├── scan a
@@ -2152,6 +2217,7 @@ ON c.y = a.k
 ----
 left-join (hash)
  ├── columns: x:1!null y:2!null z:3!null k:4 i:5 f:6 s:7 j:8
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-8), (4)-->(5-8)
  ├── scan c
@@ -2273,6 +2339,7 @@ project
  ├── fd: (1)-->(2-5), (1)==(6), (6)==(1)
  └── inner-join (hash)
       ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6!null y:7!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: (6)
       ├── fd: ()-->(7), (1)-->(2-5), (1)==(6), (6)==(1)
       ├── scan a
@@ -2302,6 +2369,7 @@ project
  ├── fd: (1)-->(2-6)
  └── left-join (hash)
       ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6 y:7
+      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       ├── key: (1)
       ├── fd: (1)-->(2-7)
       ├── scan a
@@ -2335,6 +2403,7 @@ project
  ├── fd: (3)-->(4-7), (1)==(3), (3)==(1)
  └── inner-join (hash)
       ├── columns: x:1!null y:2!null k:3!null i:4 f:5!null s:6 j:7
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: (3)
       ├── fd: ()-->(2), (3)-->(4-7), (1)==(3), (3)==(1)
       ├── select
@@ -2364,6 +2433,7 @@ project
  ├── fd: (3)-->(4-7), (1)-->(3-7)
  └── left-join (hash)
       ├── columns: x:1!null y:2!null k:3 i:4 f:5 s:6 j:7
+      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       ├── key: (1)
       ├── fd: ()-->(2), (3)-->(4-7), (1)-->(3-7)
       ├── select
@@ -2391,6 +2461,7 @@ SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS True
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── scan a
@@ -2454,6 +2525,7 @@ SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS NOT False
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── scan a
@@ -2493,6 +2565,7 @@ ON a.f>=b.z::float AND (a.k=b.x) IS True AND a.f>=b.z::float AND (a.i=b.y) IS NO
 ----
 inner-join (hash)
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 x:6!null y:7!null z:8!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── immutable
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
@@ -2561,6 +2634,7 @@ project
  ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:3!null v:4 column5:5!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── key: (1)
       ├── fd: (1)-->(2), (1,2)-->(5), (3)-->(4), (3)==(5), (5)==(3)
       ├── project
@@ -2589,6 +2663,7 @@ project
  ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:3!null v:4 column5:5!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── key: (1)
       ├── fd: (1)-->(2), (1,2)-->(5), (3)-->(4), (3)==(5), (5)==(3)
       ├── project
@@ -2617,6 +2692,7 @@ project
  ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(1,2)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:3!null v:4 column5:5!null
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(5), (1)==(5), (5)==(1)
       ├── scan xy
@@ -2645,6 +2721,7 @@ project
  ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(1,2)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:3!null v:4 column5:5!null
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(5), (1)==(5), (5)==(1)
       ├── scan xy
@@ -2708,6 +2785,7 @@ project
  ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4), (3,4)-->(1,2)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:3!null v:4 column5:5!null column6:6!null column7:7!null column8:8!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: (1)
       ├── fd: (1)-->(2), (1,2)-->(5,7), (3)-->(4), (3,4)-->(6,8), (3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)
       ├── project
@@ -2747,6 +2825,7 @@ project
  ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:3!null v:4!null column5:5!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── key: (1)
       ├── fd: (1)-->(2), (1,2)-->(5), (3)-->(4), (3)==(5), (5)==(3)
       ├── project
@@ -2773,6 +2852,7 @@ SELECT * FROM xy FULL OUTER JOIN uv ON x=u
 ----
 full-join (hash)
  ├── columns: x:1 y:2 u:3 v:4
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
  ├── scan xy
@@ -2791,6 +2871,7 @@ SELECT * FROM xy FULL OUTER JOIN uv ON x+y=1
 ----
 full-join (cross)
  ├── columns: x:1 y:2 u:3 v:4
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
  ├── scan xy
@@ -2809,6 +2890,7 @@ SELECT * FROM xy FULL OUTER JOIN uv ON 1=u+v
 ----
 full-join (cross)
  ├── columns: x:1 y:2 u:3 v:4
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
  ├── scan xy
@@ -2847,6 +2929,7 @@ project
       │    ├── left-join (cross)
       │    │    ├── columns: u:3!null v:4 k:5 i:6
       │    │    ├── outer: (1)
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       │    │    ├── key: (3,5)
       │    │    ├── fd: (3)-->(4), (5)-->(6)
       │    │    ├── scan uv
@@ -2876,6 +2959,7 @@ project
  ├── fd: (1)-->(2), (3)-->(1,2,4)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:3!null v:4 k:5!null
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(4,5), (1)==(5), (5)==(1)
       ├── scan xy
@@ -2890,6 +2974,7 @@ project
       │    ├── fd: (3)-->(4,5)
       │    ├── left-join (hash)
       │    │    ├── columns: u:3!null v:4 k:5 i:6
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
       │    │    ├── key: (3,5)
       │    │    ├── fd: (3)-->(4), (5)-->(6)
       │    │    ├── scan uv
@@ -2918,6 +3003,7 @@ SELECT * FROM xy FULL JOIN uv ON (substring('', ')') = '') = (u > 0)
 ----
 full-join (cross)
  ├── columns: x:1 y:2 u:3 v:4
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)

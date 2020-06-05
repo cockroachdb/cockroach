@@ -78,6 +78,7 @@ limit
  │         │    │    ├── inner-join (hash)
  │         │    │    │    ├── save-table-name: q3_inner_join_6
  │         │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(char!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int!null)
+ │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         │    │    │    ├── stats: [rows=220818.994, distinct(1)=29974.3087, null(1)=0, distinct(7)=1, null(7)=0, distinct(9)=190731.989, null(9)=0, distinct(10)=29974.3087, null(10)=0, distinct(13)=1169, null(13)=0, distinct(16)=1, null(16)=0]
  │         │    │    │    ├── key: (9)
  │         │    │    │    ├── fd: ()-->(7), (9)-->(10,13,16), (1)==(10), (10)==(1)

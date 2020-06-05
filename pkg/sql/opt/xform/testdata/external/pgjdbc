@@ -92,6 +92,7 @@ project
  │    ├── fd: (75)-->(1,2,7,34,70)
  │    ├── left-join (hash)
  │    │    ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:33!null nspname:34!null pg_type.oid:38 case:70 rownum:75!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── fd: (3)==(33), (33)==(3), (75)-->(1-3,7,25,33,34)
  │    │    ├── ordinality
  │    │    │    ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:33!null nspname:34!null rownum:75!null

@@ -78,12 +78,12 @@ WITH foo AS (SELECT 1) SELECT * FROM foo CROSS JOIN (VALUES (2))
 inner-join (cross)
  ├── columns: "?column?":2(int!null) column1:3(int!null)
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── cost: 0.09
  ├── key: ()
  ├── fd: ()-->(2,3)
  ├── prune: (2,3)
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── values
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
@@ -112,6 +112,7 @@ WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT * FROM foo CROSS JOIN bar
 inner-join (cross)
  ├── columns: "?column?":3!null "?column?":4!null
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: ()
  ├── fd: ()-->(3,4)
  ├── values
@@ -219,11 +220,13 @@ with &2 (bar)
  └── inner-join (cross)
       ├── columns: "?column?":3!null "?column?":4!null "?column?":5!null
       ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── key: ()
       ├── fd: ()-->(3-5)
       ├── inner-join (cross)
       │    ├── columns: "?column?":3!null "?column?":4!null
       │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       │    ├── key: ()
       │    ├── fd: ()-->(3,4)
       │    ├── values
@@ -298,38 +301,38 @@ with &1 (foo)
       └── inner-join (cross)
            ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null) "?column?":6(int!null)
            ├── cardinality: [1 - 1]
+           ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            ├── stats: [rows=1]
            ├── cost: 0.19
            ├── key: ()
            ├── fd: ()-->(3-6)
            ├── prune: (3-6)
-           ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            ├── cte-uses
            │    ├── &1: count=2 used-columns=(1)
            │    └── &2: count=2 used-columns=(2)
            ├── inner-join (cross)
            │    ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
            │    ├── cardinality: [1 - 1]
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    ├── stats: [rows=1]
            │    ├── cost: 0.13
            │    ├── key: ()
            │    ├── fd: ()-->(3-5)
            │    ├── prune: (3-5)
            │    ├── join-size: 3
-           │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    ├── cte-uses
            │    │    ├── &1: count=1 used-columns=(1)
            │    │    └── &2: count=2 used-columns=(2)
            │    ├── inner-join (cross)
            │    │    ├── columns: "?column?":3(int!null) "?column?":4(int!null)
            │    │    ├── cardinality: [1 - 1]
+           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    │    ├── stats: [rows=1]
            │    │    ├── cost: 0.07
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(3,4)
            │    │    ├── prune: (3,4)
            │    │    ├── join-size: 2
-           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    │    ├── cte-uses
            │    │    │    ├── &1: count=1 used-columns=(1)
            │    │    │    └── &2: count=1 used-columns=(2)
@@ -633,7 +636,8 @@ with &2 (cte)
  │                   │    ├── cost: 1020.02
  │                   │    ├── key: (6)
  │                   │    ├── prune: (6)
- │                   │    └── interesting orderings: (+6)
+ │                   │    ├── interesting orderings: (+6)
+ │                   │    └── unfiltered-cols: (6)
  │                   └── filters
  │                        └── eq [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
  │                             ├── variable: column2:5 [type=int]

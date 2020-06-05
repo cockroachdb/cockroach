@@ -90,6 +90,7 @@ limit
  │         │    ├── inner-join (hash)
  │         │    │    ├── save-table-name: q21_inner_join_5
  │         │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null) n_nationkey:33(int!null) n_name:34(char!null)
+ │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         │    │    ├── stats: [rows=17924.776, distinct(1)=9920, null(1)=0, distinct(2)=8329.18391, null(2)=0, distinct(4)=1, null(4)=0, distinct(8)=17568.2329, null(8)=0, distinct(10)=9920, null(10)=0, distinct(19)=2464.28129, null(19)=0, distinct(20)=2551.71335, null(20)=0, distinct(33)=1, null(33)=0, distinct(34)=1, null(34)=0]
  │         │    │    ├── fd: ()-->(34), (1)-->(2,4), (1)==(10), (10)==(1), (4)==(33), (33)==(4)
  │         │    │    ├── semi-join (hash)

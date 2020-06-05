@@ -52,6 +52,7 @@ project
  │    │    ├── inner-join (hash)
  │    │    │    ├── save-table-name: q14_inner_join_4
  │    │    │    ├── columns: l_partkey:2(int!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipdate:11(date!null) p_partkey:17(int!null) p_type:21(varchar!null)
+ │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
  │    │    │    ├── stats: [rows=82726.8788, distinct(2)=67871.4531, null(2)=0, distinct(6)=51381.824, null(6)=0, distinct(7)=11, null(7)=0, distinct(11)=30, null(11)=0, distinct(17)=67871.4531, null(17)=0, distinct(21)=150, null(21)=0, distinct(6,7)=52210.2591, null(6,7)=0, distinct(6,7,21)=82726.8788, null(6,7,21)=0]
  │    │    │    ├── fd: (17)-->(21), (2)==(17), (17)==(2)
  │    │    │    ├── scan part

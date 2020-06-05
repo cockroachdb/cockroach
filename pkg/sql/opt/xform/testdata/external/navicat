@@ -215,9 +215,11 @@ sort
       │    │    │         │    │    │    │    ├── fd: ()-->(3,28,29), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,32,33), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(28), (28)==(3), (32)-->(33), (33)-->(32), (41)-->(42,43), (42,43)-->(41), (39)==(41), (41)==(39), (68)~~>(69), (69)~~>(68)
       │    │    │         │    │    │    │    ├── left-join (hash)
       │    │    │         │    │    │    │    │    ├── columns: i.inhrelid:38!null i.inhparent:39!null c2.oid:41!null c2.relname:42!null c2.relnamespace:43!null n2.oid:68 n2.nspname:69
+      │    │    │         │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    │         │    │    │    │    │    ├── fd: (41)-->(42,43), (42,43)-->(41), (39)==(41), (41)==(39), (68)-->(69), (69)-->(68)
       │    │    │         │    │    │    │    │    ├── inner-join (hash)
       │    │    │         │    │    │    │    │    │    ├── columns: i.inhrelid:38!null i.inhparent:39!null c2.oid:41!null c2.relname:42!null c2.relnamespace:43!null
+      │    │    │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │         │    │    │    │    │    │    ├── fd: (41)-->(42,43), (42,43)-->(41), (39)==(41), (41)==(39)
       │    │    │         │    │    │    │    │    │    ├── scan i
       │    │    │         │    │    │    │    │    │    │    └── columns: i.inhrelid:38!null i.inhparent:39!null
@@ -241,6 +243,7 @@ sort
       │    │    │         │    │    │    │    │    ├── fd: ()-->(3,28,29), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,32,33), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(28), (28)==(3), (32)-->(33), (33)-->(32)
       │    │    │         │    │    │    │    │    ├── inner-join (hash)
       │    │    │         │    │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:28!null n.nspname:29!null
+      │    │    │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │         │    │    │    │    │    │    ├── key: (1)
       │    │    │         │    │    │    │    │    │    ├── fd: ()-->(3,28,29), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(28), (28)==(3)
       │    │    │         │    │    │    │    │    │    ├── select

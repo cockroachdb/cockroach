@@ -68,16 +68,19 @@ sort
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q5_inner_join_4
       │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
+      │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    ├── stats: [rows=13445.4933, distinct(1)=13445.4933, null(1)=0, distinct(4)=5, null(4)=0, distinct(9)=13060.5826, null(9)=0, distinct(10)=13445.4933, null(10)=0, distinct(13)=365, null(13)=0, distinct(18)=13060.5826, null(18)=0, distinct(20)=1843.54504, null(20)=0, distinct(23)=13107.8032, null(23)=0, distinct(24)=11, null(24)=0, distinct(34)=1843.54504, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0, distinct(23,24)=13135.9517, null(23,24)=0]
       │    │    ├── fd: ()-->(46), (1)-->(4), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(4,41), (41)==(4,37), (20)==(34), (34)==(20), (9)==(18), (18)==(9), (1)==(10), (10)==(1), (4)==(37,41)
       │    │    ├── inner-join (hash)
       │    │    │    ├── save-table-name: q5_inner_join_5
       │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── stats: [rows=333477.366, distinct(9)=230330.769, null(9)=0, distinct(10)=89272.9399, null(10)=0, distinct(13)=365, null(13)=0, distinct(18)=230330.769, null(18)=0, distinct(20)=1844.80594, null(20)=0, distinct(23)=263171.144, null(23)=0, distinct(24)=11, null(24)=0, distinct(34)=1844.80594, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0, distinct(23,24)=287513.644, null(23,24)=0]
       │    │    │    ├── fd: ()-->(46), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20), (9)==(18), (18)==(9)
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q5_inner_join_6
       │    │    │    │    ├── columns: l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
+      │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    │    ├── stats: [rows=1209922.38, distinct(18)=835685.959, null(18)=0, distinct(20)=1844.80594, null(20)=0, distinct(23)=675298.21, null(23)=0, distinct(24)=11, null(24)=0, distinct(34)=1844.80594, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0, distinct(23,24)=1095803.99, null(23,24)=0]
       │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20)
       │    │    │    │    ├── scan lineitem
@@ -98,6 +101,7 @@ sort
       │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    ├── save-table-name: q5_inner_join_9
       │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
+      │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    │    │    │    ├── stats: [rows=5, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0]
       │    │    │    │    │    │    ├── key: (41)
       │    │    │    │    │    │    ├── fd: ()-->(46), (41)-->(42,43), (43)==(45), (45)==(43)
