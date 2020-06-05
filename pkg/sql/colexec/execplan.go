@@ -1394,7 +1394,7 @@ func (r *postProcessResult) planFilterExpr(
 		ctx, evalCtx, expr, r.ColumnTypes, r.Op, acc, factory,
 	)
 	if err != nil {
-		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
+		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
 	}
 	r.InternalMemUsage += selectionInternalMem
 	if len(filterColumnTypes) > len(r.ColumnTypes) {
