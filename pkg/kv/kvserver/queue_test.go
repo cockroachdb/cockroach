@@ -629,11 +629,11 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		return nil
 	})
 	neverSplitsDesc := neverSplits.Desc()
-	if sysCfg.NeedsSplit(neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
+	if sysCfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
 	willSplitDesc := willSplit.Desc()
-	if sysCfg.NeedsSplit(willSplitDesc.StartKey, willSplitDesc.EndKey) {
+	if sysCfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
 
@@ -665,11 +665,11 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// Check our config.
 	neverSplitsDesc = neverSplits.Desc()
-	if sysCfg.NeedsSplit(neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
+	if sysCfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
 	willSplitDesc = willSplit.Desc()
-	if !sysCfg.NeedsSplit(willSplitDesc.StartKey, willSplitDesc.EndKey) {
+	if !sysCfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
 		t.Fatal("System config says range does not need to be split")
 	}
 

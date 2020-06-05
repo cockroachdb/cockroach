@@ -710,7 +710,7 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 			if err := rows.Scan(&rangeID, &startKey, &endKey); err != nil {
 				return err
 			}
-			if sysCfg.NeedsSplit(startKey, endKey) {
+			if sysCfg.NeedsSplit(ctx, startKey, endKey) {
 				return fmt.Errorf("range %d needs split", rangeID)
 			}
 			nranges++
