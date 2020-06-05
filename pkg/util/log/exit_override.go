@@ -14,6 +14,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // SetExitFunc allows setting a function that will be called to exit
@@ -56,6 +59,39 @@ func ResetExitFunc() {
 func (l *loggerT) exitLocked(err error) {
 	l.mu.AssertHeld()
 
+	l.reportErrorEverywhereLocked(err)
+
+	logging.mu.Lock()
+	f := logging.mu.exitOverride.f
+	logging.mu.Unlock()
+	if f != nil {
+		// Avoid conflicting lock order between l.mu and locks in f.
+		l.mu.Unlock()
+		f(2, err)
+		// Avoid double unlock on l.mu.
+		l.mu.Lock()
+	} else {
+		os.Exit(2)
+	}
+}
+
+// reportErrorEverywhereLocked writes the error details to both the
+// process' original stderr and the log file if configured.
+func (l *loggerT) reportErrorEverywhereLocked(err error) {
+	// Make a valid log entry for this error.
+	file, line, _ := caller.Lookup(1)
+	entry := MakeEntry(Severity_ERROR, timeutil.Now().UnixNano(), file, line,
+		fmt.Sprintf("logging error: %v", err))
+
+	// Format the entry for output below. Note how this formatting is
+	// done just once here for both the stderr and file outputs below,
+	// and thus misses out on TTY colors if configured. We afford this
+	// simplification because we only arrive here in case of
+	// likely-unrecoverable error, and there's not much incentive to be
+	// overly aesthetic in this case.
+	buf := logging.formatLogEntry(entry, nil /*stacks*/, nil /*color profile*/)
+	defer putBuffer(buf)
+
 	// Either stderr or our log file is broken. Try writing the error to both
 	// streams in the hope that one still works or else the user will have no idea
 	// why we crashed.
@@ -72,19 +108,9 @@ func (l *loggerT) exitLocked(err error) {
 		if w == nil {
 			continue
 		}
-		fmt.Fprintf(w, "log: exiting because of error: %s\n", err)
+		// We're already in error. If an additional error is encountered
+		// here, we can't do anything but raise our hands in the air.
+		_, _ = w.Write(buf.Bytes())
 	}
 	l.flushAndSync(true /*doSync*/)
-	logging.mu.Lock()
-	f := logging.mu.exitOverride.f
-	logging.mu.Unlock()
-	if f != nil {
-		// Avoid conflicting lock order between l.mu and locks in f.
-		l.mu.Unlock()
-		f(2, err)
-		// Avoid double unlock on l.mu.
-		l.mu.Lock()
-	} else {
-		os.Exit(2)
-	}
 }

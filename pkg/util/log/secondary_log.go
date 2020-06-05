@@ -66,11 +66,12 @@ func NewSecondaryLogger(
 	}
 	l := &SecondaryLogger{
 		logger: loggerT{
-			logDir:           DirName{name: dir},
-			prefix:           program + "-" + fileNamePrefix,
-			fileThreshold:    Severity_INFO,
-			noStderrRedirect: true,
-			gcNotify:         make(chan struct{}, 1),
+			logDir:                         DirName{name: dir},
+			prefix:                         program + "-" + fileNamePrefix,
+			fileThreshold:                  Severity_INFO,
+			stderrThreshold:                mainLog.stderrThreshold.get(),
+			noRedirectInternalStderrWrites: true,
+			gcNotify:                       make(chan struct{}, 1),
 		},
 		forceSyncWrites: forceSyncWrites,
 		enableMsgCount:  enableMsgCount,
