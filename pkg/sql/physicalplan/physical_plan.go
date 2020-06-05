@@ -639,14 +639,17 @@ func (p *PhysicalPlan) AddFilter(
 		return err
 	}
 	if !post.Filter.Empty() {
-		// Either Expr or LocalExpr will be set (not both).
-		if filter.Expr != "" {
-			filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
-		} else if filter.LocalExpr != nil {
+		// LocalExpr is usually set, but it can be left nil in tests, so we
+		// need to perform the nil check.
+		if post.Filter.LocalExpr != nil && filter.LocalExpr != nil {
 			filter.LocalExpr = tree.NewTypedAndExpr(
 				post.Filter.LocalExpr,
 				filter.LocalExpr,
 			)
+		}
+		// Expr is set for all distributed plans (as well as in some tests).
+		if post.Filter.Expr != "" && filter.Expr != "" {
+			filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
 		}
 	}
 	for _, pIdx := range p.ResultRouters {
