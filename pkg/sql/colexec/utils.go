@@ -35,8 +35,6 @@ var (
 
 	zeroDecimalValue  apd.Decimal
 	zeroFloat64Value  float64
-	zeroInt16Value    int16
-	zeroInt32Value    int32
 	zeroInt64Value    int64
 	zeroIntervalValue duration.Duration
 )
