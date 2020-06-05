@@ -455,7 +455,9 @@ func StaticSplits() []roachpb.RKey {
 //
 // Splits are also required between secondary tenants (i.e. /tenant/<id>).
 // However, splits are not required between the tables of secondary tenants.
-func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachpb.RKey) {
+func (s *SystemConfig) ComputeSplitKey(
+	ctx context.Context, startKey, endKey roachpb.RKey,
+) (rr roachpb.RKey) {
 	// Before dealing with splits necessitated by SQL tables, handle all of the
 	// static splits earlier in the keyspace. Note that this list must be kept in
 	// the proper order (ascending in the keyspace) for the logic below to work.
@@ -480,17 +482,17 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachp
 	// If the above iteration over the static split points didn't decide
 	// anything, the key range must be somewhere in the SQL table part of the
 	// keyspace. First, look for split keys within the system-tenant's keyspace.
-	if split := s.systemTenantTableBoundarySplitKey(startKey, endKey); split != nil {
+	if split := s.systemTenantTableBoundarySplitKey(ctx, startKey, endKey); split != nil {
 		return split
 	}
 
 	// If the system tenant does not have any splits, look for split keys at the
 	// boundary of each secondary tenant.
-	return s.tenantBoundarySplitKey(startKey, endKey)
+	return s.tenantBoundarySplitKey(ctx, startKey, endKey)
 }
 
 func (s *SystemConfig) systemTenantTableBoundarySplitKey(
-	startKey, endKey roachpb.RKey,
+	ctx context.Context, startKey, endKey roachpb.RKey,
 ) roachpb.RKey {
 	if bytes.HasPrefix(startKey, keys.TenantPrefix) {
 		// If the start key has a tenant prefix, don't try to find a split key
@@ -577,15 +579,17 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	return findSplitKey(startID, endID)
 }
 
-func (s *SystemConfig) tenantBoundarySplitKey(startKey, endKey roachpb.RKey) roachpb.RKey {
+func (s *SystemConfig) tenantBoundarySplitKey(
+	ctx context.Context, startKey, endKey roachpb.RKey,
+) roachpb.RKey {
 	// TODO(nvanbenschoten): implement this logic. Tracked in #48774.
 	return nil
 }
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
-func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
-	return len(s.ComputeSplitKey(startKey, endKey)) > 0
+func (s *SystemConfig) NeedsSplit(ctx context.Context, startKey, endKey roachpb.RKey) bool {
+	return len(s.ComputeSplitKey(ctx, startKey, endKey)) > 0
 }
 
 // shouldSplitOnSystemTenantObject checks if the ID is eligible for a split at
