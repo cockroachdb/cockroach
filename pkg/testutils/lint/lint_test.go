@@ -816,7 +816,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`\.Clone\([^)]`,
+			`proto\.Clone\([^)]`,
 			"--",
 			"*.go",
 			":!util/protoutil/clone_test.go",
@@ -1482,6 +1482,9 @@ func TestLint(t *testing.T) {
 			":!sql/colexecbase/colexecerror/error.go",
 			":!sql/colexec/execpb/stats.pb.go",
 			":!sql/colflow/vectorized_panic_propagation_test.go",
+			// This exception is because execgen itself uses panics during code
+			// generation - not at execution time.
+			":!sql/colexec/execgen/*.go",
 		)
 		if err != nil {
 			t.Fatal(err)
