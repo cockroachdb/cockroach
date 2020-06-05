@@ -2498,16 +2498,16 @@ group-by
  │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14)
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: this_.studentid:1!null name:2!null address_city:3 address_state:4 preferredcoursecode:5!null enrolment_.studentid:6!null enrolment_.coursecode:7!null enrolment_.year:9!null maxstudentenrolment_.coursecode:11!null maxstudentenrolment_.year:13!null
- │    │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (5)==(11), (11)==(5)
+ │    │    │    ├── fd: (1)-->(2-5), (5)==(11), (11)==(5), (6,7)-->(9)
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: this_.studentid:1!null name:2!null address_city:3 address_state:4 preferredcoursecode:5!null maxstudentenrolment_.coursecode:11!null maxstudentenrolment_.year:13!null
  │    │    │    │    ├── fd: (1)-->(2-5), (5)==(11), (11)==(5)
- │    │    │    │    ├── scan maxstudentenrolment_
- │    │    │    │    │    └── columns: maxstudentenrolment_.coursecode:11!null maxstudentenrolment_.year:13!null
  │    │    │    │    ├── scan this_
  │    │    │    │    │    ├── columns: this_.studentid:1!null name:2!null address_city:3 address_state:4 preferredcoursecode:5
  │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    └── fd: (1)-->(2-5)
+ │    │    │    │    ├── scan maxstudentenrolment_
+ │    │    │    │    │    └── columns: maxstudentenrolment_.coursecode:11!null maxstudentenrolment_.year:13!null
  │    │    │    │    └── filters
  │    │    │    │         └── preferredcoursecode:5 = maxstudentenrolment_.coursecode:11 [outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
  │    │    │    ├── scan enrolment_

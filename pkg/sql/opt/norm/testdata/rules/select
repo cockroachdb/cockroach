@@ -393,7 +393,7 @@ inner-join (cross)
 
 # Regression test for #42035. This test uses the opt directive because the rule
 # is triggered during exploration.
-opt expect=ConsolidateSelectFilters disable=InlineConstVar
+opt expect=ConsolidateSelectFilters disable=(InlineConstVar,RightAssociateJoinsLeft,RightAssociateJoinsRight)
 SELECT * FROM
       (VALUES ('x', 'x'), ('y', 'y')) AS vab (a, b)
     JOIN
