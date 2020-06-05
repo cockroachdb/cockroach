@@ -1714,6 +1714,10 @@ func (s *adminServer) Decommission(
 ) (*serverpb.DecommissionStatusResponse, error) {
 	nodeIDs := req.NodeIDs
 
+	if len(nodeIDs) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "no node ID specified")
+	}
+
 	// Mark the target nodes as decommissioning. They'll find out as they
 	// heartbeat their liveness.
 	if err := s.server.Decommission(ctx, req.Decommissioning, nodeIDs); err != nil {
