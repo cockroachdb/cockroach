@@ -8,12 +8,10 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
-start_test "Check that a server encountering a fatal error when not logging to stderr shows the fatal error."
+start_test "Check that a server encountering a fatal error when not logging to stderr exits with the right code."
 send "$argv start-single-node -s=path=logs/db --insecure\r"
 eexpect "CockroachDB node starting"
 system "$argv sql --insecure -e \"select crdb_internal.force_log_fatal('helloworld')\" || true"
-eexpect "\r\nF"
-eexpect "helloworld"
 eexpect ":/# "
 send "echo \$?\r"
 eexpect "255"
@@ -36,7 +34,7 @@ eexpect ":/# "
 # is only reported on the logger which is writing first after stderr
 # is has been broken, and that may be the secondary logger.
 send "tail -F `find logs/db/logs -type l`\r"
-eexpect "log: exiting because of error: write /dev/stderr: broken pipe"
+eexpect "error: write /dev/stderr: broken pipe"
 interrupt
 eexpect ":/# "
 end_test
