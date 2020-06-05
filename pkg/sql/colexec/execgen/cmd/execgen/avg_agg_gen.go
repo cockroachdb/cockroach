@@ -21,45 +21,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-func (o lastArgWidthOverload) AssignAdd(
-	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
-) string {
-	return o.WidthOverloads[0].Assign(targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
-}
-
 func (o lastArgWidthOverload) AssignDivInt64(
 	targetElem, leftElem, rightElem, _, _, _ string,
 ) string {
 	switch o.lastArgTypeOverload.CanonicalTypeFamily {
-	case types.DecimalFamily:
+	case types.IntFamily, types.DecimalFamily:
+		// Note that the result of summation of integers is stored as a
+		// decimal, so ints and decimals share the division code.
 		return fmt.Sprintf(`
 			%s.SetInt64(%s)
 			if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
-			colexecerror.InternalError(err)
-		}`,
+				colexecerror.InternalError(err)
+			}`,
 			targetElem, rightElem, targetElem, leftElem, targetElem,
 		)
 	case types.FloatFamily:
 		return fmt.Sprintf("%s = %s / float64(%s)", targetElem, leftElem, rightElem)
+	case types.IntervalFamily:
+		return fmt.Sprintf("%s = %s.Div(int64(%s))", targetElem, leftElem, rightElem)
 	}
 	colexecerror.InternalError("unsupported avg agg type")
 	// This code is unreachable, but the compiler cannot infer that.
 	return ""
 }
 
-var (
-	_ = lastArgWidthOverload{}.AssignAdd
-	_ = lastArgWidthOverload{}.AssignDivInt64
-)
+var _ = lastArgWidthOverload{}.AssignDivInt64
 
 const avgAggTmpl = "pkg/sql/colexec/avg_agg_tmpl.go"
 
 func genAvgAgg(inputFileContents string, wr io.Writer) error {
+	// Average is computed as SUM / COUNT. The counting is performed directly
+	// by the aggregate function struct, and the summation is handled by the
+	// resolved overload, so we need to take care of the the division, and it
+	// is handled by AssignDivInt64 method defined above.
+	//
+	// However, average of integers returns decimal result, so we need to be
+	// quite tricky with all integer types: namely, we need to
+	// 1. choose the resolved overload as "DECIMAL + INT" so that the
+	// intermediate results of summation didn't overflow
+	// 2. override the return type of the average computation to be decimal
+	// 3. overloadHelper struct from non-integer average aggregates (because
+	// only integer ones will be actually using it).
+
+	// ifIntegerType defines the template code that can be used to check
+	// whether the resolved overload (which must be at the '.' - dot) operates
+	// on an integer type.
+	const ifIntegerType = `{{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32") (eq .VecMethod "Int64")}}`
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
+		"_IF_INTEGER_TYPE", ifIntegerType,
+		"_RET_GOTYPE", ifIntegerType+`apd.Decimal{{else}}{{.GoType}}{{end}}`,
+		"_RET_TYPE", ifIntegerType+"Decimal{{else}}{{.VecMethod}}{{end}}",
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
@@ -68,7 +81,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	assignDivRe := makeFunctionRegex("_ASSIGN_DIV_INT64", 6)
 	s = assignDivRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignDivInt64", 6))
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
-	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
+	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 6))
 
 	accumulateAvg := makeFunctionRegex("_ACCUMULATE_AVG", 4)
 	s = accumulateAvg.ReplaceAllString(s, `{{template "accumulateAvg" buildDict "Global" . "HasNulls" $4}}`)
@@ -78,10 +91,14 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	// TODO(asubiotto): support more types.
-	supportedTypes := []*types.T{types.Decimal, types.Float}
-	tmplInfos := make([]*oneArgOverload, len(supportedTypes))
-	for i, typ := range supportedTypes {
+	// We support average on Ints, Decimals, Floats, and Intervals. The support
+	// of Ints requires special care (explained above). In order for "DECIMAL +
+	// INT" overload be of the similar structure as oneArgOverload used for all
+	// other types, we need to make the right argument as if it is the only
+	// argument (in a sense, to "pull out" the right side - the second level of
+	// family-width overload - onto the top level).
+	var tmplInfos = []*oneArgOverload{getDecimalPlusIntAsOneArgOverload()}
+	for _, typ := range []*types.T{types.Decimal, types.Float, types.Interval} {
 		var overload *oneArgOverload
 		for _, o := range sameTypeBinaryOpToOverloads[tree.Plus] {
 			if o.CanonicalTypeFamily == typ.Family() {
@@ -95,7 +112,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 		if len(overload.WidthOverloads) != 1 {
 			colexecerror.InternalError(fmt.Sprintf("unexpectedly plus binary overload for %s doesn't contain a single overload", typ.String()))
 		}
-		tmplInfos[i] = overload
+		tmplInfos = append(tmplInfos, overload)
 	}
 
 	return tmpl.Execute(wr, tmplInfos)

@@ -199,6 +199,21 @@ func registerBinOpOutputTypes() {
 	}
 }
 
+func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
+	opStr := op.String()
+	if op == tree.Bitxor {
+		// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
+		// we override the former.
+		opStr = "^"
+	}
+	return &overloadBase{
+		kind:  binaryOverload,
+		Name:  execgen.BinaryOpName[op],
+		BinOp: op,
+		OpStr: opStr,
+	}
+}
+
 func populateBinOpOverloads() {
 	registerBinOpOutputTypes()
 
@@ -218,20 +233,8 @@ func populateBinOpOverloads() {
 	})
 
 	for _, op := range allBinaryOperators {
-		opStr := op.String()
-		if op == tree.Bitxor {
-			// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
-			// we override the former.
-			opStr = "^"
-		}
-		ob := &overloadBase{
-			kind:  binaryOverload,
-			Name:  execgen.BinaryOpName[op],
-			BinOp: op,
-			OpStr: opStr,
-		}
 		sameTypeBinaryOpToOverloads[op] = populateTwoArgsOverloads(
-			ob, binOpOutputTypes[op],
+			newBinaryOverloadBase(op), binOpOutputTypes[op],
 			func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
 				if b, ok := customizer.(binOpTypeCustomizer); ok {
 					lawo.AssignFunc = b.getBinOpAssignFunc()
@@ -835,4 +838,33 @@ func parseNonIndexableTargetElem(targetElem string) (caller string, index string
 	caller = tokens[0]
 	index = tokens[1]
 	return
+}
+
+// getDecimalPlusIntAsOneArgOverload returns a two argument overload for
+// "DECIMAL + INT" as oneArgOverload which does support all int widths
+// correctly ("int" is considered to be the single argument). The result of
+// executing this overload is a decimal.
+func getDecimalPlusIntAsOneArgOverload() *oneArgOverload {
+	for _, binOpOv := range twoArgsResolvedOverloadsInfo.BinOps {
+		if binOpOv.BinOp == tree.Plus {
+			for _, leftFamilyOv := range binOpOv.LeftFamilies {
+				if leftFamilyOv.LeftCanonicalFamilyStr == toString(types.DecimalFamily) {
+					for _, rightFamilyOv := range leftFamilyOv.LeftWidths[0].RightFamilies {
+						if rightFamilyOv.RightCanonicalFamilyStr == toString(types.IntFamily) {
+							oao := &oneArgOverload{lastArgTypeOverload: newLastArgTypeOverload(
+								newBinaryOverloadBase(tree.Plus), types.IntFamily,
+							)}
+							for _, rightWidthOv := range rightFamilyOv.RightWidths {
+								oao.WidthOverloads = append(oao.WidthOverloads, rightWidthOv.Right)
+							}
+							return oao
+						}
+					}
+				}
+			}
+		}
+	}
+	colexecerror.InternalError("unexpectedly didn't find decimal + int overload")
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -196,9 +197,15 @@ func makeAggregateFuncsOutputTypes(
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
 			outTyps[i] = types.Int
+		case execinfrapb.AggregatorSpec_AVG:
+			if typeconv.TypeFamilyToCanonicalTypeFamily(aggTyps[i][0].Family()) == types.IntFamily {
+				// Average of integers is a decimal.
+				outTyps[i] = types.Decimal
+			} else {
+				outTyps[i] = aggTyps[i][0]
+			}
 		case
 			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_AVG,
 			execinfrapb.AggregatorSpec_SUM,
 			execinfrapb.AggregatorSpec_SUM_INT,
 			execinfrapb.AggregatorSpec_MIN,

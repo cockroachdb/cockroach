@@ -81,18 +81,27 @@ type avg_TYPEAgg struct {
 		// curSum keeps track of the sum of elements belonging to the current group,
 		// so we can index into the slice once per group, instead of on each
 		// iteration.
-		curSum _GOTYPE
+		curSum _RET_GOTYPE
 		// curCount keeps track of the number of elements that we've seen
 		// belonging to the current group.
 		curCount int64
 		// vec points to the output vector.
-		vec []_GOTYPE
+		vec []_RET_GOTYPE
 		// nulls points to the output null vector that we are updating.
 		nulls *coldata.Nulls
 		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 		// for the group that is currently being aggregated.
 		foundNonNullForCurrentGroup bool
 	}
+	// _IF_INTEGER_TYPE
+	// {{/*
+	// overloadHelper is used only when we perform the summation of integers
+	// and get a decimal result which is the case when _IF_INTEGER_TYPE
+	// evaluates to true. In all other cases we don't want to wastefully
+	// allocate the helper.
+	// */}}
+	overloadHelper overloadHelper
+	// {{end}}
 }
 
 var _ aggregateFunc = &avg_TYPEAgg{}
@@ -101,14 +110,14 @@ const sizeOfAvg_TYPEAgg = int64(unsafe.Sizeof(avg_TYPEAgg{}))
 
 func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
-	a.scratch.vec = v.TemplateType()
+	a.scratch.vec = v._RET_TYPE()
 	a.scratch.nulls = v.Nulls()
 	a.Reset()
 }
 
 func (a *avg_TYPEAgg) Reset() {
 	a.scratch.curIdx = -1
-	a.scratch.curSum = zero_TYPEValue
+	a.scratch.curSum = zero_RET_TYPEValue
 	a.scratch.curCount = 0
 	a.scratch.foundNonNullForCurrentGroup = false
 	a.scratch.nulls.UnsetNulls()
@@ -126,6 +135,17 @@ func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 }
 
 func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+	// _IF_INTEGER_TYPE
+	// {{/*
+	// overloadHelper is used only when we perform the summation of integers
+	// and get a decimal result which is the case when _IF_INTEGER_TYPE
+	// evaluates to true. In all other cases we don't want to wastefully
+	// allocate the helper.
+	// */}}
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := a.overloadHelper
+	// {{end}}
 	inputLen := b.Length()
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec.TemplateType(), vec.Nulls()
@@ -216,7 +236,7 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 		}
 		a.scratch.curIdx++
 		// {{with .Global}}
-		a.scratch.curSum = zero_TYPEValue
+		a.scratch.curSum = zero_RET_TYPEValue
 		// {{end}}
 		a.scratch.curCount = 0
 
