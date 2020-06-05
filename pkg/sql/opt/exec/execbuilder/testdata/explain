@@ -989,6 +989,7 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 sort
  ├── columns: a:1 b:2  [hidden: column4:4]
+ ├── immutable
  ├── stats: [rows=333.333333]
  ├── cost: 1179.25548
  ├── fd: (1,2)-->(4)
@@ -997,6 +998,7 @@ sort
  ├── interesting orderings: (+1)
  └── project
       ├── columns: column4:4 a:1 b:2
+      ├── immutable
       ├── stats: [rows=333.333333]
       ├── cost: 1116.70667
       ├── fd: (1,2)-->(4)
@@ -1004,6 +1006,7 @@ sort
       ├── interesting orderings: (+1)
       ├── select
       │    ├── columns: a:1 b:2
+      │    ├── immutable
       │    ├── stats: [rows=333.333333]
       │    ├── cost: 1110.03
       │    ├── interesting orderings: (+1)
@@ -1014,15 +1017,16 @@ sort
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
-      │         └── (a:1 + (b:2 * 2)) > 1 [outer=(1,2)]
+      │         └── (a:1 + (b:2 * 2)) > 1 [outer=(1,2), immutable]
       └── projections
-           └── a:1 * b:2 [as=column4:4, outer=(1,2)]
+           └── a:1 * b:2 [as=column4:4, outer=(1,2), immutable]
 
 query T
 EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 sort
  ├── columns: a:1(int) b:2(int)  [hidden: column4:4(int)]
+ ├── immutable
  ├── stats: [rows=333.333333]
  ├── cost: 1179.25548
  ├── fd: (1,2)-->(4)
@@ -1031,6 +1035,7 @@ sort
  ├── interesting orderings: (+1)
  └── project
       ├── columns: column4:4(int) a:1(int) b:2(int)
+      ├── immutable
       ├── stats: [rows=333.333333]
       ├── cost: 1116.70667
       ├── fd: (1,2)-->(4)
@@ -1038,6 +1043,7 @@ sort
       ├── interesting orderings: (+1)
       ├── select
       │    ├── columns: a:1(int) b:2(int)
+      │    ├── immutable
       │    ├── stats: [rows=333.333333]
       │    ├── cost: 1110.03
       │    ├── interesting orderings: (+1)
@@ -1048,7 +1054,7 @@ sort
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
-      │         └── gt [type=bool, outer=(1,2)]
+      │         └── gt [type=bool, outer=(1,2), immutable]
       │              ├── plus [type=int]
       │              │    ├── variable: a:1 [type=int]
       │              │    └── mult [type=int]
@@ -1056,7 +1062,7 @@ sort
       │              │         └── const: 2 [type=int]
       │              └── const: 1 [type=int]
       └── projections
-           └── mult [as=column4:4, type=int, outer=(1,2)]
+           └── mult [as=column4:4, type=int, outer=(1,2), immutable]
                 ├── variable: a:1 [type=int]
                 └── variable: b:2 [type=int]
 

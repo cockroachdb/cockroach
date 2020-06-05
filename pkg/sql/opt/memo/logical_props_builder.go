@@ -1372,6 +1372,8 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 	case *DivExpr:
 		// Division by zero error is possible, unless the right-hand side is a
 		// non-zero constant.
+		//
+		// TODO(radu): clean up this special case.
 		var nonZero bool
 		if c, ok := t.Right.(*ConstExpr); ok {
 			switch v := c.Value.(type) {
@@ -1413,7 +1415,34 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 		shared.VolatilitySet.Add(volatility)
 
 	default:
-		if opt.IsMutationOp(e) {
+		if opt.IsUnaryOp(e) {
+			inputType := e.Child(0).(opt.ScalarExpr).DataType()
+			o, ok := FindUnaryOverload(e.Op(), inputType)
+			if !ok {
+				panic(errors.AssertionFailedf("unary overload found (%s, %s)", e.Op(), inputType))
+			}
+			shared.VolatilitySet.Add(o.Volatility)
+		} else if opt.IsComparisonOp(e) {
+			leftType := e.Child(0).(opt.ScalarExpr).DataType()
+			rightType := e.Child(1).(opt.ScalarExpr).DataType()
+			o, _, _, ok := FindComparisonOverload(e.Op(), leftType, rightType)
+			if !ok {
+				panic(errors.AssertionFailedf(
+					"comparison overload not found (%s, %s, %s)", e.Op(), leftType, rightType,
+				))
+			}
+			shared.VolatilitySet.Add(o.Volatility)
+		} else if opt.IsBinaryOp(e) {
+			leftType := e.Child(0).(opt.ScalarExpr).DataType()
+			rightType := e.Child(1).(opt.ScalarExpr).DataType()
+			o, ok := FindBinaryOverload(e.Op(), leftType, rightType)
+			if !ok {
+				panic(errors.AssertionFailedf(
+					"binary overload not found (%s, %s, %s)", e.Op(), leftType, rightType,
+				))
+			}
+			shared.VolatilitySet.Add(o.Volatility)
+		} else if opt.IsMutationOp(e) {
 			shared.CanHaveSideEffects = true
 			shared.CanMutate = true
 			shared.VolatilitySet.AddVolatile()

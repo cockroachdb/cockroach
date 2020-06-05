@@ -36,6 +36,7 @@ SELECT 1+a.y AS plus, a.x FROM a
 ----
 project
  ├── columns: plus:3 x:1!null
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── scan a
@@ -43,7 +44,7 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      └── y:2 + 1 [as=plus:3, outer=(2)]
+      └── y:2 + 1 [as=plus:3, outer=(2), immutable]
 
 # Join operator.
 opt

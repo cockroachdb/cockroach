@@ -188,7 +188,7 @@ sort
                           │         └── sum [as=sum:36, type=float, outer=(35)]
                           │              └── column35:35 [type=float]
                           └── projections
-                               └── sum:36 * 0.0001 [as="?column?":37, type=float, outer=(36)]
+                               └── sum:36 * 0.0001 [as="?column?":37, type=float, outer=(36), immutable]
 
 stats table=q11_sort_1
 ----

@@ -1051,18 +1051,22 @@ SELECT i*i/5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
  ├── columns: r:8
+ ├── immutable
  ├── group-by
  │    ├── columns: k:1!null scalar:9 bool_or:11
  │    ├── grouping columns: k:1!null
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(9,11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null x:6 y:7 scalar:9 notnull:10
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    ├── immutable
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(6,7,9,10), (6)-->(7), (7)~~>(10)
  │    │    ├── project
  │    │    │    ├── columns: scalar:9 k:1!null
+ │    │    │    ├── immutable
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(9)
  │    │    │    ├── scan a
@@ -1070,7 +1074,7 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2)
  │    │    │    └── projections
- │    │    │         └── (i:2 * i:2) / 5 [as=scalar:9, outer=(2)]
+ │    │    │         └── (i:2 * i:2) / 5 [as=scalar:9, outer=(2), immutable]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10!null x:6!null y:7
  │    │    │    ├── key: (6)
@@ -1090,7 +1094,7 @@ project
  │         └── const-agg [as=scalar:9, outer=(9)]
  │              └── scalar:9
  └── projections
-      └── CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11)]
+      └── CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11), immutable]
 
 # --------------------------------------------------
 # TryDecorrelateProject
@@ -1197,9 +1201,11 @@ WHERE EXISTS
 ----
 project
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── semi-join-apply
       ├── columns: k:1!null i:2
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan a
@@ -1210,12 +1216,14 @@ project
       │    ├── columns: x:6!null plus:10
       │    ├── outer: (2)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      │    ├── immutable
       │    ├── scan xy
       │    │    ├── columns: x:6!null
       │    │    └── key: (6)
       │    ├── project
       │    │    ├── columns: plus:10!null
       │    │    ├── outer: (2)
+      │    │    ├── immutable
       │    │    ├── select
       │    │    │    ├── columns: u:8!null
       │    │    │    ├── outer: (2)
@@ -1226,7 +1234,7 @@ project
       │    │    │    └── filters
       │    │    │         └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    │    └── projections
-      │    │         └── u:8 + 1 [as=plus:10, outer=(8)]
+      │    │         └── u:8 + 1 [as=plus:10, outer=(8), immutable]
       │    └── filters
       │         └── x:6 = plus:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       └── filters (true)
@@ -1241,9 +1249,11 @@ WHERE EXISTS
 ----
 project
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── semi-join-apply
       ├── columns: k:1!null i:2
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan a
@@ -1254,12 +1264,14 @@ project
       │    ├── columns: x:6 plus:10
       │    ├── outer: (2)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+      │    ├── immutable
       │    ├── scan xy
       │    │    ├── columns: x:6!null
       │    │    └── key: (6)
       │    ├── project
       │    │    ├── columns: plus:10!null
       │    │    ├── outer: (2)
+      │    │    ├── immutable
       │    │    ├── select
       │    │    │    ├── columns: u:8!null
       │    │    │    ├── outer: (2)
@@ -1270,7 +1282,7 @@ project
       │    │    │    └── filters
       │    │    │         └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    │    └── projections
-      │    │         └── u:8 + 1 [as=plus:10, outer=(8)]
+      │    │         └── u:8 + 1 [as=plus:10, outer=(8), immutable]
       │    └── filters
       │         └── x:6 = plus:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       └── filters (true)
@@ -1283,14 +1295,17 @@ SELECT (SELECT sum(y + v) FROM xy, uv WHERE x=u AND x=k) FROM a
 ----
 project
  ├── columns: sum:12
+ ├── immutable
  ├── group-by
  │    ├── columns: k:1!null sum:11
  │    ├── grouping columns: k:1!null
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null x:6 column10:10
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    ├── immutable
  │    │    ├── key: (1)
  │    │    ├── fd: (6)-->(10), (1)-->(6,10)
  │    │    ├── scan a
@@ -1298,6 +1313,7 @@ project
  │    │    │    └── key: (1)
  │    │    ├── project
  │    │    │    ├── columns: column10:10 x:6!null
+ │    │    │    ├── immutable
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(10)
  │    │    │    ├── inner-join (hash)
@@ -1316,7 +1332,7 @@ project
  │    │    │    │    └── filters
  │    │    │    │         └── x:6 = u:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │    │    │    └── projections
- │    │    │         └── y:7 + v:9 [as=column10:10, outer=(7,9)]
+ │    │    │         └── y:7 + v:9 [as=column10:10, outer=(7,9), immutable]
  │    │    └── filters
  │    │         └── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    └── aggregations
@@ -4089,18 +4105,22 @@ SELECT i*i/100 < ALL(SELECT y FROM xy WHERE x=k) AS r, s FROM a
 ----
 project
  ├── columns: r:8 s:4
+ ├── immutable
  ├── group-by
  │    ├── columns: k:1!null s:4 scalar:9 bool_or:11
  │    ├── grouping columns: k:1!null
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(4,9,11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null s:4 x:6 y:7 scalar:9 notnull:10
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    ├── immutable
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(4,6,7,9,10), (6)-->(7), (7)~~>(10)
  │    │    ├── project
  │    │    │    ├── columns: scalar:9 k:1!null s:4
+ │    │    │    ├── immutable
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(4,9)
  │    │    │    ├── scan a
@@ -4108,7 +4128,7 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2,4)
  │    │    │    └── projections
- │    │    │         └── (i:2 * i:2) / 100 [as=scalar:9, outer=(2)]
+ │    │    │         └── (i:2 * i:2) / 100 [as=scalar:9, outer=(2), immutable]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10!null x:6!null y:7
  │    │    │    ├── key: (6)
@@ -4130,7 +4150,7 @@ project
  │         └── const-agg [as=scalar:9, outer=(9)]
  │              └── scalar:9
  └── projections
-      └── NOT CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11)]
+      └── NOT CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11), immutable]
 
 # Regress issue #32270: Panic when expression contains both correlated and
 # uncorrelated subquery.
@@ -4472,8 +4492,10 @@ SELECT i, y FROM a INNER JOIN xy ON (SELECT k+1) = x
 ----
 project
  ├── columns: i:2 y:7
+ ├── immutable
  └── inner-join-apply
       ├── columns: k:1!null i:2 x:6!null y:7 "?column?":8
+      ├── immutable
       ├── key: (1,6)
       ├── fd: (1)-->(2), (1,6)-->(7,8), (6)==(8), (8)==(6)
       ├── scan a
@@ -4484,6 +4506,7 @@ project
       │    ├── columns: x:6!null y:7 "?column?":8
       │    ├── outer: (1)
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    ├── immutable
       │    ├── key: (6)
       │    ├── fd: ()-->(8), (6)-->(7)
       │    ├── scan xy
@@ -4494,6 +4517,7 @@ project
       │    │    ├── columns: "?column?":8
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [1 - 1]
+      │    │    ├── immutable
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(8)
       │    │    └── (k:1 + 1,)
@@ -4622,14 +4646,17 @@ SELECT (VALUES ((SELECT i+1 AS r)), (10), ((SELECT k+1 AS s))) FROM a
 ----
 project
  ├── columns: column1:9
+ ├── immutable
  ├── ensure-distinct-on
  │    ├── columns: k:1!null column1:8
  │    ├── grouping columns: k:1!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(8)
  │    ├── inner-join-apply
  │    │    ├── columns: k:1!null i:2 r:6 s:7 column1:8
+ │    │    ├── immutable
  │    │    ├── fd: (1)-->(2)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null i:2
@@ -4639,18 +4666,21 @@ project
  │    │    │    ├── columns: r:6 s:7 column1:8
  │    │    │    ├── outer: (1,2)
  │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── immutable
  │    │    │    ├── fd: ()-->(6,7)
  │    │    │    ├── inner-join (cross)
  │    │    │    │    ├── columns: r:6 s:7
  │    │    │    │    ├── outer: (1,2)
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    │    │    │    ├── immutable
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(6,7)
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: r:6
  │    │    │    │    │    ├── outer: (2)
  │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    ├── immutable
  │    │    │    │    │    ├── key: ()
  │    │    │    │    │    ├── fd: ()-->(6)
  │    │    │    │    │    └── (i:2 + 1,)
@@ -4658,6 +4688,7 @@ project
  │    │    │    │    │    ├── columns: s:7
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    ├── immutable
  │    │    │    │    │    ├── key: ()
  │    │    │    │    │    ├── fd: ()-->(7)
  │    │    │    │    │    └── (k:1 + 1,)

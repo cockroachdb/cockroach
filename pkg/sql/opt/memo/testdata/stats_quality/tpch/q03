@@ -45,6 +45,7 @@ limit
  ├── columns: l_orderkey:18(int!null) revenue:35(float!null) o_orderdate:13(date!null) o_shippriority:16(int!null)
  ├── internal-ordering: -35,+13
  ├── cardinality: [0 - 10]
+ ├── immutable
  ├── stats: [rows=10, distinct(13)=10, null(13)=0, distinct(16)=10, null(16)=0, distinct(18)=10, null(18)=0, distinct(35)=10, null(35)=0]
  ├── key: (18)
  ├── fd: (18)-->(13,16,35)
@@ -52,6 +53,7 @@ limit
  ├── sort
  │    ├── save-table-name: q3_sort_2
  │    ├── columns: o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null) sum:35(float!null)
+ │    ├── immutable
  │    ├── stats: [rows=359560.406, distinct(13)=359560.406, null(13)=0, distinct(16)=359560.406, null(16)=0, distinct(18)=359560.406, null(18)=0, distinct(35)=359560.406, null(35)=0]
  │    ├── key: (18)
  │    ├── fd: (18)-->(13,16,35)
@@ -61,12 +63,14 @@ limit
  │         ├── save-table-name: q3_group_by_3
  │         ├── columns: o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null) sum:35(float!null)
  │         ├── grouping columns: l_orderkey:18(int!null)
+ │         ├── immutable
  │         ├── stats: [rows=359560.406, distinct(13)=359560.406, null(13)=0, distinct(16)=359560.406, null(16)=0, distinct(18)=359560.406, null(18)=0, distinct(35)=359560.406, null(35)=0]
  │         ├── key: (18)
  │         ├── fd: (18)-->(13,16,35)
  │         ├── project
  │         │    ├── save-table-name: q3_project_4
  │         │    ├── columns: column34:34(float!null) o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null)
+ │         │    ├── immutable
  │         │    ├── stats: [rows=493779.215, distinct(13)=1169, null(13)=0, distinct(16)=1, null(16)=0, distinct(18)=359560.406, null(18)=0, distinct(34)=410295.908, null(34)=0]
  │         │    ├── fd: (18)-->(13,16)
  │         │    ├── inner-join (lookup lineitem)
@@ -125,7 +129,7 @@ limit
  │         │    │    └── filters
  │         │    │         └── l_shipdate:28 > '1995-03-15' [type=bool, outer=(28), constraints=(/28: [/'1995-03-16' - ]; tight)]
  │         │    └── projections
- │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column34:34, type=float, outer=(23,24)]
+ │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column34:34, type=float, outer=(23,24), immutable]
  │         └── aggregations
  │              ├── sum [as=sum:35, type=float, outer=(34)]
  │              │    └── column34:34 [type=float]

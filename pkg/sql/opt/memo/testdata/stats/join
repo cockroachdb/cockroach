@@ -382,6 +382,7 @@ SELECT * FROM xysd JOIN uv ON x=u AND y+v=5 AND y > 0 AND y < 300
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── immutable
  ├── stats: [rows=3333.33333, distinct(1)=500, null(1)=0, distinct(5)=500, null(5)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
  ├── select
@@ -401,7 +402,7 @@ inner-join (hash)
  │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
  └── filters
       ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
+      └── (y:2 + v:6) = 5 [type=bool, outer=(2,6), immutable]
 
 # Force column statistics calculation for semi-join.
 norm
@@ -411,15 +412,18 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int!null)
+ ├── immutable
  ├── stats: [rows=138.170075]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
+      ├── immutable
       ├── stats: [rows=138.170075, distinct(2)=138.170075, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── semi-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── immutable
       │    ├── stats: [rows=166.666667, distinct(1)=166.666667, null(1)=0, distinct(2)=138.170075, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
@@ -433,7 +437,7 @@ project
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
       │    └── filters
       │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6), immutable]
       └── aggregations
            └── count-rows [as=count_rows:8, type=int]
 
@@ -445,15 +449,18 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int!null)
+ ├── immutable
  ├── stats: [rows=400]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
+      ├── immutable
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── anti-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── immutable
       │    ├── stats: [rows=4833.33333, distinct(2)=400, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
@@ -467,7 +474,7 @@ project
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
       │    └── filters
       │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6), immutable]
       └── aggregations
            └── count-rows [as=count_rows:8, type=int]
 
@@ -479,16 +486,19 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int!null)
+ ├── immutable
  ├── stats: [rows=400]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
+      ├── immutable
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── left-join (hash)
       │    ├── columns: x:1(int!null) y:2(int) u:5(int) v:6(int)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      │    ├── immutable
       │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0, distinct(5)=500, null(5)=1666.66667]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -501,7 +511,7 @@ project
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0]
       │    └── filters
       │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6), immutable]
       └── aggregations
            └── count-rows [as=count_rows:8, type=int]
 
@@ -513,16 +523,19 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int!null)
+ ├── immutable
  ├── stats: [rows=399.903879]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
+      ├── immutable
       ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── left-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:5(int) v:6(int!null)
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    ├── immutable
       │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.66667, distinct(2)=399.903879, null(2)=6666.66667]
       │    ├── fd: (1)-->(2)
       │    ├── scan uv
@@ -535,7 +548,7 @@ project
       │    │    └── fd: (1)-->(2)
       │    └── filters
       │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6), immutable]
       └── aggregations
            └── count-rows [as=count_rows:8, type=int]
 
@@ -547,16 +560,19 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int!null)
+ ├── immutable
  ├── stats: [rows=400]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
+      ├── immutable
       ├── stats: [rows=400, distinct(2)=400, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── full-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:5(int) v:6(int)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+      │    ├── immutable
       │    ├── stats: [rows=11666.6667, distinct(2)=400, null(2)=6666.66667]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -569,7 +585,7 @@ project
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0]
       │    └── filters
       │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6), immutable]
       └── aggregations
            └── count-rows [as=count_rows:8, type=int]
 

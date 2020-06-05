@@ -53,11 +53,12 @@ SELECT k1*2 FROM (SELECT k+1 AS k1, i+1 FROM a) a
 ----
 project
  ├── columns: "?column?":7!null
+ ├── immutable
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1 + 1) * 2 [as="?column?":7, outer=(1)]
+      └── (k:1 + 1) * 2 [as="?column?":7, outer=(1), immutable]
 
 # Use column values within computed column.
 norm expect=PruneProjectCols
@@ -94,7 +95,7 @@ project
  │    └── projections
  │         └── length(s:4) [as=l:5, outer=(4), immutable]
  └── projections
-      └── l:5 * 2 [as="?column?":6, outer=(5)]
+      └── l:5 * 2 [as="?column?":6, outer=(5), immutable]
 
 # Compute column based on another computed column.
 norm expect=PruneProjectCols
@@ -117,7 +118,7 @@ project
  │    └── projections
  │         └── length(s:4) [as=l:5, outer=(4), immutable]
  └── projections
-      └── l:5 * l:5 [as=r:6, outer=(5)]
+      └── l:5 * l:5 [as=r:6, outer=(5), immutable]
 
 # --------------------------------------------------
 # PruneScanCols
@@ -137,6 +138,7 @@ SELECT k, k+1 AS r, i+1 AS s FROM a
 ----
 project
  ├── columns: k:1!null r:5!null s:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(5,6)
  ├── scan a
@@ -144,8 +146,8 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── k:1 + 1 [as=r:5, outer=(1)]
-      └── i:2 + 1 [as=s:6, outer=(2)]
+      ├── k:1 + 1 [as=r:5, outer=(1), immutable]
+      └── i:2 + 1 [as=s:6, outer=(2), immutable]
 
 # Use columns only in computed columns.
 norm expect=PruneScanCols
@@ -153,12 +155,13 @@ SELECT k+i AS r FROM a
 ----
 project
  ├── columns: r:5
+ ├── immutable
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      └── k:1 + i:2 [as=r:5, outer=(1,2)]
+      └── k:1 + i:2 [as=r:5, outer=(1,2), immutable]
 
 # Use no scan columns.
 norm expect=PruneScanCols
@@ -232,8 +235,10 @@ SELECT i-1 AS r, k*k AS t FROM a WHERE k+1<5 AND s||'o'='foo'
 ----
 project
  ├── columns: r:5 t:6!null
+ ├── immutable
  ├── select
  │    ├── columns: k:1!null i:2 s:4
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,4)
  │    ├── scan a
@@ -242,10 +247,10 @@ project
  │    │    └── fd: (1)-->(2,4)
  │    └── filters
  │         ├── k:1 < 4 [outer=(1), constraints=(/1: (/NULL - /3]; tight)]
- │         └── (s:4 || 'o') = 'foo' [outer=(4)]
+ │         └── (s:4 || 'o') = 'foo' [outer=(4), immutable]
  └── projections
-      ├── i:2 - 1 [as=r:5, outer=(2)]
-      └── k:1 * k:1 [as=t:6, outer=(1)]
+      ├── i:2 - 1 [as=r:5, outer=(2), immutable]
+      └── k:1 * k:1 [as=t:6, outer=(1), immutable]
 
 # Select nested in select.
 norm expect=PruneSelectCols
@@ -290,8 +295,10 @@ SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING sum(k)=100) a
 ----
 project
  ├── columns: f:3 r:6
+ ├── immutable
  ├── select
  │    ├── columns: k:1!null f:3 sum:5!null
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: ()-->(5), (1)-->(3)
  │    ├── group-by
@@ -309,9 +316,9 @@ project
  │    │         └── const-agg [as=f:3, outer=(3)]
  │    │              └── f:3
  │    └── filters
- │         └── sum:5 = 100 [outer=(5), constraints=(/5: [/100 - /100]; tight), fd=()-->(5)]
+ │         └── sum:5 = 100 [outer=(5), immutable, constraints=(/5: [/100 - /100]; tight), fd=()-->(5)]
  └── projections
-      └── f:3 + 1.1 [as=r:6, outer=(3)]
+      └── f:3 + 1.1 [as=r:6, outer=(3), immutable]
 
 # --------------------------------------------------
 # PruneLimitCols
@@ -416,6 +423,7 @@ SELECT f, f*2.0 AS r FROM (SELECT f, s FROM a GROUP BY f, s LIMIT 5) a
 project
  ├── columns: f:3 r:5
  ├── cardinality: [0 - 5]
+ ├── immutable
  ├── limit
  │    ├── columns: f:3 s:4
  │    ├── cardinality: [0 - 5]
@@ -430,7 +438,7 @@ project
  │    │         └── limit hint: 6.02
  │    └── 5
  └── projections
-      └── f:3 * 2.0 [as=r:5, outer=(3)]
+      └── f:3 * 2.0 [as=r:5, outer=(3), immutable]
 
 # --------------------------------------------------
 # PruneOffsetCols
@@ -657,6 +665,7 @@ SELECT f, f*2.0 AS r FROM (SELECT f, s FROM a GROUP BY f, s OFFSET 5 LIMIT 5) a
 project
  ├── columns: f:3 r:5
  ├── cardinality: [0 - 5]
+ ├── immutable
  ├── offset
  │    ├── columns: f:3 s:4
  │    ├── cardinality: [0 - 5]
@@ -676,7 +685,7 @@ project
  │    │    └── 10
  │    └── 5
  └── projections
-      └── f:3 * 2.0 [as=r:5, outer=(3)]
+      └── f:3 * 2.0 [as=r:5, outer=(3), immutable]
 
 # --------------------------------------------------
 # PruneJoinLeftCols
@@ -733,6 +742,7 @@ SELECT a.k+1 AS r, xy.* FROM a FULL JOIN xy ON True
 ----
 project
  ├── columns: r:7 x:5 y:6
+ ├── immutable
  ├── fd: (5)-->(6)
  ├── full-join (cross)
  │    ├── columns: k:1 x:5 y:6
@@ -748,7 +758,7 @@ project
  │    │    └── fd: (5)-->(6)
  │    └── filters (true)
  └── projections
-      └── k:1 + 1 [as=r:7, outer=(1)]
+      └── k:1 + 1 [as=r:7, outer=(1), immutable]
 
 # No columns needed from left side of join.
 norm expect=PruneJoinLeftCols
@@ -770,18 +780,22 @@ SELECT a.k+1 AS r, a.i/2 AS s, xy.* FROM a INNER JOIN xy ON a.k*a.k=xy.x AND a.s
 ----
 project
  ├── columns: r:8!null s:9 x:5!null y:6
+ ├── immutable
  ├── fd: (5)-->(6)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 x:5!null y:6 column7:7!null
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,7), (5)-->(6), (5)==(7), (7)==(5)
  │    ├── project
  │    │    ├── columns: column7:7!null k:1!null i:2
+ │    │    ├── immutable
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,7)
  │    │    ├── select
  │    │    │    ├── columns: k:1!null i:2 a.s:4
+ │    │    │    ├── immutable
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2,4)
  │    │    │    ├── scan a
@@ -789,9 +803,9 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2,4)
  │    │    │    └── filters
- │    │    │         └── (a.s:4 || 'o') = 'foo' [outer=(4)]
+ │    │    │         └── (a.s:4 || 'o') = 'foo' [outer=(4), immutable]
  │    │    └── projections
- │    │         └── k:1 * k:1 [as=column7:7, outer=(1)]
+ │    │         └── k:1 * k:1 [as=column7:7, outer=(1), immutable]
  │    ├── scan xy
  │    │    ├── columns: x:5!null y:6
  │    │    ├── key: (5)
@@ -799,7 +813,7 @@ project
  │    └── filters
  │         └── column7:7 = x:5 [outer=(5,7), constraints=(/5: (/NULL - ]; /7: (/NULL - ]), fd=(5)==(7), (7)==(5)]
  └── projections
-      ├── k:1 + 1 [as=r:8, outer=(1)]
+      ├── k:1 + 1 [as=r:8, outer=(1), immutable]
       └── i:2 / 2 [as=s:9, outer=(2)]
 
 # Join that is nested in another join.
@@ -849,20 +863,24 @@ WHERE (SELECT k+1 AS r FROM xy WHERE y=k) = 1
 ----
 project
  ├── columns: k:1!null i:2
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── select
       ├── columns: k:1!null i:2 r:7!null
+      ├── immutable
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(2)
       ├── ensure-distinct-on
       │    ├── columns: k:1!null i:2 r:7
       │    ├── grouping columns: k:1!null
       │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── immutable
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,7)
       │    ├── left-join-apply
       │    │    ├── columns: k:1!null i:2 y:6 r:7
+      │    │    ├── immutable
       │    │    ├── fd: (1)-->(2)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null i:2
@@ -871,11 +889,12 @@ project
       │    │    ├── project
       │    │    │    ├── columns: r:7 y:6
       │    │    │    ├── outer: (1)
+      │    │    │    ├── immutable
       │    │    │    ├── fd: ()-->(7)
       │    │    │    ├── scan xy
       │    │    │    │    └── columns: y:6
       │    │    │    └── projections
-      │    │    │         └── k:1 + 1 [as=r:7, outer=(1)]
+      │    │    │         └── k:1 + 1 [as=r:7, outer=(1), immutable]
       │    │    └── filters
       │    │         └── y:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       │    └── aggregations
@@ -1012,6 +1031,7 @@ SELECT xy.*, a.k+1 AS r FROM xy FULL JOIN a ON True
 ----
 project
  ├── columns: x:1 y:2 r:7
+ ├── immutable
  ├── fd: (1)-->(2)
  ├── full-join (cross)
  │    ├── columns: x:1 y:2 k:3
@@ -1027,7 +1047,7 @@ project
  │    │    └── key: (3)
  │    └── filters (true)
  └── projections
-      └── k:3 + 1 [as=r:7, outer=(3)]
+      └── k:3 + 1 [as=r:7, outer=(3), immutable]
 
 # No columns needed from right side of join.
 norm expect=PruneJoinRightCols
@@ -1049,10 +1069,12 @@ SELECT xy.*, a.k+1 AS r, a.i/2 AS s FROM xy INNER JOIN a ON xy.x=a.k*a.k AND a.s
 ----
 project
  ├── columns: x:1!null y:2 r:8!null s:9
+ ├── immutable
  ├── fd: (1)-->(2)
  ├── inner-join (hash)
  │    ├── columns: x:1!null y:2 k:3!null i:4 column7:7!null
  │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── immutable
  │    ├── key: (3)
  │    ├── fd: (1)-->(2), (3)-->(4,7), (1)==(7), (7)==(1)
  │    ├── scan xy
@@ -1061,10 +1083,12 @@ project
  │    │    └── fd: (1)-->(2)
  │    ├── project
  │    │    ├── columns: column7:7!null k:3!null i:4
+ │    │    ├── immutable
  │    │    ├── key: (3)
  │    │    ├── fd: (3)-->(4,7)
  │    │    ├── select
  │    │    │    ├── columns: k:3!null i:4 a.s:6
+ │    │    │    ├── immutable
  │    │    │    ├── key: (3)
  │    │    │    ├── fd: (3)-->(4,6)
  │    │    │    ├── scan a
@@ -1072,13 +1096,13 @@ project
  │    │    │    │    ├── key: (3)
  │    │    │    │    └── fd: (3)-->(4,6)
  │    │    │    └── filters
- │    │    │         └── (a.s:6 || 'o') = 'foo' [outer=(6)]
+ │    │    │         └── (a.s:6 || 'o') = 'foo' [outer=(6), immutable]
  │    │    └── projections
- │    │         └── k:3 * k:3 [as=column7:7, outer=(3)]
+ │    │         └── k:3 * k:3 [as=column7:7, outer=(3), immutable]
  │    └── filters
  │         └── x:1 = column7:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  └── projections
-      ├── k:3 + 1 [as=r:8, outer=(3)]
+      ├── k:3 + 1 [as=r:8, outer=(3), immutable]
       └── i:4 / 2 [as=s:9, outer=(4)]
 
 # Join that is nested in another join.
@@ -1144,6 +1168,7 @@ SELECT a.k, xy.x, a.k+xy.x AS r FROM a LEFT JOIN xy ON a.k=xy.x
 ----
 project
  ├── columns: k:1!null x:5 r:7
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(5), (1,5)-->(7)
  ├── left-join (hash)
@@ -1160,7 +1185,7 @@ project
  │    └── filters
  │         └── k:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
-      └── k:1 + x:5 [as=r:7, outer=(1,5)]
+      └── k:1 + x:5 [as=r:7, outer=(1,5), immutable]
 
 # --------------------------------------------------
 # PruneAggCols
@@ -1344,6 +1369,7 @@ SELECT s, i+1 AS r FROM a GROUP BY i, s, s||'foo'
 ----
 project
  ├── columns: s:4 r:6
+ ├── immutable
  ├── distinct-on
  │    ├── columns: i:2 s:4
  │    ├── grouping columns: i:2 s:4
@@ -1351,7 +1377,7 @@ project
  │    └── scan a
  │         └── columns: i:2 s:4
  └── projections
-      └── i:2 + 1 [as=r:6, outer=(2)]
+      └── i:2 + 1 [as=r:6, outer=(2), immutable]
 
 # Groupby a groupby.
 norm expect=PruneGroupByCols
@@ -1400,14 +1426,16 @@ SELECT icnt FROM (SELECT count(i+1) AS icnt, count(k+1) FROM a);
 scalar-group-by
  ├── columns: icnt:6!null
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: column5:5
+ │    ├── immutable
  │    ├── scan a
  │    │    └── columns: i:2
  │    └── projections
- │         └── i:2 + 1 [as=column5:5, outer=(2)]
+ │         └── i:2 + 1 [as=column5:5, outer=(2), immutable]
  └── aggregations
       └── count [as=count:6, outer=(5)]
            └── column5:5
@@ -1499,9 +1527,11 @@ SELECT k FROM (SELECT k, min(s) FROM a GROUP BY k HAVING sum(i) > 5)
 ----
 project
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── select
       ├── columns: k:1!null sum:6!null
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(6)
       ├── group-by
@@ -1517,7 +1547,7 @@ project
       │         └── sum [as=sum:6, outer=(2)]
       │              └── i:2
       └── filters
-           └── sum:6 > 5 [outer=(6), constraints=(/6: (/5 - ]; tight)]
+           └── sum:6 > 5 [outer=(6), immutable, constraints=(/6: (/5 - ]; tight)]
 
 # --------------------------------------------------
 # PruneOrdinalityCols
@@ -1822,16 +1852,19 @@ delete a
       ├── columns: k:5!null column9:9!null
       ├── internal-ordering: +9
       ├── cardinality: [0 - 10]
+      ├── immutable
       ├── key: (5)
       ├── fd: (5)-->(9)
       ├── sort
       │    ├── columns: k:5!null column9:9!null
+      │    ├── immutable
       │    ├── key: (5)
       │    ├── fd: (5)-->(9)
       │    ├── ordering: +9
       │    ├── limit hint: 10.00
       │    └── project
       │         ├── columns: column9:9!null k:5!null
+      │         ├── immutable
       │         ├── key: (5)
       │         ├── fd: (5)-->(9)
       │         ├── select
@@ -1845,7 +1878,7 @@ delete a
       │         │    └── filters
       │         │         └── i:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
       │         └── projections
-      │              └── i:6 * 2 [as=column9:9, outer=(6)]
+      │              └── i:6 * 2 [as=column9:9, outer=(6), immutable]
       └── 10
 
 # Prune when a secondary index is present on the table.
@@ -1931,6 +1964,7 @@ update "family"
  ├── volatile, side-effects, mutations
  └── project
       ├── columns: a_new:11!null a:6!null b:7 c:8 d:9 e:10
+      ├── immutable
       ├── key: (6)
       ├── fd: (6)-->(7-11)
       ├── select
@@ -1944,7 +1978,7 @@ update "family"
       │    └── filters
       │         └── a:6 > 100 [outer=(6), constraints=(/6: [/101 - ]; tight)]
       └── projections
-           └── a:6 + 1 [as=a_new:11, outer=(6)]
+           └── a:6 + 1 [as=a_new:11, outer=(6), immutable]
 
 # Do not prune columns that must be returned.
 norm expect=(PruneMutationFetchCols, PruneMutationReturnCols)
@@ -1963,6 +1997,7 @@ project
       ├── fd: (1)-->(2)
       └── project
            ├── columns: c_new:11 a:6!null b:7 c:8 d:9
+           ├── immutable
            ├── key: (6)
            ├── fd: (6)-->(7-9), (8)-->(11)
            ├── scan "family"
@@ -1970,7 +2005,7 @@ project
            │    ├── key: (6)
            │    └── fd: (6)-->(7-9)
            └── projections
-                └── c:8 + 1 [as=c_new:11, outer=(8)]
+                └── c:8 + 1 [as=c_new:11, outer=(8), immutable]
 
 # Prune unused upsert columns.
 norm expect=PruneMutationInputCols
@@ -1992,6 +2027,7 @@ upsert a
  └── project
       ├── columns: upsert_i:15 column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
       ├── cardinality: [1 - 1]
+      ├── immutable
       ├── key: ()
       ├── fd: ()-->(5-12,15)
       ├── left-join (cross)
@@ -2019,7 +2055,7 @@ upsert a
       │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
       │    └── filters (true)
       └── projections
-           └── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
+           └── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10), immutable]
 
 # Prune update columns replaced by upsert columns.
 # TODO(andyk): Need to also prune output columns.
@@ -2049,6 +2085,7 @@ upsert a
  └── project
       ├── columns: upsert_k:14 upsert_i:15 upsert_f:16 upsert_s:17 column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
       ├── cardinality: [1 - 1]
+      ├── immutable
       ├── key: ()
       ├── fd: ()-->(5-12,14-17)
       ├── left-join (cross)
@@ -2077,7 +2114,7 @@ upsert a
       │    └── filters (true)
       └── projections
            ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14, outer=(5,9)]
-           ├── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
+           ├── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10), immutable]
            ├── CASE WHEN k:9 IS NULL THEN column8:8 ELSE f:11 END [as=upsert_f:16, outer=(8,9,11)]
            └── CASE WHEN k:9 IS NULL THEN column2:6 ELSE s:12 END [as=upsert_s:17, outer=(6,9,12)]
 
@@ -2326,6 +2363,7 @@ project
       ├── fd: (8)-->(1-7)
       └── project
            ├── columns: a_new:17 a:9 b:10 c:11 d:12 e:13 f:14 g:15 rowid:16!null
+           ├── immutable
            ├── key: (16)
            ├── fd: (16)-->(9-15), (9)~~>(10-16), (9)-->(17)
            ├── scan returning_test
@@ -2333,7 +2371,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9-15), (9)~~>(10-16)
            └── projections
-                └── a:9 + 1 [as=a_new:17, outer=(9)]
+                └── a:9 + 1 [as=a_new:17, outer=(9), immutable]
 
 
 # Fetch all the columns in the (d, e, f, g) family as d is being set.
@@ -2355,6 +2393,7 @@ project
       ├── fd: (8)-->(1,4), (1)~~>(4,8)
       └── project
            ├── columns: d_new:17 a:9 d:12 e:13 f:14 g:15 rowid:16!null
+           ├── immutable
            ├── key: (16)
            ├── fd: (16)-->(9,12-15), (9)~~>(12-16), (9,12)-->(17)
            ├── scan returning_test
@@ -2362,7 +2401,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9,12-15), (9)~~>(12-16)
            └── projections
-                └── a:9 + d:12 [as=d_new:17, outer=(9,12)]
+                └── a:9 + d:12 [as=d_new:17, outer=(9,12), immutable]
 
 # Fetch only whats being updated (not the (d, e, f, g) family).
 norm
@@ -2381,6 +2420,7 @@ project
       ├── fd: (8)-->(1)
       └── project
            ├── columns: a_new:17 a:9 rowid:16!null
+           ├── immutable
            ├── key: (16)
            ├── fd: (16)-->(9,17), (9)~~>(16,17)
            ├── scan returning_test
@@ -2388,7 +2428,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9,12), (9)~~>(12,16)
            └── projections
-                └── a:9 + d:12 [as=a_new:17, outer=(9,12)]
+                └── a:9 + d:12 [as=a_new:17, outer=(9,12), immutable]
 
 # We only fetch the minimal set of columns which is (a, b, c, rowid).
 norm
@@ -2410,6 +2450,7 @@ project
       ├── fd: (8)-->(1-3), (2)~~>(1,3,8)
       └── project
            ├── columns: a_new:17 a:9 b:10 c:11 rowid:16!null
+           ├── immutable
            ├── key: (16)
            ├── fd: (16)-->(9-11), (9)~~>(10,11,16), (9,10)-->(17)
            ├── scan returning_test
@@ -2417,7 +2458,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9-11), (9)~~>(10,11,16)
            └── projections
-                └── a:9 + b:10 [as=a_new:17, outer=(9,10)]
+                └── a:9 + b:10 [as=a_new:17, outer=(9,10), immutable]
 
 
 # We apply the PruneMutationReturnCols rule multiple times, to get
@@ -2442,6 +2483,7 @@ with &1
  │         ├── fd: (8)-->(1-3)
  │         └── project
  │              ├── columns: a_new:17 returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16!null
+ │              ├── immutable
  │              ├── key: (16)
  │              ├── fd: (16)-->(9-11), (9)~~>(10,11,16), (9)-->(17)
  │              ├── scan returning_test
@@ -2449,7 +2491,7 @@ with &1
  │              │    ├── key: (16)
  │              │    └── fd: (16)-->(9-11), (9)~~>(10,11,16)
  │              └── projections
- │                   └── returning_test.a:9 + 1 [as=a_new:17, outer=(9)]
+ │                   └── returning_test.a:9 + 1 [as=a_new:17, outer=(9), immutable]
  └── project
       ├── columns: a:21
       ├── with-scan &1
@@ -2482,6 +2524,7 @@ with &1
  │         ├── fd: (8)-->(1-3)
  │         └── project
  │              ├── columns: a_new:17 returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16!null
+ │              ├── immutable
  │              ├── key: (16)
  │              ├── fd: (16)-->(9-11), (9)~~>(10,11,16), (9)-->(17)
  │              ├── scan returning_test
@@ -2489,7 +2532,7 @@ with &1
  │              │    ├── key: (16)
  │              │    └── fd: (16)-->(9-11), (9)~~>(10,11,16)
  │              └── projections
- │                   └── returning_test.a:9 + 1 [as=a_new:17, outer=(9)]
+ │                   └── returning_test.a:9 + 1 [as=a_new:17, outer=(9), immutable]
  └── project
       ├── columns: a:21!null
       ├── select
@@ -2528,6 +2571,7 @@ with &2
  │         ├── fd: (18)-->(11-13)
  │         └── project
  │              ├── columns: a_new:27 returning_test.a:19 returning_test.b:20 returning_test.c:21 rowid:26!null
+ │              ├── immutable
  │              ├── key: (26)
  │              ├── fd: (26)-->(19-21), (19)~~>(20,21,26), (19)-->(27)
  │              ├── scan returning_test
@@ -2535,7 +2579,7 @@ with &2
  │              │    ├── key: (26)
  │              │    └── fd: (26)-->(19-21), (19)~~>(20,21,26)
  │              └── projections
- │                   └── returning_test.a:19 + 1 [as=a_new:27, outer=(19)]
+ │                   └── returning_test.a:19 + 1 [as=a_new:27, outer=(19), immutable]
  └── inner-join (cross)
       ├── columns: a:9 b:10 a:31!null b:32
       ├── fd: (9)~~>(10)
@@ -2633,7 +2677,7 @@ project
            │    │         └── a:14 = 1 [outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
            │    └── filters (true)
            └── projections
-                ├── CASE WHEN rowid:21 IS NULL THEN column1:9 ELSE column1:9 + a:14 END [as=upsert_a:23, outer=(9,14,21)]
+                ├── CASE WHEN rowid:21 IS NULL THEN column1:9 ELSE column1:9 + a:14 END [as=upsert_a:23, outer=(9,14,21), immutable]
                 ├── CASE WHEN rowid:21 IS NULL THEN column2:10 ELSE b:15 END [as=upsert_b:24, outer=(10,15,21)]
                 ├── CASE WHEN rowid:21 IS NULL THEN column3:11 ELSE c:16 END [as=upsert_c:25, outer=(11,16,21)]
                 └── CASE WHEN rowid:21 IS NULL THEN column13:13 ELSE rowid:21 END [as=upsert_rowid:30, outer=(13,21)]
@@ -2654,6 +2698,7 @@ project
       ├── fd: (8)-->(1,2,4), (1)-->(2,4,8)
       └── select
            ├── columns: a:9!null b:10 d:12 rowid:16!null
+           ├── immutable
            ├── key: (16)
            ├── fd: (16)-->(9,10,12), (9)-->(10,12,16)
            ├── scan returning_test
@@ -2661,7 +2706,7 @@ project
            │    ├── key: (16)
            │    └── fd: (16)-->(9,10,12), (9)~~>(10,12,16)
            └── filters
-                └── a:9 < (b:10 + d:12) [outer=(9,10,12), constraints=(/9: (/NULL - ])]
+                └── a:9 < (b:10 + d:12) [outer=(9,10,12), immutable, constraints=(/9: (/NULL - ])]
 
 norm
 UPSERT INTO returning_test (a, b, c) VALUES (1, 2, 'c') RETURNING a, b, c, d
@@ -2811,6 +2856,7 @@ SELECT a, b, c FROM abcde WHERE EXISTS (SELECT * FROM family WHERE abcde.a=famil
 ----
 semi-join (hash)
  ├── columns: a:1!null b:2 c:3
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── scan abcde
@@ -2823,7 +2869,7 @@ semi-join (hash)
  │    └── fd: (6)-->(7,8)
  └── filters
       ├── abcde.a:1 = "family".a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── abcde.b:2 > ("family".b:7 + "family".c:8) [outer=(2,7,8), constraints=(/2: (/NULL - ])]
+      └── abcde.b:2 > ("family".b:7 + "family".c:8) [outer=(2,7,8), immutable, constraints=(/2: (/NULL - ])]
 
 norm expect=PruneSemiAntiJoinRightCols
 SELECT a, b, c FROM abcde WHERE NOT EXISTS (SELECT * FROM family WHERE abcde.a=family.a)

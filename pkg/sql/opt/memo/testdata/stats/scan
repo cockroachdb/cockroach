@@ -202,6 +202,7 @@ SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d > 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── immutable
  ├── stats: [rows=650, distinct(3)=1, null(3)=0, distinct(4)=650, null(4)=0, distinct(3,4)=650, null(3,4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
@@ -212,13 +213,14 @@ select
  │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── filters
       ├── ((s:3 >= 'bar') AND (s:3 <= 'foo')) OR (s:3 >= 'foobar') [type=bool, outer=(3), constraints=(/3: [/'bar' - /'foo'] [/'foobar' - ]; tight)]
-      └── d:4 > 5.0 [type=bool, outer=(4), constraints=(/4: (/5.0 - ]; tight)]
+      └── d:4 > 5.0 [type=bool, outer=(4), immutable, constraints=(/4: (/5.0 - ]; tight)]
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 5.0 AND s IS NOT NULL
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── immutable
  ├── stats: [rows=650, distinct(3)=1, null(3)=0, distinct(4)=650, null(4)=0, distinct(3,4)=650, null(3,4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
@@ -229,7 +231,7 @@ select
  │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── filters
       ├── (((s:3 >= 'bar') AND (s:3 <= 'foo')) OR (s:3 >= 'foobar')) AND (s:3 IS NOT NULL) [type=bool, outer=(3), constraints=(/3: [/'bar' - /'foo'] [/'foobar' - ]; tight)]
-      └── d:4 <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
+      └── d:4 <= 5.0 [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - /5.0]; tight)]
 
 # Bump up null counts.
 
@@ -359,11 +361,13 @@ SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── immutable
  ├── stats: [rows=333.333333, distinct(3)=1, null(3)=0, distinct(4)=100, null(4)=0, distinct(3,4)=100, null(3,4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      ├── immutable
       ├── stats: [rows=333.333333, distinct(4)=98.265847, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
@@ -376,7 +380,7 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           └── d:4 <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
+           └── d:4 <= 5.0 [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - /5.0]; tight)]
 
 exec-ddl
 CREATE TABLE abcde (
@@ -720,6 +724,7 @@ SELECT * FROM hist WHERE c = 20 OR (c < 10)
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal!null) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
+ ├── immutable
  ├── stats: [rows=110, distinct(3)=10, null(3)=0]
  │   histogram(3)=  0  0  90  0   0  20
  │                <--- 0 ---- 10 --- 20
@@ -739,6 +744,7 @@ SELECT * FROM hist WHERE c = 20 OR (c <= 10)
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal!null) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
+ ├── immutable
  ├── stats: [rows=120, distinct(3)=11, null(3)=0]
  │   histogram(3)=  0  0  90  10  0  20
  │                <--- 0 ---- 10 --- 20

@@ -129,7 +129,7 @@ project
            │    │    │    │    │    │    └── projections
            │    │    │    │    │    │         └── function: unique_rowid [as=column8:8, type=int, volatile, side-effects]
            │    │    │    │    │    └── projections
-           │    │    │    │    │         └── plus [as=column9:9, type=int, outer=(6)]
+           │    │    │    │    │         └── plus [as=column9:9, type=int, outer=(6), immutable]
            │    │    │    │    │              ├── variable: y:6 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
            │    │    │    │    └── aggregations
@@ -158,11 +158,11 @@ project
            │    │    │              └── variable: c:12 [type=int]
            │    │    └── projections
            │    │         ├── const: 1 [as=a_new:14, type=int]
-           │    │         └── plus [as=b_new:15, type=int, outer=(6,12)]
+           │    │         └── plus [as=b_new:15, type=int, outer=(6,12), immutable]
            │    │              ├── variable: y:6 [type=int]
            │    │              └── variable: c:12 [type=int]
            │    └── projections
-           │         └── plus [as=column16:16, type=int, outer=(15)]
+           │         └── plus [as=column16:16, type=int, outer=(15), immutable]
            │              ├── variable: b_new:15 [type=int]
            │              └── const: 1 [type=int]
            └── projections
@@ -340,7 +340,7 @@ project
            │         │    │    │         │    │    │         │    │    │    └── projections
            │         │    │    │         │    │    │         │    │    │         └── function: unique_rowid [as=column8:8, type=int, volatile, side-effects]
            │         │    │    │         │    │    │         │    │    └── projections
-           │         │    │    │         │    │    │         │    │         └── plus [as=column9:9, type=int, outer=(6)]
+           │         │    │    │         │    │    │         │    │         └── plus [as=column9:9, type=int, outer=(6), immutable]
            │         │    │    │         │    │    │         │    │              ├── variable: y:6 [type=int]
            │         │    │    │         │    │    │         │    │              └── const: 1 [type=int]
            │         │    │    │         │    │    │         │    ├── scan abc
@@ -514,7 +514,7 @@ project
  │         │    │    │    │    │         ├── const: 10 [as=column6:6, type=int]
  │         │    │    │    │    │         └── function: unique_rowid [as=column7:7, type=int, volatile, side-effects]
  │         │    │    │    │    └── projections
- │         │    │    │    │         └── plus [as=column8:8, type=int, outer=(6)]
+ │         │    │    │    │         └── plus [as=column8:8, type=int, outer=(6), immutable]
  │         │    │    │    │              ├── variable: column6:6 [type=int]
  │         │    │    │    │              └── const: 1 [type=int]
  │         │    │    │    └── aggregations
@@ -541,7 +541,7 @@ project
  │         │    │              ├── variable: column7:7 [type=int]
  │         │    │              └── variable: rowid:12 [type=int]
  │         │    └── projections
- │         │         └── plus [as=column13:13, type=int, outer=(10)]
+ │         │         └── plus [as=column13:13, type=int, outer=(10), immutable]
  │         │              ├── variable: b:10 [type=int]
  │         │              └── const: 1 [type=int]
  │         └── projections
@@ -570,7 +570,7 @@ project
  │                   │    └── variable: column7:7 [type=int]
  │                   └── variable: rowid:12 [type=int]
  └── projections
-      └── plus [as="?column?":17, type=int, outer=(2,3)]
+      └── plus [as="?column?":17, type=int, outer=(2,3), immutable]
            ├── variable: b:2 [type=int]
            └── variable: c:3 [type=int]
 
@@ -672,7 +672,7 @@ upsert abc
       │    │    │    │    │    │         ├── const: 10 [as=column8:8, type=int]
       │    │    │    │    │    │         └── function: unique_rowid [as=column9:9, type=int, volatile, side-effects]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── plus [as=column10:10, type=int, outer=(8)]
+      │    │    │    │    │         └── plus [as=column10:10, type=int, outer=(8), immutable]
       │    │    │    │    │              ├── variable: column8:8 [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
       │    │    │    │    └── aggregations
@@ -701,7 +701,7 @@ upsert abc
       │    │    └── projections
       │    │         └── const: 2 [as=b_new:15, type=int]
       │    └── projections
-      │         └── plus [as=column16:16, type=int, outer=(15)]
+      │         └── plus [as=column16:16, type=int, outer=(15), immutable]
       │              ├── variable: b_new:15 [type=int]
       │              └── const: 1 [type=int]
       └── projections
