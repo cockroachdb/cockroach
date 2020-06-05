@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,12 +20,7 @@ import (
 
 const selectInTmpl = "pkg/sql/colexec/select_in_tmpl.go"
 
-func genSelectIn(wr io.Writer) error {
-	t, err := ioutil.ReadFile(selectInTmpl)
-	if err != nil {
-		return err
-	}
-
+func genSelectIn(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
@@ -35,7 +29,7 @@ func genSelectIn(wr io.Writer) error {
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFileContents)
 
 	assignEq := makeFunctionRegex("_ASSIGN_EQ", 6)
 	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))

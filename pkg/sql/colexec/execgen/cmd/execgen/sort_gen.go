@@ -34,12 +34,7 @@ var sortOverloads []*sortDirNullsOverload
 
 const sortOpsTmpl = "pkg/sql/colexec/sort_tmpl.go"
 
-func genSortOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(sortOpsTmpl)
-	if err != nil {
-		return err
-	}
-
+func genSortOps(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
@@ -53,7 +48,7 @@ func genSortOps(wr io.Writer) error {
 		"_ISNULL", "{{$nulls}}",
 		"_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}",
 	)
-	s := r.Replace(string(d))
+	s := r.Replace(inputFileContents)
 
 	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 6)
 	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
@@ -71,7 +66,7 @@ func genSortOps(wr io.Writer) error {
 
 const quickSortTmpl = "pkg/sql/colexec/quicksort_tmpl.go"
 
-func genQuickSortOps(wr io.Writer) error {
+func genQuickSortOps(inputFileContents string, wr io.Writer) error {
 	d, err := ioutil.ReadFile(quickSortTmpl)
 	if err != nil {
 		return err

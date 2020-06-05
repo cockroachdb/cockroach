@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -73,12 +72,7 @@ var _ = hashTableMode.IsDeletingProbe
 
 const hashTableTmpl = "pkg/sql/colexec/hashtable_tmpl.go"
 
-func genHashTable(wr io.Writer, htm hashTableMode) error {
-	t, err := ioutil.ReadFile(hashTableTmpl)
-	if err != nil {
-		return err
-	}
-
+func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) error {
 	r := strings.NewReplacer(
 		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
 		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
@@ -91,7 +85,7 @@ func genHashTable(wr io.Writer, htm hashTableMode) error {
 		"_DELETING_PROBE_MODE", "$deletingProbeMode",
 		"_OVERLOADS", ".Overloads",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFileContents)
 
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Global.Left", s)
@@ -157,8 +151,8 @@ func genHashTable(wr io.Writer, htm hashTableMode) error {
 
 func init() {
 	hashTableGenerator := func(htm hashTableMode) generator {
-		return func(wr io.Writer) error {
-			return genHashTable(wr, htm)
+		return func(inputFileContents string, wr io.Writer) error {
+			return genHashTable(inputFileContents, wr, htm)
 		}
 	}
 
