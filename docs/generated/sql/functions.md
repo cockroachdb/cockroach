@@ -720,9 +720,33 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geometry.</p>
 </span></td></tr>
-<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography.</p>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography. Coordinates have a maximum of 9 decimal digits.</p>
 </span></td></tr>
-<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry.</p>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography with max_decimal_digits output for each coordinate value.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography, max_decimal_digits: <a href="int.html">int</a>, options: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography with max_decimal_digits output for each coordinate value.</p>
+<p>Options is a flag that can be bitmasked. The options are:</p>
+<ul>
+<li>0: no option</li>
+<li>1: GeoJSON BBOX</li>
+<li>2: GeoJSON Short CRS (e.g EPSG:4326) (default for Geography)</li>
+<li>4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)</li>
+<li>8: GeoJSON Short CRS if not EPSG:4326</li>
+</ul>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of 9 decimal digits.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry, max_decimal_digits: <a href="int.html">int</a>, options: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.</p>
+<p>Options is a flag that can be bitmasked. The options are:</p>
+<ul>
+<li>0: no option</li>
+<li>1: GeoJSON BBOX</li>
+<li>2: GeoJSON Short CRS (e.g EPSG:4326)</li>
+<li>4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)</li>
+<li>8: GeoJSON Short CRS if not EPSG:4326 (default for Geometry)</li>
+</ul>
 </span></td></tr>
 <tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography.</p>
 </span></td></tr>

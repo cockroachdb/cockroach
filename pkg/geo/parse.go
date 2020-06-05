@@ -99,12 +99,10 @@ func parseWKB(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
 
 // parseGeoJSON takes given bytes assumed to be GeoJSON and transforms it into a SpatialObject.
 func parseGeoJSON(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
-	var f geojson.Feature
-	if err := f.UnmarshalJSON(b); err != nil {
+	var t geom.T
+	if err := geojson.Unmarshal(b, &t); err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	t := f.Geometry
-	// TODO(otan): check SRID from properties.
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}

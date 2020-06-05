@@ -80,17 +80,30 @@ func TestEWKBToWKB(t *testing.T) {
 func TestEWKBToGeoJSON(t *testing.T) {
 	testCases := []struct {
 		ewkt     geopb.EWKT
+		flag     EWKBToGeoJSONFlag
 		expected string
 	}{
-		{"POINT(1.0 1.0)", `{"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}`},
-		{"SRID=4;POINT(1.0 1.0)", `{"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}`},
+		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagZero, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS | EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagLongCRS, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.1234567 1.9876543)", EWKBToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1.123457,1.987654]}`},
+		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagZero, `{"type":"Point","coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagLongCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4326"}},"coordinates":[1,1]}`},
+		{"SRID=4004;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
+		{"SRID=4004;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS | EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1,1]}`},
 	}
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToGeoJSON(so.EWKB)
+			encoded, err := EWKBToGeoJSON(so.EWKB, 6, tc.flag)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, string(encoded))
 		})
