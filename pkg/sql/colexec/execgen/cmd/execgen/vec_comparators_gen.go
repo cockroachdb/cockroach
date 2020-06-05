@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,18 +20,14 @@ import (
 
 const vecCmpTmpl = "pkg/sql/colexec/vec_comparators_tmpl.go"
 
-func genVecComparators(wr io.Writer) error {
-	d, err := ioutil.ReadFile(vecCmpTmpl)
-	if err != nil {
-		return err
-	}
+func genVecComparators(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_TYPE", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(d))
+	s := r.Replace(inputFileContents)
 
 	compareRe := makeFunctionRegex("_COMPARE", 5)
 	s = compareRe.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 5))

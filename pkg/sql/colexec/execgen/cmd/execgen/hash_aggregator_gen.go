@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,18 +20,13 @@ import (
 
 const hashAggTmpl = "pkg/sql/colexec/hash_aggregator_tmpl.go"
 
-func genHashAggregator(wr io.Writer) error {
-	t, err := ioutil.ReadFile(hashAggTmpl)
-	if err != nil {
-		return err
-	}
-
+func genHashAggregator(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"TemplateType", "{{.VecMethod}}",
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFileContents)
 
 	s = replaceManipulationFuncsAmbiguous(".Global", s)
 

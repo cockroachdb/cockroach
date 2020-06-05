@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,15 +40,16 @@ import (
 {{end}}
 `
 
-func genLikeOps(wr io.Writer) error {
-	tmpl, err := getSelectionOpsTmpl()
+func genLikeOps(inputFileContents string, wr io.Writer) error {
+	tmpl, err := getSelectionOpsTmpl(inputFileContents)
 	if err != nil {
 		return err
 	}
-	projTemplate, err := getProjConstOpTmplString(false /* isConstLeft */)
+	projConstFile, err := ioutil.ReadFile(projConstOpsTmpl)
 	if err != nil {
 		return err
 	}
+	projTemplate := replaceProjConstTmplVariables(string(projConstFile), false /* isConstLeft */)
 	tmpl, err = tmpl.Funcs(template.FuncMap{"buildDict": buildDict}).Parse(projTemplate)
 	if err != nil {
 		return err

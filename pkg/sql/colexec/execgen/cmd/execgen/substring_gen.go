@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -22,19 +21,14 @@ import (
 
 const substringTmpl = "pkg/sql/colexec/substring_tmpl.go"
 
-func genSubstring(wr io.Writer) error {
-	t, err := ioutil.ReadFile(substringTmpl)
-	if err != nil {
-		return err
-	}
-
+func genSubstring(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_START_WIDTH", fmt.Sprintf("{{$startWidth}}{{if eq $startWidth %d}}: default{{end}}", anyWidth),
 		"_LENGTH_WIDTH", fmt.Sprintf("{{$lengthWidth}}{{if eq $lengthWidth %d}}: default{{end}}", anyWidth),
 		"_StartType", fmt.Sprintf("Int{{if eq $startWidth %d}}64{{else}}{{$startWidth}}{{end}}", anyWidth),
 		"_LengthType", fmt.Sprintf("Int{{if eq $lengthWidth %d}}64{{else}}{{$lengthWidth}}{{end}}", anyWidth),
 	)
-	s := r.Replace(string(t))
+	s := r.Replace(inputFileContents)
 
 	tmpl, err := template.New("substring").Parse(s)
 	if err != nil {
