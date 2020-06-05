@@ -593,7 +593,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetFinite(int64(r), 0)
+				dd.SetInt64(int64(r))
 				_, err := ExactCtx.Add(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
@@ -607,7 +607,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetFinite(int64(l), 0)
+				dd.SetInt64(int64(l))
 				_, err := ExactCtx.Add(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
@@ -888,7 +888,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetFinite(int64(r), 0)
+				dd.SetInt64(int64(r))
 				_, err := ExactCtx.Sub(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
@@ -902,7 +902,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetFinite(int64(l), 0)
+				dd.SetInt64(int64(l))
 				_, err := ExactCtx.Sub(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
@@ -1213,7 +1213,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetFinite(int64(r), 0)
+				dd.SetInt64(int64(r))
 				_, err := ExactCtx.Mul(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
@@ -1227,7 +1227,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetFinite(int64(l), 0)
+				dd.SetInt64(int64(l))
 				_, err := ExactCtx.Mul(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
@@ -1311,9 +1311,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if rInt == 0 {
 					return nil, ErrDivByZero
 				}
-				div := ctx.getTmpDec().SetFinite(int64(rInt), 0)
+				div := ctx.getTmpDec().SetInt64(int64(rInt))
 				dd := &DDecimal{}
-				dd.SetFinite(int64(MustBeDInt(left)), 0)
+				dd.SetInt64(int64(MustBeDInt(left)))
 				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
 				return dd, err
 			},
@@ -1359,7 +1359,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetFinite(int64(r), 0)
+				dd.SetInt64(int64(r))
 				_, err := DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
@@ -1376,7 +1376,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetFinite(int64(l), 0)
+				dd.SetInt64(int64(l))
 				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
@@ -1465,7 +1465,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetFinite(int64(r), 0)
+				dd.SetInt64(int64(r))
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
@@ -1482,7 +1482,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetFinite(int64(l), 0)
+				dd.SetInt64(int64(l))
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
@@ -1545,7 +1545,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetFinite(int64(r), 0)
+				dd.SetInt64(int64(r))
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
@@ -1562,7 +1562,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetFinite(int64(l), 0)
+				dd.SetInt64(int64(l))
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
@@ -1741,7 +1741,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetFinite(int64(r), 0)
+				dd.SetInt64(int64(r))
 				_, err := DecimalCtx.Pow(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
@@ -1755,7 +1755,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetFinite(int64(l), 0)
+				dd.SetInt64(int64(l))
 				_, err := DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},

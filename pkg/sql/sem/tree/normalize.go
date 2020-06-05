@@ -968,7 +968,7 @@ func ContainsVars(expr Expr) bool {
 var DecimalOne DDecimal
 
 func init() {
-	DecimalOne.SetFinite(1, 0)
+	DecimalOne.SetInt64(1)
 }
 
 // ReType ensures that the given numeric expression evaluates

@@ -510,16 +510,16 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		switch v := d.(type) {
 		case *DBool:
 			if *v {
-				dd.SetFinite(1, 0)
+				dd.SetInt64(1)
 			}
 		case *DInt:
-			dd.SetFinite(int64(*v), 0)
+			dd.SetInt64(int64(*v))
 		case *DDate:
 			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
 			if !v.IsFinite() {
 				return nil, errDecOutOfRange
 			}
-			dd.SetFinite(v.UnixEpochDays(), 0)
+			dd.SetInt64(v.UnixEpochDays())
 		case *DFloat:
 			_, err = dd.SetFloat64(float64(*v))
 		case *DDecimal:
