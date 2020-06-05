@@ -21,26 +21,42 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-func (o lastArgWidthOverload) AssignAdd(
-	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
-) string {
-	return o.WidthOverloads[0].Assign(targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
+type avgTmplInfo struct {
+	NeedsHelper    bool
+	InputVecMethod string
+	RetGoType      string
+	RetVecMethod   string
+
+	addOverload assignFunc
 }
 
-func (o lastArgWidthOverload) AssignDivInt64(
-	targetElem, leftElem, rightElem, _, _, _ string,
-) string {
-	switch o.lastArgTypeOverload.CanonicalTypeFamily {
-	case types.DecimalFamily:
+func (a avgTmplInfo) AssignAdd(targetElem, leftElem, rightElem, _, _, _ string) string {
+	// Note that we already have correctly resolved method for "Plus" overload,
+	// and we simply need to create a skeleton of lastArgWidthOverload to
+	// supply tree.Plus as the binary operator in order for the correct code to
+	// be returned.
+	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
+		overloadBase: newBinaryOverloadBase(tree.Plus),
+	}}
+	return a.addOverload(lawo, targetElem, leftElem, rightElem, "", "", "")
+}
+
+func (a avgTmplInfo) AssignDivInt64(targetElem, leftElem, rightElem, _, _, _ string) string {
+	switch a.RetVecMethod {
+	case toVecMethod(types.DecimalFamily, anyWidth):
+		// Note that the result of summation of integers is stored as a
+		// decimal, so ints and decimals share the division code.
 		return fmt.Sprintf(`
 			%s.SetInt64(%s)
 			if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
-			colexecerror.InternalError(err)
-		}`,
+				colexecerror.InternalError(err)
+			}`,
 			targetElem, rightElem, targetElem, leftElem, targetElem,
 		)
-	case types.FloatFamily:
+	case toVecMethod(types.FloatFamily, anyWidth):
 		return fmt.Sprintf("%s = %s / float64(%s)", targetElem, leftElem, rightElem)
+	case toVecMethod(types.IntervalFamily, anyWidth):
+		return fmt.Sprintf("%s = %s.Div(int64(%s))", targetElem, leftElem, rightElem)
 	}
 	colexecerror.InternalError("unsupported avg agg type")
 	// This code is unreachable, but the compiler cannot infer that.
@@ -48,20 +64,18 @@ func (o lastArgWidthOverload) AssignDivInt64(
 }
 
 var (
-	_ = lastArgWidthOverload{}.AssignAdd
-	_ = lastArgWidthOverload{}.AssignDivInt64
+	_ = avgTmplInfo{}.AssignAdd
+	_ = avgTmplInfo{}.AssignDivInt64
 )
 
 const avgAggTmpl = "pkg/sql/colexec/avg_agg_tmpl.go"
 
 func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
-		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
-		"_TYPE", "{{.VecMethod}}",
-		"TemplateType", "{{.VecMethod}}",
+		"_RET_GOTYPE", `{{.RetGoType}}`,
+		"_RET_TYPE", "{{.RetVecMethod}}",
+		"_TYPE", "{{.InputVecMethod}}",
+		"TemplateType", "{{.InputVecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
 
@@ -78,10 +92,19 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	// TODO(asubiotto): support more types.
-	supportedTypes := []*types.T{types.Decimal, types.Float}
-	tmplInfos := make([]*oneArgOverload, len(supportedTypes))
-	for i, typ := range supportedTypes {
+	// Average is computed as SUM / COUNT. The counting is performed directly
+	// by the aggregate function struct, and the division is handled by
+	// AssignDivInt64 defined above, and we need to find a suitable overload
+	// to perform the summation.
+	// For most types it is easy - we simply iterate over "Plus" overloads that
+	// take in the same type as both arguments. However, average of integers
+	// returns a decimal result, so we need to pick the overload of appropriate
+	// width from "DECIMAL + INT" overload.
+	getAddOverload := func(typ *types.T) assignFunc {
+		if typ.Family() == types.IntFamily {
+			var c decimalIntCustomizer
+			return c.getBinOpAssignFunc()
+		}
 		var overload *oneArgOverload
 		for _, o := range sameTypeBinaryOpToOverloads[tree.Plus] {
 			if o.CanonicalTypeFamily == typ.Family() {
@@ -95,9 +118,32 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 		if len(overload.WidthOverloads) != 1 {
 			colexecerror.InternalError(fmt.Sprintf("unexpectedly plus binary overload for %s doesn't contain a single overload", typ.String()))
 		}
-		tmplInfos[i] = overload
+		return overload.WidthOverloads[0].AssignFunc
 	}
 
+	var tmplInfos []avgTmplInfo
+	// Note that all types on which we support avg aggregate function are the
+	// canonical representatives, so we can operate with their type family
+	// directly.
+	for _, inputType := range []*types.T{types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval} {
+		needsHelper := false
+		// Note that we don't use execinfrapb.GetAggregateInfo because we don't
+		// want to bring in a dependency on that package to reduce the burden
+		// of regenerating execgen code when the protobufs get generated.
+		retType := inputType
+		if inputType.Family() == types.IntFamily {
+			// Average of integers is a decimal.
+			needsHelper = true
+			retType = types.Decimal
+		}
+		tmplInfos = append(tmplInfos, avgTmplInfo{
+			NeedsHelper:    needsHelper,
+			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
+			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
+			RetVecMethod:   toVecMethod(retType.Family(), retType.Width()),
+			addOverload:    getAddOverload(inputType),
+		})
+	}
 	return tmpl.Execute(wr, tmplInfos)
 }
 

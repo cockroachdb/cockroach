@@ -199,6 +199,21 @@ func registerBinOpOutputTypes() {
 	}
 }
 
+func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
+	opStr := op.String()
+	if op == tree.Bitxor {
+		// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
+		// we override the former.
+		opStr = "^"
+	}
+	return &overloadBase{
+		kind:  binaryOverload,
+		Name:  execgen.BinaryOpName[op],
+		BinOp: op,
+		OpStr: opStr,
+	}
+}
+
 func populateBinOpOverloads() {
 	registerBinOpOutputTypes()
 
@@ -218,20 +233,8 @@ func populateBinOpOverloads() {
 	})
 
 	for _, op := range allBinaryOperators {
-		opStr := op.String()
-		if op == tree.Bitxor {
-			// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
-			// we override the former.
-			opStr = "^"
-		}
-		ob := &overloadBase{
-			kind:  binaryOverload,
-			Name:  execgen.BinaryOpName[op],
-			BinOp: op,
-			OpStr: opStr,
-		}
 		sameTypeBinaryOpToOverloads[op] = populateTwoArgsOverloads(
-			ob, binOpOutputTypes[op],
+			newBinaryOverloadBase(op), binOpOutputTypes[op],
 			func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
 				if b, ok := customizer.(binOpTypeCustomizer); ok {
 					lawo.AssignFunc = b.getBinOpAssignFunc()
