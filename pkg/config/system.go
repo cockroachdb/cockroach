@@ -176,14 +176,19 @@ func (s *SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
 
 // GetIndex searches the kv list for 'key' and returns its index if found.
 func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
-	l := len(s.Values)
-	i := sort.Search(l, func(i int) bool {
-		return key.Compare(s.Values[i].Key) <= 0
-	})
-	if i == l || !key.Equal(s.Values[i].Key) {
+	i := s.getIndexBound(key)
+	if i == len(s.Values) || !key.Equal(s.Values[i].Key) {
 		return 0, false
 	}
 	return i, true
+}
+
+// getIndexBound searches the kv list for 'key' and returns its index if found
+// or the index it would be placed at if not found.
+func (s *SystemConfig) getIndexBound(key roachpb.Key) int {
+	return sort.Search(len(s.Values), func(i int) bool {
+		return key.Compare(s.Values[i].Key) <= 0
+	})
 }
 
 // GetLargestObjectID returns the largest object ID found in the config which is
@@ -201,15 +206,11 @@ func (s *SystemConfig) GetLargestObjectID(
 	}
 
 	// Search for the descriptor table entries within the SystemConfig.
-	highBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID + 1)
-	highIndex := sort.Search(len(s.Values), func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, highBound) >= 0
-	})
 	lowBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
-	lowIndex := sort.Search(len(s.Values), func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, lowBound) >= 0
-	})
-	if highIndex == lowIndex {
+	lowIndex := s.getIndexBound(lowBound)
+	highBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID + 1)
+	highIndex := s.getIndexBound(highBound)
+	if lowIndex == highIndex {
 		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
 	}
 
@@ -561,7 +562,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	if startID <= keys.MaxReservedDescID {
 		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID, keys.PseudoTableIDs)
 		if err != nil {
-			log.Errorf(context.TODO(), "unable to determine largest reserved object ID from system config: %s", err)
+			log.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
 		}
 		if splitKey := findSplitKey(startID, endID); splitKey != nil {
@@ -573,7 +574,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	// Find the split key in the system tenant's user space.
 	endID, err := s.GetLargestObjectID(0, keys.PseudoTableIDs)
 	if err != nil {
-		log.Errorf(context.TODO(), "unable to determine largest object ID from system config: %s", err)
+		log.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
 		return nil
 	}
 	return findSplitKey(startID, endID)
@@ -582,8 +583,82 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 func (s *SystemConfig) tenantBoundarySplitKey(
 	ctx context.Context, startKey, endKey roachpb.RKey,
 ) roachpb.RKey {
-	// TODO(nvanbenschoten): implement this logic. Tracked in #48774.
-	return nil
+	// Bail early if there's no overlap with the secondary tenant keyspace.
+	searchSpan := roachpb.Span{Key: startKey.AsRawKey(), EndKey: endKey.AsRawKey()}
+	tenantSpan := roachpb.Span{Key: keys.TenantTableDataMin, EndKey: keys.TenantTableDataMax}
+	if !searchSpan.Overlaps(tenantSpan) {
+		return nil
+	}
+
+	// Determine tenant ID range being searched: [lowTenID, highTenID].
+	var lowTenID, highTenID roachpb.TenantID
+	if searchSpan.Key.Compare(tenantSpan.Key) < 0 {
+		// startKey before tenant keyspace.
+		lowTenID = roachpb.MinTenantID
+	} else {
+		_, lowTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.Key)
+		if err != nil {
+			log.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
+			return nil
+		}
+		if lowTenIDExcl == roachpb.MaxTenantID {
+			// MaxTenantID already split or outside range.
+			return nil
+		}
+		// MakeTenantPrefix(lowTenIDExcl) is either the start key of this key
+		// range or is outside of this key range. We're only searching for split
+		// points within the specified key range, so the first tenant ID that we
+		// would consider splitting on is the following ID.
+		lowTenID = roachpb.MakeTenantID(lowTenIDExcl.ToUint64() + 1)
+	}
+	if searchSpan.EndKey.Compare(tenantSpan.EndKey) >= 0 {
+		// endKey after tenant keyspace.
+		highTenID = roachpb.MaxTenantID
+	} else {
+		_, highTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.EndKey)
+		if err != nil {
+			log.Errorf(ctx, "unable to decode tenant ID from end key: %s", err)
+			return nil
+		}
+		if keys.MakeTenantPrefix(highTenIDExcl).Equal(searchSpan.EndKey) {
+			// MakeTenantPrefix(highTenIDExcl) is the end key of this key range.
+			// The key range is exclusive but we're looking for an inclusive
+			// range of tenant IDs, so the last tenant ID that we would consider
+			// splitting on is the previous ID.
+			highTenID = roachpb.MakeTenantID(highTenIDExcl.ToUint64() - 1)
+		} else {
+			highTenID = highTenIDExcl
+		}
+	}
+
+	// Bail if there is no chance of any tenant boundaries between these IDs.
+	if lowTenID.ToUint64() > highTenID.ToUint64() {
+		return nil
+	}
+
+	// Search for the tenants table entries in the SystemConfig within the
+	// desired tenant ID range.
+	lowBound := keys.SystemSQLCodec.TenantMetadataKey(lowTenID)
+	lowIndex := s.getIndexBound(lowBound)
+	// NOTE: we Next() the tenant key because highTenID is inclusive but the
+	// following logic is easier if highBound is exclusive. This back and forth
+	// between exclusive->inclusive->exclusive is because MaxTenantID is
+	// math.MaxUint64, so we can't use a sentinel value larger than it.
+	highBound := keys.SystemSQLCodec.TenantMetadataKey(highTenID).Next()
+	highIndex := s.getIndexBound(highBound)
+	if lowIndex == highIndex {
+		// No keys within range found.
+		return nil
+	}
+
+	// Choose the first key in this range. Extract its tenant ID.
+	splitKey := s.Values[lowIndex].Key
+	splitTenID, err := keys.SystemSQLCodec.DecodeTenantMetadataID(splitKey)
+	if err != nil {
+		log.Errorf(ctx, "unable to decode tenant ID from system config: %s", err)
+		return nil
+	}
+	return roachpb.RKey(keys.MakeTenantPrefix(splitTenID))
 }
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
