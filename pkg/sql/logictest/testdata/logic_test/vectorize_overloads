@@ -87,6 +87,21 @@ VALUES (
        )
 
 query T
+EXPLAIN (VEC) SELECT _inet & _inet FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projBitandDatumDatumOp
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT _inet & _inet FROM many_types
+----
+NULL
+127.0.0.1
+192.168.0.0/16
+
+query T
 EXPLAIN (VEC) SELECT _inet - _int2 FROM many_types
 ----
 │
