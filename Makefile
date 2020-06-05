@@ -553,7 +553,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo >> $@
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
-	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS) $(GEOS_DIR)/capi $(PROJ_DIR)/lib)' >> $@
+	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(LIBEDIT_DIR)/src/.libs $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
@@ -1671,7 +1671,6 @@ bins = \
   bin/benchmark \
   bin/cockroach-oss \
   bin/cockroach-short \
-  bin/docgen \
   bin/execgen \
   bin/fuzz \
   bin/generate-binary \
@@ -1734,6 +1733,12 @@ $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 bin/prereqs: ./pkg/cmd/prereqs/*.go | bin/.submodules-initialized
 	@echo go install -v ./pkg/cmd/prereqs
 	@$(GO_INSTALL) -v ./pkg/cmd/prereqs
+
+bin/docgen: ./pkg/cmd/docgen/*.go | bin/prereqs bin/.submodules-initialized
+	@echo go install -v ./pkg/cmd/docgen
+	bin/prereqs ./pkg/cmd/docgen > $@.d.tmp
+	mv -f $@.d.tmp $@.d
+	@$(GO_INSTALL) -i -tags 'go_install' -v ./pkg/cmd/docgen
 
 .PHONY: fuzz
 fuzz: ## Run fuzz tests.

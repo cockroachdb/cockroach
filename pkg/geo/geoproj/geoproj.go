@@ -9,11 +9,15 @@
 // licenses/APL.txt.
 
 // Package geoproj contains functions that interface with the PROJ library.
+//
+// Note this package is installed differently depending on the presence of a
+// "go_install" flag. This is because when cross compiling, it will
+// attempt to compile against the wrong PROJ library and fail out.
 package geoproj
 
 // #cgo CXXFLAGS: -std=c++14
 // #cgo CPPFLAGS: -I../../../c-deps/proj/src
-// #cgo LDFLAGS: -lproj
+// #cgo !go_install LDFLAGS: -lproj
 // #cgo linux LDFLAGS: -lrt -lm -lpthread
 // #cgo windows LDFLAGS: -lshlwapi -lrpcrt4
 //

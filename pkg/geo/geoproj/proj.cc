@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// +build !go_install
+
 #include "proj.h"
 #include <cstring>
 #include <proj_api.h>
