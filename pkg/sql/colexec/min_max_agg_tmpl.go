@@ -40,9 +40,6 @@ var _ = colexecerror.InternalError
 // {{/*
 // Declarations to make the template compile properly.
 
-// _GOTYPESLICE is the template variable.
-type _GOTYPESLICE interface{}
-
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 
@@ -53,6 +50,12 @@ const _TYPE_WIDTH = 0
 // if the second input compares successfully to the third input. The comparison
 // operator is tree.LT for MIN and is tree.GT for MAX.
 func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
+	colexecerror.InternalError("")
+}
+
+// _COPYVAL_MAYBE_CAST is the template function for copying the second argument
+// into the first one, possibly performing a cast in the process.
+func _COPYVAL_MAYBE_CAST(_, _ string) bool {
 	colexecerror.InternalError("")
 }
 
@@ -90,9 +93,9 @@ type _AGG_TYPEAgg struct {
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg _GOTYPE
+	curAgg _RET_GOTYPE
 	// col points to the output vector we are updating.
-	col _GOTYPESLICE
+	col _RET_GOTYPESLICE
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -109,7 +112,7 @@ const sizeOf_AGG_TYPEAgg = int64(unsafe.Sizeof(_AGG_TYPEAgg{}))
 func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.vec = v
-	a.col = v._TYPE()
+	a.col = v._RET_TYPE()
 	a.nulls = v.Nulls()
 	a.Reset()
 }
@@ -240,14 +243,14 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
 			val := execgen.UNSAFEGET(col, i)
-			execgen.COPYVAL(a.curAgg, val)
+			_COPYVAL_MAYBE_CAST(a.curAgg, val)
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
 			candidate := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
 			if cmp {
-				execgen.COPYVAL(a.curAgg, candidate)
+				_COPYVAL_MAYBE_CAST(a.curAgg, candidate)
 			}
 		}
 	}

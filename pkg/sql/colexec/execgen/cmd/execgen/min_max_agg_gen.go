@@ -11,11 +11,13 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type aggOverloads struct {
@@ -33,21 +35,33 @@ func (a aggOverloads) AggNameTitle() string {
 	return strings.Title(a.AggNameLower())
 }
 
+func (o lastArgWidthOverload) CopyValMaybeCast(dest, src string) string {
+	switch o.lastArgTypeOverload.CanonicalTypeFamily {
+	case types.IntFamily:
+		// Mininum and maximum on integers always return INT8, so we need to
+		// make sure to perform the cast because 'dest' is of int64 type.
+		return fmt.Sprintf("%s = int64(%s)", dest, src)
+	}
+	return o.CopyVal(dest, src)
+
+}
+
 // Avoid unused warning for functions which are only used in templates.
 var _ = aggOverloads{}.AggNameLower()
 var _ = aggOverloads{}.AggNameTitle()
+var _ = lastArgWidthOverload{}.CopyValMaybeCast
 
 const minMaxAggTmpl = "pkg/sql/colexec/min_max_agg_tmpl.go"
 
 func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-
 		"_AGG_TITLE", "{{.AggNameTitle}}",
 		"_AGG", "{{$agg}}",
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
+		"_RET_GOTYPESLICE", ifIntegerType+`[]int64{{else}}{{.GoTypeSliceName}}{{end}}`,
+		"_RET_GOTYPE", ifIntegerType+`int64{{else}}{{.GoType}}{{end}}`,
+		"_RET_TYPE", ifIntegerType+"Int64{{else}}{{.VecMethod}}{{end}}",
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
@@ -55,6 +69,9 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
+
+	copyValMaybeCast := makeFunctionRegex("_COPYVAL_MAYBE_CAST", 2)
+	s = copyValMaybeCast.ReplaceAllString(s, makeTemplateFunctionCall("CopyValMaybeCast", 2))
 
 	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
 	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)

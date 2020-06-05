@@ -218,6 +218,11 @@ func makeAggregateFuncsOutputTypes(
 				// always INT8.
 				outTyps[i] = types.Int
 			}
+		case execinfrapb.AggregatorSpec_MAX, execinfrapb.AggregatorSpec_MIN:
+			if typeconv.TypeFamilyToCanonicalTypeFamily(aggTyps[i][0].Family()) == types.IntFamily {
+				// Maximum and minimum of integers is always INT8.
+				outTyps[i] = types.Int
+			}
 		}
 	}
 	return outTyps, nil
@@ -254,27 +259,9 @@ func isAggregateSupported(
 	if err != nil {
 		return false, err
 	}
-	outputTypes, err := makeAggregateFuncsOutputTypes(
+	_, err = makeAggregateFuncsOutputTypes(
 		[][]*types.T{inputTypes},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
 	)
-	if err != nil {
-		return false, err
-	}
-	_, retType, err := execinfrapb.GetAggregateInfo(aggFn, inputTypes...)
-	if err != nil {
-		return false, err
-	}
-	// The columnar aggregates will return the same physical output type as their
-	// input. However, our current builtin resolution might say that the return
-	// type is the canonical for the family (for example, MAX on INT4 is said to
-	// return INT8), so we explicitly check whether the type the columnar
-	// aggregate returns and the type the planning code will expect it to return
-	// are the same. If they are not, we fallback to row-by-row engine.
-	if !retType.Identical(outputTypes[0]) {
-		// TODO(yuzefovich): support this case through vectorize. Probably it needs
-		// to be done at the same time as #38845.
-		return false, errors.Newf("aggregates with different input and output types are not supported")
-	}
-	return true, nil
+	return err == nil, err
 }
