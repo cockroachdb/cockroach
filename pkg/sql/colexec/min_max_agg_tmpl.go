@@ -23,12 +23,9 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // Remove unused warning.
@@ -37,15 +34,6 @@ var _ = colexecerror.InternalError
 // {{/*
 // Declarations to make the template compile properly.
 
-// _GOTYPESLICE is the template variable.
-type _GOTYPESLICE interface{}
-
-// _CANONICAL_TYPE_FAMILY is the template variable.
-const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
-
-// _TYPE_WIDTH is the template variable.
-const _TYPE_WIDTH = 0
-
 // _ASSIGN_CMP is the template function for assigning true to the first input
 // if the second input compares successfully to the third input. The comparison
 // operator is tree.LT for MIN and is tree.GT for MAX.
@@ -53,32 +41,15 @@ func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 	colexecerror.InternalError("")
 }
 
-// */}}
-
-// {{range .}} {{/* for each aggregation (min and max) */}}
-
-// {{/* Capture the aggregation name so we can use it in the inner loop. */}}
-// {{$agg := .AggNameLower}}
-
-func new_AGG_TITLEAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) (aggregateFuncAlloc, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	// {{range .Overloads}}
-	case _CANONICAL_TYPE_FAMILY:
-		switch t.Width() {
-		// {{range .WidthOverloads}}
-		case _TYPE_WIDTH:
-			return &_AGG_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
-			// {{end}}
-		}
-		// {{end}}
-	}
-	return nil, errors.Errorf("unsupported _AGG agg type %s", t.Name())
+// _COPYVAL_MAYBE_CAST is the template function for copying the second argument
+// into the first one, possibly performing a cast in the process.
+func _COPYVAL_MAYBE_CAST(_, _ string) bool {
+	colexecerror.InternalError("")
 }
 
-// {{range .Overloads}}
-// {{range .WidthOverloads}}
+// */}}
+
+// {{range .}}
 
 type _AGG_TYPEAgg struct {
 	allocator *colmem.Allocator
@@ -87,9 +58,9 @@ type _AGG_TYPEAgg struct {
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg _GOTYPE
+	curAgg _RET_GOTYPE
 	// col points to the output vector we are updating.
-	col _GOTYPESLICE
+	col _RET_GOTYPESLICE
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -106,7 +77,7 @@ const sizeOf_AGG_TYPEAgg = int64(unsafe.Sizeof(_AGG_TYPEAgg{}))
 func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.vec = v
-	a.col = v._TYPE()
+	a.col = v._RET_TYPE()
 	a.nulls = v.Nulls()
 	a.Reset()
 }
@@ -181,9 +152,8 @@ func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
 }
 
 type _AGG_TYPEAggAlloc struct {
-	allocator *colmem.Allocator
-	allocSize int64
-	aggFuncs  []_AGG_TYPEAgg
+	aggAllocBase
+	aggFuncs []_AGG_TYPEAgg
 }
 
 var _ aggregateFuncAlloc = &_AGG_TYPEAggAlloc{}
@@ -199,8 +169,6 @@ func (a *_AGG_TYPEAggAlloc) newAggFunc() aggregateFunc {
 	return f
 }
 
-// {{end}}
-// {{end}}
 // {{end}}
 
 // {{/*
@@ -237,14 +205,14 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
 			val := execgen.UNSAFEGET(col, i)
-			execgen.COPYVAL(a.curAgg, val)
+			_COPYVAL_MAYBE_CAST(a.curAgg, val)
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
 			candidate := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
 			if cmp {
-				execgen.COPYVAL(a.curAgg, candidate)
+				_COPYVAL_MAYBE_CAST(a.curAgg, candidate)
 			}
 		}
 	}
