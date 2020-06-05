@@ -114,8 +114,6 @@ type aggregateFuncRun struct {
 	seen          map[string]struct{}
 }
 
-const noRenderIdx = -1
-
 // newAggregateFuncHolder creates an aggregateFuncHolder.
 //
 // If function is nil, this is an "ident" aggregation (meaning that the input is
@@ -135,7 +133,7 @@ func (n *groupNode) newAggregateFuncHolder(
 		funcName:        funcName,
 		resultType:      resultType,
 		argRenderIdxs:   argRenderIdxs,
-		filterRenderIdx: noRenderIdx,
+		filterRenderIdx: tree.NoColumnIdx,
 		create:          create,
 		arguments:       arguments,
 		run: aggregateFuncRun{
@@ -147,7 +145,7 @@ func (n *groupNode) newAggregateFuncHolder(
 }
 
 func (a *aggregateFuncHolder) hasFilter() bool {
-	return a.filterRenderIdx != noRenderIdx
+	return a.filterRenderIdx != tree.NoColumnIdx
 }
 
 // setDistinct causes a to ignore duplicate values of the argument.

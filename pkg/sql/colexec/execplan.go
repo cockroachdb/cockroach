@@ -180,8 +180,6 @@ func (r *NewColOperatorResult) resetToState(ctx context.Context, arg NewColOpera
 	*r = arg
 }
 
-const noFilterIdx = -1
-
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
@@ -275,7 +273,7 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 					return errors.Newf("window functions with non-default window frames are not supported")
 				}
 			}
-			if wf.FilterColIdx != noFilterIdx {
+			if wf.FilterColIdx != tree.NoColumnIdx {
 				return errors.Newf("window functions with FILTER clause are not supported")
 			}
 			if wf.Func.AggregateFunc != nil {
@@ -462,6 +460,11 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 	processorConstructor execinfra.ProcessorConstructor,
 	factory coldata.ColumnFactory,
 ) error {
+	if processorConstructor == nil {
+		// TODO(yuzefovich): update unit tests to remove panic-catcher when
+		// fallback to rowexec is not allowed.
+		return errors.New("processorConstructor is nil")
+	}
 	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
 		spec.Core.JoinReader == nil {
 		return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
@@ -971,8 +974,8 @@ func NewColOperator(
 				// temporary columns that can be appended below.
 				typs := make([]*types.T, len(result.ColumnTypes), len(result.ColumnTypes)+2)
 				copy(typs, result.ColumnTypes)
-				tempColOffset, partitionColIdx := uint32(0), columnOmitted
-				peersColIdx := columnOmitted
+				tempColOffset, partitionColIdx := uint32(0), tree.NoColumnIdx
+				peersColIdx := tree.NoColumnIdx
 				windowFn := *wf.Func.WindowFunc
 				if len(core.Windower.PartitionBy) > 0 {
 					// TODO(yuzefovich): add support for hashing partitioner (probably by
@@ -1094,14 +1097,6 @@ func NewColOperator(
 		ColumnTypes: result.ColumnTypes,
 	}
 	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, factory, args.ExprHelper)
-	// TODO(yuzefovich): update unit tests to remove panic-catcher when fallback
-	// to rowexec is not allowed.
-	if err != nil && processorConstructor == nil {
-		// Do not attempt to wrap as a row source if there is no
-		// processorConstructor because it would fail.
-		return result, err
-	}
-
 	if err != nil {
 		log.VEventf(
 			ctx, 2,

@@ -117,13 +117,11 @@ func (r *ColumnResolver) FindSourceMatchingName(
 	return tree.ExactlyOne, prefix, nil, nil
 }
 
-const invalidColIdx = -1
-
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceProvidingColumn(
 	ctx context.Context, col tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
-	colIdx := invalidColIdx
+	colIdx := tree.NoColumnIdx
 	colName := string(col)
 
 	for idx := range r.Source.SourceColumns {
@@ -131,12 +129,12 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 		if err != nil {
 			return nil, nil, -1, err
 		}
-		if colIdx != invalidColIdx {
+		if colIdx != tree.NoColumnIdx {
 			prefix = &r.Source.SourceAlias
 			break
 		}
 	}
-	if colIdx == invalidColIdx {
+	if colIdx == tree.NoColumnIdx {
 		colAlloc := col
 		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&colAlloc))
 	}
@@ -165,7 +163,7 @@ func (r *ColumnResolver) Resolve(
 	// yet. Do this now.
 	// FindSourceMatchingName() was careful to set r.ResolverState.SrcIdx
 	// and r.ResolverState.ColSetIdx for us.
-	colIdx := invalidColIdx
+	colIdx := tree.NoColumnIdx
 	colName := string(col)
 	for idx := range r.Source.SourceColumns {
 		var err error
@@ -175,8 +173,8 @@ func (r *ColumnResolver) Resolve(
 		}
 	}
 
-	if colIdx == invalidColIdx {
-		r.ResolverState.ColIdx = invalidColIdx
+	if colIdx == tree.NoColumnIdx {
+		r.ResolverState.ColIdx = tree.NoColumnIdx
 		return nil, NewUndefinedColumnError(
 			tree.ErrString(tree.NewColumnItem(&r.Source.SourceAlias, tree.Name(colName))))
 	}
@@ -189,7 +187,7 @@ func (r *ColumnResolver) Resolve(
 func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, error) {
 	col := r.Source.SourceColumns[idx]
 	if col.Name == colName {
-		if colIdx != invalidColIdx {
+		if colIdx != tree.NoColumnIdx {
 			colString := tree.ErrString(r.Source.NodeFormatter(idx))
 			var msgBuf bytes.Buffer
 			name := tree.ErrString(&r.Source.SourceAlias)
@@ -197,7 +195,7 @@ func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, er
 				name = "<anonymous>"
 			}
 			fmt.Fprintf(&msgBuf, "%s.%s", name, colString)
-			return invalidColIdx, pgerror.Newf(pgcode.AmbiguousColumn,
+			return tree.NoColumnIdx, pgerror.Newf(pgcode.AmbiguousColumn,
 				"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String())
 		}
 		colIdx = idx

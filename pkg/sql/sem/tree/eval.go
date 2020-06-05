@@ -3155,7 +3155,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	ctx := EvalContext{
 		Codec:       keys.SystemSQLCodec,
 		Txn:         &kv.Txn{},
-		SessionData: &sessiondata.SessionData{},
+		SessionData: &sessiondata.SessionData{VectorizeMode: sessiondata.VectorizeOn},
 		Settings:    st,
 		NodeID:      base.TestingIDContainer,
 	}

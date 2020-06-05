@@ -547,7 +547,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 
 		if agg.Filter == -1 {
 			// A value of -1 means the aggregate had no filter.
-			f.filterRenderIdx = noRenderIdx
+			f.filterRenderIdx = tree.NoColumnIdx
 		} else {
 			f.filterRenderIdx = int(agg.Filter)
 		}
