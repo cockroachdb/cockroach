@@ -754,13 +754,15 @@ EXPLAIN (VEC) SELECT ps_partkey, sum(ps_supplycost * ps_availqty::float) AS valu
 │
 └ Node 1
   └ *colexec.sortOp
-    └ *rowexec.noopProcessor
-      └ *colexec.hashAggregator
-        └ *rowexec.joinReader
-          └ *rowexec.joinReader
+    └ *colexec.selGTFloat64Float64Op
+      └ *colexec.castOpNullAny
+        └ *colexec.constNullOp
+          └ *colexec.hashAggregator
             └ *rowexec.joinReader
-              └ *colexec.selEQBytesBytesConstOp
-                └ *colexec.colBatchScan
+              └ *rowexec.joinReader
+                └ *rowexec.joinReader
+                  └ *colexec.selEQBytesBytesConstOp
+                    └ *colexec.colBatchScan
 
 # Query 12
 query T
@@ -826,10 +828,12 @@ EXPLAIN (VEC) SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM s
   └ *colexec.mergeJoinInnerOp
     ├ *colexec.colBatchScan
     └ *colexec.sortOp
-      └ *rowexec.noopProcessor
-        └ *colexec.hashAggregator
-          └ *rowexec.indexJoiner
-            └ *colexec.colBatchScan
+      └ *colexec.selEQFloat64Float64Op
+        └ *colexec.castOpNullAny
+          └ *colexec.constNullOp
+            └ *colexec.hashAggregator
+              └ *rowexec.indexJoiner
+                └ *colexec.colBatchScan
 
 statement ok
 DROP VIEW revenue0
@@ -1002,4 +1006,11 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
   └ *colexec.sortOp
     └ *colexec.hashAggregator
       └ *rowexec.joinReader
-        └ *rowexec.tableReader
+        └ *colexec.selGTFloat64Float64Op
+          └ *colexec.castOpNullAny
+            └ *colexec.constNullOp
+              └ *colexec.selectInOpBytes
+                └ *colexec.substringInt64Int64Operator
+                  └ *colexec.constInt64Op
+                    └ *colexec.constInt64Op
+                      └ *colexec.colBatchScan

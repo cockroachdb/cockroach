@@ -75,14 +75,6 @@ func MakeExpression(
 		ctx = &fakeExprContext{}
 	}
 
-	if ctx.IsLocal() {
-		if indexVarMap != nil {
-			// Remap our indexed vars.
-			expr = sqlbase.RemapIVarsInTypedExpr(expr, indexVarMap)
-		}
-		return execinfrapb.Expression{LocalExpr: expr}, nil
-	}
-
 	evalCtx := ctx.EvalContext()
 	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
 		evalCtx: evalCtx,
@@ -94,7 +86,17 @@ func MakeExpression(
 		if subqueryVisitor.err != nil {
 			return execinfrapb.Expression{}, subqueryVisitor.err
 		}
+		expr = outExpr.(tree.TypedExpr)
 	}
+
+	if ctx.IsLocal() {
+		if indexVarMap != nil {
+			// Remap our indexed vars.
+			expr = sqlbase.RemapIVarsInTypedExpr(expr, indexVarMap)
+		}
+		return execinfrapb.Expression{LocalExpr: expr}, nil
+	}
+
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	fmtCtx := execinfrapb.ExprFmtCtxBase(evalCtx)
 	if indexVarMap != nil {
