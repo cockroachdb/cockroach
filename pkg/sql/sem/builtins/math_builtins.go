@@ -463,7 +463,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			"negative.", tree.VolatilityImmutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 			d := &tree.DDecimal{}
-			d.Decimal.SetFinite(int64(x.Sign()), 0)
+			d.Decimal.SetInt64(int64(x.Sign()))
 			return d, nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative.", tree.VolatilityImmutable),

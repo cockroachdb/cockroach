@@ -971,7 +971,7 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 	case *DDecimal:
 		v = &t.Decimal
 	case *DInt:
-		v.SetFinite(int64(*t), 0)
+		v.SetInt64(int64(*t))
 	case *DFloat:
 		if _, err := v.SetFloat64(float64(*t)); err != nil {
 			panic(errors.NewAssertionErrorWithWrappedErrf(err, "decimal compare, unexpected error"))

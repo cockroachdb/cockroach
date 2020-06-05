@@ -242,7 +242,7 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				tmpDec := &_overloadHelper.tmpDec1
-				tmpDec.SetFinite(int64({{.Right}}), 0)
+				tmpDec.SetInt64(int64({{.Right}}))
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
 		`))
@@ -280,7 +280,7 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				tmpDec := &_overloadHelper.tmpDec1
-				tmpDec.SetFinite(int64({{.Left}}), 0)
+				tmpDec.SetInt64(int64({{.Left}}))
 				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
 			}
 		`))
