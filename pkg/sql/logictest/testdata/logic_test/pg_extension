@@ -1,0 +1,43 @@
+statement ok
+CREATE TABLE pg_extension_test (
+  a geography(point, 4326),
+  b geometry(linestring, 3857),
+  c geometry,
+  d geography
+)
+
+query TTTTIIT rowsort
+SELECT * FROM pg_extension.geography_columns WHERE f_table_name = 'pg_extension_test'
+----
+test  public  pg_extension_test  a  2     4326  POINT
+test  public  pg_extension_test  d  NULL  0     GEOMETRY
+
+query TTTTIIT rowsort
+SELECT * FROM pg_extension.geometry_columns WHERE f_table_name = 'pg_extension_test'
+----
+test  public  pg_extension_test  b  2  3857  LINESTRING
+test  public  pg_extension_test  c  2  0     GEOMETRY
+
+query TTTTIIT rowsort
+SELECT * FROM geography_columns WHERE f_table_name = 'pg_extension_test'
+----
+test  public  pg_extension_test  a  2     4326  POINT
+test  public  pg_extension_test  d  NULL  0     GEOMETRY
+
+query TTTTIIT rowsort
+SELECT * FROM geometry_columns WHERE f_table_name = 'pg_extension_test'
+----
+test  public  pg_extension_test  b  2  3857  LINESTRING
+test  public  pg_extension_test  c  2  0     GEOMETRY
+
+query ITITT
+SELECT * FROM pg_extension.spatial_ref_sys WHERE srid IN (3857, 4326) ORDER BY srid ASC
+----
+3857  EPSG  3857  PROJCS["WGS 84 / Pseudo-Mercator",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Mercator_1SP"],PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["X",EAST],AXIS["Y",NORTH],EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs"],AUTHORITY["EPSG","3857"]]  +proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs
+4326  EPSG  4326  GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]]                                                                                                                                                                                                                                                                                                                                                                                                                                      +proj=longlat +datum=WGS84 +no_defs
+
+query ITITT
+SELECT * FROM spatial_ref_sys WHERE srid IN (3857, 4326) ORDER BY srid ASC
+----
+3857  EPSG  3857  PROJCS["WGS 84 / Pseudo-Mercator",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Mercator_1SP"],PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["X",EAST],AXIS["Y",NORTH],EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs"],AUTHORITY["EPSG","3857"]]  +proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs
+4326  EPSG  4326  GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]]                                                                                                                                                                                                                                                                                                                                                                                                                                      +proj=longlat +datum=WGS84 +no_defs

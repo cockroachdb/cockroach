@@ -1551,43 +1551,6 @@ MULTIPOINT (0 0, 1 1)
 statement error st_segmentize\(\): maximum segment length must be positive
 SELECT ST_Segmentize('POLYGON ((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geometry, -1)
 
-subtest pg_extension
-
-statement ok
-CREATE TABLE pg_extension_test (
-  a geography(point, 4326),
-  b geometry(linestring, 3857),
-  c geometry,
-  d geography
-)
-
-query TTTTIIT rowsort
-SELECT * FROM pg_extension.geography_columns WHERE f_table_name = 'pg_extension_test'
-----
-test  public  pg_extension_test  a  2     4326  POINT
-test  public  pg_extension_test  d  NULL  0     GEOMETRY
-
-query TTTTIIT rowsort
-SELECT * FROM pg_extension.geometry_columns WHERE f_table_name = 'pg_extension_test'
-----
-test  public  pg_extension_test  b  2  3857  LINESTRING
-test  public  pg_extension_test  c  2  0     GEOMETRY
-
-query TTTTIIT rowsort
-SELECT * FROM geography_columns WHERE f_table_name = 'pg_extension_test'
-----
-test  public  pg_extension_test  a  2     4326  POINT
-test  public  pg_extension_test  d  NULL  0     GEOMETRY
-
-query TTTTIIT rowsort
-SELECT * FROM geometry_columns WHERE f_table_name = 'pg_extension_test'
-----
-test  public  pg_extension_test  b  2  3857  LINESTRING
-test  public  pg_extension_test  c  2  0     GEOMETRY
-
-statement error not yet implemented
-SELECT * FROM pg_extension.spatial_ref_sys ORDER BY srid ASC
-
 subtest st_srid
 
 statement ok
