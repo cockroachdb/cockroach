@@ -208,7 +208,7 @@ func TestEval(t *testing.T) {
 				result.Op,
 				typs,
 				nil, /* output */
-				nil, /* metadataSourcesQueue */
+				result.MetadataSources,
 				nil, /* toClose */
 				nil, /* outputStatsToTrace */
 				nil, /* cancelFlow */
@@ -228,10 +228,6 @@ func TestEval(t *testing.T) {
 				t.Fatalf("unexpected metadata: %+v", meta)
 			}
 			if row == nil {
-				// Might be some metadata.
-				if meta := mat.DrainHelper(); meta.Err != nil {
-					t.Fatalf("unexpected error: %s", meta.Err)
-				}
 				t.Fatal("unexpected end of input")
 			}
 			return row[0].Datum.String()
