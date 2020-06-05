@@ -1600,7 +1600,7 @@
   version = "v1.4.0"
 
 [[projects]]
-  digest = "1:c8fafded0eb90c84e4ef05b9e1ff2a5c8fb2aaf5009ba11b91f6bed2ef680aae"
+  digest = "1:5b7e59f9330bbc88c3aa7b62d92d1d29bb6ccbc176b731986de70345f3522dd7"
   name = "github.com/twpayne/go-geom"
   packages = [
     ".",
@@ -1621,8 +1621,8 @@
     "xy/orientation",
   ]
   pruneopts = "UT"
-  revision = "078e8ab21d838b07c627dc1d704f1f80688b1b90"
-  version = "v1.1.0"
+  revision = "62c03a64717d682dd89319176fd7247944f0c518"
+  version = "v1.2.1"
 
 [[projects]]
   digest = "1:43e0db2b113d1aee4bb68745598c135511976a44fb380ebd701cd0c14a77c303"

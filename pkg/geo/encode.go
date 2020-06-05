@@ -26,7 +26,7 @@ import (
 )
 
 // EWKBToWKT transforms a given EWKB to WKT.
-func EWKBToWKT(b geopb.EWKB) (geopb.WKT, error) {
+func EWKBToWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.WKT, error) {
 	// twpayne/go-geom doesn't seem to handle POINT EMPTY just yet. Add this hack in.
 	// Remove after #49209 is resolved.
 	if bytes.Equal(b, []byte{0x01, 0x01, 0x00, 0x00, 0x00}) {
@@ -36,12 +36,12 @@ func EWKBToWKT(b geopb.EWKB) (geopb.WKT, error) {
 	if err != nil {
 		return "", err
 	}
-	ret, err := wkt.Marshal(t)
+	ret, err := wkt.Marshal(t, wkt.EncodeOptionWithMaxDecimalDigits(maxDecimalDigits))
 	return geopb.WKT(ret), err
 }
 
 // EWKBToEWKT transforms a given EWKB to EWKT.
-func EWKBToEWKT(b geopb.EWKB) (geopb.EWKT, error) {
+func EWKBToEWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.EWKT, error) {
 	// twpayne/go-geom doesn't seem to handle POINT EMPTY just yet. Add this hack in.
 	// Remove after #49209 is resolved.
 	if bytes.Equal(b, []byte{0x01, 0x01, 0x00, 0x00, 0x00}) {
@@ -51,7 +51,7 @@ func EWKBToEWKT(b geopb.EWKB) (geopb.EWKT, error) {
 	if err != nil {
 		return "", err
 	}
-	ret, err := wkt.Marshal(t)
+	ret, err := wkt.Marshal(t, wkt.EncodeOptionWithMaxDecimalDigits(maxDecimalDigits))
 	if err != nil {
 		return "", err
 	}

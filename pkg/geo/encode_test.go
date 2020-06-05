@@ -19,18 +19,20 @@ import (
 
 func TestEWKBToWKT(t *testing.T) {
 	testCases := []struct {
-		ewkt     geopb.EWKT
-		expected geopb.WKT
+		ewkt             geopb.EWKT
+		maxDecimalDigits int
+		expected         geopb.WKT
 	}{
-		{"POINT(1.0 1.0)", "POINT (1 1)"},
-		{"SRID=4;POINT(1.0 1.0)", "POINT (1 1)"},
+		{"POINT(1.01 1.01)", 15, "POINT (1.01 1.01)"},
+		{"POINT(1.01 1.01)", 1, "POINT (1 1)"},
+		{"SRID=4;POINT(1.0 1.0)", 15, "POINT (1 1)"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToWKT(so.EWKB)
+			encoded, err := EWKBToWKT(so.EWKB, tc.maxDecimalDigits)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})
@@ -39,18 +41,20 @@ func TestEWKBToWKT(t *testing.T) {
 
 func TestEWKBToEWKT(t *testing.T) {
 	testCases := []struct {
-		ewkt     geopb.EWKT
-		expected geopb.EWKT
+		ewkt             geopb.EWKT
+		maxDecimalDigits int
+		expected         geopb.EWKT
 	}{
-		{"POINT(1.0 1.0)", "POINT (1 1)"},
-		{"SRID=4;POINT(1.0 1.0)", "SRID=4;POINT (1 1)"},
+		{"POINT(1.01 1.01)", 15, "POINT (1.01 1.01)"},
+		{"POINT(1.01 1.01)", 1, "POINT (1 1)"},
+		{"SRID=4;POINT(1.0 1.0)", 15, "SRID=4;POINT (1 1)"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToEWKT(so.EWKB)
+			encoded, err := EWKBToEWKT(so.EWKB, tc.maxDecimalDigits)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})
