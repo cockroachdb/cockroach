@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -362,6 +363,25 @@ func (ib *IndexBackfiller) Init(
 	ib.types = make([]*types.T, len(cols))
 	for i := range cols {
 		ib.types[i] = cols[i].Type
+	}
+
+	// Hydrate types used by the backfiller.
+	// TODO (rohany): As part of #49261, this needs to use cached enum data.
+	if evalCtx.Txn != nil {
+		// If the evalCtx has a transaction (if the schema change is running on a
+		// new table within a transaction), then use that.
+		if err := execinfrapb.HydrateTypeSlice(evalCtx, ib.types); err != nil {
+			return err
+		}
+	} else {
+		// Otherwise, make a new transaction. This case will happen when we are
+		// performing a distributed schema change outside of a transaction.
+		if err := ib.evalCtx.DB.Txn(evalCtx.Context, func(_ context.Context, txn *kv.Txn) error {
+			evalCtx.Txn = txn
+			return execinfrapb.HydrateTypeSlice(evalCtx, ib.types)
+		}); err != nil {
+			return err
+		}
 	}
 
 	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
