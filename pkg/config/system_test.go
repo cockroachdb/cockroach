@@ -41,8 +41,12 @@ func tkey(tableID uint32, chunks ...string) []byte {
 	return key
 }
 
-func tenantTkey(tenantID uint64, tableID uint32, chunks ...string) []byte {
-	key := keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID)).TablePrefix(tableID)
+func tenantPrefix(tenID uint64) []byte {
+	return keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+}
+
+func tenantTkey(tenID uint64, tableID uint32, chunks ...string) []byte {
+	key := keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)).TablePrefix(tableID)
 	for _, c := range chunks {
 		key = append(key, []byte(c)...)
 	}
@@ -65,6 +69,11 @@ func descriptor(descID uint64) roachpb.KeyValue {
 		panic(err)
 	}
 	return kv
+}
+
+func tenant(tenID uint64) roachpb.KeyValue {
+	k := keys.SystemSQLCodec.TenantMetadataKey(roachpb.MakeTenantID(tenID))
+	return kv(k, nil)
 }
 
 func zoneConfig(descID config.SystemTenantObjectID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
@@ -271,8 +280,8 @@ func TestStaticSplits(t *testing.T) {
 }
 
 // TestComputeSplitKeyTableIDs tests ComputeSplitKey for cases where the split
-// is within the system ranges. Other cases are tested below by
-// TestComputeSplitKeyTableIDs.
+// is within the system ranges. Other cases are tested by
+// TestComputeSplitKeyTableIDs and TestComputeSplitKeyTenantBoundaries.
 func TestComputeSplitKeySystemRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -330,8 +339,8 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 }
 
 // TestComputeSplitKeyTableIDs tests ComputeSplitKey for cases where the split
-// is at the start of a SQL table. Other cases are tested above by
-// TestComputeSplitKeySystemRanges.
+// is at the start of a SQL table. Other cases are tested by
+// TestComputeSplitKeySystemRanges and TestComputeSplitKeyTenantBoundaries.
 func TestComputeSplitKeyTableIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -427,6 +436,92 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		// Testing that no splits are required for IDs that
 		// that do not map to descriptors.
 		{userSQL, tkey(start + 1), tkey(start + 5), nil},
+	}
+
+	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
+	for tcNum, tc := range testCases {
+		cfg.Values = tc.values
+		splitKey := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
+		if !splitKey.Equal(tc.split) {
+			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, tc.split)
+		}
+	}
+}
+
+// TestComputeSplitKeyTenantBoundaries tests ComputeSplitKey for cases where the
+// split is at the start of a secondary tenant keyspace. Other cases are tested
+// by TestComputeSplitKeySystemRanges and TestComputeSplitKeyTableIDs.
+func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Used in place of roachpb.RKeyMin in order to test the behavior of splits
+	// in the secondary tenant keyspace rather than within the system ranges and
+	// system config span that come earlier in the keyspace. Those splits are
+	// tested separately above.
+	minKey := tkey(keys.MinUserDescID)
+	minTenID, maxTenID := roachpb.MinTenantID.ToUint64(), roachpb.MaxTenantID.ToUint64()
+
+	schema := sqlbase.MakeMetadataSchema(
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+	)
+	// Real system tenant only.
+	baseSql, _ /* splits */ := schema.GetInitialValues()
+	// Real system tenant plus some secondary tenants.
+	kvs, _ /* splits */ := schema.GetInitialValues()
+	tenantSQL := append(kvs, tenant(minTenID), tenant(5), tenant(maxTenID))
+	sort.Sort(roachpb.KeyValueByKey(tenantSQL))
+
+	testCases := []struct {
+		values     []roachpb.KeyValue
+		start, end roachpb.RKey
+		split      roachpb.RKey // nil to indicate no split is expected
+	}{
+		// No tenants.
+		{baseSql, minKey, roachpb.RKey(keys.TenantPrefix), nil},
+		{baseSql, minKey, tenantPrefix(minTenID), nil},
+		{baseSql, minKey, tenantPrefix(5), nil},
+		{baseSql, minKey, roachpb.RKey(keys.TenantTableDataMax), nil},
+		{baseSql, minKey, roachpb.RKeyMax, nil},
+		{baseSql, roachpb.RKey(keys.TenantPrefix), tenantPrefix(minTenID), nil},
+		{baseSql, roachpb.RKey(keys.TenantPrefix), tenantPrefix(5), nil},
+		{baseSql, roachpb.RKey(keys.TenantPrefix), roachpb.RKey(keys.TenantTableDataMax), nil},
+		{baseSql, roachpb.RKey(keys.TenantPrefix), roachpb.RKeyMax, nil},
+		{baseSql, tenantPrefix(minTenID), tenantPrefix(5), nil},
+		{baseSql, tenantPrefix(minTenID), roachpb.RKey(keys.TenantTableDataMax), nil},
+		{baseSql, tenantPrefix(minTenID), roachpb.RKeyMax, nil},
+		{baseSql, tenantPrefix(5), roachpb.RKey(keys.TenantTableDataMax), nil},
+		{baseSql, tenantPrefix(5), roachpb.RKeyMax, nil},
+		{baseSql, roachpb.RKey(keys.TenantTableDataMax), roachpb.RKeyMax, nil},
+
+		// Tenants minTenID, 5, maxTenID.
+		{tenantSQL, minKey, roachpb.RKey(keys.TenantPrefix), nil},
+		{tenantSQL, minKey, tenantPrefix(minTenID), nil},
+		{tenantSQL, minKey, tenantPrefix(5), tenantPrefix(minTenID)},
+		{tenantSQL, minKey, tenantPrefix(8), tenantPrefix(minTenID)},
+		{tenantSQL, minKey, tenantPrefix(maxTenID), tenantPrefix(minTenID)},
+		{tenantSQL, minKey, roachpb.RKey(keys.TenantTableDataMax), tenantPrefix(minTenID)},
+		{tenantSQL, minKey, roachpb.RKeyMax, tenantPrefix(minTenID)},
+		{tenantSQL, roachpb.RKey(keys.TenantPrefix), tenantPrefix(minTenID), nil},
+		{tenantSQL, roachpb.RKey(keys.TenantPrefix), tenantPrefix(5), tenantPrefix(minTenID)},
+		{tenantSQL, roachpb.RKey(keys.TenantPrefix), tenantPrefix(8), tenantPrefix(minTenID)},
+		{tenantSQL, roachpb.RKey(keys.TenantPrefix), tenantPrefix(maxTenID), tenantPrefix(minTenID)},
+		{tenantSQL, roachpb.RKey(keys.TenantPrefix), roachpb.RKey(keys.TenantTableDataMax), tenantPrefix(minTenID)},
+		{tenantSQL, roachpb.RKey(keys.TenantPrefix), roachpb.RKeyMax, tenantPrefix(minTenID)},
+		{tenantSQL, tenantPrefix(minTenID), tenantPrefix(5), nil},
+		{tenantSQL, tenantPrefix(minTenID), tenantPrefix(8), tenantPrefix(5)},
+		{tenantSQL, tenantPrefix(minTenID), tenantPrefix(maxTenID), tenantPrefix(5)},
+		{tenantSQL, tenantPrefix(minTenID), roachpb.RKey(keys.TenantTableDataMax), tenantPrefix(5)},
+		{tenantSQL, tenantPrefix(minTenID), roachpb.RKeyMax, tenantPrefix(5)},
+		{tenantSQL, tenantPrefix(5), tenantPrefix(8), nil},
+		{tenantSQL, tenantPrefix(5), tenantPrefix(maxTenID), nil},
+		{tenantSQL, tenantPrefix(5), roachpb.RKey(keys.TenantTableDataMax), tenantPrefix(maxTenID)},
+		{tenantSQL, tenantPrefix(5), roachpb.RKeyMax, tenantPrefix(maxTenID)},
+		{tenantSQL, tenantPrefix(8), tenantPrefix(maxTenID), nil},
+		{tenantSQL, tenantPrefix(8), roachpb.RKey(keys.TenantTableDataMax), tenantPrefix(maxTenID)},
+		{tenantSQL, tenantPrefix(8), roachpb.RKeyMax, tenantPrefix(maxTenID)},
+		{tenantSQL, tenantPrefix(maxTenID), roachpb.RKey(keys.TenantTableDataMax), nil},
+		{tenantSQL, tenantPrefix(maxTenID), roachpb.RKeyMax, nil},
+		{tenantSQL, roachpb.RKey(keys.TenantTableDataMax), roachpb.RKeyMax, nil},
 	}
 
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
