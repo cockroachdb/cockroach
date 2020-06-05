@@ -67,9 +67,15 @@ func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
 	return scan.IsLocking()
 }
 
-// GenerateIndexScans enumerates all secondary indexes on the given Scan
-// operator's table and generates an alternate Scan operator for each index that
-// includes the set of needed columns specified in the ScanOpDef.
+// GenerateIndexScans enumerates all non-inverted and non-partial secondary
+// indexes on the given Scan operator's table and generates an alternate Scan
+// operator for each index that includes the set of needed columns specified in
+// the ScanOpDef.
+//
+// Partial indexes do not index every row in the table and they can only be used
+// in cases where a query filter implies the partial index predicate.
+// GenerateIndexScans does not deal with filters. Therefore, partial indexes
+// cannot be considered for non-constrained index scans.
 //
 // NOTE: This does not generate index joins for non-covering indexes (except in
 //       case of ForceIndex). Index joins are usually only introduced "one level
@@ -79,20 +85,14 @@ func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
 //       rows from the table. See ConstrainScans and LimitScans for cases where
 //       index joins are introduced into the memo.
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
-	// Iterate over all secondary indexes.
-	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
-	for iter.next() {
-		// Skip primary index.
-		if iter.indexOrdinal == cat.PrimaryIndex {
-			continue
-		}
-
+	// Iterate over all non-inverted and non-partial secondary indexes.
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectPrimaryIndex|RejectInvertedIndexes|RejectPartialIndexes)
+	for iter.Next() {
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
-		if iter.isCovering() {
+		if iter.IsCovering() {
 			scan := memo.ScanExpr{ScanPrivate: *scanPrivate}
-			scan.Index = iter.indexOrdinal
+			scan.Index = iter.IndexOrdinal()
 			c.e.mem.AddScanToGroup(&scan, grp)
 			continue
 		}
@@ -111,8 +111,8 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate := *scanPrivate
-		newScanPrivate.Index = iter.indexOrdinal
-		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
+		newScanPrivate.Index = iter.IndexOrdinal()
+		newScanPrivate.Cols = iter.IndexColumns().Intersection(scanPrivate.Cols)
 		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
 		sb.setScan(&newScanPrivate)
 
@@ -128,8 +128,8 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //
 // ----------------------------------------------------------------------
 
-// GenerateConstrainedScans enumerates all secondary indexes on the Scan
-// operator's table and tries to push the given Select filter into new
+// GenerateConstrainedScans enumerates all non-inverted secondary indexes on the
+// Scan operator's table and tries to push the given Select filter into new
 // constrained Scan operators using those indexes. Since this only needs to be
 // done once per table, GenerateConstrainedScans should only be called on the
 // original unaltered primary index Scan operator (i.e. not constrained or
@@ -206,12 +206,14 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	filterColumns := c.FilterOuterCols(explicitFilters)
 	filterColumns.UnionWith(c.FilterOuterCols(optionalFilters))
 
-	// Iterate over all indexes.
-	var iter scanIndexIter
+	// Iterate over all non-inverted indexes.
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
-	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
-	for iter.next() {
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectInvertedIndexes)
+	for iter.Next() {
+		// TODO(mgartner): Reject partial indexes if they are not implied by the
+		// filter.
+
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
 		// add no benefit as they don't really constrain anything.
@@ -275,11 +277,11 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		//
 		var partitionFilters, inBetweenFilters memo.FiltersExpr
 
-		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
-		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
+		indexColumns := tabMeta.IndexKeyColumns(iter.IndexOrdinal())
+		firstIndexCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
 		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
 			// Calculate any partition filters if appropriate (see below).
-			partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, iter.index)
+			partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, iter.Index())
 		}
 
 		// Check whether the filter (along with any partitioning filters) can constrain the index.
@@ -287,7 +289,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			explicitFilters,
 			append(optionalFilters, partitionFilters...),
 			scanPrivate.Table,
-			iter.indexOrdinal,
+			iter.IndexOrdinal(),
 			false, /* isInverted */
 		)
 		if !ok {
@@ -299,7 +301,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 				explicitFilters,
 				append(optionalFilters, inBetweenFilters...),
 				scanPrivate.Table,
-				iter.indexOrdinal,
+				iter.IndexOrdinal(),
 				false, /* isInverted */
 			)
 			if !ok {
@@ -322,14 +324,14 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
-		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Index = iter.IndexOrdinal()
 		newScanPrivate.Constraint = constraint
 		// Record whether we were able to use partitions to constrain the scan.
 		newScanPrivate.PartitionConstrainedScan = (len(partitionFilters) > 0)
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
-		if iter.isCovering() {
+		if iter.IsCovering() {
 			sb.setScan(&newScanPrivate)
 
 			// If there are remaining filters, then the constrained Scan operator
@@ -349,7 +351,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
-		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
+		newScanPrivate.Cols = iter.IndexColumns().Intersection(scanPrivate.Cols)
 		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
 		sb.setScan(&newScanPrivate)
 
@@ -829,9 +831,8 @@ func (c *CustomFuncs) partitionValuesFilters(
 // the Scan operator's table.
 func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	// Don't bother matching unless there's an inverted index.
-	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
-	return iter.next()
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectNonInvertedIndexes)
+	return iter.Next()
 }
 
 // GenerateInvertedIndexScans enumerates all inverted indexes on the Scan
@@ -849,19 +850,18 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all inverted indexes.
-	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
-	for iter.next() {
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectNonInvertedIndexes)
+	for iter.Next() {
 		// Check whether the filter can constrain the index.
 		constraint, remaining, ok := c.tryConstrainIndex(
-			filters, nil /* optionalFilters */, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
+			filters, nil /* optionalFilters */, scanPrivate.Table, iter.IndexOrdinal(), true /* isInverted */)
 		if !ok {
 			continue
 		}
 
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
-		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Index = iter.IndexOrdinal()
 		newScanPrivate.Constraint = constraint
 
 		// Though the index is marked as containing the JSONB column being
@@ -1067,15 +1067,24 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 	return ok
 }
 
-// GenerateLimitedScans enumerates all secondary indexes on the Scan operator's
-// table and tries to create new limited Scan operators from them. Since this
-// only needs to be done once per table, GenerateLimitedScans should only be
-// called on the original unaltered primary index Scan operator (i.e. not
-// constrained or limited).
+// GenerateLimitedScans enumerates all non-inverted and non-partial secondary
+// indexes on the Scan operator's table and tries to create new limited Scan
+// operators from them. Since this only needs to be done once per table,
+// GenerateLimitedScans should only be called on the original unaltered primary
+// index Scan operator (i.e. not constrained or limited).
 //
 // For a secondary index that "covers" the columns needed by the scan, a single
 // limited Scan operator is created. For a non-covering index, an IndexJoin is
 // constructed to add missing columns to the limited Scan.
+//
+// Inverted index scans are not guaranteed to produce a specific number
+// of result rows because they contain multiple entries for a single row
+// indexed. Therefore, they cannot be considered for limited scans.
+//
+// Partial indexes do not index every row in the table and they can only be used
+// in cases where a query filter implies the partial index predicate.
+// GenerateLimitedScans deals with limits, but no filters. Therefore, partial
+// indexes cannot be considered for limited scans.
 func (c *CustomFuncs) GenerateLimitedScans(
 	grp memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
@@ -1087,12 +1096,12 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
 
-	// Iterate over all indexes, looking for those that can be limited.
-	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
-	for iter.next() {
+	// Iterate over all non-inverted, non-partial indexes, looking for those
+	// that can be limited.
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectInvertedIndexes|RejectPartialIndexes)
+	for iter.Next() {
 		newScanPrivate := *scanPrivate
-		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Index = iter.IndexOrdinal()
 
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
@@ -1107,7 +1116,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
-		if iter.isCovering() {
+		if iter.IsCovering() {
 			sb.setScan(&newScanPrivate)
 			sb.build(grp)
 			continue
@@ -1121,7 +1130,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
-		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
+		newScanPrivate.Cols = iter.IndexColumns().Intersection(scanPrivate.Cols)
 		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
 		sb.setScan(&newScanPrivate)
 
@@ -1328,12 +1337,13 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 	var pkCols opt.ColList
 
-	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
-	for iter.next() {
+	// TODO(mgartner): Use partial indexes for lookup joins when the predicate
+	// is implied by the on filter.
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectInvertedIndexes|RejectPartialIndexes)
+	for iter.Next() {
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
-		numIndexKeyCols := iter.index.LaxKeyColumnCount()
+		numIndexKeyCols := iter.Index().LaxKeyColumnCount()
 
 		var projections memo.ProjectionsExpr
 		var constFilters memo.FiltersExpr
@@ -1342,7 +1352,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// it is constrained to a constant value. This check doesn't guarantee that
 		// we will find lookup join key columns, but it avoids the unnecessary work
 		// in most cases.
-		firstIdxCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
+		firstIdxCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
 			if _, _, ok := c.findConstantFilter(on, firstIdxCol); !ok {
 				continue
@@ -1353,7 +1363,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		lookupJoin.JoinPrivate = *joinPrivate
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
-		lookupJoin.Index = iter.indexOrdinal
+		lookupJoin.Index = iter.IndexOrdinal()
 
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
@@ -1362,7 +1372,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// All the lookup conditions must apply to the prefix of the index and so
 		// the projected columns created must be created in order.
 		for j := 0; j < numIndexKeyCols; j++ {
-			idxCol := scanPrivate.Table.ColumnID(iter.index.Column(j).Ordinal)
+			idxCol := scanPrivate.Table.ColumnID(iter.Index().Column(j).Ordinal)
 			if eqIdx, ok := rightEq.Find(idxCol); ok {
 				lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
 				rightSideCols = append(rightSideCols, idxCol)
@@ -1421,7 +1431,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		lookupJoin.On.RemoveCommonFilters(constFilters)
 		lookupJoin.ConstFilters = constFilters
 
-		if iter.isCovering() {
+		if iter.IsCovering() {
 			// Case 1 (see function comment).
 			lookupJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
 			c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
@@ -1434,7 +1444,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		if pkCols == nil {
-			pkIndex := iter.tab.Index(cat.PrimaryIndex)
+			pkIndex := md.Table(scanPrivate.Table).Index(cat.PrimaryIndex)
 			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
 			for i := range pkCols {
 				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
@@ -1443,7 +1453,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		// The lower LookupJoin must return all PK columns (they are needed as key
 		// columns for the index join).
-		indexCols := iter.indexCols()
+		indexCols := iter.IndexColumns()
 		lookupJoin.Cols = scanPrivate.Cols.Intersection(indexCols)
 		for i := range pkCols {
 			lookupJoin.Cols.Add(pkCols[i])
@@ -1570,15 +1580,17 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 
 	var pkCols opt.ColList
 
-	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
-	for iter.next() {
-		if scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal) != indexGeoCol {
+	// TODO(mgartner): Use partial indexes for geolookup joins when the
+	// predicate is implied by the on filter.
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectNonInvertedIndexes|RejectPartialIndexes)
+	for iter.Next() {
+		if scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal) != indexGeoCol {
 			continue
 		}
 
 		if pkCols == nil {
-			pkIndex := iter.tab.Index(cat.PrimaryIndex)
+			tab := c.e.mem.Metadata().Table(scanPrivate.Table)
+			pkIndex := tab.Index(cat.PrimaryIndex)
 			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
 			for i := range pkCols {
 				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
@@ -1594,7 +1606,7 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		lookupJoin.JoinPrivate = *joinPrivate
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
-		lookupJoin.Index = iter.indexOrdinal
+		lookupJoin.Index = iter.IndexOrdinal()
 		lookupJoin.GeoRelationshipType = relationship
 		lookupJoin.GeoCol = inputGeoCol
 		lookupJoin.Cols = indexCols.Union(inputProps.OutputCols)
@@ -1813,6 +1825,7 @@ func (c *CustomFuncs) fixedColsForZigzag(
 func (c *CustomFuncs) GenerateZigzagJoins(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
+	tab := c.e.mem.Metadata().Table(scanPrivate.Table)
 
 	// Short circuit unless zigzag joins are explicitly enabled.
 	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled {
@@ -1851,33 +1864,35 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	// TODO(itsbilal): Implement the greedy or weighted version of the
 	// algorithm laid out here:
 	// https://en.wikipedia.org/wiki/Maximum_coverage_problem
-	var iter, iter2 scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
-	for iter.next() {
-		if iter.indexOrdinal == cat.PrimaryIndex {
-			continue
-		}
-
-		leftFixed := c.indexConstrainedCols(iter.index, scanPrivate.Table, fixedCols)
+	//
+	// TODO(mgartner): Use partial indexes for zigzag joins when the predicate
+	// is implied by the filter.
+	//
+	// TODO(mgartner): We should consider primary indexes when it has multiple
+	// columns and only the first is being constrained.
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectPrimaryIndex|RejectInvertedIndexes|RejectPartialIndexes)
+	for iter.Next() {
+		leftFixed := c.indexConstrainedCols(iter.Index(), scanPrivate.Table, fixedCols)
 		// Short-circuit quickly if the first column in the index is not a fixed
 		// column.
 		if leftFixed.Len() == 0 {
 			continue
 		}
-		iter2.init(c.e.mem, scanPrivate, onlyStandardIndexes)
-		// Only look at indexes after this one.
-		iter2.indexOrdinal = iter.indexOrdinal
 
-		for iter2.next() {
-			rightFixed := c.indexConstrainedCols(iter2.index, scanPrivate.Table, fixedCols)
+		iter2 := MakeScanIndexIter(c.e.mem, scanPrivate, RejectPrimaryIndex|RejectInvertedIndexes|RejectPartialIndexes)
+		// Only look at indexes after this one.
+		iter2.StartAfter(iter.IndexOrdinal())
+
+		for iter2.Next() {
+			rightFixed := c.indexConstrainedCols(iter2.Index(), scanPrivate.Table, fixedCols)
 			// If neither side contributes a fixed column not contributed by the
 			// other, then there's no reason to zigzag on this pair of indexes.
 			if leftFixed.SubsetOf(rightFixed) || rightFixed.SubsetOf(leftFixed) {
 				continue
 			}
 			// Columns that are in both indexes are, by definition, equal.
-			leftCols := iter.indexCols()
-			rightCols := iter2.indexCols()
+			leftCols := iter.IndexColumns()
+			rightCols := iter2.IndexColumns()
 			eqCols := leftCols.Intersection(rightCols)
 			eqCols.DifferenceWith(fixedCols)
 			if eqCols.Len() == 0 {
@@ -1891,10 +1906,10 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 				leftCols, rightCols, filters,
 			)
 			leftEqCols, rightEqCols := eqColsForZigzag(
-				iter.tab,
+				tab,
 				scanPrivate.Table,
-				iter.index,
-				iter2.index,
+				iter.Index(),
+				iter2.Index(),
 				fixedCols,
 				leftEq,
 				rightEq,
@@ -1913,7 +1928,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// for output correctness; otherwise, we could be outputting more
 			// results than there should be (due to an equality on a non-unique
 			// non-required value).
-			pkIndex := iter.tab.Index(cat.PrimaryIndex)
+			pkIndex := tab.Index(cat.PrimaryIndex)
 			pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
 			pkColsFound := true
 			for i := range pkCols {
@@ -1936,19 +1951,19 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 				On: filters,
 				ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
 					LeftTable:   scanPrivate.Table,
-					LeftIndex:   iter.indexOrdinal,
+					LeftIndex:   iter.IndexOrdinal(),
 					RightTable:  scanPrivate.Table,
-					RightIndex:  iter2.indexOrdinal,
+					RightIndex:  iter2.IndexOrdinal(),
 					LeftEqCols:  leftEqCols,
 					RightEqCols: rightEqCols,
 				},
 			}
 
 			leftFixedCols, leftVals, leftTypes := c.fixedColsForZigzag(
-				iter.index, scanPrivate.Table, filters,
+				iter.Index(), scanPrivate.Table, filters,
 			)
 			rightFixedCols, rightVals, rightTypes := c.fixedColsForZigzag(
-				iter2.index, scanPrivate.Table, filters,
+				iter2.Index(), scanPrivate.Table, filters,
 			)
 
 			if len(leftFixedCols) != leftFixed.Len() || len(rightFixedCols) != rightFixed.Len() {
@@ -2057,9 +2072,10 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all inverted indexes.
-	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
-	for iter.next() {
+	// TODO(mgartner): Use partial indexes for inverted zigzag joins when the
+	// predicate is implied by the filter.
+	iter := MakeScanIndexIter(c.e.mem, scanPrivate, RejectNonInvertedIndexes|RejectPartialIndexes)
+	for iter.Next() {
 		// See if there are two or more constraints that can be satisfied
 		// by this inverted index. This is possible with inverted indexes as
 		// opposed to secondary indexes, because one row in the primary index
@@ -2067,7 +2083,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// function generates all constraints it can derive for this index;
 		// not all of which might get used in this function.
 		constraints, ok := c.allInvIndexConstraints(
-			filters, scanPrivate.Table, iter.indexOrdinal,
+			filters, scanPrivate.Table, iter.IndexOrdinal(),
 		)
 		if !ok || len(constraints) < 2 {
 			continue
@@ -2095,9 +2111,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			On: filters,
 			ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
 				LeftTable:  scanPrivate.Table,
-				LeftIndex:  iter.indexOrdinal,
+				LeftIndex:  iter.IndexOrdinal(),
 				RightTable: scanPrivate.Table,
-				RightIndex: iter.indexOrdinal,
+				RightIndex: iter.IndexOrdinal(),
 			},
 		}
 
@@ -2131,11 +2147,11 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 
 		// Set equality columns - all remaining columns after the fixed prefix
 		// need to be equal.
-		eqColLen := iter.index.ColumnCount() - minPrefix
+		eqColLen := iter.Index().ColumnCount() - minPrefix
 		zigzagJoin.LeftEqCols = make(opt.ColList, eqColLen)
 		zigzagJoin.RightEqCols = make(opt.ColList, eqColLen)
-		for i := minPrefix; i < iter.index.ColumnCount(); i++ {
-			colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
+		for i := minPrefix; i < iter.Index().ColumnCount(); i++ {
+			colID := scanPrivate.Table.ColumnID(iter.Index().Column(i).Ordinal)
 			zigzagJoin.LeftEqCols[i-minPrefix] = colID
 			zigzagJoin.RightEqCols[i-minPrefix] = colID
 		}
@@ -2145,13 +2161,14 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// col) from the zigzag join. It could contain partial values, so
 		// presenting it in the output or checking ON conditions against
 		// it makes little sense.
-		zigzagCols := iter.indexCols()
-		for i, cnt := 0, iter.index.KeyColumnCount(); i < cnt; i++ {
-			colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
+		zigzagCols := iter.IndexColumns()
+		for i, cnt := 0, iter.Index().KeyColumnCount(); i < cnt; i++ {
+			colID := scanPrivate.Table.ColumnID(iter.Index().Column(i).Ordinal)
 			zigzagCols.Remove(colID)
 		}
 
-		pkIndex := iter.tab.Index(cat.PrimaryIndex)
+		tab := c.e.mem.Metadata().Table(scanPrivate.Table)
+		pkIndex := tab.Index(cat.PrimaryIndex)
 		pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
 		for i := range pkCols {
 			pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
@@ -2632,12 +2649,11 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(sp.Table)
 
-	var iter scanIndexIter
-	iter.init(c.e.mem, sp, allIndexes)
-	for iter.next() {
+	iter := MakeScanIndexIter(c.e.mem, sp, RejectNoIndexes)
+	for iter.Next() {
 		// Iterate through all indexes of the table and return true if cols
-		// intersect with the index's columns.
-		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
+		// intersect with the index's key columns.
+		indexColumns := tabMeta.IndexKeyColumns(iter.IndexOrdinal())
 		if cols.Intersects(indexColumns) {
 			return true
 		}
@@ -2742,103 +2758,4 @@ func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo
 		Flags:   sp.Flags,
 		Locking: sp.Locking,
 	}
-}
-
-// indexIterType is an option passed to scanIndexIter.init() to specify index types
-// to include during iteration.
-type indexIterType int
-
-const (
-	// allIndexes sepcifies that no indexes will be skipped during iteration.
-	allIndexes indexIterType = iota
-
-	// onlyStandardIndexes specifies iteration over all standard indexes,
-	// skipping inverted indexes.
-	onlyStandardIndexes
-
-	// onlyInvertedIndexes specifies iteration over all inverted indexes,
-	// skipping standard indexes.
-	onlyInvertedIndexes
-)
-
-// scanIndexIter is a helper struct that supports iteration over the indexes
-// of a Scan operator table. For example:
-//
-//   var iter scanIndexIter
-//   iter.init(mem, scanOpDef, onlyStandardIndexes)
-//   for iter.next() {
-//     doSomething(iter.indexOrdinal)
-//   }
-//
-type scanIndexIter struct {
-	mem          *memo.Memo
-	scanPrivate  *memo.ScanPrivate
-	tab          cat.Table
-	indexOrdinal cat.IndexOrdinal
-	index        cat.Index
-	indexType    indexIterType
-	cols         opt.ColSet
-}
-
-func (it *scanIndexIter) init(mem *memo.Memo, scanPrivate *memo.ScanPrivate, t indexIterType) {
-	it.mem = mem
-	it.scanPrivate = scanPrivate
-	it.tab = mem.Metadata().Table(scanPrivate.Table)
-	it.indexOrdinal = -1
-	it.index = nil
-	it.indexType = t
-}
-
-// next advances iteration to the next index of the Scan operator's table. This
-// is the primary index if it's the first time next is called, or a secondary
-// index thereafter. When there are no more indexes to enumerate, next returns
-// false. The current index is accessible via the iterator's "index" field.
-//
-// The indexType determines which indexes to skip when iterating, if any.
-//
-// If the ForceIndex flag is set, then all indexes except the forced index are
-// skipped.
-func (it *scanIndexIter) next() bool {
-	for {
-		it.indexOrdinal++
-
-		if it.indexOrdinal >= it.tab.IndexCount() {
-			it.index = nil
-			return false
-		}
-
-		it.index = it.tab.Index(it.indexOrdinal)
-
-		// Skip over inverted indexes if indexType is onlyStandardIndexes.
-		if it.indexType == onlyStandardIndexes && it.index.IsInverted() {
-			continue
-		}
-
-		// Skip over standard indexes if indexType is onlyInvertedIndexes.
-		if it.indexType == onlyInvertedIndexes && !it.index.IsInverted() {
-			continue
-		}
-
-		if it.scanPrivate.Flags.ForceIndex && it.scanPrivate.Flags.Index != it.indexOrdinal {
-			// If we are forcing a specific index, ignore the others.
-			continue
-		}
-
-		it.cols = opt.ColSet{}
-		return true
-	}
-}
-
-// indexCols returns the set of columns contained in the current index.
-func (it *scanIndexIter) indexCols() opt.ColSet {
-	if it.cols.Empty() {
-		it.cols = it.mem.Metadata().TableMeta(it.scanPrivate.Table).IndexColumns(it.indexOrdinal)
-	}
-	return it.cols
-}
-
-// isCovering returns true if the current index contains all columns projected
-// by the Scan operator.
-func (it *scanIndexIter) isCovering() bool {
-	return it.scanPrivate.Cols.SubsetOf(it.indexCols())
 }
