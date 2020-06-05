@@ -429,7 +429,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 func TestDistSQLDeadHosts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
+	t.Skip("#49843. test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
 
 	const n = 100
 	const numNodes = 5
