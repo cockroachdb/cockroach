@@ -50,9 +50,15 @@ func (t *testJobSchedulerEnv) Now() time.Time {
 	return t.now
 }
 
+func (t *testJobSchedulerEnv) AdvanceTime(d time.Duration) {
+	t.now = t.now.Add(d)
+}
+
+const timestampTZLayout = "2006-01-02 15:04:05.000000"
+const timestampTZWithTZLayout = "2006-01-02 15:04:05.000000 -0700 MST"
+
 func (t *testJobSchedulerEnv) NowExpr() string {
-	return fmt.Sprintf("TIMESTAMPTZ '%s'",
-		t.now.Format("2020-01-02 03:04:05.999999999"))
+	return fmt.Sprintf("TIMESTAMPTZ '%s'", t.now.Format(timestampTZLayout))
 }
 
 // Returns schema for the scheduled jobs table.
@@ -113,12 +119,21 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 }
 
 // NewScheduledJob is a helper to create job with helper environment.
-func (h *testHelper) newScheduledJob(t *testing.T, jobName, sql string) *ScheduledJob {
+func (h *testHelper) newScheduledJob(t *testing.T, scheduleName, sql string) *ScheduledJob {
 	j := NewScheduledJob(h.env)
-	j.SetScheduleName(jobName)
+	j.SetScheduleName(scheduleName)
 	any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: sql})
 	require.NoError(t, err)
 	j.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
+	return j
+}
+
+func (h *testHelper) newScheduledJobForExecutor(
+	scheduleName, executorName string, executorArgs *types.Any,
+) *ScheduledJob {
+	j := NewScheduledJob(h.env)
+	j.SetScheduleName(scheduleName)
+	j.SetExecutionDetails(executorName, jobspb.ExecutionArguments{Args: executorArgs})
 	return j
 }
 
@@ -136,4 +151,15 @@ func (h *testHelper) loadJob(t *testing.T, id int64) *ScheduledJob {
 	require.Equal(t, 1, len(rows))
 	require.NoError(t, j.InitFromDatums(rows[0], cols))
 	return j
+}
+
+func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) func() {
+	RegisterScheduledJobExecutorFactory(
+		name,
+		func(_ sqlutil.InternalExecutor) (ScheduledJobExecutor, error) {
+			return ex, nil
+		})
+	return func() {
+		delete(registeredExecutorFactories, name)
+	}
 }
