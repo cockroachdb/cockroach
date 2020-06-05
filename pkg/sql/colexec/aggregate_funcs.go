@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -196,9 +197,15 @@ func makeAggregateFuncsOutputTypes(
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
 			outTyps[i] = types.Int
+		case execinfrapb.AggregatorSpec_AVG:
+			if typeconv.TypeFamilyToCanonicalTypeFamily(aggTyps[i][0].Family()) == types.IntFamily {
+				// Average of integers is a decimal.
+				outTyps[i] = types.Decimal
+			} else {
+				outTyps[i] = aggTyps[i][0]
+			}
 		case
 			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_AVG,
 			execinfrapb.AggregatorSpec_SUM,
 			execinfrapb.AggregatorSpec_SUM_INT,
 			execinfrapb.AggregatorSpec_MIN,
@@ -287,4 +294,34 @@ func isAggregateSupported(
 		return false, errors.Newf("aggregates with different input and output types are not supported")
 	}
 	return true, nil
+}
+
+type aggAllocBase struct {
+	allocator *colmem.Allocator
+	allocSize int64
+}
+
+func newAvgAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch t.Family() {
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &avgInt16AggAlloc{aggAllocBase: allocBase}, nil
+		case 32:
+			return &avgInt32AggAlloc{aggAllocBase: allocBase}, nil
+		default:
+			return &avgInt64AggAlloc{aggAllocBase: allocBase}, nil
+		}
+	case types.DecimalFamily:
+		return &avgDecimalAggAlloc{aggAllocBase: allocBase}, nil
+	case types.FloatFamily:
+		return &avgFloat64AggAlloc{aggAllocBase: allocBase}, nil
+	case types.IntervalFamily:
+		return &avgIntervalAggAlloc{aggAllocBase: allocBase}, nil
+	default:
+		return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
+	}
 }

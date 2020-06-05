@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -298,7 +299,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 			}
 
 			if !tc.unorderedInput {
-				tupleSource := newOpTestInput(tc.batchSize, tc.input, nil /* typs */)
+				tupleSource := newOpTestInput(tc.batchSize, tc.input, tc.typs)
 				a, err := NewOrderedAggregator(
 					testAllocator,
 					tupleSource,
@@ -330,7 +331,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 						continue
 					}
 					t.Run(agg.name, func(t *testing.T) {
-						runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
+						runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
 							func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 								return agg.new(
 									testAllocator,
@@ -351,6 +352,9 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 func TestAggregatorMultiFunc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// TODO(yuzefovich): introduce nicer aliases for the protobuf generated
+	// ones and use those throughout the codebase.
+	avgFn := execinfrapb.AggregatorSpec_AVG
 	testCases := []aggregatorTestCase{
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
@@ -500,6 +504,23 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			aggCols: [][]uint32{
 				{0}, {1},
 			},
+		},
+		{
+			input: tuples{
+				{0, nil, 1, 1, 1.0, 1.0, duration.MakeDuration(1, 1, 1)},
+				{0, 1, nil, 2, 2.0, 2.0, duration.MakeDuration(2, 2, 2)},
+				{0, 2, 2, nil, 3.0, 3.0, duration.MakeDuration(3, 3, 3)},
+				{0, 3, 3, 3, nil, 4.0, duration.MakeDuration(4, 4, 4)},
+				{0, 4, 4, 4, 4.0, nil, duration.MakeDuration(5, 5, 5)},
+				{0, 5, 5, 5, 5.0, 5.0, nil},
+			},
+			expected: tuples{
+				{3.0, 3.0, 3.0, 3.0, 3.0, duration.MakeDuration(3, 3, 3)},
+			},
+			typs:    []*types.T{types.Int, types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval},
+			aggFns:  []execinfrapb.AggregatorSpec_Func{avgFn, avgFn, avgFn, avgFn, avgFn, avgFn},
+			aggCols: [][]uint32{{1}, {2}, {3}, {4}, {5}, {6}},
+			name:    "AVG on all types",
 		},
 	}
 

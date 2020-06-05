@@ -120,7 +120,12 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 					GroupCols:    groupingCols[:numGroupingCols],
 					Aggregations: aggregations,
 				}
-				if !hashAgg {
+				if hashAgg {
+					// Let's shuffle the rows for the hash aggregator.
+					rand.Shuffle(nRows, func(i, j int) {
+						rows[i], rows[j] = rows[j], rows[i]
+					})
+				} else {
 					aggregatorSpec.OrderedGroupCols = groupingCols[:numGroupingCols]
 					orderedCols := execinfrapb.ConvertToColumnOrdering(
 						execinfrapb.Ordering{Columns: orderingCols[:numGroupingCols]},
