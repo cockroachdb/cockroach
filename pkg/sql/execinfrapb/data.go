@@ -160,8 +160,9 @@ type Expression struct {
 	// (@1, @2, @3 ..) used for "input" variables.
 	Expr string
 
-	// LocalExpr is an unserialized field that's used to pass expressions to local
-	// flows without serializing/deserializing them.
+	// LocalExpr is an unserialized field that's used to pass expressions to
+	// the gateway node without serializing/deserializing them. It is always
+	// set in non-test setup.
 	LocalExpr tree.TypedExpr
 }
 
@@ -171,7 +172,7 @@ func (e *Expression) Empty() bool {
 }
 
 // String implements the Stringer interface.
-func (e Expression) String() string {
+func (e *Expression) String() string {
 	if e.LocalExpr != nil {
 		ctx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
 		ctx.FormatNode(e.LocalExpr)
