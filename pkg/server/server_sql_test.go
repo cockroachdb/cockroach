@@ -39,7 +39,7 @@ func TestSQLServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
@@ -49,6 +49,8 @@ func TestSQLServer(t *testing.T) {
 	r.Exec(t, `CREATE DATABASE foo`)
 	r.Exec(t, `CREATE TABLE foo.kv (k STRING PRIMARY KEY, v STRING)`)
 	r.Exec(t, `INSERT INTO foo.kv VALUES('foo', 'bar')`)
+	// Cause an index backfill operation.
+	r.Exec(t, `CREATE INDEX ON foo.kv (v)`)
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=off; SELECT * FROM foo.kv`)))
 	t.Log(sqlutils.MatrixToStr(r.QueryStr(t, `SET distsql=auto; SELECT * FROM foo.kv`)))
 }
