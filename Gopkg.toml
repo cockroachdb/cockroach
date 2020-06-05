@@ -59,6 +59,10 @@ ignored = [
   branch = "master"
 
 [[constraint]]
+  name = "github.com/dave/dst"
+  branch = "master"
+
+[[constraint]]
   name = "github.com/maruel/panicparse"
   revision = "f20d4c4d746f810c9110e21928d4135e1f2a3efa"
 
