@@ -92,36 +92,11 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	// Average is computed as SUM / COUNT. The counting is performed directly
-	// by the aggregate function struct, and the division is handled by
-	// AssignDivInt64 defined above, and we need to find a suitable overload
-	// to perform the summation.
-	// For most types it is easy - we simply iterate over "Plus" overloads that
-	// take in the same type as both arguments. However, average of integers
-	// returns a decimal result, so we need to pick the overload of appropriate
-	// width from "DECIMAL + INT" overload.
-	getAddOverload := func(typ *types.T) assignFunc {
-		if typ.Family() == types.IntFamily {
-			var c decimalIntCustomizer
-			return c.getBinOpAssignFunc()
-		}
-		var overload *oneArgOverload
-		for _, o := range sameTypeBinaryOpToOverloads[tree.Plus] {
-			if o.CanonicalTypeFamily == typ.Family() {
-				overload = o
-				break
-			}
-		}
-		if overload == nil {
-			colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find plus binary overload for %s", typ.String()))
-		}
-		if len(overload.WidthOverloads) != 1 {
-			colexecerror.InternalError(fmt.Sprintf("unexpectedly plus binary overload for %s doesn't contain a single overload", typ.String()))
-		}
-		return overload.WidthOverloads[0].AssignFunc
-	}
-
 	var tmplInfos []avgTmplInfo
+	// Average is computed as SUM / COUNT. The counting is performed directly
+	// by the aggregate function struct, the division is handled by
+	// AssignDivInt64 defined above, and resolving SUM overload is performed by
+	// the helper function.
 	// Note that all types on which we support avg aggregate function are the
 	// canonical representatives, so we can operate with their type family
 	// directly.
@@ -141,7 +116,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
 			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
 			RetVecMethod:   toVecMethod(retType.Family(), retType.Width()),
-			addOverload:    getAddOverload(inputType),
+			addOverload:    getSumAddOverload(inputType),
 		})
 	}
 	return tmpl.Execute(wr, tmplInfos)

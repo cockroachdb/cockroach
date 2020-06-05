@@ -23,21 +23,11 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // {{/*
 // Declarations to make the template compile properly
-
-// _CANONICAL_TYPE_FAMILY is the template variable.
-const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
-
-// _TYPE_WIDTH is the template variable.
-const _TYPE_WIDTH = 0
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
@@ -47,72 +37,74 @@ func _ASSIGN_ADD(_, _, _, _, _, _ string) {
 
 // */}}
 
-func newSumAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) (aggregateFuncAlloc, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	// {{range .}}
-	case _CANONICAL_TYPE_FAMILY:
-		switch t.Width() {
-		// {{range .WidthOverloads}}
-		case _TYPE_WIDTH:
-			return &sum_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
-			// {{end}}
-		}
-		// {{end}}
-	}
-	return nil, errors.Errorf("unsupported sum agg type %s", t)
-}
-
 // {{range .}}
-// {{range .WidthOverloads}}
 
-type sum_TYPEAgg struct {
+type sum_KIND_TYPEAgg struct {
 	groups  []bool
 	scratch struct {
 		curIdx int
 		// curAgg holds the running total, so we can index into the slice once per
 		// group, instead of on each iteration.
-		curAgg _GOTYPE
+		curAgg _RET_GOTYPE
 		// vec points to the output vector we are updating.
-		vec []_GOTYPE
+		vec []_RET_GOTYPE
 		// nulls points to the output null vector that we are updating.
 		nulls *coldata.Nulls
 		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 		// for the group that is currently being aggregated.
 		foundNonNullForCurrentGroup bool
 	}
+	// {{if .NeedsHelper}}
+	// {{/*
+	// overloadHelper is used only when we perform the summation of integers
+	// and get a decimal result which is the case when {{if .NeedsHelper}}
+	// evaluates to true. In all other cases we don't want to wastefully
+	// allocate the helper.
+	// */}}
+	overloadHelper overloadHelper
+	// {{end}}
 }
 
-var _ aggregateFunc = &sum_TYPEAgg{}
+var _ aggregateFunc = &sum_KIND_TYPEAgg{}
 
-const sizeOfSum_TYPEAgg = int64(unsafe.Sizeof(sum_TYPEAgg{}))
+const sizeOfSum_KIND_TYPEAgg = int64(unsafe.Sizeof(sum_KIND_TYPEAgg{}))
 
-func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
+func (a *sum_KIND_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
-	a.scratch.vec = v.TemplateType()
+	a.scratch.vec = v._RET_TYPE()
 	a.scratch.nulls = v.Nulls()
 	a.Reset()
 }
 
-func (a *sum_TYPEAgg) Reset() {
+func (a *sum_KIND_TYPEAgg) Reset() {
 	a.scratch.curIdx = -1
 	a.scratch.foundNonNullForCurrentGroup = false
 	a.scratch.nulls.UnsetNulls()
 }
 
-func (a *sum_TYPEAgg) CurrentOutputIndex() int {
+func (a *sum_KIND_TYPEAgg) CurrentOutputIndex() int {
 	return a.scratch.curIdx
 }
 
-func (a *sum_TYPEAgg) SetOutputIndex(idx int) {
+func (a *sum_KIND_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
 		a.scratch.nulls.UnsetNullsAfter(idx + 1)
 	}
 }
 
-func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *sum_KIND_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+	// {{if .NeedsHelper}}
+	// {{/*
+	// overloadHelper is used only when we perform the summation of integers
+	// and get a decimal result which is the case when {{if .NeedsHelper}}
+	// evaluates to true. In all other cases we don't want to wastefully
+	// allocate the helper.
+	// */}}
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := a.overloadHelper
+	// {{end}}
 	inputLen := b.Length()
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec.TemplateType(), vec.Nulls()
@@ -143,7 +135,7 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
-func (a *sum_TYPEAgg) Flush() {
+func (a *sum_KIND_TYPEAgg) Flush() {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
@@ -155,22 +147,21 @@ func (a *sum_TYPEAgg) Flush() {
 	a.scratch.curIdx++
 }
 
-func (a *sum_TYPEAgg) HandleEmptyInputScalar() {
+func (a *sum_KIND_TYPEAgg) HandleEmptyInputScalar() {
 	a.scratch.nulls.SetNull(0)
 }
 
-type sum_TYPEAggAlloc struct {
-	allocator *colmem.Allocator
-	allocSize int64
-	aggFuncs  []sum_TYPEAgg
+type sum_KIND_TYPEAggAlloc struct {
+	aggAllocBase
+	aggFuncs []sum_KIND_TYPEAgg
 }
 
-var _ aggregateFuncAlloc = &sum_TYPEAggAlloc{}
+var _ aggregateFuncAlloc = &sum_KIND_TYPEAggAlloc{}
 
-func (a *sum_TYPEAggAlloc) newAggFunc() aggregateFunc {
+func (a *sum_KIND_TYPEAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSum_TYPEAgg * a.allocSize)
-		a.aggFuncs = make([]sum_TYPEAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOfSum_KIND_TYPEAgg * a.allocSize)
+		a.aggFuncs = make([]sum_KIND_TYPEAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
@@ -178,14 +169,13 @@ func (a *sum_TYPEAggAlloc) newAggFunc() aggregateFunc {
 }
 
 // {{end}}
-// {{end}}
 
 // {{/*
 // _ACCUMULATE_SUM adds the value of the ith row to the output for the current
 // group. If this is the first row of a new group, and no non-nulls have been
 // found for the current group, then the output for the current group is set to
 // null.
-func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+func _ACCUMULATE_SUM(a *sum_KIND_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
 
 	// {{define "accumulateSum"}}
 	if a.groups[i] {
@@ -201,7 +191,7 @@ func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS boo
 		}
 		a.scratch.curIdx++
 		// {{with .Global}}
-		a.scratch.curAgg = zero_TYPEValue
+		a.scratch.curAgg = zero_RET_TYPEValue
 		// {{end}}
 
 		// {{/*

@@ -31,7 +31,7 @@ import (
 var (
 	defaultGroupCols = []uint32{0}
 	defaultAggCols   = [][]uint32{{1}}
-	defaultAggFns    = []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM}
+	defaultAggFns    = []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM_INT}
 	defaultTyps      = []*types.T{types.Int, types.Int}
 )
 
@@ -357,7 +357,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 	avgFn := execinfrapb.AggregatorSpec_AVG
 	testCases := []aggregatorTestCase{
 		{
-			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
+			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM_INT, execinfrapb.AggregatorSpec_SUM_INT},
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
@@ -372,7 +372,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			name: "OutputOrder",
 		},
 		{
-			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
+			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT},
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
@@ -457,7 +457,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 				execinfrapb.AggregatorSpec_MIN,
-				execinfrapb.AggregatorSpec_SUM_INT,
+				execinfrapb.AggregatorSpec_SUM,
 			},
 			input: tuples{
 				{2, 1.0, "1.0", 2.0},
@@ -550,12 +550,13 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_COUNT_ROWS,
 				execinfrapb.AggregatorSpec_COUNT,
 				execinfrapb.AggregatorSpec_SUM,
+				execinfrapb.AggregatorSpec_SUM_INT,
 				execinfrapb.AggregatorSpec_MIN,
 				execinfrapb.AggregatorSpec_MAX,
 				execinfrapb.AggregatorSpec_BOOL_AND,
 				execinfrapb.AggregatorSpec_BOOL_OR,
 			},
-			aggCols: [][]uint32{{0}, {4}, {1}, {}, {1}, {2}, {2}, {2}, {3}, {3}},
+			aggCols: [][]uint32{{0}, {4}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {3}, {3}},
 			typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool, types.Bytes},
 			input: tuples{
 				{0, 3.1, 2, true, "zero"},
@@ -567,10 +568,10 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				{3, 5.1, 0, true, "three"},
 			},
 			expected: tuples{
-				{0, "zero", 2.1, 2, 2, 5, 2, 3, false, true},
-				{1, "one", 2.6, 2, 2, 1, 0, 1, false, false},
-				{2, "two", 1.1, 1, 1, 1, 1, 1, true, true},
-				{3, "three", 4.6, 2, 2, 0, 0, 0, false, true},
+				{0, "zero", 2.1, 2, 2, 4.2, 5, 2, 3, false, true},
+				{1, "one", 2.6, 2, 2, 5.2, 1, 0, 1, false, false},
+				{2, "two", 1.1, 1, 1, 1.1, 1, 1, 1, true, true},
+				{3, "three", 4.6, 2, 2, 9.2, 0, 0, 0, false, true},
 			},
 			convToDecimal: true,
 		},
@@ -618,9 +619,10 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				if strings.Contains(agg.name, "hash") {
 					verifier = unorderedVerifier
 				}
-				runTests(
+				runTestsWithTyps(
 					t,
 					[]tuples{tc.input},
+					[][]*types.T{tc.typs},
 					tc.expected,
 					verifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
@@ -721,7 +723,7 @@ func TestAggregatorRandom(t *testing.T) {
 								[]execinfrapb.AggregatorSpec_Func{
 									execinfrapb.AggregatorSpec_COUNT_ROWS,
 									execinfrapb.AggregatorSpec_COUNT,
-									execinfrapb.AggregatorSpec_SUM_INT,
+									execinfrapb.AggregatorSpec_SUM,
 									execinfrapb.AggregatorSpec_MIN,
 									execinfrapb.AggregatorSpec_MAX,
 									execinfrapb.AggregatorSpec_AVG},
@@ -762,6 +764,7 @@ func BenchmarkAggregator(b *testing.B) {
 		execinfrapb.AggregatorSpec_COUNT_ROWS,
 		execinfrapb.AggregatorSpec_COUNT,
 		execinfrapb.AggregatorSpec_SUM,
+		execinfrapb.AggregatorSpec_SUM_INT,
 		execinfrapb.AggregatorSpec_MIN,
 		execinfrapb.AggregatorSpec_MAX,
 		execinfrapb.AggregatorSpec_BOOL_AND,
@@ -782,6 +785,10 @@ func BenchmarkAggregator(b *testing.B) {
 										// for the first one.
 										continue
 									}
+								}
+								if aggFn == execinfrapb.AggregatorSpec_SUM_INT && typ.Family() != types.IntFamily {
+									// sum_int only works on integers.
+									continue
 								}
 								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
 									groupSize, hasNulls, numInputBatches),
@@ -811,9 +818,9 @@ func BenchmarkAggregator(b *testing.B) {
 											NullProbability:  nullProb,
 											BytesFixedLength: bytesFixedLength,
 										})
-										if typ.Identical(types.Int) && aggFn == execinfrapb.AggregatorSpec_SUM {
-											// Summation of random Int64 values can lead to
-											// overflow, and we will panic. To go around it, we
+										if typ.Identical(types.Int) && aggFn == execinfrapb.AggregatorSpec_SUM_INT {
+											// Integer summation of random Int64 values can lead
+											// to overflow, and we will panic. To go around it, we
 											// restrict the range of values.
 											vals := cols[1].Int64()
 											for i := range vals {
@@ -933,7 +940,7 @@ func TestHashAggregator(t *testing.T) {
 			typs:          []*types.T{types.Int, types.Int, types.Decimal},
 			convToDecimal: true,
 
-			aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
+			aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT},
 			groupCols: []uint32{0, 1},
 			aggCols: [][]uint32{
 				{2}, {1},

@@ -130,8 +130,10 @@ func newAggregateFuncsAlloc(
 			funcAllocs[i], err = newAnyNotNullAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_AVG:
 			funcAllocs[i], err = newAvgAggAlloc(allocator, aggTyps[i][0], allocSize)
-		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
+		case execinfrapb.AggregatorSpec_SUM:
 			funcAllocs[i], err = newSumAggAlloc(allocator, aggTyps[i][0], allocSize)
+		case execinfrapb.AggregatorSpec_SUM_INT:
+			funcAllocs[i], err = newSumIntAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
 			funcAllocs[i] = newCountRowsAggAlloc(allocator, allocSize)
 		case execinfrapb.AggregatorSpec_COUNT:
@@ -189,9 +191,12 @@ func makeAggregateFuncsOutputTypes(
 	aggTyps [][]*types.T, aggFns []execinfrapb.AggregatorSpec_Func,
 ) ([]*types.T, error) {
 	outTyps := make([]*types.T, len(aggFns))
-
 	for i := range aggFns {
 		// Set the output type of the aggregate.
+		if len(aggTyps[i]) > 0 {
+			// By default, the output type is the input type (if there is one).
+			outTyps[i] = aggTyps[i][0]
+		}
 		switch aggFns[i] {
 		case execinfrapb.AggregatorSpec_COUNT_ROWS, execinfrapb.AggregatorSpec_COUNT:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
@@ -201,24 +206,18 @@ func makeAggregateFuncsOutputTypes(
 			if typeconv.TypeFamilyToCanonicalTypeFamily(aggTyps[i][0].Family()) == types.IntFamily {
 				// Average of integers is a decimal.
 				outTyps[i] = types.Decimal
-			} else {
-				outTyps[i] = aggTyps[i][0]
 			}
-		case
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_SUM,
-			execinfrapb.AggregatorSpec_SUM_INT,
-			execinfrapb.AggregatorSpec_MIN,
-			execinfrapb.AggregatorSpec_MAX,
-			execinfrapb.AggregatorSpec_BOOL_AND,
-			execinfrapb.AggregatorSpec_BOOL_OR:
-			// Output types are the input types for now.
-			outTyps[i] = aggTyps[i][0]
-		default:
-			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
+		case execinfrapb.AggregatorSpec_SUM:
+			if typeconv.TypeFamilyToCanonicalTypeFamily(aggTyps[i][0].Family()) == types.IntFamily {
+				// Summation of integers ('sum', not 'sum_int') is a decimal.
+				outTyps[i] = types.Decimal
+			}
+		case execinfrapb.AggregatorSpec_SUM_INT:
+			// Integer summation of integers ('sum_int', not 'sum') is always
+			// INT8.
+			outTyps[i] = types.Int
 		}
 	}
-
 	return outTyps, nil
 }
 
@@ -226,14 +225,12 @@ func makeAggregateFuncsOutputTypes(
 // corresponding to each aggregation function.
 func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
 	aggTyps := make([][]*types.T, len(aggCols))
-
 	for aggIdx := range aggCols {
 		aggTyps[aggIdx] = make([]*types.T, len(aggCols[aggIdx]))
 		for i, colIdx := range aggCols[aggIdx] {
 			aggTyps[aggIdx][i] = typs[colIdx]
 		}
 	}
-
 	return aggTyps
 }
 
@@ -243,22 +240,6 @@ func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
 func isAggregateSupported(
 	allocator *colmem.Allocator, aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
 ) (bool, error) {
-	switch aggFn {
-	case execinfrapb.AggregatorSpec_SUM:
-		switch inputTypes[0].Family() {
-		case types.IntFamily:
-			// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
-			// at the end, mod issues with overflow. Perhaps to avoid the overflow
-			// issues, at first, we could plan SUM for all types besides Int64.
-			return false, errors.Newf("sum on int cols not supported (use sum_int)")
-		}
-	case execinfrapb.AggregatorSpec_SUM_INT:
-		// TODO(yuzefovich): support this case through vectorize.
-		if inputTypes[0].Width() != 64 {
-			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
-		}
-	}
-
 	// We're only interested in resolving the aggregate functions and will not
 	// be actually creating them with the alloc, so we use 0 as the allocation
 	// size.
@@ -323,5 +304,49 @@ func newAvgAggAlloc(
 		return &avgIntervalAggAlloc{aggAllocBase: allocBase}, nil
 	default:
 		return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
+	}
+}
+
+func newSumAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch t.Family() {
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &sumInt16AggAlloc{aggAllocBase: allocBase}, nil
+		case 32:
+			return &sumInt32AggAlloc{aggAllocBase: allocBase}, nil
+		default:
+			return &sumInt64AggAlloc{aggAllocBase: allocBase}, nil
+		}
+	case types.DecimalFamily:
+		return &sumDecimalAggAlloc{aggAllocBase: allocBase}, nil
+	case types.FloatFamily:
+		return &sumFloat64AggAlloc{aggAllocBase: allocBase}, nil
+	case types.IntervalFamily:
+		return &sumIntervalAggAlloc{aggAllocBase: allocBase}, nil
+	default:
+		return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
+	}
+}
+
+func newSumIntAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch t.Family() {
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &sumIntInt16AggAlloc{aggAllocBase: allocBase}, nil
+		case 32:
+			return &sumIntInt32AggAlloc{aggAllocBase: allocBase}, nil
+		default:
+			return &sumIntInt64AggAlloc{aggAllocBase: allocBase}, nil
+		}
+	default:
+		return nil, errors.Errorf("unsupported sum_int agg type %s", t.Name())
 	}
 }
