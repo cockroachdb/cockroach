@@ -93,31 +93,32 @@ EXPLAIN SELECT * FROM
   JOIN twocolumn AS c (d, e) ON a.b = c.d AND c.d = onecolumn.x
 LIMIT 1
 ----
-·                    distributed  false
-·                    vectorized   true
-limit                ·            ·
- │                   count        1
- └── hash-join       ·            ·
-      │              type         inner
-      │              equality     (x) = (x)
-      ├── hash-join  ·            ·
-      │    │         type         inner
-      │    │         equality     (x) = (x)
-      │    ├── scan  ·            ·
-      │    │         table        onecolumn@primary
-      │    │         spans        FULL SCAN
-      │    └── scan  ·            ·
-      │              table        twocolumn@primary
-      │              spans        FULL SCAN
-      └── hash-join  ·            ·
-           │         type         inner
-           │         equality     (x) = (x)
-           ├── scan  ·            ·
-           │         table        onecolumn@primary
-           │         spans        FULL SCAN
-           └── scan  ·            ·
-·                    table        twocolumn@primary
-·                    spans        FULL SCAN
+·                         distributed  false
+·                         vectorized   true
+render                    ·            ·
+ └── limit                ·            ·
+      │                   count        1
+      └── hash-join       ·            ·
+           │              type         inner
+           │              equality     (x) = (x)
+           ├── hash-join  ·            ·
+           │    │         type         inner
+           │    │         equality     (x) = (x)
+           │    ├── scan  ·            ·
+           │    │         table        twocolumn@primary
+           │    │         spans        FULL SCAN
+           │    └── scan  ·            ·
+           │              table        onecolumn@primary
+           │              spans        FULL SCAN
+           └── hash-join  ·            ·
+                │         type         inner
+                │         equality     (x) = (x)
+                ├── scan  ·            ·
+                │         table        onecolumn@primary
+                │         spans        FULL SCAN
+                └── scan  ·            ·
+·                         table        twocolumn@primary
+·                         spans        FULL SCAN
 
 # The following queries verify that only the necessary columns are scanned.
 query TTTTT
@@ -312,145 +313,122 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
            pos.n
   ] WHERE node_type <> 'values' AND field <> 'size'
 ----
-0   ·              distributed         false
-0   ·              vectorized          false
-0   render         ·                   ·
-0   ·              render 0            pktable_cat
-0   ·              render 1            nspname
-0   ·              render 2            relname
-0   ·              render 3            attname
-0   ·              render 4            pktable_cat
-0   ·              render 5            nspname
-0   ·              render 6            relname
-0   ·              render 7            attname
-0   ·              render 8            generate_series
-0   ·              render 9            update_rule
-0   ·              render 10           delete_rule
-0   ·              render 11           conname
-0   ·              render 12           relname
-0   ·              render 13           deferrability
-1   sort           ·                   ·
-1   ·              order               +nspname,+relname,+conname,+generate_series
-2   render         ·                   ·
-2   ·              render 0            CAST(NULL AS STRING)
-2   ·              render 1            CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 END
-2   ·              render 2            CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 END
-2   ·              render 3            CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
-2   ·              render 4            nspname
-2   ·              render 5            relname
-2   ·              render 6            attname
-2   ·              render 7            nspname
-2   ·              render 8            relname
-2   ·              render 9            attname
-2   ·              render 10           conname
-2   ·              render 11           generate_series
-2   ·              render 12           relname
-3   hash-join      ·                   ·
-3   ·              type                inner
-3   ·              equality            (refobjid) = (oid)
-3   ·              right cols are key  ·
-4   hash-join      ·                   ·
-4   ·              type                inner
-4   ·              equality            (objid) = (oid)
-5   render         ·                   ·
-5   ·              render 0            objid
-5   ·              render 1            refobjid
-6   virtual table  ·                   ·
-6   ·              source              pg_depend@primary
-5   cross-join     ·                   ·
-5   ·              type                inner
-5   ·              pred                (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
-6   hash-join      ·                   ·
-6   ·              type                inner
-6   ·              equality            (oid, oid) = (confrelid, conrelid)
-6   ·              right cols are key  ·
-7   hash-join      ·                   ·
-7   ·              type                inner
-7   ·              equality            (oid) = (attrelid)
-7   ·              right cols are key  ·
-8   hash-join      ·                   ·
-8   ·              type                inner
-8   ·              equality            (oid) = (relnamespace)
-9   cross-join     ·                   ·
-9   ·              type                cross
-10  hash-join      ·                   ·
-10  ·              type                inner
-10  ·              equality            (oid) = (relnamespace)
-11  render         ·                   ·
-11  ·              render 0            oid
-11  ·              render 1            nspname
-12  virtual table  ·                   ·
-12  ·              source              pg_namespace@primary
-11  merge-join     ·                   ·
-11  ·              type                inner
-11  ·              equality            (oid) = (attrelid)
-11  ·              left cols are key   ·
-11  ·              right cols are key  ·
-11  ·              mergeJoinOrder      +"(oid=attrelid)"
-12  sort           ·                   ·
-12  ·              order               +oid
-13  render         ·                   ·
-13  ·              render 0            oid
-13  ·              render 1            relname
-13  ·              render 2            relnamespace
-14  virtual table  ·                   ·
-14  ·              source              pg_class@pg_class_oid_idx
-12  sort           ·                   ·
-12  ·              order               +attrelid
-13  render         ·                   ·
-13  ·              render 0            attrelid
-13  ·              render 1            attname
-13  ·              render 2            attnum
-14  virtual table  ·                   ·
-14  ·              source              pg_attribute@pg_attribute_attrelid_idx
-10  filter         ·                   ·
-10  ·              filter              nspname = 'public'
-11  render         ·                   ·
-11  ·              render 0            oid
-11  ·              render 1            nspname
-12  virtual table  ·                   ·
-12  ·              source              pg_namespace@primary
-9   filter         ·                   ·
-9   ·              filter              relname = 'orders'
-10  render         ·                   ·
-10  ·              render 0            oid
-10  ·              render 1            relname
-10  ·              render 2            relnamespace
-11  virtual table  ·                   ·
-11  ·              source              pg_class@primary
-8   render         ·                   ·
-8   ·              render 0            attrelid
-8   ·              render 1            attname
-8   ·              render 2            attnum
-9   virtual table  ·                   ·
-9   ·              source              pg_attribute@primary
-7   filter         ·                   ·
-7   ·              filter              contype = 'f'
-8   render         ·                   ·
-8   ·              render 0            oid
-8   ·              render 1            conname
-8   ·              render 2            contype
-8   ·              render 3            condeferrable
-8   ·              render 4            condeferred
-8   ·              render 5            conrelid
-8   ·              render 6            confrelid
-8   ·              render 7            confupdtype
-8   ·              render 8            confdeltype
-8   ·              render 9            conkey
-8   ·              render 10           confkey
-9   virtual table  ·                   ·
-9   ·              source              pg_constraint@primary
-6   project set    ·                   ·
-6   ·              render 0            generate_series(1, 32)
-7   emptyrow       ·                   ·
-4   filter         ·                   ·
-4   ·              filter              relkind = 'i'
-5   render         ·                   ·
-5   ·              render 0            oid
-5   ·              render 1            relname
-5   ·              render 2            relkind
-6   virtual table  ·                   ·
-6   ·              source              pg_class@primary
+0   ·                          distributed         false
+0   ·                          vectorized          false
+0   render                     ·                   ·
+0   ·                          render 0            pktable_cat
+0   ·                          render 1            nspname
+0   ·                          render 2            relname
+0   ·                          render 3            attname
+0   ·                          render 4            pktable_cat
+0   ·                          render 5            nspname
+0   ·                          render 6            relname
+0   ·                          render 7            attname
+0   ·                          render 8            generate_series
+0   ·                          render 9            update_rule
+0   ·                          render 10           delete_rule
+0   ·                          render 11           conname
+0   ·                          render 12           relname
+0   ·                          render 13           deferrability
+1   sort                       ·                   ·
+1   ·                          order               +nspname,+relname,+conname,+generate_series
+2   render                     ·                   ·
+2   ·                          render 0            CAST(NULL AS STRING)
+2   ·                          render 1            CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 END
+2   ·                          render 2            CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 END
+2   ·                          render 3            CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
+2   ·                          render 4            nspname
+2   ·                          render 5            relname
+2   ·                          render 6            attname
+2   ·                          render 7            nspname
+2   ·                          render 8            relname
+2   ·                          render 9            attname
+2   ·                          render 10           conname
+2   ·                          render 11           generate_series
+2   ·                          render 12           relname
+3   hash-join                  ·                   ·
+3   ·                          type                inner
+3   ·                          equality            (refobjid) = (oid)
+3   ·                          right cols are key  ·
+4   hash-join                  ·                   ·
+4   ·                          type                inner
+4   ·                          equality            (objid) = (oid)
+5   render                     ·                   ·
+5   ·                          render 0            objid
+5   ·                          render 1            refobjid
+6   virtual table              ·                   ·
+6   ·                          source              pg_depend@primary
+5   cross-join                 ·                   ·
+5   ·                          type                inner
+5   ·                          pred                (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
+6   hash-join                  ·                   ·
+6   ·                          type                inner
+6   ·                          equality            (conrelid) = (oid)
+7   hash-join                  ·                   ·
+7   ·                          type                inner
+7   ·                          equality            (oid) = (relnamespace)
+8   render                     ·                   ·
+8   ·                          render 0            oid
+8   ·                          render 1            nspname
+9   virtual table              ·                   ·
+9   ·                          source              pg_namespace@primary
+8   virtual-table-lookup-join  ·                   ·
+8   ·                          table               pg_class@pg_class_oid_idx
+8   ·                          type                inner
+8   ·                          equality            (attrelid) = (oid)
+9   virtual-table-lookup-join  ·                   ·
+9   ·                          table               pg_attribute@pg_attribute_attrelid_idx
+9   ·                          type                inner
+9   ·                          equality            (confrelid) = (attrelid)
+10  filter                     ·                   ·
+10  ·                          filter              contype = 'f'
+11  render                     ·                   ·
+11  ·                          render 0            oid
+11  ·                          render 1            conname
+11  ·                          render 2            contype
+11  ·                          render 3            condeferrable
+11  ·                          render 4            condeferred
+11  ·                          render 5            conrelid
+11  ·                          render 6            confrelid
+11  ·                          render 7            confupdtype
+11  ·                          render 8            confdeltype
+11  ·                          render 9            conkey
+11  ·                          render 10           confkey
+12  virtual table              ·                   ·
+12  ·                          source              pg_constraint@primary
+7   hash-join                  ·                   ·
+7   ·                          type                inner
+7   ·                          equality            (oid) = (relnamespace)
+8   filter                     ·                   ·
+8   ·                          filter              nspname = 'public'
+9   render                     ·                   ·
+9   ·                          render 0            oid
+9   ·                          render 1            nspname
+10  virtual table              ·                   ·
+10  ·                          source              pg_namespace@primary
+8   virtual-table-lookup-join  ·                   ·
+8   ·                          table               pg_attribute@pg_attribute_attrelid_idx
+8   ·                          type                inner
+8   ·                          equality            (oid) = (attrelid)
+9   filter                     ·                   ·
+9   ·                          filter              relname = 'orders'
+10  render                     ·                   ·
+10  ·                          render 0            oid
+10  ·                          render 1            relname
+10  ·                          render 2            relnamespace
+11  virtual table              ·                   ·
+11  ·                          source              pg_class@primary
+6   project set                ·                   ·
+6   ·                          render 0            generate_series(1, 32)
+7   emptyrow                   ·                   ·
+4   filter                     ·                   ·
+4   ·                          filter              relkind = 'i'
+5   render                     ·                   ·
+5   ·                          render 0            oid
+5   ·                          render 1            relname
+5   ·                          render 2            relkind
+6   virtual table              ·                   ·
+6   ·                          source              pg_class@primary
 
 # Ensure that left joins on non-null foreign keys turn into inner joins
 statement ok

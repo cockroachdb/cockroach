@@ -2667,37 +2667,38 @@ group-by
  │    │    ├── immutable
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1)-->(2), (3)-->(4), (1,3)-->(2,4,13)
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: x:1!null y:2 k:3!null i:4 i:9!null f:10!null column14:14!null
  │    │    │    ├── immutable
- │    │    │    ├── fd: (1)-->(2), (2)-->(14), (3)-->(4), (10)==(14), (14)==(10)
- │    │    │    ├── project
- │    │    │    │    ├── columns: column14:14 x:1!null y:2
+ │    │    │    ├── fd: (1)-->(2), (2)-->(14), (10)==(14), (14)==(10), (3)-->(4)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: x:1!null y:2 i:9!null f:10!null column14:14!null
  │    │    │    │    ├── immutable
- │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: (1)-->(2), (2)-->(14)
- │    │    │    │    ├── scan xy
- │    │    │    │    │    ├── columns: x:1!null y:2
+ │    │    │    │    ├── fd: (1)-->(2), (2)-->(14), (10)==(14), (14)==(10)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: column14:14 x:1!null y:2
+ │    │    │    │    │    ├── immutable
  │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    └── fd: (1)-->(2)
- │    │    │    │    └── projections
- │    │    │    │         └── y:2::FLOAT8 [as=column14:14, outer=(2), immutable]
- │    │    │    ├── inner-join (cross)
- │    │    │    │    ├── columns: k:3!null i:4 i:9!null f:10
- │    │    │    │    ├── fd: (3)-->(4)
- │    │    │    │    ├── scan a
- │    │    │    │    │    ├── columns: k:3!null i:4
- │    │    │    │    │    ├── key: (3)
- │    │    │    │    │    └── fd: (3)-->(4)
+ │    │    │    │    │    ├── fd: (1)-->(2), (2)-->(14)
+ │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    ├── columns: x:1!null y:2
+ │    │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── y:2::FLOAT8 [as=column14:14, outer=(2), immutable]
  │    │    │    │    ├── select
  │    │    │    │    │    ├── columns: i:9!null f:10
  │    │    │    │    │    ├── scan a
  │    │    │    │    │    │    └── columns: i:9 f:10
  │    │    │    │    │    └── filters
  │    │    │    │    │         └── i:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
- │    │    │    │    └── filters (true)
- │    │    │    └── filters
- │    │    │         └── column14:14 = f:10 [outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
+ │    │    │    │    └── filters
+ │    │    │    │         └── column14:14 = f:10 [outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:3!null i:4
+ │    │    │    │    ├── key: (3)
+ │    │    │    │    └── fd: (3)-->(4)
+ │    │    │    └── filters (true)
  │    │    └── aggregations
  │    │         ├── max [as=max:13, outer=(9)]
  │    │         │    └── i:9
@@ -2775,26 +2776,28 @@ project
       │    ├── columns: computed:10 k:1!null x:6!null
       │    ├── key: (1,6)
       │    ├── fd: (1)-->(10)
-      │    ├── inner-join (hash)
+      │    ├── inner-join (cross)
       │    │    ├── columns: k:1!null i:2!null x:6!null u:8!null
       │    │    ├── key: (1,6)
       │    │    ├── fd: (1)-->(2), (2)==(8), (8)==(2)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:1!null i:2
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: k:1!null i:2!null u:8!null
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2)
-      │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: x:6!null u:8!null
-      │    │    │    ├── key: (6,8)
-      │    │    │    ├── scan xy
-      │    │    │    │    ├── columns: x:6!null
-      │    │    │    │    └── key: (6)
+      │    │    │    ├── fd: (1)-->(2), (2)==(8), (8)==(2)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:1!null i:2
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(2)
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: u:8!null
       │    │    │    │    └── key: (8)
-      │    │    │    └── filters (true)
-      │    │    └── filters
-      │    │         └── u:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      │    │    │    └── filters
+      │    │    │         └── u:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:6!null
+      │    │    │    └── key: (6)
+      │    │    └── filters (true)
       │    └── projections
       │         └── COALESCE(u:8, 10) [as=computed:10, outer=(8)]
       └── filters
