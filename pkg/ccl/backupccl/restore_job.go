@@ -1008,7 +1008,7 @@ func (r *restoreResumer) Resume(
 	}
 
 	if r.descriptorCoverage == tree.AllDescriptors {
-		if err := r.restoreSystemTables(ctx); err != nil {
+		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB); err != nil {
 			return err
 		}
 	}
@@ -1248,29 +1248,29 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
-func (r *restoreResumer) restoreSystemTables(ctx context.Context) error {
+func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) error {
 	executor := r.execCfg.InternalExecutor
 	var err error
 	for _, systemTable := range fullClusterSystemTables {
-		systemTxn := r.execCfg.DB.NewTxn(ctx, "system-restore-txn")
-		txnDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
-		// Don't clear the jobs table as to not delete the jobs that are performing
-		// the restore.
-		if systemTable != sqlbase.JobsTable.Name {
-			deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTable)
-			_, err = executor.Exec(ctx, txnDebugName+"-data-deletion", systemTxn, deleteQuery)
-			if err != nil {
-				return errors.Wrapf(err, "restoring system.%s", systemTable)
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetDebugName("system-restore-txn")
+			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
+			// Don't clear the jobs table as to not delete the jobs that are performing
+			// the restore.
+			if systemTable != sqlbase.JobsTable.Name {
+				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTable)
+				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
+				if err != nil {
+					return errors.Wrapf(err, "deleting data from system.%s", systemTable)
+				}
 			}
-		}
-		restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTable, restoreTempSystemDB, systemTable)
-		_, err = executor.Exec(ctx, txnDebugName+"-data-insert", systemTxn, restoreQuery)
-		if err != nil {
-			return errors.Wrap(err, "restoring system tables")
-		}
-		err = systemTxn.Commit(ctx)
-		if err != nil {
-			return errors.Wrap(err, "committing system systemTable restoration")
+			restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTable, restoreTempSystemDB, systemTable)
+			if _, err := executor.Exec(ctx, stmtDebugName+"-data-insert", txn, restoreQuery); err != nil {
+				return errors.Wrapf(err, "inserting data to system.%s", systemTable)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 
