@@ -1150,11 +1150,6 @@ func (c *CustomFuncs) GenerateLimitedScans(
 //
 // ----------------------------------------------------------------------
 
-// NoJoinHints returns true if no hints were specified for this join.
-func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
-	return p.Flags.Empty()
-}
-
 // CommuteJoinFlags returns a join private for the commuted join (where the left
 // and right sides are swapped). It adjusts any join flags that are specific to
 // one side.

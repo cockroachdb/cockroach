@@ -1887,16 +1887,17 @@ inner-join (hash)
            ├── variable: xysd.x:1 [type=int]
            └── variable: a.x:5 [type=int]
 
-# Case with a values cross join in the input of an InnerJoin.
+# Case with duplicated referenced columns.
 norm
 SELECT * FROM
-fk INNER JOIN (SELECT * FROM xysd CROSS JOIN (VALUES (1), (2))) ON r1 = x
+fk INNER JOIN (SELECT * FROM xysd FULL JOIN (VALUES (1), (2)) ON False) ON r1 = x
 ----
 inner-join (hash)
- ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null) column1:9(int!null)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal) column1:9(int)
  ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (3)==(5), (5)==(3)
  ├── prune: (1,2,4,6-9)
+ ├── reject-nulls: (5-9)
  ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5)
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
@@ -1905,11 +1906,13 @@ inner-join (hash)
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
  │    └── unfiltered-cols: (1-4)
- ├── inner-join (cross)
- │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null) column1:9(int!null)
- │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── full-join (cross)
+ │    ├── columns: x:5(int) y:6(int) s:7(string) d:8(decimal) column1:9(int)
+ │    ├── cardinality: [2 - ]
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-9)
+ │    ├── reject-nulls: (5-9)
  │    ├── interesting orderings: (+5) (-7,+8,+5)
  │    ├── unfiltered-cols: (5-8)
  │    ├── scan xysd
@@ -1927,7 +1930,8 @@ inner-join (hash)
  │    │    │    └── const: 1 [type=int]
  │    │    └── tuple [type=tuple{int}]
  │    │         └── const: 2 [type=int]
- │    └── filters (true)
+ │    └── filters
+ │         └── false [type=bool]
  └── filters
       └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
            ├── variable: r1:3 [type=int]
@@ -2269,7 +2273,7 @@ CREATE TABLE trade (
 ----
 
 # Regression test for #49821.
-opt format=show-ruleprops
+opt format=show-ruleprops disable=(RightAssociateJoinsLeft,RightAssociateJoinsRight)
 SELECT *
 FROM trade, status_type, trade_type, security, exchange
 WHERE st_id = t_st_id
