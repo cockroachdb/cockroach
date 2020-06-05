@@ -13,14 +13,18 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -66,24 +70,29 @@ func (e *prodJobSchedulerEnvImpl) NowExpr() string {
 // jobs that need to be executed.
 type jobScheduler struct {
 	env jobSchedulerEnv
-	db  *kv.DB
 	ex  sqlutil.InternalExecutor
 }
 
-func newJobScheduler(env jobSchedulerEnv, db *kv.DB, ex sqlutil.InternalExecutor) *jobScheduler {
+func newJobScheduler(env jobSchedulerEnv, ex sqlutil.InternalExecutor) *jobScheduler {
 	if env == nil {
 		env = prodJobSchedulerEnv
 	}
 	return &jobScheduler{
 		env: env,
-		db:  db,
 		ex:  ex,
 	}
 }
 
-// getFindJobsStatement returns SQL statement used for finding
+const allSchedules = 0
+
+// getFindSchedulesStatement returns SQL statement used for finding
 // scheduled jobs that should be started.
-func (s *jobScheduler) getFindJobsStatement() string {
+func getFindSchedulesStatement(env jobSchedulerEnv, maxSchedules int64) string {
+	limitClause := ""
+	if maxSchedules > 0 {
+		limitClause = fmt.Sprintf("LIMIT %d", maxSchedules)
+	}
+
 	return fmt.Sprintf(
 		`
 SELECT
@@ -95,11 +104,13 @@ SELECT
   ) AS num_running, S.*
 FROM %s S
 WHERE next_run < %s
-`, s.env.SystemJobsTableName(), createdByName, s.env.ScheduledJobsTableName(), s.env.NowExpr())
+ORDER BY next_run
+%s
+`, env.SystemJobsTableName(), createdByName, env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
 }
 
 // unmarshalScheduledJob is a helper to deserialize a row returned by
-// getFindJobsStatement() into a ScheduledJob
+// getFindSchedulesStatement() into a ScheduledJob
 func (s *jobScheduler) unmarshalScheduledJob(
 	row []tree.Datum, cols []sqlbase.ResultColumn,
 ) (*ScheduledJob, int64, error) {
@@ -141,8 +152,13 @@ func (s *jobScheduler) processSchedule(
 	// Schedule the next job run.
 	// We do this step early, before the actual execution, to grab a lock on
 	// the scheduled_jobs table.
-	if err := schedule.ScheduleNextRun(); err != nil {
-		return err
+	if schedule.HasRecurringSchedule() {
+		if err := schedule.ScheduleNextRun(); err != nil {
+			return err
+		}
+	} else {
+		// It's a one-off schedule.  Clear next run to indicate that this schedule executed.
+		schedule.SetNextRun(time.Time{})
 	}
 
 	if err := schedule.Update(ctx, s.ex, txn); err != nil {
@@ -163,11 +179,13 @@ func (s *jobScheduler) processSchedule(
 	return schedule.Update(ctx, s.ex, txn)
 }
 
-func (s *jobScheduler) executeSchedules(ctx context.Context, txn *kv.Txn) error {
+func (s *jobScheduler) executeSchedules(
+	ctx context.Context, maxSchedules int64, txn *kv.Txn,
+) error {
+	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
 	rows, cols, err := s.ex.QueryWithCols(ctx, "find-scheduled-jobs", nil,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		s.getFindJobsStatement(),
-	)
+		findSchedulesStmt)
 
 	if err != nil {
 		return err
@@ -189,4 +207,77 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, txn *kv.Txn) error 
 	return nil
 }
 
-// TODO(yevgeniy): Implement daemon to periodically call executeSchedules
+var schedulerEnabledSetting = settings.RegisterBoolSetting(
+	"jobs.scheduler.enabled",
+	"enable/disable job scheduler",
+	true)
+
+var schedulerPaceSetting = settings.RegisterDurationSetting(
+	"jobs.scheduler.pace",
+	"how often to scan system.scheduled_jobs table",
+	time.Minute,
+)
+
+var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
+	"jobs.scheduler.max_jobs_per_iteration",
+	"how many schedules to start per iteration",
+	10,
+)
+
+// Returns amount of time to wait before starting initial scan.
+// Package visible for testing.
+var getInitialScanDelay = func() time.Duration {
+	// By default, we'll wait between 2 and 5 minutes before performing initial scan.
+	return time.Minute * time.Duration(3+rand.Intn(3))
+}
+
+// Returns duration to wait before scanning scheduled_jobs.
+// Package visible for testing.
+const minPacePeriod = 10 * time.Second
+
+var getWaitPeriod = func(sv *settings.Values) time.Duration {
+	if !schedulerEnabledSetting.Get(sv) {
+		// Retry after a minute
+		return 5 * time.Minute
+	}
+
+	pace := schedulerPaceSetting.Get(sv)
+	if pace < minPacePeriod {
+		pace = minPacePeriod
+	}
+
+	return pace
+}
+
+// StartJobSchedulerDaemon starts a daemon responsible for periodically scanning
+// system.scheduled_jobs table to find and executing eligible scheduled jobs.
+func StartJobSchedulerDaemon(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	sv *settings.Values,
+	env jobSchedulerEnv,
+	db *kv.DB,
+	ex sqlutil.InternalExecutor,
+) {
+	scheduler := newJobScheduler(env, ex)
+	waitPeriod := getInitialScanDelay()
+
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		for {
+			select {
+			case <-stopper.ShouldStop():
+				return
+			case <-time.After(waitPeriod):
+				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(sv)
+				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return scheduler.executeSchedules(ctx, maxSchedules, txn)
+				})
+				if err != nil {
+					// TODO(yevgeniy): Add more visibility into failed daemon runs.
+					log.Errorf(ctx, "error executing schedules: %+v", err)
+				}
+				waitPeriod = getWaitPeriod(sv)
+			}
+		}
+	})
+}

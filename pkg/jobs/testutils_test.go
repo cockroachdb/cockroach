@@ -50,9 +50,11 @@ func (t *testJobSchedulerEnv) Now() time.Time {
 	return t.now
 }
 
+const timestampTZLayout = "2006-01-02 15:04:05.000000"
+const timestampTZWithTZLayout = "2006-01-02 15:04:05.000000 -0700 MST"
+
 func (t *testJobSchedulerEnv) NowExpr() string {
-	return fmt.Sprintf("TIMESTAMPTZ '%s'",
-		t.now.Format("2020-01-02 03:04:05.999999999"))
+	return fmt.Sprintf("TIMESTAMPTZ '%s'", t.now.Format(timestampTZLayout))
 }
 
 // Returns schema for the scheduled jobs table.

@@ -13,14 +13,20 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe/testdata/src/github.com/cockroachdb/errors"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gorhill/cronexpr"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +75,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 				}))
 
 			// Verify the job has expected nextRun time.
-			expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.now)
+			expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.Now())
 			loaded := h.loadJob(t, j.ScheduleID())
 			require.Equal(t, expectedRunTime, loaded.NextRun())
 
@@ -78,13 +84,13 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 
 			// The job should not run -- it should be rescheduled `recheckJobAfter` time in the
 			// future.
-			c := newJobScheduler(h.env, h.kvDB, h.ex)
-			require.NoError(t, c.executeSchedules(ctx, nil))
+			s := newJobScheduler(h.env, h.ex)
+			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
 
 			if wait == jobspb.ScheduleDetails_WAIT {
-				expectedRunTime = h.env.now.Add(recheckRunningAfter)
+				expectedRunTime = h.env.Now().Add(recheckRunningAfter)
 			} else {
-				expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.now)
+				expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
 			}
 			loaded = h.loadJob(t, j.ScheduleID())
 			require.Equal(t, expectedRunTime, loaded.NextRun())
@@ -110,7 +116,7 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 		}))
 
 	// Verify the job has expected nextRun time.
-	expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.now)
+	expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.Now())
 	loaded := h.loadJob(t, j.ScheduleID())
 	require.Equal(t, expectedRunTime, loaded.NextRun())
 
@@ -118,10 +124,164 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 	h.env.now = expectedRunTime.Add(time.Second)
 
 	// Execute the job and verify it has the next run scheduled.
-	c := newJobScheduler(h.env, h.kvDB, h.ex)
-	require.NoError(t, c.executeSchedules(ctx, nil))
+	s := newJobScheduler(h.env, h.ex)
+	require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
 
-	expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.now)
+	expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
 	loaded = h.loadJob(t, j.ScheduleID())
 	require.Equal(t, expectedRunTime, loaded.NextRun())
+}
+
+func TestJobSchedulerDaemonInitialScanDelay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for i := 0; i < 100; i++ {
+		require.Greater(t, int64(getInitialScanDelay()), int64(time.Minute))
+	}
+}
+
+func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sv := settings.Values{}
+	schedulerEnabledSetting.Override(&sv, false)
+
+	// When disabled, we wait 5 minutes before rechecking.
+	require.True(t, 5*time.Minute == getWaitPeriod(&sv))
+	schedulerEnabledSetting.Override(&sv, true)
+
+	// When pace is too low, we use something more reasonable.
+	schedulerPaceSetting.Override(&sv, time.Nanosecond)
+	require.True(t, minPacePeriod == getWaitPeriod(&sv))
+
+	// Otherwise, we use user specified setting.
+	pace := 42 * time.Second
+	schedulerPaceSetting.Override(&sv, pace)
+	require.True(t, pace == getWaitPeriod(&sv))
+}
+
+func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create few, one-off schedules.
+	const numJobs = 5
+	scheduleRunTime := h.env.Now().Add(time.Hour)
+	var scheduleIDs []int64
+	for i := 0; i < numJobs; i++ {
+		schedule := h.newScheduledJob(t, "test_job", "SELECT 42")
+		schedule.SetNextRun(scheduleRunTime)
+		require.NoError(t, schedule.Create(ctx, h.ex, nil))
+		scheduleIDs = append(scheduleIDs, schedule.ScheduleID())
+	}
+
+	// Sort by schedule ID.
+	sort.Slice(scheduleIDs, func(i, j int) bool { return scheduleIDs[i] < scheduleIDs[j] })
+
+	// Make daemon run fast.
+	defer func(f func(_ *settings.Values) time.Duration) {
+		getWaitPeriod = f
+	}(getWaitPeriod)
+
+	getWaitPeriod = func(_ *settings.Values) time.Duration {
+		return 10 * time.Millisecond
+	}
+	defer func(f func() time.Duration) {
+		getInitialScanDelay = f
+	}(getInitialScanDelay)
+	getInitialScanDelay = func() time.Duration { return 0 }
+
+	stopper := stop.NewStopper()
+	sv := settings.Values{}
+	StartJobSchedulerDaemon(ctx, stopper, &sv, h.env, h.kvDB, h.ex)
+
+	// Advance our fake time 1 hour forward (plus a bit)
+	h.env.now = h.env.now.Add(time.Hour + time.Second)
+
+	expected := [][]string{
+		{fmt.Sprintf("%d", scheduleIDs[0]), "NULL"},
+		{fmt.Sprintf("%d", scheduleIDs[1]), "NULL"},
+		{fmt.Sprintf("%d", scheduleIDs[2]), "NULL"},
+		{fmt.Sprintf("%d", scheduleIDs[3]), "NULL"},
+		{fmt.Sprintf("%d", scheduleIDs[4]), "NULL"},
+	}
+	query := fmt.Sprintf("SELECT schedule_id, next_run FROM %s", h.env.scheduledJobsTableName)
+
+	testutils.SucceedsSoon(t, func() error {
+		results := h.sqlDB.QueryStr(t, query)
+		if reflect.DeepEqual(expected, results) {
+			return nil
+		}
+		return errors.Newf("still waiting for matching jobs: res=%+v", results)
+	})
+
+	stopper.Stop(ctx)
+}
+
+func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create few, one-off schedules.
+	const numJobs = 5
+	scheduleRunTime := h.env.Now().Add(time.Hour)
+	scheduleRunTimeStr := scheduleRunTime.Format(timestampTZWithTZLayout)
+	var scheduleIDs []int64
+	for i := 0; i < numJobs; i++ {
+		schedule := h.newScheduledJob(t, "test_job", "SELECT 42")
+		schedule.SetNextRun(scheduleRunTime)
+		require.NoError(t, schedule.Create(ctx, h.ex, nil))
+		scheduleIDs = append(scheduleIDs, schedule.ScheduleID())
+	}
+
+	// Sort by schedule ID.
+	sort.Slice(scheduleIDs, func(i, j int) bool { return scheduleIDs[i] < scheduleIDs[j] })
+
+	// Make daemon execute initial scan immediately, but block subsequent scans.
+	defer func(f func(_ *settings.Values) time.Duration) {
+		getWaitPeriod = f
+	}(getWaitPeriod)
+
+	getWaitPeriod = func(_ *settings.Values) time.Duration {
+		return time.Hour
+	}
+
+	defer func(f func() time.Duration) {
+		getInitialScanDelay = f
+	}(getInitialScanDelay)
+	getInitialScanDelay = func() time.Duration { return 0 }
+
+	// Advance our fake time 1 hour forward (plus a bit) so that the daemon finds matching jobs.
+	h.env.now = h.env.now.Add(time.Hour + time.Second)
+
+	stopper := stop.NewStopper()
+	sv := settings.Values{}
+	schedulerMaxJobsPerIterationSetting.Override(&sv, 2)
+	StartJobSchedulerDaemon(ctx, stopper, &sv, h.env, h.kvDB, h.ex)
+
+	// We expect the first 2 jobs to be executed.
+	expected := [][]string{
+		{fmt.Sprintf("%d", scheduleIDs[0]), "NULL"},
+		{fmt.Sprintf("%d", scheduleIDs[1]), "NULL"},
+		{fmt.Sprintf("%d", scheduleIDs[2]), scheduleRunTimeStr},
+		{fmt.Sprintf("%d", scheduleIDs[3]), scheduleRunTimeStr},
+		{fmt.Sprintf("%d", scheduleIDs[4]), scheduleRunTimeStr},
+	}
+	query := fmt.Sprintf("SELECT schedule_id, next_run FROM %s", h.env.scheduledJobsTableName)
+
+	testutils.SucceedsSoon(t, func() error {
+		results := h.sqlDB.QueryStr(t, query)
+		if reflect.DeepEqual(expected, results) {
+			return nil
+		}
+		return errors.Newf("still waiting for matching jobs: res=%+v expected=%+v", results, expected)
+	})
+
+	stopper.Stop(ctx)
 }
