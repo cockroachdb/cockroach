@@ -619,21 +619,20 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 			ClusterSettingsUpdater: st.MakeUpdater(),
 		}
 	}
-	return startTenant(
+	sqlCfg.TenantKVAddrs = []string{ts.RPCAddr()}
+	return StartTenant(
 		ctx,
 		ts.Stopper(),
 		ts.Cfg.ClusterName,
-		ts.RPCAddr(),
 		baseCfg,
 		sqlCfg,
 	)
 }
 
-func startTenant(
+func StartTenant(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
-	tsRPCAddr string,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (pgAddr string, _ error) {
@@ -676,13 +675,17 @@ func startTenant(
 	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
 
 	{
-		rsvlr, err := resolver.NewResolver(tsRPCAddr)
-		if err != nil {
-			return "", err
+		rs := make([]resolver.Resolver, len(sqlCfg.TenantKVAddrs))
+		for i := range rs {
+			var err error
+			rs[i], err = resolver.NewResolver(sqlCfg.TenantKVAddrs[i])
+			if err != nil {
+				return "", err
+			}
 		}
 		// NB: gossip server is not bound to any address, so the advertise addr does
 		// not matter.
-		args.gossip.Start(pgL.Addr(), []resolver.Resolver{rsvlr})
+		args.gossip.Start(pgL.Addr(), rs)
 	}
 
 	if err := s.start(ctx,
