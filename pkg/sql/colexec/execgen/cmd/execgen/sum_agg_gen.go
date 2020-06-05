@@ -18,23 +18,61 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+func (o lastArgWidthOverload) AssignAddForSumInt(
+	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
+) string {
+	switch o.lastArgTypeOverload.CanonicalTypeFamily {
+	case types.IntFamily:
+		var c intCustomizer
+		// The result of "sum_int" computation is always INT8, regardless of
+		// the argument type width, so we use special assignFunc that
+		// "promotes" the result to be of types.Int equivalent.
+		return c.getBinOpAssignFuncWithPromotedReturnType(types.Int)(
+			&o, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol,
+		)
+	}
+	colexecerror.InternalError("unsupported sum_int agg type")
+	// This code is unreachable, but the compiler cannot infer that.
+	return ""
+}
+
+var _ = lastArgWidthOverload{}.AssignAddForSumInt
 
 const sumAggTmpl = "pkg/sql/colexec/sum_agg_tmpl.go"
 
-func genSumAgg(inputFileContents string, wr io.Writer) error {
+func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
+	kindReplacement := ""
+	retGoTypeReplacement := ifIntegerType + `apd.Decimal{{else}}{{.GoType}}{{end}}`
+	retTypeReplacement := ifIntegerType + `Decimal{{else}}{{.VecMethod}}{{end}}`
+	if isSumInt {
+		kindReplacement = "Int"
+		retGoTypeReplacement = "int64"
+		retTypeReplacement = "Int64"
+	}
 	r := strings.NewReplacer(
+		"_KIND", kindReplacement,
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
+		"_IF_INTEGER_TYPE", ifIntegerType,
+		"_RET_GOTYPE", retGoTypeReplacement,
+		"_RET_TYPE", retTypeReplacement,
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
 
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
-	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 6))
+	if isSumInt {
+		// The result of computation of sum_int aggregation is INT8 regardless
+		// of the argument type width, and we need to use the custom function
+		// defined above that promotes the result type.
+		s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAddForSumInt", 6))
+	} else {
+		s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 6))
+	}
 
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 4)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4}}`)
@@ -44,15 +82,38 @@ func genSumAgg(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	overloads := sameTypeBinaryOpToOverloads[tree.Plus]
-	// We want to omit the overload that operates on datum-backed vectors.
-	if overloads[len(overloads)-1].CanonicalTypeFamily != typeconv.DatumVecCanonicalTypeFamily {
-		colexecerror.InternalError("unexpectedly plus overload on datum-backed types is not the last one")
+	var overloads []*oneArgOverload
+	if isSumInt {
+		// sum_int operates only on integers.
+		for _, ov := range sameTypeBinaryOpToOverloads[tree.Plus] {
+			if ov.CanonicalTypeFamily == typeconv.TypeFamilyToCanonicalTypeFamily(types.Int.Family()) {
+				overloads = append(overloads, ov)
+				break
+			}
+		}
+	} else {
+		// We support summation on ints, decimals, floats, and intervals. The
+		// support of int summation requires special attention because it
+		// returns a decimal result.
+		overloads = append(overloads, getDecimalPlusIntAsOneArgOverload())
+		for _, typ := range []*types.T{types.Decimal, types.Float, types.Interval} {
+			for _, ov := range sameTypeBinaryOpToOverloads[tree.Plus] {
+				if ov.CanonicalTypeFamily == typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+					overloads = append(overloads, ov)
+					break
+				}
+			}
+		}
 	}
-	overloads = overloads[:len(overloads)-1]
 	return tmpl.Execute(wr, overloads)
 }
 
 func init() {
-	registerGenerator(genSumAgg, "sum_agg.eg.go", sumAggTmpl)
+	sumAggGenerator := func(isSumInt bool) generator {
+		return func(inputFileContents string, wr io.Writer) error {
+			return genSumAgg(inputFileContents, wr, isSumInt)
+		}
+	}
+	registerGenerator(sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go", sumAggTmpl)
+	registerGenerator(sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go", sumAggTmpl)
 }

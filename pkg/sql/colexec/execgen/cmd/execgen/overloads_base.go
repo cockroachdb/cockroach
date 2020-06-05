@@ -942,3 +942,8 @@ func getDatumVecVariableName(leftCol, rightCol string, preferRightSide bool) str
 		return preferredSide
 	}
 }
+
+// ifIntegerType defines the template code that can be used to check
+// whether the resolved overload (which must be at the '.' - dot) operates
+// on an integer type.
+const ifIntegerType = `{{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32") (eq .VecMethod "Int64")}}`

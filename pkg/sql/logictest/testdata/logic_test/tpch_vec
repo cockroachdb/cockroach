@@ -769,7 +769,7 @@ EXPLAIN (VEC) SELECT l_shipmode, sum(CASE WHEN o_orderpriority = '1-URGENT' or o
 │
 └ Node 1
   └ *colexec.sortOp
-    └ *rowexec.hashAggregator
+    └ *colexec.hashAggregator
       └ *rowexec.joinReader
         └ *rowexec.indexJoiner
           └ *colexec.colBatchScan

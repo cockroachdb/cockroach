@@ -63,10 +63,6 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	// 3. overloadHelper struct from non-integer average aggregates (because
 	// only integer ones will be actually using it).
 
-	// ifIntegerType defines the template code that can be used to check
-	// whether the resolved overload (which must be at the '.' - dot) operates
-	// on an integer type.
-	const ifIntegerType = `{{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32") (eq .VecMethod "Int64")}}`
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
