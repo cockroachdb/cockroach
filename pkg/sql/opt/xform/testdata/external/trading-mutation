@@ -886,7 +886,7 @@ ORDER BY extract(day from d.TransactionDate)
 sort
  ├── columns: extract:45 totalsell:40!null totalbuy:42!null totalprofit:44!null
  ├── stable
- ├── stats: [rows=1171234.57, distinct(45)=1171234.57, null(45)=0]
+ ├── stats: [rows=750327.164, distinct(45)=750327.164, null(45)=0]
  ├── key: (45)
  ├── fd: (45)-->(40,42,44)
  ├── ordering: +45
@@ -894,25 +894,25 @@ sort
       ├── columns: sum:40!null sum:42!null sum:44!null column45:45
       ├── grouping columns: column45:45
       ├── stable
-      ├── stats: [rows=1171234.57, distinct(45)=1171234.57, null(45)=0]
+      ├── stats: [rows=750327.164, distinct(45)=750327.164, null(45)=0]
       ├── key: (45)
       ├── fd: (45)-->(40,42,44)
       ├── project
       │    ├── columns: column39:39!null column41:41!null column43:43!null column45:45
       │    ├── stable
-      │    ├── stats: [rows=1198631.87, distinct(45)=1171234.57, null(45)=0]
+      │    ├── stats: [rows=1198631.87, distinct(45)=750327.164, null(45)=0]
       │    ├── inner-join (hash)
       │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null id:20!null cardsinfo.dealerid:26!null cardsinfo.cardid:27!null
       │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    ├── stats: [rows=1198631.87, distinct(3)=1171234.57, null(3)=0, distinct(4)=37420.3552, null(4)=0, distinct(13)=1171234.57, null(13)=0, distinct(20)=37420.3552, null(20)=0]
+      │    │    ├── stats: [rows=1198631.87, distinct(3)=750327.164, null(3)=0, distinct(4)=37420.3552, null(4)=0, distinct(20)=37420.3552, null(20)=0]
       │    │    ├── key: (5,13,27)
-      │    │    ├── fd: ()-->(1,2,11,12,26), (3-5)-->(6,7), (13)-->(14,15), (20)==(4,27), (27)==(4,20), (3)==(13), (13)==(3), (4)==(20,27)
+      │    │    ├── fd: ()-->(1,2,11,12,26), (3-5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3), (20)==(4,27), (27)==(4,20), (4)==(20,27)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
       │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── stats: [rows=1171234.57, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1171234.57, null(3)=0, distinct(4)=56999.9999, null(4)=0, distinct(5)=1091498.71, null(5)=0, distinct(6)=1091498.71, null(6)=0, distinct(7)=1091498.71, null(7)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1171234.57, null(13)=0, distinct(14)=551608.449, null(14)=0, distinct(15)=551608.449, null(15)=0]
       │    │    │    ├── key: (4,5,13)
-      │    │    │    ├── fd: ()-->(1,2,11,12), (13)-->(14,15), (3-5)-->(6,7), (3)==(13), (13)==(3)
+      │    │    │    ├── fd: ()-->(1,2,11,12), (3-5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3)
       │    │    │    ├── scan transactiondetails
       │    │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null
       │    │    │    │    ├── constraint: /1/2/3/4/5: [/1/false/'2020-02-23 00:00:00+00:00' - /1/false/'2020-03-01 00:00:00+00:00']
