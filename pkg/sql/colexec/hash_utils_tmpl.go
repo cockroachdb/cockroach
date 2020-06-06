@@ -30,9 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
 
 // _GOTYPESLICE is a template Go type slice variable.

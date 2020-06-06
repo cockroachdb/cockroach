@@ -32,9 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
 
 // _CANONICAL_TYPE_FAMILY is the template variable.
