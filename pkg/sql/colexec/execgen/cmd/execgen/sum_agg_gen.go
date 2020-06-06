@@ -22,7 +22,7 @@ import (
 )
 
 type sumTmplInfo struct {
-	Kind           string
+	SumKind        string
 	NeedsHelper    bool
 	InputVecMethod string
 	RetGoType      string
@@ -77,7 +77,7 @@ const sumAggTmpl = "pkg/sql/colexec/sum_agg_tmpl.go"
 
 func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	r := strings.NewReplacer(
-		"_KIND", "{{.Kind}}",
+		"_SUMKIND", "{{.SumKind}}",
 		"_RET_GOTYPE", `{{.RetGoType}}`,
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
@@ -98,11 +98,11 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 
 	var (
 		supportedTypes []*types.T
-		kind           string
+		sumKind        string
 	)
 	if isSumInt {
 		supportedTypes = []*types.T{types.Int2, types.Int4, types.Int}
-		kind = "Int"
+		sumKind = "Int"
 	} else {
 		supportedTypes = []*types.T{types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval}
 	}
@@ -132,7 +132,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 			}
 		}
 		tmplInfos = append(tmplInfos, sumTmplInfo{
-			Kind:           kind,
+			SumKind:        sumKind,
 			NeedsHelper:    needsHelper,
 			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
 			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
@@ -140,7 +140,13 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 			addOverload:    getAddOverload(inputType, retType),
 		})
 	}
-	return tmpl.Execute(wr, tmplInfos)
+	return tmpl.Execute(wr, struct {
+		SumKind string
+		Infos   []sumTmplInfo
+	}{
+		SumKind: sumKind,
+		Infos:   tmplInfos,
+	})
 }
 
 func init() {
@@ -149,6 +155,6 @@ func init() {
 			return genSumAgg(inputFileContents, wr, isSumInt)
 		}
 	}
-	registerGenerator(sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go", sumAggTmpl)
-	registerGenerator(sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go", sumAggTmpl)
+	registerAggGenerator(sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go", sumAggTmpl)
+	registerAggGenerator(sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go", sumAggTmpl)
 }

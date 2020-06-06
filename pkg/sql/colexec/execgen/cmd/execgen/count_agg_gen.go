@@ -19,7 +19,7 @@ import (
 const countAggTmpl = "pkg/sql/colexec/count_agg_tmpl.go"
 
 func genCountAgg(inputFileContents string, wr io.Writer) error {
-	s := strings.ReplaceAll(inputFileContents, "_KIND", "{{.Kind}}")
+	s := strings.ReplaceAll(inputFileContents, "_COUNTKIND", "{{.CountKind}}")
 
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_COUNT", 4)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateCount" buildDict "Global" . "ColWithNulls" $4}}`)
@@ -30,17 +30,17 @@ func genCountAgg(inputFileContents string, wr io.Writer) error {
 	}
 
 	return tmpl.Execute(wr, []struct {
-		Kind string
+		CountKind string
 	}{
 		// "Rows" count aggregate performs COUNT(*) aggregation, which counts
 		// every row in the result unconditionally.
-		{Kind: "Rows"},
+		{CountKind: "Rows"},
 		// "" ("pure") count aggregate performs COUNT(col) aggregation, which
 		// counts every row in the result where the value of col is not null.
-		{Kind: ""},
+		{CountKind: ""},
 	})
 }
 
 func init() {
-	registerGenerator(genCountAgg, "count_agg.eg.go", countAggTmpl)
+	registerAggGenerator(genCountAgg, "count_agg.eg.go", countAggTmpl)
 }
