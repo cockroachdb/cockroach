@@ -54,7 +54,7 @@ func _ASSIGN_ADD(_, _, _, _, _, _ string) {
 
 // */}}
 
-func newAvgAggAlloc(
+func newAvg_AGG_KINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
@@ -63,7 +63,7 @@ func newAvgAggAlloc(
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return &avg_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
+			return &avg_TYPE_AGG_KINDAggAlloc{allocator: allocator, allocSize: allocSize}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -74,8 +74,10 @@ func newAvgAggAlloc(
 // {{range .}}
 // {{range .WidthOverloads}}
 
-type avg_TYPEAgg struct {
-	groups  []bool
+type avg_TYPE_AGG_KINDAgg struct {
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
+	groups []bool
+	// {{end}}
 	scratch struct {
 		curIdx int
 		// curSum keeps track of the sum of elements belonging to the current group,
@@ -95,18 +97,20 @@ type avg_TYPEAgg struct {
 	}
 }
 
-var _ aggregateFunc = &avg_TYPEAgg{}
+var _ aggregateFunc = &avg_TYPE_AGG_KINDAgg{}
 
-const sizeOfAvg_TYPEAgg = int64(unsafe.Sizeof(avg_TYPEAgg{}))
+const sizeOfAvg_TYPE_AGG_KINDAgg = int64(unsafe.Sizeof(avg_TYPE_AGG_KINDAgg{}))
 
-func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
+func (a *avg_TYPE_AGG_KINDAgg) Init(groups []bool, v coldata.Vec) {
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	a.groups = groups
+	// {{end}}
 	a.scratch.vec = v.TemplateType()
 	a.scratch.nulls = v.Nulls()
 	a.Reset()
 }
 
-func (a *avg_TYPEAgg) Reset() {
+func (a *avg_TYPE_AGG_KINDAgg) Reset() {
 	a.scratch.curIdx = -1
 	a.scratch.curSum = zero_TYPEValue
 	a.scratch.curCount = 0
@@ -114,15 +118,15 @@ func (a *avg_TYPEAgg) Reset() {
 	a.scratch.nulls.UnsetNulls()
 }
 
-func (a *avg_TYPEAgg) CurrentOutputIndex() int {
+func (a *avg_TYPE_AGG_KINDAgg) CurrentOutputIndex() int {
 	return a.scratch.curIdx
 }
 
-func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
+func (a *avg_TYPE_AGG_KINDAgg) SetOutputIndex(idx int) {
 	a.scratch.curIdx = idx
 }
 
-func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *avg_TYPE_AGG_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	inputLen := b.Length()
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec.TemplateType(), vec.Nulls()
@@ -153,7 +157,7 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
-func (a *avg_TYPEAgg) Flush() {
+func (a *avg_TYPE_AGG_KINDAgg) Flush() {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
@@ -165,22 +169,22 @@ func (a *avg_TYPEAgg) Flush() {
 	a.scratch.curIdx++
 }
 
-func (a *avg_TYPEAgg) HandleEmptyInputScalar() {
+func (a *avg_TYPE_AGG_KINDAgg) HandleEmptyInputScalar() {
 	a.scratch.nulls.SetNull(0)
 }
 
-type avg_TYPEAggAlloc struct {
+type avg_TYPE_AGG_KINDAggAlloc struct {
 	allocator *colmem.Allocator
 	allocSize int64
-	aggFuncs  []avg_TYPEAgg
+	aggFuncs  []avg_TYPE_AGG_KINDAgg
 }
 
-var _ aggregateFuncAlloc = &avg_TYPEAggAlloc{}
+var _ aggregateFuncAlloc = &avg_TYPE_AGG_KINDAggAlloc{}
 
-func (a *avg_TYPEAggAlloc) newAggFunc() aggregateFunc {
+func (a *avg_TYPE_AGG_KINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvg_TYPEAgg * a.allocSize)
-		a.aggFuncs = make([]avg_TYPEAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOfAvg_TYPE_AGG_KINDAgg * a.allocSize)
+		a.aggFuncs = make([]avg_TYPE_AGG_KINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
@@ -195,9 +199,10 @@ func (a *avg_TYPEAggAlloc) newAggFunc() aggregateFunc {
 // of the ith row. If this is the first row of a new group, then the average is
 // computed for the current group. If no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
-func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
-
+func _ACCUMULATE_AVG(a *_AGG_TYPE_AGG_KINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
 	// {{define "accumulateAvg"}}
+
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	if a.groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null. If
@@ -225,6 +230,8 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 		a.scratch.foundNonNullForCurrentGroup = false
 		// {{end}}
 	}
+	// {{end}}
+
 	var isNull bool
 	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)

@@ -129,21 +129,53 @@ func newAggregateFuncsAlloc(
 				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_AVG:
-			funcAllocs[i], err = newAvgAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newAvgHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newAvgOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
-			funcAllocs[i], err = newSumAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newSumHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newSumOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
-			funcAllocs[i] = newCountRowsAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newCountRowsHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newCountRowsOrderedAggAlloc(allocator, allocSize)
+			}
 		case execinfrapb.AggregatorSpec_COUNT:
-			funcAllocs[i] = newCountAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newCountHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newCountOrderedAggAlloc(allocator, allocSize)
+			}
 		case execinfrapb.AggregatorSpec_MIN:
-			funcAllocs[i], err = newMinAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newMinHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newMinOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_MAX:
-			funcAllocs[i], err = newMaxAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newMaxHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newMaxOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_BOOL_AND:
-			funcAllocs[i] = newBoolAndAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newBoolAndHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newBoolAndOrderedAggAlloc(allocator, allocSize)
+			}
 		case execinfrapb.AggregatorSpec_BOOL_OR:
-			funcAllocs[i] = newBoolOrAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newBoolOrHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newBoolOrOrderedAggAlloc(allocator, allocSize)
+			}
 		// NOTE: if you're adding an implementation of a new aggregate
 		// function, make sure to account for the memory under that struct in
 		// its constructor.
@@ -165,7 +197,7 @@ func newAggregateFuncsAlloc(
 // sizeOfAggregateFunc is the size of some aggregateFunc implementation.
 // countAgg was chosen arbitrarily, but it's important that we use a pointer to
 // the aggregate function struct.
-const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countAgg{}))
+const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countHashAgg{}))
 
 func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 	if len(a.returnFuncs) == 0 {

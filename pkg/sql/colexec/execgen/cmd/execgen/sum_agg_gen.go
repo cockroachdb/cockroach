@@ -54,5 +54,5 @@ func genSumAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSumAgg, "sum_agg.eg.go", sumAggTmpl)
+	registerAggGenerator(genSumAgg, "sum_%s_agg.eg.go", sumAggTmpl)
 }

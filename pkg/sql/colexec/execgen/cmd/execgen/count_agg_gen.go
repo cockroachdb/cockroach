@@ -42,5 +42,5 @@ func genCountAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genCountAgg, "count_agg.eg.go", countAggTmpl)
+	registerAggGenerator(genCountAgg, "count_%s_agg.eg.go", countAggTmpl)
 }

@@ -28,47 +28,54 @@ import (
 
 // {{range .}}
 
-func newCount_KINDAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
-	return &count_KINDAggAlloc{allocator: allocator, allocSize: allocSize}
+func newCount_KIND_AGG_KINDAggAlloc(
+	allocator *colmem.Allocator, allocSize int64,
+) aggregateFuncAlloc {
+	return &count_KIND_AGG_KINDAggAlloc{allocator: allocator, allocSize: allocSize}
 }
 
-// count_KINDAgg supports either COUNT(*) or COUNT(col) aggregate.
-type count_KINDAgg struct {
+// count_KIND_AGG_KINDAgg supports either COUNT(*) or COUNT(col) aggregate.
+type count_KIND_AGG_KINDAgg struct {
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	groups []bool
+	// {{end}}
 	vec    []int64
 	nulls  *coldata.Nulls
 	curIdx int
 	curAgg int64
 }
 
-var _ aggregateFunc = &count_KINDAgg{}
+var _ aggregateFunc = &count_KIND_AGG_KINDAgg{}
 
-const sizeOfCount_KINDAgg = int64(unsafe.Sizeof(count_KINDAgg{}))
+const sizeOfCount_KIND_AGG_KINDAgg = int64(unsafe.Sizeof(count_KIND_AGG_KINDAgg{}))
 
-func (a *count_KINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *count_KIND_AGG_KINDAgg) Init(groups []bool, vec coldata.Vec) {
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	a.groups = groups
+	// {{end}}
 	a.vec = vec.Int64()
 	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
-func (a *count_KINDAgg) Reset() {
+func (a *count_KIND_AGG_KINDAgg) Reset() {
 	a.curIdx = -1
 	a.curAgg = 0
 	a.nulls.UnsetNulls()
 }
 
-func (a *count_KINDAgg) CurrentOutputIndex() int {
+func (a *count_KIND_AGG_KINDAgg) CurrentOutputIndex() int {
 	return a.curIdx
 }
 
-func (a *count_KINDAgg) SetOutputIndex(idx int) {
+func (a *count_KIND_AGG_KINDAgg) SetOutputIndex(idx int) {
 	a.curIdx = idx
 }
 
-func (a *count_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *count_KIND_AGG_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	inputLen := b.Length()
 	sel := b.Selection()
+	var i int
 
 	// {{if not (eq .Kind "Rows")}}
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
@@ -77,11 +84,11 @@ func (a *count_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	nulls := b.ColVec(int(inputIdxs[0])).Nulls()
 	if nulls.MaybeHasNulls() {
 		if sel != nil {
-			for _, i := range sel[:inputLen] {
+			for _, i = range sel[:inputLen] {
 				_ACCUMULATE_COUNT(a, nulls, i, true)
 			}
 		} else {
-			for i := range a.groups[:inputLen] {
+			for i = 0; i < inputLen; i++ {
 				_ACCUMULATE_COUNT(a, nulls, i, true)
 			}
 		}
@@ -89,38 +96,38 @@ func (a *count_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	// {{end}}
 	{
 		if sel != nil {
-			for _, i := range sel[:inputLen] {
+			for _, i = range sel[:inputLen] {
 				_ACCUMULATE_COUNT(a, nulls, i, false)
 			}
 		} else {
-			for i := range a.groups[:inputLen] {
+			for i = 0; i < inputLen; i++ {
 				_ACCUMULATE_COUNT(a, nulls, i, false)
 			}
 		}
 	}
 }
 
-func (a *count_KINDAgg) Flush() {
+func (a *count_KIND_AGG_KINDAgg) Flush() {
 	a.vec[a.curIdx] = a.curAgg
 	a.curIdx++
 }
 
-func (a *count_KINDAgg) HandleEmptyInputScalar() {
+func (a *count_KIND_AGG_KINDAgg) HandleEmptyInputScalar() {
 	a.vec[0] = 0
 }
 
-type count_KINDAggAlloc struct {
+type count_KIND_AGG_KINDAggAlloc struct {
 	allocator *colmem.Allocator
 	allocSize int64
-	aggFuncs  []count_KINDAgg
+	aggFuncs  []count_KIND_AGG_KINDAgg
 }
 
-var _ aggregateFuncAlloc = &count_KINDAggAlloc{}
+var _ aggregateFuncAlloc = &count_KIND_AGG_KINDAggAlloc{}
 
-func (a *count_KINDAggAlloc) newAggFunc() aggregateFunc {
+func (a *count_KIND_AGG_KINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfCount_KINDAgg * a.allocSize)
-		a.aggFuncs = make([]count_KINDAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOfCount_KIND_AGG_KINDAgg * a.allocSize)
+		a.aggFuncs = make([]count_KIND_AGG_KINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
@@ -135,6 +142,7 @@ func (a *count_KINDAggAlloc) newAggFunc() aggregateFunc {
 func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS bool) { // */}}
 	// {{define "accumulateCount" -}}
 
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	if a.groups[i] {
 		if a.curIdx != -1 {
 			a.vec[a.curIdx] = a.curAgg
@@ -142,6 +150,8 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 		a.curIdx++
 		a.curAgg = int64(0)
 	}
+	// {{end}}
+
 	var y int64
 	// {{if .ColWithNulls}}
 	y = int64(0)

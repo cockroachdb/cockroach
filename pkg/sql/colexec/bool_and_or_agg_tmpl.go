@@ -43,33 +43,37 @@ func _ASSIGN_BOOL_OP(_, _, _ string) {
 
 // {{range .}}
 
-func newBool_OP_TYPEAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
-	return &bool_OP_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}
+func newBool_OP_TYPE_AGG_KINDAggAlloc(
+	allocator *colmem.Allocator, allocSize int64,
+) aggregateFuncAlloc {
+	return &bool_OP_TYPE_AGG_KINDAggAlloc{allocator: allocator, allocSize: allocSize}
 }
 
-type bool_OP_TYPEAgg struct {
+type bool_OP_TYPE_AGG_KINDAgg struct {
 	sawNonNull bool
-
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	groups []bool
+	// {{end}}
 	vec    []bool
-
 	nulls  *coldata.Nulls
 	curIdx int
 	curAgg bool
 }
 
-var _ aggregateFunc = &bool_OP_TYPEAgg{}
+var _ aggregateFunc = &bool_OP_TYPE_AGG_KINDAgg{}
 
-const sizeOfBool_OP_TYPEAgg = int64(unsafe.Sizeof(bool_OP_TYPEAgg{}))
+const sizeOfBool_OP_TYPE_AGG_KINDAgg = int64(unsafe.Sizeof(bool_OP_TYPE_AGG_KINDAgg{}))
 
-func (b *bool_OP_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
+func (b *bool_OP_TYPE_AGG_KINDAgg) Init(groups []bool, vec coldata.Vec) {
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	b.groups = groups
+	// {{end}}
 	b.vec = vec.Bool()
 	b.nulls = vec.Nulls()
 	b.Reset()
 }
 
-func (b *bool_OP_TYPEAgg) Reset() {
+func (b *bool_OP_TYPE_AGG_KINDAgg) Reset() {
 	b.curIdx = -1
 	b.nulls.UnsetNulls()
 	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR aggregate.
@@ -77,15 +81,15 @@ func (b *bool_OP_TYPEAgg) Reset() {
 	b.curAgg = _DEFAULT_VAL
 }
 
-func (b *bool_OP_TYPEAgg) CurrentOutputIndex() int {
+func (b *bool_OP_TYPE_AGG_KINDAgg) CurrentOutputIndex() int {
 	return b.curIdx
 }
 
-func (b *bool_OP_TYPEAgg) SetOutputIndex(idx int) {
+func (b *bool_OP_TYPE_AGG_KINDAgg) SetOutputIndex(idx int) {
 	b.curIdx = idx
 }
 
-func (b *bool_OP_TYPEAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
+func (b *bool_OP_TYPE_AGG_KINDAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 	inputLen := batch.Length()
 	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
 	col, nulls := vec.Bool(), vec.Nulls()
@@ -102,7 +106,7 @@ func (b *bool_OP_TYPEAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
-func (b *bool_OP_TYPEAgg) Flush() {
+func (b *bool_OP_TYPE_AGG_KINDAgg) Flush() {
 	if !b.sawNonNull {
 		b.nulls.SetNull(b.curIdx)
 	} else {
@@ -111,22 +115,22 @@ func (b *bool_OP_TYPEAgg) Flush() {
 	b.curIdx++
 }
 
-func (b *bool_OP_TYPEAgg) HandleEmptyInputScalar() {
+func (b *bool_OP_TYPE_AGG_KINDAgg) HandleEmptyInputScalar() {
 	b.nulls.SetNull(0)
 }
 
-type bool_OP_TYPEAggAlloc struct {
+type bool_OP_TYPE_AGG_KINDAggAlloc struct {
 	allocator *colmem.Allocator
 	allocSize int64
-	aggFuncs  []bool_OP_TYPEAgg
+	aggFuncs  []bool_OP_TYPE_AGG_KINDAgg
 }
 
-var _ aggregateFuncAlloc = &bool_OP_TYPEAggAlloc{}
+var _ aggregateFuncAlloc = &bool_OP_TYPE_AGG_KINDAggAlloc{}
 
-func (a *bool_OP_TYPEAggAlloc) newAggFunc() aggregateFunc {
+func (a *bool_OP_TYPE_AGG_KINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfBool_OP_TYPEAgg * a.allocSize)
-		a.aggFuncs = make([]bool_OP_TYPEAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOfBool_OP_TYPE_AGG_KINDAgg * a.allocSize)
+		a.aggFuncs = make([]bool_OP_TYPE_AGG_KINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
@@ -137,8 +141,10 @@ func (a *bool_OP_TYPEAggAlloc) newAggFunc() aggregateFunc {
 
 // {{/*
 // _ACCUMULATE_BOOLEAN aggregates the boolean value at index i into the boolean aggregate.
-func _ACCUMULATE_BOOLEAN(b *bool_OP_TYPEAgg, nulls *coldata.Nulls, i int) { // */}}
+func _ACCUMULATE_BOOLEAN(b *bool_OP_TYPE_AGG_KINDAgg, nulls *coldata.Nulls, i int) { // */}}
 	// {{define "accumulateBoolean" -}}
+
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	if b.groups[i] {
 		if b.curIdx >= 0 {
 			if !b.sawNonNull {
@@ -153,6 +159,9 @@ func _ACCUMULATE_BOOLEAN(b *bool_OP_TYPEAgg, nulls *coldata.Nulls, i int) { // *
 		// {{end}}
 		b.sawNonNull = false
 	}
+	// {{end}}
+
+	// TODO(yuzefovich): template out has nulls vs no nulls cases.
 	isNull := nulls.NullAt(i)
 	if !isNull {
 		// {{with .Global}}

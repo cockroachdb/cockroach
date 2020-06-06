@@ -63,7 +63,7 @@ func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAggAlloc(
+func new_AGG_TITLE_AGG_KINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
@@ -72,7 +72,7 @@ func new_AGG_TITLEAggAlloc(
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return &_AGG_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
+			return &_AGG_TYPE_AGG_KINDAggAlloc{allocator: allocator, allocSize: allocSize}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -83,10 +83,12 @@ func new_AGG_TITLEAggAlloc(
 // {{range .Overloads}}
 // {{range .WidthOverloads}}
 
-type _AGG_TYPEAgg struct {
+type _AGG_TYPE_AGG_KINDAgg struct {
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
+	groups []bool
+	// {{end}}
+	curIdx int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -102,33 +104,35 @@ type _AGG_TYPEAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-var _ aggregateFunc = &_AGG_TYPEAgg{}
+var _ aggregateFunc = &_AGG_TYPE_AGG_KINDAgg{}
 
-const sizeOf_AGG_TYPEAgg = int64(unsafe.Sizeof(_AGG_TYPEAgg{}))
+const sizeOf_AGG_TYPE_AGG_KINDAgg = int64(unsafe.Sizeof(_AGG_TYPE_AGG_KINDAgg{}))
 
-func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
+func (a *_AGG_TYPE_AGG_KINDAgg) Init(groups []bool, v coldata.Vec) {
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	a.groups = groups
+	// {{end}}
 	a.vec = v
 	a.col = v._TYPE()
 	a.nulls = v.Nulls()
 	a.Reset()
 }
 
-func (a *_AGG_TYPEAgg) Reset() {
+func (a *_AGG_TYPE_AGG_KINDAgg) Reset() {
 	a.curIdx = -1
 	a.foundNonNullForCurrentGroup = false
 	a.nulls.UnsetNulls()
 }
 
-func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
+func (a *_AGG_TYPE_AGG_KINDAgg) CurrentOutputIndex() int {
 	return a.curIdx
 }
 
-func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
+func (a *_AGG_TYPE_AGG_KINDAgg) SetOutputIndex(idx int) {
 	a.curIdx = idx
 }
 
-func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *_AGG_TYPE_AGG_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	inputLen := b.Length()
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TYPE(), vec.Nulls()
@@ -164,7 +168,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *_AGG_TYPEAgg) Flush() {
+func (a *_AGG_TYPE_AGG_KINDAgg) Flush() {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
@@ -176,22 +180,22 @@ func (a *_AGG_TYPEAgg) Flush() {
 	a.curIdx++
 }
 
-func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
+func (a *_AGG_TYPE_AGG_KINDAgg) HandleEmptyInputScalar() {
 	a.nulls.SetNull(0)
 }
 
-type _AGG_TYPEAggAlloc struct {
+type _AGG_TYPE_AGG_KINDAggAlloc struct {
 	allocator *colmem.Allocator
 	allocSize int64
-	aggFuncs  []_AGG_TYPEAgg
+	aggFuncs  []_AGG_TYPE_AGG_KINDAgg
 }
 
-var _ aggregateFuncAlloc = &_AGG_TYPEAggAlloc{}
+var _ aggregateFuncAlloc = &_AGG_TYPE_AGG_KINDAggAlloc{}
 
-func (a *_AGG_TYPEAggAlloc) newAggFunc() aggregateFunc {
+func (a *_AGG_TYPE_AGG_KINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOf_AGG_TYPEAgg * a.allocSize)
-		a.aggFuncs = make([]_AGG_TYPEAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOf_AGG_TYPE_AGG_KINDAgg * a.allocSize)
+		a.aggFuncs = make([]_AGG_TYPE_AGG_KINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
@@ -208,9 +212,10 @@ func (a *_AGG_TYPEAggAlloc) newAggFunc() aggregateFunc {
 // the ith row if it is smaller/larger than the current result. If this is the
 // first row of a new group, and no non-nulls have been found for the current
 // group, then the output for the current group is set to null.
-func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
-
+func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGG_KINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
 	// {{define "accumulateMinMax"}}
+
+	// _IF_CAN_HAVE_MULTIPLE_GROUPS
 	if a.groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null. If a.curIdx is
@@ -227,6 +232,8 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 	}
+	// {{end}}
+
 	var isNull bool
 	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)
