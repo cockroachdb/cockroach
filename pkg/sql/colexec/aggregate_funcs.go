@@ -61,11 +61,7 @@ type aggregateFunc interface {
 	// computation.
 	CurrentOutputIndex() int
 	// SetOutputIndex sets the output index to write to. The value for the current
-	// index is carried over. Note that calling SetOutputIndex is a noop if
-	// CurrentOutputIndex returns a negative value (i.e. the aggregate function
-	// has not yet performed any computation). This method also has the side
-	// effect of clearing the NULLs bitmap of the output buffer past the given
-	// index.
+	// index is carried over.
 	SetOutputIndex(idx int)
 
 	// Compute computes the aggregation on the input batch.

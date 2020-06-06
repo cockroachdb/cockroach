@@ -106,10 +106,7 @@ func (a *sum_TYPEAgg) CurrentOutputIndex() int {
 }
 
 func (a *sum_TYPEAgg) SetOutputIndex(idx int) {
-	if a.scratch.curIdx != -1 {
-		a.scratch.curIdx = idx
-		a.scratch.nulls.UnsetNullsAfter(idx + 1)
-	}
+	a.scratch.curIdx = idx
 }
 
 func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
