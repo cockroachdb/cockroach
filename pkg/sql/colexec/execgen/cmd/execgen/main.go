@@ -47,6 +47,7 @@ type execgenTool struct {
 
 	// cmdLine stores the set of flags used to invoke the Execgen tool.
 	cmdLine *flag.FlagSet
+	verbose bool
 }
 
 // generator is a func that, given an input file's contents as a string,
@@ -74,6 +75,7 @@ func (g *execgenTool) run(args ...string) bool {
 	g.cmdLine.SetOutput(g.stdErr)
 	g.cmdLine.Usage = g.usage
 	g.cmdLine.BoolVar(&g.useGoFmt, "useGoFmt", true, "run go fmt on generated code")
+	g.cmdLine.BoolVar(&g.verbose, "verbose", false, "print out debug information to stderr")
 	g.cmdLine.BoolVar(&printDeps, "M", false, "print the dependency list")
 	err := g.cmdLine.Parse(args)
 	if err != nil {
@@ -126,10 +128,17 @@ func (g *execgenTool) generate(path string, entry entry) error {
 		if err != nil {
 			return err
 		}
+		// Expand functions with // execgen:template.
 		// Inline functions with // execgen:inline.
 		inputFileContents, err = execgen.InlineFuncs(string(inputFileBytes))
 		if err != nil {
 			return err
+		}
+		if g.verbose {
+			fmt.Fprintln(os.Stderr, "generated code before text/template runs")
+			fmt.Fprintln(os.Stderr, "-----------------------------------")
+			fmt.Fprintln(os.Stderr, inputFileContents)
+			fmt.Fprintln(os.Stderr, "-----------------------------------")
 		}
 	}
 

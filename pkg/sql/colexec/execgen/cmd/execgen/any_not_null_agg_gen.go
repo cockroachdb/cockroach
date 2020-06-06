@@ -31,9 +31,6 @@ func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	findAnyNotNull := makeFunctionRegex("_FIND_ANY_NOT_NULL", 4)
-	s = findAnyNotNull.ReplaceAllString(s, `{{template "findAnyNotNull" buildDict "Global" . "HasNulls" $4}}`)
-
 	s = replaceManipulationFuncs(s)
 
 	tmpl, err := template.New("any_not_null_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

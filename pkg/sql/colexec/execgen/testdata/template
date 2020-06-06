@@ -1,0 +1,142 @@
+inline
+package main
+
+func a() {
+  x := b(true)
+  x = b(false)
+}
+
+
+// execgen:inline
+// execgen:template<t>
+func b(t bool) int {
+  if t {
+    x = 3
+  } else {
+    x = 4
+  }
+  return x
+}
+----
+----
+package main
+
+func a() {
+	var x int
+	{
+		var __retval_0 int
+		{
+			x = 3
+			{
+				__retval_0 = x
+			}
+		}
+		x = __retval_0
+	}
+	{
+		var __retval_0 int
+		{
+			x = 4
+			{
+				__retval_0 = x
+			}
+		}
+		x = __retval_0
+	}
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+const _ = "inlined_b_false"
+
+// execgen:inline
+const _ = "inlined_b_true"
+----
+----
+
+inline
+package main
+
+func a() {
+  x := b(3, true, true)
+  x = b(6, true, false)
+  b(4, false, true)
+  b(5, false, false)
+}
+
+
+// execgen:inline
+// execgen:template<t, u>
+func b(a int, t bool, u bool) int {
+  var x int
+  if t {
+    x = 3
+  } else {
+    x = 4
+    if u {
+      x += 1
+    }
+  }
+  return x
+}
+----
+----
+package main
+
+func a() {
+	var x int
+	{
+		var __retval_0 int
+		{
+			var a int = 3
+			var x int
+			x = 3
+			{
+				__retval_0 = x
+			}
+		}
+		x = __retval_0
+	}
+	{
+		var __retval_0 int
+		{
+			var a int = 6
+			var x int
+			x = 3
+			{
+				__retval_0 = x
+			}
+		}
+		x = __retval_0
+	}
+	{
+		var a int = 4
+		var x int
+		x = 4
+		x += 1
+	}
+	{
+		var a int = 5
+		var x int
+		x = 4
+	}
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+const _ = "inlined_b_false_false"
+
+// execgen:inline
+const _ = "inlined_b_true_false"
+
+// execgen:inline
+const _ = "inlined_b_false_true"
+
+// execgen:inline
+const _ = "inlined_b_true_true"
+----
+----
