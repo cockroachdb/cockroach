@@ -44,6 +44,7 @@ test           crdb_internal       cluster_settings                   public   S
 test           crdb_internal       cluster_transactions               public   SELECT
 test           crdb_internal       create_statements                  public   SELECT
 test           crdb_internal       create_type_statements             public   SELECT
+test           crdb_internal       databases                          public   SELECT
 test           crdb_internal       feature_usage                      public   SELECT
 test           crdb_internal       forward_dependencies               public   SELECT
 test           crdb_internal       gossip_alerts                      public   SELECT

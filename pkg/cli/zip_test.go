@@ -70,6 +70,7 @@ table_name NOT IN (
 	'builtin_functions',
 	'create_statements',
 	'create_type_statements',
+	'databases',
 	'forward_dependencies',
 	'index_columns',
 	'table_columns',

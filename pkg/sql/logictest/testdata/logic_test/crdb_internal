@@ -19,6 +19,7 @@ crdb_internal  cluster_settings           table
 crdb_internal  cluster_transactions       table
 crdb_internal  create_statements          table
 crdb_internal  create_type_statements     table
+crdb_internal  databases                  table
 crdb_internal  feature_usage              table
 crdb_internal  forward_dependencies       table
 crdb_internal  gossip_alerts              table

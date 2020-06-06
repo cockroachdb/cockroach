@@ -224,6 +224,7 @@ crdb_internal       cluster_settings
 crdb_internal       cluster_transactions
 crdb_internal       create_statements
 crdb_internal       create_type_statements
+crdb_internal       databases
 crdb_internal       feature_usage
 crdb_internal       forward_dependencies
 crdb_internal       gossip_alerts
@@ -372,6 +373,7 @@ cluster_settings
 cluster_transactions
 create_statements
 create_type_statements
+databases
 feature_usage
 forward_dependencies
 gossip_alerts
@@ -527,6 +529,7 @@ system         crdb_internal       cluster_settings                   SYSTEM VIE
 system         crdb_internal       cluster_transactions               SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                  SYSTEM VIEW  NO                  1
 system         crdb_internal       create_type_statements             SYSTEM VIEW  NO                  1
+system         crdb_internal       databases                          SYSTEM VIEW  NO                  1
 system         crdb_internal       feature_usage                      SYSTEM VIEW  NO                  1
 system         crdb_internal       forward_dependencies               SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_alerts                      SYSTEM VIEW  NO                  1
@@ -1588,6 +1591,7 @@ NULL     public   system         crdb_internal       cluster_settings           
 NULL     public   system         crdb_internal       cluster_transactions               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_type_statements             SELECT          NULL          YES
+NULL     public   system         crdb_internal       databases                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          YES
@@ -1951,6 +1955,7 @@ NULL     public   system         crdb_internal       cluster_settings           
 NULL     public   system         crdb_internal       cluster_transactions               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_type_statements             SELECT          NULL          YES
+NULL     public   system         crdb_internal       databases                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          YES
