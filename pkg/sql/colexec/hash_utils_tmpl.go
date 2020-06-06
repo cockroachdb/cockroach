@@ -49,49 +49,45 @@ func _ASSIGN_HASH(_, _, _, _ interface{}) uint64 {
 
 // */}}
 
-// {{/*
+// execgen:inline
+// execgen:template<hasSel, hasNulls>
 func _REHASH_BODY(
 	ctx context.Context,
+	cancelChecker CancelChecker,
 	buckets []uint64,
 	keys _GOTYPESLICE,
 	nulls *coldata.Nulls,
 	nKeys int,
 	sel []int,
-	_HAS_SEL bool,
-	_HAS_NULLS bool,
-) { // */}}
-	// {{define "rehashBody" -}}
+	hasSel bool,
+	hasNulls bool,
+) {
 	// Early bounds checks.
 	_ = buckets[nKeys-1]
-	// {{if .HasSel}}
-	_ = sel[nKeys-1]
-	// {{else}}
-	_ = execgen.UNSAFEGET(keys, nKeys-1)
-	// {{end}}
+	if hasSel {
+		_ = sel[nKeys-1]
+	} else {
+		_ = execgen.UNSAFEGET(keys, nKeys-1)
+	}
 	var selIdx int
 	for i := 0; i < nKeys; i++ {
 		cancelChecker.check(ctx)
-		// {{if .HasSel}}
-		selIdx = sel[i]
-		// {{else}}
-		selIdx = i
-		// {{end}}
-		// {{if .HasNulls}}
-		if nulls.NullAt(selIdx) {
-			continue
+		if hasSel {
+			selIdx = sel[i]
+		} else {
+			selIdx = i
 		}
-		// {{end}}
+		if hasNulls {
+			if nulls.NullAt(selIdx) {
+				continue
+			}
+		}
 		v := execgen.UNSAFEGET(keys, selIdx)
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v, _, keys)
 		buckets[i] = uint64(p)
 	}
-	// {{end}}
-
-	// {{/*
 }
-
-// */}}
 
 // rehash takes an element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
@@ -118,15 +114,15 @@ func rehash(
 			keys, nulls := col.TemplateType(), col.Nulls()
 			if col.MaybeHasNulls() {
 				if sel != nil {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, true)
+					_REHASH_BODY(ctx, cancelChecker, buckets, keys, nulls, nKeys, sel, true, true)
 				} else {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, true)
+					_REHASH_BODY(ctx, cancelChecker, buckets, keys, nulls, nKeys, sel, false, true)
 				}
 			} else {
 				if sel != nil {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, false)
+					_REHASH_BODY(ctx, cancelChecker, buckets, keys, nulls, nKeys, sel, true, false)
 				} else {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, false)
+					_REHASH_BODY(ctx, cancelChecker, buckets, keys, nulls, nKeys, sel, false, false)
 				}
 			}
 			// {{end}}

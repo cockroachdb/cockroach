@@ -12,39 +12,10 @@ package execgen
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
 )
-
-func prettyPrintStmts(stmts ...dst.Stmt) string {
-	if len(stmts) == 0 {
-		return ""
-	}
-	f := &dst.File{
-		Name: dst.NewIdent("main"),
-		Decls: []dst.Decl{
-			&dst.FuncDecl{
-				Name: dst.NewIdent("test"),
-				Type: &dst.FuncType{},
-				Body: &dst.BlockStmt{
-					List: stmts,
-				},
-			},
-		},
-	}
-	var ret strings.Builder
-	_ = decorator.Fprint(&ret, f)
-	prelude := `package main
-
-func test() {
-`
-	postlude := `}
-`
-	s := ret.String()
-	return strings.TrimSpace(s[len(prelude) : len(s)-len(postlude)])
-}
 
 func parseStmts(stmts string) []dst.Stmt {
 	inputStr := fmt.Sprintf(`package main

@@ -1,0 +1,110 @@
+template
+package main
+
+func a() {
+  x := b(true)
+  x = b(false)
+}
+
+
+// execgen:template<t>
+func b(t bool) int {
+  if t {
+    x = 3
+  } else {
+    x = 4
+  }
+  return x
+}
+----
+----
+package main
+
+func a() {
+	x := b_true()
+	x = b_false()
+}
+
+const _ = "template_b"
+
+func b_false() int {
+	x = 4
+	return x
+}
+
+func b_true() int {
+	x = 3
+	return x
+}
+----
+----
+
+template
+package main
+
+func a() {
+  x := b(3, true, true)
+  x = b(6, true, false)
+  b(4, false, true)
+  b(5, false, false)
+}
+
+
+// execgen:inline
+// execgen:template<t, u>
+func b(a int, t bool, u bool) int {
+  var x int
+  if t {
+    x = 3
+  } else {
+    x = 4
+    if u {
+      x += 1
+    }
+  }
+  return x
+}
+----
+----
+package main
+
+func a() {
+	x := b_true_true(3)
+	x = b_true_false(6)
+	b_false_true(4)
+	b_false_false(5)
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+func b_false_false(a int) int {
+	var x int
+	x = 4
+	return x
+}
+
+// execgen:inline
+func b_true_false(a int) int {
+	var x int
+	x = 3
+	return x
+}
+
+// execgen:inline
+func b_false_true(a int) int {
+	var x int
+	x = 4
+	x += 1
+	return x
+}
+
+// execgen:inline
+func b_true_true(a int) int {
+	var x int
+	x = 3
+	return x
+}
+----
+----

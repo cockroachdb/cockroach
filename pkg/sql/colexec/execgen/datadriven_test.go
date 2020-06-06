@@ -11,26 +11,33 @@
 package execgen
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/dave/dst/decorator"
 )
 
 // Walk walks path for datadriven files and calls RunTest on them.
 func TestExecgen(t *testing.T) {
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			f, err := decorator.Parse(d.Input)
+			if err != nil {
+				t.Fatal(err)
+			}
 			switch d.Cmd {
 			case "inline":
-				s, err := InlineFuncs(d.Input)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return s
+				inlineFuncs(f)
+			case "template":
+				expandTemplates(f)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 				return ""
 			}
+			var sb strings.Builder
+			_ = decorator.Fprint(&sb, f)
+			return sb.String()
 		})
 	})
 }
