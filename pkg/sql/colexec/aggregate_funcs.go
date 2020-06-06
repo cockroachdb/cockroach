@@ -14,7 +14,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -130,23 +129,59 @@ func newAggregateFuncsAlloc(
 				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_AVG:
-			funcAllocs[i], err = newAvgAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newAvgHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newAvgOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_SUM:
-			funcAllocs[i], err = newSumAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newSumHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newSumOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_SUM_INT:
-			funcAllocs[i], err = newSumIntAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newSumIntHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newSumIntOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
-			funcAllocs[i] = newCountRowsAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newCountRowsHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newCountRowsOrderedAggAlloc(allocator, allocSize)
+			}
 		case execinfrapb.AggregatorSpec_COUNT:
-			funcAllocs[i] = newCountAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newCountHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newCountOrderedAggAlloc(allocator, allocSize)
+			}
 		case execinfrapb.AggregatorSpec_MIN:
-			funcAllocs[i] = newMinAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newMinHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i] = newMinOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_MAX:
-			funcAllocs[i] = newMaxAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newMaxHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i] = newMaxOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_BOOL_AND:
-			funcAllocs[i] = newBoolAndAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newBoolAndHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newBoolAndOrderedAggAlloc(allocator, allocSize)
+			}
 		case execinfrapb.AggregatorSpec_BOOL_OR:
-			funcAllocs[i] = newBoolOrAggAlloc(allocator, allocSize)
+			if isHashAgg {
+				funcAllocs[i] = newBoolOrHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newBoolOrOrderedAggAlloc(allocator, allocSize)
+			}
 		// NOTE: if you're adding an implementation of a new aggregate
 		// function, make sure to account for the memory under that struct in
 		// its constructor.
@@ -168,7 +203,7 @@ func newAggregateFuncsAlloc(
 // sizeOfAggregateFunc is the size of some aggregateFunc implementation.
 // countAgg was chosen arbitrarily, but it's important that we use a pointer to
 // the aggregate function struct.
-const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countAgg{}))
+const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countHashAgg{}))
 
 func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 	if len(a.returnFuncs) == 0 {
@@ -239,131 +274,4 @@ func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*t
 type aggAllocBase struct {
 	allocator *colmem.Allocator
 	allocSize int64
-}
-
-func newAvgAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) (aggregateFuncAlloc, error) {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch t.Family() {
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return &avgInt16AggAlloc{aggAllocBase: allocBase}, nil
-		case 32:
-			return &avgInt32AggAlloc{aggAllocBase: allocBase}, nil
-		default:
-			return &avgInt64AggAlloc{aggAllocBase: allocBase}, nil
-		}
-	case types.DecimalFamily:
-		return &avgDecimalAggAlloc{aggAllocBase: allocBase}, nil
-	case types.FloatFamily:
-		return &avgFloat64AggAlloc{aggAllocBase: allocBase}, nil
-	case types.IntervalFamily:
-		return &avgIntervalAggAlloc{aggAllocBase: allocBase}, nil
-	default:
-		return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
-	}
-}
-
-func newSumAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) (aggregateFuncAlloc, error) {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch t.Family() {
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return &sumInt16AggAlloc{aggAllocBase: allocBase}, nil
-		case 32:
-			return &sumInt32AggAlloc{aggAllocBase: allocBase}, nil
-		default:
-			return &sumInt64AggAlloc{aggAllocBase: allocBase}, nil
-		}
-	case types.DecimalFamily:
-		return &sumDecimalAggAlloc{aggAllocBase: allocBase}, nil
-	case types.FloatFamily:
-		return &sumFloat64AggAlloc{aggAllocBase: allocBase}, nil
-	case types.IntervalFamily:
-		return &sumIntervalAggAlloc{aggAllocBase: allocBase}, nil
-	default:
-		return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
-	}
-}
-
-func newSumIntAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) (aggregateFuncAlloc, error) {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch t.Family() {
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return &sumIntInt16AggAlloc{aggAllocBase: allocBase}, nil
-		case 32:
-			return &sumIntInt32AggAlloc{aggAllocBase: allocBase}, nil
-		default:
-			return &sumIntInt64AggAlloc{aggAllocBase: allocBase}, nil
-		}
-	default:
-		return nil, errors.Errorf("unsupported sum_int agg type %s", t.Name())
-	}
-}
-
-func newMinAggAlloc(allocator *colmem.Allocator, t *types.T, allocSize int64) aggregateFuncAlloc {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BoolFamily:
-		return &minBoolAggAlloc{aggAllocBase: allocBase}
-	case types.BytesFamily:
-		return &minBytesAggAlloc{aggAllocBase: allocBase}
-	case types.DecimalFamily:
-		return &minDecimalAggAlloc{aggAllocBase: allocBase}
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return &minInt16AggAlloc{aggAllocBase: allocBase}
-		case 32:
-			return &minInt32AggAlloc{aggAllocBase: allocBase}
-		default:
-			return &minInt64AggAlloc{aggAllocBase: allocBase}
-		}
-	case types.FloatFamily:
-		return &minFloat64AggAlloc{aggAllocBase: allocBase}
-	case types.TimestampTZFamily:
-		return &minTimestampAggAlloc{aggAllocBase: allocBase}
-	case types.IntervalFamily:
-		return &minIntervalAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &minDatumAggAlloc{aggAllocBase: allocBase}
-	}
-}
-
-func newMaxAggAlloc(allocator *colmem.Allocator, t *types.T, allocSize int64) aggregateFuncAlloc {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BoolFamily:
-		return &maxBoolAggAlloc{aggAllocBase: allocBase}
-	case types.BytesFamily:
-		return &maxBytesAggAlloc{aggAllocBase: allocBase}
-	case types.DecimalFamily:
-		return &maxDecimalAggAlloc{aggAllocBase: allocBase}
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return &maxInt16AggAlloc{aggAllocBase: allocBase}
-		case 32:
-			return &maxInt32AggAlloc{aggAllocBase: allocBase}
-		default:
-			return &maxInt64AggAlloc{aggAllocBase: allocBase}
-		}
-	case types.FloatFamily:
-		return &maxFloat64AggAlloc{aggAllocBase: allocBase}
-	case types.TimestampTZFamily:
-		return &maxTimestampAggAlloc{aggAllocBase: allocBase}
-	case types.IntervalFamily:
-		return &maxIntervalAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &maxDatumAggAlloc{aggAllocBase: allocBase}
-	}
 }

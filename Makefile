@@ -830,11 +830,8 @@ DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions docs/generated/redact_s
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
   pkg/sql/colexec/and_or_projection.eg.go \
-  pkg/sql/colexec/avg_agg.eg.go \
-  pkg/sql/colexec/bool_and_or_agg.eg.go \
   pkg/sql/colexec/cast.eg.go \
   pkg/sql/colexec/const.eg.go \
-  pkg/sql/colexec/count_agg.eg.go \
   pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hashtable_distinct.eg.go \
@@ -842,6 +839,12 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/hashtable_full_deleting.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/hash_any_not_null_agg.eg.go \
+  pkg/sql/colexec/hash_avg_agg.eg.go \
+  pkg/sql/colexec/hash_bool_and_or_agg.eg.go \
+  pkg/sql/colexec/hash_count_agg.eg.go \
+  pkg/sql/colexec/hash_min_max_agg.eg.go \
+  pkg/sql/colexec/hash_sum_agg.eg.go \
+  pkg/sql/colexec/hash_sum_int_agg.eg.go \
   pkg/sql/colexec/hash_utils.eg.go \
   pkg/sql/colexec/like_ops.eg.go \
   pkg/sql/colexec/mergejoinbase.eg.go \
@@ -853,8 +856,13 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/mergejoiner_leftouter.eg.go \
   pkg/sql/colexec/mergejoiner_leftsemi.eg.go \
   pkg/sql/colexec/mergejoiner_rightouter.eg.go \
-  pkg/sql/colexec/min_max_agg.eg.go \
   pkg/sql/colexec/ordered_any_not_null_agg.eg.go \
+  pkg/sql/colexec/ordered_avg_agg.eg.go \
+  pkg/sql/colexec/ordered_bool_and_or_agg.eg.go \
+  pkg/sql/colexec/ordered_count_agg.eg.go \
+  pkg/sql/colexec/ordered_min_max_agg.eg.go \
+  pkg/sql/colexec/ordered_sum_agg.eg.go \
+  pkg/sql/colexec/ordered_sum_int_agg.eg.go \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
   pkg/sql/colexec/overloads_test_utils.eg.go \
   pkg/sql/colexec/proj_const_left_ops.eg.go \
@@ -869,8 +877,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/select_in.eg.go \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/substring.eg.go \
-  pkg/sql/colexec/sum_agg.eg.go \
-  pkg/sql/colexec/sum_int_agg.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go

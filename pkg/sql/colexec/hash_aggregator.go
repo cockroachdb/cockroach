@@ -110,20 +110,9 @@ type hashAggregator struct {
 		// so this would not matter.
 		hashCodeForSelsSlot []uint64
 
-		// group is a boolean vector where "true" represent the beginning of a group
-		// in the column. It is shared among all aggregation functions. Since
-		// hashAggregator manually manages mapping between input groups and their
-		// corresponding aggregation functions, group is set to all false to prevent
-		// premature materialization of aggregation result in the aggregation
-		// function. However, aggregation function expects at least one group in its
-		// input batches, (that is, at least one "true" in the group vector
-		// corresponding to the selection vector). Therefore, before the first
-		// invocation of .Compute() method, the element in group vector which
-		// corresponds to the first value of the selection vector is set to true so
-		// that aggregation function will initialize properly. Then after .Compute()
-		// finishes, it is set back to false so the same group vector can be reused
-		// by other aggregation functions.
-		group []bool
+		// diff is a boolean vector that is used as a scratch for match
+		// function.
+		diff []bool
 	}
 
 	// keyMapping stores the key values for each aggregation group. It is a
@@ -232,7 +221,7 @@ func (op *hashAggregator) Init() {
 
 	op.scratch.sels = make([][]int, coldata.BatchSize())
 	op.scratch.hashCodeForSelsSlot = make([]uint64, coldata.BatchSize())
-	op.scratch.group = make([]bool, coldata.BatchSize())
+	op.scratch.diff = make([]bool, coldata.BatchSize())
 	// Eventually, op.keyMapping will contain as many tuples as there are
 	// groups in the input, but we don't know that number upfront, so we
 	// allocate it with some reasonably sized constant capacity.
@@ -362,7 +351,7 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 				anyMatched, remaining = aggFunc.match(
 					remaining, b, op.groupCols, op.groupTypes,
 					op.groupCanonicalTypeFamilies, op.keyMapping,
-					op.scratch.group[:len(remaining)], false, /* firstDefiniteMatch */
+					op.scratch.diff[:len(remaining)], false, /* firstDefiniteMatch */
 				)
 				if anyMatched {
 					aggFunc.compute(b, op.aggCols)
@@ -409,15 +398,13 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 			_, remaining = aggFunc.match(
 				remaining, b, op.groupCols, op.groupTypes,
 				op.groupCanonicalTypeFamilies, op.keyMapping,
-				op.scratch.group[:len(remaining)], true, /* firstDefiniteMatch */
+				op.scratch.diff[:len(remaining)], true, /* firstDefiniteMatch */
 			)
 
-			// Hack required to get aggregation function working. See '.scratch.group'
-			// field comment in hashAggregator for more details.
-			op.scratch.group[groupStartIdx] = true
-			aggFunc.init(op.scratch.group, op.output.Batch)
+			// aggFunc knows that all selected tuples in b belong to the same
+			// single group, so we can pass 'nil' for the first argument.
+			aggFunc.init(nil /* group */, op.output.Batch)
 			aggFunc.compute(b, op.aggCols)
-			op.scratch.group[groupStartIdx] = false
 		}
 
 		// We have processed all tuples with this hashCode, so we should reset
