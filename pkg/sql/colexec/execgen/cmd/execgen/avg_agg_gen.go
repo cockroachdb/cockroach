@@ -123,5 +123,5 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genAvgAgg, "avg_agg.eg.go", avgAggTmpl)
+	registerAggGenerator(genAvgAgg, "avg_agg.eg.go", avgAggTmpl)
 }
