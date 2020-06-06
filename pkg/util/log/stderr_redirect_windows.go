@@ -35,6 +35,8 @@ func dupFD(fd uintptr) (uintptr, error) {
 // We also override os.Stderr for those other parts of Go which use
 // that and not fd 2 directly.
 func redirectStderr(f *os.File) error {
+	osStderrMu.Lock()
+	defer osStderrMu.Unlock()
 	if err := windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd())); err != nil {
 		return err
 	}
