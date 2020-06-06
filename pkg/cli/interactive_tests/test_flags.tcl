@@ -7,14 +7,14 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 start_test "Check that --max-disk-temp-storage works."
-send "$argv start-single-node --insecure --store=path=mystore --max-disk-temp-storage=10GiB\r"
+send "$argv start-single-node --insecure --store=path=logs/mystore --max-disk-temp-storage=10GiB\r"
 eexpect "node starting"
 interrupt
 eexpect ":/# "
 end_test
 
 start_test "Check that --max-disk-temp-storage can be expressed as a percentage."
-send "$argv start-single-node --insecure --store=path=mystore --max-disk-temp-storage=10%\r"
+send "$argv start-single-node --insecure --store=path=logs/mystore --max-disk-temp-storage=10%\r"
 eexpect "node starting"
 interrupt
 eexpect ":/# "
