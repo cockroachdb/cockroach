@@ -28,7 +28,7 @@ start_server $argv
 system "echo 'select * from system.information_schema.columns;' | $argv sql >/dev/null"
 
 # What memory is currently consumed by the server?
-set vmem [ exec ps --no-headers o vsz -p [ exec cat server_pid ] ]
+set vmem [ exec ps -o vsz= -p [ exec cat server_pid ] ]
 
 # Now play. First, shut down the running server.
 stop_server $argv
