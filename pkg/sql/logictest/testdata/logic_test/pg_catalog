@@ -883,8 +883,8 @@ FROM pg_catalog.pg_depend
 ORDER BY objid
 ----
 classid     objid       objsubid  refclassid  refobjid   refobjsubid  deptype
-4294967223  2143281868  0         4294967225  450499961  0            n
-4294967223  4089604113  0         4294967225  450499960  0            n
+4294967222  2143281868  0         4294967224  450499961  0            n
+4294967222  4089604113  0         4294967224  450499960  0            n
 
 # All entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table.
@@ -896,7 +896,7 @@ JOIN pg_class cla ON classid=cla.oid
 JOIN pg_class refcla ON refclassid=refcla.oid
 ----
 classid     refclassid  tablename      reftablename
-4294967223  4294967225  pg_constraint  pg_class
+4294967222  4294967224  pg_constraint  pg_class
 
 # All entries in pg_depend are foreign key constraints that reference an index
 # in pg_class.
@@ -1534,118 +1534,119 @@ SELECT objoid, classoid, objsubid, regexp_replace(description, e'\n.*', '') AS d
   FROM pg_catalog.pg_description
 ----
 objoid      classoid    objsubid  description
-4294967294  4294967225  0         backward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
-4294967292  4294967225  0         built-in functions (RAM/static)
-4294967291  4294967225  0         running queries visible by current user (cluster RPC; expensive!)
-4294967289  4294967225  0         running sessions visible to current user (cluster RPC; expensive!)
-4294967288  4294967225  0         cluster settings (RAM)
-4294967290  4294967225  0         running user transactions visible by the current user (cluster RPC; expensive!)
-4294967287  4294967225  0         CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)
-4294967286  4294967225  0         CREATE statements for all user defined types accessible by the current user in current database (KV scan)
-4294967285  4294967225  0         telemetry counters (RAM; local node only)
-4294967284  4294967225  0         forward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
-4294967282  4294967225  0         locally known gossiped health alerts (RAM; local node only)
-4294967281  4294967225  0         locally known gossiped node liveness (RAM; local node only)
-4294967280  4294967225  0         locally known edges in the gossip network (RAM; local node only)
-4294967283  4294967225  0         locally known gossiped node details (RAM; local node only)
-4294967279  4294967225  0         index columns for all indexes accessible by current user in current database (KV scan)
-4294967278  4294967225  0         decoded job metadata from system.jobs (KV scan)
-4294967277  4294967225  0         node details across the entire cluster (cluster RPC; expensive!)
-4294967276  4294967225  0         store details and status (cluster RPC; expensive!)
-4294967275  4294967225  0         acquired table leases (RAM; local node only)
-4294967293  4294967225  0         detailed identification strings (RAM, local node only)
-4294967271  4294967225  0         current values for metrics (RAM; local node only)
-4294967274  4294967225  0         running queries visible by current user (RAM; local node only)
-4294967266  4294967225  0         server parameters, useful to construct connection URLs (RAM, local node only)
-4294967272  4294967225  0         running sessions visible by current user (RAM; local node only)
-4294967262  4294967225  0         statement statistics (in-memory, not durable; local node only). This table is wiped periodically (by default, at least every two hours)
-4294967273  4294967225  0         running user transactions visible by the current user (RAM; local node only)
-4294967258  4294967225  0         per-application transaction statistics (in-memory, not durable; local node only). This table is wiped periodically (by default, at least every two hours)
-4294967270  4294967225  0         defined partitions for all tables/indexes accessible by the current user in the current database (KV scan)
-4294967269  4294967225  0         comments for predefined virtual tables (RAM/static)
-4294967268  4294967225  0         range metadata without leaseholder details (KV join; expensive!)
-4294967265  4294967225  0         ongoing schema changes, across all descriptors accessible by current user (KV scan; expensive!)
-4294967264  4294967225  0         session trace accumulated so far (RAM)
-4294967263  4294967225  0         session variables (RAM)
-4294967261  4294967225  0         details for all columns accessible by current user in current database (KV scan)
-4294967260  4294967225  0         indexes accessible by current user in current database (KV scan)
-4294967259  4294967225  0         table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)
-4294967257  4294967225  0         decoded zone configurations from system.zones (KV scan)
-4294967255  4294967225  0         roles for which the current user has admin option
-4294967254  4294967225  0         roles available to the current user
-4294967253  4294967225  0         check constraints
-4294967252  4294967225  0         column privilege grants (incomplete)
-4294967251  4294967225  0         table and view columns (incomplete)
-4294967250  4294967225  0         columns usage by constraints
-4294967249  4294967225  0         roles for the current user
-4294967248  4294967225  0         column usage by indexes and key constraints
-4294967247  4294967225  0         built-in function parameters (empty - introspection not yet supported)
-4294967246  4294967225  0         foreign key constraints
-4294967245  4294967225  0         privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
-4294967244  4294967225  0         built-in functions (empty - introspection not yet supported)
-4294967242  4294967225  0         schema privileges (incomplete; may contain excess users or roles)
-4294967243  4294967225  0         database schemas (may contain schemata without permission)
-4294967241  4294967225  0         sequences
-4294967240  4294967225  0         index metadata and statistics (incomplete)
-4294967239  4294967225  0         table constraints
-4294967238  4294967225  0         privileges granted on table or views (incomplete; may contain excess users or roles)
-4294967237  4294967225  0         tables and views
-4294967235  4294967225  0         grantable privileges (incomplete)
-4294967236  4294967225  0         views (incomplete)
-4294967233  4294967225  0         aggregated built-in functions (incomplete)
-4294967232  4294967225  0         index access methods (incomplete)
-4294967231  4294967225  0         column default values
-4294967230  4294967225  0         table columns (incomplete - see also information_schema.columns)
-4294967228  4294967225  0         role membership
-4294967229  4294967225  0         authorization identifiers - differs from postgres as we do not display passwords,
-4294967227  4294967225  0         available extensions
-4294967226  4294967225  0         casts (empty - needs filling out)
-4294967225  4294967225  0         tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
-4294967224  4294967225  0         available collations (incomplete)
-4294967223  4294967225  0         table constraints (incomplete - see also information_schema.table_constraints)
-4294967222  4294967225  0         encoding conversions (empty - unimplemented)
-4294967221  4294967225  0         available databases (incomplete)
-4294967220  4294967225  0         default ACLs (empty - unimplemented)
-4294967219  4294967225  0         dependency relationships (incomplete)
-4294967218  4294967225  0         object comments
-4294967216  4294967225  0         enum types and labels (empty - feature does not exist)
-4294967215  4294967225  0         event triggers (empty - feature does not exist)
-4294967214  4294967225  0         installed extensions (empty - feature does not exist)
-4294967213  4294967225  0         foreign data wrappers (empty - feature does not exist)
-4294967212  4294967225  0         foreign servers (empty - feature does not exist)
-4294967211  4294967225  0         foreign tables (empty  - feature does not exist)
-4294967210  4294967225  0         indexes (incomplete)
-4294967209  4294967225  0         index creation statements
-4294967208  4294967225  0         table inheritance hierarchy (empty - feature does not exist)
-4294967207  4294967225  0         available languages (empty - feature does not exist)
-4294967206  4294967225  0         locks held by active processes (empty - feature does not exist)
-4294967205  4294967225  0         available materialized views (empty - feature does not exist)
-4294967204  4294967225  0         available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
-4294967203  4294967225  0         operators (incomplete)
-4294967202  4294967225  0         prepared statements
-4294967201  4294967225  0         prepared transactions (empty - feature does not exist)
-4294967200  4294967225  0         built-in functions (incomplete)
-4294967199  4294967225  0         range types (empty - feature does not exist)
-4294967198  4294967225  0         rewrite rules (empty - feature does not exist)
-4294967197  4294967225  0         database roles
-4294967184  4294967225  0         security labels (empty - feature does not exist)
-4294967196  4294967225  0         security labels (empty)
-4294967195  4294967225  0         sequences (see also information_schema.sequences)
-4294967194  4294967225  0         session variables (incomplete)
-4294967193  4294967225  0         shared dependencies (empty - not implemented)
-4294967217  4294967225  0         shared object comments
-4294967183  4294967225  0         shared security labels (empty - feature not supported)
-4294967185  4294967225  0         backend access statistics (empty - monitoring works differently in CockroachDB)
-4294967190  4294967225  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967189  4294967225  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967188  4294967225  0         triggers (empty - feature does not exist)
-4294967187  4294967225  0         scalar types (incomplete)
-4294967192  4294967225  0         database users
-4294967191  4294967225  0         local to remote user mapping (empty - feature does not exist)
-4294967186  4294967225  0         view definitions (incomplete - see also information_schema.views)
-4294967181  4294967225  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
-4294967180  4294967225  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
-4294967179  4294967225  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+4294967294  4294967224  0         backward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
+4294967292  4294967224  0         built-in functions (RAM/static)
+4294967291  4294967224  0         running queries visible by current user (cluster RPC; expensive!)
+4294967289  4294967224  0         running sessions visible to current user (cluster RPC; expensive!)
+4294967288  4294967224  0         cluster settings (RAM)
+4294967290  4294967224  0         running user transactions visible by the current user (cluster RPC; expensive!)
+4294967287  4294967224  0         CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)
+4294967286  4294967224  0         CREATE statements for all user defined types accessible by the current user in current database (KV scan)
+4294967285  4294967224  0         databases accessible by the current user (KV scan)
+4294967284  4294967224  0         telemetry counters (RAM; local node only)
+4294967283  4294967224  0         forward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
+4294967281  4294967224  0         locally known gossiped health alerts (RAM; local node only)
+4294967280  4294967224  0         locally known gossiped node liveness (RAM; local node only)
+4294967279  4294967224  0         locally known edges in the gossip network (RAM; local node only)
+4294967282  4294967224  0         locally known gossiped node details (RAM; local node only)
+4294967278  4294967224  0         index columns for all indexes accessible by current user in current database (KV scan)
+4294967277  4294967224  0         decoded job metadata from system.jobs (KV scan)
+4294967276  4294967224  0         node details across the entire cluster (cluster RPC; expensive!)
+4294967275  4294967224  0         store details and status (cluster RPC; expensive!)
+4294967274  4294967224  0         acquired table leases (RAM; local node only)
+4294967293  4294967224  0         detailed identification strings (RAM, local node only)
+4294967270  4294967224  0         current values for metrics (RAM; local node only)
+4294967273  4294967224  0         running queries visible by current user (RAM; local node only)
+4294967265  4294967224  0         server parameters, useful to construct connection URLs (RAM, local node only)
+4294967271  4294967224  0         running sessions visible by current user (RAM; local node only)
+4294967261  4294967224  0         statement statistics (in-memory, not durable; local node only). This table is wiped periodically (by default, at least every two hours)
+4294967272  4294967224  0         running user transactions visible by the current user (RAM; local node only)
+4294967257  4294967224  0         per-application transaction statistics (in-memory, not durable; local node only). This table is wiped periodically (by default, at least every two hours)
+4294967269  4294967224  0         defined partitions for all tables/indexes accessible by the current user in the current database (KV scan)
+4294967268  4294967224  0         comments for predefined virtual tables (RAM/static)
+4294967267  4294967224  0         range metadata without leaseholder details (KV join; expensive!)
+4294967264  4294967224  0         ongoing schema changes, across all descriptors accessible by current user (KV scan; expensive!)
+4294967263  4294967224  0         session trace accumulated so far (RAM)
+4294967262  4294967224  0         session variables (RAM)
+4294967260  4294967224  0         details for all columns accessible by current user in current database (KV scan)
+4294967259  4294967224  0         indexes accessible by current user in current database (KV scan)
+4294967258  4294967224  0         table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)
+4294967256  4294967224  0         decoded zone configurations from system.zones (KV scan)
+4294967254  4294967224  0         roles for which the current user has admin option
+4294967253  4294967224  0         roles available to the current user
+4294967252  4294967224  0         check constraints
+4294967251  4294967224  0         column privilege grants (incomplete)
+4294967250  4294967224  0         table and view columns (incomplete)
+4294967249  4294967224  0         columns usage by constraints
+4294967248  4294967224  0         roles for the current user
+4294967247  4294967224  0         column usage by indexes and key constraints
+4294967246  4294967224  0         built-in function parameters (empty - introspection not yet supported)
+4294967245  4294967224  0         foreign key constraints
+4294967244  4294967224  0         privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
+4294967243  4294967224  0         built-in functions (empty - introspection not yet supported)
+4294967241  4294967224  0         schema privileges (incomplete; may contain excess users or roles)
+4294967242  4294967224  0         database schemas (may contain schemata without permission)
+4294967240  4294967224  0         sequences
+4294967239  4294967224  0         index metadata and statistics (incomplete)
+4294967238  4294967224  0         table constraints
+4294967237  4294967224  0         privileges granted on table or views (incomplete; may contain excess users or roles)
+4294967236  4294967224  0         tables and views
+4294967234  4294967224  0         grantable privileges (incomplete)
+4294967235  4294967224  0         views (incomplete)
+4294967232  4294967224  0         aggregated built-in functions (incomplete)
+4294967231  4294967224  0         index access methods (incomplete)
+4294967230  4294967224  0         column default values
+4294967229  4294967224  0         table columns (incomplete - see also information_schema.columns)
+4294967227  4294967224  0         role membership
+4294967228  4294967224  0         authorization identifiers - differs from postgres as we do not display passwords,
+4294967226  4294967224  0         available extensions
+4294967225  4294967224  0         casts (empty - needs filling out)
+4294967224  4294967224  0         tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
+4294967223  4294967224  0         available collations (incomplete)
+4294967222  4294967224  0         table constraints (incomplete - see also information_schema.table_constraints)
+4294967221  4294967224  0         encoding conversions (empty - unimplemented)
+4294967220  4294967224  0         available databases (incomplete)
+4294967219  4294967224  0         default ACLs (empty - unimplemented)
+4294967218  4294967224  0         dependency relationships (incomplete)
+4294967217  4294967224  0         object comments
+4294967215  4294967224  0         enum types and labels (empty - feature does not exist)
+4294967214  4294967224  0         event triggers (empty - feature does not exist)
+4294967213  4294967224  0         installed extensions (empty - feature does not exist)
+4294967212  4294967224  0         foreign data wrappers (empty - feature does not exist)
+4294967211  4294967224  0         foreign servers (empty - feature does not exist)
+4294967210  4294967224  0         foreign tables (empty  - feature does not exist)
+4294967209  4294967224  0         indexes (incomplete)
+4294967208  4294967224  0         index creation statements
+4294967207  4294967224  0         table inheritance hierarchy (empty - feature does not exist)
+4294967206  4294967224  0         available languages (empty - feature does not exist)
+4294967205  4294967224  0         locks held by active processes (empty - feature does not exist)
+4294967204  4294967224  0         available materialized views (empty - feature does not exist)
+4294967203  4294967224  0         available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
+4294967202  4294967224  0         operators (incomplete)
+4294967201  4294967224  0         prepared statements
+4294967200  4294967224  0         prepared transactions (empty - feature does not exist)
+4294967199  4294967224  0         built-in functions (incomplete)
+4294967198  4294967224  0         range types (empty - feature does not exist)
+4294967197  4294967224  0         rewrite rules (empty - feature does not exist)
+4294967196  4294967224  0         database roles
+4294967183  4294967224  0         security labels (empty - feature does not exist)
+4294967195  4294967224  0         security labels (empty)
+4294967194  4294967224  0         sequences (see also information_schema.sequences)
+4294967193  4294967224  0         session variables (incomplete)
+4294967192  4294967224  0         shared dependencies (empty - not implemented)
+4294967216  4294967224  0         shared object comments
+4294967182  4294967224  0         shared security labels (empty - feature not supported)
+4294967184  4294967224  0         backend access statistics (empty - monitoring works differently in CockroachDB)
+4294967189  4294967224  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967188  4294967224  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967187  4294967224  0         triggers (empty - feature does not exist)
+4294967186  4294967224  0         scalar types (incomplete)
+4294967191  4294967224  0         database users
+4294967190  4294967224  0         local to remote user mapping (empty - feature does not exist)
+4294967185  4294967224  0         view definitions (incomplete - see also information_schema.views)
+4294967180  4294967224  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+4294967179  4294967224  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+4294967178  4294967224  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
 
 ## pg_catalog.pg_shdescription
 
