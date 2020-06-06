@@ -242,8 +242,8 @@ func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
 			// input, so every left row is guaranteed to match at least once.
 			return true
 		}
-		// Case 1b: if there is at least one not-null foreign key column referencing
-		// the unfiltered right columns, return true. Otherwise, false.
+		// Case 1b: if there is at least one not-null foreign key referencing the
+		// unfiltered right columns, return true. Otherwise, false.
 		return makeForeignKeyMap(
 			md, left.Relational().NotNullCols, deriveUnfilteredCols(right)) != nil
 	}
