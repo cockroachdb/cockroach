@@ -45,16 +45,17 @@ const _TYPE_WIDTH = 0
 
 // */}}
 
-func newAnyNotNullAggAlloc(
+func newAnyNotNull_AGGKINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return &anyNotNull_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
+			return &anyNotNull_TYPE_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -65,11 +66,13 @@ func newAnyNotNullAggAlloc(
 // {{range .}}
 // {{range .WidthOverloads}}
 
-// anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
+// anyNotNull_TYPE_AGGKINDAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
-type anyNotNull_TYPEAgg struct {
-	allocator                   *colmem.Allocator
-	groups                      []bool
+type anyNotNull_TYPE_AGGKINDAgg struct {
+	allocator *colmem.Allocator
+	// {{if eq "_AGGKIND" "Ordered"}}
+	groups []bool
+	// {{end}}
 	vec                         coldata.Vec
 	col                         _GOTYPESLICE
 	nulls                       *coldata.Nulls
@@ -78,33 +81,44 @@ type anyNotNull_TYPEAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-var _ aggregateFunc = &anyNotNull_TYPEAgg{}
+var _ aggregateFunc = &anyNotNull_TYPE_AGGKINDAgg{}
 
-const sizeOfAnyNotNull_TYPEAgg = int64(unsafe.Sizeof(anyNotNull_TYPEAgg{}))
+const sizeOfAnyNotNull_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(anyNotNull_TYPE_AGGKINDAgg{}))
 
-func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *anyNotNull_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+	// {{if eq "_AGGKIND" "Ordered"}}
 	a.groups = groups
+	// {{end}}
 	a.vec = vec
 	a.col = vec.TemplateType()
 	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
-func (a *anyNotNull_TYPEAgg) Reset() {
+func (a *anyNotNull_TYPE_AGGKINDAgg) Reset() {
 	a.curIdx = -1
 	a.foundNonNullForCurrentGroup = false
 	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
+func (a *anyNotNull_TYPE_AGGKINDAgg) CurrentOutputIndex() int {
 	return a.curIdx
 }
 
-func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
+func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutputIndex(idx int) {
 	a.curIdx = idx
 }
 
-func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+	// {{if eq "_AGGKIND" "Hash"}}
+	if a.foundNonNullForCurrentGroup {
+		// We have already seen non-null for the current group, and since there
+		// is at most a single group when performing hash aggregation, we can
+		// finish computing.
+		return
+	}
+	// {{end}}
+
 	inputLen := b.Length()
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec.TemplateType(), vec.Nulls()
@@ -141,7 +155,7 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNull_TYPEAgg) Flush() {
+func (a *anyNotNull_TYPE_AGGKINDAgg) Flush() {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
@@ -152,22 +166,21 @@ func (a *anyNotNull_TYPEAgg) Flush() {
 	a.curIdx++
 }
 
-func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
+func (a *anyNotNull_TYPE_AGGKINDAgg) HandleEmptyInputScalar() {
 	a.nulls.SetNull(0)
 }
 
-type anyNotNull_TYPEAggAlloc struct {
-	allocator *colmem.Allocator
-	allocSize int64
-	aggFuncs  []anyNotNull_TYPEAgg
+type anyNotNull_TYPE_AGGKINDAggAlloc struct {
+	aggAllocBase
+	aggFuncs []anyNotNull_TYPE_AGGKINDAgg
 }
 
-var _ aggregateFuncAlloc = &anyNotNull_TYPEAggAlloc{}
+var _ aggregateFuncAlloc = &anyNotNull_TYPE_AGGKINDAggAlloc{}
 
-func (a *anyNotNull_TYPEAggAlloc) newAggFunc() aggregateFunc {
+func (a *anyNotNull_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNull_TYPEAgg * a.allocSize)
-		a.aggFuncs = make([]anyNotNull_TYPEAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNull_TYPE_AGGKINDAgg * a.allocSize)
+		a.aggFuncs = make([]anyNotNull_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
@@ -183,9 +196,12 @@ func (a *anyNotNull_TYPEAggAlloc) newAggFunc() aggregateFunc {
 // row. If a non-null value was already found, then it does nothing. If this is
 // the first row of a new group, and no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
-func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+func _FIND_ANY_NOT_NULL(
+	a *anyNotNull_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool,
+) { // */}}
 	// {{define "findAnyNotNull" -}}
 
+	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[i] {
 		// The `a.curIdx` check is necessary because for the first
 		// group in the result set there is no "current group."
@@ -203,6 +219,8 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 	}
+	// {{end}}
+
 	var isNull bool
 	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)
@@ -211,13 +229,19 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 	// {{end}}
 	if !a.foundNonNullForCurrentGroup && !isNull {
 		// If we haven't seen any non-nulls for the current group yet, and the
-		// current value is non-null, then we can pick the current value to be the
-		// output.
+		// current value is non-null, then we can pick the current value to be
+		// the output.
 		// {{with .Global}}
 		val := execgen.UNSAFEGET(col, i)
 		execgen.COPYVAL(a.curAgg, val)
 		// {{end}}
 		a.foundNonNullForCurrentGroup = true
+		// {{if eq "_AGGKIND" "Hash"}}
+		// We have already seen non-null for the current group, and since there
+		// is at most a single group when performing hash aggregation, we can
+		// finish computing.
+		return
+		// {{end}}
 	}
 	// {{end}}
 
