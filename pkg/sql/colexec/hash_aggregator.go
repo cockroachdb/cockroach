@@ -202,7 +202,7 @@ func NewHashAggregator(
 		groupTypes[i] = typs[colIdx]
 	}
 
-	aggFnsAlloc, err := newAggregateFuncsAlloc(allocator, aggTyps, aggFns, hashAggregatorAllocSize)
+	aggFnsAlloc, err := newAggregateFuncsAlloc(allocator, aggTyps, aggFns, hashAggregatorAllocSize, true /* isHashAgg */)
 
 	return &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
