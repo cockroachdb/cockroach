@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dave/dst"
@@ -30,7 +31,7 @@ func InlineFuncs(inputFileContents string) (string, error) {
 		return "", err
 	}
 
-	templateFuncMap := make(map[string]*dst.FuncDecl)
+	templateFuncMap := make(map[string]funcInfo)
 
 	// First, run over the input file, searching for functions that are annotated
 	// with execgen:inline.
@@ -38,7 +39,7 @@ func InlineFuncs(inputFileContents string) (string, error) {
 
 	// Do a second pass over the AST, this time replacing calls to the inlined
 	// functions with the inlined function itself.
-	n = dstutil.Apply(n, func(cursor *dstutil.Cursor) bool {
+	dstutil.Apply(n, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
 		// There are two cases. AssignStmt, which are like:
 		// a = foo()
@@ -54,8 +55,8 @@ func InlineFuncs(inputFileContents string) (string, error) {
 			if !ok {
 				return true
 			}
-			decl := getTemplateFunc(templateFuncMap, callExpr)
-			if decl == nil {
+			funcInfo := getTemplateFunc(templateFuncMap, callExpr)
+			if funcInfo == nil {
 				return true
 			}
 			if len(n.Rhs) > 1 {
@@ -65,6 +66,7 @@ func InlineFuncs(inputFileContents string) (string, error) {
 			// Now we've got a callExpr. We need to inline the function call, and
 			// convert the result into the assignment variable.
 
+			decl := funcInfo.decl
 			// Produce declarations for each return value of the function to inline.
 			retValDeclStmt, retValNames := extractReturnValues(decl)
 			// inlinedStatements is a BlockStmt (a set of statements within curly
@@ -99,12 +101,18 @@ func InlineFuncs(inputFileContents string) (string, error) {
 			inlinedStatements := &dst.BlockStmt{
 				List: []dst.Stmt{retValDeclStmt},
 			}
+			body := dst.Clone(decl.Body).(*dst.BlockStmt)
+
+			// Replace template vars.
+			templateArgs, callExpr := replaceTemplateVars(funcInfo, callExpr)
+
+			// Replace template conditionals.
+			body = monomorphizeTemplate(body, funcInfo, templateArgs)
 
 			// Replace return statements with assignments to the return values.
 			// Make a copy of the function to inline, and walk through it, replacing
 			// return statements at the end of the body with assignments to the return
 			// value declarations we made first.
-			body := dst.Clone(decl.Body).(*dst.BlockStmt)
 			body = replaceReturnStatements(decl.Name.Name, body, func(stmt *dst.ReturnStmt) dst.Stmt {
 				returnAssignmentSpecs := make([]dst.Stmt, len(retValNames))
 				for i := range retValNames {
@@ -138,10 +146,11 @@ func InlineFuncs(inputFileContents string) (string, error) {
 			if !ok {
 				return true
 			}
-			decl := getTemplateFunc(templateFuncMap, callExpr)
-			if decl == nil {
+			funcInfo := getTemplateFunc(templateFuncMap, callExpr)
+			if funcInfo == nil {
 				return true
 			}
+			decl := funcInfo.decl
 
 			reassignments := getFormalParamReassignments(decl, callExpr)
 
@@ -152,6 +161,12 @@ func InlineFuncs(inputFileContents string) (string, error) {
 				List: []dst.Stmt{reassignments},
 			}
 			body := dst.Clone(decl.Body).(*dst.BlockStmt)
+
+			// Replace template vars.
+			templateArgs, callExpr := replaceTemplateVars(funcInfo, callExpr)
+
+			// Replace template conditionals.
+			body = monomorphizeTemplate(body, funcInfo, templateArgs)
 
 			// Remove return values if there are any, since we're ignoring returns
 			// as a raw function call.
@@ -169,22 +184,77 @@ func InlineFuncs(inputFileContents string) (string, error) {
 	return b.String(), nil
 }
 
+func monomorphizeTemplate(body *dst.BlockStmt, info *funcInfo, args []dst.Expr) *dst.BlockStmt {
+	return dstutil.Apply(body, func(cursor *dstutil.Cursor) bool {
+		n := cursor.Node()
+		switch n := n.(type) {
+		case *dst.IfStmt:
+			switch c := n.Cond.(type) {
+			case *dst.Ident:
+				for i, p := range info.templateParams {
+					if ident, ok := p.field.Type.(*dst.Ident); !ok || ident.Name != "bool" {
+						// Can only template bool types right now.
+						continue
+					}
+					if c.Name == p.field.Names[0].Name {
+						if ident, ok := args[i].(*dst.Ident); ok {
+							if ident.Name == "true" {
+								for _, stmt := range n.Body.List {
+									cursor.InsertAfter(stmt)
+								}
+								cursor.Delete()
+								return true
+							} else if n.Else != nil {
+								switch e := n.Else.(type) {
+								case *dst.BlockStmt:
+									for _, stmt := range e.List {
+										cursor.InsertAfter(stmt)
+									}
+									cursor.Delete()
+								default:
+									cursor.Replace(n.Else)
+								}
+								return true
+							} else {
+								cursor.Delete()
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return true
+	}, nil).(*dst.BlockStmt)
+}
+
 // extractInlineFuncDecls searches the input file for functions that are
 // annotated with execgen:inline, extracts them into templateFuncMap, and
 // deletes them from the AST.
-func extractInlineFuncDecls(f *dst.File, templateFuncMap map[string]*dst.FuncDecl) dst.Node {
+func extractInlineFuncDecls(f *dst.File, templateFuncMap map[string]funcInfo) dst.Node {
 	return dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
 		switch n := n.(type) {
 		case *dst.FuncDecl:
 			var mustInline bool
+			var templateVars []string
 			for _, dec := range n.Decorations().Start.All() {
 				if dec == "// execgen:inline" {
 					mustInline = true
-					break
+				}
+				if matches := templateRe.FindStringSubmatch(dec); matches != nil {
+					match := matches[1]
+					// Match now looks like foo, bar
+					templateVars = strings.Split(match, ",")
+					for i, v := range templateVars {
+						templateVars[i] = strings.TrimSpace(v)
+					}
 				}
 			}
 			if !mustInline {
+				if templateVars != nil {
+					panic("can't currently template without inlining")
+				}
 				// Nothing to do, but recurse further.
 				return true
 			}
@@ -193,14 +263,55 @@ func extractInlineFuncDecls(f *dst.File, templateFuncMap map[string]*dst.FuncDec
 					panic("can't currently deal with multiple names per type in decls")
 				}
 			}
+
+			// Process template funcs: find template params from runtime definition
+			// and save in funcInfo.
+			var info funcInfo
+			for _, v := range templateVars {
+				var found bool
+				for i, f := range n.Type.Params.List {
+					if f.Names[0].Name == v {
+						info.templateParams = append(info.templateParams, templateParamInfo{
+							fieldOrdinal: i,
+							field:        dst.Clone(f).(*dst.Field),
+						})
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(fmt.Errorf("template var %s not found", v))
+				}
+			}
+			info.decl = n
+
+			// Delete template params from runtime definition.
+			newParamList := make([]*dst.Field, 0, len(n.Type.Params.List)-len(info.templateParams))
+			for i, field := range n.Type.Params.List {
+				var skip bool
+				for _, p := range info.templateParams {
+					if i == p.fieldOrdinal {
+						skip = true
+						break
+					}
+				}
+				if !skip {
+					newParamList = append(newParamList, field)
+				}
+			}
+			n.Type.Params.List = newParamList
+
 			// Store the function in a map.
-			templateFuncMap[n.Name.Name] = n
+			templateFuncMap[n.Name.Name] = info
 			// Replace the function textually with a fake constant, such as:
 			// `const _ = "inlined_blahFunc"`. We do this instead
 			// of completely deleting it to prevent "important comments" above the
 			// function to be deleted, such as template comments like {{end}}. This
 			// is kind of a quirk of the way the comments are parsed, but nonetheless
 			// this is an easy fix so we'll leave it for now.
+			// TODO(jordan): We can't delete this until later, because template funcs
+			// can call other template funcs and we have to propagate the static
+			// template values... we really need to make a graph.
 			cursor.Replace(&dst.GenDecl{
 				Tok: token.CONST,
 				Specs: []dst.Spec{
@@ -346,21 +457,22 @@ func replaceReturnStatements(
 
 // getTemplateFunc returns the corresponding FuncDecl for a CallExpr from the
 // map, using the CallExpr's name to look up the FuncDecl from templateFuncs.
-func getTemplateFunc(templateFuncs map[string]*dst.FuncDecl, n *dst.CallExpr) *dst.FuncDecl {
+func getTemplateFunc(templateFuncs map[string]funcInfo, n *dst.CallExpr) *funcInfo {
 	ident, ok := n.Fun.(*dst.Ident)
 	if !ok {
 		return nil
 	}
 
-	decl, ok := templateFuncs[ident.Name]
+	info, ok := templateFuncs[ident.Name]
 	if !ok {
 		return nil
 	}
-	if decl.Type.Params.NumFields() != len(n.Args) {
+	decl := info.decl
+	if decl.Type.Params.NumFields()+len(info.templateParams) != len(n.Args) {
 		panic(errors.Newf(
 			"%s expected %d arguments, found %d",
 			decl.Name, decl.Type.Params.NumFields(), len(n.Args)),
 		)
 	}
-	return decl
+	return &info
 }
