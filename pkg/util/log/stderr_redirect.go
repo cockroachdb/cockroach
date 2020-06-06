@@ -10,7 +10,11 @@
 
 package log
 
-import "os"
+import (
+	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
 
 // OrigStderr points to the original stderr stream.
 var OrigStderr = func() *os.File {
@@ -44,3 +48,7 @@ func hijackStderr(f *os.File) error {
 func restoreStderr() error {
 	return redirectStderr(OrigStderr)
 }
+
+// osStderrMu ensures that concurrent redirects of stderr don't
+// overwrite each other.
+var osStderrMu syncutil.Mutex
