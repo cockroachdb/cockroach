@@ -213,7 +213,9 @@ SELECT EXISTS(SELECT * FROM generate_series(1,2))
 sql.plan.opt.node.project-set
 
 feature-usage
-SELECT * FROM x AS x1 NATURAL INNER MERGE JOIN x AS x2
+SELECT *
+FROM (SELECT * FROM x WHERE a < 0) AS x1
+NATURAL INNER MERGE JOIN (SELECT * FROM x WHERE a > 0) AS x2
 ----
 sql.plan.opt.node.join.algo.merge
 sql.plan.opt.node.join.type.inner
