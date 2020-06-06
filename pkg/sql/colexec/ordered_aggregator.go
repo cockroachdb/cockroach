@@ -155,7 +155,7 @@ func NewOrderedAggregator(
 
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
-	funcsAlloc, err := newAggregateFuncsAlloc(a.allocator, aggTypes, aggFns, 1 /* allocSize */)
+	funcsAlloc, err := newAggregateFuncsAlloc(a.allocator, aggTypes, aggFns, 1 /* allocSize */, false /* isHashAgg */)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,
