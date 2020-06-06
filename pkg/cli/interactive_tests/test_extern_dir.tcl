@@ -2,7 +2,7 @@
 #
 source [file join [file dirname $argv0] common.tcl]
 
-set storedir "mystore"
+set storedir "logs/mystore"
 set externdir "/some/extern"
 
 spawn /bin/bash
