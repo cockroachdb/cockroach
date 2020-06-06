@@ -56,6 +56,8 @@ type orderedAggregator struct {
 	// function operators write directly to this output batch.
 	scratch struct {
 		coldata.Batch
+		vecs  []coldata.Vec
+		nulls []*coldata.Nulls
 		// shouldResetInternalBatch keeps track of whether the scratch.Batch should
 		// be reset. It is false in cases where we have overflow results still to
 		// return and therefore do not want to modify the batch.
@@ -182,8 +184,10 @@ func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSiz
 	a.scratch.inputSize = inputSize * 2
 	a.scratch.outputSize = outputSize
 	a.scratch.Batch = a.allocator.NewMemBatchWithSize(a.outputTypes, a.scratch.inputSize)
-	for i := 0; i < len(a.outputTypes); i++ {
-		vec := a.scratch.ColVec(i)
+	a.scratch.vecs = a.scratch.Batch.ColVecs()
+	a.scratch.nulls = make([]*coldata.Nulls, len(a.outputTypes))
+	for i, vec := range a.scratch.vecs {
+		a.scratch.nulls[i] = vec.Nulls()
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
 	a.unsafeBatch = a.allocator.NewMemBatchWithSize(a.outputTypes, outputSize)
@@ -201,15 +205,14 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	}
 	if a.done {
 		a.scratch.SetLength(0)
-		return a.scratch
+		return a.scratch.Batch
 	}
 	if a.scratch.resumeIdx >= a.scratch.outputSize {
 		// Copy the second part of the output batch into the first and resume from
 		// there.
 		newResumeIdx := a.scratch.resumeIdx - a.scratch.outputSize
-		a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
-			for i := 0; i < len(a.outputTypes); i++ {
-				vec := a.scratch.ColVec(i)
+		a.allocator.PerformOperation(a.scratch.vecs, func() {
+			for i, vec := range a.scratch.vecs {
 				// According to the aggregate function interface contract, the value at
 				// the current index must also be copied.
 				// Note that we're using Append here instead of Copy because we want the
@@ -227,6 +230,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				// Now we need to restore the desired length for the Vec.
 				vec.SetLength(a.scratch.inputSize)
 				a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)
+				// There might have been some NULLs set in the part that we
+				// have just copied over, so we need to unset the NULLs.
+				a.scratch.nulls[i].UnsetNullsAfter(newResumeIdx + 1)
 			}
 		})
 		a.scratch.resumeIdx = newResumeIdx
@@ -234,11 +240,11 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			// We still have overflow output values.
 			a.scratch.SetLength(a.scratch.outputSize)
 			a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
-				for i := 0; i < len(a.outputTypes); i++ {
+				for i, vec := range a.scratch.vecs {
 					a.unsafeBatch.ColVec(i).Copy(
 						coldata.CopySliceArgs{
 							SliceArgs: coldata.SliceArgs{
-								Src:         a.scratch.ColVec(i),
+								Src:         vec,
 								SrcStartIdx: 0,
 								SrcEndIdx:   a.scratch.Length(),
 							},
@@ -294,11 +300,11 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	if a.scratch.resumeIdx > a.scratch.outputSize {
 		a.scratch.SetLength(a.scratch.outputSize)
 		a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
-			for i := 0; i < len(a.outputTypes); i++ {
+			for i, vec := range a.scratch.vecs {
 				a.unsafeBatch.ColVec(i).Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							Src:         a.scratch.ColVec(i),
+							Src:         vec,
 							SrcStartIdx: 0,
 							SrcEndIdx:   a.scratch.Length(),
 						},

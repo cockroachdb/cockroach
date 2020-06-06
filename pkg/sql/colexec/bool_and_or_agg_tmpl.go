@@ -82,10 +82,7 @@ func (b *bool_OP_TYPEAgg) CurrentOutputIndex() int {
 }
 
 func (b *bool_OP_TYPEAgg) SetOutputIndex(idx int) {
-	if b.curIdx != -1 {
-		b.curIdx = idx
-		b.nulls.UnsetNullsAfter(idx)
-	}
+	b.curIdx = idx
 }
 
 func (b *bool_OP_TYPEAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
