@@ -830,7 +830,8 @@ DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
   pkg/sql/colexec/and_or_projection.eg.go \
-  pkg/sql/colexec/any_not_null_agg.eg.go \
+  pkg/sql/colexec/any_not_null_hash_agg.eg.go \
+  pkg/sql/colexec/any_not_null_ordered_agg.eg.go \
   pkg/sql/colexec/avg_agg.eg.go \
   pkg/sql/colexec/bool_and_or_agg.eg.go \
   pkg/sql/colexec/cast.eg.go \

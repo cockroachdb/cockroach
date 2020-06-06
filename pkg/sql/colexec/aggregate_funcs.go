@@ -116,13 +116,18 @@ func newAggregateFuncsAlloc(
 	aggTyps [][]*types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	allocSize int64,
+	isHashAgg bool,
 ) (*aggregateFuncsAlloc, error) {
 	funcAllocs := make([]aggregateFuncAlloc, len(aggFns))
 	for i := range aggFns {
 		var err error
 		switch aggFns[i] {
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
-			funcAllocs[i], err = newAnyNotNullAggAlloc(allocator, aggTyps[i][0], allocSize)
+			if isHashAgg {
+				funcAllocs[i], err = newAnyNotNullHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+			} else {
+				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
 		case execinfrapb.AggregatorSpec_AVG:
 			funcAllocs[i], err = newAvgAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
@@ -255,7 +260,8 @@ func isAggregateSupported(
 		allocator,
 		[][]*types.T{inputTypes},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
-		0, /* allocSize */
+		0,     /* allocSize */
+		false, /* isHashAgg */
 	)
 	if err != nil {
 		return false, err
