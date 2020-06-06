@@ -227,7 +227,7 @@ func RecordError(err error) {
 	}
 
 	code := pgerror.GetPGCode(err)
-	Count("errorcodes." + code)
+	Count("errorcodes." + code.String())
 
 	tkeys := errors.GetTelemetryKeys(err)
 	if len(tkeys) > 0 {
@@ -238,7 +238,7 @@ func RecordError(err error) {
 		case pgcode.Internal:
 			prefix = "internalerror."
 		default:
-			prefix = "othererror." + code + "."
+			prefix = "othererror." + code.String() + "."
 		}
 
 		for _, tk := range tkeys {

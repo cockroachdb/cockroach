@@ -88,7 +88,7 @@ func TestDropDatabaseCascadeDuringImportsFails(t *testing.T) {
 		` database `+dbName, err)
 	pgErr := new(pq.Error)
 	require.True(t, errors.As(err, &pgErr))
-	require.Equal(t, pgcode.ObjectNotInPrerequisiteState, string(pgErr.Code))
+	require.Equal(t, pgcode.ObjectNotInPrerequisiteState, pgcode.MakeCode(string(pgErr.Code)))
 
 	close(allowResponse)
 	require.NoError(t, <-importErrCh)

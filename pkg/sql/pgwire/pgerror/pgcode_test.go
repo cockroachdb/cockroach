@@ -26,18 +26,18 @@ func TestPGCode(t *testing.T) {
 	tt := testutils.T{T: t}
 
 	testData := []struct {
-		outerCode    string
-		innerCode    string
+		outerCode    pgcode.Code
+		innerCode    pgcode.Code
 		innerErr     error
-		expectedCode string
+		expectedCode pgcode.Code
 	}{
-		{"foo", "bar", errors.New("world"), "bar"},
-		{"foo", pgcode.Uncategorized, errors.New("world"), "foo"},
-		{pgcode.Uncategorized, "foo", errors.New("world"), "foo"},
-		{"foo", "bar", errors.WithAssertionFailure(errors.New("world")), pgcode.Internal},
-		{"foo", "bar", errors.UnimplementedError(errors.IssueLink{}, "world"), pgcode.FeatureNotSupported},
-		{"foo", pgcode.Internal, errors.New("world"), pgcode.Internal},
-		{pgcode.Internal, "foo", errors.New("world"), pgcode.Internal},
+		{pgcode.MakeCode("foo"), pgcode.MakeCode("bar"), errors.New("world"), pgcode.MakeCode("bar")},
+		{pgcode.MakeCode("foo"), pgcode.Uncategorized, errors.New("world"), pgcode.MakeCode("foo")},
+		{pgcode.Uncategorized, pgcode.MakeCode("foo"), errors.New("world"), pgcode.MakeCode("foo")},
+		{pgcode.MakeCode("foo"), pgcode.MakeCode("bar"), errors.WithAssertionFailure(errors.New("world")), pgcode.Internal},
+		{pgcode.MakeCode("foo"), pgcode.MakeCode("bar"), errors.UnimplementedError(errors.IssueLink{}, "world"), pgcode.FeatureNotSupported},
+		{pgcode.MakeCode("foo"), pgcode.Internal, errors.New("world"), pgcode.Internal},
+		{pgcode.Internal, pgcode.MakeCode("foo"), errors.New("world"), pgcode.Internal},
 	}
 
 	for _, t := range testData {
@@ -57,8 +57,8 @@ func TestPGCode(t *testing.T) {
 					tt.CheckEqual(code, t.expectedCode)
 
 					errV := fmt.Sprintf("%+v", err)
-					tt.Check(strings.Contains(errV, "code: "+t.innerCode))
-					tt.Check(strings.Contains(errV, "code: "+t.outerCode))
+					tt.Check(strings.Contains(errV, "code: "+t.innerCode.String()))
+					tt.Check(strings.Contains(errV, "code: "+t.outerCode.String()))
 				}
 
 				tt.Run("local", func(tt testutils.T) { theTest(tt, origErr) })

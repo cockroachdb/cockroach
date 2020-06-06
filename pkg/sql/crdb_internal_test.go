@@ -408,7 +408,7 @@ VALUES ($1, 'StatusRunning', repeat('a', $2)::BYTES, repeat('a', $2)::BYTES)`, i
 			t.Fatalf("Expected \"%s\" to consume too much memory, found no error", statement)
 		}
 		if pErr := (*pq.Error)(nil); !(errors.As(err, &pErr) &&
-			pErr.Code == pgcode.OutOfMemory) {
+			pgcode.MakeCode(string(pErr.Code)) == pgcode.OutOfMemory) {
 			t.Fatalf("Expected \"%s\" to consume too much memory, found unexpected error %+v", statement, pErr)
 		}
 	})

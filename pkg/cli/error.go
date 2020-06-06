@@ -68,13 +68,14 @@ func (f *formattedError) Error() string {
 	severity := "ERROR"
 
 	// Extract the fields.
-	var message, code, hint, detail, location string
+	var message, hint, detail, location string
+	var code pgcode.Code
 	if pqErr := (*pq.Error)(nil); errors.As(f.err, &pqErr) {
 		if pqErr.Severity != "" {
 			severity = pqErr.Severity
 		}
 		message = pqErr.Message
-		code = string(pqErr.Code)
+		code = pgcode.MakeCode(string(pqErr.Code))
 		hint, detail = pqErr.Hint, pqErr.Detail
 		location = formatLocation(pqErr.File, pqErr.Line, pqErr.Routine)
 	} else {
@@ -96,7 +97,7 @@ func (f *formattedError) Error() string {
 	fmt.Fprintln(&buf, message)
 
 	// Avoid printing the code for NOTICE, as the code is always 00000.
-	if severity != "NOTICE" && code != "" {
+	if severity != "NOTICE" && code.String() != "" {
 		// In contrast to `psql` we print the code even when printing
 		// non-verbosely, because we want to promote users reporting codes
 		// when interacting with support.
@@ -264,7 +265,7 @@ func MaybeDecorateGRPCError(
 			// here, there was a TCP connection already.
 
 			// Did we fail due to security settings?
-			if wErr.Code == pgcode.ProtocolViolation {
+			if pgcode.MakeCode(string(wErr.Code)) == pgcode.ProtocolViolation {
 				return connSecurityHint()
 			}
 			// Otherwise, there was a regular SQL error. Just report
