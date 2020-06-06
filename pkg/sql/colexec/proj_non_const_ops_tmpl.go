@@ -33,9 +33,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
 // Declarations to make the template compile properly.
 

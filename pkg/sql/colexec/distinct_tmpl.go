@@ -84,9 +84,6 @@ func NewOrderedDistinct(
 	}, nil
 }
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
 
 // Declarations to make the template compile properly.
