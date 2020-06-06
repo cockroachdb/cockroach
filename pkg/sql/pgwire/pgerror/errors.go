@@ -65,21 +65,21 @@ func formatMsgHintDetail(prefix, msg, hint, detail string) string {
 
 // NewWithDepthf creates an error with a pg code and extracts the context
 // information at the specified depth level.
-func NewWithDepthf(depth int, code string, format string, args ...interface{}) error {
+func NewWithDepthf(depth int, code pgcode.Code, format string, args ...interface{}) error {
 	err := errors.NewWithDepthf(1+depth, format, args...)
 	err = WithCandidateCode(err, code)
 	return err
 }
 
 // New creates an error with a code.
-func New(code string, msg string) error {
+func New(code pgcode.Code, msg string) error {
 	err := errors.NewWithDepth(1, msg)
 	err = WithCandidateCode(err, code)
 	return err
 }
 
 // Newf creates an Error with a format string.
-func Newf(code string, format string, args ...interface{}) error {
+func Newf(code pgcode.Code, format string, args ...interface{}) error {
 	err := errors.NewWithDepthf(1, format, args...)
 	err = WithCandidateCode(err, code)
 	return err

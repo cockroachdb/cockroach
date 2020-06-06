@@ -724,7 +724,7 @@ func dumpTableDataForZip(
 				// Not a SQL error. Nothing to retry.
 				break
 			}
-			if pqErr.Code != pgcode.SerializationFailure {
+			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.SerializationFailure {
 				// A non-retry error. We've printed the error, and
 				// there's nothing to retry. Stop here.
 				break

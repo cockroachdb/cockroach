@@ -27,22 +27,22 @@ func TestUserName(t *testing.T) {
 		username   string
 		normalized string
 		err        string
-		sqlstate   string
+		sqlstate   pgcode.Code
 	}{
-		{"Abc123", "abc123", "", ""},
-		{"0123121132", "0123121132", "", ""},
-		{"HeLlO", "hello", "", ""},
-		{"Ομηρος", "ομηρος", "", ""},
-		{"_HeLlO", "_hello", "", ""},
-		{"a-BC-d", "a-bc-d", "", ""},
-		{"A.Bcd", "a.bcd", "", ""},
-		{"WWW.BIGSITE.NET", "www.bigsite.net", "", ""},
+		{"Abc123", "abc123", "", pgcode.Code{}},
+		{"0123121132", "0123121132", "", pgcode.Code{}},
+		{"HeLlO", "hello", "", pgcode.Code{}},
+		{"Ομηρος", "ομηρος", "", pgcode.Code{}},
+		{"_HeLlO", "_hello", "", pgcode.Code{}},
+		{"a-BC-d", "a-bc-d", "", pgcode.Code{}},
+		{"A.Bcd", "a.bcd", "", pgcode.Code{}},
+		{"WWW.BIGSITE.NET", "www.bigsite.net", "", pgcode.Code{}},
 		{"", "", `username "" invalid`, pgcode.InvalidName},
 		{"-ABC", "", `username "-abc" invalid`, pgcode.InvalidName},
 		{".ABC", "", `username ".abc" invalid`, pgcode.InvalidName},
 		{"*.wildcard", "", `username "\*.wildcard" invalid`, pgcode.InvalidName},
 		{"foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof", "", `username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" is too long`, pgcode.NameTooLong},
-		{"M", "m", "", ""},
+		{"M", "m", "", pgcode.Code{}},
 		{".", "", `username "." invalid`, pgcode.InvalidName},
 	}
 

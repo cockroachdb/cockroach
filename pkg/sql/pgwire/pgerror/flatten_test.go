@@ -33,7 +33,7 @@ func TestFlatten(t *testing.T) {
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckEqual(e.Message, "woo")
 				// Errors without code flatten to Uncategorized.
-				t.CheckEqual(e.Code, pgcode.Uncategorized)
+				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.Uncategorized)
 				t.CheckEqual(e.Severity, "ERROR")
 			},
 		},
@@ -41,7 +41,7 @@ func TestFlatten(t *testing.T) {
 			pgerror.WithCandidateCode(baseErr, pgcode.Syntax),
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckEqual(e.Message, "woo")
-				t.CheckEqual(e.Code, pgcode.Syntax)
+				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.Syntax)
 			},
 		},
 		{
@@ -68,7 +68,7 @@ func TestFlatten(t *testing.T) {
 		{
 			unimplemented.New("woo", "woo"),
 			func(t testutils.T, e *pgerror.Error) {
-				t.CheckEqual(e.Code, pgcode.FeatureNotSupported)
+				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.FeatureNotSupported)
 				t.CheckRegexpEqual(e.Hint, "You have attempted to use a feature that is not yet implemented")
 				t.CheckRegexpEqual(e.Hint, "support form")
 			},
@@ -76,7 +76,7 @@ func TestFlatten(t *testing.T) {
 		{
 			errors.AssertionFailedf("woo"),
 			func(t testutils.T, e *pgerror.Error) {
-				t.CheckEqual(e.Code, pgcode.Internal)
+				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.Internal)
 				t.CheckRegexpEqual(e.Hint, "You have encountered an unexpected error")
 				t.CheckRegexpEqual(e.Hint, "support form")
 			},
@@ -85,14 +85,14 @@ func TestFlatten(t *testing.T) {
 			errors.Wrap(&roachpb.TransactionRetryWithProtoRefreshError{Msg: "woo"}, ""),
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckRegexpEqual(e.Message, "restart transaction: .* woo")
-				t.CheckEqual(e.Code, pgcode.SerializationFailure)
+				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.SerializationFailure)
 			},
 		},
 		{
 			errors.Wrap(&roachpb.AmbiguousResultError{Message: "woo"}, ""),
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckRegexpEqual(e.Message, "result is ambiguous.*woo")
-				t.CheckEqual(e.Code, pgcode.StatementCompletionUnknown)
+				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.StatementCompletionUnknown)
 			},
 		},
 	}

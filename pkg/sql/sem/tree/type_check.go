@@ -775,7 +775,7 @@ func NewInvalidNestedSRFError(context string) error {
 // NewInvalidFunctionUsageError creates a rejection for a special function.
 func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	var cat string
-	var code string
+	var code pgcode.Code
 	switch class {
 	case AggregateClass:
 		cat = "aggregate"

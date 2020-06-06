@@ -51,7 +51,7 @@ func (w *withCandidateCode) FormatError(p errors.Printer) (next error) {
 func decodeWithCandidateCode(
 	_ context.Context, cause error, _ string, details []string, _ proto.Message,
 ) error {
-	code := pgcode.Uncategorized
+	code := pgcode.Uncategorized.String()
 	if len(details) > 0 {
 		code = details[0]
 	}

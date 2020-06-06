@@ -543,7 +543,7 @@ func expectExecPortal(
 }
 
 func expectSendError(
-	ctx context.Context, t *testing.T, pgErrCode string, rd *sql.StmtBufReader, c *conn,
+	ctx context.Context, t *testing.T, pgErrCode pgcode.Code, rd *sql.StmtBufReader, c *conn,
 ) {
 	t.Helper()
 	cmd, err := rd.CurCmd()

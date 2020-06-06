@@ -38,7 +38,7 @@ func loadTPCHDataset(
 		if err := db.QueryRowContext(
 			ctx, `SELECT count(*) FROM tpch.supplier`,
 		).Scan(&supplierCardinality); err != nil {
-			if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) && pqErr.Code == pgcode.UndefinedTable) {
+			if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) && pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedTable) {
 				return err
 			}
 			// Table does not exist. Set cardinality to 0.
@@ -62,7 +62,7 @@ func loadTPCHDataset(
 		c.Start(ctx, t, roachNodes)
 		m.ResetDeaths()
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
-		string(pqErr.Code) == pgcode.InvalidCatalogName) {
+		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
 		return err
 	}
 
