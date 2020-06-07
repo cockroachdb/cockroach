@@ -37,7 +37,7 @@ func TrackRaftProtos() func() []reflect.Type {
 	applyRaftEntryFunc := funcName((*apply.Task).ApplyCommittedEntries)
 	// We only need to track protos that could cause replica divergence
 	// by being written to disk downstream of raft.
-	whitelist := []string{
+	allowlist := []string{
 		// Some raft operations trigger gossip, but we don't require
 		// strict consistency there.
 		funcName((*gossip.Gossip).AddInfoProto),
@@ -92,14 +92,14 @@ func TrackRaftProtos() func() []reflect.Type {
 		for {
 			f, more := frames.Next()
 
-			whitelisted := false
-			for _, s := range whitelist {
+			allowlisted := false
+			for _, s := range allowlist {
 				if strings.Contains(f.Function, s) {
-					whitelisted = true
+					allowlisted = true
 					break
 				}
 			}
-			if whitelisted {
+			if allowlisted {
 				break
 			}
 

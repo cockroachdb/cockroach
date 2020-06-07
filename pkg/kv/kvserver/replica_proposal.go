@@ -751,7 +751,7 @@ func (r *Replica) evaluateProposal(
 		}
 
 		// Failed proposals can't have any Result except for what's
-		// whitelisted here.
+		// allowlisted here.
 		res.Local = result.LocalResult{
 			EncounteredIntents: res.Local.DetachEncounteredIntents(),
 			EndTxns:            res.Local.DetachEndTxns(true /* alwaysOnly */),

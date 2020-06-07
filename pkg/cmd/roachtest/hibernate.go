@@ -109,11 +109,11 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, _, _ := hibernateBlacklists.getLists(version)
+		blocklistName, expectedFailures, _, _ := hibernateBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
+			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// When testing, it is helpful to run only a subset of the tests. To do so
@@ -172,7 +172,7 @@ func registerHibernate(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "hibernate" /* ormName */, output,
-			blacklistName, expectedFailures, nil /* ignorelist */, version, latestTag,
+			blocklistName, expectedFailures, nil /* ignorelist */, version, latestTag,
 		)
 	}
 

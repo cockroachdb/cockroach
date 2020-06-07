@@ -109,12 +109,12 @@ import (
 // logicTestConfigs. If the directive is missing, the test is run in the
 // default configuration.
 //
-// The directive also supports blacklists, i.e. running all specified
-// configurations apart from a blacklisted configuration:
+// The directive also supports blocklists, i.e. running all specified
+// configurations apart from a blocklisted configuration:
 //
 //   # LogicTest: default-configs !3node-tenant
 //
-// If a blacklist is specified without an accompanying configuration, the
+// If a blocklist is specified without an accompanying configuration, the
 // default config is assumed. i.e., the following directive is equivalent to the
 // one above:
 //
@@ -1397,17 +1397,17 @@ CREATE DATABASE test;
 	t.unsupported = 0
 }
 
-// applyBlacklistToConfigIdxs applies the given blacklist to config idxs,
+// applyBlocklistToConfigIdxs applies the given blocklist to config idxs,
 // returning the result.
-func applyBlacklistToConfigIdxs(
-	configIdxs []logicTestConfigIdx, blacklist map[string]struct{},
+func applyBlocklistToConfigIdxs(
+	configIdxs []logicTestConfigIdx, blocklist map[string]struct{},
 ) []logicTestConfigIdx {
-	if len(blacklist) == 0 {
+	if len(blocklist) == 0 {
 		return configIdxs
 	}
 	var newConfigIdxs []logicTestConfigIdx
 	for _, idx := range configIdxs {
-		if _, ok := blacklist[logicTestConfigIdxToName[idx]]; ok {
+		if _, ok := blocklist[logicTestConfigIdxToName[idx]]; ok {
 			continue
 		}
 		newConfigIdxs = append(newConfigIdxs, idx)
@@ -1418,28 +1418,28 @@ func applyBlacklistToConfigIdxs(
 // processConfigs, given a list of configNames, returns the list of
 // corresponding logicTestConfigIdxs.
 func processConfigs(t *testing.T, path string, configNames []string) []logicTestConfigIdx {
-	const blacklistChar = '!'
-	blacklist := make(map[string]struct{})
-	allConfigNamesAreBlacklistDirectives := true
+	const blocklistChar = '!'
+	blocklist := make(map[string]struct{})
+	allConfigNamesAreBlocklistDirectives := true
 	for _, configName := range configNames {
-		if configName[0] != blacklistChar {
-			allConfigNamesAreBlacklistDirectives = false
+		if configName[0] != blocklistChar {
+			allConfigNamesAreBlocklistDirectives = false
 			continue
 		}
-		blacklist[configName[1:]] = struct{}{}
+		blocklist[configName[1:]] = struct{}{}
 	}
 
 	var configs []logicTestConfigIdx
-	if len(blacklist) != 0 && allConfigNamesAreBlacklistDirectives {
-		// No configs specified, this blacklist applies to the default config.
-		return applyBlacklistToConfigIdxs(defaultConfig, blacklist)
+	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
+		// No configs specified, this blocklist applies to the default config.
+		return applyBlocklistToConfigIdxs(defaultConfig, blocklist)
 	}
 
 	for _, configName := range configNames {
-		if configName[0] == blacklistChar {
+		if configName[0] == blocklistChar {
 			continue
 		}
-		if _, ok := blacklist[configName]; ok {
+		if _, ok := blocklist[configName]; ok {
 			continue
 		}
 
@@ -1447,9 +1447,9 @@ func processConfigs(t *testing.T, path string, configNames []string) []logicTest
 		if !ok {
 			switch configName {
 			case defaultConfigName:
-				configs = append(configs, applyBlacklistToConfigIdxs(defaultConfig, blacklist)...)
+				configs = append(configs, applyBlocklistToConfigIdxs(defaultConfig, blocklist)...)
 			case fiveNodeDefaultConfigName:
-				configs = append(configs, applyBlacklistToConfigIdxs(fiveNodeDefaultConfig, blacklist)...)
+				configs = append(configs, applyBlocklistToConfigIdxs(fiveNodeDefaultConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}

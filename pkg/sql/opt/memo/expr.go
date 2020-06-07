@@ -631,7 +631,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			//
 			// We only add the FD if composite types are not involved.
 			//
-			// TODO(radu): add a whitelist of expressions/operators that are ok, like
+			// TODO(radu): add a allowlist of expressions/operators that are ok, like
 			// arithmetic.
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {

@@ -231,7 +231,7 @@ func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	if b.insideViewDef {
-		// A black list of statements that can't be used from inside a view.
+		// A blocklist of statements that can't be used from inside a view.
 		switch stmt := stmt.(type) {
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
 			*tree.Split, *tree.Unsplit, *tree.Relocate,
