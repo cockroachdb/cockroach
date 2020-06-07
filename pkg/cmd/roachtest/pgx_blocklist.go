@@ -10,18 +10,18 @@
 
 package main
 
-var pgxBlacklists = blacklistsForVersion{
-	{"v19.2", "pgxBlacklist19_2", pgxBlacklist19_2, "pgxIgnorelist19_2", pgxIgnorelist19_2},
-	{"v20.1", "pgxBlacklist20_1", pgxBlacklist20_1, "pgxIgnorelist20_1", pgxIgnorelist20_1},
-	{"v20.2", "pgxBlacklist20_2", pgxBlacklist20_2, "pgxIgnorelist20_2", pgxIgnorelist20_2},
+var pgxBlocklists = blocklistsForVersion{
+	{"v19.2", "pgxBlocklist19_2", pgxBlocklist19_2, "pgxIgnorelist19_2", pgxIgnorelist19_2},
+	{"v20.1", "pgxBlocklist20_1", pgxBlocklist20_1, "pgxIgnorelist20_1", pgxIgnorelist20_1},
+	{"v20.2", "pgxBlocklist20_2", pgxBlocklist20_2, "pgxIgnorelist20_2", pgxIgnorelist20_2},
 }
 
 // Please keep these lists alphabetized for easy diffing.
-// After a failed run, an updated version of this blacklist should be available
+// After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var pgxBlacklist20_2 = pgxBlacklist20_1
+var pgxBlocklist20_2 = pgxBlocklist20_1
 
-var pgxBlacklist20_1 = blacklist{
+var pgxBlocklist20_1 = blocklist{
 	"v4.Example_CustomType":                                        "27796",
 	"v4.TestConnBeginBatchDeferredError":                           "31632",
 	"v4.TestConnCopyFromFailServerSideMidway":                      "19603",
@@ -65,12 +65,12 @@ var pgxBlacklist20_1 = blacklist{
 
 var pgxIgnorelist20_2 = pgxIgnorelist20_1
 
-var pgxIgnorelist20_1 = blacklist{
+var pgxIgnorelist20_1 = blocklist{
 	"v4.TestBeginIsoLevels":   "We don't support isolation levels",
 	"v4.TestQueryEncodeError": "This test checks the exact error message",
 }
 
-var pgxBlacklist19_2 = blacklist{
+var pgxBlocklist19_2 = blocklist{
 	"v4.Example_CustomType":                                                   "27796",
 	"v4.TestConnBeginBatchDeferredError":                                      "31632",
 	"v4.TestConnCopyFromCopyFromSourceErrorEnd":                               "5807",
@@ -129,7 +129,7 @@ var pgxBlacklist19_2 = blacklist{
 	"v4.TestUnregisteredTypeUsableAsStringArgumentAndBaseResult":              "27796",
 }
 
-var pgxIgnorelist19_2 = blacklist{
+var pgxIgnorelist19_2 = blocklist{
 	"v4.TestBeginIsoLevels":   "We don't support isolation levels",
 	"v4.TestQueryEncodeError": "This test checks the exact error message",
 }

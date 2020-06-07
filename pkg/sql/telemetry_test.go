@@ -45,10 +45,10 @@ import (
 //    Executes SQL statements against the database. Outputs no results on
 //    success. In case of error, outputs the error message.
 //
-//  - feature-whitelist
+//  - feature-allowlist
 //
 //    The input for this command is not SQL, but a list of regular expressions.
-//    Tests that follow (until the next feature-whitelist command) will only
+//    Tests that follow (until the next feature-allowlist command) will only
 //    output counters that match a regexp in this white list.
 //
 //  - feature-usage, feature-counters
@@ -57,7 +57,7 @@ import (
 //    white list that have been reported to the diagnostic server. The first
 //    variant outputs only the names of the counters that changed; the second
 //    variant outputs the counts as well. It is necessary to use
-//    feature-whitelist before these commands to avoid test flakes (e.g. because
+//    feature-allowlist before these commands to avoid test flakes (e.g. because
 //    of counters that are changed by looking up descriptors)
 //
 //  - schema
@@ -103,7 +103,7 @@ func TestTelemetry(t *testing.T) {
 		// issued multiple times.
 		runner.Exec(t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
 
-		var whitelist featureWhitelist
+		var allowlist featureAllowlist
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "exec":
@@ -125,9 +125,9 @@ func TestTelemetry(t *testing.T) {
 				}
 				return buf.String()
 
-			case "feature-whitelist":
+			case "feature-allowlist":
 				var err error
-				whitelist, err = makeWhitelist(strings.Split(td.Input, "\n"))
+				allowlist, err = makeAllowlist(strings.Split(td.Input, "\n"))
 				if err != nil {
 					td.Fatalf(t, "error parsing feature regex: %s", err)
 				}
@@ -150,8 +150,8 @@ func TestTelemetry(t *testing.T) {
 						// Ignore zero values (shouldn't happen in practice)
 						continue
 					}
-					if !whitelist.Match(k) {
-						// Feature key not in whitelist.
+					if !allowlist.Match(k) {
+						// Feature key not in allowlist.
 						continue
 					}
 					keys = append(keys, k)
@@ -193,10 +193,10 @@ func TestTelemetry(t *testing.T) {
 	})
 }
 
-type featureWhitelist []*regexp.Regexp
+type featureAllowlist []*regexp.Regexp
 
-func makeWhitelist(strings []string) (featureWhitelist, error) {
-	w := make(featureWhitelist, len(strings))
+func makeAllowlist(strings []string) (featureAllowlist, error) {
+	w := make(featureAllowlist, len(strings))
 	for i := range strings {
 		var err error
 		w[i], err = regexp.Compile("^" + strings[i] + "$")
@@ -207,9 +207,9 @@ func makeWhitelist(strings []string) (featureWhitelist, error) {
 	return w, nil
 }
 
-func (w featureWhitelist) Match(feature string) bool {
+func (w featureAllowlist) Match(feature string) bool {
 	if w == nil {
-		// Unset whitelist matches all counters.
+		// Unset allowlist matches all counters.
 		return true
 	}
 	for _, r := range w {
