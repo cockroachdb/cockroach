@@ -778,3 +778,26 @@ howdy cockroach
 
 statement ok
 ROLLBACK
+
+# Ensure that index drops that can't use range deletions succeed.
+statement ok
+CREATE TABLE enum_parent (x greeting PRIMARY KEY);
+CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
+INSERT INTO enum_parent VALUES ('hello');
+INSERT INTO enum_child VALUES ('hello', 'hello');
+CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
+DROP INDEX enum_child@i
+
+# Test the above case, but in a transaction.
+statement ok
+DROP TABLE enum_child;
+DROP TABLE enum_parent;
+BEGIN;
+CREATE TABLE enum_parent (x greeting PRIMARY KEY);
+CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
+INSERT INTO enum_parent VALUES ('hello');
+INSERT INTO enum_child VALUES ('hello', 'hello');
+CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
+DROP INDEX enum_child@i;
+ROLLBACK
+
