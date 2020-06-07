@@ -18,9 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,12 +35,13 @@ import (
 // reuse an existing client.Txn safely.
 func validateCheckExpr(
 	ctx context.Context,
+	semaCtx *tree.SemaContext,
 	exprStr string,
 	tableDesc *sqlbase.TableDescriptor,
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
-	expr, err := parser.ParseExpr(exprStr)
+	expr, err := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, tableDesc, exprStr)
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,7 @@ func validateCheckExpr(
 	lim := &tree.Limit{Count: tree.NewDInt(1)}
 	stmt := &tree.Select{Select: sel, Limit: lim}
 	queryStr := tree.AsStringWithFlags(stmt, tree.FmtParsable)
-	log.Infof(ctx, "Validating check constraint %q with query %q", expr.String(), queryStr)
+	log.Infof(ctx, "Validating check constraint %q with query %q", tree.SerializeForDisplay(expr), queryStr)
 
 	rows, err := ie.QueryRow(ctx, "validate check constraint", txn, queryStr)
 	if err != nil {
@@ -63,7 +64,7 @@ func validateCheckExpr(
 	if rows.Len() > 0 {
 		return pgerror.Newf(pgcode.CheckViolation,
 			"validation of CHECK %q failed on row: %s",
-			expr.String(), labeledRowValues(tableDesc.Columns, rows))
+			tree.SerializeForDisplay(expr), labeledRowValues(tableDesc.Columns, rows))
 	}
 	return nil
 }
@@ -336,7 +337,11 @@ type checkSet = util.FastIntSet
 // values, as ordinals into ActiveChecks(). There must be exactly one value in
 // checkVals for each element in checkSet.
 func checkMutationInput(
-	tabDesc *sqlbase.ImmutableTableDescriptor, checkOrds checkSet, checkVals tree.Datums,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	tabDesc *sqlbase.ImmutableTableDescriptor,
+	checkOrds checkSet,
+	checkVals tree.Datums,
 ) error {
 	if len(checkVals) < checkOrds.Len() {
 		return errors.AssertionFailedf(
@@ -353,9 +358,16 @@ func checkMutationInput(
 		if res, err := tree.GetBool(checkVals[colIdx]); err != nil {
 			return err
 		} else if !res && checkVals[colIdx] != tree.DNull {
-			// Failed to satisfy CHECK constraint.
+			// Failed to satisfy CHECK constraint, so unwrap the serialized
+			// check expression to display to the user.
+			expr, exprErr := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, tabDesc.TableDesc(), checks[i].Expr)
+			if exprErr != nil {
+				// If we ran into an error trying to read the check constraint, wrap it
+				// and return.
+				return errors.Wrapf(exprErr, "failed to satisfy CHECK constraint (%s)", checks[i].Expr)
+			}
 			return pgerror.Newf(
-				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", checks[i].Expr,
+				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", tree.SerializeForDisplay(expr),
 			)
 		}
 		colIdx++
