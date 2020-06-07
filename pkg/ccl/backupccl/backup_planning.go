@@ -104,7 +104,13 @@ func spansForAllTableIndexes(
 	// in them that we didn't already get above e.g. indexes or tables that are
 	// not in latest because they were dropped during the time window in question.
 	for _, rev := range revs {
-		if tbl := rev.Desc.Table(hlc.Timestamp{}); tbl != nil {
+		// If the table was dropped during the last interval, it will have
+		// at least 2 revisions, and the first one should have the table in a PUBLIC
+		// state. We want (and do) ignore tables that have been dropped for the
+		// entire interval. DROPPED tables should never later become PUBLIC.
+		// TODO(pbardea): Consider and test the interaction between revision_history
+		// backups and OFFLINE tables.
+		if tbl := rev.Desc.Table(hlc.Timestamp{}); tbl != nil && tbl.State != sqlbase.TableDescriptor_DROP {
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
