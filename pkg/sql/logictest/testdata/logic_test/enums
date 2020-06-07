@@ -586,6 +586,47 @@ enum_checks  CREATE TABLE enum_checks (
              CONSTRAINT "check" CHECK ('hello':::test.public.greeting = 'hello':::test.public.greeting)
 )
 
+# Ensure that we can add check constraints to tables with enums.
+statement ok
+DROP TABLE enum_checks;
+CREATE TABLE enum_checks (x greeting);
+INSERT INTO enum_checks VALUES ('hi'), ('howdy');
+ALTER TABLE enum_checks ADD CHECK (x > 'hello')
+
+# Ensure that checks are validated on insert.
+statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::test.public.greeting\)
+INSERT INTO enum_checks VALUES ('hello')
+
+# Try adding a check that fails validation.
+statement error pq: validation of CHECK "x = 'hello':::test.public.greeting" failed
+ALTER TABLE enum_checks ADD CHECK (x = 'hello')
+
+# Check the above cases, but in a transaction.
+statement ok
+DROP TABLE enum_checks;
+BEGIN;
+CREATE TABLE enum_checks (x greeting);
+INSERT INTO enum_checks VALUES ('hi'), ('howdy');
+ALTER TABLE enum_checks ADD CHECK (x > 'hello')
+
+statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::test.public.greeting\)
+INSERT INTO enum_checks VALUES ('hello')
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+CREATE TABLE enum_checks (x greeting);
+INSERT INTO enum_checks VALUES ('hi'), ('howdy');
+
+# Try adding a check that fails validation.
+statement error pq: validation of CHECK "x = 'hello':::test.public.greeting" failed
+ALTER TABLE enum_checks ADD CHECK (x = 'hello')
+
+statement ok
+ROLLBACK
+
 subtest schema_changes
 
 # Ensure that we can drop and create indexes on user defined type columns,

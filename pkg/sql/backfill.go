@@ -540,9 +540,16 @@ func (sc *SchemaChanger) validateConstraints(
 			}
 			// Each check operates at the historical timestamp.
 			return runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
+				// If the constraint is a check constraint that fails validation, we
+				// need a semaContext set up that can resolve types in order to pretty
+				// print the check expression back to the user.
+				evalCtx.Txn = txn
+				semaCtx := tree.MakeSemaContext()
+				// Use the DistSQLTypeResolver because we need to resolve types by ID.
+				semaCtx.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: &evalCtx.EvalContext}
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
@@ -550,7 +557,7 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_NOT_NULL:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
@@ -1517,7 +1524,7 @@ func runSchemaChangesInTxn(
 		switch c.ConstraintType {
 		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 			if err := validateCheckInTxn(
-				ctx, planner.Tables().LeaseManager(), planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
+				ctx, planner.Tables().LeaseManager(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
 			); err != nil {
 				return err
 			}
@@ -1564,6 +1571,7 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	leaseMgr *lease.Manager,
+	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *kv.Txn,
@@ -1587,7 +1595,7 @@ func validateCheckInTxn(
 	if err != nil {
 		return err
 	}
-	return validateCheckExpr(ctx, check.Expr, tableDesc.TableDesc(), ie, txn)
+	return validateCheckExpr(ctx, semaCtx, check.Expr, tableDesc.TableDesc(), ie, txn)
 }
 
 // validateFkInTxn validates foreign key constraints within the provided

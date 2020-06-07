@@ -173,7 +173,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// Verify the CHECK constraint results, if any.
 	if !r.checkOrds.Empty() {
 		checkVals := rowVals[len(r.insertCols):]
-		if err := checkMutationInput(r.ti.tableDesc(), r.checkOrds, checkVals); err != nil {
+		if err := checkMutationInput(params.ctx, &params.p.semaCtx, r.ti.tableDesc(), r.checkOrds, checkVals); err != nil {
 			return err
 		}
 		rowVals = rowVals[:len(r.insertCols)]

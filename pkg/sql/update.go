@@ -300,7 +300,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// contain the results of evaluation.
 	if !u.run.checkOrds.Empty() {
 		checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
-		if err := checkMutationInput(u.run.tu.tableDesc(), u.run.checkOrds, checkVals); err != nil {
+		if err := checkMutationInput(params.ctx, &params.p.semaCtx, u.run.tu.tableDesc(), u.run.checkOrds, checkVals); err != nil {
 			return err
 		}
 	}
