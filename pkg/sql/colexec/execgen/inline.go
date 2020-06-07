@@ -62,6 +62,29 @@ func InlineFuncs(inputFileContents string) (string, error) {
 				panic("can't do template replacement with more than a single RHS to a CallExpr")
 			}
 
+			if n.Tok == token.DEFINE {
+				// We need to put a variable declaration for the new defined variables
+				// in the parent scope.
+				newDefinitions := &dst.GenDecl{
+					Tok:   token.VAR,
+					Specs: make([]dst.Spec, len(n.Lhs)),
+				}
+
+				for i, e := range n.Lhs {
+					// If we had foo, bar := thingToInline(), we'd get
+					// var (
+					//   foo int
+					//   bar int
+					// )
+					newDefinitions.Specs[i] = &dst.ValueSpec{
+						Names: []*dst.Ident{dst.NewIdent(e.(*dst.Ident).Name)},
+						Type:  dst.Clone(funcInfo.decl.Type.Results.List[i].Type).(dst.Expr),
+					}
+				}
+
+				cursor.InsertBefore(&dst.DeclStmt{Decl: newDefinitions})
+			}
+
 			// Now we've got a callExpr. We need to inline the function call, and
 			// convert the result into the assignment variable.
 
@@ -124,6 +147,7 @@ func InlineFuncs(inputFileContents string) (string, error) {
 			})
 			// Assign mangled return values to the original assignment variables.
 			newAssignment := dst.Clone(n).(*dst.AssignStmt)
+			newAssignment.Tok = token.ASSIGN
 			newAssignment.Rhs = make([]dst.Expr, len(retValNames))
 			for i := range retValNames {
 				newAssignment.Rhs[i] = dst.NewIdent(retValNames[i])
