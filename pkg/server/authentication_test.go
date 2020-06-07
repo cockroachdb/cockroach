@@ -73,7 +73,7 @@ func (insecureCtx) HTTPRequestScheme() string {
 	return "https"
 }
 
-// Verify client certificate enforcement and user whitelisting.
+// Verify client certificate enforcement and user allowlisting.
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{

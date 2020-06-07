@@ -2096,7 +2096,7 @@ To achieve this, the library introduce *error domains*, which are computed attri
   its domain and preserves its message, structure, etc.
 - domains are preserved across the network.
 - a function `EnsureNotInDomain()` (described below) makes it possible to block
-  errors from one or more “blacklist” domains from escaping an API boundary,
+  errors from one or more “blocklist” domains from escaping an API boundary,
   or conditionally transmute them into appropriate substitute errors,
   in particular [barriers](#barriers-Error-barriers).
   

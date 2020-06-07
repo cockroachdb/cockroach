@@ -137,7 +137,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 
 	if pErr != nil {
 		// Failed read-only batches can't have any Result except for what's
-		// whitelisted here.
+		// allowlisted here.
 		res.Local = result.LocalResult{
 			EncounteredIntents: res.Local.DetachEncounteredIntents(),
 			Metrics:            res.Local.Metrics,

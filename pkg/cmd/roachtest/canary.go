@@ -28,35 +28,35 @@ import (
 // TODO(bram): There are more common elements between all the canary tests,
 // factor more of them into here.
 
-// blacklist is a lists of known test errors and failures.
-type blacklist map[string]string
+// blocklist is a lists of known test errors and failures.
+type blocklist map[string]string
 
-// blacklistForVersion contains both a blacklist of known test errors and
+// blocklistForVersion contains both a blocklist of known test errors and
 // failures but also an optional ignorelist for flaky tests.
 // When the test suite is run, the results are compared to this list.
-// Any passed test that is not on this blacklist is reported as PASS - expected
-// Any passed test that is on this blacklist is reported as PASS - unexpected
-// Any failed test that is on this blacklist is reported as FAIL - expected
-// Any failed test that is not on blackthis list is reported as FAIL - unexpected
-// Any test on this blacklist that is not run is reported as FAIL - not run
+// Any passed test that is not on this blocklist is reported as PASS - expected
+// Any passed test that is on this blocklist is reported as PASS - unexpected
+// Any failed test that is on this blocklist is reported as FAIL - expected
+// Any failed test that is not on blocklist list is reported as FAIL - unexpected
+// Any test on this blocklist that is not run is reported as FAIL - not run
 // Ant test in the ignorelist is reported as SKIP if it is run
-type blacklistForVersion struct {
+type blocklistForVersion struct {
 	versionPrefix  string
-	blacklistname  string
-	blacklist      blacklist
+	blocklistname  string
+	blocklist      blocklist
 	ignorelistname string
-	ignorelist     blacklist
+	ignorelist     blocklist
 }
 
-type blacklistsForVersion []blacklistForVersion
+type blocklistsForVersion []blocklistForVersion
 
-// getLists returns the appropriate blacklist and ignorelist based on the
+// getLists returns the appropriate blocklist and ignorelist based on the
 // cockroach version. This check only looks to ensure that the prefix that
 // matches.
-func (b blacklistsForVersion) getLists(version string) (string, blacklist, string, blacklist) {
+func (b blocklistsForVersion) getLists(version string) (string, blocklist, string, blocklist) {
 	for _, info := range b {
 		if strings.HasPrefix(version, info.versionPrefix) {
-			return info.blacklistname, info.blacklist, info.ignorelistname, info.ignorelist
+			return info.blocklistname, info.blocklist, info.ignorelistname, info.ignorelist
 		}
 	}
 	return "", nil, "", nil

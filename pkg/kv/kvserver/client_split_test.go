@@ -1705,9 +1705,9 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		}
 		return replica
 	}
-	blacklistedLeaseHolder := leaseHolder(leftKey)
-	log.Infof(ctx, "blacklisting replica %+v for leases", blacklistedLeaseHolder)
-	noLeaseForDesc.Store(&blacklistedLeaseHolder)
+	blocklistedLeaseHolder := leaseHolder(leftKey)
+	log.Infof(ctx, "blocklisting replica %+v for leases", blocklistedLeaseHolder)
+	noLeaseForDesc.Store(&blocklistedLeaseHolder)
 
 	// Pull the trigger. This actually also reads the RHS descriptor after the
 	// split, so when this returns, we've got the leases set up already.
@@ -1727,9 +1727,9 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	}
 
 	if currentLHSLeaseHolder := leaseHolder(leftKey); !reflect.DeepEqual(
-		currentLHSLeaseHolder, blacklistedLeaseHolder) {
+		currentLHSLeaseHolder, blocklistedLeaseHolder) {
 		t.Fatalf("lease holder changed from %+v to %+v, should de-flake this test",
-			blacklistedLeaseHolder, currentLHSLeaseHolder)
+			blocklistedLeaseHolder, currentLHSLeaseHolder)
 	}
 
 	// This write (to the right-hand side of the split) should hit the
@@ -1755,7 +1755,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	// that it's the same ReplicaID, which is not required but should always
 	// hold).
 	if rhsLease := leaseHolder(rightKey); !reflect.DeepEqual(
-		rhsLease, blacklistedLeaseHolder,
+		rhsLease, blocklistedLeaseHolder,
 	) {
 		t.Errorf("expected LHS and RHS to have same lease holder")
 	}
