@@ -89,6 +89,10 @@ func b(a int, b int, c int) (int, int) {
 package main
 
 func a() {
+	var (
+		ret1 int
+		ret2 int
+	)
 	{
 		var (
 			__retval_0 int
@@ -105,11 +109,15 @@ func a() {
 				__retval_1 = c
 			}
 		}
-		ret1, ret2 := __retval_0, __retval_1
+		ret1, ret2 = __retval_0, __retval_1
 	}
 }
 
 func c() {
+	var (
+		ret3 int
+		ret4 int
+	)
 	{
 		var (
 			__retval_0 int
@@ -126,7 +134,7 @@ func c() {
 				__retval_1 = c
 			}
 		}
-		ret3, ret4 := __retval_0, __retval_1
+		ret3, ret4 = __retval_0, __retval_1
 	}
 }
 
