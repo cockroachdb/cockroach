@@ -1735,7 +1735,7 @@ CockroachDB supports the following flags:
 	"nextval": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySequences,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 			Impure:           true,
 		},
 		tree.Overload{
@@ -1761,7 +1761,7 @@ CockroachDB supports the following flags:
 	"currval": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySequences,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 			Impure:           true,
 		},
 		tree.Overload{
@@ -1809,7 +1809,7 @@ CockroachDB supports the following flags:
 	"setval": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySequences,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 			Impure:           true,
 		},
 		tree.Overload{
@@ -3023,7 +3023,7 @@ may increase either contention or retry errors, or both.`,
 	"current_schema": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -3060,7 +3060,7 @@ may increase either contention or retry errors, or both.`,
 	"current_schemas": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"include_pg_catalog", types.Bool}},
@@ -3801,7 +3801,7 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.is_admin": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},

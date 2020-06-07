@@ -187,7 +187,7 @@ func evaluateBatch(
 			// has already been aborted.
 			// - heartbeats don't check the abort span. If the txn is aborted, they'll
 			// return an aborted proto in their otherwise successful response.
-			// TODO(nvanbenschoten): Let's remove heartbeats from this whitelist when
+			// TODO(nvanbenschoten): Let's remove heartbeats from this allowlist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
 			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {

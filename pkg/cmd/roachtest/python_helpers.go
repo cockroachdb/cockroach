@@ -20,7 +20,7 @@ import (
 var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^ ']*)(?: u?['"](?P<reason>.*)['"])?`)
 
 func (r *ormTestsResults) parsePythonUnitTestOutput(
-	input []byte, expectedFailures blacklist, ignoredList blacklist,
+	input []byte, expectedFailures blocklist, ignoredList blocklist,
 ) {
 	scanner := bufio.NewScanner(bytes.NewReader(input))
 	for scanner.Scan() {

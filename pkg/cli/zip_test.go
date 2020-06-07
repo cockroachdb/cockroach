@@ -65,7 +65,7 @@ SELECT concat('crdb_internal.', table_name) as name
 FROM [ SELECT table_name FROM [ SHOW TABLES FROM crdb_internal ] ]
 WHERE
 table_name NOT IN (
-	-- whitelisted tables that don't need to be in debug zip
+	-- allowlisted tables that don't need to be in debug zip
 	'backward_dependencies',
 	'builtin_functions',
 	'create_statements',

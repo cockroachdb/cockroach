@@ -173,7 +173,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	var err error
 	var username string
 	// We intentionally allow the `node` user to have a cert.
-	if username, err = sql.NormalizeAndValidateUsernameNoBlacklist(args[0]); err != nil {
+	if username, err = sql.NormalizeAndValidateUsernameNoBlocklist(args[0]); err != nil {
 		return errors.Wrap(err, "failed to generate client certificate and key")
 	}
 

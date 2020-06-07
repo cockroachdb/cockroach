@@ -92,21 +92,21 @@ func registerGopg(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, ignorelistName, ignorelist := gopgBlacklists.getLists(version)
+		blocklistName, expectedFailures, ignorelistName, ignorelist := gopgBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No gopg blacklist defined for cockroach version %s", version)
+			t.Fatalf("No gopg blocklist defined for cockroach version %s", version)
 		}
 		if ignorelist == nil {
 			t.Fatalf("No gopg ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignorelist %s",
-			version, blacklistName, ignorelistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+			version, blocklistName, ignorelistName)
 
 		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath))
 		t.Status("running gopg test suite")
 
 		// go test provides colorful output which - when redirected - interferes
-		// with matching of the blacklisted tests, so we will strip off all color
+		// with matching of the blocklisted tests, so we will strip off all color
 		// code escape sequences.
 		const removeColorCodes = `sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"`
 		// Note that this is expected to return an error, since the test suite
@@ -145,7 +145,7 @@ func registerGopg(r *testRegistry) {
 
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeFailed(
-			t, "gopg", blacklistName, expectedFailures, version, latestTag,
+			t, "gopg", blocklistName, expectedFailures, version, latestTag,
 			0, /* notRunCount */
 		)
 	}
@@ -166,7 +166,7 @@ func registerGopg(r *testRegistry) {
 // test suites from gopg ORM tests. TestGinkgo is a test harness that runs
 // several test suites described by gopg.
 func gormParseTestGinkgoOutput(
-	r *ormTestsResults, rawResults []byte, expectedFailures, ignorelist blacklist,
+	r *ormTestsResults, rawResults []byte, expectedFailures, ignorelist blocklist,
 ) (err error) {
 	var (
 		totalRunCount, totalTestCount int
@@ -265,7 +265,7 @@ func gormParseTestGinkgoOutput(
 		}
 	}
 
-	// Blacklist contains both the expected failures for "global" tests as well
+	// Blocklist contains both the expected failures for "global" tests as well
 	// as TestGinkgo's tests. We need to figure the number of the latter ones.
 	testGinkgoExpectedFailures := 0
 	for failure := range expectedFailures {

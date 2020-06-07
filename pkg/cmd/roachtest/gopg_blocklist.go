@@ -10,10 +10,10 @@
 
 package main
 
-var gopgBlacklists = blacklistsForVersion{
-	{"v19.2", "gopgBlackList19_2", gopgBlackList19_2, "gopgIgnoreList19_2", gopgIgnoreList19_2},
-	{"v20.1", "gopgBlackList20_1", gopgBlackList20_1, "gopgIgnoreList20_1", gopgIgnoreList20_1},
-	{"v20.2", "gopgBlackList20_2", gopgBlackList20_2, "gopgIgnoreList20_2", gopgIgnoreList20_2},
+var gopgBlocklists = blocklistsForVersion{
+	{"v19.2", "gopgBlockList19_2", gopgBlockList19_2, "gopgIgnoreList19_2", gopgIgnoreList19_2},
+	{"v20.1", "gopgBlockList20_1", gopgBlockList20_1, "gopgIgnoreList20_1", gopgIgnoreList20_1},
+	{"v20.2", "gopgBlockList20_2", gopgBlockList20_2, "gopgIgnoreList20_2", gopgIgnoreList20_2},
 }
 
 // These are lists of known gopg test errors and failures.
@@ -22,12 +22,12 @@ var gopgBlacklists = blacklistsForVersion{
 // Any failed test that is not on this list is reported as FAIL - unexpected.
 //
 // Please keep these lists alphabetized for easy diffing.
-// After a failed run, an updated version of this blacklist should be available
+// After a failed run, an updated version of this blocklist should be available
 // in the test log.
 
-var gopgBlackList20_2 = gopgBlackList20_1
+var gopgBlockList20_2 = gopgBlockList20_1
 
-var gopgBlackList20_1 = blacklist{
+var gopgBlockList20_1 = blocklist{
 	"pg | CopyFrom/CopyTo | copies corrupted data to a table":         "41608",
 	"pg | CopyFrom/CopyTo | copies data from a table and to a table":  "41608",
 	"pg | CountEstimate | works":                                      "17511",
@@ -47,7 +47,7 @@ var gopgBlackList20_1 = blacklist{
 	"v9.TestUnixSocket": "31113",
 }
 
-var gopgBlackList19_2 = blacklist{
+var gopgBlockList19_2 = blocklist{
 	"pg | CopyFrom/CopyTo | copies corrupted data to a table":                              "5807",
 	"pg | CopyFrom/CopyTo | copies data from a table and to a table":                       "5807",
 	"pg | CountEstimate | works":                                                           "17511",
@@ -97,7 +97,7 @@ var gopgIgnoreList20_2 = gopgIgnoreList20_1
 
 var gopgIgnoreList20_1 = gopgIgnoreList19_2
 
-var gopgIgnoreList19_2 = blacklist{
+var gopgIgnoreList19_2 = blocklist{
 	// These "fetching" tests assume a particular order when ORDER BY clause is
 	// omitted from the query by the ORM itself.
 	"pg | ORM slice model | fetches Book relations":       "41690",

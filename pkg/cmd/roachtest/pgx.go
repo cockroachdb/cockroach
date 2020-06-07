@@ -66,15 +66,15 @@ func registerPgx(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		t.Status("checking blacklist")
-		blacklistName, expectedFailures, ignorelistName, ignorelist := pgxBlacklists.getLists(version)
+		t.Status("checking blocklist")
+		blocklistName, expectedFailures, ignorelistName, ignorelist := pgxBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No pgx blacklist defined for cockroach version %s", version)
+			t.Fatalf("No pgx blocklist defined for cockroach version %s", version)
 		}
-		status := fmt.Sprintf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 		if ignorelist != nil {
-			status = fmt.Sprintf("Running cockroach version %s, using blacklist %s, using ignorelist %s",
-				version, blacklistName, ignorelistName)
+			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+				version, blocklistName, ignorelistName)
 		}
 		c.l.Printf("%s", status)
 
@@ -109,7 +109,7 @@ func registerPgx(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeAll(
-			t, "pgx", blacklistName, expectedFailures, version, latestTag,
+			t, "pgx", blocklistName, expectedFailures, version, latestTag,
 		)
 	}
 

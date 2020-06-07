@@ -74,7 +74,7 @@ type partitioningTest struct {
 
 	// scans are each a shorthand for an assertion of where data should live.
 	// The map key is the used for the `WHERE` clause of a `SELECT *` and the
-	// value is a comma separated whitelist of nodes that are allowed to serve
+	// value is a comma separated allowlist of nodes that are allowed to serve
 	// this query. Example: `map[string]string{`b = 1`: `n2`}` means that
 	// `SELECT * FROM t WHERE b = 1` is required to be served entirely by node2.
 	//

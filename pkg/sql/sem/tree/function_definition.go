@@ -65,15 +65,15 @@ type FunctionProperties struct {
 	// as impure.
 	Impure bool
 
-	// DistsqlBlacklist is set to true when a function depends on
+	// DistsqlBlocklist is set to true when a function depends on
 	// members of the EvalContext that are not marshaled by DistSQL
 	// (e.g. planner). Currently used for DistSQL to determine if
 	// expressions can be evaluated on a different node without sending
 	// over the EvalContext.
 	//
 	// TODO(andrei): Get rid of the planner from the EvalContext and then we can
-	// get rid of this blacklist.
-	DistsqlBlacklist bool
+	// get rid of this blocklist.
+	DistsqlBlocklist bool
 
 	// Class is the kind of built-in function (normal/aggregate/window/etc.)
 	Class FunctionClass

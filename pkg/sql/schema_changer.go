@@ -118,8 +118,8 @@ func NewSchemaChangerForTesting(
 }
 
 // isPermanentSchemaChangeError returns true if the error results in
-// a permanent failure of a schema change. This function is a whitelist
-// instead of a blacklist: only known safe errors are confirmed to not be
+// a permanent failure of a schema change. This function is a allowlist
+// instead of a blocklist: only known safe errors are confirmed to not be
 // permanent errors. Anything unknown is assumed to be permanent.
 func isPermanentSchemaChangeError(err error) bool {
 	if err == nil {
@@ -1550,7 +1550,7 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
 //
 // TODO(andrei): This EvalContext() will be broken for backfills trying to use
-// functions marked with distsqlBlacklist.
+// functions marked with distsqlBlocklist.
 // Also, the SessionTracing inside the context is unrelated to the one
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
@@ -1690,7 +1690,7 @@ func (r schemaChangeResumer) Resume(
 				)
 				return nil
 			case !isPermanentSchemaChangeError(scErr):
-				// Check if the error is on a whitelist of errors we should retry on,
+				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
 			default:
 				// All other errors lead to a failed job.
@@ -1808,7 +1808,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 			// wrapping it in a retry error.
 			return rollbackErr
 		case !isPermanentSchemaChangeError(rollbackErr):
-			// Check if the error is on a whitelist of errors we should retry on, and
+			// Check if the error is on a allowlist of errors we should retry on, and
 			// have the job registry retry.
 			return jobs.NewRetryJobError(rollbackErr.Error())
 		default:

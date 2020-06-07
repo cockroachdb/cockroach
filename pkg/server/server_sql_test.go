@@ -34,7 +34,7 @@ import (
 // and must not rely on having a NodeID/NodeDescriptor/NodeLiveness/...
 //
 // In short, it should not rely on the test server through anything other than a
-// `*kv.DB` and a small number of whitelisted RPCs.
+// `*kv.DB` and a small number of allowlisted RPCs.
 func TestSQLServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()

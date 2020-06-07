@@ -10,15 +10,15 @@
 
 package main
 
-var libPQBlacklists = blacklistsForVersion{
-	{"v19.2", "libPQBlacklist19_2", libPQBlacklist19_2, "libPQIgnorelist19_2", libPQIgnorelist19_2},
-	{"v20.1", "libPQBlacklist20_1", libPQBlacklist20_1, "libPQIgnorelist20_1", libPQIgnorelist20_1},
-	{"v20.2", "libPQBlacklist20_2", libPQBlacklist20_2, "libPQIgnorelist20_2", libPQIgnorelist20_2},
+var libPQBlocklists = blocklistsForVersion{
+	{"v19.2", "libPQBlocklist19_2", libPQBlocklist19_2, "libPQIgnorelist19_2", libPQIgnorelist19_2},
+	{"v20.1", "libPQBlocklist20_1", libPQBlocklist20_1, "libPQIgnorelist20_1", libPQIgnorelist20_1},
+	{"v20.2", "libPQBlocklist20_2", libPQBlocklist20_2, "libPQIgnorelist20_2", libPQIgnorelist20_2},
 }
 
-var libPQBlacklist20_2 = libPQBlacklist20_1
+var libPQBlocklist20_2 = libPQBlocklist20_1
 
-var libPQBlacklist20_1 = blacklist{
+var libPQBlocklist20_1 = blocklist{
 	"pq.TestBinaryByteSliceToInt":        "41547",
 	"pq.TestBinaryByteSlicetoUUID":       "41547",
 	"pq.TestByteaOutputFormats":          "26947",
@@ -53,7 +53,7 @@ var libPQBlacklist20_1 = blacklist{
 	"pq.TestStringWithNul":               "26366",
 }
 
-var libPQBlacklist19_2 = blacklist{
+var libPQBlocklist19_2 = blocklist{
 	"pq.TestBinaryByteSliceToInt":        "41547",
 	"pq.TestBinaryByteSlicetoUUID":       "41547",
 	"pq.TestBindError":                   "5807",
@@ -105,7 +105,7 @@ var libPQIgnorelist20_2 = libPQIgnorelist20_1
 
 var libPQIgnorelist20_1 = libPQIgnorelist19_2
 
-var libPQIgnorelist19_2 = blacklist{
+var libPQIgnorelist19_2 = blocklist{
 	// TestFormatTsBacked fails due to not returning an error for accepting a
 	// timestamp format that postgres does not.
 	"pq.TestFormatTsBackend": "41690",

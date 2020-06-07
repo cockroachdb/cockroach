@@ -10,12 +10,12 @@
 
 package main
 
-var psycopgBlacklists = blacklistsForVersion{
-	{"v2.2", "psycopgBlackList19_1", psycopgBlackList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
-	{"v19.1", "psycopgBlackList19_1", psycopgBlackList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
-	{"v19.2", "psycopgBlackList19_2", psycopgBlackList19_2, "psycopgIgnoreList19_2", psycopgIgnoreList19_2},
-	{"v20.1", "psycopgBlackList20_1", psycopgBlackList20_1, "psycopgIgnoreList20_1", psycopgIgnoreList20_1},
-	{"v20.2", "psycopgBlackList20_2", psycopgBlackList20_2, "psycopgIgnoreList20_2", psycopgIgnoreList20_2},
+var psycopgBlocklists = blocklistsForVersion{
+	{"v2.2", "psycopgBlockList19_1", psycopgBlockList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
+	{"v19.1", "psycopgBlockList19_1", psycopgBlockList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
+	{"v19.2", "psycopgBlockList19_2", psycopgBlockList19_2, "psycopgIgnoreList19_2", psycopgIgnoreList19_2},
+	{"v20.1", "psycopgBlockList20_1", psycopgBlockList20_1, "psycopgIgnoreList20_1", psycopgIgnoreList20_1},
+	{"v20.2", "psycopgBlockList20_2", psycopgBlockList20_2, "psycopgIgnoreList20_2", psycopgIgnoreList20_2},
 }
 
 // These are lists of known psycopg test errors and failures.
@@ -27,11 +27,11 @@ var psycopgBlacklists = blacklistsForVersion{
 // Any test on this list that is not run is reported as FAIL - not run
 //
 // Please keep these lists alphabetized for easy diffing.
-// After a failed run, an updated version of this blacklist should be available
+// After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var psycopgBlackList20_2 = psycopgBlackList20_1
+var psycopgBlockList20_2 = psycopgBlockList20_1
 
-var psycopgBlackList20_1 = blacklist{
+var psycopgBlockList20_1 = blocklist{
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "44701",
 	"tests.test_async.AsyncTests.test_error":                                                                 "44706",
 	"tests.test_async.AsyncTests.test_flush_on_write":                                                        "44709",
@@ -240,7 +240,7 @@ var psycopgBlackList20_1 = blacklist{
 	"tests.test_with.WithCursorTestCase.test_named_with_noop":                                                "30352",
 }
 
-var psycopgBlackList19_2 = blacklist{
+var psycopgBlockList19_2 = blocklist{
 	"tests.test_async.AsyncTests.test_async_after_async":                                                     "5807",
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "5807",
 	"tests.test_async.AsyncTests.test_async_connection_error_message":                                        "5807",
@@ -527,7 +527,7 @@ var psycopgBlackList19_2 = blacklist{
 	"tests.test_with.WithCursorTestCase.test_named_with_noop":                                                "30352",
 }
 
-var psycopgBlackList19_1 = blacklist{
+var psycopgBlockList19_1 = blocklist{
 	"tests.test_async.AsyncTests.test_async_after_async":                                                     "5807",
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "5807",
 	"tests.test_async.AsyncTests.test_async_connection_error_message":                                        "5807",
@@ -825,7 +825,7 @@ var psycopgIgnoreList20_1 = psycopgIgnoreList19_2
 
 var psycopgIgnoreList19_2 = psycopgIgnoreList19_1
 
-var psycopgIgnoreList19_1 = blacklist{
+var psycopgIgnoreList19_1 = blocklist{
 	"tests.test_green.GreenTestCase.test_flush_on_write":        "flakey",
 	"tests.test_connection.TestConnectionInfo.test_backend_pid": "we return -1 for pg_backend_pid()",
 }
