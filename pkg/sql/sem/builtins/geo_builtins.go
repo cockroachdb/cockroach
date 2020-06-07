@@ -854,6 +854,55 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_project": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"distance", types.Float},
+				{"azimuth", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				distance := float64(*args[1].(*tree.DFloat))
+				azimuth := float64(*args[2].(*tree.DFloat))
+
+				geomT, err := g.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				point, ok := geomT.(*geom.Point)
+				if !ok {
+					return nil, errors.Newf("ST_Project(geography) is only valid for point inputs")
+				}
+
+				projected, err := geogfn.Project(point, distance, azimuth)
+				if err != nil {
+					return nil, err
+				}
+
+				geog, err := geo.NewGeographyFromGeom(projected)
+				if err != nil {
+					return nil, err
+				}
+
+				return &tree.DGeography{Geography: geog}, nil
+			},
+			Info: infoBuilder{
+				info: `Returns a point projected from a start point along a geodesic using a given distance and azimuth (bearing).
+This is known as the direct geodesic problem.
+
+The distance is given in meters. Negative values are supported.
+
+The azimuth (also known as heading or bearing) is given in radians. It is measured clockwise from true north (azimuth zero).
+East is azimuth π/2 (90 degrees); south is azimuth π (180 degrees); west is azimuth 3π/2 (270 degrees).
+Negative azimuth values and values greater than 2π (360 degrees) are supported.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// Unary functions.

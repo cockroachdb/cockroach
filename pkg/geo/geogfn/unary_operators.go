@@ -11,9 +11,12 @@
 package geogfn
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 )
@@ -90,6 +93,41 @@ func Length(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64,
 	return length(regions, useSphereOrSpheroid)
 }
 
+// Project returns calculate a projected point given a source point, a distance and a azimuth.
+func Project(point *geom.Point, distance float64, azimuth float64) (*geom.Point, error) {
+	spheroid := geographiclib.WGS84Spheroid
+
+	// Normalize distance to be positive.
+	if distance < 0.0 {
+		distance = -distance
+		azimuth += math.Pi
+	}
+
+	// Normalize azimuth
+	azimuth -= 2.0 * math.Pi * math.Floor(azimuth/(2.0*math.Pi))
+
+	// Check the distance validity.
+	if distance > (math.Pi * spheroid.Radius) {
+		return nil, errors.Newf("Distance must not be greater than %v", math.Pi*spheroid.Radius)
+	}
+
+	// Convert to ta geodetic point.
+	x := point.X()
+	y := point.Y()
+
+	projected := spheroid.Project(
+		s2.LatLng{Lat: s1.Angle(x), Lng: s1.Angle(y)},
+		distance,
+		azimuth)
+
+	return geom.NewPointFlat(
+		geom.XY,
+		[]float64{
+			longitudeNormalize(float64(projected.Lng)) * 180.0 / math.Pi,
+			latitudeNormalize(float64(projected.Lat)) * 180.0 / math.Pi,
+		}), nil
+}
+
 // length returns the sum of the lengtsh and perimeters in the shapes of the Geography.
 // In OGC parlance, length returns both LineString lengths _and_ Polygon perimeters.
 func length(regions []s2.Region, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
@@ -127,4 +165,66 @@ func length(regions []s2.Region, useSphereOrSpheroid UseSphereOrSpheroid) (float
 		totalLength *= spheroid.SphereRadius
 	}
 	return totalLength, nil
+}
+
+// longitudeNormalize convert a longitude to the range of -Pi, Pi.
+func longitudeNormalize(lon float64) float64 {
+	if lon == -math.Pi {
+		return math.Pi
+	}
+
+	if lon == -2.0*math.Pi {
+		return 0
+	}
+
+	if lon > 2.0*math.Pi {
+		lon = math.Remainder(lon, 2.0*math.Pi)
+	}
+
+	if lon < -2.0*math.Pi {
+		lon = math.Remainder(lon, -2.0*math.Pi)
+	}
+
+	if lon > math.Pi {
+		lon = -2.0*math.Pi + lon
+	}
+
+	if lon < -1.0*math.Pi {
+		lon = 2.0*math.Pi + lon
+	}
+
+	if lon == -2.0*math.Pi {
+		lon *= -1.0
+	}
+
+	return lon
+}
+
+// latitudeNormalize convert a latitude to the range of -Pi/2, Pi/2.
+func latitudeNormalize(lat float64) float64 {
+	if lat > 2.0*math.Pi {
+		lat = math.Remainder(lat, 2.0*math.Pi)
+	}
+
+	if lat < -2.0*math.Pi {
+		lat = math.Remainder(lat, -2.0*math.Pi)
+	}
+
+	if lat > math.Pi {
+		lat = math.Pi - lat
+	}
+
+	if lat < -1.0*math.Pi {
+		lat = -1.0*math.Pi - lat
+	}
+
+	if lat > math.Pi*2 {
+		lat = math.Pi - lat
+	}
+
+	if lat < -1.0*math.Pi*2 {
+		lat = -1.0*math.Pi - lat
+	}
+
+	return lat
 }
