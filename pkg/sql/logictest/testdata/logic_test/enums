@@ -708,6 +708,57 @@ txn
 statement ok
 ROLLBACK
 
+# Ensure that index drops that can't use range deletions succeed.
+statement ok
+CREATE TABLE enum_parent (x greeting PRIMARY KEY);
+CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
+INSERT INTO enum_parent VALUES ('hello');
+INSERT INTO enum_child VALUES ('hello', 'hello');
+CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
+DROP INDEX enum_child@i
+
+# Test the above case, but in a transaction.
+statement ok
+DROP TABLE enum_child;
+DROP TABLE enum_parent;
+BEGIN;
+CREATE TABLE enum_parent (x greeting PRIMARY KEY);
+CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
+INSERT INTO enum_parent VALUES ('hello');
+INSERT INTO enum_child VALUES ('hello', 'hello');
+CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
+DROP INDEX enum_child@i;
+ROLLBACK
+
+# Test primary key change to an ENUM column.
+statement ok
+CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
+INSERT INTO enum_not_pk VALUES (1, 'howdy');
+ALTER TABLE enum_not_pk ALTER PRIMARY KEY USING COLUMNS (y);
+DROP TABLE enum_not_pk
+
+# Test primary key change away from an ENUM column.
+statement ok
+CREATE TABLE enum_pk (x GREETING PRIMARY KEY, y INT NOT NULL);
+INSERT INTO enum_pk VALUES ('howdy', 1);
+ALTER TABLE enum_pk ALTER PRIMARY KEY USING COLUMNS (y);
+DROP TABLE enum_pk
+
+# Repeat the above tests, but in a transaction.
+statement ok
+BEGIN;
+CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
+INSERT INTO enum_not_pk VALUES (1, 'howdy');
+ALTER TABLE enum_not_pk ALTER PRIMARY KEY USING COLUMNS (y);
+ROLLBACK
+
+statement ok
+BEGIN;
+CREATE TABLE enum_pk (x GREETING PRIMARY KEY, y INT NOT NULL);
+INSERT INTO enum_pk VALUES ('howdy', 1);
+ALTER TABLE enum_pk ALTER PRIMARY KEY USING COLUMNS (y);
+ROLLBACK
+
 # Test basic CTAS.
 statement ok
 CREATE TABLE enum_ctas_base (x greeting, y greeting, z _greeting);
