@@ -28,8 +28,7 @@ type columnBackfiller struct {
 
 	backfill.ColumnBackfiller
 
-	desc        *sqlbase.ImmutableTableDescriptor
-	otherTables []*sqlbase.ImmutableTableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 }
 
 var _ execinfra.Processor = &columnBackfiller{}
@@ -43,13 +42,8 @@ func newColumnBackfiller(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*columnBackfiller, error) {
-	otherTables := make([]*sqlbase.ImmutableTableDescriptor, len(spec.OtherTables))
-	for i, tbl := range spec.OtherTables {
-		otherTables[i] = sqlbase.NewImmutableTableDescriptor(tbl)
-	}
 	cb := &columnBackfiller{
-		desc:        sqlbase.NewImmutableTableDescriptor(spec.Table),
-		otherTables: otherTables,
+		desc: sqlbase.NewImmutableTableDescriptor(spec.Table),
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,
@@ -104,7 +98,6 @@ func (cb *columnBackfiller) runChunk(
 			ctx,
 			txn,
 			cb.desc,
-			cb.otherTables,
 			sp,
 			chunkSize,
 			true,  /*alsoCommit*/
