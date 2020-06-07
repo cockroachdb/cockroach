@@ -56,13 +56,10 @@ message BackfillerSpec {
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
-  // Any other (leased) table descriptors necessary for the
-  // backfiller to do its job, such as the descriptors for tables with fk
-  // relationships to the table being modified.
-  repeated sqlbase.TableDescriptor other_tables = 6 [(gogoproto.nullable) = false];
-
   // The timestamp to perform index backfill historical scans at.
   optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+
+  reserved 6;
 }
 
 // JobProgress identifies the job to report progress on. This reporting

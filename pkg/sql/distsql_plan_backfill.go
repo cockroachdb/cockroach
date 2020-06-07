@@ -26,15 +26,13 @@ func initBackfillerSpec(
 	desc sqlbase.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
-	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
 ) (execinfrapb.BackfillerSpec, error) {
 	ret := execinfrapb.BackfillerSpec{
-		Table:       desc,
-		Duration:    duration,
-		ChunkSize:   chunkSize,
-		OtherTables: otherTables,
-		ReadAsOf:    readAsOf,
+		Table:     desc,
+		Duration:  duration,
+		ChunkSize: chunkSize,
+		ReadAsOf:  readAsOf,
 	}
 	switch backfillType {
 	case indexBackfill:
@@ -57,10 +55,9 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	duration time.Duration,
 	chunkSize int64,
 	spans []roachpb.Span,
-	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
 ) (PhysicalPlan, error) {
-	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, readAsOf)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}

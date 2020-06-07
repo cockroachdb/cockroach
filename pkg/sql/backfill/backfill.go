@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
@@ -145,37 +144,11 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	otherTables []*sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	fkTables, _ := row.MakeFkMetadata(
-		ctx,
-		tableDesc,
-		row.CheckUpdates,
-		row.NoLookup,
-		row.NoCheckPrivilege,
-		nil, /* AnalyzeExprFunction */
-		nil, /* CheckHelper */
-	)
-	for i, fkTableDesc := range otherTables {
-		found, ok := fkTables[fkTableDesc.ID]
-		if !ok {
-			// We got passed an extra table for some reason - just ignore it.
-			continue
-		}
-
-		found.Desc = otherTables[i]
-		fkTables[fkTableDesc.ID] = found
-	}
-	for id, table := range fkTables {
-		if table.Desc == nil {
-			// We weren't passed all of the tables that we need by the coordinator.
-			return roachpb.Key{}, errors.AssertionFailedf("table %v not sent by coordinator", id)
-		}
-	}
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
 	requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
@@ -186,11 +159,11 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		txn,
 		cb.evalCtx.Codec,
 		tableDesc,
-		fkTables,
+		nil, /* fkTables */
 		cb.updateCols,
 		requestedCols,
 		row.UpdaterOnlyColumns,
-		row.CheckFKs,
+		row.SkipFKs,
 		cb.evalCtx,
 		&cb.alloc,
 	)
