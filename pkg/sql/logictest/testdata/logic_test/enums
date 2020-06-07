@@ -666,3 +666,74 @@ txn
 
 statement ok
 ROLLBACK
+
+# Test basic CTAS.
+statement ok
+CREATE TABLE enum_ctas_base (x greeting, y greeting, z _greeting);
+INSERT INTO enum_ctas_base VALUES ('hi', 'howdy', ARRAY['hello']);
+CREATE TABLE enum_ctas AS TABLE enum_ctas_base
+
+query TTT
+SELECT * from enum_ctas
+----
+hi howdy {hello}
+
+# Test basic CTAS in a transaction.
+statement ok
+DROP TABLE enum_ctas;
+BEGIN;
+CREATE TABLE enum_ctas AS TABLE enum_ctas_base
+
+query TTT
+SELECT * from enum_ctas
+----
+hi howdy {hello}
+
+statement ok
+ROLLBACK
+
+# Test CTAS with a SELECT query.
+statement ok
+CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
+
+query TTTT
+SELECT * FROM enum_ctas
+----
+hi hello {hello} {hello,howdy,hi}
+
+# Test CTAS with a SELECT query in a transaction.
+statement ok
+DROP TABLE enum_ctas;
+BEGIN;
+CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
+
+query TTTT
+SELECT * FROM enum_ctas
+----
+hi hello {hello} {hello,howdy,hi}
+
+statement ok
+ROLLBACK
+
+# Test CTAS from a VALUES clause.
+statement ok
+CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
+
+query TT
+SELECT * FROM enum_ctas
+----
+howdy cockroach
+
+# Test CTAS from a VALUES clause in a transaction.
+statement ok
+DROP TABLE enum_ctas;
+BEGIN;
+CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
+
+query TT
+SELECT * FROM enum_ctas
+----
+howdy cockroach
+
+statement ok
+ROLLBACK
