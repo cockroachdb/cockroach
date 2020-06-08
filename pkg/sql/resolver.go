@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -496,17 +495,31 @@ type internalLookupCtx struct {
 // database descriptor using the table's ID.
 type tableLookupFn = *internalLookupCtx
 
-func newInternalLookupCtx(
-	descs []sqlbase.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
+// newInternalLookupCtxFromDescriptors "unwraps" the descriptors into the
+// appropriate implementation of DescriptorInterface before constructing a
+// new internalLookupCtx. It is intended only for use when dealing with backups.
+func newInternalLookupCtxFromDescriptors(
+	rawDescs []sqlbase.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
-	return newInternalLookupCtxFromDescriptors(descs, prefix)
+	descs := make([]sqlbase.DescriptorInterface, len(rawDescs))
+	for i := range rawDescs {
+		desc := &rawDescs[i]
+		switch t := desc.Union.(type) {
+		case *sqlbase.Descriptor_Database:
+			descs[i] = sqlbase.NewImmutableDatabaseDescriptor(*t.Database)
+		case *sqlbase.Descriptor_Table:
+			descs[i] = sqlbase.NewImmutableTableDescriptor(*t.Table)
+		case *sqlbase.Descriptor_Type:
+			descs[i] = sqlbase.NewImmutableTypeDescriptor(*t.Type)
+		case *sqlbase.Descriptor_Schema:
+			descs[i] = sqlbase.NewImmutableSchemaDescriptor(*t.Schema)
+		}
+	}
+	return newInternalLookupCtx(descs, prefix)
 }
 
-// TODO(ajwerner): This should take already unwrapped descriptors in the form of
-// a []sqlbase.DescriptorInterface rather than constructing the wrapper structs
-// a new.
-func newInternalLookupCtxFromDescriptors(
-	descs []sqlbase.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
+func newInternalLookupCtx(
+	descs []sqlbase.DescriptorInterface, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
 	dbNames := make(map[sqlbase.ID]string)
 	dbDescs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
@@ -515,25 +528,24 @@ func newInternalLookupCtxFromDescriptors(
 	var tbIDs, typIDs, dbIDs []sqlbase.ID
 	// Record database descriptors for name lookups.
 	for i := range descs {
-		desc := &descs[i]
-		if database := desc.GetDatabase(); database != nil {
-			dbNames[database.GetID()] = database.GetName()
-			dbDescs[database.GetID()] = sqlbase.NewImmutableDatabaseDescriptor(*database)
-			if prefix == nil || prefix.GetID() == database.GetID() {
-				dbIDs = append(dbIDs, database.GetID())
+		switch desc := descs[i].(type) {
+		case *sqlbase.ImmutableDatabaseDescriptor:
+			dbNames[desc.GetID()] = desc.GetName()
+			dbDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.GetID() {
+				dbIDs = append(dbIDs, desc.GetID())
 			}
-		} else if table := desc.Table(hlc.Timestamp{}); table != nil {
-			tbDescs[table.ID] = sqlbase.NewImmutableTableDescriptor(*table)
-			if prefix == nil || prefix.GetID() == table.ParentID {
+		case *sqlbase.ImmutableTableDescriptor:
+			tbDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
-				tbIDs = append(tbIDs, table.ID)
+				tbIDs = append(tbIDs, desc.ID)
 			}
-		} else if typ := desc.GetType(); typ != nil {
-			typ := sqlbase.NewImmutableTypeDescriptor(*typ)
-			typDescs[typ.GetID()] = typ
-			if prefix == nil || prefix.GetID() == typ.ParentID {
+		case *sqlbase.ImmutableTypeDescriptor:
+			typDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the type visible for iteration if the prefix was included.
-				typIDs = append(typIDs, typ.GetID())
+				typIDs = append(typIDs, desc.GetID())
 			}
 		}
 	}
