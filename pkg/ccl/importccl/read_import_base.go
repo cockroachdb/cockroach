@@ -55,10 +55,12 @@ func runImport(
 	// After this group is done, we need to close kvCh.
 	// Depending on the import implementation both conv.start and conv.readFiles can
 	// produce KVs so we should close the channel only after *both* are finished.
-	producerGroup := ctxgroup.WithContext(ctx)
-	conv.start(producerGroup)
+	group := ctxgroup.WithContext(ctx)
+	conv.start(group)
+
 	// Read input files into kvs
-	producerGroup.GoCtx(func(ctx context.Context) error {
+	group.GoCtx(func(ctx context.Context) error {
+		defer close(kvCh)
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
 		var inputs map[int32]string
@@ -77,13 +79,6 @@ func runImport(
 		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage)
 	})
 
-	// This group links together the producers (via producerGroup) and the KV ingester.
-	group := ctxgroup.WithContext(ctx)
-	group.Go(func() error {
-		defer close(kvCh)
-		return producerGroup.Wait()
-	})
-
 	// Ingest the KVs that the producer group emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *roachpb.BulkOpSummary
@@ -99,11 +94,15 @@ func runImport(
 			prog.CompletedFraction[i] = 1.0
 			prog.ResumePos[i] = math.MaxInt64
 		}
-		progCh <- prog
-		return nil
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case progCh <- prog:
+			return nil
+		}
 	})
 
-	if err := group.Wait(); err != nil {
+	if err = group.Wait(); err != nil {
 		return nil, err
 	}
 
