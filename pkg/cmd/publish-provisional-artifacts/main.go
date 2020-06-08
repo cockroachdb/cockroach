@@ -13,7 +13,6 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"flag"
@@ -31,8 +30,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/cockroachdb/cockroach/pkg/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
 
@@ -49,8 +48,6 @@ type s3I interface {
 	PutObject(*s3.PutObjectInput) (*s3.PutObjectOutput, error)
 }
 
-type execRunner func(*exec.Cmd) ([]byte, error)
-
 func makeS3() (s3I, error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
@@ -60,20 +57,6 @@ func makeS3() (s3I, error) {
 	}
 	return s3.New(sess), nil
 }
-
-var libsRe = func() *regexp.Regexp {
-	libs := strings.Join([]string{
-		regexp.QuoteMeta("linux-vdso.so."),
-		regexp.QuoteMeta("librt.so."),
-		regexp.QuoteMeta("libpthread.so."),
-		regexp.QuoteMeta("libdl.so."),
-		regexp.QuoteMeta("libm.so."),
-		regexp.QuoteMeta("libc.so."),
-		regexp.QuoteMeta("libresolv.so."),
-		strings.Replace(regexp.QuoteMeta("ld-linux-ARCH.so."), "ARCH", ".*", -1),
-	}, "|")
-	return regexp.MustCompile(libs)
-}()
 
 var osVersionRe = regexp.MustCompile(`\d+(\.\d+)*-`)
 
@@ -106,16 +89,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Creating AWS S3 session: %s", err)
 	}
-	execFn := func(c *exec.Cmd) ([]byte, error) {
-		if c.Stdout != nil {
-			return nil, errors.New("exec: Stdout already set")
-		}
-		var stdout bytes.Buffer
-		c.Stdout = io.MultiWriter(&stdout, os.Stdout)
-		err := c.Run()
-		return stdout.Bytes(), err
-	}
-
+	execFn := release.DefaultExecFn
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
 	if !ok {
 		log.Fatalf("VCS branch environment variable %s is not set", teamcityBuildBranchKey)
@@ -149,7 +123,7 @@ type runFlags struct {
 	pkgDir                 string
 }
 
-func run(svc s3I, execFn execRunner, flags runFlags) {
+func run(svc s3I, execFn release.ExecFn, flags runFlags) {
 	// TODO(dan): non-release builds currently aren't broken into the two
 	// phases. Instead, the provisional phase does them both.
 	if !flags.isRelease {
@@ -198,17 +172,7 @@ func run(svc s3I, execFn execRunner, flags runFlags) {
 	log.Printf("Using S3 bucket: %s", bucketName)
 
 	var cockroachBuildOpts []opts
-	for _, target := range []struct {
-		buildType string
-		suffix    string
-	}{
-		// TODO(tamird): consider shifting this information into the builder
-		// image; it's conceivable that we'll want to target multiple versions
-		// of a given triple.
-		{buildType: "darwin", suffix: ".darwin-10.9-amd64"},
-		{buildType: "linux-gnu", suffix: ".linux-2.6.32-gnu-amd64"},
-		{buildType: "windows", suffix: ".windows-6.2-amd64.exe"},
-	} {
+	for _, target := range release.SupportedTargets {
 		for i, extraArgs := range []struct {
 			goflags string
 			suffix  string
@@ -229,9 +193,9 @@ func run(svc s3I, execFn execRunner, flags runFlags) {
 			o.Branch = flags.branch
 			o.VersionStr = versionStr
 			o.BucketName = bucketName
-			o.BuildType = target.buildType
+			o.BuildType = target.BuildType
 			o.GoFlags = extraArgs.goflags
-			o.Suffix = extraArgs.suffix + target.suffix
+			o.Suffix = extraArgs.suffix + target.Suffix
 			o.Tags = extraArgs.tags
 			o.Base = "cockroach" + o.Suffix
 
@@ -252,7 +216,7 @@ func run(svc s3I, execFn execRunner, flags runFlags) {
 
 	if flags.doProvisional {
 		for _, o := range cockroachBuildOpts {
-			buildCockroach(svc, execFn, flags, o)
+			buildCockroach(execFn, flags, o)
 
 			absolutePath := filepath.Join(o.PkgDir, o.Base)
 			binary, err := os.Open(absolutePath)
@@ -285,7 +249,7 @@ func run(svc s3I, execFn execRunner, flags runFlags) {
 	}
 }
 
-func buildAndPutArchive(svc s3I, execFn execRunner, o opts) {
+func buildAndPutArchive(svc s3I, execFn release.ExecFn, o opts) {
 	log.Printf("building archive %s", pretty.Sprint(o))
 	defer func() {
 		log.Printf("done building archive: %s", pretty.Sprint(o))
@@ -325,59 +289,33 @@ func buildAndPutArchive(svc s3I, execFn execRunner, o opts) {
 	}
 }
 
-func buildCockroach(svc s3I, execFn execRunner, flags runFlags, o opts) {
+func buildCockroach(execFn release.ExecFn, flags runFlags, o opts) {
 	log.Printf("building cockroach %s", pretty.Sprint(o))
 	defer func() {
 		log.Printf("done building cockroach: %s", pretty.Sprint(o))
 	}()
 
-	{
-		args := []string{o.BuildType}
-		args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", o.GoFlags))
-		args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix))
-		args = append(args, fmt.Sprintf("%s=%s", "TAGS", o.Tags))
-		args = append(args, fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary"))
-		if flags.isRelease {
-			args = append(args, fmt.Sprintf("%s=%s", "BUILDINFO_TAG", o.VersionStr))
-			args = append(args, fmt.Sprintf("%s=%s", "BUILD_TAGGED_RELEASE", "true"))
-		}
-		cmd := exec.Command("mkrelease", args...)
-		cmd.Dir = o.PkgDir
-		cmd.Stderr = os.Stderr
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		if out, err := execFn(cmd); err != nil {
-			log.Fatalf("%s %s: %s\n\n%s", cmd.Env, cmd.Args, err, out)
-		}
+	opts := []release.MakeReleaseOption{
+		release.WithMakeReleaseOptionExecFn(execFn),
+		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "GOFLAGS", o.GoFlags)),
+		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix)),
+		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "TAGS", o.Tags)),
+		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary")),
+	}
+	if flags.isRelease {
+		opts = append(opts, release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILDINFO_TAG", o.VersionStr)))
+		opts = append(opts, release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILD_TAGGED_RELEASE", "true")))
 	}
 
-	if strings.Contains(o.BuildType, "linux") {
-		binaryName := "./cockroach" + o.Suffix
-
-		cmd := exec.Command(binaryName, "version")
-		cmd.Dir = o.PkgDir
-		cmd.Env = append(cmd.Env, "MALLOC_CONF=prof:true")
-		cmd.Stderr = os.Stderr
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		if out, err := execFn(cmd); err != nil {
-			log.Fatalf("%s %s: %s\n\n%s", cmd.Env, cmd.Args, err, out)
-		}
-
-		cmd = exec.Command("ldd", binaryName)
-		cmd.Dir = o.PkgDir
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		out, err := execFn(cmd)
-		if err != nil {
-			log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
-		}
-		scanner := bufio.NewScanner(bytes.NewReader(out))
-		for scanner.Scan() {
-			if line := scanner.Text(); !libsRe.MatchString(line) {
-				log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			log.Fatal(err)
-		}
+	if err := release.MakeRelease(
+		release.SupportedTarget{
+			BuildType: o.BuildType,
+			Suffix:    o.Suffix,
+		},
+		o.PkgDir,
+		opts...,
+	); err != nil {
+		log.Fatal(err)
 	}
 }
 
