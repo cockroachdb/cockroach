@@ -13,6 +13,7 @@ package geo
 
 import (
 	"encoding/binary"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
@@ -239,12 +240,6 @@ func (g *Geometry) Shape() geopb.Shape {
 // intersects with the other.
 func (g *Geometry) BoundingBoxIntersects(o *Geometry) bool {
 	return g.SpatialObject.BoundingBox.Intersects(o.SpatialObject.BoundingBox)
-}
-
-// Layout returns the geom layout of the given geometry.
-func (g *Geometry) Layout() geom.Layout {
-	// We are currently always 2D.
-	return geom.XY
 }
 
 //
@@ -542,6 +537,21 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 		}
 	default:
 		return geopb.SpatialObject{}, errors.Newf("only 2D objects are currently supported")
+	}
+	// TODO(otan): temporary stopgap until #49209 is resolved.
+	// Fix the bounding box for NaN, NaN.
+	switch tDeref := t.(type) {
+	case *geom.Point:
+		isEmpty := true
+		for _, coord := range tDeref.FlatCoords() {
+			if !math.IsNaN(coord) {
+				isEmpty = false
+				break
+			}
+		}
+		if isEmpty {
+			t = geom.NewPointEmpty(t.Layout()).SetSRID(t.SRID())
+		}
 	}
 	bbox, err := BoundingBoxFromGeom(t)
 	if err != nil {
