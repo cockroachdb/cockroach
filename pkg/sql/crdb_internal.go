@@ -251,8 +251,8 @@ CREATE TABLE crdb_internal.tables (
 			dbNames := make(map[sqlbase.ID]string)
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
-				if desc.GetDatabase() != nil {
-					dbNames[desc.GetID()] = desc.GetName()
+				if dbDesc, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor); ok {
+					dbNames[dbDesc.GetID()] = dbDesc.GetName()
 				}
 			}
 
@@ -300,8 +300,8 @@ CREATE TABLE crdb_internal.tables (
 			// Note: we do not use forEachTableDesc() here because we want to
 			// include added and dropped descriptors.
 			for _, desc := range descs {
-				table := desc.Table(hlc.Timestamp{})
-				if table == nil || p.CheckAnyPrivilege(ctx, sqlbase.NewImmutableTableDescriptor(*table)) != nil {
+				table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+				if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 					continue
 				}
 				dbName := dbNames[table.GetParentID()]
@@ -312,7 +312,7 @@ CREATE TABLE crdb_internal.tables (
 					// effectively deleted.
 					dbName = fmt.Sprintf("[%d]", table.GetParentID())
 				}
-				if err := addDesc(table, tree.NewDString(dbName), "public"); err != nil {
+				if err := addDesc(table.TableDesc(), tree.NewDString(dbName), "public"); err != nil {
 					return err
 				}
 			}
@@ -358,8 +358,8 @@ CREATE TABLE crdb_internal.schema_changes (
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
-			table := desc.Table(hlc.Timestamp{})
-			if table == nil || p.CheckAnyPrivilege(ctx, sqlbase.NewImmutableTableDescriptor(*table)) != nil {
+			table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
 			tableID := tree.NewDInt(tree.DInt(int64(table.ID)))
@@ -2191,14 +2191,15 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		parents := make(map[uint32]uint32)
 		for _, desc := range descs {
 			id := uint32(desc.GetID())
-			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-				parents[id] = uint32(tableDesc.ParentID)
-				tableNames[id] = tableDesc.GetName()
+			switch desc := desc.(type) {
+			case *sqlbase.ImmutableTableDescriptor:
+				parents[id] = uint32(desc.ParentID)
+				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
-				for _, idx := range tableDesc.Indexes {
+				for _, idx := range desc.Indexes {
 					indexNames[id][uint32(idx.ID)] = idx.Name
 				}
-			} else if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			case *sqlbase.ImmutableDatabaseDescriptor:
 				dbNames[id] = desc.GetName()
 			}
 		}
