@@ -458,7 +458,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:01f450f2b42cdd2e3eac4a0ff01e0eccc287b5e6c590dbb592b3a320cd29cce0"
+  digest = "1:085203aa725af444d832f6f0e38511e7a2a7bf7d630f618257e467fb043ea109"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -484,7 +484,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "4887c526300055e1c30635c53fd16b3fe9d9e132"
+  revision = "feb93032c41f991845506cd423f1771618edf2b0"
 
 [[projects]]
   branch = "master"
@@ -2146,6 +2146,7 @@
     "github.com/apache/arrow/go/arrow/memory",
     "github.com/armon/circbuf",
     "github.com/aws/aws-sdk-go/aws",
+    "github.com/aws/aws-sdk-go/aws/awserr",
     "github.com/aws/aws-sdk-go/aws/credentials",
     "github.com/aws/aws-sdk-go/aws/session",
     "github.com/aws/aws-sdk-go/service/s3",
