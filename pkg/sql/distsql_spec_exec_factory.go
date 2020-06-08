@@ -12,22 +12,28 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type distSQLSpecExecFactory struct {
+	planner *planner
+	dsp     *DistSQLPlanner
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
-func newDistSQLSpecExecFactory() exec.Factory {
-	return &distSQLSpecExecFactory{}
+func newDistSQLSpecExecFactory(p *planner) exec.Factory {
+	return &distSQLSpecExecFactory{planner: p, dsp: p.extendedEvalCtx.DistSQLPlanner}
 }
 
 func (e *distSQLSpecExecFactory) ConstructValues(
@@ -36,6 +42,9 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
+// ConstructScan implements exec.Factory interface by combining the logic that
+// performs scanNode creation of execFactory.ConstructScan and physical
+// planning of table readers of DistSQLPlanner.createTableReaders.
 func (e *distSQLSpecExecFactory) ConstructScan(
 	table cat.Table,
 	index cat.Index,
@@ -49,12 +58,135 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	rowCount float64,
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	if table.IsVirtualTable() {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	}
+
+	var p PhysicalPlan
+	// Although we don't yet recommend distributing plans where soft limits
+	// propagate to scan nodes because we don't have infrastructure to only
+	// plan for a few ranges at a time, the propagation of the soft limits
+	// to scan nodes has been added in 20.1 release, so to keep the
+	// previous behavior we continue to ignore the soft limits for now.
+	// TODO(yuzefovich): pay attention to the soft limits.
+	recommendation := canDistribute
+
+	// Phase 1: set up all necessary infrastructure for table reader planning
+	// below. This phase is equivalent to what execFactory.ConstructScan does.
+	tabDesc := table.(*optTable).desc
+	indexDesc := index.(*optIndex).desc
+	colCfg := makeScanColumnsConfig(table, needed)
+	sb := span.MakeBuilder(e.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
+
+	// Note that initColsForScan and setting ResultColumns below are equivalent
+	// to what scan.initTable call does in execFactory.ConstructScan.
+	cols, err := initColsForScan(tabDesc, colCfg)
+	if err != nil {
+		return nil, err
+	}
+	p.ResultColumns = sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), cols)
+
+	if indexConstraint != nil && indexConstraint.IsContradiction() {
+		// TODO(yuzefovich): once ConstructValues is implemented, consider
+		// calling it here.
+		physPlan, err := e.dsp.createValuesPlan(
+			getTypesFromResultColumns(p.ResultColumns), 0 /* numRows */, nil, /* rawBytes */
+		)
+		return planMaybePhysical{physPlan: physPlan, recommendation: canDistribute}, err
+	}
+
+	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
+	// scanNode.canParallelize() returns true. We should plumb that info from
+	// here somehow as well.
+	var spans roachpb.Spans
+	spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	if err != nil {
+		return nil, err
+	}
+	isFullTableScan := len(spans) == 1 && spans[0].EqualValue(
+		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, indexDesc.ID),
+	)
+	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
+		return nil, err
+	}
+
+	// Check if we are doing a full scan.
+	if isFullTableScan {
+		recommendation = recommendation.compose(shouldDistribute)
+	}
+
+	// Phase 2: perform the table reader planning. This phase is equivalent to
+	// what DistSQLPlanner.createTableReaders does.
+	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc, colCfg.visibility)
+	trSpec := physicalplan.NewTableReaderSpec()
+	*trSpec = execinfrapb.TableReaderSpec{
+		Table:      *tabDesc.TableDesc(),
+		Reverse:    reverse,
+		IsCheck:    false,
+		Visibility: colCfg.visibility,
+		// Retain the capacity of the spans slice.
+		Spans: trSpec.Spans[:0],
+	}
+	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
+	if err != nil {
+		return nil, err
+	}
+	if locking != nil {
+		trSpec.LockingStrength = sqlbase.ToScanLockingStrength(locking.Strength)
+		trSpec.LockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(locking.WaitPolicy)
+		if trSpec.LockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+			// Scans that are performing row-level locking cannot currently be
+			// distributed because their locks would not be propagated back to
+			// the root transaction coordinator.
+			// TODO(nvanbenschoten): lift this restriction.
+			recommendation = cannotDistribute
+		}
+	}
+
+	// Note that we don't do anything about the possible filter here since we
+	// don't know yet whether we will have it. ConstructFilter is responsible
+	// for pushing the filter down into the post-processing stage of this scan.
+	post := execinfrapb.PostProcessSpec{}
+	if hardLimit != 0 {
+		post.Limit = uint64(hardLimit)
+	} else if softLimit != 0 {
+		trSpec.LimitHint = softLimit
+	}
+
+	distribute := shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
+	if _, singleTenant := e.planner.execCfg.NodeID.OptionalNodeID(); !singleTenant {
+		distribute = false
+	}
+
+	evalCtx := e.planner.ExtendedEvalContext()
+	planCtx := e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+	err = e.dsp.planTableReaders(
+		planCtx,
+		&p,
+		&tableReaderPlanningInfo{
+			spec:                   trSpec,
+			post:                   post,
+			desc:                   tabDesc,
+			spans:                  spans,
+			reverse:                reverse,
+			scanVisibility:         colCfg.visibility,
+			maxResults:             maxResults,
+			estimatedRowCount:      uint64(rowCount),
+			reqOrdering:            ReqOrdering(reqOrdering),
+			cols:                   cols,
+			colsToTableOrdrinalMap: colsToTableOrdinalMap,
+		},
+	)
+
+	return planMaybePhysical{physPlan: &p, recommendation: recommendation}, err
 }
 
 func (e *distSQLSpecExecFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	// TODO(yuzefovich): figure out how to push the filter into the table
+	// reader when it already doesn't have a filter and it doesn't have a hard
+	// limit.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
@@ -229,13 +361,17 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) RenameColumns(
 	input exec.Node, colNames []string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	inputCols := input.(planMaybePhysical).physPlan.ResultColumns
+	for i := range inputCols {
+		inputCols[i].Name = colNames[i]
+	}
+	return input, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
 ) (exec.Plan, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return constructPlan(e.planner, root, subqueries, cascades, checks)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(
