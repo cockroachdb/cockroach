@@ -711,3 +711,26 @@ SELECT * FROM check_constraint_validity WHERE a > 6
 scan check_constraint_validity@secondary
  ├── columns: a:1!null
  └── constraint: /1/2: [/7 - /19]
+
+# Test that we can constrain indexes using the results of now().
+exec-ddl
+CREATE TABLE with_time_index (k INT PRIMARY KEY, time TIMESTAMP, INDEX(time))
+----
+
+opt
+SELECT * FROM with_time_index WHERE time > now() - INTERVAL '1 hour'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 12:00:00.000001+00:00' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM with_time_index WHERE time >= 'today'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 00:00:00+00:00' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)

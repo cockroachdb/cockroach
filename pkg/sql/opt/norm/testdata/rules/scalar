@@ -153,8 +153,9 @@ project
 # EliminateCast
 # --------------------------------------------------
 
-# CastExpr removes unnecessary casts during type-checking; but it's still
-# conceivable that some other rule may create an unnecessary CastExpr.
+# It's hard to write a SQL test for EliminateCast because tree.CastExpr removes
+# unnecessary casts during type-checking. We still want the rule because it's
+# still conceivable that some other rule may create an unnecessary CastExpr.
 exprnorm expect=EliminateCast
 (Root
   (Project
@@ -1149,7 +1150,7 @@ project
 
 # A case where we can theoretically generate spans, but do not.
 # TODO(justin): modify the logic to allow us to create spans in this case.
-norm
+opt
 SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w1s'::INTERVAL
 ----
 project
@@ -1161,12 +1162,12 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(5)
-      ├── scan e
-      │    ├── columns: k:1!null d:5
+      ├── scan e@secondary
+      │    ├── columns: k:1!null d:5!null
+      │    ├── constraint: /5/1: [/'2018-07-02' - ]
       │    ├── key: (1)
       │    └── fd: (1)-->(5)
       └── filters
-           ├── d:5 > '2018-07-01' [outer=(5), constraints=(/5: [/'2018-07-02' - ]; tight)]
            └── d:5 < '2018-07-08 00:00:01+00:00' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 # NULL value.
