@@ -280,7 +280,7 @@ func testSideloadingSideloadedStorage(
 		// First add a file that shouldn't be in the sideloaded storage to ensure
 		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.(*diskSideloadStorage).dir, "cantremove.xx")
-		f, err := os.Create(nonRemovableFile)
+		f, err := eng.Create(nonRemovableFile)
 		if err != nil {
 			t.Fatalf("could not create non i*.t* file in sideloaded storage: %+v", err)
 		}
@@ -295,7 +295,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatalf("error truncating sideloaded storage: %+v", err)
 		}
 		// Now remove extra file and let truncation proceed to remove directory.
-		err = os.Remove(nonRemovableFile)
+		err = eng.Remove(nonRemovableFile)
 		if err != nil {
 			t.Fatalf("could not remove %s: %+v", nonRemovableFile, err)
 		}
@@ -305,7 +305,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatal(err)
 		}
 		// Ensure directory is removed, now that all files should be gone.
-		_, err = os.Stat(ss.(*diskSideloadStorage).dir)
+		_, err = eng.Stat(ss.(*diskSideloadStorage).dir)
 		if err == nil {
 			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
 		}
@@ -329,7 +329,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatal(err)
 		}
 		// Ensure directory is removed when all records are removed.
-		_, err = os.Stat(ss.(*diskSideloadStorage).dir)
+		_, err = eng.Stat(ss.(*diskSideloadStorage).dir)
 		if err == nil {
 			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
 		}
