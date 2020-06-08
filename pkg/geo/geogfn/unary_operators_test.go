@@ -15,7 +15,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/golang/geo/s1"
 	"github.com/stretchr/testify/require"
+	"github.com/twpayne/go-geom"
 )
 
 type unaryOperatorExpectedResult struct {
@@ -216,6 +218,38 @@ func TestLength(t *testing.T) {
 					)
 				})
 			}
+		})
+	}
+}
+
+func TestProject(t *testing.T) {
+	var testCases = []struct {
+		desc      string
+		point     *geom.Point
+		distance  float64
+		azimuth   float64
+		projected *geom.Point
+	}{
+		{
+			"POINT(0 0), 100000, radians(45)",
+			geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			100000,
+			45 * math.Pi / 180.0,
+			geom.NewPointFlat(geom.XY, []float64{0.6352310291255374, 0.6394723347291977}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			projected, err := Project(tc.point, tc.distance, s1.Angle(tc.azimuth))
+			require.NoError(t, err)
+			require.Equalf(
+				t,
+				tc.projected,
+				projected,
+				"expected %f, found %f",
+				&tc.projected,
+				projected)
 		})
 	}
 }
