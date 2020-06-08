@@ -1174,11 +1174,15 @@ func SupportsVectorized(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
-	fuseOpt flowinfra.FuseOpt,
+	isLocal bool,
 	output execinfra.RowReceiver,
 ) (leaves []execinfra.OpNode, err error) {
 	if output == nil {
 		output = &execinfra.RowChannel{}
+	}
+	fuseOpt := flowinfra.FuseNormally
+	if isLocal {
+		fuseOpt = flowinfra.FuseAggressively
 	}
 	creator := newVectorizedFlowCreator(newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore)
 	// We create an unlimited memory account because we're interested whether the

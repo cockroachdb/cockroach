@@ -1202,6 +1202,21 @@ func (r *NewColOperatorResult) wrapPostProcessSpec(
 	)
 }
 
+// TODO: use a single struct
+func maybeDeserializeExpr(
+	expr execinfrapb.Expression,
+	evalCtx *tree.EvalContext,
+	typs []*types.T,
+	forceDeserialization bool,
+) (tree.TypedExpr, error) {
+	if !forceDeserialization && expr.LocalExpr != nil {
+		return expr.LocalExpr, nil
+	}
+	var helper execinfra.ExprHelper
+	vars := tree.MakeIndexedVarHelper(&helper, len(typs))
+	return execinfra.DeserializeExpr(expr.Expr, evalCtx, &vars)
+}
+
 // planPostProcessSpec plans the post processing stage specified in post on top
 // of r.Op.
 func (r *postProcessResult) planPostProcessSpec(
@@ -1224,18 +1239,15 @@ func (r *postProcessResult) planPostProcessSpec(
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
-		for _, expr := range post.RenderExprs {
-			var (
-				helper            execinfra.ExprHelper
-				renderInternalMem int
-			)
-			err := helper.Init(expr, r.ColumnTypes, flowCtx.EvalCtx)
+		for _, renderExpr := range post.RenderExprs {
+			var renderInternalMem int
+			expr, err := maybeDeserializeExpr(renderExpr, flowCtx.EvalCtx, r.ColumnTypes, true)
 			if err != nil {
 				return err
 			}
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, renderInternalMem, err = planProjectionOperators(
-				ctx, flowCtx.NewEvalCtx(), helper.Expr, r.ColumnTypes, r.Op, streamingMemAccount, factory,
+				ctx, flowCtx.NewEvalCtx(), expr, r.ColumnTypes, r.Op, streamingMemAccount, factory,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)
@@ -1365,15 +1377,13 @@ func (r *postProcessResult) planFilterExpr(
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
 ) error {
-	var (
-		helper               execinfra.ExprHelper
-		selectionInternalMem int
-	)
-	err := helper.Init(filter, r.ColumnTypes, evalCtx)
+	var selectionInternalMem int
+	// TODO
+	expr, err := maybeDeserializeExpr(filter, evalCtx, r.ColumnTypes, true)
 	if err != nil {
 		return err
 	}
-	if helper.Expr == tree.DNull {
+	if expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
 		r.Op = NewZeroOp(r.Op)
@@ -1381,7 +1391,7 @@ func (r *postProcessResult) planFilterExpr(
 	}
 	var filterColumnTypes []*types.T
 	r.Op, _, filterColumnTypes, selectionInternalMem, err = planSelectionOperators(
-		ctx, evalCtx, helper.Expr, r.ColumnTypes, r.Op, acc, factory,
+		ctx, evalCtx, expr, r.ColumnTypes, r.Op, acc, factory,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)

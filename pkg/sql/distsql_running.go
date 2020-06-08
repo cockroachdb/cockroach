@@ -158,10 +158,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// the execution time.
 			setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
 		} else {
-			fuseOpt := flowinfra.FuseNormally
-			if localState.IsLocal {
-				fuseOpt = flowinfra.FuseAggressively
-			}
 			// Now we check to see whether or not to even try vectorizing the flow.
 			// The goal here is to determine up front whether all of the flows can be
 			// vectorized. If any of them can't, turn off the setting.
@@ -178,7 +174,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							VecFDSemaphore: dsp.distSQLSrv.VecFDSemaphore,
 						},
 						NodeID: evalCtx.NodeID,
-					}, spec.Processors, fuseOpt, recv,
+					}, spec.Processors, localState.IsLocal, recv,
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
