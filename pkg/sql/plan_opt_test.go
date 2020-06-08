@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -164,6 +165,22 @@ func TestQueryCache(t *testing.T) {
 						[][]string{{"21", "201"}},
 					)
 				}
+			}
+		})
+
+		// Verify that using a relative timestamp literal interacts correctly with
+		// the query cache (#48717).
+		t.Run("relative-timestamp", func(t *testing.T) {
+			t.Parallel() // SAFE FOR TESTING
+			h := makeQueryCacheTestHelper(t, 1 /* numConns */)
+			defer h.Stop()
+
+			r := h.runners[0]
+			res := r.QueryStr(t, "SELECT 'now'::TIMESTAMP")
+			time.Sleep(time.Millisecond)
+			res2 := r.QueryStr(t, "SELECT 'now'::TIMESTAMP")
+			if reflect.DeepEqual(res, res2) {
+				t.Error("expected different result")
 			}
 		})
 
