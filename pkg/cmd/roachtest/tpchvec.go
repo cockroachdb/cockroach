@@ -29,10 +29,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	tpchVecNodeCount = 3
-)
-
 type crdbVersion int
 
 const (
@@ -155,8 +151,8 @@ func (b tpchVecTestCaseBase) postTestRunHook(_ *test, _ *gosql.DB, _ crdbVersion
 
 const (
 	tpchPerfTestNumRunsPerQuery = 3
-	tpchPerfTestVecOnConfigIdx  = 0
-	tpchPerfTestVecOffConfigIdx = 1
+	tpchPerfTestVecOnConfigIdx  = 1
+	tpchPerfTestVecOffConfigIdx = 0
 )
 
 type tpchVecPerfTest struct {
@@ -177,7 +173,7 @@ func newTpchVecPerfTest(disableStatsCreation bool) *tpchVecPerfTest {
 func (p tpchVecPerfTest) vectorizeOptions() []bool {
 	// Since this is a performance test, each query should be run with both
 	// vectorize modes.
-	return []bool{true, false}
+	return []bool{false, true}
 }
 
 func (p tpchVecPerfTest) numRunsPerQuery() int {
@@ -372,8 +368,8 @@ func baseTestRun(
 			}
 			vectorizeSetting := vectorizeOptionToSetting(vectorize, version)
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-				"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
-				tc.numRunsPerQuery(), queryNum, vectorizeSetting, tpchVecNodeCount)
+				"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1}",
+				tc.numRunsPerQuery(), queryNum, vectorizeSetting)
 			workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
 			t.l.Printf("\n" + string(workloadOutput))
 			if err != nil {
@@ -479,6 +475,8 @@ func runTPCHVec(
 	testRun(ctx, t, c, version, testCase)
 	testCase.postTestRunHook(t, conn, version)
 }
+
+const tpchVecNodeCount = 3
 
 func registerTPCHVec(r *testRegistry) {
 	r.Add(testSpec{
