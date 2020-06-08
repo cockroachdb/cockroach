@@ -778,8 +778,9 @@ func restore(
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
-// TODO: this method returns two things: the sqlbase.Descriptor and the backup manifest.
-// Ideally, this should be broken down into two methods.
+// TODO(anzoteh96): this method returns two things: backup manifests
+// and the descriptors of the relevant manifests. Ideally, this should
+// be broken down into two methods.
 func loadBackupSQLDescs(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -834,20 +835,27 @@ func getStatisticsFromBackup(
 	exportStore cloud.ExternalStorage,
 	encryption *roachpb.FileEncryptionOptions,
 	backup BackupManifest,
-) []*stats.TableStatisticProto {
-	if backup.Statistics != nil {
-		return backup.Statistics
+) ([]*stats.TableStatisticProto, error) {
+	// This part deals with pre-20.2 stats format where backup statistics
+	// are stored as a field in backup manifests instead of in their
+	// individual files.
+	if backup.DeprecatedStatistics != nil {
+		return backup.DeprecatedStatistics, nil
 	}
-	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
+	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.StatisticsFilenames))
+	uniqueFileNames := make(map[string]struct{})
 	for _, fname := range backup.StatisticsFilenames {
-		myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
-		if err != nil {
-			return tableStatistics
+		if _, exists := uniqueFileNames[fname]; !exists {
+			uniqueFileNames[fname] = struct{}{}
+			myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
+			if err != nil {
+				return tableStatistics, err
+			}
+			tableStatistics = append(tableStatistics, myStatsTable.Statistics...)
 		}
-		tableStatistics = append(tableStatistics, myStatsTable.Statistics...)
 	}
 
-	return tableStatistics
+	return tableStatistics, nil
 }
 
 // remapRelevantStatistics changes the table ID references in the stats
@@ -862,13 +870,11 @@ func remapRelevantStatistics(
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
 
 	for _, stat := range tableStatistics {
-		tableRewrite, ok := descriptorRewrites[stat.TableID]
-		if !ok {
-			// Table re-write not present, so statistic should not be imported.
-			continue
+		if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
+			// Statistics imported only when table re-write is present.
+			stat.TableID = tableRewrite.ID
+			relevantTableStatistics = append(relevantTableStatistics, stat)
 		}
-		stat.TableID = tableRewrite.ID
-		relevantTableStatistics = append(relevantTableStatistics, stat)
 	}
 
 	return relevantTableStatistics
@@ -1020,16 +1026,17 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
-	// The lastInd information is needed to know the index of latestBackUpManifest
-	// in order to retrieve the corresponding URI.
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
 	)
-	lastInd := getBackupIndAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastInd])
+	lastBackupIndex, err := getBackupIndexAtTime(backupManifests, details.EndTime)
+	if err != nil {
+		return err
+	}
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex])
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}
@@ -1046,7 +1053,10 @@ func (r *restoreResumer) Resume(
 	r.descriptorCoverage = details.DescriptorCoverage
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
-	backupStats := getStatisticsFromBackup(ctx, defaultStore, details.Encryption, latestBackupManifest)
+	backupStats, err := getStatisticsFromBackup(ctx, defaultStore, details.Encryption, latestBackupManifest)
+	if err != nil {
+		return err
+	}
 	r.latestStats = remapRelevantStatistics(backupStats, details.DescriptorRewrites)
 
 	if len(r.tables) == 0 {
