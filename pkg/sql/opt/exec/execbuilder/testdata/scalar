@@ -719,27 +719,16 @@ values  ·              ·                ("case")  ·
 ·       size           1 column, 1 row  ·         ·
 ·       row 0, expr 0  42               ·         ·
 
-# Don't fold the CASE since there is an error in the ELSE clause.
+# Don't fold random(), but fold current_database().
 query TTTTT
-EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/0 END
+EXPLAIN (VERBOSE) SELECT random(), current_database()
 ----
-·       distribution   local                                  ·         ·
-·       vectorized     false                                  ·         ·
-values  ·              ·                                      ("case")  ·
-·       size           1 column, 1 row                        ·         ·
-·       row 0, expr 0  CASE WHEN true THEN 42 ELSE 1 / 0 END  ·         ·
-
-# Don't fold random() or now(), which are impure functions.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT random(), current_database(), now()
-----
-·       distribution   local             ·                                ·
-·       vectorized     false             ·                                ·
-values  ·              ·                 (random, current_database, now)  ·
-·       size           3 columns, 1 row  ·                                ·
-·       row 0, expr 0  random()          ·                                ·
-·       row 0, expr 1  'test'            ·                                ·
-·       row 0, expr 2  now()             ·                                ·
+·       distribution   local             ·                           ·
+·       vectorized     false             ·                           ·
+values  ·              ·                 (random, current_database)  ·
+·       size           2 columns, 1 row  ·                           ·
+·       row 0, expr 0  random()          ·                           ·
+·       row 0, expr 1  'test'            ·                           ·
 
 # Don't fold non-constants.
 query TTTTT

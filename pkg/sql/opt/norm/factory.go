@@ -85,10 +85,16 @@ type Factory struct {
 	// catalog is the opt catalog, used to resolve names during constant folding
 	// of special metadata queries like 'table_name'::regclass.
 	catalog cat.Catalog
+
+	// See FoldingControl.
+	foldingControl FoldingControl
 }
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
+//
+// By default, a factory only constant-folds immutable operators; this can be
+// changed using FoldingControl().AllowStableFolds().
 func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
 	if f.mem == nil {
@@ -101,6 +107,12 @@ func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil
+	f.foldingControl.DisallowStableFolds()
+}
+
+// FoldingControl returns the FoldingControl instance for this factory.
+func (f *Factory) FoldingControl() *FoldingControl {
+	return &f.foldingControl
 }
 
 // DetachMemo extracts the memo from the optimizer, and then re-initializes the

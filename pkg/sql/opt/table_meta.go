@@ -143,10 +143,12 @@ type TableMeta struct {
 	// See comment above GenerateConstrainedScans for more detail.
 	Constraints ScalarExpr
 
-	// ComputedCols stores ScalarExprs for each computed column on the table,
-	// indexed by ColumnID. These will be used when building mutation statements
-	// and constraining indexes. See comment above GenerateConstrainedScans for
-	// more detail.
+	// ComputedCols stores ScalarExprs for computed columns on the table, indexed
+	// by ColumnID. These will be used as "known truths" about data when
+	// constraining indexes. See comment above GenerateConstrainedScans for more
+	// detail.
+	//
+	// Computed columns with non-immutable operators are omitted.
 	ComputedCols map[ColumnID]ScalarExpr
 
 	// PartialIndexPredicates is a map from an index ordinal on the table to

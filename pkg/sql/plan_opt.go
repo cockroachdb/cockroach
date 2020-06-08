@@ -352,6 +352,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 	}
 
 	if bld.DisableMemoReuse {
+		// The builder encountered a statement that prevents safe reuse of the memo.
 		opc.allowMemoReuse = false
 		opc.useCache = false
 	}
@@ -359,16 +360,17 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 	if isCanned {
 		if f.Memo().HasPlaceholders() {
 			// We don't support placeholders inside the canned plan. The main reason
-			// is that they would be invisible to the parser (which is reports the
-			// number of placeholders, used to initialize the relevant structures).
+			// is that they would be invisible to the parser (which reports the number
+			// of placeholders, used to initialize the relevant structures).
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"placeholders are not supported with PREPARE AS OPT PLAN")
 		}
 		// With a canned plan, the memo is already optimized.
 	} else {
-		// If the memo doesn't have placeholders, then fully optimize it, since
-		// it can be reused without further changes to build the execution tree.
-		if !f.Memo().HasPlaceholders() {
+		// If the memo doesn't have placeholders and did not encounter any stable
+		// operators that can be constant folded, then fully optimize it now - it
+		// can be reused without further changes to build the execution tree.
+		if !f.Memo().HasPlaceholders() && !f.FoldingControl().PreventedStableFold() {
 			if _, err := opc.optimizer.Optimize(); err != nil {
 				return nil, err
 			}
@@ -389,16 +391,17 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 // The returned memo is only safe to use in one thread, during execution of the
 // current statement.
 func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
-	if !cachedMemo.HasPlaceholders() {
-		// If there are no placeholders, the query was already fully optimized
-		// (see buildReusableMemo).
+	if cachedMemo.IsOptimized() {
+		// The query could have been already fully optimized if there were no
+		// placeholders (see buildReusableMemo).
 		return cachedMemo, nil
 	}
 	f := opc.optimizer.Factory()
 	// Finish optimization by assigning any remaining placeholders and
 	// applying exploration rules. Reinitialize the optimizer and construct a
 	// new memo that is copied from the prepared memo, but with placeholders
-	// assigned.
+	// assigned. Stable operators can be constant-folded at this time.
+	f.FoldingControl().AllowStableFolds()
 	if err := f.AssignPlaceholders(cachedMemo); err != nil {
 		return nil, err
 	}
@@ -467,6 +470,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// We are executing a statement for which there is no reusable memo
 	// available.
 	f := opc.optimizer.Factory()
+	f.FoldingControl().AllowStableFolds()
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
 	if err := bld.Build(); err != nil {
 		return nil, err
@@ -477,10 +481,12 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		}
 	}
 
-	// If this statement doesn't have placeholders, add it to the cache. Note
-	// that non-prepared statements from pgwire clients cannot have
+	// If this statement doesn't have placeholders and we have not constant-folded
+	// any VolatilityStable operators, add it to the cache.
+	// Note that non-prepared statements from pgwire clients cannot have
 	// placeholders.
-	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse {
+	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse &&
+		!f.FoldingControl().PermittedStableFold() {
 		memo := opc.optimizer.DetachMemo()
 		cachedData := querycache.CachedData{
 			SQL:  opc.p.stmt.SQL,
