@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -180,6 +181,7 @@ func backup(
 	checkpointDesc *BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *roachpb.FileEncryptionOptions,
+	statsCache *stats.TableStatisticsCache,
 ) (RowCount, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
@@ -345,6 +347,26 @@ func backup(
 	if err := writeBackupManifest(ctx, settings, defaultStore, BackupManifestName, encryption, backupManifest); err != nil {
 		return RowCount{}, err
 	}
+	var tableStatistics []*stats.TableStatisticProto
+	for _, desc := range backupManifest.Descriptors {
+		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+			// Collect all the table stats for this table.
+			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
+			if err != nil {
+				return RowCount{}, err
+			}
+			for _, stat := range tableStatisticsAcc {
+				tableStatistics = append(tableStatistics, &stat.TableStatisticProto)
+			}
+		}
+	}
+	statsTable := StatsTable{
+		Statistics: tableStatistics,
+	}
+
+	if err := writeTableStatistics(ctx, defaultStore, BackupStatisticsFileName, encryption, &statsTable); err != nil {
+		return RowCount{}, err
+	}
 
 	return exported, nil
 }
@@ -449,6 +471,7 @@ func (b *backupResumer) Resume(
 		return err
 	}
 
+	statsCache := p.ExecCfg().TableStatsCache
 	res, err := backup(
 		ctx,
 		p,
@@ -463,6 +486,7 @@ func (b *backupResumer) Resume(
 		checkpointDesc,
 		p.ExecCfg().DistSQLSrv.ExternalStorage,
 		details.Encryption,
+		statsCache,
 	)
 	if err != nil {
 		return err
@@ -523,7 +547,7 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 	if err := protoutil.Unmarshal(details.BackupManifest, &backupManifest); err != nil {
 		return err
 	}
-	backupManifest.Statistics = nil
+	backupManifest.DeprecatedStatistics = nil
 	descBytes, err := protoutil.Marshal(&backupManifest)
 	if err != nil {
 		return err
