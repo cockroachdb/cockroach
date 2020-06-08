@@ -56,15 +56,15 @@ func (ids IDs) Len() int           { return len(ids) }
 func (ids IDs) Less(i, j int) bool { return ids[i] < ids[j] }
 func (ids IDs) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
 
-// TableDescriptors is a sortable list of *TableDescriptors.
-type TableDescriptors []*TableDescriptor
+// BaseDescriptorInterfaces is a sortable list of BaseDescriptorInterfaces.
+type BaseDescriptorInterfaces []BaseDescriptorInterface
+
+func (d BaseDescriptorInterfaces) Len() int           { return len(d) }
+func (d BaseDescriptorInterfaces) Less(i, j int) bool { return d[i].GetID() < d[j].GetID() }
+func (d BaseDescriptorInterfaces) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }
 
 // TablesByID is a shorthand for the common map of tables keyed by ID.
 type TablesByID map[ID]*TableDescriptor
-
-func (t TableDescriptors) Len() int           { return len(t) }
-func (t TableDescriptors) Less(i, j int) bool { return t[i].ID < t[j].ID }
-func (t TableDescriptors) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID tree.ColumnID
@@ -1195,6 +1195,23 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	desc.FormatVersion = FamilyFormatVersion
 
 	return true
+}
+
+// GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
+// this table references.
+func (desc *TableDescriptor) GetAllReferencedTypeIDs() IDs {
+	var result IDs
+	for _, c := range desc.Columns {
+		result = append(result, GetTypeDescriptorClosure(c.Type)...)
+	}
+	// TODO (rohany): I'm not sure if we should look at mutations -- does that
+	//  make sense in the context of backup/restore?
+	for _, mut := range desc.Mutations {
+		if c := mut.GetColumn(); c != nil {
+			result = append(result, GetTypeDescriptorClosure(c.Type)...)
+		}
+	}
+	return result
 }
 
 func (desc *MutableTableDescriptor) initIDs() {

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -24,15 +25,15 @@ import (
 )
 
 type descriptorsMatched struct {
-	// all tables that match targets plus their parent databases.
+	// All descriptors that match targets plus their parent databases.
 	//
 	// TODO(ajwerner): Replace this with DescriptorInterface.
 	descs []sqlbase.Descriptor
 
-	// the databases from which all tables were matched (eg a.* or DATABASE a).
+	// The databases from which all tables were matched (eg a.* or DATABASE a).
 	expandedDB []sqlbase.ID
 
-	// explicitly requested DBs (e.g. DATABASE a).
+	// Explicitly requested DBs (e.g. DATABASE a).
 	requestedDBs []*sqlbase.ImmutableDatabaseDescriptor
 }
 
@@ -129,30 +130,46 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 		}
 		r.descByID[desc.GetID()] = desc
 	}
-	// Now on to the tables.
+
+	// registerDesc is a closure that registers a Descriptor into the resolver's
+	// object registry.
+	registerDesc := func(parentID sqlbase.ID, desc sqlbase.BaseDescriptorInterface, kind string) error {
+		parentDesc, ok := r.descByID[parentID]
+		if !ok {
+			return errors.Errorf("%s %q has unknown ParentID %d", kind, desc.GetName(), parentID)
+		}
+		if _, ok := r.dbsByName[parentDesc.GetName()]; !ok {
+			return errors.Errorf("%s %q's ParentID %d (%q) is not a database",
+				kind, desc.GetName(), parentID, parentDesc.GetName())
+		}
+		objMap := r.objsByName[parentDesc.GetID()]
+		if objMap == nil {
+			objMap = make(map[string]sqlbase.ID)
+		}
+		if _, ok := objMap[desc.GetName()]; ok {
+			return errors.Errorf("duplicate %s name: %q.%q used for ID %d and %d",
+				kind, parentDesc.GetName(), desc.GetName(), desc.GetID(), objMap[desc.GetName()])
+		}
+		objMap[desc.GetName()] = desc.GetID()
+		r.objsByName[parentDesc.GetID()] = objMap
+		return nil
+	}
+
+	// Now on to the tables and types.
 	for _, desc := range descs {
 		if tbDesc := desc.Table(hlc.Timestamp{}); tbDesc != nil {
 			if tbDesc.Dropped() {
 				continue
 			}
-			parentDesc, ok := r.descByID[tbDesc.ParentID]
-			if !ok {
-				return nil, errors.Errorf("table %q has unknown ParentID %d", tbDesc.Name, tbDesc.ParentID)
+			if err := registerDesc(tbDesc.ParentID, tbDesc, "table"); err != nil {
+				return nil, err
 			}
-			if _, ok := r.dbsByName[parentDesc.GetName()]; !ok {
-				return nil, errors.Errorf("table %q's ParentID %d (%q) is not a database",
-					tbDesc.Name, tbDesc.ParentID, parentDesc.GetName())
+		}
+		if typDesc := desc.GetType(); typDesc != nil {
+			// TODO (rohany): Add a .Dropped() check here once we can drop types.
+			if err := registerDesc(typDesc.ParentID, typDesc, "type"); err != nil {
+				return nil, err
 			}
-			objMap := r.objsByName[parentDesc.GetID()]
-			if objMap == nil {
-				objMap = make(map[string]sqlbase.ID)
-			}
-			if _, ok := objMap[tbDesc.Name]; ok {
-				return nil, errors.Errorf("duplicate table name: %q.%q used for ID %d and %d",
-					parentDesc.GetName(), tbDesc.Name, tbDesc.ID, objMap[tbDesc.Name])
-			}
-			objMap[tbDesc.Name] = tbDesc.ID
-			r.objsByName[parentDesc.GetID()] = objMap
 		}
 	}
 
@@ -203,6 +220,17 @@ func descriptorsMatchingTargets(
 		}
 	}
 
+	alreadyRequestedTypes := make(map[sqlbase.ID]struct{})
+	maybeAddTypeDesc := func(id sqlbase.ID) {
+		if _, ok := alreadyRequestedTypes[id]; !ok {
+			// Cross database type references have been disabled, so we don't
+			// need to request the parent database because it has already been
+			// requested by the table that holds this type.
+			alreadyRequestedTypes[id] = struct{}{}
+			ret.descs = append(ret.descs, resolver.descByID[id])
+		}
+	}
+
 	// Process all the TABLE requests.
 	// Pulling in a table needs to pull in the underlying database too.
 	alreadyRequestedTables := make(map[sqlbase.ID]struct{})
@@ -229,6 +257,10 @@ func descriptorsMatchingTargets(
 			}
 			desc := descI.(sqlbase.Descriptor)
 			tableDesc := desc.Table(hlc.Timestamp{})
+			// If tableDesc is nil, then we resolved a type instead, so error out.
+			if tableDesc == nil {
+				return ret, doesNotExistErr
+			}
 
 			// Verify that the table is in the correct state.
 			if err := sqlbase.FilterTableState(tableDesc); err != nil {
@@ -247,6 +279,10 @@ func descriptorsMatchingTargets(
 			if _, ok := alreadyRequestedTables[desc.GetID()]; !ok {
 				alreadyRequestedTables[desc.GetID()] = struct{}{}
 				ret.descs = append(ret.descs, desc)
+			}
+			// Get all the types used by this table.
+			for _, id := range tableDesc.GetAllReferencedTypeIDs() {
+				maybeAddTypeDesc(id)
 			}
 
 		case *tree.AllTablesSelector:
@@ -279,17 +315,24 @@ func descriptorsMatchingTargets(
 
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
-		for _, tblID := range resolver.objsByName[dbID] {
-			desc := resolver.descByID[tblID]
-			table := desc.Table(hlc.Timestamp{})
-			if err := sqlbase.FilterTableState(table); err != nil {
-				// Don't include this table in the expansion since it's not in a valid
-				// state. Silently fail since this table was not directly requested,
-				// but was just part of an expansion.
-				continue
-			}
-			if _, ok := alreadyRequestedTables[tblID]; !ok {
-				ret.descs = append(ret.descs, desc)
+		for _, id := range resolver.objsByName[dbID] {
+			desc := resolver.descByID[id]
+			if table := desc.Table(hlc.Timestamp{}); table != nil {
+				if err := sqlbase.FilterTableState(table); err != nil {
+					// Don't include this table in the expansion since it's not in a valid
+					// state. Silently fail since this table was not directly requested,
+					// but was just part of an expansion.
+					continue
+				}
+				if _, ok := alreadyRequestedTables[id]; !ok {
+					ret.descs = append(ret.descs, desc)
+				}
+				// Get all the types used by this table.
+				for _, id := range table.GetAllReferencedTypeIDs() {
+					maybeAddTypeDesc(id)
+				}
+			} else if typ := desc.GetType(); typ != nil {
+				maybeAddTypeDesc(typ.ID)
 			}
 		}
 	}
@@ -303,6 +346,8 @@ func descriptorsMatchingTargets(
 // descs (same ID) or has parentID in `expanded`. Deleted descriptors are
 // represented as nil. Fills in the `priorIDs` map in the process, which maps
 // a descriptor the the ID by which it was previously known (e.g pre-TRUNCATE).
+// TODO (rohany): I'm not sure whats going on this function, and how type
+//  descriptors may or may not interact with it.
 func getRelevantDescChanges(
 	ctx context.Context,
 	db *kv.DB,
@@ -341,6 +386,8 @@ func getRelevantDescChanges(
 				interestingIDs[j] = struct{}{}
 			}
 		}
+		// TODO (rohany): Once we start tracking modification time on type
+		//  descriptors we need to consider them here.
 	}
 
 	// We're also interested in any desc that belonged to a DB we're backing up.
@@ -441,6 +488,8 @@ func getAllDescChanges(
 				if t != nil && t.ReplacementOf.ID != sqlbase.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
+				// TODO (rohany): Once we track modification time on type descriptors,
+				//  they need to be checked for updates here.
 			}
 			res = append(res, r)
 		}
@@ -618,17 +667,27 @@ func lookupDatabaseID(
 	return id, nil
 }
 
-// CheckTableExists returns an error if a table already exists with given
-// parent and name.
-func CheckTableExists(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID sqlbase.ID, name string,
+// CheckObjectExists returns an error if an object already exists with a given
+// parent, parent schema and name.
+func CheckObjectExists(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	parentID sqlbase.ID,
+	parentSchemaID sqlbase.ID,
+	name string,
 ) error {
-	found, _, err := sqlbase.LookupPublicTableID(ctx, txn, codec, parentID, name)
+	found, id, err := sqlbase.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
 	if err != nil {
 		return err
 	}
 	if found {
-		return sqlbase.NewRelationAlreadyExistsError(name)
+		// Find what object we collided with.
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id)
+		if err != nil {
+			return err
+		}
+		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name)
 	}
 	return nil
 }

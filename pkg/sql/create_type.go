@@ -89,7 +89,7 @@ func getCreateTypeParams(
 		if err != nil {
 			return nil, 0, err
 		}
-		return nil, 0, makeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
+		return nil, 0, sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
 	}
 	if err != nil {
 		return nil, 0, err
