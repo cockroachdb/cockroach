@@ -10,7 +10,6 @@ package importccl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -46,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -426,6 +426,66 @@ func TestImportHonorsResumePosition(t *testing.T) {
 				keys.Unlock()
 			}
 		}
+	}
+}
+
+type duplicateKeyErrorAdder struct {
+	doNothingKeyAdder
+}
+
+var _ storagebase.BulkAdder = &duplicateKeyErrorAdder{}
+
+func (a *duplicateKeyErrorAdder) Add(_ context.Context, k roachpb.Key, v []byte) error {
+	return &storagebase.DuplicateKeyError{Key: k, Value: v}
+}
+
+func TestImportHandlesDuplicateKVs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	batchSize := 13
+	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
+	evalCtx := tree.MakeTestingEvalContext(nil)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings:        &cluster.Settings{},
+			ExternalStorage: externalStorageFactory,
+			BulkAdder: func(
+				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
+				opts storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
+				return &duplicateKeyErrorAdder{}, nil
+			},
+			TestingKnobs: execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+			},
+		},
+	}
+
+	// In this test, we'll attempt to import different input formats.
+	// All imports produce a DuplicateKeyError, which we expect to be propagated.
+	testSpecs := []testSpec{
+		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
+		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
+		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
+	}
+
+	for _, testCase := range testSpecs {
+		spec := testCase.getConverterSpec()
+
+		t.Run(fmt.Sprintf("duplicate-key-%v", spec.Format.Format), func(t *testing.T) {
+			progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
+			defer close(progCh)
+			go func() {
+				for range progCh {
+				}
+			}()
+
+			_, err := runImport(context.Background(), flowCtx, spec, progCh)
+			require.True(t, errors.HasType(err, &storagebase.DuplicateKeyError{}))
+		})
 	}
 }
 
