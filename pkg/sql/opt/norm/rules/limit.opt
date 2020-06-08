@@ -202,3 +202,114 @@ $input
     $limitExpr
     $ordering
 )
+
+# AssociateLimitJoinsLeft reorders an InnerJoin and LeftJoin under a Limit if
+# the InnerJoin does not preserve rows from either of its inputs. This is done
+# in order to allow limit push-down to take place. Here's the transformation:
+#
+#   SELECT *
+#   FROM (SELECT * FROM xy LEFT JOIN uv ON u = x)
+#   INNER JOIN ab
+#   ON a = y
+#   LIMIT 10
+# =>
+#   SELECT *
+#   FROM (SELECT * FROM xy INNER JOIN ab ON a = y)
+#   LEFT JOIN uv
+#   ON u = x
+#   LIMIT 10
+#
+# Citations: [1] (See identity (6) in section 2.2)
+[AssociateLimitJoinsLeft, Normalize, LowPriority]
+(Limit
+    $limitInput:(InnerJoin
+            $outerLeft:(LeftJoin
+                $innerLeft:*
+                $innerRight:*
+                $innerOn:*
+                $innerPrivate:* & (NoJoinHints $innerPrivate)
+            )
+            $outerRight:*
+            $outerOn:* &
+                ^(ColsIntersect
+                    (FilterOuterCols $outerOn)
+                    (OutputCols $innerRight)
+                )
+            $outerPrivate:* & (NoJoinHints $outerPrivate)
+        ) &
+        ^(JoinPreservesLeftRows $limitInput) &
+        ^(JoinPreservesRightRows $limitInput)
+    $limitValue:*
+    $limitOrdering:*
+)
+=>
+(Limit
+    (LeftJoin
+        (InnerJoin
+            $innerLeft
+            $outerRight
+            $outerOn
+            (EmptyJoinPrivate)
+        )
+        $innerRight
+        $innerOn
+        (EmptyJoinPrivate)
+    )
+    $limitValue
+    $limitOrdering
+)
+
+# AssociateLimitJoinsRight mirrors AssociateLimitJoinsLeft (it matches when the
+# LeftJoin is the right input of the InnerJoin, as opposed to the left input).
+# Here's the transformation:
+#
+#   SELECT *
+#   FROM ab
+#   INNER JOIN (SELECT * FROM xy LEFT JOIN uv ON u = x)
+#   ON a = y
+#   LIMIT 10
+# =>
+#   SELECT *
+#   FROM (SELECT * FROM xy INNER JOIN ab ON a = y)
+#   LEFT JOIN uv
+#   ON u = x
+#   LIMIT 10
+#
+[AssociateLimitJoinsRight, Normalize, LowPriority]
+(Limit
+    $limitInput:(InnerJoin
+            $outerLeft:*
+            $outerRight:(LeftJoin
+                $innerLeft:*
+                $innerRight:*
+                $innerOn:*
+                $innerPrivate:* & (NoJoinHints $innerPrivate)
+            )
+            $outerOn:* &
+                ^(ColsIntersect
+                    (FilterOuterCols $outerOn)
+                    (OutputCols $innerRight)
+                )
+            $outerPrivate:* & (NoJoinHints $outerPrivate)
+        ) &
+        ^(JoinPreservesLeftRows $limitInput) &
+        ^(JoinPreservesRightRows $limitInput)
+    $limitValue:*
+    $limitOrdering:*
+)
+=>
+(Limit
+    (LeftJoin
+        (InnerJoin
+            $innerLeft
+            $outerLeft
+            $outerOn
+            (EmptyJoinPrivate)
+        )
+        $innerRight
+        $innerOn
+        (EmptyJoinPrivate)
+    )
+    $limitValue
+    $limitOrdering
+)
