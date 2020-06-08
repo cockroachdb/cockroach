@@ -1402,3 +1402,142 @@ limit
  │         │         └── fd: (1)-->(2-5)
  │         └── 10
  └── 5
+
+# ----------------------------------------------------
+# AssociateLimitJoinsLeft and AssociateLimitJoinsRight
+# ----------------------------------------------------
+
+norm expect=AssociateLimitJoinsLeft format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER JOIN ab
+ON a = y
+LIMIT 10
+----
+limit
+ ├── left-join (hash)
+ │    ├── limit
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── scan b
+ │    │    │    ├── scan ab
+ │    │    │    └── filters
+ │    │    │         └── a = y
+ │    │    └── 10
+ │    ├── scan uv
+ │    └── filters
+ │         └── x = u
+ └── 10
+
+norm expect=AssociateLimitJoinsRight format=hide-all
+SELECT *
+FROM ab
+INNER JOIN (SELECT * FROM b LEFT JOIN uv ON x = u)
+ON a = y
+LIMIT 10
+----
+limit
+ ├── left-join (hash)
+ │    ├── limit
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── scan b
+ │    │    │    ├── scan ab
+ │    │    │    └── filters
+ │    │    │         └── a = y
+ │    │    └── 10
+ │    ├── scan uv
+ │    └── filters
+ │         └── x = u
+ └── 10
+
+# No-op case because the InnerJoin filter references columns from the right side
+# of the LeftJoin.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER JOIN ab
+ON a = y AND b = v
+LIMIT 10
+----
+limit
+ ├── inner-join (hash)
+ │    ├── left-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── x = u
+ │    ├── scan ab
+ │    └── filters
+ │         ├── a = y
+ │         └── b = v
+ └── 10
+
+# No-op case because the InnerJoin preserves rows from one of its inputs;
+# therefore limit push-down is already possible.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight)
+SELECT *
+FROM kvr_fk
+INNER JOIN (SELECT * FROM uv LEFT JOIN ab ON v = b)
+ON r = u
+LIMIT 10
+----
+limit
+ ├── columns: k:1!null v:2 r:3!null u:4!null v:5 a:6 b:7
+ ├── cardinality: [0 - 10]
+ ├── key: (1,6)
+ ├── fd: (1)-->(2,3), (4)-->(5), (6)-->(7), (3)==(4), (4)==(3)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null kvr_fk.v:2 r:3!null u:4!null uv.v:5 a:6 b:7
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── key: (1,6)
+ │    ├── fd: (1)-->(2,3), (4)-->(5), (6)-->(7), (3)==(4), (4)==(3)
+ │    ├── limit hint: 10.00
+ │    ├── limit
+ │    │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── scan kvr_fk
+ │    │    │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2,3)
+ │    │    │    └── limit hint: 10.00
+ │    │    └── 10
+ │    ├── left-join (hash)
+ │    │    ├── columns: u:4!null uv.v:5 a:6 b:7
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── key: (4,6)
+ │    │    ├── fd: (4)-->(5), (6)-->(7)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:4!null uv.v:5
+ │    │    │    ├── key: (4)
+ │    │    │    └── fd: (4)-->(5)
+ │    │    ├── scan ab
+ │    │    │    ├── columns: a:6!null b:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── uv.v:5 = b:7 [outer=(5,7), constraints=(/5: (/NULL - ]; /7: (/NULL - ]), fd=(5)==(7), (7)==(5)]
+ │    └── filters
+ │         └── r:3 = u:4 [outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
+ └── 10
+
+# No-op case because one of the joins has a join hint.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER MERGE JOIN ab
+ON a = y
+LIMIT 10
+----
+limit
+ ├── inner-join (hash)
+ │    ├── flags: force merge join
+ │    ├── left-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── x = u
+ │    ├── scan ab
+ │    └── filters
+ │         └── a = y
+ └── 10
