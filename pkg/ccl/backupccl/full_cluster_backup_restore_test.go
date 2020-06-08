@@ -16,6 +16,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -42,7 +43,11 @@ func TestFullClusterBackup(t *testing.T) {
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
-	for i := 0; i < 1000; i++ {
+	numUsers := 1000
+	if util.RaceEnabled {
+		numUsers = 10
+	}
+	for i := 0; i < numUsers; i++ {
 		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
 	}
 	// Populate system.zones.
@@ -74,7 +79,11 @@ func TestFullClusterBackup(t *testing.T) {
 
 	// Create a bunch of user tables on the restoring cluster that we're going
 	// to delete.
-	for i := 0; i < 50; i++ {
+	numTables := 50
+	if util.RaceEnabled {
+		numTables = 2
+	}
+	for i := 0; i < numTables; i++ {
 		sqlDBRestore.Exec(t, `CREATE DATABASE db_to_drop`)
 		sqlDBRestore.Exec(t, `CREATE TABLE db_to_drop.table_to_drop (a int)`)
 		sqlDBRestore.Exec(t, `ALTER TABLE db_to_drop.table_to_drop CONFIGURE ZONE USING gc.ttlseconds=1`)
