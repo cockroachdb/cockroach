@@ -51,7 +51,8 @@ func (d *antagonisticDialer) DialContext(
 	ctx context.Context, network, addr string,
 ) (net.Conn, error) {
 	if network == "tcp" && addr == "storage.googleapis.com:443" {
-		if *d.numRepeatFailures < maxNoProgressReads && d.rnd.Int()%2 == 0 {
+		// The maximum number of injected errors should always be less than the maximum retry attempts in delayedRetry.
+		if *d.numRepeatFailures < maxDelayedRetryAttempts-1 && d.rnd.Int()%2 == 0 {
 			*(d.numRepeatFailures)++
 			return nil, econnrefused
 		}
@@ -66,7 +67,8 @@ func (d *antagonisticDialer) DialContext(
 }
 
 func (c *antagonisticConn) Read(b []byte) (int, error) {
-	if *c.numRepeatFailures < maxNoProgressReads && c.rnd.Int()%2 == 0 {
+	// The maximum number of injected errors should always be less than the maximum retry attempts in delayedRetry.
+	if *c.numRepeatFailures < maxDelayedRetryAttempts-1 && c.rnd.Int()%2 == 0 {
 		*(c.numRepeatFailures)++
 		return 0, econnreset
 	}
