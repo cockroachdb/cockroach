@@ -352,8 +352,7 @@ var (
 // fails. It knows about specific kinds of errors that need longer retry
 // delays than normal.
 func delayedRetry(ctx context.Context, fn func() error) error {
-	const maxAttempts = 3
-	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxDelayedRetryAttempts, func() error {
 		err := fn()
 		if err == nil {
 			return nil
@@ -403,6 +402,9 @@ func isResumableHTTPError(err error) bool {
 		sysutil.IsErrConnectionReset(err) ||
 		sysutil.IsErrConnectionRefused(err)
 }
+
+// Maximum number of times the delayedRetry method will re-run the provided function.
+const maxDelayedRetryAttempts = 3
 
 // Maximum number of times we can attempt to retry reading from external storage,
 // without making any progress.

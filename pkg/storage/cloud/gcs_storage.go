@@ -182,7 +182,6 @@ func (r *resumingGoogleStorageReader) openStream() error {
 
 func (r *resumingGoogleStorageReader) Read(p []byte) (int, error) {
 	var lastErr error
-
 	for retries := 0; lastErr == nil; retries++ {
 		if r.data == nil {
 			lastErr = r.openStream()
@@ -202,7 +201,7 @@ func (r *resumingGoogleStorageReader) Read(p []byte) (int, error) {
 		}
 
 		if isResumableHTTPError(lastErr) {
-			if retries > maxNoProgressReads {
+			if retries >= maxNoProgressReads {
 				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
 			}
 			log.Errorf(r.ctx, "GCS:Retry: error %s", lastErr)
