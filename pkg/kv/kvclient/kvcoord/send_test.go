@@ -113,7 +113,7 @@ func (f *firstNErrorTransport) NextInternalClient(
 }
 
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
-	return roachpb.ReplicaDescriptor{}
+	return f.replicas[f.numSent].ReplicaDescriptor
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
