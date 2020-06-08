@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -245,7 +244,6 @@ type SpanExpression struct {
 	// intersection with [5, 8) did not add anything to the spans to read. Also
 	// note that, despite factoring, there are overlapping spans in this
 	// expression, specifically [2, 6) and [5, 6).
-
 	FactoredUnionSpans []InvertedSpan
 
 	// Operator is the set operation to apply to Left and Right.
@@ -270,28 +268,25 @@ func (s *SpanExpression) SetNotTight() {
 
 func (s *SpanExpression) String() string {
 	tp := treeprinter.New()
-	s.format(tp)
+	n := tp.Child("span expression")
+	s.Format(n)
 	return tp.String()
 }
 
-func (s *SpanExpression) format(tp treeprinter.Node) {
-	var b strings.Builder
-	fmt.Fprintf(&b, "tight: %t, toRead: ", s.Tight)
-	formatSpans(&b, s.SpansToRead)
-	b.WriteString(" unionSpans: ")
-	formatSpans(&b, s.FactoredUnionSpans)
+// Format pretty-prints the SpanExpression.
+func (s *SpanExpression) Format(tp treeprinter.Node) {
+	tp.Childf("tight: %t", s.Tight)
+	formatSpans(tp, "to read", s.SpansToRead)
+	formatSpans(tp, "union spans", s.FactoredUnionSpans)
 	if s.Operator == None {
-		tp.Child(b.String())
 		return
 	}
-	b.WriteString("\n")
 	switch s.Operator {
 	case SetUnion:
-		b.WriteString("UNION")
+		tp = tp.Child("UNION")
 	case SetIntersection:
-		b.WriteString("INTERSECTION")
+		tp = tp.Child("INTERSECTION")
 	}
-	tp = tp.Child(b.String())
 	formatExpression(tp, s.Left)
 	formatExpression(tp, s.Right)
 }
@@ -299,34 +294,37 @@ func (s *SpanExpression) format(tp treeprinter.Node) {
 func formatExpression(tp treeprinter.Node, expr InvertedExpression) {
 	switch e := expr.(type) {
 	case *SpanExpression:
-		e.format(tp)
+		n := tp.Child("span expression")
+		e.Format(n)
 	default:
 		tp.Child(fmt.Sprintf("%v", e))
 	}
 }
 
 // formatSpans pretty-prints the spans.
-func formatSpans(b *strings.Builder, spans []InvertedSpan) {
+func formatSpans(tp treeprinter.Node, label string, spans []InvertedSpan) {
 	if len(spans) == 0 {
-		b.WriteString("empty")
+		tp.Childf("%s: empty", label)
 		return
 	}
+	if len(spans) == 1 {
+		tp.Childf("%s: %s", label, formatSpan(spans[0]))
+		return
+	}
+	n := tp.Child(label)
 	for i := 0; i < len(spans); i++ {
-		formatSpan(b, spans[i])
-		if i != len(spans)-1 {
-			b.WriteByte(' ')
-		}
+		n.Child(formatSpan(spans[i]))
 	}
 }
 
-func formatSpan(b *strings.Builder, span InvertedSpan) {
+func formatSpan(span InvertedSpan) string {
 	end := span.end
 	spanEndOpenOrClosed := ')'
 	if span.isSingleVal() {
 		end = span.start
 		spanEndOpenOrClosed = ']'
 	}
-	fmt.Fprintf(b, "[%s, %s%c", strconv.Quote(string(span.start)),
+	return fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.start)),
 		strconv.Quote(string(end)), spanEndOpenOrClosed)
 }
 
