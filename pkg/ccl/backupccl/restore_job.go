@@ -432,6 +432,7 @@ func WriteTableDescs(
 	txn *kv.Txn,
 	databases []*sqlbase.ImmutableDatabaseDescriptor,
 	tables []sqlbase.TableDescriptorInterface,
+	types []sqlbase.TypeDescriptorInterface,
 	descCoverage tree.DescriptorCoverage,
 	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
@@ -491,6 +492,26 @@ func WriteTableDescs(
 			tkey := sqlbase.MakePublicTableNameKey(ctx, settings, table.ParentID, table.Name)
 			b.CPut(tkey.Key(keys.SystemSQLCodec), table.ID, nil)
 		}
+
+		// Write all type descriptors -- create namespace entries and write to
+		// the system.descriptor table.
+		for i := range types {
+			typ := types[i].TypeDesc()
+			if err := catalogkv.WriteNewDescToBatch(
+				ctx,
+				false, /* kvTrace */
+				settings,
+				b,
+				keys.SystemSQLCodec,
+				typ.ID,
+				types[i],
+			); err != nil {
+				return err
+			}
+			tkey := sqlbase.MakePublicTableNameKey(ctx, settings, typ.ParentID, typ.Name)
+			b.CPut(tkey.Key(keys.SystemSQLCodec), typ.ID, nil)
+		}
+
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
 		}
@@ -780,7 +801,7 @@ func loadBackupSQLDescs(
 
 	var sqlDescs []sqlbase.Descriptor
 	for _, desc := range allDescs {
-		if _, ok := details.TableRewrites[desc.GetID()]; ok {
+		if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
 			sqlDescs = append(sqlDescs, desc)
 		}
 	}
@@ -801,21 +822,21 @@ type restoreResumer struct {
 // from those they had in the backed up database to what they should be
 // in the restored database.
 // It also selects only the statistics which belong to one of the tables
-// being restored. If the tableRewrites can re-write the table ID, then that
+// being restored. If the descriptorRewrites can re-write the table ID, then that
 // table is being restored.
 func remapRelevantStatistics(
-	backup BackupManifest, tableRewrites TableRewriteMap,
+	backup BackupManifest, descriptorRewrites DescRewriteMap,
 ) []*stats.TableStatisticProto {
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
 
 	for i := range backup.Statistics {
 		stat := backup.Statistics[i]
-		tableRewrite, ok := tableRewrites[stat.TableID]
+		tableRewrite, ok := descriptorRewrites[stat.TableID]
 		if !ok {
 			// Table re-write not present, so statistic should not be imported.
 			continue
 		}
-		stat.TableID = tableRewrite.TableID
+		stat.TableID = tableRewrite.ID
 		relevantTableStatistics = append(relevantTableStatistics, stat)
 	}
 
@@ -862,9 +883,9 @@ func isDatabaseEmpty(
 	return true, nil
 }
 
-// createImportingTables create the tables that we will restore into. It also
+// createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
-func createImportingTables(
+func createImportingDescriptors(
 	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
 ) (
 	[]*sqlbase.ImmutableDatabaseDescriptor,
@@ -877,6 +898,7 @@ func createImportingTables(
 
 	var databases []*sqlbase.ImmutableDatabaseDescriptor
 	var tables []sqlbase.TableDescriptorInterface
+	var types []sqlbase.TypeDescriptorInterface
 	var oldTableIDs []sqlbase.ID
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
@@ -885,15 +907,18 @@ func createImportingTables(
 			oldTableIDs = append(oldTableIDs, tableDesc.ID)
 		}
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			if rewrite, ok := details.TableRewrites[dbDesc.GetID()]; ok {
+			if rewrite, ok := details.DescriptorRewrites[dbDesc.GetID()]; ok {
 				rewriteDesc := sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
-					rewrite.TableID, dbDesc.GetName(), dbDesc.Privileges)
+					rewrite.ID, dbDesc.GetName(), dbDesc.Privileges)
 				databases = append(databases, rewriteDesc)
 			}
 		}
+		if typDesc := desc.GetType(); typDesc != nil {
+			types = append(types, sqlbase.NewMutableCreatedTypeDescriptor(*typDesc))
+		}
 	}
 	tempSystemDBID := keys.MinNonPredefinedUserDescID
-	for id := range details.TableRewrites {
+	for id := range details.DescriptorRewrites {
 		if int(id) > tempSystemDBID {
 			tempSystemDBID = int(id)
 		}
@@ -915,7 +940,16 @@ func createImportingTables(
 	for i, table := range tables {
 		tableDescs[i] = table.TableDesc()
 	}
-	if err := RewriteTableDescs(tableDescs, details.TableRewrites, details.OverrideDB); err != nil {
+	if err := RewriteTableDescs(tableDescs, details.DescriptorRewrites, details.OverrideDB); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	// Assign new IDs to all of the type descriptors in the backup.
+	typDescs := make([]*sqlbase.TypeDescriptor, len(types))
+	for i, typ := range types {
+		typDescs[i] = typ.TypeDesc()
+	}
+	if err := rewriteTypeDescs(typDescs, details.DescriptorRewrites); err != nil {
 		return nil, nil, nil, nil, err
 	}
 
@@ -928,7 +962,7 @@ func createImportingTables(
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteTableDescs(ctx, txn, databases, tables, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
+			if err := WriteTableDescs(ctx, txn, databases, tables, types, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 
@@ -962,7 +996,7 @@ func (r *restoreResumer) Resume(
 		return err
 	}
 
-	databases, tables, oldTableIDs, spans, err := createImportingTables(ctx, p, sqlDescs, r)
+	databases, tables, oldTableIDs, spans, err := createImportingDescriptors(ctx, p, sqlDescs, r)
 	if err != nil {
 		return err
 	}
@@ -970,7 +1004,7 @@ func (r *restoreResumer) Resume(
 	r.descriptorCoverage = details.DescriptorCoverage
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
-	r.latestStats = remapRelevantStatistics(latestBackupManifest, details.TableRewrites)
+	r.latestStats = remapRelevantStatistics(latestBackupManifest, details.DescriptorRewrites)
 
 	if len(r.tables) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
@@ -1142,6 +1176,9 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 		r.execCfg.StatsRefresher.NotifyMutation(r.tables[i].GetID(), math.MaxInt32 /* rowsAffected */)
 	}
 
+	// TODO (rohany): Once types have type schema change jobs, we need to create
+	//  jobs for pending type changes here.
+
 	return nil
 }
 
@@ -1161,6 +1198,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 }
 
 // dropTables implements the OnFailOrCancel logic.
+// TODO (rohany): Needs to be updated for user defined types.
 func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *kv.Txn) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 

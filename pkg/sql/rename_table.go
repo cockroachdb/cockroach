@@ -159,7 +159,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		return makeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
+		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
 	} else if err != nil {
 		return err
 	}

@@ -597,6 +597,12 @@ func loadSQLDescsFromBackupsAtTime(
 				continue
 			}
 		}
+		if t := desc.GetType(); t != nil {
+			// We apply the same filter for types as well.
+			if byID[t.ParentID] == nil {
+				continue
+			}
+		}
 		allDescs = append(allDescs, *desc)
 	}
 	return allDescs, lastBackupManifest
