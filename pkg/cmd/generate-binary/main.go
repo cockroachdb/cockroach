@@ -17,7 +17,7 @@
 // The target postgres server must accept plaintext (non-ssl) connections from
 // the postgres:postgres account. A suitable server can be started with:
 //
-// `docker run -p 127.0.0.1:5432:5432 postgres`
+// `docker run -p 127.0.0.1:5432:5432 postgres:11`
 //
 // The output of this file generates pkg/sql/pgwire/testdata/encodings.json.
 package main
@@ -197,6 +197,9 @@ var inputs = map[string][]string{
 		"2.2289971159100284",
 		"3409589268520956934250.234098732045120934701239846",
 		"42",
+		"42.0",
+		"420000",
+		"420000.0",
 	},
 
 	"'%s'::float8": {
