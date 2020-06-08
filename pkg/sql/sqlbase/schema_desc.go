@@ -67,42 +67,43 @@ func NewInitialSchemaDescriptor(id ID, name string) *ImmutableSchemaDescriptor {
 }
 
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {
+func (desc *ImmutableSchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 	return TableDescriptor_DISABLED
 }
 
 // TypeName implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) TypeName() string {
+func (desc *ImmutableSchemaDescriptor) TypeName() string {
 	return "schema"
 }
 
 // DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) DatabaseDesc() *DatabaseDescriptor {
+func (desc *ImmutableSchemaDescriptor) DatabaseDesc() *DatabaseDescriptor {
 	return nil
 }
 
 // SchemaDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) SchemaDesc() *SchemaDescriptor {
-	return desc
+func (desc *ImmutableSchemaDescriptor) SchemaDesc() *SchemaDescriptor {
+	return &desc.SchemaDescriptor
 }
 
 // TableDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) TableDesc() *TableDescriptor {
+func (desc *ImmutableSchemaDescriptor) TableDesc() *TableDescriptor {
 	return nil
 }
 
 // TypeDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) TypeDesc() *TypeDescriptor {
+func (desc *ImmutableSchemaDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
 
 // DescriptorProto wraps a SchemaDescriptor in a Descriptor.
-//
-// TODO(ajwerner): Lift this into the SchemaDescriptorInterface
-// implementations.
-func (desc *SchemaDescriptor) DescriptorProto() *Descriptor {
-	return wrapDescriptor(desc)
+func (desc *ImmutableSchemaDescriptor) DescriptorProto() *Descriptor {
+	return &Descriptor{
+		Union: &Descriptor_Schema{
+			Schema: &desc.SchemaDescriptor,
+		},
+	}
 }
 
 // NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) NameResolutionResult() {}
+func (desc *ImmutableSchemaDescriptor) NameResolutionResult() {}
