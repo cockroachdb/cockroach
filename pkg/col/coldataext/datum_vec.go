@@ -70,6 +70,12 @@ func (d *Datum) CompareDatum(dVec, other interface{}) int {
 	return d.Datum.Compare(dVec.(*datumVec).evalCtx, maybeUnwrapDatum(other))
 }
 
+// Cast returns the result of casting d to the type toType. dVec is the
+// datumVec that stores d and is used to supply the eval context.
+func (d *Datum) Cast(dVec interface{}, toType *types.T) (tree.Datum, error) {
+	return tree.PerformCast(dVec.(*datumVec).evalCtx, d.Datum, toType)
+}
+
 // Hash returns the hash of the datum as a byte slice.
 func (d *Datum) Hash(da *sqlbase.DatumAlloc) []byte {
 	ed := sqlbase.EncDatum{Datum: maybeUnwrapDatum(d)}
