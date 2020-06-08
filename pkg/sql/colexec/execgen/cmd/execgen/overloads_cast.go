@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -56,15 +57,15 @@ func populateCastOverloads() {
 		}, castTypeCustomizers)
 }
 
-func intToDecimal(to, from string) string {
+func intToDecimal(to, from, _ string) string {
 	convStr := `
    %[1]s = *apd.New(int64(%[2]s), 0)
  `
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func intToFloat() func(string, string) string {
-	return func(to, from string) string {
+func intToFloat() func(string, string, string) string {
+	return func(to, from, _ string) string {
 		convStr := `
 			%[1]s = float64(%[2]s)
 			`
@@ -72,29 +73,29 @@ func intToFloat() func(string, string) string {
 	}
 }
 
-func intToInt16(to, from string) string {
+func intToInt16(to, from, _ string) string {
 	convStr := `
    %[1]s = int16(%[2]s)
  `
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func intToInt32(to, from string) string {
+func intToInt32(to, from, _ string) string {
 	convStr := `
    %[1]s = int32(%[2]s)
  `
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func intToInt64(to, from string) string {
+func intToInt64(to, from, _ string) string {
 	convStr := `
    %[1]s = int64(%[2]s)
  `
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func floatToInt(intWidth, floatWidth int32) func(string, string) string {
-	return func(to, from string) string {
+func floatToInt(intWidth, floatWidth int32) func(string, string, string) string {
+	return func(to, from, _ string) string {
 		convStr := `
 			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
 				colexecerror.ExpectedError(tree.ErrIntOutOfRange)
@@ -108,14 +109,14 @@ func floatToInt(intWidth, floatWidth int32) func(string, string) string {
 	}
 }
 
-func numToBool(to, from string) string {
+func numToBool(to, from, _ string) string {
 	convStr := `
 		%[1]s = %[2]s != 0
 	`
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func floatToDecimal(to, from string) string {
+func floatToDecimal(to, from, _ string) string {
 	convStr := `
 		{
 			var tmpDec apd.Decimal
@@ -127,6 +128,19 @@ func floatToDecimal(to, from string) string {
 		}
 	`
 	return fmt.Sprintf(convStr, to, from)
+}
+
+func datumToBool(to, from, fromCol string) string {
+	convStr := `
+		{
+			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, types.Bool)
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			%[1]s = _castedDatum == tree.DBoolTrue
+		}
+	`
+	return fmt.Sprintf(convStr, to, from, fromCol)
 }
 
 // castTypeCustomizer is a type customizer that changes how the templater
@@ -200,6 +214,9 @@ func registerCastTypeCustomizers() {
 			registerCastTypeCustomizer(typePair{types.FloatFamily, anyWidth, toFamily, toWidth}, floatCastCustomizer{toFamily: toFamily, toWidth: toWidth})
 		}
 	}
+
+	// Casts from datum-backed types.
+	registerCastTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BoolFamily, anyWidth}, datumCastCustomizer{toFamily: types.BoolFamily})
 }
 
 // boolCastCustomizer specifies casts from booleans.
@@ -220,8 +237,14 @@ type intCastCustomizer struct {
 	toWidth  int32
 }
 
+// datumCastCustomizer specifies casts from types that are backed by tree.Datum
+// to other types.
+type datumCastCustomizer struct {
+	toFamily types.Family
+}
+
 func (boolCastCustomizer) getCastFunc() castFunc {
-	return func(to, from string) string {
+	return func(to, from, _ string) string {
 		convStr := `
 			%[1]s = 0
 			if %[2]s {
@@ -233,7 +256,7 @@ func (boolCastCustomizer) getCastFunc() castFunc {
 }
 
 func (decimalCastCustomizer) getCastFunc() castFunc {
-	return func(to, from string) string {
+	return func(to, from, _ string) string {
 		return fmt.Sprintf("%[1]s = %[2]s.Sign() != 0", to, from)
 	}
 }
@@ -271,6 +294,16 @@ func (c intCastCustomizer) getCastFunc() castFunc {
 		return intToFloat()
 	}
 	colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find a cast from int to %s with %d width", c.toFamily, c.toWidth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
+func (c datumCastCustomizer) getCastFunc() castFunc {
+	switch c.toFamily {
+	case types.BoolFamily:
+		return datumToBool
+	}
+	colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find a cast from datum-backed type to %s", c.toFamily))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

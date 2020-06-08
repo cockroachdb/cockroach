@@ -30,8 +30,8 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	castRe := makeFunctionRegex("_CAST", 2)
-	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 2))
+	castRe := makeFunctionRegex("_CAST", 3)
+	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 3))
 
 	s = strings.ReplaceAll(s, "_L_SLICE", "execgen.SLICE")
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
