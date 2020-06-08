@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -348,8 +347,6 @@ func backupPlanHook(
 			return err
 		}
 
-		statsCache := p.ExecCfg().TableStatsCache
-		var tableStatistics []*stats.TableStatisticProto
 		statsFiles := make(map[sqlbase.ID]string)
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
@@ -370,15 +367,6 @@ func backupPlanHook(
 						return unimplemented.NewWithIssue(48689, "user defined types in backup")
 					}
 				}
-
-				// Collect all the table stats for this table.
-				tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
-				if err != nil {
-					return err
-				}
-				for i := range tableStatisticsAcc {
-					tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
-				}
 				// For now, all Stats are written in the same file, so let's only have one key/value pair.
 				// TODO: look into the tradeoffs of having all objects in the array to be in the same file,
 				// vs having each object in a separate file, or somewhere in between.
@@ -386,9 +374,6 @@ func backupPlanHook(
 					statsFiles[tableDesc.GetID()] = BackupStatisticsFileName
 				}
 			}
-		}
-		statsTable := StatsTable{
-			Statistics: tableStatistics,
 		}
 
 		if err := ensureInterleavesIncluded(tables); err != nil {
@@ -671,13 +656,6 @@ func backupPlanHook(
 		if err := VerifyUsableExportTarget(
 			ctx, p.ExecCfg().Settings, defaultStore, defaultURI, encryption,
 		); err != nil {
-			return err
-		}
-
-		// This part writes the StatsTable objects into files.
-		// We delay the writing to here as the 'encryption' value has been changed just earlier on.
-		err = writeTableStatistics(ctx, defaultStore, BackupStatisticsFileName, encryption, &statsTable)
-		if err != nil {
 			return err
 		}
 

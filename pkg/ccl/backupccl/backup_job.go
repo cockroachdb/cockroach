@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -540,6 +542,36 @@ func (b *backupResumer) Resume(
 		p.ExecCfg().DistSQLSrv.ExternalStorage,
 		details.Encryption,
 	)
+	if err != nil {
+		return err
+	}
+
+	statsCache := p.ExecCfg().TableStatsCache
+	var tableStatistics []*stats.TableStatisticProto
+	statsFiles := make(map[sqlbase.ID]string)
+	for _, desc := range backupManifest.Descriptors {
+		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+
+			// Collect all the table stats for this table.
+			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
+			if err != nil {
+				return err
+			}
+			for i := range tableStatisticsAcc {
+				tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
+			}
+			// For now, all Stats are written in the same file, so let's only have one key/value pair.
+			// TODO: look into the tradeoffs of having all objects in the array to be in the same file,
+			// vs having each object in a separate file, or somewhere in between.
+			if len(statsFiles) == 0 {
+				statsFiles[tableDesc.GetID()] = BackupStatisticsFileName
+			}
+		}
+	}
+	statsTable := StatsTable{
+		Statistics: tableStatistics,
+	}
+	err = writeTableStatistics(ctx, defaultStore, BackupStatisticsFileName, details.Encryption, &statsTable)
 	if err != nil {
 		return err
 	}
