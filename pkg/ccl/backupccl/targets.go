@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -608,8 +609,10 @@ func lookupDatabaseID(ctx context.Context, txn *kv.Txn, name string) (sqlbase.ID
 
 // CheckTableExists returns an error if a table already exists with given
 // parent and name.
-func CheckTableExists(ctx context.Context, txn *kv.Txn, parentID sqlbase.ID, name string) error {
-	found, _, err := sqlbase.LookupPublicTableID(ctx, txn, parentID, name)
+func CheckTableExists(
+	ctx context.Context, settings *cluster.Settings, txn *kv.Txn, parentID sqlbase.ID, name string,
+) error {
+	found, _, err := sqlbase.LookupPublicTableID(ctx, settings, txn, parentID, name)
 	if err != nil {
 		return err
 	}
