@@ -62,7 +62,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		case jobs.StatusPaused:
 			err = reg.PauseRequested(params.ctx, params.p.txn, int64(jobID))
 		case jobs.StatusRunning:
-			err = reg.Resume(params.ctx, params.p.txn, int64(jobID))
+			err = reg.Unpause(params.ctx, params.p.txn, int64(jobID))
 		case jobs.StatusCanceled:
 			err = reg.CancelRequested(params.ctx, params.p.txn, int64(jobID))
 		default:

@@ -54,7 +54,7 @@ func validateCheckExpr(
 	}
 	lim := &tree.Limit{Count: tree.NewDInt(1)}
 	stmt := &tree.Select{Select: sel, Limit: lim}
-	queryStr := tree.AsStringWithFlags(stmt, tree.FmtParsable)
+	queryStr := tree.AsStringWithFlags(stmt, tree.FmtSerializable)
 	log.Infof(ctx, "Validating check constraint %q with query %q", tree.SerializeForDisplay(expr), queryStr)
 
 	rows, err := ie.QueryRow(ctx, "validate check constraint", txn, queryStr)

@@ -33,11 +33,6 @@ func genDistinctOps(inputFileContents string, wr io.Writer) error {
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
-	innerLoopRe := makeFunctionRegex("_CHECK_DISTINCT", 5)
-	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" buildDict "Global" .}}`)
-
-	innerLoopNullsRe := makeFunctionRegex("_CHECK_DISTINCT_WITH_NULLS", 7)
-	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" buildDict "Global" .}}`)
 	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.
@@ -48,6 +43,7 @@ func genDistinctOps(inputFileContents string, wr io.Writer) error {
 
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
+
 func init() {
 	registerGenerator(genDistinctOps, "distinct.eg.go", distinctOpsTmpl)
 }

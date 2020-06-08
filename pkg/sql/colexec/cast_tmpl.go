@@ -36,9 +36,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
 
 type _R_GO_TYPE interface{}

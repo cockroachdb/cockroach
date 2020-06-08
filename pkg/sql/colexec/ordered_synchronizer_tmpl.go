@@ -36,9 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
 // Declarations to make the template compile properly.
 

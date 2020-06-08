@@ -59,11 +59,16 @@ func (p *planner) runWithOptions(flags resolveFlags, fn func()) {
 		defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 		p.avoidCachedDescriptors = true
 	}
+	if flags.contextDatabaseID != sqlbase.InvalidID {
+		defer func(prev sqlbase.ID) { p.contextDatabaseID = prev }(p.contextDatabaseID)
+		p.contextDatabaseID = flags.contextDatabaseID
+	}
 	fn()
 }
 
 type resolveFlags struct {
-	skipCache bool
+	skipCache         bool
+	contextDatabaseID sqlbase.ID
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
@@ -156,6 +161,20 @@ func (p *planner) ResolveType(
 	}
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
 	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
+
+	// Disllow cross-database type resolution. Note that we check
+	// p.contextDatabaseID != sqlbase.InvalidID when we have been restricted to
+	// accessing types in the database with ID = p.contextDatabaseID by
+	// p.runWithOptions. So, check to see if the resolved descriptor's parentID
+	// matches, unless the descriptor's parentID is invalid. This could happen
+	// when the type being resolved is a builtin type prefaced with a virtual
+	// schema like `pg_catalog.int`. Resolution for these types returns a dummy
+	// TypeDescriptor, so ignore those cases.
+	if p.contextDatabaseID != sqlbase.InvalidID && tdesc.ParentID != sqlbase.InvalidID && tdesc.ParentID != p.contextDatabaseID {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
+	}
+
 	return tdesc.MakeTypesT(&tn, p.makeTypeLookupFn(ctx))
 }
 

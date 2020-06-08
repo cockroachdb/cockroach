@@ -535,6 +535,21 @@
   version = "v1.0.8"
 
 [[projects]]
+  branch = "master"
+  digest = "1:6c25d97f154e54290d708120e6bc72da4e8628e1467c53d8f723f1594043901d"
+  name = "github.com/dave/dst"
+  packages = [
+    ".",
+    "decorator",
+    "decorator/resolver",
+    "decorator/resolver/gopackages",
+    "decorator/resolver/gotypes",
+    "dstutil",
+  ]
+  pruneopts = "UT"
+  revision = "ce1c8af3ca7fccd4405ec0594a8b68d40370dda0"
+
+[[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -2164,6 +2179,9 @@
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
     "github.com/codahale/hdrhistogram",
+    "github.com/dave/dst",
+    "github.com/dave/dst/decorator",
+    "github.com/dave/dst/dstutil",
     "github.com/docker/distribution/reference",
     "github.com/docker/docker/api/types",
     "github.com/docker/docker/api/types/container",
