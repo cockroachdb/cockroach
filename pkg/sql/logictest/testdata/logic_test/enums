@@ -949,3 +949,43 @@ SELECT * FROM tbl_in_txn
 
 statement ok
 ROLLBACK
+
+# Test that we can add foreign keys using enum columns.
+statement ok
+CREATE TABLE enum_origin (x greeting PRIMARY KEY);
+CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
+INSERT INTO enum_origin VALUES ('hello');
+INSERT INTO enum_referenced VALUES ('hello');
+ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
+
+# Try a foreign key insert that fails validation.
+statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+INSERT INTO enum_origin VALUES ('howdy')
+
+# Try the above, but in a transaction.
+statement ok
+DROP TABLE enum_referenced, enum_origin;
+BEGIN;
+CREATE TABLE enum_origin (x greeting PRIMARY KEY);
+CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
+INSERT INTO enum_origin VALUES ('hello');
+INSERT INTO enum_referenced VALUES ('hello');
+ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
+
+statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+INSERT INTO enum_origin VALUES ('howdy')
+
+statement ok
+ROLLBACK
+
+# Try adding a foreign key that fails validation when building.
+# Foreign keys added in the same transaction as a new table are not validated,
+# so we can't test the below case in a transaction as well.
+statement ok
+CREATE TABLE enum_origin (x greeting PRIMARY KEY);
+CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
+INSERT INTO enum_origin VALUES ('hello');
+INSERT INTO enum_referenced VALUES ('howdy')
+
+statement error pq: foreign key violation: "enum_origin" row x='hello' has no match in "enum_referenced"
+ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
