@@ -123,8 +123,8 @@ func registerHibernate(r *testRegistry) {
 		// Also note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		_ = c.RunE(ctx, node,
-			`cd /mnt/data1/hibernate/hibernate-core/ && `+
-				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb`,
+			`cd /mnt/data1/hibernate/ && `+
+				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./gradlew test -Pdb=cockroachdb`,
 		)
 
 		t.Status("collecting the test results")
@@ -161,7 +161,7 @@ func registerHibernate(r *testRegistry) {
 			t.l,
 			node,
 			"get list of test files",
-			`ls /mnt/data1/hibernate/hibernate-core/target/test-results/test/*.xml`,
+			`ls /mnt/data1/hibernate/*/target/test-results/test/*.xml`,
 		)
 		if err != nil {
 			t.Fatal(err)
