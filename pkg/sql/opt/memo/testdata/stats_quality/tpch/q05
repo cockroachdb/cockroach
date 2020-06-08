@@ -50,6 +50,7 @@ ORDER BY
 sort
  ├── save-table-name: q5_sort_1
  ├── columns: n_name:42(char!null) revenue:49(float!null)
+ ├── immutable
  ├── stats: [rows=5, distinct(42)=5, null(42)=0, distinct(49)=5, null(49)=0]
  ├── key: (42)
  ├── fd: (42)-->(49)
@@ -58,12 +59,14 @@ sort
       ├── save-table-name: q5_group_by_2
       ├── columns: n_name:42(char!null) sum:49(float!null)
       ├── grouping columns: n_name:42(char!null)
+      ├── immutable
       ├── stats: [rows=5, distinct(42)=5, null(42)=0, distinct(49)=5, null(49)=0]
       ├── key: (42)
       ├── fd: (42)-->(49)
       ├── project
       │    ├── save-table-name: q5_project_3
       │    ├── columns: column48:48(float!null) n_name:42(char!null)
+      │    ├── immutable
       │    ├── stats: [rows=13445.4933, distinct(42)=5, null(42)=0, distinct(48)=13135.9517, null(48)=0]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q5_inner_join_4
@@ -171,7 +174,7 @@ sort
       │    │         ├── c_custkey:1 = o_custkey:10 [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    │         └── c_nationkey:4 = s_nationkey:37 [type=bool, outer=(4,37), constraints=(/4: (/NULL - ]; /37: (/NULL - ]), fd=(4)==(37), (37)==(4)]
       │    └── projections
-      │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column48:48, type=float, outer=(23,24)]
+      │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column48:48, type=float, outer=(23,24), immutable]
       └── aggregations
            └── sum [as=sum:49, type=float, outer=(48)]
                 └── column48:48 [type=float]

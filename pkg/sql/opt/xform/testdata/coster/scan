@@ -104,6 +104,7 @@ SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0
 select
  ├── columns: id:1!null
  ├── cardinality: [0 - 1000]
+ ├── immutable
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
  ├── cost: 1030.02
  ├── key: (1)
@@ -116,7 +117,7 @@ select
  │    ├── cost: 1020.01
  │    └── key: (1)
  └── filters
-      └── (id:1 % 16) = 0 [outer=(1)]
+      └── (id:1 % 16) = 0 [outer=(1), immutable]
 
 opt
 SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0)
@@ -124,6 +125,7 @@ SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0
 select
  ├── columns: id:1!null
  ├── cardinality: [0 - 2000]
+ ├── immutable
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
  ├── cost: 1030.02
  ├── key: (1)
@@ -136,4 +138,4 @@ select
  │    ├── cost: 1020.01
  │    └── key: (1)
  └── filters
-      └── (id:1 % 16) = 0 [outer=(1)]
+      └── (id:1 % 16) = 0 [outer=(1), immutable]

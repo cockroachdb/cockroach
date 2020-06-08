@@ -246,7 +246,7 @@ sort
       │    │    │    │         └── p_partkey:1 = l_partkey:18 [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │    │    │    └── projections
       │    │    │         ├── extract('year', o_orderdate:37) [as=o_year:61, type=float, outer=(37), immutable]
-      │    │    │         └── l_extendedprice:22 * (1.0 - l_discount:23) [as=volume:62, type=float, outer=(22,23)]
+      │    │    │         └── l_extendedprice:22 * (1.0 - l_discount:23) [as=volume:62, type=float, outer=(22,23), immutable]
       │    │    └── projections
       │    │         └── CASE WHEN n2.n_name:55 = 'BRAZIL' THEN volume:62 ELSE 0.0 END [as=column63:63, type=float, outer=(55,62)]
       │    └── aggregations

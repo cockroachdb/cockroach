@@ -137,6 +137,7 @@ WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT *
 values
  ├── columns: "?column?":5
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(5)
  └── tuple
@@ -162,6 +163,7 @@ WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT *
 with &2 (bar)
  ├── columns: "?column?":6
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── values
@@ -173,6 +175,7 @@ with &2 (bar)
  └── values
       ├── columns: "?column?":6
       ├── cardinality: [1 - 1]
+      ├── immutable
       ├── key: ()
       ├── fd: ()-->(6)
       └── tuple
@@ -647,6 +650,7 @@ with &2 (cte)
       ├── left columns: c:7(int)
       ├── right columns: "?column?":9(int)
       ├── cardinality: [1 - 2]
+      ├── immutable
       ├── stats: [rows=2, distinct(10)=2, null(10)=0]
       ├── cost: 0.1
       ├── key: (10)
@@ -663,6 +667,7 @@ with &2 (cte)
       └── project
            ├── columns: "?column?":9(int!null)
            ├── cardinality: [1 - 1]
+           ├── immutable
            ├── stats: [rows=1, distinct(9)=1, null(9)=0]
            ├── cost: 0.04
            ├── key: ()
@@ -679,7 +684,7 @@ with &2 (cte)
            │    ├── fd: ()-->(8)
            │    └── prune: (8)
            └── projections
-                └── plus [as="?column?":9, type=int, outer=(8)]
+                └── plus [as="?column?":9, type=int, outer=(8), immutable]
                      ├── variable: c:8 [type=int]
                      └── const: 1 [type=int]
 
@@ -800,6 +805,7 @@ with &2 (t)
  ├── columns: sum:6
  ├── materialized
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── recursive-c-t-e
@@ -808,6 +814,7 @@ with &2 (t)
  │    ├── initial columns: column1:1
  │    ├── recursive columns: "?column?":4
  │    ├── cardinality: [1 - ]
+ │    ├── immutable
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    ├── cardinality: [1 - 1]
@@ -816,6 +823,7 @@ with &2 (t)
  │    │    └── (1,)
  │    └── project
  │         ├── columns: "?column?":4!null
+ │         ├── immutable
  │         ├── select
  │         │    ├── columns: n:3!null
  │         │    ├── with-scan &1 (t)
@@ -826,7 +834,7 @@ with &2 (t)
  │         │    └── filters
  │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
  │         └── projections
- │              └── n:3 + 1 [as="?column?":4, outer=(3)]
+ │              └── n:3 + 1 [as="?column?":4, outer=(3), immutable]
  └── scalar-group-by
       ├── columns: sum:6
       ├── cardinality: [1 - 1]
@@ -848,17 +856,20 @@ WITH RECURSIVE t(n) AS NOT MATERIALIZED (VALUES (1) UNION ALL SELECT n+1 FROM t 
 scalar-group-by
  ├── columns: sum:6
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: n:5
  │    ├── cardinality: [1 - ]
+ │    ├── immutable
  │    ├── recursive-c-t-e
  │    │    ├── columns: n:2
  │    │    ├── working table binding: &1
  │    │    ├── initial columns: column1:1
  │    │    ├── recursive columns: "?column?":4
  │    │    ├── cardinality: [1 - ]
+ │    │    ├── immutable
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null
  │    │    │    ├── cardinality: [1 - 1]
@@ -867,6 +878,7 @@ scalar-group-by
  │    │    │    └── (1,)
  │    │    └── project
  │    │         ├── columns: "?column?":4!null
+ │    │         ├── immutable
  │    │         ├── select
  │    │         │    ├── columns: n:3!null
  │    │         │    ├── with-scan &1 (t)
@@ -877,7 +889,7 @@ scalar-group-by
  │    │         │    └── filters
  │    │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
  │    │         └── projections
- │    │              └── n:3 + 1 [as="?column?":4, outer=(3)]
+ │    │              └── n:3 + 1 [as="?column?":4, outer=(3), immutable]
  │    └── projections
  │         └── n:2 [as=n:5, outer=(2)]
  └── aggregations

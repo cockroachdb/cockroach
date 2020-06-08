@@ -223,7 +223,7 @@ func checkCallExpr(pass *analysis.Pass, enclosingFnName string, call *ast.CallEx
 
 	lit := pass.TypesInfo.Types[call.Args[idx]].Value
 	if lit != nil {
-		// A literal constant! All is well.
+		// A literal or constant! All is well.
 		return
 	}
 
@@ -251,7 +251,7 @@ func checkCallExpr(pass *analysis.Pass, enclosingFnName string, call *ast.CallEx
 
 // Tip is exported for use in tests.
 var Tip = `
-Tip: use YourFuncf("descriptive prefix %s", ...) or list new formatting wrappers in pkg/testutils/lint/passes/fmtsafe/functions.go.`
+Tip: use YourFuncf("descriptive prefix %%s", ...) or list new formatting wrappers in pkg/testutils/lint/passes/fmtsafe/functions.go.`
 
 func hasNoLintComment(pass *analysis.Pass, call *ast.CallExpr, idx int) bool {
 	fPos, f := findContainingFile(pass, call)

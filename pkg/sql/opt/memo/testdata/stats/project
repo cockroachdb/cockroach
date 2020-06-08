@@ -135,9 +135,11 @@ SELECT * FROM (SELECT y + 3 AS v FROM a) WHERE v >= 1 AND v <= 100
 ----
 select
  ├── columns: v:5(int!null)
+ ├── immutable
  ├── stats: [rows=1000, distinct(5)=100, null(5)=0]
  ├── project
  │    ├── columns: v:5(int)
+ │    ├── immutable
  │    ├── stats: [rows=2000, distinct(5)=200, null(5)=0]
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
@@ -145,7 +147,7 @@ select
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── projections
- │         └── y:2 + 3 [as=v:5, type=int, outer=(2)]
+ │         └── y:2 + 3 [as=v:5, type=int, outer=(2), immutable]
  └── filters
       └── (v:5 >= 1) AND (v:5 <= 100) [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
 
