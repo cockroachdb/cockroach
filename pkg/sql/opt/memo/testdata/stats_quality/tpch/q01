@@ -43,6 +43,7 @@ ORDER BY
 sort
  ├── save-table-name: q1_sort_1
  ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum_qty:17(float!null) sum_base_price:18(float!null) sum_disc_price:20(float!null) sum_charge:22(float!null) avg_qty:23(float!null) avg_price:24(float!null) avg_disc:25(float!null) count_order:26(int!null)
+ ├── immutable
  ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(17)=6, null(17)=0, distinct(18)=6, null(18)=0, distinct(20)=6, null(20)=0, distinct(22)=6, null(22)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(9,10)=6, null(9,10)=0]
  ├── key: (9,10)
  ├── fd: (9,10)-->(17,18,20,22-26)
@@ -51,12 +52,14 @@ sort
       ├── save-table-name: q1_group_by_2
       ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum:17(float!null) sum:18(float!null) sum:20(float!null) sum:22(float!null) avg:23(float!null) avg:24(float!null) avg:25(float!null) count_rows:26(int!null)
       ├── grouping columns: l_returnflag:9(char!null) l_linestatus:10(char!null)
+      ├── immutable
       ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(17)=6, null(17)=0, distinct(18)=6, null(18)=0, distinct(20)=6, null(20)=0, distinct(22)=6, null(22)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(9,10)=6, null(9,10)=0]
       ├── key: (9,10)
       ├── fd: (9,10)-->(17,18,20,22-26)
       ├── project
       │    ├── save-table-name: q1_project_3
       │    ├── columns: column19:19(float!null) column21:21(float!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
+      │    ├── immutable
       │    ├── stats: [rows=5925056.21, distinct(5)=50, null(5)=0, distinct(6)=925955, null(6)=0, distinct(7)=11, null(7)=0, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(19)=5925056.21, null(19)=0, distinct(21)=5925056.21, null(21)=0, distinct(9,10)=6, null(9,10)=0]
       │    ├── select
       │    │    ├── save-table-name: q1_select_4
@@ -73,8 +76,8 @@ sort
       │    │    └── filters
       │    │         └── l_shipdate:11 <= '1998-09-02' [type=bool, outer=(11), constraints=(/11: (/NULL - /'1998-09-02']; tight)]
       │    └── projections
-      │         ├── l_extendedprice:6 * (1.0 - l_discount:7) [as=column19:19, type=float, outer=(6,7)]
-      │         └── (l_extendedprice:6 * (1.0 - l_discount:7)) * (l_tax:8 + 1.0) [as=column21:21, type=float, outer=(6-8)]
+      │         ├── l_extendedprice:6 * (1.0 - l_discount:7) [as=column19:19, type=float, outer=(6,7), immutable]
+      │         └── (l_extendedprice:6 * (1.0 - l_discount:7)) * (l_tax:8 + 1.0) [as=column21:21, type=float, outer=(6-8), immutable]
       └── aggregations
            ├── sum [as=sum:17, type=float, outer=(5)]
            │    └── l_quantity:5 [type=float]

@@ -186,6 +186,7 @@ SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
 select
  ├── columns: sum:5(decimal!null) s:4(string)
+ ├── immutable
  ├── stats: [rows=1, distinct(5)=1, null(5)=0]
  ├── key: (4)
  ├── fd: ()-->(5)
@@ -209,7 +210,7 @@ select
  │         └── sum [as=sum:5, type=decimal, outer=(1)]
  │              └── x:1 [type=int]
  └── filters
-      └── sum:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      └── sum:5 = 5 [type=bool, outer=(5), immutable, constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
 
 # Scalar GroupBy.
 build
@@ -431,6 +432,7 @@ SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
 select
  ├── columns: sum:5(decimal!null) s:4(string)
+ ├── immutable
  ├── stats: [rows=1, distinct(5)=1, null(5)=0]
  ├── key: (4)
  ├── fd: ()-->(5)
@@ -454,7 +456,7 @@ select
  │         └── sum [as=sum:5, type=decimal, outer=(1)]
  │              └── x:1 [type=int]
  └── filters
-      └── sum:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      └── sum:5 = 5 [type=bool, outer=(5), immutable, constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
 
 # Regression test for #36442.
 norm

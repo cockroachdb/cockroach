@@ -43,6 +43,7 @@ project
  ├── save-table-name: q17_project_1
  ├── columns: avg_yearly:45(float)
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── stats: [rows=1, distinct(45)=1, null(45)=0]
  ├── key: ()
  ├── fd: ()-->(45)
@@ -50,6 +51,7 @@ project
  │    ├── save-table-name: q17_scalar_group_by_2
  │    ├── columns: sum:44(float)
  │    ├── cardinality: [1 - 1]
+ │    ├── immutable
  │    ├── stats: [rows=1, distinct(44)=1, null(44)=0]
  │    ├── key: ()
  │    ├── fd: ()-->(44)
@@ -58,18 +60,21 @@ project
  │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) p_partkey:17(int!null) "?column?":43(float!null)
  │    │    ├── key columns: [1 4] = [1 4]
  │    │    ├── lookup columns are key
+ │    │    ├── immutable
  │    │    ├── stats: [rows=2008.02163, distinct(2)=199.999619, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=2005.84759, null(6)=0, distinct(17)=199.999619, null(17)=0, distinct(43)=199.999619, null(43)=0]
  │    │    ├── fd: (17)-->(43), (2)==(17), (17)==(2)
  │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    ├── save-table-name: q17_lookup_join_4
  │    │    │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) p_partkey:17(int!null) "?column?":43(float)
  │    │    │    ├── key columns: [17] = [2]
+ │    │    │    ├── immutable
  │    │    │    ├── stats: [rows=6024.06489, distinct(1)=6012.21509, null(1)=0, distinct(2)=199.999619, null(2)=0, distinct(4)=7, null(4)=0, distinct(17)=199.999619, null(17)=0, distinct(43)=199.999619, null(43)=0]
  │    │    │    ├── key: (1,4)
  │    │    │    ├── fd: (17)-->(43), (1,4)-->(2), (2)==(17), (17)==(2)
  │    │    │    ├── project
  │    │    │    │    ├── save-table-name: q17_project_5
  │    │    │    │    ├── columns: "?column?":43(float) p_partkey:17(int!null)
+ │    │    │    │    ├── immutable
  │    │    │    │    ├── stats: [rows=199.999619, distinct(17)=199.999619, null(17)=0, distinct(43)=199.999619, null(43)=0]
  │    │    │    │    ├── key: (17)
  │    │    │    │    ├── fd: (17)-->(43)
@@ -122,7 +127,7 @@ project
  │    │    │    │    │         └── avg [as=avg:42, type=float, outer=(30)]
  │    │    │    │    │              └── l_quantity:30 [type=float]
  │    │    │    │    └── projections
- │    │    │    │         └── avg:42 * 0.2 [as="?column?":43, type=float, outer=(42)]
+ │    │    │    │         └── avg:42 * 0.2 [as="?column?":43, type=float, outer=(42), immutable]
  │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── l_quantity:5 < "?column?":43 [type=bool, outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]

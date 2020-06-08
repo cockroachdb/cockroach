@@ -766,6 +766,7 @@ SELECT v + 1, min(w), v FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 project
  ├── columns: "?column?":6!null min:5!null v:3!null
  ├── cardinality: [0 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(3,5,6)
  ├── project
@@ -782,7 +783,7 @@ project
  │    └── projections
  │         └── w:4 [as=min:5, outer=(4)]
  └── projections
-      └── v:3 + 1 [as="?column?":6, outer=(3)]
+      └── v:3 + 1 [as="?column?":6, outer=(3), immutable]
 
 # Add const_agg function, as well as max function.
 opt expect=ReplaceMaxWithLimit
@@ -791,6 +792,7 @@ SELECT v + 1, max(w), v FROM kuvw WHERE v = 5 GROUP BY v
 project
  ├── columns: "?column?":6!null max:5 v:3!null
  ├── cardinality: [0 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(3,5,6)
  ├── project
@@ -807,7 +809,7 @@ project
  │    └── projections
  │         └── w:4 [as=max:5, outer=(4)]
  └── projections
-      └── v:3 + 1 [as="?column?":6, outer=(3)]
+      └── v:3 + 1 [as="?column?":6, outer=(3), immutable]
 
 # Use multiple grouping columns with min function.
 opt expect=ReplaceMinWithLimit

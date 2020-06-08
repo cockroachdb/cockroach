@@ -700,26 +700,30 @@ SELECT (SELECT y FROM xy WHERE x+y=k) FROM a
 ----
 project
  ├── columns: y:8
+ ├── immutable
  ├── ensure-distinct-on
  │    ├── columns: k:1!null xy.y:7
  │    ├── grouping columns: k:1!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(7)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null xy.y:7 column9:9
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │    │    ├── immutable
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null
  │    │    │    └── key: (1)
  │    │    ├── project
  │    │    │    ├── columns: column9:9 xy.y:7
+ │    │    │    ├── immutable
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6!null xy.y:7
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── projections
- │    │    │         └── x:6 + xy.y:7 [as=column9:9, outer=(6,7)]
+ │    │    │         └── x:6 + xy.y:7 [as=column9:9, outer=(6,7), immutable]
  │    │    └── filters
  │    │         └── k:1 = column9:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    └── aggregations
@@ -857,18 +861,21 @@ SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 ----
 project
  ├── columns: min:7!null
+ ├── immutable
  └── group-by
       ├── columns: i2:6!null min:7!null
       ├── grouping columns: i2:6!null
+      ├── immutable
       ├── key: (6)
       ├── fd: (6)-->(7)
       ├── project
       │    ├── columns: i2:6!null s:4!null
+      │    ├── immutable
       │    ├── scan a
       │    │    ├── columns: i:2!null s:4!null
       │    │    └── key: (2,4)
       │    └── projections
-      │         └── i:2 + 1 [as=i2:6, outer=(2)]
+      │         └── i:2 + 1 [as=i2:6, outer=(2), immutable]
       └── aggregations
            └── min [as=min:7, outer=(4)]
                 └── s:4
@@ -1925,6 +1932,7 @@ WHERE x > 100 OR b > 100
 ----
 project
  ├── columns: x:1!null y:2!null z:3!null a:4 b:5 c:6 "?column?":7!null
+ ├── immutable
  ├── fd: (1)-->(7)
  ├── select
  │    ├── columns: column1:1!null column2:2!null column3:3!null a:4 b:5 c:6
@@ -1947,7 +1955,7 @@ project
  │    └── filters
  │         └── (column1:1 > 100) OR (b:5 > 100) [outer=(1,5)]
  └── projections
-      └── column1:1 + 1 [as="?column?":7, outer=(1)]
+      └── column1:1 + 1 [as="?column?":7, outer=(1), immutable]
 
 # Right input of left join does not have a key, so left side may have dups.
 norm expect-not=EliminateDistinctOnValues
@@ -2025,11 +2033,13 @@ distinct-on
  ├── columns: x:1!null y:2!null
  ├── grouping columns: y:2!null
  ├── cardinality: [1 - 2]
+ ├── immutable
  ├── key: (2)
  ├── fd: (1)-->(2), (2)-->(1)
  ├── project
  │    ├── columns: y:2!null column1:1!null
  │    ├── cardinality: [2 - 2]
+ │    ├── immutable
  │    ├── fd: (1)-->(2)
  │    ├── values
  │    │    ├── columns: column1:1!null
@@ -2037,7 +2047,7 @@ distinct-on
  │    │    ├── (1,)
  │    │    └── (2,)
  │    └── projections
- │         └── column1:1 + 1 [as=y:2, outer=(1)]
+ │         └── column1:1 + 1 [as=y:2, outer=(1), immutable]
  └── aggregations
       └── first-agg [as=column1:1, outer=(1)]
            └── column1:1

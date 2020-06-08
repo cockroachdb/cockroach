@@ -232,12 +232,14 @@ LIMIT 50
 project
  ├── columns: score:9!null expires_at:15!null  [hidden: updated_at_inverse:14!null]
  ├── cardinality: [0 - 50]
+ ├── immutable
  ├── fd: ()-->(15)
  ├── ordering: -9,-14 opt(15) [actual: -9,-14]
  └── scan leaderboard_record@test_idx,rev
       ├── columns: id:1!null leaderboard_id:2!null score:9!null updated_at_inverse:14!null expires_at:15!null
       ├── constraint: /2/15/9/14/1/3: [/'\x74657374'/0 - /'\x74657374'/0/100/500/'\x736f6d655f6964')
       ├── limit: 50(rev)
+      ├── immutable
       ├── key: (1)
       ├── fd: ()-->(2,15), (1)-->(9,14)
       └── ordering: -9,-14 opt(2,15) [actual: -9,-14]
@@ -569,5 +571,5 @@ project
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      ├── value:4->>'secondary_id' [as=secondary_id:6, outer=(4)]
+      ├── value:4->>'secondary_id' [as=secondary_id:6, outer=(4), immutable]
       └── data:3 || jsonb_build_object('primary_id', primary_id:1) [as="?column?":7, outer=(1,3), stable]

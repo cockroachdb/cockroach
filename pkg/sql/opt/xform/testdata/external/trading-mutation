@@ -557,6 +557,7 @@ FROM CardsView WHERE Version > 1584421773604892000.0000000000
 ----
 project
  ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null buyprice:9!null sellprice:10!null desiredinventory:12!null actualinventory:13!null version:15!null discount:11!null maxinventory:14!null
+ ├── immutable
  ├── stats: [rows=1]
  ├── key: (15)
  ├── fd: (1)-->(2-6,9-15), (2,4,5)~~>(1,3,6), (15)-->(1-6,9-14)
@@ -564,11 +565,13 @@ project
       ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null dealerid:7!null cardid:8!null buyprice:9!null sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null version:15!null
       ├── key columns: [8] = [1]
       ├── lookup columns are key
+      ├── immutable
       ├── stats: [rows=1, distinct(1)=6.35833333e-05, null(1)=0, distinct(8)=6.35833333e-05, null(8)=0]
       ├── key: (8)
       ├── fd: ()-->(7), (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(9-15), (15)-->(8-14), (1)==(8), (8)==(1)
       ├── index-join cardsinfo
       │    ├── columns: dealerid:7!null cardid:8!null buyprice:9!null sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null version:15!null
+      │    ├── immutable
       │    ├── stats: [rows=6.35833333e-05, distinct(7)=6.35833333e-05, null(7)=0, distinct(8)=6.35833333e-05, null(8)=0, distinct(9)=6.35833333e-05, null(9)=0, distinct(10)=6.35833333e-05, null(10)=0, distinct(11)=6.35833333e-05, null(11)=0, distinct(12)=6.35833333e-05, null(12)=0, distinct(13)=6.35833333e-05, null(13)=0, distinct(14)=6.35833333e-05, null(14)=0, distinct(15)=6.35833333e-05, null(15)=0, distinct(7,15)=6.35833333e-05, null(7,15)=0]
       │    │   histogram(15)=
       │    ├── key: (8)
@@ -739,6 +742,7 @@ LIMIT 50
 project
  ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null buyprice:9!null sellprice:10!null desiredinventory:12!null actualinventory:13!null version:15!null discount:11!null maxinventory:14!null twodaysales:31
  ├── cardinality: [0 - 50]
+ ├── immutable
  ├── stats: [rows=50]
  ├── key: (15,31)
  ├── fd: (1)-->(2-6,9-15), (2,4,5)~~>(1,3,6), (15)-->(1-6,9-14)
@@ -747,12 +751,14 @@ project
  │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null cardsinfo.discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null sum:30
  │    ├── internal-ordering: +2,+4,+5
  │    ├── cardinality: [0 - 50]
+ │    ├── immutable
  │    ├── stats: [rows=50]
  │    ├── key: (8)
  │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(1-6,9-15,30), (15)-->(8-14), (1)==(8), (8)==(1)
  │    ├── ordering: +2,+4,+5
  │    ├── sort
  │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null cardsinfo.discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null sum:30
+ │    │    ├── immutable
  │    │    ├── stats: [rows=19000, distinct(8)=19000, null(8)=0]
  │    │    ├── key: (8)
  │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(1-6,9-15,30), (15)-->(8-14), (1)==(8), (8)==(1)
@@ -761,11 +767,13 @@ project
  │    │    └── group-by
  │    │         ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null cardsinfo.discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null sum:30
  │    │         ├── grouping columns: cardsinfo.cardid:8!null
+ │    │         ├── immutable
  │    │         ├── stats: [rows=19000, distinct(8)=19000, null(8)=0]
  │    │         ├── key: (8)
  │    │         ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(1-6,9-15,30), (15)-->(8-14), (1)==(8), (8)==(1)
  │    │         ├── right-join (hash)
  │    │         │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null cardsinfo.discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null transactiondetails.dealerid:20 isbuy:21 transactiondate:22 transactiondetails.cardid:23 quantity:24
+ │    │         │    ├── immutable
  │    │         │    ├── stats: [rows=5523583.18, distinct(8)=19000, null(8)=0, distinct(23)=19000, null(23)=0]
  │    │         │    ├── key: (8,22-24)
  │    │         │    ├── fd: ()-->(7), (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(9-15), (15)-->(8-14), (1)==(8), (8)==(1), (8,22-24)-->(20,21)
@@ -779,11 +787,13 @@ project
  │    │         │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null cardsinfo.discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null
  │    │         │    │    ├── left ordering: +1
  │    │         │    │    ├── right ordering: +8
+ │    │         │    │    ├── immutable
  │    │         │    │    ├── stats: [rows=29618.4611, distinct(1)=19000, null(1)=0, distinct(2)=11668.1409, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5572.85686, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=19000, null(8)=0, distinct(9)=21037.9959, null(9)=0, distinct(10)=21037.9959, null(10)=0, distinct(11)=21037.9959, null(11)=0, distinct(12)=21037.9959, null(12)=0, distinct(13)=21037.9959, null(13)=0, distinct(14)=21037.9959, null(14)=0, distinct(15)=23225.5851, null(15)=0]
  │    │         │    │    ├── key: (8)
  │    │         │    │    ├── fd: ()-->(7), (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(9-15), (15)-->(8-14), (1)==(8), (8)==(1)
  │    │         │    │    ├── select
  │    │         │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │    │         │    │    │    ├── immutable
  │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0]
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
@@ -795,7 +805,7 @@ project
  │    │         │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
  │    │         │    │    │    │    └── ordering: +1
  │    │         │    │    │    └── filters
- │    │         │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
+ │    │         │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
  │    │         │    │    ├── scan cardsinfo
  │    │         │    │    │    ├── columns: cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null cardsinfo.discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null
  │    │         │    │    │    ├── constraint: /7/8: [/1 - /1]
@@ -946,9 +956,9 @@ sort
       │    │    └── filters
       │    │         └── id:20 = transactiondetails.cardid:4 [outer=(4,20), constraints=(/4: (/NULL - ]; /20: (/NULL - ]), fd=(4)==(20), (20)==(4)]
       │    └── projections
-      │         ├── transactiondetails.sellprice:6 * quantity:5 [as=column39:39, outer=(5,6)]
-      │         ├── transactiondetails.buyprice:7 * quantity:5 [as=column41:41, outer=(5,7)]
-      │         ├── quantity:5 * (transactiondetails.sellprice:6 - transactiondetails.buyprice:7) [as=column43:43, outer=(5-7)]
+      │         ├── transactiondetails.sellprice:6 * quantity:5 [as=column39:39, outer=(5,6), immutable]
+      │         ├── transactiondetails.buyprice:7 * quantity:5 [as=column41:41, outer=(5,7), immutable]
+      │         ├── quantity:5 * (transactiondetails.sellprice:6 - transactiondetails.buyprice:7) [as=column43:43, outer=(5-7), immutable]
       │         └── extract('day', transactiondate:3) [as=column45:45, outer=(3), stable]
       └── aggregations
            ├── sum [as=sum:40, outer=(39)]
