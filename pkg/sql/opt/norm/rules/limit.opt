@@ -221,3 +221,122 @@ $input
 )
 =>
 (Limit $innerInput $outerLimitExpr $innerOrdering)
+
+# AssociateLimitJoinsLeft reorders an InnerJoin and LeftJoin under a Limit if:
+# 1. The InnerJoin does not preserve rows from either of its inputs.
+# 2. The InnerJoin's ON condition does not reference the right side of the
+#    LeftJoin (because the reordering would be invalid).
+# 3. Neither join has join hints.
+#
+# Why condition #1? PushLimitIntoJoinLeft and PushLimitIntoJoinRight cannot push
+# a limit into an InnerJoin that doesn't preserve rows, but placing the LeftJoin
+# under the limit makes push-down possible.
+#
+# Here's the transformation:
+#
+#   SELECT *
+#   FROM (SELECT * FROM xy LEFT JOIN uv ON u = x)
+#   INNER JOIN ab
+#   ON a = y
+#   LIMIT 10
+# =>
+#   SELECT *
+#   FROM (SELECT * FROM xy INNER JOIN ab ON a = y)
+#   LEFT JOIN uv
+#   ON u = x
+#   LIMIT 10
+#
+# Citations: [1] (See identity (6) in section 2.2)
+[AssociateLimitJoinsLeft, Normalize, LowPriority]
+(Limit
+    $limitInput:(InnerJoin
+            $outsideLeft:(LeftJoin
+                $insideLeft:*
+                $insideRight:*
+                $insideOn:*
+                $insidePrivate:* & (NoJoinHints $insidePrivate)
+            )
+            $outsideRight:*
+            $outsideOn:* &
+                ^(ColsIntersect
+                    (FilterOuterCols $outsideOn)
+                    (OutputCols $insideRight)
+                )
+            $outsidePrivate:* & (NoJoinHints $outsidePrivate)
+        ) &
+        ^(JoinPreservesLeftRows $limitInput) &
+        ^(JoinPreservesRightRows $limitInput)
+    $limitValue:*
+    $limitOrdering:*
+)
+=>
+(Limit
+    (LeftJoin
+        (InnerJoin
+            $insideLeft
+            $outsideRight
+            $outsideOn
+            (EmptyJoinPrivate)
+        )
+        $insideRight
+        $insideOn
+        (EmptyJoinPrivate)
+    )
+    $limitValue
+    $limitOrdering
+)
+
+# AssociateLimitJoinsRight mirrors AssociateLimitJoinsLeft (it matches when the
+# LeftJoin is the right input of the InnerJoin, as opposed to the left input).
+# Here's the transformation:
+#
+#   SELECT *
+#   FROM ab
+#   INNER JOIN (SELECT * FROM xy LEFT JOIN uv ON u = x)
+#   ON a = y
+#   LIMIT 10
+# =>
+#   SELECT *
+#   FROM (SELECT * FROM xy INNER JOIN ab ON a = y)
+#   LEFT JOIN uv
+#   ON u = x
+#   LIMIT 10
+#
+[AssociateLimitJoinsRight, Normalize, LowPriority]
+(Limit
+    $limitInput:(InnerJoin
+            $outsideLeft:*
+            $outsideRight:(LeftJoin
+                $insideLeft:*
+                $insideRight:*
+                $insideOn:*
+                $insidePrivate:* & (NoJoinHints $insidePrivate)
+            )
+            $outsideOn:* &
+                ^(ColsIntersect
+                    (FilterOuterCols $outsideOn)
+                    (OutputCols $insideRight)
+                )
+            $outsidePrivate:* & (NoJoinHints $outsidePrivate)
+        ) &
+        ^(JoinPreservesLeftRows $limitInput) &
+        ^(JoinPreservesRightRows $limitInput)
+    $limitValue:*
+    $limitOrdering:*
+)
+=>
+(Limit
+    (LeftJoin
+        (InnerJoin
+            $insideLeft
+            $outsideLeft
+            $outsideOn
+            (EmptyJoinPrivate)
+        )
+        $insideRight
+        $insideOn
+        (EmptyJoinPrivate)
+    )
+    $limitValue
+    $limitOrdering
+)
