@@ -103,7 +103,8 @@ func unwrapDescriptor(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *sqlbase.Descriptor,
 ) (catalog.Descriptor, error) {
 	// TODO(ajwerner): Fill in the ModificationTime field for the descriptor.
-	table, database, typ, schema := desc.Table(ts), desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
+	table, database, typ, schema := desc.Table(hlc.Timestamp{}), desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
@@ -342,7 +343,7 @@ func GetDatabaseDescriptorsFromIDs(
 				desc.String(),
 			)
 		}
-		// TODO(ajwerner): Set ModificationTime.
+		desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, result.Rows[0].Value.Timestamp)
 		results = append(results, sqlbase.NewImmutableDatabaseDescriptor(*db))
 	}
 	return results, nil

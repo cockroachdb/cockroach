@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -351,15 +352,15 @@ func GetDatabaseDescFromID(
 ) (*ImmutableDatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(codec, id)
-	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
+	ts, err := protoGetter.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
 		return nil, err
 	}
-	// TODO(ajwerner): Set the Modification time.
 	db := desc.GetDatabase()
 	if db == nil {
 		return nil, ErrDescriptorNotFound
 	}
+	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
 	return NewImmutableDatabaseDescriptor(*db), nil
 }
 
@@ -3678,7 +3679,7 @@ func (desc *Descriptor) GetID() ID {
 	case *Descriptor_Schema:
 		return t.Schema.ID
 	default:
-		panic(errors.AssertionFailedf("unknown Descriptor type %T", t))
+		panic(errors.AssertionFailedf("GetID: unknown Descriptor type %T", t))
 	}
 }
 
@@ -3694,26 +3695,63 @@ func (desc *Descriptor) GetName() string {
 	case *Descriptor_Schema:
 		return t.Schema.Name
 	default:
-		panic(errors.AssertionFailedf("unknown Descriptor type %T", t))
+		panic(errors.AssertionFailedf("GetName: unknown Descriptor type %T", t))
 	}
 }
 
-// Table is a replacement for GetTable() which seeks to ensure that clients
-// which unmarshal Descriptor structs properly set the ModificationTime on
-// tables based on the MVCC timestamp at which the descriptor was read.
-//
-// A linter should ensure that GetTable() is not called.
-func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
-	t := desc.GetTable()
-	if t != nil {
-		t.maybeSetTimeFromMVCCTimestamp(ts)
+// GetVersion returns the Version of the descriptor.
+func (desc *Descriptor) GetVersion() DescriptorVersion {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.Version
+	case *Descriptor_Database:
+		return t.Database.Version
+	case *Descriptor_Type:
+		return t.Type.Version
+	case *Descriptor_Schema:
+		return t.Schema.Version
+	default:
+		panic(errors.AssertionFailedf("GetVersion: unknown Descriptor type %T", t))
 	}
-	return t
 }
 
-// maybeSetTimeFromMVCCTimestamp will update ModificationTime and possible
-// CreateAsOfTime with the provided timestamp. If desc.ModificationTime is
-// non-zero it must be the case that it is not after the provided timestamp.
+// GetModificationTime returns the ModificationTime of the descriptor.
+func (desc *Descriptor) GetModificationTime() hlc.Timestamp {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.ModificationTime
+	case *Descriptor_Database:
+		return t.Database.ModificationTime
+	case *Descriptor_Type:
+		return t.Type.ModificationTime
+	case *Descriptor_Schema:
+		return t.Schema.ModificationTime
+	default:
+		debug.PrintStack()
+		panic(errors.AssertionFailedf("GetModificationTime: unknown Descriptor type %T", t))
+	}
+}
+
+// GetModificationTime returns the ModificationTime of the descriptor.
+func (desc *Descriptor) setModificationTime(ts hlc.Timestamp) {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		t.Table.ModificationTime = ts
+	case *Descriptor_Database:
+		t.Database.ModificationTime = ts
+	case *Descriptor_Type:
+		t.Type.ModificationTime = ts
+	case *Descriptor_Schema:
+		t.Schema.ModificationTime = ts
+	default:
+		panic(errors.AssertionFailedf("setModificationTime: unknown Descriptor type %T", t))
+	}
+}
+
+// MaybeSetModificationTimeFromMVCCTimestamp will update ModificationTime and
+// possibly CreateAsOfTime on TableDescriptor with the provided timestamp. If
+// ModificationTime is non-zero it must be the case that it is not after the
+// provided timestamp.
 //
 // When table descriptor versions are incremented they are written with a
 // zero-valued ModificationTime. This is done to avoid the need to observe
@@ -3727,30 +3765,37 @@ func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
 //
 // It is vital that users which read table descriptor values from the KV store
 // call this method.
-func (desc *TableDescriptor) maybeSetTimeFromMVCCTimestamp(ts hlc.Timestamp) {
-	// CreateAsOfTime is used for CREATE TABLE ... AS ... and was introduced in
-	// v19.1. In general it is not critical to set except for tables in the ADD
-	// ADD state which were created from CTAS so we should not assert on its not
-	// being set. It's not always sensical to set it from the passed MVCC
-	// timestamp. However, starting in 19.2 the CreateAsOfTime and
-	// ModificationTime fields are both unset for the first Version of a
-	// TableDescriptor and the code relies on the value being set based on the
-	// MVCC timestamp.
-	if !ts.IsEmpty() &&
-		desc.ModificationTime.IsEmpty() &&
-		desc.CreateAsOfTime.IsEmpty() &&
-		desc.Version == 1 {
-		desc.CreateAsOfTime = ts
-	}
+func (desc *Descriptor) MaybeSetModificationTimeFromMVCCTimestamp(
+	ctx context.Context, ts hlc.Timestamp,
+) {
+	switch t := desc.Union.(type) {
+	case nil:
+		// Empty descriptors shouldn't be touched.
+		return
+	case *Descriptor_Table:
+		// CreateAsOfTime is used for CREATE TABLE ... AS ... and was introduced in
+		// v19.1. In general it is not critical to set except for tables in the ADD
+		// state which were created from CTAS so we should not assert on its not
+		// being set. It's not always sensical to set it from the passed MVCC
+		// timestamp. However, starting in 19.2 the CreateAsOfTime and
+		// ModificationTime fields are both unset for the first Version of a
+		// TableDescriptor and the code relies on the value being set based on the
+		// MVCC timestamp.
+		if !ts.IsEmpty() &&
+			t.Table.ModificationTime.IsEmpty() &&
+			t.Table.CreateAsOfTime.IsEmpty() &&
+			t.Table.Version == 1 {
+			t.Table.CreateAsOfTime = ts
+		}
 
-	// Ensure that if the table is in the process of being added and relies on
-	// CreateAsOfTime that it is now set.
-	if desc.Adding() && desc.IsAs() && desc.CreateAsOfTime.IsEmpty() {
-		log.Fatalf(context.TODO(), "table descriptor for %q (%d.%d) is in the "+
-			"ADD state and was created with CREATE TABLE ... AS but does not have a "+
-			"CreateAsOfTime set", desc.Name, desc.ParentID, desc.ID)
+		// Ensure that if the table is in the process of being added and relies on
+		// CreateAsOfTime that it is now set.
+		if t.Table.Adding() && t.Table.IsAs() && t.Table.CreateAsOfTime.IsEmpty() {
+			log.Fatalf(context.TODO(), "table descriptor for %q (%d.%d) is in the "+
+				"ADD state and was created with CREATE TABLE ... AS but does not have a "+
+				"CreateAsOfTime set", t.Table.Name, t.Table.ParentID, t.Table.ID)
+		}
 	}
-
 	// Set the ModificationTime based on the passed ts if we should.
 	// Table descriptors can be updated in place after their version has been
 	// incremented (e.g. to include a schema change lease).
@@ -3758,20 +3803,33 @@ func (desc *TableDescriptor) maybeSetTimeFromMVCCTimestamp(ts hlc.Timestamp) {
 	// with the value that lives on the in-memory copy. That value should contain
 	// a timestamp set by this method. Thus if the ModificationTime is set it
 	// must not be after the MVCC timestamp we just read it at.
-	if desc.ModificationTime.IsEmpty() && ts.IsEmpty() && desc.Version > 1 {
+	if modTime := desc.GetModificationTime(); modTime.IsEmpty() && ts.IsEmpty() && desc.GetVersion() > 1 {
 		// TODO(ajwerner): reconsider the third condition here.It seems that there
 		// are some cases where system tables lack this timestamp and then when they
 		// are rendered in some other downstream setting we expect the timestamp to
 		// be read. This is a hack we shouldn't need to do.
-		log.Fatalf(context.TODO(), "read table descriptor for %q (%d.%d) without ModificationTime "+
-			"with zero MVCC timestamp", desc.Name, desc.ParentID, desc.ID)
-	} else if desc.ModificationTime.IsEmpty() {
-		desc.ModificationTime = ts
-	} else if !ts.IsEmpty() && ts.Less(desc.ModificationTime) {
-		log.Fatalf(context.TODO(), "read table descriptor %q (%d.%d) which has a ModificationTime "+
+		log.Fatalf(context.TODO(), "read table descriptor for %q (%d) without ModificationTime "+
+			"with zero MVCC timestamp", desc.GetName(), desc.GetID())
+	} else if modTime.IsEmpty() {
+		desc.setModificationTime(ts)
+	} else if !ts.IsEmpty() && ts.Less(modTime) {
+		log.Fatalf(context.TODO(), "read table descriptor %q (%d) which has a ModificationTime "+
 			"after its MVCC timestamp: has %v, expected %v",
-			desc.Name, desc.ParentID, desc.ID, desc.ModificationTime, ts)
+			desc.GetName(), desc.GetID(), modTime, ts)
 	}
+}
+
+// Table is a replacement for GetTable() which seeks to ensure that clients
+// which unmarshal Descriptor structs properly set the ModificationTime on
+// tables based on the MVCC timestamp at which the descriptor was read.
+//
+// A linter should ensure that GetTable() is not called.
+func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
+	t := desc.GetTable()
+	if t != nil {
+		desc.MaybeSetModificationTimeFromMVCCTimestamp(context.TODO(), ts)
+	}
+	return t
 }
 
 // IsSet returns whether or not the foreign key actually references a table.
