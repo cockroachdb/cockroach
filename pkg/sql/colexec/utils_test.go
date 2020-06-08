@@ -602,20 +602,25 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 			vec.Decimal()[idx].Set(decimalVal)
 		}
 	} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
-		switch vec.Type().Family() {
-		case types.JsonFamily:
-			if jsonStr, ok := val.(string); ok {
-				jobj, err := json.ParseJSON(jsonStr)
-				if err != nil {
-					colexecerror.InternalError(
-						fmt.Sprintf("unable to parse json object: %v: %v", jobj, err))
-				}
-				vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
-			} else if jobj, ok := val.(json.JSON); ok {
-				vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
-			}
+		switch v := val.(type) {
+		case *coldataext.Datum:
+			vec.Datum().Set(idx, v)
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected datum-backed type: %s", vec.Type()))
+			switch vec.Type().Family() {
+			case types.JsonFamily:
+				if jsonStr, ok := val.(string); ok {
+					jobj, err := json.ParseJSON(jsonStr)
+					if err != nil {
+						colexecerror.InternalError(
+							fmt.Sprintf("unable to parse json object: %v: %v", jobj, err))
+					}
+					vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
+				} else if jobj, ok := val.(json.JSON); ok {
+					vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
+				}
+			default:
+				colexecerror.InternalError(fmt.Sprintf("unexpected datum-backed type: %s", vec.Type()))
+			}
 		}
 	} else {
 		reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
@@ -991,16 +996,18 @@ func getTupleFromBatch(batch coldata.Batch, tupleIdx int) tuple {
 				newDec.Set(&colDec[tupleIdx])
 				val = reflect.ValueOf(newDec)
 			} else if vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
-				switch vec.Type().Family() {
-				case types.JsonFamily:
-					d := vec.Datum().Get(tupleIdx).(*coldataext.Datum).Datum
-					if d == tree.DNull {
-						val = reflect.ValueOf(tree.DNull)
-					} else {
-						val = reflect.ValueOf(d.(*tree.DJSON).JSON)
+				d := vec.Datum().Get(tupleIdx).(*coldataext.Datum)
+				if d.Datum == tree.DNull {
+					val = reflect.ValueOf(tree.DNull)
+				} else {
+					switch vec.Type().Family() {
+					case types.CollatedStringFamily:
+						val = reflect.ValueOf(d)
+					case types.JsonFamily:
+						val = reflect.ValueOf(d.Datum.(*tree.DJSON).JSON)
+					default:
+						colexecerror.InternalError(fmt.Sprintf("unexpected datum-backed type: %s", vec.Type()))
 					}
-				default:
-					colexecerror.InternalError(fmt.Sprintf("unexpected datum-backed type: %s", vec.Type()))
 				}
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(tupleIdx)
