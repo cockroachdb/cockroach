@@ -394,7 +394,7 @@ type importFileContext struct {
 // handleCorruptRow reports an error encountered while processing a row
 // in an input file.
 func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error) error {
-	log.Error(ctx, err)
+	log.Errorf(ctx, "%+v", err)
 
 	if rowErr, isRowErr := err.(*importRowError); isRowErr && fileCtx.rejected != nil {
 		fileCtx.rejected <- rowErr.row + "\n"
@@ -544,7 +544,7 @@ func runParallelImport(
 		}
 
 		if producer.Err() == nil {
-			return importer.flush(ctx)
+			return importer.close(ctx)
 		}
 		return producer.Err()
 	})
@@ -568,22 +568,25 @@ func (p *parallelImporter) add(
 	return nil
 }
 
-// Flush flushes currently accumulated data.
+// close closes this importer, flushing remaining accumulated data if needed.
+func (p *parallelImporter) close(ctx context.Context) error {
+	if len(p.b.data) > 0 {
+		return p.flush(ctx)
+	}
+	return nil
+}
+
+// flush flushes currently accumulated data.
 func (p *parallelImporter) flush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	default:
-	}
-
-	// if the batch isn't empty, we need to flush it.
-	if len(p.b.data) > 0 {
-		p.recordCh <- p.b
+	case p.recordCh <- p.b:
 		p.b = batch{
 			data: make([]interface{}, 0, cap(p.b.data)),
 		}
+		return nil
 	}
-	return nil
 }
 
 func (p *parallelImporter) importWorker(
