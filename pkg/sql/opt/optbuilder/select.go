@@ -531,8 +531,11 @@ func (b *Builder) buildScan(
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
-			for i := 0; i < colCount; i++ {
-				dep.ColumnOrdinals.Add(getOrdinal(i))
+			dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
+			// We will track the ColumnID to Ord mapping so Ords can be added
+			// when a column is referenced.
+			for i, col := range outScope.cols {
+				dep.ColumnIDToOrd[col.id] = getOrdinal(i)
 			}
 			if private.Flags.ForceIndex {
 				dep.SpecificIndex = true
@@ -996,6 +999,7 @@ func (b *Builder) buildSelectClause(
 	inScope *scope,
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, locking, inScope)
+
 	b.processWindowDefs(sel, fromScope)
 	b.buildWhere(sel.Where, fromScope)
 

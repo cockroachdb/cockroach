@@ -570,10 +570,13 @@ func (c *CustomFuncs) OrdinalityOrdering(private *memo.OrdinalityPrivate) physic
 }
 
 // IsSameOrdering evaluates whether the two orderings are equal.
-func (c *CustomFuncs) IsSameOrdering(
-	first physical.OrderingChoice, other physical.OrderingChoice,
-) bool {
+func (c *CustomFuncs) IsSameOrdering(first, other physical.OrderingChoice) bool {
 	return first.Equals(&other)
+}
+
+// OrderingImplies returns true if the first OrderingChoice implies the second.
+func (c *CustomFuncs) OrderingImplies(first, second physical.OrderingChoice) bool {
+	return first.Implies(&second)
 }
 
 // -----------------------------------------------------------------------
@@ -949,4 +952,10 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 // IntConst constructs a Const holding a DInt.
 func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
+}
+
+// IsGreaterThan returns true if the first datum compares as greater than the
+// second.
+func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
+	return first.Compare(c.f.evalCtx, second) == 1
 }

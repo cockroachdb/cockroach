@@ -201,8 +201,8 @@ INSERT INTO parse_test (geom, geog) VALUES
   (ST_GeomFromText('POINT(1.0 2.0)'), ST_GeogFromText('POINT(1.0 2.0)')),
   (ST_GeomFromText('SRID=4326;POINT(1.0 2.0)'), ST_GeogFromText('SRID=4326;POINT(1.0 2.0)')),
   (ST_GeometryFromText('SRID=4004;POINT(1.0 2.0)'), ST_GeographyFromText('POINT(1.0 2.0)')),
-  (ST_GeomFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'), ST_GeogFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}')),
-  (ST_GeomFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'::jsonb), ST_GeogFromGeoJSON('{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}'::jsonb)),
+  (ST_GeomFromGeoJSON('{"type":"Point","coordinates":[1,2]}'), ST_GeogFromGeoJSON('{"type":"Point","coordinates":[1,2]}')),
+  (ST_GeomFromGeoJSON('{"type":"Point","coordinates":[1,2]}'::jsonb), ST_GeogFromGeoJSON('{"type":"Point","coordinates":[1,2]}'::jsonb)),
   (ST_GeomFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
   (ST_GeomFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
   (st_geomfromgeojson('null':::jsonb), st_geogfromgeojson('null':::jsonb))
@@ -214,7 +214,7 @@ SELECT
 ----
 true  true
 
-query TTTTTTTT
+query TTTTTTT
 SELECT
   ST_AsText(geom),
   ST_AsEWKT(geom),
@@ -222,25 +222,41 @@ SELECT
   ST_AsBinary(geom, 'ndr'),
   ST_AsBinary(geom, 'xdr'),
   ST_AsEWKB(geom),
-  ST_AsKML(geom),
-  ST_AsGeoJSON(geom)
+  ST_AsKML(geom)
 FROM parse_test ORDER BY id ASC
 ----
-POINT (1 2)                                    POINT (1 2)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=4004;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 164 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    POINT (1 2)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    POINT (1 2)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 1)                                    POINT (1 1)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
-POINT (1 1)                                    POINT (1 1)                                                                           [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
-NULL                                           NULL                                                                                  NULL  NULL  NULL  NULL  NULL  NULL
+POINT (1 2)                                    POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    SRID=4004;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 164 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 1)                                    POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,1</coordinates></Point>
+POINT (1 1)                                    POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,1</coordinates></Point>
+NULL                                           NULL  NULL  NULL  NULL  NULL  NULL
+
+
+query TTT
+SELECT
+  ST_AsGeoJSON(geom),
+  ST_AsGeoJSON(geom, 6, 8),
+  ST_AsGeoJSON(geom, 6, 5)
+FROM parse_test ORDER BY id ASC
+----
+{"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,2]}  {"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4004"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}
+{"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}
+NULL                                                                                          NULL                                                                                          NULL
 
 query TTTT
 SELECT
@@ -259,7 +275,7 @@ FROM parse_test ORDER BY id ASC
 0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F          0101000000000000000000F03F000000000000F03F          00000000013FF00000000000003FF0000000000000
 NULL                                        NULL                                                NULL                                                NULL
 
-query TTTTTTTT
+query TTTTTTT
 SELECT
   ST_AsText(geog),
   ST_AsEWKT(geog),
@@ -267,25 +283,40 @@ SELECT
   ST_AsBinary(geog, 'ndr'),
   ST_AsBinary(geog, 'xdr'),
   ST_AsEWKB(geog),
-  ST_AsKML(geog),
-  ST_AsGeoJSON(geog)
+  ST_AsKML(geog)
 FROM parse_test ORDER BY id ASC
 ----
-POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 2)                                    SRID=4326;POINT (1 2)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":null}
-POINT (1 1)                                    SRID=4326;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
-POINT (1 1)                                    SRID=4326;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
-NULL                                           NULL                                                                                  NULL  NULL  NULL  NULL  NULL  NULL
+POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,2</coordinates></Point>
+POINT (1 1)                                    SRID=4326;POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,1</coordinates></Point>
+POINT (1 1)                                    SRID=4326;POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1,1</coordinates></Point>
+NULL                                           NULL  NULL  NULL  NULL  NULL  NULL
+
+query TTT
+SELECT
+  ST_AsGeoJSON(geog),
+  ST_AsGeoJSON(geog, 6, 8),
+  ST_AsGeoJSON(geog, 6, 5)
+FROM parse_test ORDER BY id ASC
+----
+{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,1]}  {"type":"Point","coordinates":[1,1]}  {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
+{"type":"Point","coordinates":[1,1]}  {"type":"Point","coordinates":[1,1]}  {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
+NULL                                  NULL                                  NULL
 
 query TTTT
 SELECT
