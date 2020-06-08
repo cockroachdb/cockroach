@@ -291,6 +291,9 @@ func (u *geographyMinDistanceUpdater) IsMaxDistance() bool {
 	return false
 }
 
+// TwistGeometries implements the geodist.DistanceUpdater interface.
+func (u *geographyMinDistanceUpdater) TwistGeometries() {}
+
 // geographyDistanceCalculator implements geodist.DistanceCalculator
 type geographyDistanceCalculator struct {
 	updater *geographyMinDistanceUpdater

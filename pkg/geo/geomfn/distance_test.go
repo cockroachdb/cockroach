@@ -26,6 +26,7 @@ var distanceTestCases = []struct {
 	b                   string
 	expectedMinDistance float64
 	expectedMaxDistance float64
+	expectedLongestLine string
 }{
 	{
 		"Same POINTs",
@@ -33,6 +34,7 @@ var distanceTestCases = []struct {
 		"POINT(1.0 1.0)",
 		0,
 		0,
+		"LINESTRING (1 1, 1 1)",
 	},
 	{
 		"Different POINTs",
@@ -40,6 +42,7 @@ var distanceTestCases = []struct {
 		"POINT(2.0 1.0)",
 		1,
 		1,
+		"LINESTRING(1.0 1.0, 2.0 1.0)",
 	},
 	{
 		"POINT on LINESTRING",
@@ -47,6 +50,7 @@ var distanceTestCases = []struct {
 		"LINESTRING(0.0 0.0, 1.0 1.0, 2.0 2.0)",
 		0,
 		2.1213203435596424,
+		"LINESTRING(0.5 0.5, 2.0 2.0)",
 	},
 	{
 		"POINT away from LINESTRING",
@@ -54,6 +58,7 @@ var distanceTestCases = []struct {
 		"LINESTRING(0.0 0.0, 1.0 1.0, 2.0 2.0)",
 		1.4142135623730951,
 		4.242640687119285,
+		"LINESTRING(3.0 3.0, 0.0 0.0)",
 	},
 	{
 		"Same LINESTRING",
@@ -61,6 +66,7 @@ var distanceTestCases = []struct {
 		"LINESTRING(0.0 0.0, 1.0 1.0, 2.0 2.0)",
 		0,
 		2.8284271247461903,
+		"LINESTRING(0.0 0.0, 2.0 2.0)",
 	},
 	{
 		"Intersecting LINESTRING",
@@ -68,6 +74,7 @@ var distanceTestCases = []struct {
 		"LINESTRING(0.5 0.0, 0.5 3.0)",
 		0,
 		3.0413812651491097,
+		"LINESTRING(0.0 0.0, 0.5 3.0)",
 	},
 	{
 		"LINESTRING does not meet",
@@ -75,6 +82,7 @@ var distanceTestCases = []struct {
 		"LINESTRING(0.0 0.0, 3.0 -3.0)",
 		8.48528137423857,
 		12.083045973594572,
+		"LINESTRING(8.0 8.0, 3.0 -3.0)",
 	},
 	{
 		"POINT in POLYGON",
@@ -82,6 +90,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 		0,
 		0.7071067811865476,
+		"LINESTRING (0.5 0.5, 1.0 0.0)",
 	},
 	{
 		"POINT in POLYGON hole",
@@ -89,6 +98,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.6 0.2, 0.6 0.6, 0.2 0.6, 0.2 0.2))",
 		0.09999999999999998,
 		0.7071067811865476,
+		"LINESTRING(0.5 0.5, 1.0 0.0)",
 	},
 	{
 		"POINT not in POLYGON hole",
@@ -96,6 +106,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.6 0.2, 0.6 0.6, 0.2 0.6, 0.2 0.2))",
 		0,
 		1.2727922061357855,
+		"LINESTRING(0.1 0.1, 1.0 1.0)",
 	},
 	{
 		"POINT outside of POLYGON",
@@ -103,6 +114,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 		0.7071067811865476,
 		2.1213203435596424,
+		"LINESTRING (1.5 1.5, 0.0 0.0)",
 	},
 	{
 		"LINESTRING intersects POLYGON",
@@ -110,6 +122,7 @@ var distanceTestCases = []struct {
 		"LINESTRING(-0.5 -0.5, 0.5 0.5)",
 		0,
 		2.1213203435596424,
+		"LINESTRING (1.0 1.0, -0.5 -0.5)",
 	},
 	{
 		"LINESTRING intersects POLYGON, duplicate points",
@@ -117,6 +130,7 @@ var distanceTestCases = []struct {
 		"LINESTRING(-0.5 -0.5, 0.5 0.5, 0.5 0.5)",
 		0,
 		2.1213203435596424,
+		"LINESTRING (1.0 1.0, -0.5 -0.5)",
 	},
 	{
 		"LINESTRING outside of POLYGON",
@@ -124,6 +138,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 		0.5,
 		2.1213203435596424,
+		"LINESTRING (-0.5 -0.5, 1.0 1.0)",
 	},
 	{
 		"LINESTRING outside of POLYGON, duplicate points",
@@ -131,6 +146,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 		0.5,
 		2.1213203435596424,
+		"LINESTRING(-0.5 -0.5, 1.0 1.0)",
 	},
 	{
 		"POLYGON is the same",
@@ -138,6 +154,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 		0,
 		1.4142135623730951,
+		"LINESTRING(0.0 0.0, 1.0 1.0)",
 	},
 	{
 		"POLYGON inside POLYGON",
@@ -145,6 +162,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.1 0.1, 0.9 0.1, 0.9 0.9, 0.1 0.9, 0.1 0.1))",
 		0,
 		1.2727922061357855,
+		"LINESTRING(0.0 0.0, 0.9 0.9)",
 	},
 	{
 		"POLYGON to POLYGON intersecting through its hole",
@@ -152,6 +170,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.15 0.25, 0.35 0.25, 0.35 0.35, 0.25 0.35, 0.15 0.25))",
 		0,
 		1.1335784048754634,
+		"LINESTRING(1.0 1.0, 0.15 0.25)",
 	},
 	{
 		"POLYGON to POLYGON intersecting through its hole, duplicate points",
@@ -159,6 +178,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.15 0.25, 0.15 0.25, 0.35 0.25, 0.35 0.35, 0.35 0.35,0.25 0.35, 0.15 0.25))",
 		0,
 		1.1335784048754634,
+		"LINESTRING(1.0 1.0, 0.15 0.25)",
 	},
 	{
 		"POLYGON inside POLYGON hole",
@@ -166,6 +186,7 @@ var distanceTestCases = []struct {
 		"POLYGON((0.2 0.2, 0.8 0.2, 0.8 0.8, 0.2 0.8, 0.2 0.2))",
 		0.09999999999999998,
 		1.1313708498984762,
+		"LINESTRING(0.0 0.0, 0.8 0.8)",
 	},
 	{
 		"POLYGON outside POLYGON",
@@ -173,6 +194,7 @@ var distanceTestCases = []struct {
 		"POLYGON((3.0 3.0, 4.0 3.0, 4.0 4.0, 3.0 4.0, 3.0 3.0))",
 		2.8284271247461903,
 		5.656854249492381,
+		"LINESTRING(0.0 0.0, 4.0 4.0)",
 	},
 	{
 		"MULTIPOINT to MULTIPOINT",
@@ -180,6 +202,7 @@ var distanceTestCases = []struct {
 		"MULTIPOINT((2.5 2.5), (3.0 3.0))",
 		0.7071067811865476,
 		2.8284271247461903,
+		"LINESTRING(1.0 1.0, 3.0 3.0)",
 	},
 	{
 		"MULTIPOINT to MULTILINESTRING",
@@ -187,6 +210,7 @@ var distanceTestCases = []struct {
 		"MULTIPOINT(2.0 2.0, 1.0 1.0, 3.0 3.0)",
 		0,
 		2.8284271247461903,
+		"LINESTRING (1.0 1.0, 3.0 3.0)",
 	},
 	{
 		"MULTIPOINT to MULTIPOLYGON",
@@ -194,6 +218,7 @@ var distanceTestCases = []struct {
 		"MULTIPOLYGON (((15 5, 40 10, 10 20, 5 10, 15 5)),((30 20, 45 40, 10 40, 30 20)))",
 		2,
 		56.72741841473134,
+		"LINESTRING (2.0 3.0, 45.0 40.0)",
 	},
 	{
 		"MULTILINESTRING to MULTILINESTRING",
@@ -201,6 +226,7 @@ var distanceTestCases = []struct {
 		"MULTILINESTRING((2.0 2.0, 2.1 2.1), (4.0 3.0, 3.1 3.1))",
 		0,
 		3.605551275463989,
+		"LINESTRING(1.0 1.0, 4.0 3.0)",
 	},
 	{
 		"MULTILINESTRING to MULTIPOLYGON",
@@ -208,6 +234,7 @@ var distanceTestCases = []struct {
 		"MULTILINESTRING((3 3, -4 -4), (45 41, 48 48, 52 52))",
 		1,
 		65.85590330410783,
+		"LINESTRING (45.0 40.0, -4.0 -4.0)",
 	},
 	{
 		"MULTIPOLYGON to MULTIPOLYGON",
@@ -215,6 +242,7 @@ var distanceTestCases = []struct {
 		"MULTIPOLYGON (((30 20, 45 40, 15 45, 30 20)))",
 		0,
 		50,
+		"LINESTRING (5 10, 45 40)",
 	},
 	{
 		"GEOMETRYCOLLECTION (POINT, EMPTY) with POINT",
@@ -222,6 +250,7 @@ var distanceTestCases = []struct {
 		"POINT(1.0 2.0)",
 		0,
 		0,
+		"LINESTRING (1 2, 1 2)",
 	},
 	{
 		"GEOMETRYCOLLECTION (POINT, EMPTY) with DIFFERENT POINT",
@@ -229,6 +258,23 @@ var distanceTestCases = []struct {
 		"POINT(1.0 3.0)",
 		1,
 		1,
+		"LINESTRING(1.0 2.0, 1.0 3.0)",
+	},
+	{
+		"MULTIPOLYGON to MULTIPOINT",
+		"MULTIPOLYGON(((15 5, 40 10, 10 20, 5 10, 15 5)), ((30 20, 45 40, 10 40, 30 20)))",
+		"MULTIPOINT((2.0 3.0), (10 42))",
+		2,
+		56.72741841473134,
+		"LINESTRING(45.0 40.0, 2.0 3.0)",
+	},
+	{
+		"POLYGON inside POLYGON hole",
+		"POLYGON((0.2 0.2, 0.8 0.2, 0.8 0.8, 0.2 0.8, 0.2 0.2))",
+		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.1 0.1, 0.9 0.1, 0.9 0.9, 0.1 0.9, 0.1 0.1))",
+		0.09999999999999998,
+		1.1313708498984762,
+		"LINESTRING(0.2 0.2, 1.0 1.0)",
 	},
 }
 
@@ -466,5 +512,53 @@ func TestDFullyWithin(t *testing.T) {
 	t.Run("errors if distance < 0", func(t *testing.T) {
 		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01)
 		require.Error(t, err)
+	})
+}
+
+func TestLongestLineString(t *testing.T) {
+	for _, tc := range distanceTestCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			longestLineString, err := LongestLineString(a, b)
+			require.NoError(t, err)
+			expectedLongestLine, err := geo.ParseGeometry(tc.expectedLongestLine)
+			require.Equal(t, expectedLongestLine, longestLineString)
+
+			// Check length of longest line is same as expectedMaxLength.
+			lengthOfLongestLine, err := Length(longestLineString)
+			require.NoError(t, err)
+			require.LessOrEqualf(
+				t,
+				math.Abs(lengthOfLongestLine-tc.expectedMaxDistance),
+				0.0000001,
+				"length of longest line %f, max distance between geometry's %f",
+				lengthOfLongestLine,
+				tc.expectedMaxDistance,
+			)
+		})
+	}
+
+	t.Run("returns error for EMPTY geometries", func(t *testing.T) {
+		for _, tc := range emptyDistanceTestCases {
+			t.Run(fmt.Sprintf("%s to %s", tc.a, tc.b), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+				longestLine, err := LongestLineString(a, b)
+				require.Error(t, err)
+				require.True(t, geo.IsEmptyGeometryError(err))
+				require.Nil(t, longestLine)
+			})
+		}
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := LongestLineString(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
 	})
 }

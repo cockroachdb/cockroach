@@ -982,6 +982,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_linestringfromwkb"></a><code>st_linestringfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
+<tr><td><a name="st_longestline"></a><code>st_longestline(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the LineString corresponds to the max distance across every pair of points comprising the given geometries.</p>
+<p>Note if geometries are the same, it will return the LineString with the maximum distance between the geometry’s vertexes. The function will return the first longest line if more than one is found.</p>
+</span></td></tr>
 <tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X and Y coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_maxdistance"></a><code>st_maxdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum distance across every pair of points comprising the given geometries. Note if the geometries are the same, it will return the maximum distance between the geometry’s vertexes.</p>

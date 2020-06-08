@@ -20,6 +20,19 @@ import (
 	"github.com/twpayne/go-geom/xy/lineintersector"
 )
 
+// geometricalObjectsOrder allows us to preserve the order of geometrical objects to
+// match the start and endpoint in the shortest and longest LineString.
+type geometricalObjectsOrder int
+
+const (
+	// geometricalObjectsTwisted represents that the given order of two geometrical
+	// objects has been twisted.
+	geometricalObjectsTwisted geometricalObjectsOrder = -1
+	// geometricalObjectsNotTwisted represents that the given order of two geometrical
+	// objects has not been twisted.
+	geometricalObjectsNotTwisted geometricalObjectsOrder = 1
+)
+
 // MinDistance returns the minimum distance between geometries A and B.
 // This returns a geo.EmptyGeometryError if either A or B is EMPTY.
 func MinDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
@@ -75,6 +88,40 @@ func DFullyWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 		return false, err
 	}
 	return dist <= d, nil
+}
+
+// LongestLineString returns the LineString corresponds to maximum distance across
+// every pair of points comprising geometries A and B.
+func LongestLineString(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a, b)
+	}
+	u := newGeomMaxDistancePointsUpdater(math.MaxFloat64)
+	return lineStringInternal(a, b, u, geo.EmptyBehaviorOmit)
+}
+
+// lineStringInternal calculates the LineString between two geometries using
+// the DistanceCalculator operator.
+// If there are any EMPTY Geometry objects, they will be ignored. It will return an
+// EmptyGeometryError if A or B contains only EMPTY geometries, even if emptyBehavior
+// is set to EmptyBehaviorOmit.
+func lineStringInternal(
+	a *geo.Geometry, b *geo.Geometry, u geodist.DistanceUpdater, emptyBehavior geo.EmptyBehavior,
+) (*geo.Geometry, error) {
+	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.BoundingBoxIntersects(b)}
+	_, err := distanceInternal(a, b, c, emptyBehavior)
+	if err != nil {
+		return nil, err
+	}
+	var lineFlatCoords []float64
+	switch u.(type) {
+	case *geomMaxDistancePointsUpdater:
+		lineFlatCoords = c.DistanceUpdater().(*geomMaxDistancePointsUpdater).lineFlatPoints
+	default:
+		return nil, errors.Newf("programmer error: unknown behavior")
+	}
+	lineString := geom.NewLineStringFlat(geom.XY, lineFlatCoords).SetSRID(int(a.SRID()))
+	return geo.NewGeometryFromGeom(lineString)
 }
 
 // maxDistanceInternal finds the maximum distance between two geometries.
@@ -304,7 +351,7 @@ func newGeomMinDistanceUpdater(stopAfterLE float64) *geomMinDistanceUpdater {
 	}
 }
 
-// Distance implements the DistanceUpdater interface.
+// Distance implements the geodist.DistanceUpdater interface.
 func (u *geomMinDistanceUpdater) Distance() float64 {
 	return u.currentValue
 }
@@ -333,6 +380,9 @@ func (u *geomMinDistanceUpdater) IsMaxDistance() bool {
 	return false
 }
 
+// TwistGeometries implements the geodist.DistanceUpdater interface.
+func (u *geomMinDistanceUpdater) TwistGeometries() {}
+
 // geomMaxDistanceUpdater finds the maximum distance using geom calculations.
 // Methods will return early if it finds a distance > stopAfterGT.
 type geomMaxDistanceUpdater struct {
@@ -351,7 +401,7 @@ func newGeomMaxDistanceUpdater(stopAfterGT float64) *geomMaxDistanceUpdater {
 	}
 }
 
-// Distance implements the DistanceUpdater interface.
+// Distance implements the geodist.DistanceUpdater interface.
 func (u *geomMaxDistanceUpdater) Distance() float64 {
 	return u.currentValue
 }
@@ -377,6 +427,60 @@ func (u *geomMaxDistanceUpdater) OnIntersects() bool {
 // IsMaxDistance implements the geodist.DistanceUpdater interface.
 func (u *geomMaxDistanceUpdater) IsMaxDistance() bool {
 	return true
+}
+
+// TwistGeometries implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistanceUpdater) TwistGeometries() {}
+
+// geoMaxDistancePointsUpdater finds the maximum distance using geom calculations
+// and preserve the line's endpoints as []float which corresponds to maximum
+// distance. Methods will return early if it maximum distance > stopAfterGT.
+type geomMaxDistancePointsUpdater struct {
+	*geomMaxDistanceUpdater
+	lineFlatPoints      []float64
+	geometricalObjOrder geometricalObjectsOrder
+}
+
+var _ geodist.DistanceUpdater = (*geomMaxDistancePointsUpdater)(nil)
+
+// newGeomMaxDistancePointsUpdater returns a new geoMaxDistancePointsUpdater
+// with the correct arguments set up. currentValue is initially populated
+// with least possible value because there may be the case where maximum
+// distance is 0 and we may require to find the line for 0 maximum distance.
+func newGeomMaxDistancePointsUpdater(stopAfterGT float64) *geomMaxDistancePointsUpdater {
+	return &geomMaxDistancePointsUpdater{
+		geomMaxDistanceUpdater: &geomMaxDistanceUpdater{
+			currentValue: -math.MaxFloat64,
+			stopAfterGT:  stopAfterGT,
+		},
+		lineFlatPoints:      make([]float64, 0, 4),
+		geometricalObjOrder: geometricalObjectsNotTwisted,
+	}
+}
+
+// Update implements the geodist.DistanceUpdater interface
+func (u *geomMaxDistancePointsUpdater) Update(
+	aInterface geodist.Point, bInterface geodist.Point,
+) bool {
+	a := aInterface.(*geomGeodistPoint).Coord
+	b := bInterface.(*geomGeodistPoint).Coord
+
+	dist := coordNorm(coordSub(a, b))
+	if dist > u.currentValue {
+		u.currentValue = dist
+		if u.geometricalObjOrder == geometricalObjectsTwisted {
+			u.lineFlatPoints = append(b.Clone(), a.Clone()...)
+		} else {
+			u.lineFlatPoints = append(a.Clone(), b.Clone()...)
+		}
+		return dist > u.stopAfterGT
+	}
+	return false
+}
+
+// TwistGeometries implements the geodist.DistanceUpdater interface
+func (u *geomMaxDistancePointsUpdater) TwistGeometries() {
+	u.geometricalObjOrder = -u.geometricalObjOrder
 }
 
 // geomDistanceCalculator implements geodist.DistanceCalculator

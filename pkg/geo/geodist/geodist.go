@@ -80,6 +80,8 @@ type DistanceUpdater interface {
 	Distance() float64
 	// IsMaxDistance returns whether the updater is looking for maximum distance.
 	IsMaxDistance() bool
+	// TwistGeometries is called to twist(flip) the order of geometries.
+	TwistGeometries()
 }
 
 // EdgeCrosser is a provided hook that calculates whether edges intersect.
@@ -132,6 +134,9 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 	case LineString:
 		switch b := b.(type) {
 		case Point:
+			c.DistanceUpdater().TwistGeometries()
+			// defer to restore the order of geometries at the end of the function call.
+			defer c.DistanceUpdater().TwistGeometries()
 			return onPointToLineString(c, b, a), nil
 		case LineString:
 			return onShapeEdgesToShapeEdges(c, a, b), nil
@@ -143,8 +148,14 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 	case Polygon:
 		switch b := b.(type) {
 		case Point:
+			c.DistanceUpdater().TwistGeometries()
+			// defer to restore the order of geometries at the end of the function call.
+			defer c.DistanceUpdater().TwistGeometries()
 			return onPointToPolygon(c, b, a), nil
 		case LineString:
+			c.DistanceUpdater().TwistGeometries()
+			// defer to restore the order of geometries at the end of the function call.
+			defer c.DistanceUpdater().TwistGeometries()
 			return onLineStringToPolygon(c, b, a), nil
 		case Polygon:
 			return onPolygonToPolygon(c, a, b), nil
@@ -259,11 +270,16 @@ func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWit
 			// Only project vertexes to edges if we are looking at the edges.
 			if !c.DistanceUpdater().IsMaxDistance() {
 				if projectVertexToEdge(c, aEdge.V0, bEdge) ||
-					projectVertexToEdge(c, aEdge.V1, bEdge) ||
-					projectVertexToEdge(c, bEdge.V0, aEdge) ||
+					projectVertexToEdge(c, aEdge.V1, bEdge) {
+					return true
+				}
+				c.DistanceUpdater().TwistGeometries()
+				if projectVertexToEdge(c, bEdge.V0, aEdge) ||
 					projectVertexToEdge(c, bEdge.V1, aEdge) {
 					return true
 				}
+				// Restore the order of geometries.
+				c.DistanceUpdater().TwistGeometries()
 			}
 		}
 	}
@@ -380,6 +396,9 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	}
 
 	// Do the same check for the polygons the other way around.
+	c.DistanceUpdater().TwistGeometries()
+	// defer to restore the order of geometries at the end of the function call.
+	defer c.DistanceUpdater().TwistGeometries()
 	for ringIdx := 1; ringIdx < a.NumLinearRings(); ringIdx++ {
 		aHole := a.LinearRing(ringIdx)
 		if c.PointInLinearRing(bFirstPoint, aHole) {
