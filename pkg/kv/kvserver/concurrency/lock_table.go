@@ -779,6 +779,9 @@ func (l *lockState) Format(buf *strings.Builder) {
 	} else {
 		writeHolderInfo(buf, txn, ts)
 	}
+	// TODO(sumeer): Add an optional `description string` field to Request and
+	// lockTableGuardImpl that tests can set to avoid relying on the seqNum to
+	// identify requests.
 	if l.waitingReaders.Len() > 0 {
 		fmt.Fprintln(buf, "   waiting readers:")
 		for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
@@ -1638,13 +1641,52 @@ func (l *lockState) requestDone(g *lockTableGuardImpl) (gc bool) {
 	return false
 }
 
+// tryFreeLockOnReplicatedAcquire attempts to free a write-uncontended lock
+// during the state transition from the Unreplicated durability to the
+// Replicated durability. This is possible because a Replicated lock is also
+// stored as an MVCC intent, so it does not need to also be stored in the
+// lockTable if writers are not queuing on it. This is beneficial because it
+// serves as a mitigation for #49973. Since we aren't currently great at
+// avoiding excessive contention on limited scans when locks are in the
+// lockTable, it's better the keep locks out of the lockTable when possible.
+//
+// If any of the readers do truly contend with this lock even after their limit
+// has been applied, they will notice during their MVCC scan and re-enter the
+// queue (possibly recreating the lock through AddDiscoveredLock). Still, in
+// practice this seems to work well in avoiding most of the artificial
+// concurrency discussed in #49973.
+//
+// Acquires l.mu.
+func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Bail if not locked with only the Unreplicated durability.
+	if !l.holder.locked || l.holder.holder[lock.Replicated].txn != nil {
+		return false
+	}
+
+	// Bail if the lock has waiting writers. It is not uncontended.
+	if l.queuedWriters.Len() != 0 {
+		return false
+	}
+
+	// The lock is uncontended by other writers, so we're safe to drop it.
+	// This may release readers who were waiting on the lock.
+	if gc := l.lockIsFree(); !gc {
+		panic("expected lockIsFree to return true")
+	}
+	return true
+}
+
 // The lock has transitioned from locked/reserved to unlocked. There could be
 // waiters, but there cannot be a reservation.
 // REQUIRES: l.mu is locked.
 func (l *lockState) lockIsFree() (gc bool) {
 	if l.reservation != nil {
-		panic("lockTable bug")
+		panic("called lockIsFree on lock with reservation")
 	}
+
 	// All waiting readers don't need to wait here anymore.
 	for e := l.waitingReaders.Front(); e != nil; {
 		g := e.Value.(*lockTableGuardImpl)
@@ -1844,8 +1886,8 @@ func (t *lockTableImpl) AcquireLock(
 	iter.FirstOverlap(&lockState{key: key})
 	if !iter.Valid() {
 		if durability == lock.Replicated {
-			tree.mu.Unlock()
 			// Don't remember uncontended replicated locks.
+			tree.mu.Unlock()
 			return nil
 		}
 		l = &lockState{id: tree.nextLockSeqNum(), key: key, ss: ss}
@@ -1856,6 +1898,16 @@ func (t *lockTableImpl) AcquireLock(
 		atomic.AddInt64(&tree.numLocks, 1)
 	} else {
 		l = iter.Cur()
+		if durability == lock.Replicated && l.tryFreeLockOnReplicatedAcquire() {
+			// Don't remember uncontended replicated locks. Just like in the
+			// case where the lock is initially added as replicated, we drop
+			// replicated locks from the lockTable when being upgraded from
+			// Unreplicated to Replicated, whenever possible.
+			tree.Delete(l)
+			tree.mu.Unlock()
+			atomic.AddInt64(&tree.numLocks, -1)
+			return nil
+		}
 	}
 	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp)
 	tree.mu.Unlock()
