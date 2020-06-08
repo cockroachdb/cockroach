@@ -15,11 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
-func TestUnionKeySpansToProto(t *testing.T) {
+func TestUnionKeySpansToSpanExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type testCase struct {
@@ -43,11 +42,11 @@ func TestUnionKeySpansToProto(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		require.Equal(t, c.expected, proto.CompactTextString(GeoUnionKeySpansToProto(c.uks)))
+		require.Equal(t, c.expected, GeoUnionKeySpansToSpanExpr(c.uks).ToProto().String())
 	}
 }
 
-func TestRPKeyExprToProto(t *testing.T) {
+func TestRPKeyExprToSpanExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type testCase struct {
@@ -123,10 +122,10 @@ func TestRPKeyExprToProto(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		rpxProto, err := GeoRPKeyExprToProto(c.rpx)
+		rpx, err := GeoRPKeyExprToSpanExpr(c.rpx)
 		if len(c.err) == 0 {
 			require.NoError(t, err)
-			require.Equal(t, c.expected, proto.CompactTextString(rpxProto))
+			require.Equal(t, c.expected, rpx.ToProto().String())
 		} else {
 			require.Equal(t, c.err, err.Error())
 		}

@@ -81,7 +81,7 @@ type UnknownExpression struct {
 func (u UnknownExpression) IsTight() bool { return u.tight }
 func (u UnknownExpression) SetNotTight()  { u.tight = false }
 func (u UnknownExpression) String() string {
-	return fmt.Sprintf("UnknownExpression: tight=%t", u.tight)
+	return fmt.Sprintf("unknown expression: tight=%t", u.tight)
 }
 
 // Makes a (shallow) copy of the root node of the expression identified
