@@ -18,6 +18,7 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedTypeORMRelease = "0.2.24"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r *testRegistry) {
@@ -40,6 +41,7 @@ func registerTypeORM(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest TypeORM release is %s.", latestTag)
+		c.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -92,7 +94,7 @@ func registerTypeORM(r *testRegistry) {
 			c,
 			"https://github.com/typeorm/typeorm.git",
 			"/mnt/data1/typeorm",
-			latestTag,
+			supportedTypeORMRelease,
 			node,
 		); err != nil {
 			t.Fatal(err)
