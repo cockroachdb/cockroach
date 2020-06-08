@@ -757,8 +757,8 @@ func restore(
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
-// TODO: this method returns two things: the sqlbase.Descriptor and the backup manifest.
-// Ideally, this should be broken down into two methods.
+// TODO(anzoteh96): this method returns two things: the sqlbase.Descriptor
+// and the backup manifest. Ideally, this should be broken down into two methods.
 func loadBackupSQLDescs(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -818,7 +818,11 @@ func getStatisticsFromBackup(
 		return backup.Statistics
 	}
 	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
+	uniqueFileNames := make(map[string]struct{})
 	for _, fname := range backup.StatisticsFilenames {
+		uniqueFileNames[fname] = struct{}{}
+	}
+	for fname := range uniqueFileNames {
 		myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
 		if err != nil {
 			return tableStatistics
@@ -986,16 +990,14 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
-	// The lastInd information is needed to know the index of latestBackUpManifest
-	// in order to retrieve the corresponding URI.
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
 	)
-	lastInd := getBackupIndAtTime(backupManifests, details.EndTime)
+	lastBackupIndex := getBackupIndexAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastInd])
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex])
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}

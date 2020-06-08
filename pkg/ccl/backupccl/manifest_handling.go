@@ -236,33 +236,33 @@ func readBackupPartitionDescriptor(
 }
 
 // readTableStatistics reads and unmarshals a StatsTable from filename in
-// the provided export store, and returns the StatsTable.
+// the provided export store, and returns its pointer.
 func readTableStatistics(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *roachpb.FileEncryptionOptions,
-) (StatsTable, error) {
+) (*StatsTable, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
-		return StatsTable{}, err
+		return nil, err
 	}
 	defer r.Close()
 	statsBytes, err := ioutil.ReadAll(r)
 	if err != nil {
-		return StatsTable{}, err
+		return nil, err
 	}
 	if encryption != nil {
 		statsBytes, err = storageccl.DecryptFile(statsBytes, encryption.Key)
 		if err != nil {
-			return StatsTable{}, err
+			return nil, err
 		}
 	}
 	var tableStats StatsTable
 	if err := protoutil.Unmarshal(statsBytes, &tableStats); err != nil {
-		return StatsTable{}, err
+		return nil, err
 	}
-	return tableStats, err
+	return &tableStats, err
 }
 
 func writeBackupManifest(
@@ -613,18 +613,20 @@ func resolveBackupManifests(
 	return defaultURIs, mainBackupManifests, localityInfo, nil
 }
 
-func getBackupIndAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) int {
-	backupManifestInd := len(backupManifests) - 1
+// TODO(anzoteh96): benchmark the performance of different search algorithms,
+// e.g.  linear search, binary search, reverse linear search.
+func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) int {
+	backupManifestIndex := len(backupManifests) - 1
 	if asOf.IsEmpty() {
-		return backupManifestInd
+		return backupManifestIndex
 	}
 	for ind, b := range backupManifests {
 		if asOf.Less(b.StartTime) {
 			break
 		}
-		backupManifestInd = ind
+		backupManifestIndex = ind
 	}
-	return backupManifestInd
+	return backupManifestIndex
 }
 
 func loadSQLDescsFromBackupsAtTime(

@@ -375,8 +375,8 @@ func backupPlanHook(
 					}
 				}
 
-				// TODO: look into the tradeoffs of having all objects in the array to be in the same file,
-				// vs having each object in a separate file, or somewhere in between.
+				// TODO(anzoteh96): look into the tradeoffs of having all objects in the array to be in the
+				// same file, vs having each object in a separate file, or somewhere in between.
 				statsFiles[tableDesc.GetID()] = BackupStatisticsFileName
 			}
 		}
