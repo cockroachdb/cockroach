@@ -179,18 +179,6 @@ func (c *DataConversionConfig) GetFloatPrec() int {
 	return nDigits
 }
 
-// Equals returns true if the two DataConversionConfigs are identical.
-func (c *DataConversionConfig) Equals(other *DataConversionConfig) bool {
-	if c.BytesEncodeFormat != other.BytesEncodeFormat ||
-		c.ExtraFloatDigits != other.ExtraFloatDigits {
-		return false
-	}
-	if c.Location != other.Location && c.Location.String() != other.Location.String() {
-		return false
-	}
-	return true
-}
-
 // ExperimentalDistSQLPlanningMode controls if and when the opt-driven DistSQL
 // planning is used to create physical plans.
 type ExperimentalDistSQLPlanningMode int64

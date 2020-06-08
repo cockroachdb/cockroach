@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -132,7 +131,6 @@ type Memo struct {
 
 	// The following are selected fields from SessionData which can affect
 	// planning. We need to cross-check these before reusing a cached memo.
-	dataConversion    sessiondata.DataConversionConfig
 	reorderJoinsLimit int
 	zigzagJoinEnabled bool
 	useHistograms     bool
@@ -166,7 +164,6 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.rootProps = nil
 	m.memEstimate = 0
 
-	m.dataConversion = evalCtx.SessionData.DataConversion
 	m.reorderJoinsLimit = evalCtx.SessionData.ReorderJoinsLimit
 	m.zigzagJoinEnabled = evalCtx.SessionData.ZigzagJoinEnabled
 	m.useHistograms = evalCtx.SessionData.OptimizerUseHistograms
@@ -274,8 +271,7 @@ func (m *Memo) IsStale(
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
-	if !m.dataConversion.Equals(&evalCtx.SessionData.DataConversion) ||
-		m.reorderJoinsLimit != evalCtx.SessionData.ReorderJoinsLimit ||
+	if m.reorderJoinsLimit != evalCtx.SessionData.ReorderJoinsLimit ||
 		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
 		m.useHistograms != evalCtx.SessionData.OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData.OptimizerUseMultiColStats ||

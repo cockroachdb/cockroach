@@ -1621,7 +1621,7 @@ update checks
 # Test decimal column truncation.
 # ------------------------------------------------------------------------------
 
-opt
+build
 UPDATE decimals SET a=1.1, b=ARRAY[0.95, NULL, 15]
 ----
 update decimals
@@ -1633,18 +1633,30 @@ update decimals
  │    └── d:14 => decimals.d:4
  ├── check columns: check1:15 check2:16
  └── project
-      ├── columns: check1:15!null check2:16 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11!null b:12 d:14
+      ├── columns: check1:15 check2:16 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11 b:12 d:14
       ├── project
-      │    ├── columns: d:14 a:11!null b:12 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
-      │    ├── scan decimals
-      │    │    ├── columns: decimals.a:5!null decimals.b:6 c:7 decimals.d:8
-      │    │    └── computed column expressions
-      │    │         └── decimals.d:8
-      │    │              └── decimals.a:5 + c:7
+      │    ├── columns: d:14 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11 b:12
+      │    ├── project
+      │    │    ├── columns: column13:13 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11 b:12
+      │    │    ├── project
+      │    │    │    ├── columns: a:11 b:12 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: a_new:9!null b_new:10 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
+      │    │    │    │    ├── scan decimals
+      │    │    │    │    │    ├── columns: decimals.a:5!null decimals.b:6 c:7 decimals.d:8
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── decimals.d:8
+      │    │    │    │    │              └── decimals.a:5 + c:7
+      │    │    │    │    └── projections
+      │    │    │    │         ├── 1.1 [as=a_new:9]
+      │    │    │    │         └── ARRAY[0.95,NULL,15] [as=b_new:10]
+      │    │    │    └── projections
+      │    │    │         ├── crdb_internal.round_decimal_values(a_new:9, 0) [as=a:11]
+      │    │    │         └── crdb_internal.round_decimal_values(b_new:10, 1) [as=b:12]
+      │    │    └── projections
+      │    │         └── a:11 + c:7 [as=column13:13]
       │    └── projections
-      │         ├── crdb_internal.round_decimal_values(c:7 + 1, 1) [as=d:14]
-      │         ├── 1 [as=a:11]
-      │         └── crdb_internal.round_decimal_values(ARRAY[0.95,NULL,15], 1) [as=b:12]
+      │         └── crdb_internal.round_decimal_values(column13:13, 1) [as=d:14]
       └── projections
-           ├── true [as=check1:15]
+           ├── round(a:11) = a:11 [as=check1:15]
            └── b:12[0] > 1 [as=check2:16]

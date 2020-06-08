@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -551,6 +552,8 @@ func (b *Builder) buildScan(
 // apply to the table and adds them to the table metadata (see
 // TableMeta.Constraints). To do this, the scalar expressions of the check
 // constraints are built here.
+//
+// These expressions are used as "known truths" about table data.
 func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	tab := tabMeta.Table
 
@@ -594,12 +597,20 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 		}
 
 		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
-		condition := b.buildScalar(texpr, tableScope, nil, nil, nil)
+		var condition opt.ScalarExpr
+		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+			condition = b.buildScalar(texpr, tableScope, nil, nil, nil)
+		})
 		// Check constraints that are guaranteed to not evaluate to NULL
 		// are the only ones converted into filters. This is because a NULL
 		// constraint is interpreted as passing, whereas a NULL filter is not.
 		if memo.ExprIsNeverNull(condition, notNullCols) {
-			filters = append(filters, b.factory.ConstructFiltersItem(condition))
+			// Check if the expression contains non-immutable operators.
+			var sharedProps props.Shared
+			memo.BuildSharedProps(condition, &sharedProps)
+			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
+				filters = append(filters, b.factory.ConstructFiltersItem(condition))
+			}
 		}
 	}
 	if len(filters) > 0 {
@@ -608,7 +619,9 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 }
 
 // addComputedColsForTable finds all computed columns in the given table and
-// caches them in the table metadata as scalar expressions.
+// caches them in the table metadata as scalar expressions. These expressions
+// are used as "known truths" about table data. Any columns for which the
+// expression contains non-immutable operators are omitted.
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 	var tableScope *scope
 	tab := tabMeta.Table
@@ -629,8 +642,16 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 
 		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
 			colID := tabMeta.MetaID.ColumnID(i)
-			scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
-			tabMeta.AddComputedCol(colID, scalar)
+			var scalar opt.ScalarExpr
+			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
+			})
+			// Check if the expression contains non-immutable operators.
+			var sharedProps props.Shared
+			memo.BuildSharedProps(scalar, &sharedProps)
+			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
+				tabMeta.AddComputedCol(colID, scalar)
+			}
 		}
 	}
 }
@@ -639,6 +660,9 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 // adds their predicates to the table metadata (see
 // TableMeta.PartialIndexPredicates). The predicates are converted from strings
 // to ScalarExprs here.
+//
+// The predicates are used as "known truths" about table data. Any predicates
+// containint non-immutable operators are omitted.
 func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 	tab := tabMeta.Table
 
@@ -677,8 +701,16 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 		}
 
 		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
-		scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
-		tabMeta.AddPartialIndexPredicate(indexOrd, scalar)
+		var scalar opt.ScalarExpr
+		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+			scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
+		})
+		// Check if the expression contains non-immutable operators.
+		var sharedProps props.Shared
+		memo.BuildSharedProps(scalar, &sharedProps)
+		if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
+			tabMeta.AddPartialIndexPredicate(indexOrd, scalar)
+		}
 	}
 }
 

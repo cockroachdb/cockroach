@@ -123,7 +123,7 @@ render                                                                     ·   
                 │                                                          type          inner
                 │                                                          equality      (oid) = (connamespace)
                 ├── filter                                                 ·             ·
-                │    │                                                     filter        nspname = ANY ARRAY['public']
+                │    │                                                     filter        nspname IN ('public',)
                 │    └── render                                            ·             ·
                 │         └── virtual table                                ·             ·
                 │                                                          source        pg_namespace@primary
