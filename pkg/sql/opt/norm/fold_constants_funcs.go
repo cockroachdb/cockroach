@@ -18,7 +18,120 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
+
+// FoldingControl is used to control whether normalization rules allow constant
+// folding of VolatilityStable operators.
+//
+// FoldingControl can be initialized in either "allow stable folds" or "disallow
+// stable folds" state.
+//
+// For a query with placeholders, we don't want to fold stable operators when
+// building the reusable normalized expression; we want to fold them at
+// AssignPlaceholder time.
+//
+// For a query with placeholders, we build and optimize the expression allowing
+// stable folds; we need to know if any stable folds occurred so we can prevent
+// caching the resulting plan.
+//
+// Examples illustrating the various cases:
+//
+//  1) Prepare and execute query with placeholders
+//
+//     SELECT * FROM t WHERE time > now() - $1
+//
+//     During prepare, we disable stable folds, so the now() call is not be
+//     folded. At execution time, we enable stable folds before running
+//     AssignPlaceholders; when the expression is recreated, now() will be
+//     folded, along with the subtraction. If we have an index on time, we will
+//     use it.
+//
+//  2) Prepare and execute query without placeholders
+//
+//     SELECT * FROM t WHERE time > now() - '1 minute'::INTERVAL
+//
+//     During prepare, we disable stable folds. After building the expression,
+//     we check if we actually prevented any stable folds; in this case we did.
+//     Because of that, we don't fully optimize the memo at prepare time. At
+//     execution time we will take the same path as in example 1, running
+//     AssignPlaceholders with stable folds enabled. We don't have any
+//     placeholders here, but AssignPlaceholders will nevertheless recreate the
+//     expression, allowing folding to happen.
+//
+//  3) Execute query without placeholders
+//
+//     SELECT * FROM t WHERE time > now() - '1 minute'::INTERVAL
+//
+//     To execute a query that is not prepared in advance, we build the
+//     expression with stable folds enabled. Afterwards, we check if we actually
+//     had any stable folds, in which case we don't put the resulting plan in
+//     the plan cache. In the future, we may want to detect queries that are
+//     re-executed frequently and cache a non-folded version like in the prepare
+//     case.
+//
+type FoldingControl struct {
+	// allowStable controls whether canFoldOperator returns true or false for
+	// VolatilityStable.
+	allowStable bool
+
+	// encounteredStableFold is true if canFoldOperator was called with
+	// VolatilityStable.
+	encounteredStableFold bool
+}
+
+// AllowStableFolds initializes the FoldingControl in "disallow stable folds"
+// state.
+func (fc *FoldingControl) AllowStableFolds() {
+	fc.allowStable = true
+	fc.encounteredStableFold = false
+}
+
+// DisallowStableFolds initializes the FoldingControl in "disallow stable folds"
+// state.
+func (fc *FoldingControl) DisallowStableFolds() {
+	fc.allowStable = false
+	fc.encounteredStableFold = false
+}
+
+func (fc *FoldingControl) canFoldOperator(v tree.Volatility) bool {
+	if v < tree.VolatilityStable {
+		return true
+	}
+	if v > tree.VolatilityStable {
+		return false
+	}
+	fc.encounteredStableFold = true
+	return fc.allowStable
+}
+
+// PreventedStableFold returns true if we disallowed a stable fold; can only be
+// called if DisallowStableFolds() was called.
+func (fc *FoldingControl) PreventedStableFold() bool {
+	if fc.allowStable {
+		panic(errors.AssertionFailedf("called in allow-stable state"))
+	}
+	return fc.encounteredStableFold
+}
+
+// PermittedStableFold returns true if we allowed a stable fold; can only be
+// called if AllowStableFolds() was called.
+//
+// Note that this does not guarantee that folding actually occurred - it is
+// possible for folding to fail (e.g. due to the operator hitting an error).
+func (fc *FoldingControl) PermittedStableFold() bool {
+	if !fc.allowStable {
+		panic(errors.AssertionFailedf("called in disallow-stable state"))
+	}
+	return fc.encounteredStableFold
+}
+
+// CanFoldOperator returns true if we should fold an operator with the given
+// volatility. This depends on the foldingVolatility setting of the factory
+// (which can be either VolatilityImmutable or VolatilityStable).
+func (c *CustomFuncs) CanFoldOperator(v tree.Volatility) bool {
+	return c.f.foldingControl.canFoldOperator(v)
+}
 
 // FoldNullUnary replaces the unary operator with a typed null value having the
 // same type as the unary operator would have.
@@ -146,13 +259,12 @@ func (c *CustomFuncs) HasAllNonNullElements(input opt.ScalarExpr) bool {
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input types, and the evaluation causes no error.
 func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
-	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-
 	o, ok := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
-	if !ok {
+	if !ok || !c.CanFoldOperator(o.Volatility) {
 		return nil
 	}
 
+	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
 	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
 	if err != nil {
 		return nil
@@ -217,6 +329,11 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExp
 			}
 		}
 		// Save this cast for the execbuilder.
+		return nil
+	}
+
+	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ)
+	if !ok || !c.CanFoldOperator(volatility) {
 		return nil
 	}
 
@@ -321,14 +438,16 @@ func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr
 // function for the given operator and input types, and the evaluation causes
 // no error.
 func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
-	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-
 	var flipped, not bool
 	o, flipped, not, ok := memo.FindComparisonOverload(op, left.DataType(), right.DataType())
 	if !ok {
 		return nil
 	}
+	if !c.CanFoldOperator(o.Volatility) {
+		return nil
+	}
 
+	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
 	if flipped {
 		lDatum, rDatum = rDatum, lDatum
 	}
@@ -413,9 +532,8 @@ func (c *CustomFuncs) FoldFunction(
 	if private.Properties.Class != tree.NormalClass {
 		return nil
 	}
-	// Functions that aren't immutable and also not in the allowlist cannot
-	// be folded.
-	if _, ok := FoldFunctionAllowlist[private.Name]; !ok && private.Overload.Volatility > tree.VolatilityImmutable {
+
+	if !c.CanFoldOperator(private.Overload.Volatility) {
 		return nil
 	}
 
@@ -440,15 +558,4 @@ func (c *CustomFuncs) FoldFunction(
 		return nil
 	}
 	return c.f.ConstructConstVal(result, private.Typ)
-}
-
-// FoldFunctionAllowlist contains non-immutable functions that are nevertheless
-// known to be safe for folding.
-var FoldFunctionAllowlist = map[string]struct{}{
-	// The SQL statement is generated in the optbuilder phase, so the remaining
-	// function execution is immutable.
-	"addgeometrycolumn": {},
-
-	// Query plan cache is invalidated on location changes.
-	"crdb_internal.locality_value": {},
 }

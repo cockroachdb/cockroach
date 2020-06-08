@@ -1143,7 +1143,7 @@ insert checks
 # Test decimal column rounding.
 # ------------------------------------------------------------------------------
 
-opt
+build
 INSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95, NULL, 15])
 ----
 insert decimals
@@ -1155,12 +1155,30 @@ insert decimals
  │    └── d:12 => decimals.d:4
  ├── check columns: check1:13 check2:14
  └── project
-      ├── columns: check1:13!null check2:14 a:8!null b:9 c:10!null d:12!null
-      ├── values
-      │    ├── columns: a:8!null b:9 c:10!null d:12!null
-      │    └── (1, crdb_internal.round_decimal_values(ARRAY[0.95,NULL,15], 1), 1.2, 2.2)
+      ├── columns: check1:13 check2:14 a:8 b:9 c:10 d:12
+      ├── project
+      │    ├── columns: d:12 a:8 b:9 c:10
+      │    ├── project
+      │    │    ├── columns: column11:11 a:8 b:9 c:10
+      │    │    ├── project
+      │    │    │    ├── columns: a:8 b:9 c:10
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column7:7!null column1:5!null column2:6
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:5!null column2:6
+      │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
+      │    │    │    │    └── projections
+      │    │    │    │         └── 1.23 [as=column7:7]
+      │    │    │    └── projections
+      │    │    │         ├── crdb_internal.round_decimal_values(column1:5, 0) [as=a:8]
+      │    │    │         ├── crdb_internal.round_decimal_values(column2:6, 1) [as=b:9]
+      │    │    │         └── crdb_internal.round_decimal_values(column7:7, 1) [as=c:10]
+      │    │    └── projections
+      │    │         └── a:8 + c:10 [as=column11:11]
+      │    └── projections
+      │         └── crdb_internal.round_decimal_values(column11:11, 1) [as=d:12]
       └── projections
-           ├── true [as=check1:13]
+           ├── round(a:8) = a:8 [as=check1:13]
            └── b:9[0] > 1 [as=check2:14]
 
 # Regression test for #38293; the default values should be separate projections.

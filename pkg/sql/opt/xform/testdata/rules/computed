@@ -56,6 +56,16 @@ scan t_int@c_int_index
  ├── constraint: /2/1/4: [/1/5 - /1/5]
  └── fd: ()-->(1)
 
+# Constrain the index when the computed column has a non-pure function.
+opt
+SELECT k_interval FROM t_now WHERE k_interval = '3 hours'
+----
+scan t_now@c_ts_index
+ ├── columns: k_interval:1!null
+ ├── constraint: /2/1/3: [/'2017-05-10 16:00:00+00:00'/'03:00:00' - /'2017-05-10 16:00:00+00:00'/'03:00:00']
+ └── fd: ()-->(1)
+
+
 # Use index with multiple computed columns, based on multiple input columns in
 # acyclic graph.
 opt
@@ -142,21 +152,6 @@ select
  │              └── k_float:1 + 1.0
  └── filters
       └── k_float:1 = 5.0 [outer=(1), constraints=(/1: [/5.0 - /5.0]; tight), fd=()-->(1)]
-
-# Don't constrain the index when the computed column has a non-pure function.
-opt
-SELECT k_interval FROM t_now WHERE k_interval = '3 hours'
-----
-select
- ├── columns: k_interval:1!null
- ├── fd: ()-->(1)
- ├── scan t_now
- │    ├── columns: k_interval:1
- │    └── computed column expressions
- │         └── c_ts:2
- │              └── k_interval:1 + now()
- └── filters
-      └── k_interval:1 = '03:00:00' [outer=(1), constraints=(/1: [/'03:00:00' - /'03:00:00']; tight), fd=()-->(1)]
 
 # Verify that a stored NULL value is handled correctly (#44132).
 exec-ddl
