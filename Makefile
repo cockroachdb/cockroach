@@ -1671,6 +1671,7 @@ bins = \
   bin/benchmark \
   bin/cockroach-oss \
   bin/cockroach-short \
+  bin/compile-builds \
   bin/docgen \
   bin/execgen \
   bin/fuzz \
