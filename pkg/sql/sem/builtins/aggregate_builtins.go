@@ -1717,12 +1717,12 @@ func (a *intSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.D
 				// And overflow was detected; go to large integers, but keep the
 				// sum computed so far.
 				a.large = true
-				a.decSum.SetFinite(a.intSum, 0)
+				a.decSum.SetInt64(a.intSum)
 			}
 		}
 
 		if a.large {
-			a.tmpDec.SetFinite(t, 0)
+			a.tmpDec.SetInt64(t)
 			_, err := tree.ExactCtx.Add(&a.decSum, &a.decSum, &a.tmpDec)
 			if err != nil {
 				return err
@@ -1745,7 +1745,7 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 	if a.large {
 		dd.Set(&a.decSum)
 	} else {
-		dd.SetFinite(a.intSum, 0)
+		dd.SetInt64(a.intSum)
 	}
 	return dd, nil
 }
@@ -1815,7 +1815,7 @@ func (a *decimalSumAggregate) Result() (tree.Datum, error) {
 
 // Reset implements tree.AggregateFunc interface.
 func (a *decimalSumAggregate) Reset(ctx context.Context) {
-	a.sum.SetFinite(0, 0)
+	a.sum.SetInt64(0)
 	a.sawNonNull = false
 	a.reset(ctx)
 }
@@ -1951,7 +1951,7 @@ func (a *intSqrDiffAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 		return nil
 	}
 
-	a.tmpDec.SetFinite(int64(tree.MustBeDInt(datum)), 0)
+	a.tmpDec.SetInt64(int64(tree.MustBeDInt(datum)))
 	return a.agg.Add(ctx, &a.tmpDec)
 }
 
@@ -2121,9 +2121,9 @@ func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
 
 // Reset implements tree.AggregateFunc interface.
 func (a *decimalSqrDiffAggregate) Reset(ctx context.Context) {
-	a.count.SetFinite(0, 0)
-	a.mean.SetFinite(0, 0)
-	a.sqrDiff.SetFinite(0, 0)
+	a.count.SetInt64(0)
+	a.mean.SetInt64(0)
+	a.sqrDiff.SetInt64(0)
 	a.reset(ctx)
 }
 
@@ -2317,9 +2317,9 @@ func (a *decimalSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 
 // Reset implements tree.AggregateFunc interface.
 func (a *decimalSumSqrDiffsAggregate) Reset(ctx context.Context) {
-	a.count.SetFinite(0, 0)
-	a.mean.SetFinite(0, 0)
-	a.sqrDiff.SetFinite(0, 0)
+	a.count.SetInt64(0)
+	a.mean.SetInt64(0)
+	a.sqrDiff.SetInt64(0)
 	a.reset(ctx)
 }
 

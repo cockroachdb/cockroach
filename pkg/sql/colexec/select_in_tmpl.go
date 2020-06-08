@@ -35,7 +35,6 @@ import (
 
 // Remove unused warnings.
 var (
-	_ = execgen.UNSAFEGET
 	_ = colexecerror.InternalError
 )
 

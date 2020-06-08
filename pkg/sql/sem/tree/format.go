@@ -148,7 +148,10 @@ const (
 	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lex.EncBareStrings)
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
-	// can be parsed into an equivalent expression.
+	// can be parsed into an equivalent expression. If there is a chance that the
+	// formatted data will be stored durably on disk or sent to other nodes,
+	// then this formatting directive is not appropriate, and FmtSerializable
+	// should be used instead.
 	FmtParsable FmtFlags = fmtDisambiguateDatumTypes | FmtParsableNumerics
 
 	// FmtSerializable instructs the pretty-printer to produce a representation

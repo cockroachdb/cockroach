@@ -68,11 +68,11 @@ func TestIntegerDivision(t *testing.T) {
 	var res apd.Decimal
 
 	res = performDivInt16Int16(math.MinInt16, -1)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MinInt16, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(-math.MinInt16)))
 	res = performDivInt32Int32(math.MinInt32, -1)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MinInt32, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(-math.MinInt32)))
 	res = performDivInt64Int64(math.MinInt64, -1)
-	d.SetFinite(math.MinInt64, 0)
+	d.SetInt64(math.MinInt64)
 	if _, err := tree.DecimalCtx.Neg(d, d); err != nil {
 		t.Error(err)
 	}
@@ -83,11 +83,11 @@ func TestIntegerDivision(t *testing.T) {
 	require.True(t, errors.Is(colexecerror.CatchVectorizedRuntimeError(func() { performDivInt64Int64(10, 0) }), tree.ErrDivByZero))
 
 	res = performDivInt16Int16(math.MaxInt16, -1)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt16, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(-math.MaxInt16)))
 	res = performDivInt32Int32(math.MaxInt32, -1)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt32, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(-math.MaxInt32)))
 	res = performDivInt64Int64(math.MaxInt64, -1)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt64, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(-math.MaxInt64)))
 }
 
 func TestIntegerMultiplication(t *testing.T) {
@@ -145,20 +145,20 @@ func TestMixedTypeInteger(t *testing.T) {
 	var res apd.Decimal
 
 	res = performDivInt16Int32(4, 2)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(2, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(2)))
 	res = performDivInt16Int64(6, 2)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(3, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(3)))
 	res = performDivInt64Int32(12, 3)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(4, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(4)))
 	res = performDivInt64Int16(20, 4)
-	require.Equal(t, 0, res.Cmp(d.SetFinite(5, 0)))
+	require.Equal(t, 0, res.Cmp(d.SetInt64(5)))
 }
 
 func TestDecimalDivByZero(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nonZeroDec, zeroDec := apd.Decimal{}, apd.Decimal{}
-	nonZeroDec.SetFinite(4, 0)
-	zeroDec.SetFinite(0, 0)
+	nonZeroDec.SetInt64(4)
+	zeroDec.SetInt64(0)
 
 	require.True(t, errors.Is(colexecerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt16(nonZeroDec, 0) }), tree.ErrDivByZero))
 	require.True(t, errors.Is(colexecerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt32(nonZeroDec, 0) }), tree.ErrDivByZero))

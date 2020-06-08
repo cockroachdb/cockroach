@@ -154,3 +154,53 @@ with &1 (t0)
            │    └── filters (true)
            └── projections
                 └── NULL [as="?column?":27, type=unknown]
+
+exec-ddl
+CREATE TABLE test (
+  id string
+)
+----
+
+# Regression test for #49911. Make sure there is no error if the left side of
+# a recursive CTE has cardinality=0.
+norm
+WITH RECURSIVE hierarchy(id) as
+  (SELECT id FROM test WHERE id = 'foo' AND 1 != 1 UNION ALL SELECT c.id FROM test AS c, hierarchy AS p WHERE c.id = 'bar')
+SELECT * FROM hierarchy
+----
+project
+ ├── columns: id:7(string)
+ ├── stats: [rows=10]
+ ├── recursive-c-t-e
+ │    ├── columns: id:3(string)
+ │    ├── working table binding: &1
+ │    ├── initial columns: test.id:1(string)
+ │    ├── recursive columns: c.id:4(string)
+ │    ├── stats: [rows=10]
+ │    ├── values
+ │    │    ├── columns: test.id:1(string!null)
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(1)
+ │    └── inner-join (cross)
+ │         ├── columns: c.id:4(string!null)
+ │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │         ├── stats: [rows=10]
+ │         ├── fd: ()-->(4)
+ │         ├── select
+ │         │    ├── columns: c.id:4(string!null)
+ │         │    ├── stats: [rows=10, distinct(4)=1, null(4)=0]
+ │         │    ├── fd: ()-->(4)
+ │         │    ├── scan c
+ │         │    │    ├── columns: c.id:4(string)
+ │         │    │    └── stats: [rows=1000, distinct(4)=100, null(4)=10]
+ │         │    └── filters
+ │         │         └── c.id:4 = 'bar' [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
+ │         ├── with-scan &1 (hierarchy)
+ │         │    ├── mapping:
+ │         │    ├── cardinality: [1 - ]
+ │         │    └── stats: [rows=1]
+ │         └── filters (true)
+ └── projections
+      └── id:3 [as=id:7, type=string, outer=(3)]

@@ -241,8 +241,8 @@ func (u UserDefinedTypeName) Basename() string {
 // FQName returns the fully qualified name.
 func (u UserDefinedTypeName) FQName() string {
 	var sb strings.Builder
-	sb.WriteString(u.Catalog)
-	sb.WriteString(".")
+	// Note that cross-database type references are disabled, so we only
+	// format the qualified name with the schema.
 	sb.WriteString(u.Schema)
 	sb.WriteString(".")
 	sb.WriteString(u.Name)

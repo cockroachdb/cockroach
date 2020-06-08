@@ -659,8 +659,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	resumePos := js.prog.ResumePos[0]
 	t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
 
-	// Resume the job and wait for it to complete.
-	if err := registry.Resume(ctx, nil, jobID); err != nil {
+	// Unpause the job and wait for it to complete.
+	if err := registry.Unpause(ctx, nil, jobID); err != nil {
 		t.Fatal(err)
 	}
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
@@ -763,8 +763,8 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	// Send cancellation and unblock import.
 	proceedImport()
 
-	// Resume the job and wait for it to complete.
-	if err := registry.Resume(ctx, nil, jobID); err != nil {
+	// Unpause the job and wait for it to complete.
+	if err := registry.Unpause(ctx, nil, jobID); err != nil {
 		t.Fatal(err)
 	}
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
