@@ -12,11 +12,7 @@ package log
 
 import (
 	"context"
-	"fmt"
-	"strings"
-	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -25,8 +21,6 @@ import (
 // facility.
 type SecondaryLogger struct {
 	logger          loggerT
-	msgCount        uint64
-	enableMsgCount  bool
 	forceSyncWrites bool
 }
 
@@ -66,16 +60,20 @@ func NewSecondaryLogger(
 	}
 	l := &SecondaryLogger{
 		logger: loggerT{
-			logDir:                         DirName{name: dir},
-			prefix:                         program + "-" + fileNamePrefix,
-			fileThreshold:                  Severity_INFO,
-			stderrThreshold:                mainLog.stderrThreshold.get(),
-			noRedirectInternalStderrWrites: true,
-			gcNotify:                       make(chan struct{}, 1),
+			logDir:          DirName{name: dir},
+			prefix:          program + "-" + fileNamePrefix,
+			fileThreshold:   Severity_INFO,
+			stderrThreshold: mainLog.stderrThreshold.get(),
+			logCounter:      EntryCounter{EnableMsgCount: enableMsgCount},
+			gcNotify:        make(chan struct{}, 1),
+			// Only one logger can have redirectInternalStderrWrites set to
+			// true; this is going to be either mainLog or stderrLog
+			// depending on configuration.
+			redirectInternalStderrWrites: false,
 		},
 		forceSyncWrites: forceSyncWrites,
-		enableMsgCount:  enableMsgCount,
 	}
+	l.logger.redactableLogs.Set(mainLog.redactableLogs.Get())
 	l.logger.mu.syncWrites = forceSyncWrites || mainLog.mu.syncWrites
 
 	// Ensure the registry knows about this logger.
@@ -110,22 +108,9 @@ func (l *SecondaryLogger) Close() {
 func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
 ) {
-	file, line, _ := caller.Lookup(depth + 1)
-	var buf strings.Builder
-	formatTags(ctx, &buf)
-
-	if l.enableMsgCount {
-		// Add a counter. This is important for the SQL audit logs.
-		counter := atomic.AddUint64(&l.msgCount, 1)
-		fmt.Fprintf(&buf, "%d ", counter)
-	}
-
-	if format == "" {
-		fmt.Fprint(&buf, args...)
-	} else {
-		fmt.Fprintf(&buf, format, args...)
-	}
-	l.logger.outputLogEntry(Severity_INFO, file, line, buf.String())
+	entry := MakeEntry(
+		ctx, sev, &l.logger.logCounter, depth+1, l.logger.redactableLogs.Get(), format, args...)
+	l.logger.outputLogEntry(entry)
 }
 
 // Logf logs an event on a secondary logger.

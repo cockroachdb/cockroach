@@ -12,15 +12,13 @@ package log
 
 import (
 	"bufio"
-	"fmt"
+	"context"
 	"os"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/petermattis/goid"
 )
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
@@ -97,7 +95,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	//
 	// This captures e.g. all writes performed by internal
 	// assertions in the Go runtime.
-	if sb.logger.redirectInternalStderrWrites() {
+	if sb.logger.redirectInternalStderrWrites {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.
@@ -113,34 +111,27 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
-	messages := make([]string, 0, 6)
+	messages := make([]Entry, 0, 6)
 	messages = append(messages,
-		fmt.Sprintf("[config] file created at: %s\n", now.Format("2006/01/02 15:04:05")),
-		fmt.Sprintf("[config] running on machine: %s\n", host),
-		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
-		fmt.Sprintf("[config] arguments: %s\n", os.Args),
+		sb.logger.makeStartLine("file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
+		sb.logger.makeStartLine("running on machine: %s", host),
+		sb.logger.makeStartLine("binary: %s", Safe(build.GetInfo().Short())),
+		sb.logger.makeStartLine("arguments: %s", os.Args),
 	)
 
 	logging.mu.Lock()
 	if logging.mu.clusterID != "" {
-		messages = append(messages, fmt.Sprintf("[config] clusterID: %s\n", logging.mu.clusterID))
+		messages = append(messages, sb.logger.makeStartLine("clusterID: %s", logging.mu.clusterID))
 	}
 	logging.mu.Unlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
-	messages = append(messages, fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"))
+	messages = append(messages,
+		sb.logger.makeStartLine("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
 
-	f, l, _ := caller.Lookup(1)
-	for _, msg := range messages {
-		buf := logging.formatLogEntry(Entry{
-			Severity:  Severity_INFO,
-			Time:      now.UnixNano(),
-			Goroutine: goid.Get(),
-			File:      f,
-			Line:      int64(l),
-			Message:   msg,
-		}, nil, nil)
+	for _, entry := range messages {
+		buf := logging.formatLogEntry(entry, nil, nil)
 		var n int
 		n, err = sb.file.Write(buf.Bytes())
 		putBuffer(buf)
@@ -155,4 +146,17 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	default:
 	}
 	return nil
+}
+
+func (l *loggerT) makeStartLine(format string, args ...interface{}) Entry {
+	entry := MakeEntry(
+		context.Background(),
+		Severity_INFO,
+		nil, /* logCounter */
+		2,   /* depth */
+		l.redactableLogs.Get(),
+		format,
+		args...)
+	entry.Tags = "config"
+	return entry
 }

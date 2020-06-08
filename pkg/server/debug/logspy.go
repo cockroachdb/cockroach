@@ -13,7 +13,6 @@ package debug
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -165,10 +163,9 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 	defer func() {
 		if err == nil {
 			if dropped := atomic.LoadInt32(&countDropped); dropped > 0 {
-				f, l, _ := caller.Lookup(0)
 				entry := log.MakeEntry(
-					log.Severity_WARNING, timeutil.Now().UnixNano(), f, l,
-					fmt.Sprintf("%d messages were dropped", dropped))
+					ctx, log.Severity_WARNING, nil /* LogCounter */, 0 /* depth */, false, /* redactable */
+					"%d messages were dropped", log.Safe(dropped))
 				err = entry.Format(w) // modify return value
 			}
 		}
@@ -181,16 +178,16 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 	entries := make(chan log.Entry, logSpyChanCap)
 
 	{
-		f, l, _ := caller.Lookup(0)
 		entry := log.MakeEntry(
-			log.Severity_INFO, timeutil.Now().UnixNano(), f, l,
-			fmt.Sprintf("intercepting logs with options %+v", opts))
+			ctx, log.Severity_INFO, nil /* LogCounter */, 0 /* depth */, false, /* redactable */
+			"intercepting logs with options %+v", opts)
 		entries <- entry
 	}
 
 	spy.setIntercept(ctx, func(entry log.Entry) {
 		if re := opts.Grep.re; re != nil {
 			switch {
+			case re.MatchString(entry.Tags):
 			case re.MatchString(entry.Message):
 			case re.MatchString(entry.File):
 			case opts.Grep.i != 0 && opts.Grep.i == entry.Goroutine:

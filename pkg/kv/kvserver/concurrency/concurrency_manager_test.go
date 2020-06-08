@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"reflect"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -925,10 +926,17 @@ func (m *monitor) collectRecordings() string {
 		if log.g.opSeq != 0 {
 			seq = strconv.Itoa(log.g.opSeq)
 		}
-		fmt.Fprintf(&buf, "[%s] %s: %s", seq, log.g.opName, log.value)
+		logValue := stripFileLinePrefix(log.value)
+		fmt.Fprintf(&buf, "[%s] %s: %s", seq, log.g.opName, logValue)
 	}
 	return buf.String()
 }
+
+func stripFileLinePrefix(s string) string {
+	return reFileLinePrefix.ReplaceAllString(s, "")
+}
+
+var reFileLinePrefix = regexp.MustCompile(`^[^:]+:\d+ `)
 
 func (m *monitor) hasNewEvents(g *monitoredGoroutine) bool {
 	events := 0

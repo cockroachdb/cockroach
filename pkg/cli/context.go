@@ -93,6 +93,7 @@ func initCLIDefaults() {
 	sqlCtx.echo = false
 
 	zipCtx.nodes = nodeSelection{}
+	zipCtx.redactLogs = false
 
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
@@ -274,6 +275,10 @@ var sqlCtx = struct {
 // Defaults set by InitCLIDefaults() above.
 var zipCtx struct {
 	nodes nodeSelection
+
+	// redactLogs indicates whether log files should be redacted
+	// server-side during retrieval.
+	redactLogs bool
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.
