@@ -613,18 +613,20 @@ func resolveBackupManifests(
 	return defaultURIs, mainBackupManifests, localityInfo, nil
 }
 
-func getBackupIndAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) int {
-	backupManifestInd := len(backupManifests) - 1
+// TODO: benchmark the performance of different search algorithms,
+// e.g.  linear search, binary search, reverse linear search.
+func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) int {
+	backupManifestIndex := len(backupManifests) - 1
 	if asOf.IsEmpty() {
-		return backupManifestInd
+		return backupManifestIndex
 	}
 	for ind, b := range backupManifests {
 		if asOf.Less(b.StartTime) {
 			break
 		}
-		backupManifestInd = ind
+		backupManifestIndex = ind
 	}
-	return backupManifestInd
+	return backupManifestIndex
 }
 
 func loadSQLDescsFromBackupsAtTime(

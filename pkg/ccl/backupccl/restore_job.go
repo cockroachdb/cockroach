@@ -810,7 +810,11 @@ func getStatisticsFromBackup(
 		return backup.Statistics
 	}
 	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
+	uniqueFileNames := make(map[string]struct{})
 	for _, fname := range backup.StatisticsFilenames {
+		uniqueFileNames[fname] = struct{}{}
+	}
+	for fname := range uniqueFileNames {
 		myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
 		if err != nil {
 			return tableStatistics
@@ -980,11 +984,11 @@ func (r *restoreResumer) Resume(
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
 	)
-	lastInd := getBackupIndAtTime(backupManifests, details.EndTime)
+	lastBackupIndex := getBackupIndexAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastInd])
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex])
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}

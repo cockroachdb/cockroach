@@ -54,7 +54,7 @@ func (x MVCCFilter) String() string {
 	return proto.EnumName(MVCCFilter_name, int32(x))
 }
 func (MVCCFilter) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{0}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{0}
 }
 
 type EncryptionInfo_Scheme int32
@@ -74,7 +74,7 @@ func (x EncryptionInfo_Scheme) String() string {
 	return proto.EnumName(EncryptionInfo_Scheme_name, int32(x))
 }
 func (EncryptionInfo_Scheme) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{3, 0}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{3, 0}
 }
 
 // RowCount tracks the size and row/index entry counts.
@@ -88,7 +88,7 @@ func (m *RowCount) Reset()         { *m = RowCount{} }
 func (m *RowCount) String() string { return proto.CompactTextString(m) }
 func (*RowCount) ProtoMessage()    {}
 func (*RowCount) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{0}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{0}
 }
 func (m *RowCount) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -153,7 +153,7 @@ type BackupManifest struct {
 	ID                           github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,18,opt,name=id,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"id"`
 	PartitionDescriptorFilenames []string                                            `protobuf:"bytes,19,rep,name=partition_descriptor_filenames,json=partitionDescriptorFilenames,proto3" json:"partition_descriptor_filenames,omitempty"`
 	LocalityKVs                  []string                                            `protobuf:"bytes,20,rep,name=locality_kvs,json=localityKvs,proto3" json:"locality_kvs,omitempty"`
-	// This field is used by backups in 10.2 and 20.1 where a backup manifest stores all the table
+	// This field is used by backups in 19.2 and 20.1 where a backup manifest stores all the table
 	// statistics in the field, the later versions all write the statistics to a separate file
 	// indicated in the table_statistic_files field.
 	Statistics          []*stats.TableStatisticProto                                         `protobuf:"bytes,21,rep,name=statistics,proto3" json:"statistics,omitempty"`
@@ -165,7 +165,7 @@ func (m *BackupManifest) Reset()         { *m = BackupManifest{} }
 func (m *BackupManifest) String() string { return proto.CompactTextString(m) }
 func (*BackupManifest) ProtoMessage()    {}
 func (*BackupManifest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{1}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{1}
 }
 func (m *BackupManifest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -208,7 +208,7 @@ func (m *BackupManifest_File) Reset()         { *m = BackupManifest_File{} }
 func (m *BackupManifest_File) String() string { return proto.CompactTextString(m) }
 func (*BackupManifest_File) ProtoMessage()    {}
 func (*BackupManifest_File) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{1, 0}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{1, 0}
 }
 func (m *BackupManifest_File) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -243,7 +243,7 @@ func (m *BackupManifest_DescriptorRevision) Reset()         { *m = BackupManifes
 func (m *BackupManifest_DescriptorRevision) String() string { return proto.CompactTextString(m) }
 func (*BackupManifest_DescriptorRevision) ProtoMessage()    {}
 func (*BackupManifest_DescriptorRevision) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{1, 1}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{1, 1}
 }
 func (m *BackupManifest_DescriptorRevision) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -278,7 +278,7 @@ func (m *BackupPartitionDescriptor) Reset()         { *m = BackupPartitionDescri
 func (m *BackupPartitionDescriptor) String() string { return proto.CompactTextString(m) }
 func (*BackupPartitionDescriptor) ProtoMessage()    {}
 func (*BackupPartitionDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{2}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{2}
 }
 func (m *BackupPartitionDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -314,7 +314,7 @@ func (m *EncryptionInfo) Reset()         { *m = EncryptionInfo{} }
 func (m *EncryptionInfo) String() string { return proto.CompactTextString(m) }
 func (*EncryptionInfo) ProtoMessage()    {}
 func (*EncryptionInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{3}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{3}
 }
 func (m *EncryptionInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -350,7 +350,7 @@ func (m *StatsTable) Reset()         { *m = StatsTable{} }
 func (m *StatsTable) String() string { return proto.CompactTextString(m) }
 func (*StatsTable) ProtoMessage()    {}
 func (*StatsTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_82d2756033c63b86, []int{4}
+	return fileDescriptor_backup_ba8b6e6651cfed09, []int{4}
 }
 func (m *StatsTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2870,9 +2870,9 @@ var (
 	ErrIntOverflowBackup   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("ccl/backupccl/backup.proto", fileDescriptor_backup_82d2756033c63b86) }
+func init() { proto.RegisterFile("ccl/backupccl/backup.proto", fileDescriptor_backup_ba8b6e6651cfed09) }
 
-var fileDescriptor_backup_82d2756033c63b86 = []byte{
+var fileDescriptor_backup_ba8b6e6651cfed09 = []byte{
 	// 1327 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x57, 0xcf, 0x8f, 0xda, 0xc6,
 	0x17, 0x5f, 0x83, 0x61, 0xe1, 0xf1, 0x23, 0xec, 0xec, 0x26, 0xeb, 0x2f, 0xdf, 0x7c, 0x81, 0x10,
