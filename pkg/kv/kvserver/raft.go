@@ -293,3 +293,6 @@ func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 		log.Eventf(ctx, "%v", event)
 	}
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (SnapshotRequest_Type) SafeValue() {}

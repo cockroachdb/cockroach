@@ -11,11 +11,10 @@
 package gossip
 
 import (
-	"bytes"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/redact"
 )
 
 // Metrics contains gossip metrics used per node and server.
@@ -38,7 +37,7 @@ func makeMetrics() Metrics {
 }
 
 func (m Metrics) String() string {
-	return m.Snapshot().String()
+	return redact.StringWithoutMarkers(m.Snapshot())
 }
 
 // Snapshot returns a snapshot of the metrics.
@@ -53,54 +52,81 @@ func (m Metrics) Snapshot() MetricSnap {
 }
 
 func (m MetricSnap) String() string {
-	s := fmt.Sprintf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
-		m.InfosSent, m.InfosReceived, m.BytesSent, m.BytesReceived)
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m MetricSnap) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
+		m.InfosSent, m.InfosReceived,
+		m.BytesSent, m.BytesReceived)
 	if m.ConnsRefused > 0 {
-		s += fmt.Sprintf(", refused %d conns", m.ConnsRefused)
+		w.Printf(", refused %d conns", m.ConnsRefused)
 	}
-	return s
 }
 
 func (c OutgoingConnStatus) String() string {
-	return fmt.Sprintf("%d: %s (%s: %s)",
-		c.NodeID, c.Address, roundSecs(time.Duration(c.AgeNanos)), c.MetricSnap)
+	return redact.StringWithoutMarkers(c)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c OutgoingConnStatus) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%d: %s (%s: %s)",
+		c.NodeID, c.Address,
+		roundSecs(time.Duration(c.AgeNanos)), c.MetricSnap)
 }
 
 func (c ClientStatus) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", len(c.ConnStatus), c.MaxConns)
+	return redact.StringWithoutMarkers(c)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c ClientStatus) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("gossip client (%d/%d cur/max conns)\n",
+		len(c.ConnStatus), c.MaxConns)
 	for _, conn := range c.ConnStatus {
-		fmt.Fprintf(&buf, "  %s\n", conn)
+		w.Printf("  %s\n", conn)
 	}
-	return buf.String()
 }
 
 func (c ConnStatus) String() string {
-	return fmt.Sprintf("%d: %s (%s)", c.NodeID, c.Address, roundSecs(time.Duration(c.AgeNanos)))
+	return redact.StringWithoutMarkers(c)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c ConnStatus) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%d: %s (%s)", c.NodeID, c.Address,
+		roundSecs(time.Duration(c.AgeNanos)))
 }
 
 func (s ServerStatus) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %s)\n",
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s ServerStatus) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("gossip server (%d/%d cur/max conns, %s)\n",
 		len(s.ConnStatus), s.MaxConns, s.MetricSnap)
 	for _, conn := range s.ConnStatus {
-		fmt.Fprintf(&buf, "  %s\n", conn)
+		w.Printf("  %s\n", conn)
 	}
-	return buf.String()
 }
 
 func (c Connectivity) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "gossip connectivity\n")
+	return redact.StringWithoutMarkers(c)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c Connectivity) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("gossip connectivity\n")
 	if c.SentinelNodeID != 0 {
-		fmt.Fprintf(&buf, "  n%d [sentinel];\n", c.SentinelNodeID)
+		w.Printf("  n%d [sentinel];\n", c.SentinelNodeID)
 	}
 	if len(c.ClientConns) > 0 {
-		fmt.Fprintf(&buf, " ")
+		w.SafeRune(' ')
 		for _, conn := range c.ClientConns {
-			fmt.Fprintf(&buf, " n%d -> n%d;", conn.SourceID, conn.TargetID)
+			w.Printf(" n%d -> n%d;", conn.SourceID, conn.TargetID)
 		}
-		fmt.Fprintf(&buf, "\n")
+		w.SafeRune('\n')
 	}
-	return buf.String()
 }

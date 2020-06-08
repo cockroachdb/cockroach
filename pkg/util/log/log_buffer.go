@@ -68,7 +68,7 @@ func (buf *buffer) nDigits(n, i, d int, pad byte) int {
 	return n
 }
 
-// someDigits formats a zero-prefixed variable-width integer at buf.tmp[i].
+// someDigits formats a variable-width integer at buf.tmp[i].
 func (buf *buffer) someDigits(i, d int) int {
 	// Print into the top, then copy down. We know there's space for at least
 	// a 10-digit number.

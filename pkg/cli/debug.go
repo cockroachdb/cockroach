@@ -1187,26 +1187,35 @@ the captured parts will be printed.
 	RunE: runDebugMergeLogs,
 }
 
+// TODO(knz): this struct belongs elsewhere.
+// See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugMergeLogsOpts = struct {
-	from    time.Time
-	to      time.Time
-	filter  *regexp.Regexp
-	program *regexp.Regexp
-	file    *regexp.Regexp
-	prefix  string
+	from           time.Time
+	to             time.Time
+	filter         *regexp.Regexp
+	program        *regexp.Regexp
+	file           *regexp.Regexp
+	prefix         string
+	keepRedactable bool
+	redactInput    bool
 }{
-	program: regexp.MustCompile("^cockroach.*$"),
-	file:    regexp.MustCompile(log.FilePattern),
+	program:        regexp.MustCompile("^cockroach.*$"),
+	file:           regexp.MustCompile(log.FilePattern),
+	keepRedactable: true,
+	redactInput:    false,
 }
 
 func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	o := debugMergeLogsOpts
+
+	inputEditMode := log.SelectEditMode(o.redactInput, o.keepRedactable)
+
 	s, err := newMergedStreamFromPatterns(context.Background(),
-		args, o.file, o.program, o.from, o.to)
+		args, o.file, o.program, o.from, o.to, inputEditMode)
 	if err != nil {
 		return err
 	}
-	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix)
+	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix, o.keepRedactable)
 }
 
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
@@ -1303,6 +1312,7 @@ func init() {
 	f = debugMergeLogsCommand.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
 		"time before which messages should be filtered")
+	// TODO(knz): the "to" should be named "until" - it's a time boundary, not a space boundary.
 	f.Var(flagutil.Time(&debugMergeLogsOpts.to), "to",
 		"time after which messages should be filtered")
 	f.Var(flagutil.Regexp(&debugMergeLogsOpts.filter), "filter",
@@ -1314,4 +1324,8 @@ func init() {
 			"if no such group exists, program-filter is ignored")
 	f.StringVar(&debugMergeLogsOpts.prefix, "prefix", "${host}> ",
 		"expansion template (see regexp.Expand) used as prefix to merged log messages evaluated on file-pattern")
+	f.BoolVar(&debugMergeLogsOpts.keepRedactable, "redactable-output", debugMergeLogsOpts.keepRedactable,
+		"keep the output log file redactable")
+	f.BoolVar(&debugMergeLogsOpts.redactInput, "redact", debugMergeLogsOpts.redactInput,
+		"redact the input files to remove sensitive information")
 }

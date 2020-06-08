@@ -1710,6 +1710,10 @@ func TestLint(t *testing.T) {
 			"WarningfDepth",
 			"Wrapf",
 			"WrapWithDepthf",
+			"redact.Fprint",
+			"redact.Fprintf",
+			"redact.Sprint",
+			"redact.Sprintf",
 		}, ",")
 
 		filters := []stream.Filter{
@@ -1769,6 +1773,12 @@ func TestLint(t *testing.T) {
 			// because addStructured takes its positional argument as []interface{},
 			// instead of ...interface{}.
 			stream.GrepNot(`pkg/util/log/structured\.go:\d+:\d+: addStructured\(\): format argument is not a constant expression`),
+			// The markers test file is passing test case formats
+			// to the printf function.
+			stream.GrepNot(`pkg/util/redact/markers_test\.go:\d+:\d+: TestRedactStream\(\): format argument is not a constant expression`),
+			// roachtest is not collecting redactable logs so we don't care
+			// about printf hygiene there as much.
+			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")

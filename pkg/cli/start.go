@@ -1223,11 +1223,6 @@ func setupAndInitializeLoggingAndProfiling(
 			return nil, err
 		}
 
-		// NB: this message is a crutch until #33458 is addressed. Without it,
-		// the calls to log.Shout below can be the first use of logging, hitting
-		// the bug described in the issue.
-		log.Infof(ctx, "logging to directory %s", logDir)
-
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
 		log.StartGCDaemon(ctx)
@@ -1241,6 +1236,14 @@ func setupAndInitializeLoggingAndProfiling(
 				stopper.AddCloser(storage.InitRocksDBLogger(ctx))
 			}
 		}()
+	}
+
+	// Initialize the redirection of stderr and log redaction.  Note,
+	// this function must be called even if there is no log directory
+	// configured, to verify whether the combination of requested flags
+	// is valid.
+	if _, err := log.SetupRedactionAndStderrRedirects(); err != nil {
+		return nil, err
 	}
 
 	// We want to be careful to still produce useful debug dumps if the

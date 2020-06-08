@@ -121,6 +121,9 @@ const int Entry::kGoroutineFieldNumber;
 const int Entry::kFileFieldNumber;
 const int Entry::kLineFieldNumber;
 const int Entry::kMessageFieldNumber;
+const int Entry::kTagsFieldNumber;
+const int Entry::kCounterFieldNumber;
+const int Entry::kRedactableFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Entry::Entry()
@@ -142,18 +145,23 @@ Entry::Entry(const Entry& from)
   if (from.message().size() > 0) {
     message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.message_);
   }
+  tags_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.tags().size() > 0) {
+    tags_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.tags_);
+  }
   ::memcpy(&time_, &from.time_,
-    static_cast<size_t>(reinterpret_cast<char*>(&severity_) -
-    reinterpret_cast<char*>(&time_)) + sizeof(severity_));
+    static_cast<size_t>(reinterpret_cast<char*>(&counter_) -
+    reinterpret_cast<char*>(&time_)) + sizeof(counter_));
   // @@protoc_insertion_point(copy_constructor:cockroach.util.log.Entry)
 }
 
 void Entry::SharedCtor() {
   file_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  tags_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&time_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&severity_) -
-      reinterpret_cast<char*>(&time_)) + sizeof(severity_));
+      reinterpret_cast<char*>(&counter_) -
+      reinterpret_cast<char*>(&time_)) + sizeof(counter_));
 }
 
 Entry::~Entry() {
@@ -164,6 +172,7 @@ Entry::~Entry() {
 void Entry::SharedDtor() {
   file_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   message_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  tags_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
 void Entry::SetCachedSize(int size) const {
@@ -183,9 +192,10 @@ void Entry::Clear() {
 
   file_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  tags_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&time_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&severity_) -
-      reinterpret_cast<char*>(&time_)) + sizeof(severity_));
+      reinterpret_cast<char*>(&counter_) -
+      reinterpret_cast<char*>(&time_)) + sizeof(counter_));
   _internal_metadata_.Clear();
 }
 
@@ -294,6 +304,50 @@ bool Entry::MergePartialFromCodedStream(
         break;
       }
 
+      // string tags = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(58u /* 58 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_tags()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->tags().data(), static_cast<int>(this->tags().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.log.Entry.tags"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // uint64 counter = 8;
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
+                 input, &counter_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool redactable = 9;
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &redactable_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -361,6 +415,26 @@ void Entry::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->goroutine(), output);
   }
 
+  // string tags = 7;
+  if (this->tags().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->tags().data(), static_cast<int>(this->tags().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.util.log.Entry.tags");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      7, this->tags(), output);
+  }
+
+  // uint64 counter = 8;
+  if (this->counter() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(8, this->counter(), output);
+  }
+
+  // bool redactable = 9;
+  if (this->redactable() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(9, this->redactable(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.util.log.Entry)
@@ -386,6 +460,13 @@ size_t Entry::ByteSizeLong() const {
         this->message());
   }
 
+  // string tags = 7;
+  if (this->tags().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->tags());
+  }
+
   // int64 time = 2;
   if (this->time() != 0) {
     total_size += 1 +
@@ -400,6 +481,17 @@ size_t Entry::ByteSizeLong() const {
         this->line());
   }
 
+  // .cockroach.util.log.Severity severity = 1;
+  if (this->severity() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->severity());
+  }
+
+  // bool redactable = 9;
+  if (this->redactable() != 0) {
+    total_size += 1 + 1;
+  }
+
   // int64 goroutine = 6;
   if (this->goroutine() != 0) {
     total_size += 1 +
@@ -407,10 +499,11 @@ size_t Entry::ByteSizeLong() const {
         this->goroutine());
   }
 
-  // .cockroach.util.log.Severity severity = 1;
-  if (this->severity() != 0) {
+  // uint64 counter = 8;
+  if (this->counter() != 0) {
     total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::EnumSize(this->severity());
+      ::google::protobuf::internal::WireFormatLite::UInt64Size(
+        this->counter());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -438,17 +531,27 @@ void Entry::MergeFrom(const Entry& from) {
 
     message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.message_);
   }
+  if (from.tags().size() > 0) {
+
+    tags_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.tags_);
+  }
   if (from.time() != 0) {
     set_time(from.time());
   }
   if (from.line() != 0) {
     set_line(from.line());
   }
+  if (from.severity() != 0) {
+    set_severity(from.severity());
+  }
+  if (from.redactable() != 0) {
+    set_redactable(from.redactable());
+  }
   if (from.goroutine() != 0) {
     set_goroutine(from.goroutine());
   }
-  if (from.severity() != 0) {
-    set_severity(from.severity());
+  if (from.counter() != 0) {
+    set_counter(from.counter());
   }
 }
 
@@ -473,10 +576,14 @@ void Entry::InternalSwap(Entry* other) {
     GetArenaNoVirtual());
   message_.Swap(&other->message_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
+  tags_.Swap(&other->tags_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
   swap(time_, other->time_);
   swap(line_, other->line_);
-  swap(goroutine_, other->goroutine_);
   swap(severity_, other->severity_);
+  swap(redactable_, other->redactable_);
+  swap(goroutine_, other->goroutine_);
+  swap(counter_, other->counter_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

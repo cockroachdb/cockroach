@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/errors"
 )
 
@@ -89,9 +90,9 @@ func TestRangeDescriptorSafeMessage(t *testing.T) {
 		},
 	}
 
-	const expStr = `r1: [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`
+	const expStr = `r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`
 
-	if str := desc.SafeMessage(); str != expStr {
+	if str := redact.Sprint(desc); str != expStr {
 		t.Errorf(
 			"expected meta: %s\n"+
 				"got:          %s",

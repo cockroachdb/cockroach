@@ -61,7 +61,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
         title: "Message",
         cell: (index: number) => (
           <pre className="sort-table__unbounded-column logs-table__message">
-              { logEntries[index].message }
+              { (logEntries[index].tags ? "[" + logEntries[index].tags + "] " : "") + logEntries[index].message }
             </pre>
         ),
       },

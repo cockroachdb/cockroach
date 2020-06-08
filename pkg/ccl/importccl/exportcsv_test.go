@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, string, func()) {
@@ -200,6 +201,49 @@ func TestExportOrder(t *testing.T) {
 	}
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestExportUserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	// Set up some initial state for the tests.
+	sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+CREATE TYPE greeting AS ENUM ('hello', 'hi');
+CREATE TABLE greeting_table (x greeting, y greeting);
+INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi');
+`)
+	tests := []struct {
+		stmt     string
+		expected string
+	}{
+		{
+			stmt:     "EXPORT INTO CSV 'nodelocal://0/test/' FROM (SELECT 'hello':::greeting, 'hi':::greeting)",
+			expected: "hello,hi\n",
+		},
+		{
+			stmt:     "EXPORT INTO CSV 'nodelocal://0/test/' FROM TABLE greeting_table",
+			expected: "hello,hello\nhi,hi\n",
+		},
+		{
+			stmt:     "EXPORT INTO CSV 'nodelocal://0/test/' FROM (SELECT x, y, enum_first(x) FROM greeting_table)",
+			expected: "hello,hello,hello\nhi,hi,hello\n",
+		},
+	}
+	for _, test := range tests {
+		sqlDB.Exec(t, test.stmt)
+		// Read the dumped file.
+		contents, err := ioutil.ReadFile(filepath.Join(baseDir, "test", "n1.0.csv"))
+		require.NoError(t, err)
+		require.Equal(t, test.expected, string(contents))
 	}
 }
 

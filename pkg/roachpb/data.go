@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1603,6 +1604,11 @@ func confChangeImpl(
 var _ fmt.Stringer = &ChangeReplicasTrigger{}
 
 func (crt ChangeReplicasTrigger) String() string {
+	return redact.StringWithoutMarkers(crt)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 	var nextReplicaID ReplicaID
 	var afterReplicas []ReplicaDescriptor
 	added, removed := crt.Added(), crt.Removed()
@@ -1617,10 +1623,9 @@ func (crt ChangeReplicasTrigger) String() string {
 		nextReplicaID = crt.DeprecatedNextReplicaID
 		afterReplicas = crt.DeprecatedUpdatedReplicas
 	}
-	var chgS strings.Builder
 	cc, err := crt.ConfChange(nil)
 	if err != nil {
-		fmt.Fprintf(&chgS, "<malformed ChangeReplicasTrigger: %s>", err)
+		w.Printf("<malformed ChangeReplicasTrigger: %s>", err)
 	} else {
 		ccv2 := cc.AsV2()
 		if ccv2.LeaveJoint() {
@@ -1628,24 +1633,48 @@ func (crt ChangeReplicasTrigger) String() string {
 			//
 			// TODO(tbg): could list the replicas that will actually leave the
 			// voter set.
-			fmt.Fprintf(&chgS, "LEAVE_JOINT")
+			w.SafeString("LEAVE_JOINT")
 		} else if _, ok := ccv2.EnterJoint(); ok {
-			fmt.Fprintf(&chgS, "ENTER_JOINT(%s) ", raftpb.ConfChangesToString(ccv2.Changes))
+			w.Printf("ENTER_JOINT(%s) ", confChangesToRedactableString(ccv2.Changes))
 		} else {
-			fmt.Fprintf(&chgS, "SIMPLE(%s) ", raftpb.ConfChangesToString(ccv2.Changes))
+			w.Printf("SIMPLE(%s) ", confChangesToRedactableString(ccv2.Changes))
 		}
 	}
 	if len(added) > 0 {
-		fmt.Fprintf(&chgS, "%s%s", ADD_REPLICA, added)
+		w.Printf("%s%s", ADD_REPLICA, added)
 	}
 	if len(removed) > 0 {
 		if len(added) > 0 {
-			chgS.WriteString(", ")
+			w.SafeString(", ")
 		}
-		fmt.Fprintf(&chgS, "%s%s", REMOVE_REPLICA, removed)
+		w.Printf("%s%s", REMOVE_REPLICA, removed)
 	}
-	fmt.Fprintf(&chgS, ": after=%s next=%d", afterReplicas, nextReplicaID)
-	return chgS.String()
+	w.Printf(": after=%s next=%d", afterReplicas, nextReplicaID)
+}
+
+// confChangesToRedactableString produces a safe representation for
+// the configuration changes.
+func confChangesToRedactableString(ccs []raftpb.ConfChangeSingle) redact.RedactableString {
+	return redact.Sprintfn(func(w redact.SafePrinter) {
+		for i, cc := range ccs {
+			if i > 0 {
+				w.SafeRune(' ')
+			}
+			switch cc.Type {
+			case raftpb.ConfChangeAddNode:
+				w.SafeRune('v')
+			case raftpb.ConfChangeAddLearnerNode:
+				w.SafeRune('l')
+			case raftpb.ConfChangeRemoveNode:
+				w.SafeRune('r')
+			case raftpb.ConfChangeUpdateNode:
+				w.SafeRune('u')
+			default:
+				w.SafeString("unknown")
+			}
+			w.Print(cc.NodeID)
+		}
+	})
 }
 
 func (crt ChangeReplicasTrigger) legacy() (ReplicaDescriptor, bool) {
@@ -2247,3 +2276,6 @@ func init() {
 	enginepb.FormatBytesAsKey = func(k []byte) string { return Key(k).String() }
 	enginepb.FormatBytesAsValue = func(v []byte) string { return Value{RawBytes: v}.PrettyPrint() }
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (ReplicaChangeType) SafeValue() {}
