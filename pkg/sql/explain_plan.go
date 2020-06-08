@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -212,21 +211,15 @@ func populateExplain(
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData
 		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
-		willVectorize = true
 		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
 			willVectorize = false
 		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
 			willVectorize = false
 		} else {
-			thisNodeID := distSQLPlanner.nodeDesc.NodeID
-			for nodeID, flow := range flows {
-				fuseOpt := flowinfra.FuseNormally
-				if nodeID == thisNodeID && !willDistribute {
-					fuseOpt = flowinfra.FuseAggressively
-				}
-				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, fuseOpt, nil /* output */)
-				willVectorize = willVectorize && (err == nil)
-				if !willVectorize {
+			willVectorize = true
+			for _, flow := range flows {
+				if _, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */); err != nil {
+					willVectorize = false
 					break
 				}
 			}

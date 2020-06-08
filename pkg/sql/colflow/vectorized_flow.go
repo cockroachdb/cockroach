@@ -226,11 +226,12 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
+		false, /* forceExprDeserialization */
 	)
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(creator)
 	}
-	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
+	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt, false /* forceExprDeserialization */)
 	if err == nil {
 		f.operatorConcurrency = creator.operatorConcurrency
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
@@ -431,6 +432,7 @@ type vectorizedFlowCreator struct {
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
+	exprHelper                     colexec.ExprHelper
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
@@ -466,6 +468,7 @@ func newVectorizedFlowCreator(
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
+	forceExprDeserialization bool,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -479,6 +482,7 @@ func newVectorizedFlowCreator(
 		flowID:                         flowID,
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
+		exprHelper:                     colexec.NewExprHelper(forceExprDeserialization),
 	}
 }
 
@@ -892,6 +896,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
 	opt flowinfra.FuseOpt,
+	forceExprDeserialization bool,
 ) (leaves []execinfra.OpNode, err error) {
 	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
 	factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
@@ -952,6 +957,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			ProcessorConstructor: rowexec.NewProcessor,
 			DiskQueueCfg:         s.diskQueueCfg,
 			FDSemaphore:          s.fdSemaphore,
+			ExprHelper:           s.exprHelper,
 		}
 		result, err := colexec.NewColOperator(ctx, flowCtx, args)
 		// Even when err is non-nil, it is possible that the buffering memory
@@ -1174,13 +1180,21 @@ func SupportsVectorized(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
-	fuseOpt flowinfra.FuseOpt,
+	isLocal bool,
 	output execinfra.RowReceiver,
 ) (leaves []execinfra.OpNode, err error) {
 	if output == nil {
 		output = &execinfra.RowChannel{}
 	}
-	creator := newVectorizedFlowCreator(newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore)
+	fuseOpt := flowinfra.FuseNormally
+	if isLocal {
+		fuseOpt = flowinfra.FuseAggressively
+	}
+	creator := newVectorizedFlowCreator(
+		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
+		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		flowCtx.Cfg.VecFDSemaphore, !isLocal, /* forceExprDeserialization */
+	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed
@@ -1207,8 +1221,12 @@ func SupportsVectorized(
 			mon.Stop(ctx)
 		}
 	}()
+	// We want to force the expression deserialization if we have a distributed
+	// plan to make sure that that during actual execution the remote nodes
+	// will be able to deserialize the expressions without an error.
+	forceExprDeserialization := !isLocal
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
-		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
+		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt, forceExprDeserialization)
 	}); vecErr != nil {
 		return leaves, vecErr
 	}
