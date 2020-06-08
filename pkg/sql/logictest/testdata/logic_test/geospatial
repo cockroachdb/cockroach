@@ -98,6 +98,11 @@ SELECT ST_AsText(p) FROM (VALUES
 POINT (1 2)
 POINT (3 4)
 
+query T
+SELECT ST_AsText(ST_Project('POINT(0 0)'::geography, 100000, radians(45.0)))
+----
+POINT (0.6352310291255374 0.6394723347291977)
+
 subtest cast_test
 
 query T
