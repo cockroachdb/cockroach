@@ -10,7 +10,10 @@
 
 package fs
 
-import "io"
+import (
+	"io"
+	"os"
+)
 
 // File and FS are a partial attempt at offering the Pebble vfs.FS interface. Given the constraints
 // of the RocksDB Env interface we've chosen to only include what is easy to implement. Additionally,
@@ -65,4 +68,20 @@ type FS interface {
 	// List returns a listing of the given directory. The names returned are
 	// relative to the directory.
 	List(name string) ([]string, error)
+
+	// Stat returns a FileInfo describing the named file.
+	Stat(name string) (os.FileInfo, error)
+}
+
+// WriteFile writes data to a file named by filename.
+func WriteFile(fs FS, filename string, data []byte) error {
+	f, err := fs.Create(filename)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err1 := f.Close(); err == nil {
+		err = err1
+	}
+	return err
 }

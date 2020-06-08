@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -2460,7 +2459,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 // is returned.
 func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
 	checkpointBase := filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
-	_ = os.MkdirAll(checkpointBase, 0700)
+	_ = s.engine.MkdirAll(checkpointBase)
 
 	checkpointDir := filepath.Join(checkpointBase, tag)
 	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {

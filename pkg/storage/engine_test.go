@@ -1461,6 +1461,9 @@ func TestFS(t *testing.T) {
 			// Create a/ and assert that it's empty.
 			require.NoError(t, fs.MkdirAll(path("a")))
 			expectLS(path("a"), []string{})
+			if _, err := fs.Stat(path("a/b/c")); !os.IsNotExist(err) {
+				t.Fatal(`fs.Stat("a/b/c") should not exist`)
+			}
 
 			// Create a/b/ and a/b/c/ in a single MkdirAll call.
 			// Then ensure that a duplicate call returns a nil error.
@@ -1469,6 +1472,8 @@ func TestFS(t *testing.T) {
 			expectLS(path("a"), []string{"b"})
 			expectLS(path("a/b"), []string{"c"})
 			expectLS(path("a/b/c"), []string{})
+			_, err := fs.Stat(path("a/b/c"))
+			require.NoError(t, err)
 
 			// Create a file at a/b/c/foo.
 			f, err := fs.Create(path("a/b/c/foo"))
@@ -1481,6 +1486,8 @@ func TestFS(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 			expectLS(path("a/b/c"), []string{"bar", "foo"})
+			_, err = fs.Stat(path("a/b/c/bar"))
+			require.NoError(t, err)
 
 			// RemoveAll a file.
 			require.NoError(t, fs.RemoveAll(path("a/b/c/bar")))
