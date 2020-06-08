@@ -115,11 +115,6 @@ func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) err
 		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $1}}`,
 	)
 
-	checkBody := makeFunctionRegex("_CHECK_BODY", 2)
-	s = checkBody.ReplaceAllString(s,
-		`{{template "checkBody" buildDict "Global" . "SelectSameTuples" $1 "DeletingProbeMode" $2}}`,
-	)
-
 	tmpl, err := template.New("hashtable").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
