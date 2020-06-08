@@ -1110,6 +1110,13 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_polygonfromwkb"></a><code>st_polygonfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
+<tr><td><a name="st_project"></a><code>st_project(geography: geography, distance: <a href="float.html">float</a>, azimuth: <a href="float.html">float</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a point projected from a start point along a geodesic using a given distance and azimuth (bearing).
+This is known as the direct geodesic problem.</p>
+<p>The distance is given in meters. Negative values are supported.</p>
+<p>The azimuth (also known as heading or bearing) is given in radians. It is measured clockwise from true north (azimuth zero).
+East is azimuth π/2 (90 degrees); south is azimuth π (180 degrees); west is azimuth 3π/2 (270 degrees).
+Negative azimuth values and values greater than 2π (360 degrees) are supported.</p>
+</span></td></tr>
 <tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the DE-9IM spatial relation between geometry_a and geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
