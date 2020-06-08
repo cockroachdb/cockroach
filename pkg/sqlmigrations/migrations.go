@@ -1077,7 +1077,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 	//
 	// There are probably more efficient ways to do this part of the migration,
 	// but the current approach seemed like the most straightforward.
-	var allDescs []sqlbase.Descriptor
+	var allDescs []sqlbase.DescriptorInterface
 	schemaChangeJobsForDesc := make(map[sqlbase.ID][]int64)
 	gcJobsForDesc := make(map[sqlbase.ID][]int64)
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -1176,7 +1176,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 
 	log.Infof(ctx, "evaluating tables for creating jobs")
 	for _, desc := range allDescs {
-		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+		if tableDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
 			if scJobs := schemaChangeJobsForDesc[tableDesc.ID]; len(scJobs) > 0 {
 				log.VEventf(ctx, 3, "table %d has running schema change jobs %v, skipping", tableDesc.ID, scJobs)
 				continue
@@ -1202,7 +1202,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 					return nil
 				}
 				if tableDesc.Adding() || tableDesc.HasDrainingNames() {
-					if err := createSchemaChangeJobForTable(txn, tableDesc); err != nil {
+					if err := createSchemaChangeJobForTable(txn, tableDesc.TableDesc()); err != nil {
 						return err
 					}
 				} else if tableDesc.Dropped() {
@@ -1210,7 +1210,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 					// names. In that case it was enough to just create a schema change
 					// job, as in the case above, because that job will itself create a
 					// GC job.
-					if err := createGCJobForTable(txn, tableDesc); err != nil {
+					if err := createGCJobForTable(txn, tableDesc.TableDesc()); err != nil {
 						return err
 					}
 				}

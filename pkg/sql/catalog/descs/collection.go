@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -122,7 +121,7 @@ type Collection struct {
 	//
 	// TODO(ajwerner): This cache may be problematic in clusters with very large
 	// numbers of descriptors.
-	allDescriptors []sqlbase.Descriptor
+	allDescriptors []sqlbase.DescriptorInterface
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
@@ -739,24 +738,22 @@ func (tc *Collection) GetUncommittedTableByID(id sqlbase.ID) UncommittedTable {
 // TODO(ajwerner): Have this return []sqlbase.DescriptorInterface.
 func (tc *Collection) GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]sqlbase.Descriptor, error) {
+) ([]sqlbase.DescriptorInterface, error) {
 	if tc.allDescriptors == nil {
 		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
 		}
-
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
 		typDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor)
-		for i := range descs {
-			desc := &descs[i]
-			if dbDesc := desc.GetDatabase(); dbDesc != nil {
-				dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
-				dbDescs[desc.GetID()] = dbDesc
-			} else if typDesc := desc.GetType(); typDesc != nil {
-				typDescs[desc.GetID()] = sqlbase.NewImmutableTypeDescriptor(*typDesc)
+		for _, desc := range descs {
+			switch desc := desc.(type) {
+			case *sqlbase.ImmutableDatabaseDescriptor:
+				dbDescs[desc.GetID()] = desc
+			case *sqlbase.ImmutableTypeDescriptor:
+				typDescs[desc.GetID()] = desc
 			}
 		}
 		// If we found any type descriptors, that means that some of the tables we
@@ -778,8 +775,8 @@ func (tc *Collection) GetAllDescriptors(
 			// Now hydrate all table descriptors.
 			for i := range descs {
 				desc := descs[i]
-				if tblDesc := desc.Table(hlc.Timestamp{}); tblDesc != nil {
-					if err := sqlbase.HydrateTypesInTableDescriptor(tblDesc, typeLookup); err != nil {
+				if tblDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
+					if err := sqlbase.HydrateTypesInTableDescriptor(tblDesc.TableDesc(), typeLookup); err != nil {
 						// If we ran into an error hydrating the types, that means that we
 						// have some sort of corrupted descriptor state. Rather than disable
 						// uses of GetAllDescriptors, just log the error.

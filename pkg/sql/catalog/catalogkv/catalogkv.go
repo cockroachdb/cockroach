@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -83,7 +85,7 @@ func ResolveSchemaID(
 // TODO(ajwerner): Consider passing mutability information into here.
 func GetDescriptorByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
-) (sqlbase.DescriptorInterface, error) {
+) (catalog.Descriptor, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(codec, id)
 	desc := &sqlbase.Descriptor{}
@@ -91,6 +93,15 @@ func GetDescriptorByID(
 	if err != nil {
 		return nil, err
 	}
+	return unwrapDescriptor(ctx, txn, codec, ts, desc)
+}
+
+// unwrapDescriptor takes a descriptor retrieved using a transaction and unwraps
+// it into an immutable implementation of DescriptorInterface. It ensures that
+// the ModificationTime is set properly.
+func unwrapDescriptor(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *sqlbase.Descriptor,
+) (catalog.Descriptor, error) {
 	// TODO(ajwerner): Fill in the ModificationTime field for the descriptor.
 	table, database, typ, schema := desc.Table(ts), desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
@@ -136,12 +147,9 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 }
 
 // GetAllDescriptors looks up and returns all available descriptors.
-//
-// TODO(ajwerner): This really should return "unwrapped" descriptors as a
-// slice of DescriptorInterface.
 func GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]sqlbase.Descriptor, error) {
+) ([]sqlbase.DescriptorInterface, error) {
 	log.Eventf(ctx, "fetching all descriptors")
 	descsKey := sqlbase.MakeAllDescsMetadataKey(codec)
 	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
@@ -150,16 +158,16 @@ func GetAllDescriptors(
 	}
 
 	// TODO(ajwerner): Fill in ModificationTime.
-	descs := make([]sqlbase.Descriptor, len(kvs))
+	rawDescs := make([]sqlbase.Descriptor, len(kvs))
+	descs := make([]sqlbase.DescriptorInterface, len(kvs))
 	for i, kv := range kvs {
-		desc := &descs[i]
+		desc := &rawDescs[i]
 		if err := kv.ValueProto(desc); err != nil {
 			return nil, err
 		}
-		if table := desc.Table(kv.Value.Timestamp); table != nil {
-			if err := table.Validate(ctx, txn, codec); err != nil {
-				return nil, err
-			}
+		var err error
+		if descs[i], err = unwrapDescriptor(ctx, txn, codec, kv.Value.Timestamp, desc); err != nil {
+			return nil, err
 		}
 	}
 	return descs, nil
@@ -271,13 +279,12 @@ func GetDatabaseDescByID(
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	db := desc.DatabaseDesc()
-	if db == nil {
+	db, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor)
+	if desc != nil && !ok {
 		return nil, pgerror.Newf(pgcode.WrongObjectType,
 			"%q with ID %d is not a database", desc, log.Safe(id))
 	}
-	// TODO(ajwerner): Set ModificationTime.
-	return sqlbase.NewImmutableDatabaseDescriptor(*db), nil
+	return db, nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
