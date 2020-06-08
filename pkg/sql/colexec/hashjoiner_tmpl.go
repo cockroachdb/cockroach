@@ -24,25 +24,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// {{/*
-
-func _COLLECT_PROBE_OUTER(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, _USE_SEL bool,
-) int { // */}}
-	// {{define "collectProbeOuter" -}}
+// execgen:inline
+// execgen:template<useSel>
+func collectProbeOuter(
+	hj *hashJoiner, sel []int, batchSize int, batch coldata.Batch, useSel bool,
+) int {
+	var nResults int
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
-	// {{if .UseSel}}
-	_ = sel[batchSize-1]
-	// {{end}}
+	if useSel {
+		_ = sel[batchSize-1]
+	}
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 
+		var earlyReturn bool
 		for {
 			if nResults >= hj.outputBatchSize {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
-				return nResults
+				earlyReturn = true
+				break
 			}
 
 			hj.probeState.probeRowUnmatched[nResults] = currentID == 0
@@ -55,11 +57,11 @@ func _COLLECT_PROBE_OUTER(
 				// without paying attention to probeRowUnmatched.
 				hj.probeState.buildIdx[nResults] = 0
 			}
-			// {{if .UseSel}}
-			hj.probeState.probeIdx[nResults] = sel[i]
-			// {{else}}
-			hj.probeState.probeIdx[nResults] = i
-			// {{end}}
+			if useSel {
+				hj.probeState.probeIdx[nResults] = sel[i]
+			} else {
+				hj.probeState.probeIdx[nResults] = i
+			}
 			currentID = hj.ht.same[currentID]
 			hj.ht.probeScratch.headID[i] = currentID
 			nResults++
@@ -68,89 +70,92 @@ func _COLLECT_PROBE_OUTER(
 				break
 			}
 		}
+		if earlyReturn {
+			break
+		}
 	}
-	// {{end}}
-	// {{/*
-	// Dummy return value that is never used.
-	return 0
+	return nResults
 }
 
-func _COLLECT_PROBE_NO_OUTER(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, _USE_SEL bool,
-) int { // */}}
-	// {{define "collectProbeNoOuter" -}}
+// execgen:inline
+// execgen:template<useSel>
+func collectProbeNoOuter(
+	hj *hashJoiner, sel []int, batchSize int, batch coldata.Batch, useSel bool,
+) int {
+	var nResults int
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
-	// {{if .UseSel}}
-	_ = sel[batchSize-1]
-	// {{end}}
+	if useSel {
+		_ = sel[batchSize-1]
+	}
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
+		var earlyReturn bool
 		currentID := hj.ht.probeScratch.headID[i]
 		for currentID != 0 {
 			if nResults >= hj.outputBatchSize {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
-				return nResults
+				earlyReturn = true
+				break
 			}
 
 			hj.probeState.buildIdx[nResults] = int(currentID - 1)
-			// {{if .UseSel}}
-			hj.probeState.probeIdx[nResults] = sel[i]
-			// {{else}}
-			hj.probeState.probeIdx[nResults] = i
-			// {{end}}
+			if useSel {
+				hj.probeState.probeIdx[nResults] = sel[i]
+			} else {
+				hj.probeState.probeIdx[nResults] = i
+			}
 			currentID = hj.ht.same[currentID]
 			hj.ht.probeScratch.headID[i] = currentID
 			nResults++
 		}
+		if earlyReturn {
+			break
+		}
 	}
-	// {{end}}
-	// {{/*
-	// Dummy return value that is never used.
-	return 0
+	return nResults
 }
 
 // This code snippet collects the "matches" for LEFT ANTI and EXCEPT ALL joins.
 // "Matches" are in quotes because we're actually interested in non-matches
 // from the left side.
-func _COLLECT_ANTI(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, _USE_SEL bool,
-) int { // */}}
-	// {{define "collectAnti" -}}
+// execgen:inline
+// execgen:template<useSel>
+func collectAnti(
+	hj *hashJoiner, sel []int, batchSize int, nResults int, batch coldata.Batch, useSel bool,
+) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
-	// {{if .UseSel}}
-	_ = sel[batchSize-1]
-	// {{end}}
+	if useSel {
+		_ = sel[batchSize-1]
+	}
 	for i := int(0); i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		if currentID == 0 {
 			// currentID of 0 indicates that ith probing row didn't have a match, so
 			// we include it into the output.
-			// {{if .UseSel}}
-			hj.probeState.probeIdx[nResults] = sel[i]
-			// {{else}}
-			hj.probeState.probeIdx[nResults] = i
-			// {{end}}
+			if useSel {
+				hj.probeState.probeIdx[nResults] = sel[i]
+			} else {
+				hj.probeState.probeIdx[nResults] = i
+			}
 			nResults++
 		}
 	}
-	// {{end}}
-	// {{/*
-	// Dummy return value that is never used.
-	return 0
+	return nResults
 }
 
-func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize int, _USE_SEL bool) { // */}}
-	// {{define "distinctCollectProbeOuter" -}}
+// execgen:inline
+// execgen:template<useSel>
+func distinctCollectProbeOuter(hj *hashJoiner, sel []int, batchSize int, useSel bool) {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.groupID[batchSize-1]
 	_ = hj.probeState.probeRowUnmatched[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
-	// {{if .UseSel}}
-	_ = sel[batchSize-1]
-	// {{end}}
+	if useSel {
+		_ = sel[batchSize-1]
+	}
 	for i := int(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
 		id := hj.ht.probeScratch.groupID[i]
@@ -159,69 +164,66 @@ func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize int, _USE_SEL bool)
 		if !rowUnmatched {
 			hj.probeState.buildIdx[i] = int(id - 1)
 		}
-		// {{if .UseSel}}
-		hj.probeState.probeIdx[i] = sel[i]
-		// {{else}}
-		hj.probeState.probeIdx[i] = i
-		// {{end}}
+		if useSel {
+			hj.probeState.probeIdx[i] = sel[i]
+		} else {
+			hj.probeState.probeIdx[i] = i
+		}
 	}
-	// {{end}}
-	// {{/*
 }
 
-func _DISTINCT_COLLECT_PROBE_NO_OUTER(hj *hashJoiner, batchSize int, nResults int, _USE_SEL bool) { // */}}
-	// {{define "distinctCollectProbeNoOuter" -}}
+// execgen:inline
+// execgen:template<useSel>
+func distinctCollectProbeNoOuter(hj *hashJoiner, sel []int, batchSize int, useSel bool) int {
+	var nResults int
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.groupID[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
-	// {{if .UseSel}}
-	_ = sel[batchSize-1]
-	// {{end}}
+	if useSel {
+		_ = sel[batchSize-1]
+	}
 	for i := int(0); i < batchSize; i++ {
 		if hj.ht.probeScratch.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			hj.probeState.buildIdx[nResults] = int(hj.ht.probeScratch.groupID[i] - 1)
-			// {{if .UseSel}}
-			hj.probeState.probeIdx[nResults] = sel[i]
-			// {{else}}
-			hj.probeState.probeIdx[nResults] = i
-			// {{end}}
+			if useSel {
+				hj.probeState.probeIdx[nResults] = sel[i]
+			} else {
+				hj.probeState.probeIdx[nResults] = i
+			}
 			nResults++
 		}
 	}
-	// {{end}}
-	// {{/*
+	return nResults
 }
-
-// */}}
 
 // collect prepares the buildIdx and probeIdx arrays where the buildIdx and
 // probeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
 func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
-	nResults := int(0)
+	var nResults int
 
 	if hj.spec.left.outer {
 		if sel != nil {
-			_COLLECT_PROBE_OUTER(hj, batchSize, nResults, batch, true)
+			nResults = collectProbeOuter(hj, sel, batchSize, batch, true)
 		} else {
-			_COLLECT_PROBE_OUTER(hj, batchSize, nResults, batch, false)
+			nResults = collectProbeOuter(hj, sel, batchSize, batch, false)
 		}
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
 			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
-				_COLLECT_ANTI(hj, batchSize, nResults, batch, true)
+				nResults = collectAnti(hj, sel, batchSize, nResults, batch, true)
 			default:
-				_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, batch, true)
+				nResults = collectProbeNoOuter(hj, sel, batchSize, batch, true)
 			}
 		} else {
 			switch hj.spec.joinType {
 			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
-				_COLLECT_ANTI(hj, batchSize, nResults, batch, false)
+				nResults = collectAnti(hj, sel, batchSize, nResults, batch, false)
 			default:
-				_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, batch, false)
+				nResults = collectProbeNoOuter(hj, sel, batchSize, batch, false)
 			}
 		}
 	}
@@ -233,15 +235,15 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 // row index for each probe row is given in the groupID slice. This function
 // requires assumes a N-1 hash join.
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
-	nResults := int(0)
+	var nResults int
 
 	if hj.spec.left.outer {
 		nResults = batchSize
 
 		if sel != nil {
-			_DISTINCT_COLLECT_PROBE_OUTER(hj, batchSize, true)
+			distinctCollectProbeOuter(hj, sel, batchSize, true)
 		} else {
-			_DISTINCT_COLLECT_PROBE_OUTER(hj, batchSize, false)
+			distinctCollectProbeOuter(hj, sel, batchSize, false)
 		}
 	} else {
 		if sel != nil {
@@ -250,9 +252,9 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 				// {{/* For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method. */}}
-				_COLLECT_ANTI(hj, batchSize, nResults, batch, true)
+				nResults = collectAnti(hj, sel, batchSize, nResults, batch, true)
 			default:
-				_DISTINCT_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, true)
+				nResults = distinctCollectProbeNoOuter(hj, sel, batchSize, true)
 			}
 		} else {
 			switch hj.spec.joinType {
@@ -260,12 +262,11 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 				// {{/* For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method. */}}
-				_COLLECT_ANTI(hj, batchSize, nResults, batch, false)
+				nResults = collectAnti(hj, sel, batchSize, nResults, batch, false)
 			default:
-				_DISTINCT_COLLECT_PROBE_NO_OUTER(hj, batchSize, nResults, false)
+				nResults = distinctCollectProbeNoOuter(hj, sel, batchSize, false)
 			}
 		}
 	}
-
 	return nResults
 }
