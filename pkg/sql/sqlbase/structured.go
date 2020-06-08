@@ -4256,52 +4256,6 @@ func (desc *ImmutableTableDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
 
-// GetAuditMode implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
-}
-
-// TypeName implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) TypeName() string {
-	return "schema"
-}
-
-// SetName implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) SetName(name string) {
-	desc.Name = name
-}
-
-// DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) DatabaseDesc() *DatabaseDescriptor {
-	return nil
-}
-
-// SchemaDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) SchemaDesc() *SchemaDescriptor {
-	return desc
-}
-
-// TableDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) TableDesc() *TableDescriptor {
-	return nil
-}
-
-// TypeDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) TypeDesc() *TypeDescriptor {
-	return nil
-}
-
-// DescriptorProto wraps a SchemaDescriptor in a Descriptor.
-//
-// TODO(ajwerner): Lift this into the DatabaseDescriptorInterface
-// implementations.
-func (desc *SchemaDescriptor) DescriptorProto() *Descriptor {
-	return wrapDescriptor(desc)
-}
-
-// NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) NameResolutionResult() {}
-
 // DatabaseKey implements DescriptorKey.
 type DatabaseKey struct {
 	name string
