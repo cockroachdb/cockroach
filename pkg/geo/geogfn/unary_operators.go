@@ -11,9 +11,12 @@
 package geogfn
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 )
@@ -90,6 +93,41 @@ func Length(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64,
 	return length(regions, useSphereOrSpheroid)
 }
 
+// Project returns calculate a projected point given a source point, a distance and a azimuth.
+func Project(point *geom.Point, distance float64, azimuth s1.Angle) (*geom.Point, error) {
+	spheroid := geographiclib.WGS84Spheroid
+
+	// Normalize distance to be positive.
+	if distance < 0.0 {
+		distance = -distance
+		azimuth += math.Pi
+	}
+
+	// Normalize azimuth
+	azimuth = azimuth.Normalized()
+
+	// Check the distance validity.
+	if distance > (math.Pi * spheroid.Radius) {
+		return nil, errors.Newf("distance must not be greater than %f", math.Pi*spheroid.Radius)
+	}
+
+	// Convert to ta geodetic point.
+	x := point.X()
+	y := point.Y()
+
+	projected := spheroid.Project(
+		s2.LatLngFromDegrees(x, y),
+		distance,
+		azimuth)
+
+	return geom.NewPointFlat(
+		geom.XY,
+		[]float64{
+			float64(projected.Lng.Normalized()) * 180.0 / math.Pi,
+			latitudeNormalize(float64(projected.Lat)) * 180.0 / math.Pi,
+		}), nil
+}
+
 // length returns the sum of the lengtsh and perimeters in the shapes of the Geography.
 // In OGC parlance, length returns both LineString lengths _and_ Polygon perimeters.
 func length(regions []s2.Region, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
@@ -127,4 +165,33 @@ func length(regions []s2.Region, useSphereOrSpheroid UseSphereOrSpheroid) (float
 		totalLength *= spheroid.SphereRadius
 	}
 	return totalLength, nil
+}
+
+// latitudeNormalize convert a latitude to the range of -Pi/2, Pi/2.
+func latitudeNormalize(lat float64) float64 {
+	if lat > 2.0*math.Pi {
+		lat = math.Remainder(lat, 2.0*math.Pi)
+	}
+
+	if lat < -2.0*math.Pi {
+		lat = math.Remainder(lat, -2.0*math.Pi)
+	}
+
+	if lat > math.Pi {
+		lat = math.Pi - lat
+	}
+
+	if lat < -1.0*math.Pi {
+		lat = -1.0*math.Pi - lat
+	}
+
+	if lat > math.Pi*2 {
+		lat = math.Pi - lat
+	}
+
+	if lat < -1.0*math.Pi*2 {
+		lat = -1.0*math.Pi - lat
+	}
+
+	return lat
 }

@@ -18,7 +18,12 @@ package geographiclib
 // #include "geographiclib.h"
 import "C"
 
-import "github.com/golang/geo/s2"
+import (
+	"math"
+
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
+)
 
 var (
 	// WGS84Spheroid represents the default WGS84 ellipsoid.
@@ -108,4 +113,23 @@ func (s *Spheroid) AreaAndPerimeter(points []s2.Point) (area float64, perimeter 
 		&perimeterDouble,
 	)
 	return float64(areaDouble), float64(perimeterDouble)
+}
+
+// Project returns computes the location of the projected point.
+//
+// Using the direct geodesic problem from GeographicLib (Karney 2013).
+func (s *Spheroid) Project(point s2.LatLng, distance float64, azimuth s1.Angle) s2.LatLng {
+	var lat, lng C.double
+
+	C.geod_direct(
+		&s.cRepr,
+		C.double(point.Lat.Degrees()),
+		C.double(point.Lng.Degrees()),
+		C.double(azimuth*180.0/math.Pi),
+		C.double(distance),
+		&lat,
+		&lng,
+		nil)
+
+	return s2.LatLngFromDegrees(float64(lat), float64(lng))
 }
