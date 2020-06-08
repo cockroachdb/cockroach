@@ -20,6 +20,19 @@ import (
 	"github.com/twpayne/go-geom/xy/lineintersector"
 )
 
+// geometricalObjectsOrder allows us to preserve the order of geometrical objects to
+// match the start and endpoint in the shortest and longest LineString.
+type geometricalObjectsOrder int
+
+const (
+	// geometricalObjectsFlipped represents that the given order of two geometrical
+	// objects has been flipped.
+	geometricalObjectsFlipped geometricalObjectsOrder = -1
+	// geometricalObjectsNotFlipped represents that the given order of two geometrical
+	// objects has not been flipped.
+	geometricalObjectsNotFlipped geometricalObjectsOrder = 1
+)
+
 // MinDistance returns the minimum distance between geometries A and B.
 // This returns a geo.EmptyGeometryError if either A or B is EMPTY.
 func MinDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
@@ -75,6 +88,41 @@ func DFullyWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 		return false, err
 	}
 	return dist <= d, nil
+}
+
+// LongestLineString returns the LineString corresponds to maximum distance across
+// every pair of points comprising geometries A and B.
+func LongestLineString(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a, b)
+	}
+	u := newGeomMaxDistanceUpdater(math.MaxFloat64)
+	return distanceLineStringInternal(a, b, u, geo.EmptyBehaviorOmit)
+}
+
+// distanceLineStringInternal calculates the LineString between two geometries using
+// the DistanceCalculator operator.
+// If there are any EMPTY Geometry objects, they will be ignored. It will return an
+// EmptyGeometryError if A or B contains only EMPTY geometries, even if emptyBehavior
+// is set to EmptyBehaviorOmit.
+func distanceLineStringInternal(
+	a *geo.Geometry, b *geo.Geometry, u geodist.DistanceUpdater, emptyBehavior geo.EmptyBehavior,
+) (*geo.Geometry, error) {
+	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.BoundingBoxIntersects(b)}
+	_, err := distanceInternal(a, b, c, emptyBehavior)
+	if err != nil {
+		return nil, err
+	}
+	var coordA, coordB geom.Coord
+	switch u := u.(type) {
+	case *geomMaxDistanceUpdater:
+		coordA = u.coordA
+		coordB = u.coordB
+	default:
+		return nil, errors.Newf("programmer error: unknown behavior")
+	}
+	lineString := geom.NewLineStringFlat(geom.XY, append(coordA, coordB...)).SetSRID(int(a.SRID()))
+	return geo.NewGeometryFromGeom(lineString)
 }
 
 // maxDistanceInternal finds the maximum distance between two geometries.
@@ -304,7 +352,7 @@ func newGeomMinDistanceUpdater(stopAfterLE float64) *geomMinDistanceUpdater {
 	}
 }
 
-// Distance implements the DistanceUpdater interface.
+// Distance implements the geodist.DistanceUpdater interface.
 func (u *geomMinDistanceUpdater) Distance() float64 {
 	return u.currentValue
 }
@@ -333,25 +381,44 @@ func (u *geomMinDistanceUpdater) IsMaxDistance() bool {
 	return false
 }
 
+// FlipGeometries implements the geodist.DistanceUpdater interface.
+func (u *geomMinDistanceUpdater) FlipGeometries() {
+	// FlipGeometries for geomMinDistanceUpdater is currently unimplemented
+	// pending its implementation for the implementation of ST_ShortestLine/#49035.
+}
+
 // geomMaxDistanceUpdater finds the maximum distance using geom calculations.
-// Methods will return early if it finds a distance > stopAfterGT.
+// And preserve the line's endpoints as geom.Coord which corresponds to maximum
+// distance. Methods will return early if it finds a distance > stopAfterGT.
 type geomMaxDistanceUpdater struct {
 	currentValue float64
 	stopAfterGT  float64
+
+	// coordA represents the first vertex of the edge that holds the maximum distance.
+	coordA geom.Coord
+	// coordB represents the second vertex of the edge that holds the maximum distance.
+	coordB geom.Coord
+
+	geometricalObjOrder geometricalObjectsOrder
 }
 
 var _ geodist.DistanceUpdater = (*geomMaxDistanceUpdater)(nil)
 
 // newGeomMaxDistanceUpdater returns a new geomMaxDistanceUpdater with the
-// correct arguments set up.
+// correct arguments set up. currentValue is initially populated with least
+// possible value instead of 0 because there may be the case where maximum
+// distance is 0 and we may require to find the line for 0 maximum distance.
 func newGeomMaxDistanceUpdater(stopAfterGT float64) *geomMaxDistanceUpdater {
 	return &geomMaxDistanceUpdater{
-		currentValue: 0,
-		stopAfterGT:  stopAfterGT,
+		currentValue:        -math.MaxFloat64,
+		stopAfterGT:         stopAfterGT,
+		coordA:              nil,
+		coordB:              nil,
+		geometricalObjOrder: geometricalObjectsNotFlipped,
 	}
 }
 
-// Distance implements the DistanceUpdater interface.
+// Distance implements the geodist.DistanceUpdater interface.
 func (u *geomMaxDistanceUpdater) Distance() float64 {
 	return u.currentValue
 }
@@ -364,6 +431,13 @@ func (u *geomMaxDistanceUpdater) Update(aInterface geodist.Point, bInterface geo
 	dist := coordNorm(coordSub(a, b))
 	if dist > u.currentValue {
 		u.currentValue = dist
+		if u.geometricalObjOrder == geometricalObjectsFlipped {
+			u.coordA = b
+			u.coordB = a
+		} else {
+			u.coordA = a
+			u.coordB = b
+		}
 		return dist > u.stopAfterGT
 	}
 	return false
@@ -377,6 +451,11 @@ func (u *geomMaxDistanceUpdater) OnIntersects() bool {
 // IsMaxDistance implements the geodist.DistanceUpdater interface.
 func (u *geomMaxDistanceUpdater) IsMaxDistance() bool {
 	return true
+}
+
+// FlipGeometries implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistanceUpdater) FlipGeometries() {
+	u.geometricalObjOrder = -u.geometricalObjOrder
 }
 
 // geomDistanceCalculator implements geodist.DistanceCalculator
