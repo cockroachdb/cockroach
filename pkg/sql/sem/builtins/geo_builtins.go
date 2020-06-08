@@ -1610,6 +1610,31 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_longestline": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				longestLineString, err := geomfn.LongestLineString(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(longestLineString), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns the LineString corresponds to the max distance across every pair of points comprising the ` +
+					`given geometries. 
+
+Note if geometries are the same, it will return the LineString with the maximum distance between the geometry's ` +
+					`vertexes. The function will return the longest line that was discovered first when comparing maximum ` +
+					`distances if more than one is found.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Binary Predicates

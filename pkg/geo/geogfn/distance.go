@@ -291,6 +291,12 @@ func (u *geographyMinDistanceUpdater) IsMaxDistance() bool {
 	return false
 }
 
+// FlipGeometries implements the geodist.DistanceUpdater interface.
+func (u *geographyMinDistanceUpdater) FlipGeometries() {
+	// FlipGeometries is unimplemented for geographyMinDistanceUpdater as we don't
+	// require the order of geometries for calculation of minimum distance.
+}
+
 // geographyDistanceCalculator implements geodist.DistanceCalculator
 type geographyDistanceCalculator struct {
 	updater *geographyMinDistanceUpdater
