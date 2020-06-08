@@ -110,7 +110,7 @@ func TestPutHttp(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
 		testExportStore(t, srv.String(), false)
-		if expected, actual := 13, files(); expected != actual {
+		if expected, actual := 14, files(); expected != actual {
 			t.Fatalf("expected %d files to be written to single http store, got %d", expected, actual)
 		}
 	})

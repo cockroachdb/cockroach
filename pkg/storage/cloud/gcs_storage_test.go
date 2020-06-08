@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,7 +79,7 @@ func (c *antagonisticConn) Read(b []byte) (int, error) {
 func TestAntagonisticRead(t *testing.T) {
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		// This test requires valid GS credential file.
-		return
+		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
 	}
 
 	rnd, _ := randutil.NewPseudoRand()
@@ -111,4 +112,42 @@ func TestAntagonisticRead(t *testing.T) {
 	defer stream.Close()
 	_, err = ioutil.ReadAll(stream)
 	require.NoError(t, err)
+}
+
+// TestFileDoesNotExist ensures that the ReadFile method of google cloud storage
+// returns a sentinel error when the `Bucket` or `Object` being read do not
+// exist.
+func TestFileDoesNotExist(t *testing.T) {
+	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
+		// This test requires valid GS credential file.
+		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
+	}
+
+	{
+		// Invalid gsFile.
+		gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
+		conf, err := ExternalStorageConfFromURI(gsFile)
+		require.NoError(t, err)
+
+		s, err := MakeExternalStorage(
+			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+		require.NoError(t, err)
+		_, err = s.ReadFile(context.Background(), "")
+		require.Error(t, err, "")
+		require.True(t, errors.Is(err, ErrFileDoesNotExist))
+	}
+
+	{
+		// Invalid gsBucket.
+		gsFile := "gs://cockroach-fixtures-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
+		conf, err := ExternalStorageConfFromURI(gsFile)
+		require.NoError(t, err)
+
+		s, err := MakeExternalStorage(
+			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+		require.NoError(t, err)
+		_, err = s.ReadFile(context.Background(), "")
+		require.Error(t, err, "")
+		require.True(t, errors.Is(err, ErrFileDoesNotExist))
+	}
 }
