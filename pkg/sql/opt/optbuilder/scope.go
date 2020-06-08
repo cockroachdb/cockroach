@@ -574,8 +574,14 @@ func findExistingColInList(
 // findExistingCol finds the given expression among the bound variables in this
 // scope. Returns nil if the expression is not found (or an expression is found
 // but it has side-effects and allowSideEffects is false).
+// If a column is found and we are tracking view dependencies, we add the column
+// to the view dependencies since it means this column is being referenced.
 func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *scopeColumn {
-	return findExistingColInList(expr, s.cols, allowSideEffects)
+	col := findExistingColInList(expr, s.cols, allowSideEffects)
+	if col != nil {
+		s.builder.trackReferencedColumnForViews(col)
+	}
+	return col
 }
 
 // startAggFunc is called when the builder starts building an aggregate

@@ -225,7 +225,7 @@ func TestParseGeometry(t *testing.T) {
 			"",
 		},
 		{
-			`{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [1.0, 1.0] }, "properties": { "name": "┳━┳ ヽ(ಠل͜ಠ)ﾉ" } }`,
+			`{ "type": "Point", "coordinates": [1.0, 1.0] }`,
 			&Geometry{
 				SpatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
@@ -367,7 +367,7 @@ func TestParseGeography(t *testing.T) {
 			"",
 		},
 		{
-			`{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [1.0, 1.0] }, "properties": { "name": "┳━┳ ヽ(ಠل͜ಠ)ﾉ" } }`,
+			`{ "type": "Point", "coordinates": [1.0, 1.0] }`,
 			&Geography{
 				SpatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
