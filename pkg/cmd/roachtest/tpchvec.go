@@ -422,6 +422,7 @@ func runTPCHVec(
 	c *cluster,
 	testCase tpchVecTestCase,
 	testRun func(ctx context.Context, t *test, c *cluster, version crdbVersion, tc tpchVecTestCase),
+	disableStatsCreation bool,
 ) {
 	firstNode := c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -430,6 +431,7 @@ func runTPCHVec(
 
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)
+	disableVectorizeRowCountThresholdHeuristic(t, conn)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, newMonitor(ctx, c), c.All()); err != nil {
 		t.Fatal(err)
@@ -441,7 +443,9 @@ func runTPCHVec(
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
 	waitForFullReplication(t, conn)
-	createStatsFromTables(t, conn, tpchTables)
+	if !disableStatsCreation {
+		createStatsFromTables(t, conn, tpchTables)
+	}
 	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
 	if err != nil {
 		t.Fatal(err)
@@ -463,7 +467,7 @@ func registerTPCHVec(r *testRegistry) {
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v19.2.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, newTpchVecPerfTest(), baseTestRun)
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(), baseTestRun, false /* disableStatsCreation */)
 		},
 	})
 
@@ -475,7 +479,7 @@ func registerTPCHVec(r *testRegistry) {
 		// there is no point in running this config on that version.
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun)
+			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun, false /* disableStatsCreation */)
 		},
 	})
 
@@ -487,7 +491,7 @@ func registerTPCHVec(r *testRegistry) {
 		// size, so only run on versions >= 20.1.0.
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, tpchVecSmallBatchSizeTest{}, baseTestRun)
+			runTPCHVec(ctx, t, c, tpchVecSmallBatchSizeTest{}, baseTestRun, false /* disableStatsCreation */)
 		},
 	})
 
@@ -497,7 +501,17 @@ func registerTPCHVec(r *testRegistry) {
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
+			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun, false /* disableStatsCreation */)
+		},
+	})
+
+	r.Add(testSpec{
+		Name:       "tpchvec/perf_no_stats",
+		Owner:      OwnerSQLExec,
+		Cluster:    makeClusterSpec(tpchVecNodeCount),
+		MinVersion: "v20.2.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(), baseTestRun, true /* disableStatsCreation */)
 		},
 	})
 }
