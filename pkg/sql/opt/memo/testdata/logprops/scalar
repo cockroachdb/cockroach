@@ -67,7 +67,7 @@ project
       │         ├── function: length [type=int]
       │         │    └── const: 'foo' [type=string]
       │         └── variable: y:2 [type=int]
-      └── mult [as=b:7, type=int, outer=(1,5)]
+      └── mult [as=b:7, type=int, outer=(1,5), immutable]
            ├── variable: rowid:5 [type=int]
            └── variable: x:1 [type=int]
 

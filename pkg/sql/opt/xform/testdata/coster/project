@@ -7,6 +7,7 @@ SELECT k, i, s || 'foo' FROM a
 ----
 project
  ├── columns: k:1!null i:2 "?column?":5
+ ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1090.03
  ├── key: (1)
@@ -18,13 +19,14 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── projections
-      └── s:3 || 'foo' [as="?column?":5, outer=(3)]
+      └── s:3 || 'foo' [as="?column?":5, outer=(3), immutable]
 
 opt
 SELECT k, k+2, i*d FROM a
 ----
 project
  ├── columns: k:1!null "?column?":5!null "?column?":6
+ ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1100.03
  ├── key: (1)
@@ -36,5 +38,5 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections
-      ├── k:1 + 2 [as="?column?":5, outer=(1)]
-      └── i:2 * d:4 [as="?column?":6, outer=(2,4)]
+      ├── k:1 + 2 [as="?column?":5, outer=(1), immutable]
+      └── i:2 * d:4 [as="?column?":6, outer=(2,4), immutable]

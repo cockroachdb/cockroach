@@ -40,14 +40,17 @@ ORDER BY
 group-by
  ├── columns: l_returnflag:9!null l_linestatus:10!null sum_qty:17!null sum_base_price:18!null sum_disc_price:20!null sum_charge:22!null avg_qty:23!null avg_price:24!null avg_disc:25!null count_order:26!null
  ├── grouping columns: l_returnflag:9!null l_linestatus:10!null
+ ├── immutable
  ├── key: (9,10)
  ├── fd: (9,10)-->(17,18,20,22-26)
  ├── ordering: +9,+10
  ├── sort
  │    ├── columns: l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_returnflag:9!null l_linestatus:10!null column19:19!null column21:21!null
+ │    ├── immutable
  │    ├── ordering: +9,+10
  │    └── project
  │         ├── columns: column19:19!null column21:21!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_returnflag:9!null l_linestatus:10!null
+ │         ├── immutable
  │         ├── select
  │         │    ├── columns: l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_tax:8!null l_returnflag:9!null l_linestatus:10!null l_shipdate:11!null
  │         │    ├── scan lineitem
@@ -55,8 +58,8 @@ group-by
  │         │    └── filters
  │         │         └── l_shipdate:11 <= '1998-09-02' [outer=(11), constraints=(/11: (/NULL - /'1998-09-02']; tight)]
  │         └── projections
- │              ├── l_extendedprice:6 * (1.0 - l_discount:7) [as=column19:19, outer=(6,7)]
- │              └── (l_extendedprice:6 * (1.0 - l_discount:7)) * (l_tax:8 + 1.0) [as=column21:21, outer=(6-8)]
+ │              ├── l_extendedprice:6 * (1.0 - l_discount:7) [as=column19:19, outer=(6,7), immutable]
+ │              └── (l_extendedprice:6 * (1.0 - l_discount:7)) * (l_tax:8 + 1.0) [as=column21:21, outer=(6-8), immutable]
  └── aggregations
       ├── sum [as=sum:17, outer=(5)]
       │    └── l_quantity:5
@@ -339,11 +342,13 @@ limit
  ├── columns: l_orderkey:18!null revenue:35!null o_orderdate:13!null o_shippriority:16!null
  ├── internal-ordering: -35,+13
  ├── cardinality: [0 - 10]
+ ├── immutable
  ├── key: (18)
  ├── fd: (18)-->(13,16,35)
  ├── ordering: -35,+13
  ├── sort
  │    ├── columns: o_orderdate:13!null o_shippriority:16!null l_orderkey:18!null sum:35!null
+ │    ├── immutable
  │    ├── key: (18)
  │    ├── fd: (18)-->(13,16,35)
  │    ├── ordering: -35,+13
@@ -351,10 +356,12 @@ limit
  │    └── group-by
  │         ├── columns: o_orderdate:13!null o_shippriority:16!null l_orderkey:18!null sum:35!null
  │         ├── grouping columns: l_orderkey:18!null
+ │         ├── immutable
  │         ├── key: (18)
  │         ├── fd: (18)-->(13,16,35)
  │         ├── project
  │         │    ├── columns: column34:34!null o_orderdate:13!null o_shippriority:16!null l_orderkey:18!null
+ │         │    ├── immutable
  │         │    ├── fd: (18)-->(13,16)
  │         │    ├── inner-join (hash)
  │         │    │    ├── columns: c_custkey:1!null c_mktsegment:7!null o_orderkey:9!null o_custkey:10!null o_orderdate:13!null o_shippriority:16!null l_orderkey:18!null l_extendedprice:23!null l_discount:24!null l_shipdate:28!null
@@ -393,7 +400,7 @@ limit
  │         │    │    └── filters
  │         │    │         └── l_orderkey:18 = o_orderkey:9 [outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
  │         │    └── projections
- │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column34:34, outer=(23,24)]
+ │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column34:34, outer=(23,24), immutable]
  │         └── aggregations
  │              ├── sum [as=sum:35, outer=(34)]
  │              │    └── column34:34
@@ -520,16 +527,19 @@ ORDER BY
 ----
 sort
  ├── columns: n_name:42!null revenue:49!null
+ ├── immutable
  ├── key: (42)
  ├── fd: (42)-->(49)
  ├── ordering: -49
  └── group-by
       ├── columns: n_name:42!null sum:49!null
       ├── grouping columns: n_name:42!null
+      ├── immutable
       ├── key: (42)
       ├── fd: (42)-->(49)
       ├── project
       │    ├── columns: column48:48!null n_name:42!null
+      │    ├── immutable
       │    ├── inner-join (hash)
       │    │    ├── columns: c_custkey:1!null c_nationkey:4!null o_orderkey:9!null o_custkey:10!null o_orderdate:13!null l_orderkey:18!null l_suppkey:20!null l_extendedprice:23!null l_discount:24!null s_suppkey:34!null s_nationkey:37!null n_nationkey:41!null n_name:42!null n_regionkey:43!null r_regionkey:45!null r_name:46!null
       │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -600,7 +610,7 @@ sort
       │    │         ├── c_custkey:1 = o_custkey:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    │         └── c_nationkey:4 = s_nationkey:37 [outer=(4,37), constraints=(/4: (/NULL - ]; /37: (/NULL - ]), fd=(4)==(37), (37)==(4)]
       │    └── projections
-      │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column48:48, outer=(23,24)]
+      │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column48:48, outer=(23,24), immutable]
       └── aggregations
            └── sum [as=sum:49, outer=(48)]
                 └── column48:48
@@ -634,10 +644,12 @@ WHERE
 scalar-group-by
  ├── columns: revenue:18
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(18)
  ├── project
  │    ├── columns: column17:17!null
+ │    ├── immutable
  │    ├── select
  │    │    ├── columns: l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_shipdate:11!null
  │    │    ├── scan lineitem
@@ -647,7 +659,7 @@ scalar-group-by
  │    │         ├── (l_shipdate:11 >= '1994-01-01') AND (l_shipdate:11 < '1995-01-01') [outer=(11), constraints=(/11: [/'1994-01-01' - /'1994-12-31']; tight)]
  │    │         └── l_quantity:5 < 24.0 [outer=(5), constraints=(/5: (/NULL - /23.999999999999996]; tight)]
  │    └── projections
- │         └── l_extendedprice:6 * l_discount:7 [as=column17:17, outer=(6,7)]
+ │         └── l_extendedprice:6 * l_discount:7 [as=column17:17, outer=(6,7), immutable]
  └── aggregations
       └── sum [as=sum:18, outer=(17)]
            └── column17:17
@@ -780,7 +792,7 @@ group-by
  │         │         └── s_nationkey:4 = n1.n_nationkey:41 [outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ]), fd=(4)==(41), (41)==(4)]
  │         └── projections
  │              ├── extract('year', l_shipdate:18) [as=l_year:49, outer=(18), immutable]
- │              └── l_extendedprice:13 * (1.0 - l_discount:14) [as=volume:50, outer=(13,14)]
+ │              └── l_extendedprice:13 * (1.0 - l_discount:14) [as=volume:50, outer=(13,14), immutable]
  └── aggregations
       └── sum [as=sum:51, outer=(50)]
            └── volume:50
@@ -943,7 +955,7 @@ sort
       │    │    │    │         └── p_type:5 = 'ECONOMY ANODIZED STEEL' [outer=(5), constraints=(/5: [/'ECONOMY ANODIZED STEEL' - /'ECONOMY ANODIZED STEEL']; tight), fd=()-->(5)]
       │    │    │    └── projections
       │    │    │         ├── extract('year', o_orderdate:37) [as=o_year:61, outer=(37), immutable]
-      │    │    │         └── l_extendedprice:22 * (1.0 - l_discount:23) [as=volume:62, outer=(22,23)]
+      │    │    │         └── l_extendedprice:22 * (1.0 - l_discount:23) [as=volume:62, outer=(22,23), immutable]
       │    │    └── projections
       │    │         └── CASE WHEN n2.n_name:55 = 'BRAZIL' THEN volume:62 ELSE 0.0 END [as=column63:63, outer=(55,62)]
       │    └── aggregations
@@ -1069,7 +1081,7 @@ sort
       │    │         └── p_name:2 LIKE '%green%' [outer=(2), constraints=(/2: (/NULL - ])]
       │    └── projections
       │         ├── extract('year', o_orderdate:42) [as=o_year:51, outer=(42), immutable]
-      │         └── (l_extendedprice:22 * (1.0 - l_discount:23)) - (ps_supplycost:36 * l_quantity:21) [as=amount:52, outer=(21-23,36)]
+      │         └── (l_extendedprice:22 * (1.0 - l_discount:23)) - (ps_supplycost:36 * l_quantity:21) [as=amount:52, outer=(21-23,36), immutable]
       └── aggregations
            └── sum [as=sum:53, outer=(52)]
                 └── amount:52
@@ -1126,11 +1138,13 @@ limit
  ├── columns: c_custkey:1!null c_name:2!null revenue:39!null c_acctbal:6!null n_name:35!null c_address:3!null c_phone:5!null c_comment:8!null
  ├── internal-ordering: -39
  ├── cardinality: [0 - 20]
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3,5,6,8,35,39)
  ├── ordering: -39
  ├── sort
  │    ├── columns: c_custkey:1!null c_name:2!null c_address:3!null c_phone:5!null c_acctbal:6!null c_comment:8!null n_name:35!null sum:39!null
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3,5,6,8,35,39)
  │    ├── ordering: -39
@@ -1138,10 +1152,12 @@ limit
  │    └── group-by
  │         ├── columns: c_custkey:1!null c_name:2!null c_address:3!null c_phone:5!null c_acctbal:6!null c_comment:8!null n_name:35!null sum:39!null
  │         ├── grouping columns: c_custkey:1!null
+ │         ├── immutable
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3,5,6,8,35,39)
  │         ├── project
  │         │    ├── columns: column38:38!null c_custkey:1!null c_name:2!null c_address:3!null c_phone:5!null c_acctbal:6!null c_comment:8!null n_name:35!null
+ │         │    ├── immutable
  │         │    ├── fd: (1)-->(2,3,5,6,8,35)
  │         │    ├── inner-join (lookup nation)
  │         │    │    ├── columns: c_custkey:1!null c_name:2!null c_address:3!null c_nationkey:4!null c_phone:5!null c_acctbal:6!null c_comment:8!null o_orderkey:9!null o_custkey:10!null o_orderdate:13!null l_orderkey:18!null l_extendedprice:23!null l_discount:24!null l_returnflag:26!null n_nationkey:34!null n_name:35!null
@@ -1170,7 +1186,7 @@ limit
  │         │    │    │    └── filters (true)
  │         │    │    └── filters (true)
  │         │    └── projections
- │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column38:38, outer=(23,24)]
+ │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column38:38, outer=(23,24), immutable]
  │         └── aggregations
  │              ├── sum [as=sum:39, outer=(38)]
  │              │    └── column38:38
@@ -1328,7 +1344,7 @@ sort
                           │         └── sum [as=sum:36, outer=(35)]
                           │              └── column35:35
                           └── projections
-                               └── sum:36 * 0.0001 [as="?column?":37, outer=(36)]
+                               └── sum:36 * 0.0001 [as="?column?":37, outer=(36), immutable]
 
 # --------------------------------------------------
 # Q12
@@ -1518,10 +1534,12 @@ project
  ├── scalar-group-by
  │    ├── columns: sum:27 sum:29
  │    ├── cardinality: [1 - 1]
+ │    ├── immutable
  │    ├── key: ()
  │    ├── fd: ()-->(27,29)
  │    ├── project
  │    │    ├── columns: column26:26!null column28:28!null
+ │    │    ├── immutable
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: l_partkey:2!null l_extendedprice:6!null l_discount:7!null l_shipdate:11!null p_partkey:17!null p_type:21!null
  │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
@@ -1539,8 +1557,8 @@ project
  │    │    │    └── filters
  │    │    │         └── l_partkey:2 = p_partkey:17 [outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
  │    │    └── projections
- │    │         ├── CASE WHEN p_type:21 LIKE 'PROMO%' THEN l_extendedprice:6 * (1.0 - l_discount:7) ELSE 0.0 END [as=column26:26, outer=(6,7,21)]
- │    │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column28:28, outer=(6,7)]
+ │    │         ├── CASE WHEN p_type:21 LIKE 'PROMO%' THEN l_extendedprice:6 * (1.0 - l_discount:7) ELSE 0.0 END [as=column26:26, outer=(6,7,21), immutable]
+ │    │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column28:28, outer=(6,7), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:27, outer=(26)]
  │         │    └── column26:26
@@ -1597,30 +1615,36 @@ ORDER BY
 ----
 sort
  ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_phone:5!null total_revenue:25!null
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3,5,25)
  ├── ordering: +1
  └── project
       ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_phone:5!null sum:25!null
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,3,5,25)
       └── inner-join (lookup supplier)
            ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_phone:5!null l_suppkey:10!null sum:25!null
            ├── key columns: [10] = [1]
            ├── lookup columns are key
+           ├── immutable
            ├── key: (10)
            ├── fd: (1)-->(2,3,5), (10)-->(25), (1)==(10), (10)==(1)
            ├── select
            │    ├── columns: l_suppkey:10!null sum:25!null
+           │    ├── immutable
            │    ├── key: (10)
            │    ├── fd: (10)-->(25)
            │    ├── group-by
            │    │    ├── columns: l_suppkey:10!null sum:25!null
            │    │    ├── grouping columns: l_suppkey:10!null
+           │    │    ├── immutable
            │    │    ├── key: (10)
            │    │    ├── fd: (10)-->(25)
            │    │    ├── project
            │    │    │    ├── columns: column24:24!null l_suppkey:10!null
+           │    │    │    ├── immutable
            │    │    │    ├── select
            │    │    │    │    ├── columns: l_suppkey:10!null l_extendedprice:13!null l_discount:14!null l_shipdate:18!null
            │    │    │    │    ├── scan lineitem
@@ -1628,26 +1652,29 @@ sort
            │    │    │    │    └── filters
            │    │    │    │         └── (l_shipdate:18 >= '1996-01-01') AND (l_shipdate:18 < '1996-04-01') [outer=(18), constraints=(/18: [/'1996-01-01' - /'1996-03-31']; tight)]
            │    │    │    └── projections
-           │    │    │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=column24:24, outer=(13,14)]
+           │    │    │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=column24:24, outer=(13,14), immutable]
            │    │    └── aggregations
            │    │         └── sum [as=sum:25, outer=(24)]
            │    │              └── column24:24
            │    └── filters
-           │         └── eq [outer=(25), subquery, constraints=(/25: (/NULL - ])]
+           │         └── eq [outer=(25), immutable, subquery, constraints=(/25: (/NULL - ])]
            │              ├── sum:25
            │              └── subquery
            │                   └── scalar-group-by
            │                        ├── columns: max:44
            │                        ├── cardinality: [1 - 1]
+           │                        ├── immutable
            │                        ├── key: ()
            │                        ├── fd: ()-->(44)
            │                        ├── group-by
            │                        │    ├── columns: l_suppkey:28!null sum:43!null
            │                        │    ├── grouping columns: l_suppkey:28!null
+           │                        │    ├── immutable
            │                        │    ├── key: (28)
            │                        │    ├── fd: (28)-->(43)
            │                        │    ├── project
            │                        │    │    ├── columns: column42:42!null l_suppkey:28!null
+           │                        │    │    ├── immutable
            │                        │    │    ├── select
            │                        │    │    │    ├── columns: l_suppkey:28!null l_extendedprice:31!null l_discount:32!null l_shipdate:36!null
            │                        │    │    │    ├── scan lineitem
@@ -1655,7 +1682,7 @@ sort
            │                        │    │    │    └── filters
            │                        │    │    │         └── (l_shipdate:36 >= '1996-01-01') AND (l_shipdate:36 < '1996-04-01') [outer=(36), constraints=(/36: [/'1996-01-01' - /'1996-03-31']; tight)]
            │                        │    │    └── projections
-           │                        │    │         └── l_extendedprice:31 * (1.0 - l_discount:32) [as=column42:42, outer=(31,32)]
+           │                        │    │         └── l_extendedprice:31 * (1.0 - l_discount:32) [as=column42:42, outer=(31,32), immutable]
            │                        │    └── aggregations
            │                        │         └── sum [as=sum:43, outer=(42)]
            │                        │              └── column42:42
@@ -1795,25 +1822,30 @@ WHERE
 project
  ├── columns: avg_yearly:45
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(45)
  ├── scalar-group-by
  │    ├── columns: sum:44
  │    ├── cardinality: [1 - 1]
+ │    ├── immutable
  │    ├── key: ()
  │    ├── fd: ()-->(44)
  │    ├── inner-join (lookup lineitem)
  │    │    ├── columns: l_partkey:2!null l_quantity:5!null l_extendedprice:6!null p_partkey:17!null "?column?":43!null
  │    │    ├── key columns: [1 4] = [1 4]
  │    │    ├── lookup columns are key
+ │    │    ├── immutable
  │    │    ├── fd: (17)-->(43), (2)==(17), (17)==(2)
  │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    ├── columns: l_orderkey:1!null l_partkey:2!null l_linenumber:4!null p_partkey:17!null "?column?":43
  │    │    │    ├── key columns: [17] = [2]
+ │    │    │    ├── immutable
  │    │    │    ├── key: (1,4)
  │    │    │    ├── fd: (17)-->(43), (1,4)-->(2), (2)==(17), (17)==(2)
  │    │    │    ├── project
  │    │    │    │    ├── columns: "?column?":43 p_partkey:17!null
+ │    │    │    │    ├── immutable
  │    │    │    │    ├── key: (17)
  │    │    │    │    ├── fd: (17)-->(43)
  │    │    │    │    ├── group-by
@@ -1853,7 +1885,7 @@ project
  │    │    │    │    │         └── avg [as=avg:42, outer=(30)]
  │    │    │    │    │              └── l_quantity:30
  │    │    │    │    └── projections
- │    │    │    │         └── avg:42 * 0.2 [as="?column?":43, outer=(42)]
+ │    │    │    │         └── avg:42 * 0.2 [as="?column?":43, outer=(42), immutable]
  │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── l_quantity:5 < "?column?":43 [outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]
@@ -2048,10 +2080,12 @@ WHERE
 scalar-group-by
  ├── columns: revenue:27
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(27)
  ├── project
  │    ├── columns: column26:26!null
+ │    ├── immutable
  │    ├── inner-join (lookup part)
  │    │    ├── columns: l_partkey:2!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_shipinstruct:14!null l_shipmode:15!null p_partkey:17!null p_brand:20!null p_size:22!null p_container:23!null
  │    │    ├── key columns: [2] = [17]
@@ -2069,7 +2103,7 @@ scalar-group-by
  │    │         ├── ((((((p_brand:20 = 'Brand#12') AND (p_container:23 IN ('SM BOX', 'SM CASE', 'SM PACK', 'SM PKG'))) AND (l_quantity:5 >= 1.0)) AND (l_quantity:5 <= 11.0)) AND (p_size:22 <= 5)) OR (((((p_brand:20 = 'Brand#23') AND (p_container:23 IN ('MED BAG', 'MED BOX', 'MED PACK', 'MED PKG'))) AND (l_quantity:5 >= 10.0)) AND (l_quantity:5 <= 20.0)) AND (p_size:22 <= 10))) OR (((((p_brand:20 = 'Brand#34') AND (p_container:23 IN ('LG BOX', 'LG CASE', 'LG PACK', 'LG PKG'))) AND (l_quantity:5 >= 20.0)) AND (l_quantity:5 <= 30.0)) AND (p_size:22 <= 15)) [outer=(5,20,22,23), constraints=(/5: [/1.0 - /30.0]; /20: [/'Brand#12' - /'Brand#12'] [/'Brand#23' - /'Brand#23'] [/'Brand#34' - /'Brand#34']; /22: (/NULL - /15]; /23: [/'LG BOX' - /'LG BOX'] [/'LG CASE' - /'LG CASE'] [/'LG PACK' - /'LG PACK'] [/'LG PKG' - /'LG PKG'] [/'MED BAG' - /'MED BAG'] [/'MED BOX' - /'MED BOX'] [/'MED PACK' - /'MED PACK'] [/'MED PKG' - /'MED PKG'] [/'SM BOX' - /'SM BOX'] [/'SM CASE' - /'SM CASE'] [/'SM PACK' - /'SM PACK'] [/'SM PKG' - /'SM PKG'])]
  │    │         └── p_size:22 >= 1 [outer=(22), constraints=(/22: [/1 - ]; tight)]
  │    └── projections
- │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column26:26, outer=(6,7)]
+ │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column26:26, outer=(6,7), immutable]
  └── aggregations
       └── sum [as=sum:27, outer=(26)]
            └── column26:26
@@ -2129,37 +2163,46 @@ ORDER BY
 ----
 sort
  ├── columns: s_name:2!null s_address:3!null
+ ├── immutable
  ├── ordering: +2
  └── project
       ├── columns: s_name:2!null s_address:3!null
+      ├── immutable
       └── inner-join (lookup nation)
            ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null n_nationkey:8!null n_name:9!null
            ├── key columns: [4] = [8]
            ├── lookup columns are key
+           ├── immutable
            ├── key: (1)
            ├── fd: ()-->(9), (1)-->(2-4), (4)==(8), (8)==(4)
            ├── project
            │    ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null
+           │    ├── immutable
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-4)
            │    └── inner-join (lookup supplier)
            │         ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null ps_suppkey:13!null
            │         ├── key columns: [13] = [1]
            │         ├── lookup columns are key
+           │         ├── immutable
            │         ├── key: (13)
            │         ├── fd: (1)-->(2-4), (1)==(13), (13)==(1)
            │         ├── distinct-on
            │         │    ├── columns: ps_suppkey:13!null
            │         │    ├── grouping columns: ps_suppkey:13!null
+           │         │    ├── immutable
            │         │    ├── key: (13)
            │         │    └── semi-join (hash)
            │         │         ├── columns: ps_partkey:12!null ps_suppkey:13!null
+           │         │         ├── immutable
            │         │         ├── key: (12,13)
            │         │         ├── project
            │         │         │    ├── columns: ps_partkey:12!null ps_suppkey:13!null
+           │         │         │    ├── immutable
            │         │         │    ├── key: (12,13)
            │         │         │    └── select
            │         │         │         ├── columns: ps_partkey:12!null ps_suppkey:13!null ps_availqty:14!null sum:42
+           │         │         │         ├── immutable
            │         │         │         ├── key: (12,13)
            │         │         │         ├── fd: (12,13)-->(14,42)
            │         │         │         ├── group-by
@@ -2190,7 +2233,7 @@ sort
            │         │         │         │         └── const-agg [as=ps_availqty:14, outer=(14)]
            │         │         │         │              └── ps_availqty:14
            │         │         │         └── filters
-           │         │         │              └── ps_availqty:14 > (sum:42 * 0.5) [outer=(14,42), constraints=(/14: (/NULL - ])]
+           │         │         │              └── ps_availqty:14 > (sum:42 * 0.5) [outer=(14,42), immutable, constraints=(/14: (/NULL - ])]
            │         │         ├── select
            │         │         │    ├── columns: p_partkey:17!null p_name:18!null
            │         │         │    ├── key: (17)

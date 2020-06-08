@@ -167,6 +167,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
@@ -179,7 +180,7 @@ select
       │         └── lt [type=bool]
       │              ├── variable: x:1 [type=int]
       │              └── const: 5 [type=int]
-      └── eq [type=bool, outer=(1,2)]
+      └── eq [type=bool, outer=(1,2), immutable]
            ├── plus [type=int]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -190,6 +191,7 @@ SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
@@ -197,12 +199,12 @@ select
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: x:1 [type=int]
       │    └── const: 1 [type=int]
-      ├── ge [type=bool, outer=(1,2)]
+      ├── ge [type=bool, outer=(1,2), immutable]
       │    ├── plus [type=int]
       │    │    ├── variable: x:1 [type=int]
       │    │    └── variable: y:2 [type=int]
       │    └── const: 5 [type=int]
-      └── le [type=bool, outer=(1,2)]
+      └── le [type=bool, outer=(1,2), immutable]
            ├── plus [type=int]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -357,11 +359,12 @@ SELECT * FROM a WHERE (x, y) > (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── gt [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
+      └── gt [type=bool, outer=(1,2), immutable, constraints=(/1/2: [/1/3 - ]; tight)]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -374,11 +377,12 @@ SELECT * FROM a WHERE (x, y) >= (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── ge [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
+      └── ge [type=bool, outer=(1,2), immutable, constraints=(/1/2: [/1/2 - ]; tight)]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -391,11 +395,12 @@ SELECT * FROM a WHERE (x, y) < (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── lt [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
+      └── lt [type=bool, outer=(1,2), immutable, constraints=(/1/2: (/NULL - /1/1]; tight)]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -408,11 +413,12 @@ SELECT * FROM a WHERE (x, y) <= (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── le [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
+      └── le [type=bool, outer=(1,2), immutable, constraints=(/1/2: (/NULL - /1/2]; tight)]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -426,11 +432,12 @@ SELECT * FROM a WHERE (x, y) >= (1, 2.5)
 ----
 select
  ├── columns: x:1(int) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── ge [type=bool, outer=(1,2)]
+      └── ge [type=bool, outer=(1,2), immutable]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -444,11 +451,12 @@ SELECT * FROM a WHERE (x, y) >= (1, NULL)
 ----
 select
  ├── columns: x:1(int) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── ge [type=bool, outer=(1,2)]
+      └── ge [type=bool, outer=(1,2), immutable]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: x:1 [type=int]
            │    └── variable: y:2 [type=int]
@@ -463,12 +471,13 @@ SELECT * FROM a WHERE (x, 1) >= (1, 2)
 ----
 select
  ├── columns: x:1(int) y:2(int)
+ ├── immutable
  ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── ge [type=bool, outer=(1)]
+      └── ge [type=bool, outer=(1), immutable]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: x:1 [type=int]
            │    └── const: 1 [type=int]
@@ -640,6 +649,7 @@ SELECT * FROM (SELECT (x, y) AS col FROM a) WHERE col > (1, 2)
 ----
 select
  ├── columns: col:4(tuple{int, int}!null)
+ ├── immutable
  ├── project
  │    ├── columns: col:4(tuple{int, int})
  │    ├── prune: (4)
@@ -651,7 +661,7 @@ select
  │              ├── variable: x:1 [type=int]
  │              └── variable: y:2 [type=int]
  └── filters
-      └── gt [type=bool, outer=(4), constraints=(/4: [/(1, 3) - ]; tight)]
+      └── gt [type=bool, outer=(4), immutable, constraints=(/4: [/(1, 3) - ]; tight)]
            ├── variable: col:4 [type=tuple{int, int}]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
@@ -812,6 +822,7 @@ SELECT * FROM c WHERE (v, u + v) IN ((1, 2), (3, 50), (5, 100))
 ----
 select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1)
@@ -827,7 +838,7 @@ select
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1) (+3,+2,+1)
  └── filters
-      └── in [type=bool, outer=(2,3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
+      └── in [type=bool, outer=(2,3), immutable, constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: v:3 [type=int]
            │    └── plus [type=int]
@@ -1251,11 +1262,12 @@ SELECT * FROM a WHERE (x, y) < (1, 2) OR (x, y) > (3, 4)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── or [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1] [/3/5 - ]; tight)]
+      └── or [type=bool, outer=(1,2), immutable, constraints=(/1/2: (/NULL - /1/1] [/3/5 - ]; tight)]
            ├── lt [type=bool]
            │    ├── tuple [type=tuple{int, int}]
            │    │    ├── variable: x:1 [type=int]

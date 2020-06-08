@@ -209,20 +209,23 @@ EXPLAIN SELECT b, b+1 AS plus, c FROM abcde ORDER BY b, plus, c
 ----
 explain
  ├── columns: tree:7 field:8 description:9
+ ├── immutable
  └── sort
       ├── columns: b:2 plus:6 c:3
+      ├── immutable
       ├── lax-key: (2,3)
       ├── fd: (2)-->(6)
       ├── ordering: +2,+3
       └── project
            ├── columns: plus:6 b:2 c:3
+           ├── immutable
            ├── lax-key: (2,3)
            ├── fd: (2)-->(6)
            ├── scan abcde
            │    ├── columns: b:2 c:3
            │    └── lax-key: (2,3)
            └── projections
-                └── b:2 + 1 [as=plus:6, outer=(2)]
+                └── b:2 + 1 [as=plus:6, outer=(2), immutable]
 
 # Regression: Explain a statement having constant column, but with no ordering.
 norm

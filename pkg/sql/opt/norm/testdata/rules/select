@@ -270,9 +270,11 @@ SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w1s'::INTE
 ----
 project
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── select
       ├── columns: k:1!null d:5!null
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(5)
       ├── scan e
@@ -281,7 +283,7 @@ project
       │    └── fd: (1)-->(5)
       └── filters
            ├── d:5 > '2018-07-01' [outer=(5), constraints=(/5: [/'2018-07-02' - ]; tight)]
-           └── d:5 < '2018-07-08 00:00:01+00:00' [outer=(5), constraints=(/5: (/NULL - ])]
+           └── d:5 < '2018-07-08 00:00:01+00:00' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 # Ranges can be merged with other filters to create new ranges.
 norm expect=ConsolidateSelectFilters disable=InlineConstVar
@@ -533,6 +535,7 @@ SELECT * FROM (SELECT i, i+1 AS r, f FROM a) a WHERE f=10.0
 ----
 project
  ├── columns: i:2 r:6 f:3!null
+ ├── immutable
  ├── fd: ()-->(3), (2)-->(6)
  ├── select
  │    ├── columns: i:2 f:3!null
@@ -542,7 +545,7 @@ project
  │    └── filters
  │         └── f:3 = 10.0 [outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
  └── projections
-      └── i:2 + 1 [as=r:6, outer=(2)]
+      └── i:2 + 1 [as=r:6, outer=(2), immutable]
 
 # Don't push down select if it depends on computed column that can't be inlined.
 norm expect-not=PushSelectIntoProject
@@ -550,6 +553,7 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 ----
 select
  ├── columns: i:2 div:6!null f:3
+ ├── immutable
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: div:6 i:2 f:3
@@ -559,7 +563,7 @@ select
  │    └── projections
  │         └── i:2 / 2 [as=div:6, outer=(2)]
  └── filters
-      └── div:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
+      └── div:6 = 2 [outer=(6), immutable, constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 
 # Push down some conjuncts, but not others.
 norm expect=PushSelectIntoProject
@@ -567,6 +571,7 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 ----
 select
  ├── columns: i:2!null div:6!null f:3!null
+ ├── immutable
  ├── fd: ()-->(2,3,6)
  ├── project
  │    ├── columns: div:6!null i:2!null f:3!null
@@ -582,7 +587,7 @@ select
  │    └── projections
  │         └── i:2 / 2 [as=div:6, outer=(2)]
  └── filters
-      └── div:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
+      └── div:6 = 2 [outer=(6), immutable, constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 
 # Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
 norm
@@ -590,6 +595,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) 
 ----
 project
  ├── columns: f:3 r:7
+ ├── immutable
  ├── select
  │    ├── columns: i:2 f:3 sum:6!null
  │    ├── key: (2,3)
@@ -607,7 +613,7 @@ project
  │    └── filters
  │         └── sum:6 = 10.0 [outer=(6), constraints=(/6: [/10.0 - /10.0]; tight), fd=()-->(6)]
  └── projections
-      └── f:3 + 1.1 [as=r:7, outer=(3)]
+      └── f:3 + 1.1 [as=r:7, outer=(3), immutable]
 
 # --------------------------------------
 # PushSelectCondLeftIntoJoinLeftAndRight
@@ -1395,9 +1401,11 @@ SELECT k FROM b WHERE i+k IS NOT NULL
 ----
 project
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── select
       ├── columns: k:1!null i:2
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan b
@@ -1405,7 +1413,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── filters
-           └── (i:2 + k:1) IS NOT NULL [outer=(1,2)]
+           └── (i:2 + k:1) IS NOT NULL [outer=(1,2), immutable]
 
 # --------------------------------------------------
 # DetectSelectContradiction

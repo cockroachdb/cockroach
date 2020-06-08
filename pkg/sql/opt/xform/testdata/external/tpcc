@@ -39,6 +39,7 @@ project
       └── project
            ├── columns: d_next_o_id_new:23 d_id:12!null d_w_id:13!null d_name:14 d_street_1:15 d_street_2:16 d_city:17 d_state:18 d_zip:19 d_tax:20 d_ytd:21 d_next_o_id:22
            ├── cardinality: [0 - 1]
+           ├── immutable
            ├── key: ()
            ├── fd: ()-->(12-23)
            ├── scan district
@@ -48,7 +49,7 @@ project
            │    ├── key: ()
            │    └── fd: ()-->(12-22)
            └── projections
-                └── d_next_o_id:22 + 1 [as=d_next_o_id_new:23, outer=(22)]
+                └── d_next_o_id:22 + 1 [as=d_next_o_id_new:23, outer=(22), immutable]
 
 opt format=hide-qual
 SELECT w_tax FROM warehouse WHERE w_id = 10
@@ -585,7 +586,7 @@ project
  │         └── projections
  │              ├── crdb_internal.round_decimal_values(customer.c_balance:38 - 3860.61, 2) [as=c_balance:47, outer=(38), immutable]
  │              ├── crdb_internal.round_decimal_values(customer.c_ytd_payment:39 + 3860.61, 2) [as=c_ytd_payment:48, outer=(39), immutable]
- │              ├── c_payment_cnt:40 + 1 [as=c_payment_cnt_new:45, outer=(40)]
+ │              ├── c_payment_cnt:40 + 1 [as=c_payment_cnt_new:45, outer=(40), immutable]
  │              └── CASE c_credit:35 WHEN 'BC' THEN left((((((c_id:22::STRING || c_d_id:23::STRING) || c_w_id:24::STRING) || '5') || '10') || '3860.61') || c_data:42, 500) ELSE c_data:42 END [as=c_data_new:46, outer=(22-24,35,42), immutable]
  └── projections
       └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:49, outer=(14,21), immutable]
@@ -906,7 +907,7 @@ update customer
       │    └── fd: ()-->(24), (22,23)-->(25-42)
       └── projections
            ├── crdb_internal.round_decimal_values(customer.c_balance:38 + CASE c_d_id:23 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 END, 2) [as=c_balance:45, outer=(23,38), immutable]
-           └── c_delivery_cnt:41 + 1 [as=c_delivery_cnt_new:43, outer=(41)]
+           └── c_delivery_cnt:41 + 1 [as=c_delivery_cnt_new:43, outer=(41), immutable]
 
 opt format=hide-qual
 DELETE FROM new_order
@@ -1071,12 +1072,14 @@ WHERE w_ytd != sum_d_ytd
 scalar-group-by
  ├── columns: count:22!null
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(22)
  ├── inner-join (merge)
  │    ├── columns: w_id:1!null w_ytd:9!null d_w_id:11!null sum:21!null
  │    ├── left ordering: +1
  │    ├── right ordering: +11
+ │    ├── immutable
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── scan warehouse
@@ -1097,7 +1100,7 @@ scalar-group-by
  │    │         └── sum [as=sum:21, outer=(19)]
  │    │              └── d_ytd:19
  │    └── filters
- │         └── w_ytd:9 != sum:21 [outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │         └── w_ytd:9 != sum:21 [outer=(9,21), immutable, constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
  └── aggregations
       └── count-rows [as=count_rows:22]
 
@@ -1165,10 +1168,12 @@ WHERE nod != -1
 scalar-group-by
  ├── columns: count:8!null
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(8)
  ├── select
  │    ├── columns: no_d_id:2!null no_w_id:3!null max:4!null min:5!null count_rows:6!null
+ │    ├── immutable
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(4-6)
  │    ├── group-by
@@ -1188,7 +1193,7 @@ scalar-group-by
  │    │         │    └── no_o_id:1
  │    │         └── count-rows [as=count_rows:6]
  │    └── filters
- │         └── ((max:4 - min:5) - count_rows:6) != -1 [outer=(4-6)]
+ │         └── ((max:4 - min:5) - count_rows:6) != -1 [outer=(4-6), immutable]
  └── aggregations
       └── count-rows [as=count_rows:8]
 

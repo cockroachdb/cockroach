@@ -60,22 +60,26 @@ ORDER BY
 sort
  ├── save-table-name: q20_sort_1
  ├── columns: s_name:2(char!null) s_address:3(varchar!null)
+ ├── immutable
  ├── stats: [rows=392.749612, distinct(2)=392.742232, null(2)=0, distinct(3)=392.749612, null(3)=0]
  ├── ordering: +2
  └── project
       ├── save-table-name: q20_project_2
       ├── columns: s_name:2(char!null) s_address:3(varchar!null)
+      ├── immutable
       ├── stats: [rows=392.749612, distinct(2)=392.742232, null(2)=0, distinct(3)=392.749612, null(3)=0]
       └── inner-join (hash)
            ├── save-table-name: q20_inner_join_3
            ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null) n_nationkey:8(int!null) n_name:9(char!null)
            ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           ├── immutable
            ├── stats: [rows=392.749612, distinct(1)=392.685411, null(1)=0, distinct(2)=392.742232, null(2)=0, distinct(3)=392.749612, null(3)=0, distinct(4)=1, null(4)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0]
            ├── key: (1)
            ├── fd: ()-->(9), (1)-->(2-4), (4)==(8), (8)==(4)
            ├── semi-join (hash)
            │    ├── save-table-name: q20_semi_join_4
            │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null)
+           │    ├── immutable
            │    ├── stats: [rows=9818.7403, distinct(1)=9740.19038, null(1)=0, distinct(2)=9809.64703, null(2)=0, distinct(3)=9818.7403, null(3)=0, distinct(4)=25, null(4)=0]
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-4)
@@ -92,11 +96,13 @@ sort
            │    ├── project
            │    │    ├── save-table-name: q20_project_6
            │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
+           │    │    ├── immutable
            │    │    ├── stats: [rows=36952.1991, distinct(12)=22217.3354, null(12)=0, distinct(13)=9740.19038, null(13)=0]
            │    │    ├── key: (12,13)
            │    │    └── project
            │    │         ├── save-table-name: q20_project_7
            │    │         ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) p_partkey:17(int!null)
+           │    │         ├── immutable
            │    │         ├── stats: [rows=36960.327, distinct(12)=22217.3354, null(12)=0, distinct(13)=9681.00153, null(13)=0, distinct(17)=22217.3354, null(17)=0]
            │    │         ├── key: (13,17)
            │    │         ├── fd: (12)==(17), (17)==(12)
@@ -104,12 +110,14 @@ sort
            │    │              ├── save-table-name: q20_inner_join_8
            │    │              ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) p_partkey:17(int!null) p_name:18(varchar!null) sum:42(float)
            │    │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │    │              ├── immutable
            │    │              ├── stats: [rows=36960.327, distinct(12)=22217.3354, null(12)=0, distinct(13)=9681.00153, null(13)=0, distinct(14)=34508.432, null(14)=0, distinct(17)=22217.3354, null(17)=0, distinct(18)=17907.1379, null(18)=0, distinct(42)=34508.432, null(42)=0]
            │    │              ├── key: (13,17)
            │    │              ├── fd: (12,13)-->(14,42), (17)-->(18), (12)==(17), (17)==(12)
            │    │              ├── select
            │    │              │    ├── save-table-name: q20_select_9
            │    │              │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) sum:42(float)
+           │    │              │    ├── immutable
            │    │              │    ├── stats: [rows=266100.667, distinct(12)=159991.77, null(12)=0, distinct(13)=9920, null(13)=0, distinct(14)=266100.667, null(14)=0, distinct(42)=266100.667, null(42)=0]
            │    │              │    ├── key: (12,13)
            │    │              │    ├── fd: (12,13)-->(14,42)
@@ -161,7 +169,7 @@ sort
            │    │              │    │         └── const-agg [as=ps_availqty:14, type=int, outer=(14)]
            │    │              │    │              └── ps_availqty:14 [type=int]
            │    │              │    └── filters
-           │    │              │         └── ps_availqty:14 > (sum:42 * 0.5) [type=bool, outer=(14,42), constraints=(/14: (/NULL - ])]
+           │    │              │         └── ps_availqty:14 > (sum:42 * 0.5) [type=bool, outer=(14,42), immutable, constraints=(/14: (/NULL - ])]
            │    │              ├── select
            │    │              │    ├── save-table-name: q20_select_15
            │    │              │    ├── columns: p_partkey:17(int!null) p_name:18(varchar!null)

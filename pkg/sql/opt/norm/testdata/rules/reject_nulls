@@ -256,9 +256,11 @@ HAVING sum(DISTINCT y)=1
 ----
 project
  ├── columns: sum:7!null
+ ├── immutable
  ├── fd: ()-->(7)
  └── select
       ├── columns: k:1!null sum:7!null
+      ├── immutable
       ├── key: (1)
       ├── fd: ()-->(7)
       ├── group-by
@@ -283,7 +285,7 @@ project
       │              └── sum
       │                   └── y:6
       └── filters
-           └── sum:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── sum:7 = 1 [outer=(7), immutable, constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Single max aggregate function without grouping columns.
 norm expect=RejectNullsGroupBy
@@ -651,18 +653,22 @@ HAVING string_agg(s || 'bar', ',')='foo'
 ----
 project
  ├── columns: string_agg:9!null
+ ├── immutable
  ├── fd: ()-->(9)
  └── select
       ├── columns: k:3 string_agg:9!null
+      ├── immutable
       ├── key: (3)
       ├── fd: ()-->(9)
       ├── group-by
       │    ├── columns: k:3 string_agg:9
       │    ├── grouping columns: k:3
+      │    ├── immutable
       │    ├── key: (3)
       │    ├── fd: (3)-->(9)
       │    ├── project
       │    │    ├── columns: column7:7 column8:8!null k:3
+      │    │    ├── immutable
       │    │    ├── fd: ()-->(8), (3)-->(7)
       │    │    ├── left-join (cross)
       │    │    │    ├── columns: k:3 s:6
@@ -675,7 +681,7 @@ project
       │    │    │    │    └── fd: (3)-->(6)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         ├── s:6 || 'bar' [as=column7:7, outer=(6)]
+      │    │         ├── s:6 || 'bar' [as=column7:7, outer=(6), immutable]
       │    │         └── ',' [as=column8:8]
       │    └── aggregations
       │         └── string-agg [as=string_agg:9, outer=(7,8)]
@@ -716,15 +722,18 @@ exprnorm
 select
  ├── columns: sum:6!null
  ├── cardinality: [0 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── scalar-group-by
  │    ├── columns: sum:6
  │    ├── cardinality: [1 - 1]
+ │    ├── immutable
  │    ├── key: ()
  │    ├── fd: ()-->(6)
  │    ├── inner-join-apply
  │    │    ├── columns: x:1!null u:3!null z:5
+ │    │    ├── immutable
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1,3)-->(5)
  │    │    ├── scan xy
@@ -733,6 +742,7 @@ select
  │    │    ├── left-join-apply
  │    │    │    ├── columns: u:3!null z:5
  │    │    │    ├── outer: (1)
+ │    │    │    ├── immutable
  │    │    │    ├── key: (3)
  │    │    │    ├── fd: (3)-->(5)
  │    │    │    ├── scan uv
@@ -742,6 +752,7 @@ select
  │    │    │    │    ├── columns: z:5
  │    │    │    │    ├── outer: (1,3)
  │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    ├── immutable
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(5)
  │    │    │    │    └── (x:1 + u:3,)

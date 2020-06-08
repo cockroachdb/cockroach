@@ -243,6 +243,7 @@ SELECT 9223372036854775800::INT + 9223372036854775800::INT
 values
  ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1)
  └── (9223372036854775800 + 9223372036854775800,)
@@ -265,6 +266,7 @@ SELECT (-9223372036854775800)::INT - 9223372036854775800::INT
 values
  ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1)
  └── (-9223372036854775800 - 9223372036854775800,)
@@ -287,6 +289,7 @@ SELECT 9223372036854775800::INT * 9223372036854775800::INT
 values
  ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1)
  └── (9223372036854775800 * 9223372036854775800,)
@@ -332,6 +335,7 @@ SELECT B'01' # B'11001001010101'
 values
  ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1)
  └── (B'01' # B'11001001010101',)
@@ -354,6 +358,7 @@ SELECT B'01' | B'11001001010101'
 values
  ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1)
  └── (B'01' | B'11001001010101',)
@@ -455,6 +460,7 @@ SELECT -((-9223372036854775808)::int)
 values
  ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── stats: [rows=1]
  ├── cost: 0.02
  ├── key: ()
@@ -845,10 +851,11 @@ SELECT ARRAY[i, i + 1][2] FROM a
 ----
 project
  ├── columns: array:7
+ ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2 + 1 [as=array:7, outer=(2)]
+      └── i:2 + 1 [as=array:7, outer=(2), immutable]
 
 # Fold when input is a DArray constant.
 norm expect=FoldIndirection

@@ -149,7 +149,7 @@ sort
       │    │         └── s_nationkey:4 = n1.n_nationkey:41 [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ]), fd=(4)==(41), (41)==(4)]
       │    └── projections
       │         ├── extract('year', l_shipdate:18) [as=l_year:49, type=float, outer=(18), immutable]
-      │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=volume:50, type=float, outer=(13,14)]
+      │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=volume:50, type=float, outer=(13,14), immutable]
       └── aggregations
            └── sum [as=sum:51, type=float, outer=(50)]
                 └── volume:50 [type=float]

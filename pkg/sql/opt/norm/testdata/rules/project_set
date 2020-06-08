@@ -192,8 +192,10 @@ SELECT unnest(ARRAY[x,y]), unnest(ARRAY[1,x*100]) FROM xy
 ----
 project
  ├── columns: unnest:4 unnest:5
+ ├── immutable
  └── inner-join-apply
       ├── columns: x:1!null y:2 unnest:4 unnest:5
+      ├── immutable
       ├── fd: (1)-->(2)
       ├── scan xy
       │    ├── columns: x:1!null y:2
@@ -203,6 +205,7 @@ project
       │    ├── columns: unnest:4 unnest:5
       │    ├── outer: (1,2)
       │    ├── cardinality: [2 - 2]
+      │    ├── immutable
       │    ├── (x:1, 1)
       │    └── (y:2, x:1 * 100)
       └── filters (true)

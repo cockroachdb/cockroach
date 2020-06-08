@@ -71,7 +71,7 @@ insert abcde
       │         └── cast: INT8 [as=column12:12, type=int, immutable]
       │              └── null [type=unknown]
       └── projections
-           └── plus [as=column13:13, type=int, outer=(8,10)]
+           └── plus [as=column13:13, type=int, outer=(8,10), immutable]
                 ├── plus [type=int]
                 │    ├── variable: y:8 [type=int]
                 │    └── variable: column10:10 [type=int]
@@ -139,7 +139,7 @@ project
            │         └── cast: INT8 [as=column12:12, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
-                └── plus [as=column13:13, type=int, outer=(8,10)]
+                └── plus [as=column13:13, type=int, outer=(8,10), immutable]
                      ├── plus [type=int]
                      │    ├── variable: y:8 [type=int]
                      │    └── variable: column10:10 [type=int]
@@ -190,7 +190,7 @@ project
            │         └── cast: INT8 [as=column12:12, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
-                └── plus [as=column13:13, type=int, outer=(8,10)]
+                └── plus [as=column13:13, type=int, outer=(8,10), immutable]
                      ├── plus [type=int]
                      │    ├── variable: y:8 [type=int]
                      │    └── variable: column10:10 [type=int]
@@ -242,7 +242,7 @@ insert abcde
       │         └── cast: INT8 [as=column11:11, type=int, immutable]
       │              └── null [type=unknown]
       └── projections
-           └── plus [as=column12:12, type=int, outer=(8,9)]
+           └── plus [as=column12:12, type=int, outer=(8,9), immutable]
                 ├── plus [type=int]
                 │    ├── variable: column2:8 [type=int]
                 │    └── variable: column9:9 [type=int]
@@ -310,7 +310,7 @@ project
            │         └── cast: INT8 [as=column13:13, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
-                └── plus [as=column14:14, type=int, outer=(10,11)]
+                └── plus [as=column14:14, type=int, outer=(10,11), immutable]
                      ├── plus [type=int]
                      │    ├── variable: int8:10 [type=int]
                      │    └── variable: column11:11 [type=int]
