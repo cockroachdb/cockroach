@@ -111,7 +111,7 @@ func TestParallelImportProducerHandlesConsumerErrors(t *testing.T) {
 	descr := sqlbase.TableDescriptor{
 		Name: "test",
 		Columns: []sqlbase.ColumnDescriptor{
-			{Name: "column", ID: 1, Type: types.Int, Nullable: true},
+			{Name: "column", ID: 1, Type: *types.Int, Nullable: true},
 		},
 	}
 
@@ -149,7 +149,7 @@ func TestParallelImportProducerHandlesCancellation(t *testing.T) {
 	descr := sqlbase.TableDescriptor{
 		Name: "test",
 		Columns: []sqlbase.ColumnDescriptor{
-			{Name: "column", ID: 1, Type: types.Int, Nullable: true},
+			{Name: "column", ID: 1, Type: *types.Int, Nullable: true},
 		},
 	}
 
