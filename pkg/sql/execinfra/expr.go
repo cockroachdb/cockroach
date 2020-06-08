@@ -139,6 +139,28 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return &n
 }
 
+// DeserializeExpr deserializes expr, binds the indexed variables to the
+// provided IndexedVarHelper, and evaluates any constants in the expression.
+func DeserializeExpr(
+	expr string, evalCtx *tree.EvalContext, vars *tree.IndexedVarHelper,
+) (tree.TypedExpr, error) {
+	if expr == "" {
+		return nil, nil
+	}
+
+	semaContext := tree.MakeSemaContext()
+	semaContext.TypeResolver = evalCtx.TypeResolver
+	deserializedExpr, err := processExpression(execinfrapb.Expression{Expr: expr}, evalCtx, &semaContext, vars)
+	if err != nil {
+		return deserializedExpr, err
+	}
+	var t transform.ExprTransformContext
+	if t.AggregateInExpr(deserializedExpr, evalCtx.SessionData.SearchPath) {
+		return nil, errors.Errorf("expression '%s' has aggregate", deserializedExpr)
+	}
+	return deserializedExpr, nil
+}
+
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
 	expr execinfrapb.Expression, types []*types.T, evalCtx *tree.EvalContext,
@@ -157,17 +179,8 @@ func (eh *ExprHelper) Init(
 		return nil
 	}
 	var err error
-	semaContext := tree.MakeSemaContext()
-	semaContext.TypeResolver = evalCtx.TypeResolver
-	eh.Expr, err = processExpression(expr, evalCtx, &semaContext, &eh.Vars)
-	if err != nil {
-		return err
-	}
-	var t transform.ExprTransformContext
-	if t.AggregateInExpr(eh.Expr, evalCtx.SessionData.SearchPath) {
-		return errors.Errorf("expression '%s' has aggregate", eh.Expr)
-	}
-	return nil
+	eh.Expr, err = DeserializeExpr(expr.Expr, evalCtx, &eh.Vars)
+	return err
 }
 
 // EvalFilter is used for filter expressions; it evaluates the expression and
