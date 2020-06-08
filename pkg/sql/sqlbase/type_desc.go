@@ -123,15 +123,6 @@ func makeImmutableTypeDescriptor(desc TypeDescriptor) ImmutableTypeDescriptor {
 	return ImmutableTypeDescriptor{TypeDescriptor: desc}
 }
 
-// DescriptorProto returns a Descriptor for serialization.
-func (desc *ImmutableTypeDescriptor) DescriptorProto() *Descriptor {
-	return &Descriptor{
-		Union: &Descriptor_Type{
-			Type: &desc.TypeDescriptor,
-		},
-	}
-}
-
 // DatabaseDesc implements the ObjectDescriptor interface.
 func (desc *ImmutableTypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
 	return nil
@@ -152,20 +143,29 @@ func (desc *ImmutableTypeDescriptor) TypeDesc() *TypeDescriptor {
 	return &desc.TypeDescriptor
 }
 
+// DescriptorProto returns a Descriptor for serialization.
+func (desc *TypeDescriptor) DescriptorProto() *Descriptor {
+	return &Descriptor{
+		Union: &Descriptor_Type{
+			Type: desc,
+		},
+	}
+}
+
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *ImmutableTypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
+func (desc *TypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 	return TableDescriptor_DISABLED
 }
 
 // GetPrivileges implements the DescriptorProto interface.
 //
 // Types do not carry privileges.
-func (desc *ImmutableTypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
+func (desc *TypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
 	return nil
 }
 
 // TypeName implements the DescriptorProto interface.
-func (desc *ImmutableTypeDescriptor) TypeName() string {
+func (desc *TypeDescriptor) TypeName() string {
 	return "type"
 }
 
@@ -280,4 +280,23 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
 	}
+}
+
+// GetTypeDescriptorClosure returns a slice of all type descriptor IDs that are
+// referenced by this input types.T.
+func GetTypeDescriptorClosure(typ *types.T) IDs {
+	if !typ.UserDefined() {
+		return IDs{}
+	}
+	ret := IDs{ID(typ.StableTypeID())}
+	if typ.Family() == types.ArrayFamily {
+		// If we have an array type, then maybe get the element type ID.
+		if typ.ArrayContents().UserDefined() {
+			ret = append(ret, ID(typ.ArrayContents().StableTypeID()))
+		}
+	} else {
+		// Otherwise, take the array type ID.
+		ret = append(ret, ID(typ.StableArrayTypeID()))
+	}
+	return ret
 }

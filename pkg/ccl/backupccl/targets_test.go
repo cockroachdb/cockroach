@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,6 +36,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	{
 		// Make shorthand type names for syntactic sugar.
 		type tbDesc = sqlbase.TableDescriptor
+		type typDesc = sqlbase.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
 		mkTable := func(descriptor tbDesc) sqlbase.Descriptor {
 			desc := sqlbase.NewImmutableTableDescriptor(descriptor)
@@ -44,6 +46,9 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		mkDB := func(id sqlbase.ID, name string) sqlbase.Descriptor {
 			return *sqlbase.NewInitialDatabaseDescriptor(id, name).DescriptorProto()
 		}
+		mkTyp := func(desc typDesc) sqlbase.Descriptor {
+			return *sqlbase.NewImmutableTypeDescriptor(desc).DescriptorProto()
+		}
 		descriptors = []sqlbase.Descriptor{
 			mkDB(0, "system"),
 			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
@@ -52,6 +57,14 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: sqlbase.TableDescriptor_OFFLINE}),
 			mkDB(3, "data"),
 			mkDB(5, "empty"),
+			// Create some user defined types and tables that reference them.
+			mkDB(7, "udts"),
+			mkTyp(sqlbase.TypeDescriptor{ParentID: 7, ID: 8, Name: "enum1", ArrayTypeID: 9, Kind: sqlbase.TypeDescriptor_ENUM}),
+			mkTyp(sqlbase.TypeDescriptor{ParentID: 7, ID: 9, Name: "_enum1", Kind: sqlbase.TypeDescriptor_ALIAS, Alias: types.MakeEnum(8, 9)}),
+			mkTable(sqlbase.TableDescriptor{ParentID: 7, ID: 10, Name: "enum_tbl", Columns: []sqlbase.ColumnDescriptor{{ID: 0, Type: types.MakeEnum(8, 9)}}}),
+			mkTable(sqlbase.TableDescriptor{ParentID: 7, ID: 11, Name: "enum_arr_tbl", Columns: []sqlbase.ColumnDescriptor{{ID: 0, Type: types.MakeArray(types.MakeEnum(8, 9))}}}),
+			mkTyp(sqlbase.TypeDescriptor{ParentID: 7, ID: 12, Name: "enum2", ArrayTypeID: 13, Kind: sqlbase.TypeDescriptor_ENUM}),
+			mkTyp(sqlbase.TypeDescriptor{ParentID: 7, ID: 13, Name: "_enum2", Kind: sqlbase.TypeDescriptor_ALIAS, Alias: types.MakeEnum(12, 13)}),
 		}
 	}
 
@@ -121,6 +134,12 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"system", `TABLE offline`, nil, nil, `table "offline" does not exist`},
 		{"", `TABLE system.offline`, []string{"system", "foo"}, nil, `table "system.public.offline" does not exist`},
 		{"system", `TABLE *`, []string{"system", "foo", "bar"}, nil, ``},
+		// If we backup udts, then all tables and types (even unused) should be present.
+		{"", "DATABASE udts", []string{"udts", "enum1", "_enum1", "enum2", "_enum2", "enum_tbl", "enum_arr_tbl"}, []string{"udts"}, ``},
+		// Backing up enum_tbl should pull in both the enum and its array type.
+		{"", "TABLE udts.enum_tbl", []string{"udts", "enum1", "_enum1", "enum_tbl"}, nil, ``},
+		// Backing up enum_arr_tbl should also pull in both the enum and its array type.
+		{"", "TABLE udts.enum_arr_tbl", []string{"udts", "enum1", "_enum1", "enum_arr_tbl"}, nil, ``},
 	}
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {

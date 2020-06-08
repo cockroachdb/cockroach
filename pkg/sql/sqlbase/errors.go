@@ -129,6 +129,24 @@ func NewDatabaseAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateDatabase, "database %q already exists", name)
 }
 
+// MakeObjectAlreadyExistsError creates an error for a namespace collision
+// with an arbitrary descriptor type.
+func MakeObjectAlreadyExistsError(collidingObject *Descriptor, name string) error {
+	switch collidingObject.Union.(type) {
+	case *Descriptor_Table:
+		return NewRelationAlreadyExistsError(name)
+	case *Descriptor_Type:
+		return NewTypeAlreadyExistsError(name)
+	case *Descriptor_Database:
+		return NewDatabaseAlreadyExistsError(name)
+	case *Descriptor_Schema:
+		// TODO(ajwerner): Add a case for an existing schema object.
+		return errors.AssertionFailedf("schema exists with name %v", name)
+	default:
+		return errors.AssertionFailedf("unknown type %T exists with name %v", collidingObject.Union, name)
+	}
+}
+
 // NewRelationAlreadyExistsError creates an error for a preexisting relation.
 func NewRelationAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateRelation, "relation %q already exists", name)
