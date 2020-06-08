@@ -104,6 +104,9 @@ type tpchVecTestCase interface {
 	vectorizeOptions() []bool
 	// numRunsPerQuery is the number of times each tpch query should be run.
 	numRunsPerQuery() int
+	// getQueriesToSkip returns the queries that should be skipped (which is
+	// a mapping from query number to the reason for skipping).
+	getQueriesToSkip(version crdbVersion) map[int]string
 	// preTestRunHook is called before any tpch query is run. Can be used to
 	// perform setup.
 	preTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion)
@@ -125,6 +128,10 @@ func (b tpchVecTestCaseBase) vectorizeOptions() []bool {
 
 func (b tpchVecTestCaseBase) numRunsPerQuery() int {
 	return 1
+}
+
+func (b tpchVecTestCaseBase) getQueriesToSkip(version crdbVersion) map[int]string {
+	return queriesToSkipByVersion[version]
 }
 
 func (b tpchVecTestCaseBase) preTestRunHook(
@@ -154,14 +161,16 @@ const (
 
 type tpchVecPerfTest struct {
 	tpchVecTestCaseBase
-	timeByQueryNum []map[int][]float64
+	disableStatsCreation bool
+	timeByQueryNum       []map[int][]float64
 }
 
 var _ tpchVecTestCase = &tpchVecPerfTest{}
 
-func newTpchVecPerfTest() *tpchVecPerfTest {
+func newTpchVecPerfTest(disableStatsCreation bool) *tpchVecPerfTest {
 	return &tpchVecPerfTest{
-		timeByQueryNum: []map[int][]float64{make(map[int][]float64), make(map[int][]float64)},
+		disableStatsCreation: disableStatsCreation,
+		timeByQueryNum:       []map[int][]float64{make(map[int][]float64), make(map[int][]float64)},
 	}
 }
 
@@ -175,10 +184,22 @@ func (p tpchVecPerfTest) numRunsPerQuery() int {
 	return tpchPerfTestNumRunsPerQuery
 }
 
+func (p tpchVecPerfTest) getQueriesToSkip(version crdbVersion) map[int]string {
+	if p.disableStatsCreation {
+		return map[int]string{
+			9: "takes too long without stats",
+		}
+	}
+	return queriesToSkipByVersion[version]
+}
+
 func (p tpchVecPerfTest) preTestRunHook(
 	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
 ) {
 	p.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version)
+	if !p.disableStatsCreation {
+		createStatsFromTables(t, conn, tpchTables)
+	}
 	// TODO(yuzefovich): remove this once we figure out the issue with random
 	// performance hits on query 7.
 	for node := 1; node <= c.spec.NodeCount; node++ {
@@ -216,7 +237,7 @@ func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bo
 }
 
 func (p *tpchVecPerfTest) postTestRunHook(t *test, conn *gosql.DB, version crdbVersion) {
-	queriesToSkip := queriesToSkipByVersion[version]
+	queriesToSkip := p.getQueriesToSkip(version)
 	t.Status("comparing the runtimes (only median values for each query are compared)")
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 		if _, skipped := queriesToSkip[queryNum]; skipped {
@@ -302,6 +323,7 @@ func (d tpchVecDiskTest) preTestRunHook(
 	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
 ) {
 	d.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version)
+	createStatsFromTables(t, conn, tpchTables)
 	// In order to stress the disk spilling of the vectorized
 	// engine, we will set workmem limit to a random value in range
 	// [16KiB, 256KiB).
@@ -332,6 +354,7 @@ func (b tpchVecSmallBatchSizeTest) preTestRunHook(
 	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
 ) {
 	b.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version)
+	createStatsFromTables(t, conn, tpchTables)
 	rng, _ := randutil.NewPseudoRand()
 	setSmallBatchSize(t, conn, rng)
 }
@@ -340,7 +363,7 @@ func baseTestRun(
 	ctx context.Context, t *test, c *cluster, version crdbVersion, tc tpchVecTestCase,
 ) {
 	firstNode := c.Node(1)
-	queriesToSkip := queriesToSkipByVersion[version]
+	queriesToSkip := tc.getQueriesToSkip(version)
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 		for _, vectorize := range tc.vectorizeOptions() {
 			if reason, skip := queriesToSkip[queryNum]; skip {
@@ -373,6 +396,7 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
 ) {
 	s.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version)
+	createStatsFromTables(t, conn, tpchTables)
 	const smithcmpSHA = "a3f41f5ba9273249c5ecfa6348ea8ee3ac4b77e3"
 	node := c.Node(1)
 	if local && runtime.GOOS != "linux" {
@@ -430,6 +454,7 @@ func runTPCHVec(
 
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)
+	disableVectorizeRowCountThresholdHeuristic(t, conn)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, newMonitor(ctx, c), c.All()); err != nil {
 		t.Fatal(err)
@@ -441,7 +466,6 @@ func runTPCHVec(
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
 	waitForFullReplication(t, conn)
-	createStatsFromTables(t, conn, tpchTables)
 	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
 	if err != nil {
 		t.Fatal(err)
@@ -463,7 +487,7 @@ func registerTPCHVec(r *testRegistry) {
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v19.2.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, newTpchVecPerfTest(), baseTestRun)
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(false /* disableStatsCreation */), baseTestRun)
 		},
 	})
 
@@ -498,6 +522,16 @@ func registerTPCHVec(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
+		},
+	})
+
+	r.Add(testSpec{
+		Name:       "tpchvec/perf_no_stats",
+		Owner:      OwnerSQLExec,
+		Cluster:    makeClusterSpec(tpchVecNodeCount),
+		MinVersion: "v20.2.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(true /* disableStatsCreation */), baseTestRun)
 		},
 	})
 }
