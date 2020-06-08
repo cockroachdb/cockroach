@@ -145,7 +145,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	}
 
 	exists, _, err := sqlbase.LookupPublicTableID(
-		params.ctx, params.p.txn, targetDbDesc.ID, newTn.Table(),
+		params.ctx, p.execCfg.Settings, params.p.txn, targetDbDesc.ID, newTn.Table(),
 	)
 	if err == nil && exists {
 		return sqlbase.NewRelationAlreadyExistsError(newTn.Table())

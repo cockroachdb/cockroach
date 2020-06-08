@@ -852,7 +852,9 @@ func prepareNewTableDescsForIngestion(
 ) ([]*sqlbase.TableDescriptor, error) {
 	var tableDescs []*sqlbase.TableDescriptor
 	for _, i := range tables {
-		if err := backupccl.CheckTableExists(ctx, txn, parentID, i.Desc.Name); err != nil {
+		if err := backupccl.CheckTableExists(
+			ctx, p.ExecCfg().Settings, txn, parentID, i.Desc.Name,
+		); err != nil {
 			return nil, err
 		}
 		tableDescs = append(tableDescs, i.Desc)
