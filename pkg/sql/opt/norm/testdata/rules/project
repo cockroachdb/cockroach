@@ -86,11 +86,12 @@ SELECT 1+b.x FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
  ├── columns: "?column?":7!null
+ ├── immutable
  ├── scan b
  │    ├── columns: b.x:1!null
  │    └── key: (1)
  └── projections
-      └── b.x:1 + 1 [as="?column?":7, outer=(1)]
+      └── b.x:1 + 1 [as="?column?":7, outer=(1), immutable]
 
 # Case with no references to the left side.
 norm expect=EliminateJoinUnderProjectLeft
@@ -124,6 +125,7 @@ SELECT b.x, b.z, 1+a.x FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
  ├── columns: x:1!null z:2 "?column?":7
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,7)
  ├── left-join (hash)
@@ -141,7 +143,7 @@ project
  │    └── filters
  │         └── b.x:1 = a.x:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  └── projections
-      └── a.x:3 + 1 [as="?column?":7, outer=(3)]
+      └── a.x:3 + 1 [as="?column?":7, outer=(3), immutable]
 
 # No-op case because r2 is nullable, and therefore rows may not match despite
 # the fact that it is a foreign key.
@@ -306,6 +308,7 @@ SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
  ├── columns: r:7
+ ├── immutable
  ├── inner-join (hash)
  │    ├── columns: a.x:1!null y:2 b.x:5!null
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -321,7 +324,7 @@ project
  │    └── filters
  │         └── a.x:1 = b.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
-      └── y:2 + 1 [as=r:7, outer=(2)]
+      └── y:2 + 1 [as=r:7, outer=(2), immutable]
 
 # Outer and inner projections have synthesized columns.
 norm expect=MergeProjects
@@ -329,11 +332,12 @@ SELECT y1, f+1 FROM (SELECT y+1 AS y1, f FROM a)
 ----
 project
  ├── columns: y1:5 "?column?":6
+ ├── immutable
  ├── scan a
  │    └── columns: y:2 f:3
  └── projections
-      ├── f:3 + 1.0 [as="?column?":6, outer=(3)]
-      └── y:2 + 1 [as=y1:5, outer=(2)]
+      ├── f:3 + 1.0 [as="?column?":6, outer=(3), immutable]
+      └── y:2 + 1 [as=y1:5, outer=(2), immutable]
 
 # Multiple synthesized columns in both outer and inner projections.
 norm expect=MergeProjects
@@ -341,15 +345,16 @@ SELECT y1, f+1, x2, s||'foo' FROM (SELECT y+1 AS y1, f, s, x*2 AS x2 FROM a)
 ----
 project
  ├── columns: y1:5 "?column?":7 x2:6!null "?column?":8
+ ├── immutable
  ├── scan a
  │    ├── columns: x:1!null y:2 f:3 s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── projections
-      ├── f:3 + 1.0 [as="?column?":7, outer=(3)]
-      ├── s:4 || 'foo' [as="?column?":8, outer=(4)]
-      ├── y:2 + 1 [as=y1:5, outer=(2)]
-      └── x:1 * 2 [as=x2:6, outer=(1)]
+      ├── f:3 + 1.0 [as="?column?":7, outer=(3), immutable]
+      ├── s:4 || 'foo' [as="?column?":8, outer=(4), immutable]
+      ├── y:2 + 1 [as=y1:5, outer=(2), immutable]
+      └── x:1 * 2 [as=x2:6, outer=(1), immutable]
 
 # Outer project selects subset of inner columns.
 norm expect=MergeProjects
@@ -357,10 +362,11 @@ SELECT y1 FROM (SELECT y+1 AS y1, f*2 AS f2 FROM a)
 ----
 project
  ├── columns: y1:5
+ ├── immutable
  ├── scan a
  │    └── columns: y:2
  └── projections
-      └── y:2 + 1 [as=y1:5, outer=(2)]
+      └── y:2 + 1 [as=y1:5, outer=(2), immutable]
 
 # Don't merge, since outer depends on inner.
 norm expect-not=MergeProjects
@@ -368,14 +374,16 @@ SELECT y1*2, y1/2 FROM (SELECT y+1 AS y1 FROM a)
 ----
 project
  ├── columns: "?column?":6 "?column?":7
+ ├── immutable
  ├── project
  │    ├── columns: y1:5
+ │    ├── immutable
  │    ├── scan a
  │    │    └── columns: y:2
  │    └── projections
- │         └── y:2 + 1 [as=y1:5, outer=(2)]
+ │         └── y:2 + 1 [as=y1:5, outer=(2), immutable]
  └── projections
-      ├── y1:5 * 2 [as="?column?":6, outer=(5)]
+      ├── y1:5 * 2 [as="?column?":6, outer=(5), immutable]
       └── y1:5 / 2 [as="?column?":7, outer=(5)]
 
 # Discard all inner columns.
@@ -459,7 +467,7 @@ project
  │    ├── fd: ()-->(1)
  │    └── ($1::INT8,)
  └── projections
-      ├── column1:1 + 1 [as="?column?":3, outer=(1)]
+      ├── column1:1 + 1 [as="?column?":3, outer=(1), immutable]
       └── 3 [as="?column?":4]
 
 # --------------------------------------------------
@@ -525,16 +533,19 @@ SELECT (SELECT (tup).@1 * x FROM b) FROM (VALUES ((1,2)), ((3,4))) AS v(tup)
 project
  ├── columns: "?column?":5
  ├── cardinality: [1 - ]
+ ├── immutable
  ├── ensure-distinct-on
  │    ├── columns: "?column?":4 rownum:8!null
  │    ├── grouping columns: rownum:8!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── cardinality: [1 - ]
+ │    ├── immutable
  │    ├── key: (8)
  │    ├── fd: (8)-->(4)
  │    ├── left-join-apply
  │    │    ├── columns: "?column?":4 column1_1:6!null rownum:8!null
  │    │    ├── cardinality: [2 - ]
+ │    │    ├── immutable
  │    │    ├── fd: (8)-->(6)
  │    │    ├── ordinality
  │    │    │    ├── columns: column1_1:6!null rownum:8!null
@@ -549,11 +560,12 @@ project
  │    │    ├── project
  │    │    │    ├── columns: "?column?":4
  │    │    │    ├── outer: (6)
+ │    │    │    ├── immutable
  │    │    │    ├── scan b
  │    │    │    │    ├── columns: x:2!null
  │    │    │    │    └── key: (2)
  │    │    │    └── projections
- │    │    │         └── x:2 * column1_1:6 [as="?column?":4, outer=(2,6)]
+ │    │    │         └── x:2 * column1_1:6 [as="?column?":4, outer=(2,6), immutable]
  │    │    └── filters (true)
  │    └── aggregations
  │         └── const-agg [as="?column?":4, outer=(4)]
@@ -838,6 +850,7 @@ SELECT x*1, x+1 FROM (VALUES (1), (2)) f(x)
 project
  ├── columns: "?column?":2!null "?column?":3!null
  ├── cardinality: [2 - 2]
+ ├── immutable
  ├── fd: (2)-->(3)
  ├── values
  │    ├── columns: "?column?":2!null
@@ -845,7 +858,7 @@ project
  │    ├── (1,)
  │    └── (2,)
  └── projections
-      └── "?column?":2 + 1 [as="?column?":3, outer=(2)]
+      └── "?column?":2 + 1 [as="?column?":3, outer=(2), immutable]
 
 # Case with a subquery reference to a remapped column.
 norm expect=PushColumnRemappingIntoValues

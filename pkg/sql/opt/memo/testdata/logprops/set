@@ -102,6 +102,7 @@ SELECT * FROM xy WHERE (SELECT x, u FROM uv UNION SELECT y, v FROM uv) = (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1)
@@ -112,7 +113,7 @@ select
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── filters
-      └── eq [type=bool, outer=(1,2), correlated-subquery]
+      └── eq [type=bool, outer=(1,2), immutable, correlated-subquery]
            ├── subquery [type=tuple{int, int}]
            │    └── max1-row
            │         ├── columns: column13:13(tuple{int, int})

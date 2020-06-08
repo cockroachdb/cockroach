@@ -1988,18 +1988,22 @@ WHERE
 ----
 project
  ├── columns: customer1_1_0_:1!null ordernum2_1_0_:2!null orderdat3_1_0_:3!null formula101_0_:18 customer1_2_1_:4 ordernum2_2_1_:5 producti3_2_1_:6 customer1_2_2_:4 ordernum2_2_2_:5 producti3_2_2_:6 quantity4_2_2_:7
+ ├── immutable
  ├── key: (6)
  ├── fd: ()-->(1-3), (6)-->(4,5,7,18)
  ├── group-by
  │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:4 lineitems1_.ordernumber:5 lineitems1_.productid:6 lineitems1_.quantity:7 sum:17
  │    ├── grouping columns: lineitems1_.productid:6
+ │    ├── immutable
  │    ├── key: (6)
  │    ├── fd: ()-->(1-3), (6)-->(1-5,7,17)
  │    ├── right-join (hash)
  │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:4 lineitems1_.ordernumber:5 lineitems1_.productid:6 lineitems1_.quantity:7 li.customerid:8 li.ordernumber:9 column16:16
+ │    │    ├── immutable
  │    │    ├── fd: ()-->(1-3), (6)-->(4,5,7)
  │    │    ├── project
  │    │    │    ├── columns: column16:16 li.customerid:8!null li.ordernumber:9!null
+ │    │    │    ├── immutable
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:8!null li.ordernumber:9!null li.productid:10!null li.quantity:11 p.productid:12!null cost:14
  │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -2016,7 +2020,7 @@ project
  │    │    │    │    └── filters
  │    │    │    │         └── li.productid:10 = p.productid:12 [outer=(10,12), constraints=(/10: (/NULL - ]; /12: (/NULL - ]), fd=(10)==(12), (12)==(10)]
  │    │    │    └── projections
- │    │    │         └── li.quantity:11 * cost:14 [as=column16:16, outer=(11,14)]
+ │    │    │         └── li.quantity:11 * cost:14 [as=column16:16, outer=(11,14), immutable]
  │    │    ├── left-join (merge)
  │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:4 lineitems1_.ordernumber:5 lineitems1_.productid:6 lineitems1_.quantity:7
  │    │    │    ├── left ordering: +1,+2
@@ -2110,25 +2114,30 @@ FROM
 ----
 project
  ├── columns: customer1_0_0_:1!null customer1_1_1_:4 ordernum2_1_1_:5 customer1_2_2_:7 ordernum2_2_2_:8 producti3_2_2_:9 producti1_3_3_:11 name2_0_0_:2!null address3_0_0_:3!null orderdat3_1_1_:6 formula103_1_:30 customer1_1_0__:4 ordernum2_1_0__:5 ordernum2_0__:5 quantity4_2_2_:10 customer1_2_1__:7 ordernum2_2_1__:8 producti3_2_1__:9 descript2_3_3_:12 cost3_3_3_:13 numberav4_3_3_:14 formula104_3_:31
+ ├── immutable
  ├── key: (1,4,5,7-9)
  ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,30,31)
  ├── group-by
  │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24 sum:29
  │    ├── grouping columns: customer0_.customerid:1!null orders1_.customerid:4 orders1_.ordernumber:5 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9
+ │    ├── immutable
  │    ├── key: (1,4,5,7-9)
  │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24,29)
  │    ├── left-join (hash)
  │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24 li.productid:27 li.quantity:28
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── immutable
  │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24)
  │    │    ├── group-by
  │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 sum:24
  │    │    │    ├── grouping columns: customer0_.customerid:1!null orders1_.customerid:4 orders1_.ordernumber:5 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9
+ │    │    │    ├── immutable
  │    │    │    ├── key: (1,4,5,7-9)
  │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(2,3,6,10-14,24)
  │    │    │    ├── left-join (hash)
  │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14 li.customerid:15 li.ordernumber:16 column23:23
  │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    │    │    ├── immutable
  │    │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9)-->(11-14)
  │    │    │    │    ├── left-join (hash)
  │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:4 orders1_.ordernumber:5 orderdate:6 lineitems2_.customerid:7 lineitems2_.ordernumber:8 lineitems2_.productid:9 lineitems2_.quantity:10 product3_.productid:11 product3_.description:12 product3_.cost:13 product3_.numberavailable:14
@@ -2172,6 +2181,7 @@ project
  │    │    │    │    │         └── lineitems2_.productid:9 = product3_.productid:11 [outer=(9,11), constraints=(/9: (/NULL - ]; /11: (/NULL - ]), fd=(9)==(11), (11)==(9)]
  │    │    │    │    ├── project
  │    │    │    │    │    ├── columns: column23:23 li.customerid:15!null li.ordernumber:16!null
+ │    │    │    │    │    ├── immutable
  │    │    │    │    │    ├── inner-join (hash)
  │    │    │    │    │    │    ├── columns: li.customerid:15!null li.ordernumber:16!null li.productid:17!null li.quantity:18 p.productid:19!null p.cost:21
  │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -2188,7 +2198,7 @@ project
  │    │    │    │    │    │    └── filters
  │    │    │    │    │    │         └── li.productid:17 = p.productid:19 [outer=(17,19), constraints=(/17: (/NULL - ]; /19: (/NULL - ]), fd=(17)==(19), (19)==(17)]
  │    │    │    │    │    └── projections
- │    │    │    │    │         └── li.quantity:18 * p.cost:21 [as=column23:23, outer=(18,21)]
+ │    │    │    │    │         └── li.quantity:18 * p.cost:21 [as=column23:23, outer=(18,21), immutable]
  │    │    │    │    └── filters
  │    │    │    │         ├── li.customerid:15 = orders1_.customerid:4 [outer=(4,15), constraints=(/4: (/NULL - ]; /15: (/NULL - ]), fd=(4)==(15), (15)==(4)]
  │    │    │    │         └── li.ordernumber:16 = orders1_.ordernumber:5 [outer=(5,16), constraints=(/5: (/NULL - ]; /16: (/NULL - ]), fd=(5)==(16), (16)==(5)]
@@ -2274,18 +2284,22 @@ WHERE
 ----
 project
  ├── columns: customer1_1_0_:1!null ordernum2_1_0_:2!null orderdat3_1_0_:3!null formula105_0_:18 customer1_2_1_:4 ordernum2_2_1_:5 producti3_2_1_:6 customer1_2_2_:4 ordernum2_2_2_:5 producti3_2_2_:6 quantity4_2_2_:7
+ ├── immutable
  ├── key: (6)
  ├── fd: ()-->(1-3), (6)-->(4,5,7,18)
  ├── group-by
  │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:4 lineitems1_.ordernumber:5 lineitems1_.productid:6 lineitems1_.quantity:7 sum:17
  │    ├── grouping columns: lineitems1_.productid:6
+ │    ├── immutable
  │    ├── key: (6)
  │    ├── fd: ()-->(1-3), (6)-->(1-5,7,17)
  │    ├── right-join (hash)
  │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:4 lineitems1_.ordernumber:5 lineitems1_.productid:6 lineitems1_.quantity:7 li.customerid:8 li.ordernumber:9 column16:16
+ │    │    ├── immutable
  │    │    ├── fd: ()-->(1-3), (6)-->(4,5,7)
  │    │    ├── project
  │    │    │    ├── columns: column16:16 li.customerid:8!null li.ordernumber:9!null
+ │    │    │    ├── immutable
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:8!null li.ordernumber:9!null li.productid:10!null li.quantity:11 p.productid:12!null cost:14
  │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -2302,7 +2316,7 @@ project
  │    │    │    │    └── filters
  │    │    │    │         └── li.productid:10 = p.productid:12 [outer=(10,12), constraints=(/10: (/NULL - ]; /12: (/NULL - ]), fd=(10)==(12), (12)==(10)]
  │    │    │    └── projections
- │    │    │         └── li.quantity:11 * cost:14 [as=column16:16, outer=(11,14)]
+ │    │    │         └── li.quantity:11 * cost:14 [as=column16:16, outer=(11,14), immutable]
  │    │    ├── left-join (merge)
  │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null lineitems1_.customerid:4 lineitems1_.ordernumber:5 lineitems1_.productid:6 lineitems1_.quantity:7
  │    │    │    ├── left ordering: +1,+2
@@ -2363,16 +2377,19 @@ FROM
 ----
 project
  ├── columns: customer1_10_:1!null ordernum2_10_:2!null orderdat3_10_:3!null formula273_:14
+ ├── immutable
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,14)
  ├── group-by
  │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null sum:13
  │    ├── grouping columns: order0_.customerid:1!null order0_.ordernumber:2!null
+ │    ├── immutable
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3,13)
  │    ├── left-join (hash)
  │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null li.customerid:4 li.ordernumber:5 column12:12
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │    │    ├── immutable
  │    │    ├── fd: (1,2)-->(3)
  │    │    ├── scan order0_
  │    │    │    ├── columns: order0_.customerid:1!null order0_.ordernumber:2!null orderdate:3!null
@@ -2380,6 +2397,7 @@ project
  │    │    │    └── fd: (1,2)-->(3)
  │    │    ├── project
  │    │    │    ├── columns: column12:12 li.customerid:4!null li.ordernumber:5!null
+ │    │    │    ├── immutable
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: li.customerid:4!null li.ordernumber:5!null li.productid:6!null quantity:7 p.productid:8!null cost:10
  │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -2396,7 +2414,7 @@ project
  │    │    │    │    └── filters
  │    │    │    │         └── li.productid:6 = p.productid:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │    │    │    └── projections
- │    │    │         └── quantity:7 * cost:10 [as=column12:12, outer=(7,10)]
+ │    │    │         └── quantity:7 * cost:10 [as=column12:12, outer=(7,10), immutable]
  │    │    └── filters
  │    │         ├── li.customerid:4 = order0_.customerid:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │    │         └── li.ordernumber:5 = order0_.ordernumber:2 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]

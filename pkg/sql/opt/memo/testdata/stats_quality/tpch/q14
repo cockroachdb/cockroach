@@ -42,12 +42,14 @@ project
  │    ├── save-table-name: q14_scalar_group_by_2
  │    ├── columns: sum:27(float) sum:29(float)
  │    ├── cardinality: [1 - 1]
+ │    ├── immutable
  │    ├── stats: [rows=1, distinct(27)=1, null(27)=0, distinct(29)=1, null(29)=0, distinct(27,29)=1, null(27,29)=0]
  │    ├── key: ()
  │    ├── fd: ()-->(27,29)
  │    ├── project
  │    │    ├── save-table-name: q14_project_3
  │    │    ├── columns: column26:26(float!null) column28:28(float!null)
+ │    │    ├── immutable
  │    │    ├── stats: [rows=82726.8788, distinct(26)=82726.8788, null(26)=0, distinct(28)=52210.2591, null(28)=0]
  │    │    ├── inner-join (hash)
  │    │    │    ├── save-table-name: q14_inner_join_4
@@ -83,8 +85,8 @@ project
  │    │    │    └── filters
  │    │    │         └── l_partkey:2 = p_partkey:17 [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
  │    │    └── projections
- │    │         ├── CASE WHEN p_type:21 LIKE 'PROMO%' THEN l_extendedprice:6 * (1.0 - l_discount:7) ELSE 0.0 END [as=column26:26, type=float, outer=(6,7,21)]
- │    │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column28:28, type=float, outer=(6,7)]
+ │    │         ├── CASE WHEN p_type:21 LIKE 'PROMO%' THEN l_extendedprice:6 * (1.0 - l_discount:7) ELSE 0.0 END [as=column26:26, type=float, outer=(6,7,21), immutable]
+ │    │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column28:28, type=float, outer=(6,7), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:27, type=float, outer=(26)]
  │         │    └── column26:26 [type=float]

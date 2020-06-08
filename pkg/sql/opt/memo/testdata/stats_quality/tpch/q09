@@ -159,7 +159,7 @@ sort
       │    │         └── p_name:2 LIKE '%green%' [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    └── projections
       │         ├── extract('year', o_orderdate:42) [as=o_year:51, type=float, outer=(42), immutable]
-      │         └── (l_extendedprice:22 * (1.0 - l_discount:23)) - (ps_supplycost:36 * l_quantity:21) [as=amount:52, type=float, outer=(21-23,36)]
+      │         └── (l_extendedprice:22 * (1.0 - l_discount:23)) - (ps_supplycost:36 * l_quantity:21) [as=amount:52, type=float, outer=(21-23,36), immutable]
       └── aggregations
            └── sum [as=sum:53, type=float, outer=(52)]
                 └── amount:52 [type=float]

@@ -103,7 +103,7 @@ select
  │    ├── (0.00,)
  │    └── (0.000,)
  └── filters
-      ├── column1:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+      ├── column1:1 = 0 [outer=(1), immutable, constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
       └── column1:1::STRING = '0.00' [outer=(1), immutable]
 
 # The rule should trigger, but not inline the composite type.
@@ -122,7 +122,7 @@ select
  │    ├── (0.00, 'b')
  │    └── (0.000, 'b')
  └── filters
-      ├── column1:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+      ├── column1:1 = 0 [outer=(1), immutable, constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
       ├── column1:1::STRING = '0.00' [outer=(1), immutable]
       └── column2:2 = 'b' [outer=(2), constraints=(/2: [/'b' - /'b']; tight), fd=()-->(2)]
 
@@ -196,7 +196,7 @@ SELECT one+two+three+four FROM (VALUES (1, $1:::int, 2, $2:::int)) AS t(one, two
 project
  ├── columns: "?column?":5
  ├── cardinality: [1 - 1]
- ├── has-placeholder
+ ├── immutable, has-placeholder
  ├── key: ()
  ├── fd: ()-->(5)
  ├── values
@@ -207,7 +207,7 @@ project
  │    ├── fd: ()-->(2,4)
  │    └── ($1, $2)
  └── projections
-      └── column4:4 + ((column2:2 + 1) + 2) [as="?column?":5, outer=(2,4)]
+      └── column4:4 + ((column2:2 + 1) + 2) [as="?column?":5, outer=(2,4), immutable]
 
 # Multiple constant columns, multiple refs to each, interspersed with other
 # columns.
@@ -258,13 +258,14 @@ SELECT one+two FROM (VALUES (1, 2), (3, 4)) AS t(one, two)
 project
  ├── columns: "?column?":3!null
  ├── cardinality: [2 - 2]
+ ├── immutable
  ├── values
  │    ├── columns: column1:1!null column2:2!null
  │    ├── cardinality: [2 - 2]
  │    ├── (1, 2)
  │    └── (3, 4)
  └── projections
-      └── column1:1 + column2:2 [as="?column?":3, outer=(1,2)]
+      └── column1:1 + column2:2 [as="?column?":3, outer=(1,2), immutable]
 
 # --------------------------------------------------
 # InlineSelectConstants
@@ -456,16 +457,18 @@ SELECT * FROM (SELECT k*2+1 AS expr FROM a) a WHERE expr > 10
 ----
 project
  ├── columns: expr:6!null
+ ├── immutable
  ├── select
  │    ├── columns: k:1!null
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
  │    └── filters
- │         └── (k:1 * 2) > 9 [outer=(1)]
+ │         └── (k:1 * 2) > 9 [outer=(1), immutable]
  └── projections
-      └── (k:1 * 2) + 1 [as=expr:6, outer=(1)]
+      └── (k:1 * 2) + 1 [as=expr:6, outer=(1), immutable]
 
 # Inline boolean logic.
 norm expect=PushSelectIntoInlinableProject
@@ -505,14 +508,16 @@ SELECT * FROM (SELECT f+1 AS expr FROM a) a WHERE expr=expr
 ----
 project
  ├── columns: expr:6
+ ├── immutable
  ├── select
  │    ├── columns: f:3
+ │    ├── immutable
  │    ├── scan a
  │    │    └── columns: f:3
  │    └── filters
- │         └── (f:3 + 1.0) IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(3)]
+ │         └── (f:3 + 1.0) IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(3), immutable]
  └── projections
-      └── f:3 + 1.0 [as=expr:6, outer=(3)]
+      └── f:3 + 1.0 [as=expr:6, outer=(3), immutable]
 
 # Use outer references in both inlined expression and in referencing expression.
 norm expect=PushSelectIntoInlinableProject
@@ -520,6 +525,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT (x-i) AS expr FROM xy) WHERE 
 ----
 semi-join (cross)
  ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -530,7 +536,7 @@ semi-join (cross)
  │    ├── columns: x:6!null
  │    └── key: (6)
  └── filters
-      └── (x:6 - i:2) > (i:2 * i:2) [outer=(2,6)]
+      └── (x:6 - i:2) > (i:2 * i:2) [outer=(2,6), immutable]
 
 exec-ddl
 CREATE TABLE crdb_internal.zones (
@@ -596,13 +602,14 @@ project
       │    ├── limit hint: 107.00
       │    ├── project
       │    │    ├── columns: c0:6!null c1:7!null
+      │    │    ├── immutable
       │    │    ├── limit hint: 321.00
       │    │    ├── scan crdb_internal.public.zones
       │    │    │    ├── columns: crdb_internal.public.zones.zone_id:1!null
       │    │    │    └── limit hint: 321.00
       │    │    └── projections
-      │    │         ├── crdb_internal.public.zones.zone_id:1 + 1 [as=c0:6, outer=(1)]
-      │    │         └── crdb_internal.public.zones.zone_id:1 + 2 [as=c1:7, outer=(1)]
+      │    │         ├── crdb_internal.public.zones.zone_id:1 + 1 [as=c0:6, outer=(1), immutable]
+      │    │         └── crdb_internal.public.zones.zone_id:1 + 2 [as=c1:7, outer=(1), immutable]
       │    └── filters
       │         └── le [outer=(6,7), stable+volatile, side-effects, correlated-subquery]
       │              ├── case
@@ -636,13 +643,14 @@ SELECT NOT(expr), i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
  ├── columns: "?column?":7!null r:8
+ ├── immutable
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
       ├── k:1 != 1 [as="?column?":7, outer=(1)]
-      └── i:2 + 1 [as=r:8, outer=(2)]
+      └── i:2 + 1 [as=r:8, outer=(2), immutable]
 
 # Multiple synthesized column references to same inner passthrough column
 # (should still inline).
@@ -651,14 +659,15 @@ SELECT x+1, x+2, y1+2 FROM (SELECT x, y+1 AS y1 FROM xy)
 ----
 project
  ├── columns: "?column?":4!null "?column?":5!null "?column?":6
+ ├── immutable
  ├── scan xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── x:1 + 1 [as="?column?":4, outer=(1)]
-      ├── x:1 + 2 [as="?column?":5, outer=(1)]
-      └── (y:2 + 1) + 2 [as="?column?":6, outer=(2)]
+      ├── x:1 + 1 [as="?column?":4, outer=(1), immutable]
+      ├── x:1 + 2 [as="?column?":5, outer=(1), immutable]
+      └── (y:2 + 1) + 2 [as="?column?":6, outer=(2), immutable]
 
 # Synthesized and passthrough references to same inner passthrough column
 # (should still inline).
@@ -667,6 +676,7 @@ SELECT x+y1 FROM (SELECT x, y+1 AS y1 FROM xy) ORDER BY x
 ----
 project
  ├── columns: "?column?":4  [hidden: x:1!null]
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── ordering: +1
@@ -676,7 +686,7 @@ project
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── projections
-      └── x:1 + (y:2 + 1) [as="?column?":4, outer=(1,2)]
+      └── x:1 + (y:2 + 1) [as="?column?":4, outer=(1,2), immutable]
 
 # Inline multiple expressions.
 norm expect=InlineProjectInProject
@@ -684,13 +694,14 @@ SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' 
 ----
 project
  ├── columns: r:8!null i:2 s:9
+ ├── immutable
  ├── scan a
  │    ├── columns: k:1!null i:2 a.s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections
-      ├── (k:1 + 1) + 1 [as=r:8, outer=(1)]
-      └── (a.s:4 || 'foo') || 'bar' [as=s:9, outer=(4)]
+      ├── (k:1 + 1) + 1 [as=r:8, outer=(1), immutable]
+      └── (a.s:4 || 'foo') || 'bar' [as=s:9, outer=(4), immutable]
 
 # Don't inline when there are multiple references.
 norm expect-not=InlineProjectInProject
@@ -698,16 +709,18 @@ SELECT expr, expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
  ├── columns: expr:6!null r:7!null
+ ├── immutable
  ├── fd: (6)-->(7)
  ├── project
  │    ├── columns: expr:6!null
+ │    ├── immutable
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
  │    └── projections
- │         └── k:1 + 1 [as=expr:6, outer=(1)]
+ │         └── k:1 + 1 [as=expr:6, outer=(1), immutable]
  └── projections
-      └── expr:6 * 2 [as=r:7, outer=(6)]
+      └── expr:6 * 2 [as=r:7, outer=(6), immutable]
 
 # Uncorrelated subquery should not block inlining.
 norm expect=InlineProjectInProject
@@ -715,6 +728,7 @@ SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 A
 ----
 project
  ├── columns: exists:9 r:10!null
+ ├── immutable
  ├── fd: ()-->(9)
  ├── scan a
  │    ├── columns: k:1!null
@@ -740,7 +754,7 @@ project
       │         │    └── filters
       │         │         └── (x:7 = 1) OR (x:7 = 2) [outer=(7), constraints=(/7: [/1 - /1] [/2 - /2]; tight)]
       │         └── 1
-      └── (k:1 + 1) * 2 [as=r:10, outer=(1)]
+      └── (k:1 + 1) * 2 [as=r:10, outer=(1), immutable]
 
 # Correlated subquery should be hoisted as usual.
 norm expect=InlineProjectInProject
@@ -748,26 +762,31 @@ SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
  ├── columns: exists:9!null
+ ├── immutable
  ├── group-by
  │    ├── columns: true_agg:11 rownum:13!null
  │    ├── grouping columns: rownum:13!null
+ │    ├── immutable
  │    ├── key: (13)
  │    ├── fd: (13)-->(11)
  │    ├── left-join (cross)
  │    │    ├── columns: expr:6!null true:10 rownum:13!null
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── immutable
  │    │    ├── fd: (13)-->(6)
  │    │    ├── ordinality
  │    │    │    ├── columns: expr:6!null rownum:13!null
+ │    │    │    ├── immutable
  │    │    │    ├── key: (13)
  │    │    │    ├── fd: (13)-->(6)
  │    │    │    └── project
  │    │    │         ├── columns: expr:6!null
+ │    │    │         ├── immutable
  │    │    │         ├── scan a
  │    │    │         │    ├── columns: k:1!null
  │    │    │         │    └── key: (1)
  │    │    │         └── projections
- │    │    │              └── k:1 + 1 [as=expr:6, outer=(1)]
+ │    │    │              └── k:1 + 1 [as=expr:6, outer=(1), immutable]
  │    │    ├── project
  │    │    │    ├── columns: true:10!null
  │    │    │    ├── fd: ()-->(10)
@@ -788,6 +807,7 @@ SELECT c FROM (SELECT k+2 AS c FROM a) AS t WHERE c > 2;
 ----
 project
  ├── columns: c:6!null
+ ├── immutable
  ├── select
  │    ├── columns: k:1!null
  │    ├── key: (1)
@@ -797,4 +817,4 @@ project
  │    └── filters
  │         └── k:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
  └── projections
-      └── k:1 + 2 [as=c:6, outer=(1)]
+      └── k:1 + 2 [as=c:6, outer=(1), immutable]

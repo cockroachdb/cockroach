@@ -2271,6 +2271,7 @@ SELECT b,a FROM t5 WHERE b @> '{"a":1}'
 ----
 index-join t5
  ├── columns: b:2 a:1!null
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t5@b_idx
@@ -2283,6 +2284,7 @@ SELECT b,a FROM t5 WHERE b @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
 ----
 index-join t5
  ├── columns: b:2 a:1!null
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t5@b_idx
@@ -2298,6 +2300,7 @@ inner-join (lookup t5)
  ├── columns: b:2 a:1!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── inner-join (zigzag t5@b_idx t5@b_idx)
@@ -2307,7 +2310,7 @@ inner-join (lookup t5)
  │    ├── right fixed columns: [2] = ['{"c": 2}']
  │    └── filters (true)
  └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2)]
+      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable]
 
 memo
 SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
@@ -2352,6 +2355,7 @@ inner-join (lookup t5)
  ├── columns: b:2 a:1!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── inner-join (zigzag t5@b_idx t5@b_idx)
@@ -2361,7 +2365,7 @@ inner-join (lookup t5)
  │    ├── right fixed columns: [2] = ['{"a": [{"d": 3}]}']
  │    └── filters (true)
  └── filters
-      └── b:2 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(2)]
+      └── b:2 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(2), immutable]
 
 # Regression test for issue where zero-column expressions could exist multiple
 # times in the tree, causing collisions.
@@ -2878,7 +2882,7 @@ select
  │         ├── volatile, side-effects
  │         └── key: (1)
  └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2)]
+      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable]
 
 # --------------------------------------------------
 # AssociateJoin

@@ -115,6 +115,7 @@ expr
 ----
 inner-join-apply
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
+ ├── immutable
  ├── stats: [rows=333333.333]
  ├── cost: 5611.39451
  ├── prune: (7)
@@ -129,6 +130,7 @@ inner-join-apply
  ├── select
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    ├── outer: (1)
+ │    ├── immutable
  │    ├── stats: [rows=333.333333, distinct(1)=1, null(1)=0]
  │    ├── cost: 1080.03
  │    ├── prune: (7)
@@ -138,7 +140,7 @@ inner-join-apply
  │    │    ├── cost: 1070.02
  │    │    └── prune: (5-7)
  │    └── filters
- │         └── eq [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,5,6), immutable, constraints=(/1: (/NULL - ])]
  │              ├── variable: t.public.abc.a:1 [type=int]
  │              └── plus [type=int]
  │                   ├── variable: t.public.def.d:5 [type=int]

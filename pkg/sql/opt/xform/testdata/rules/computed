@@ -81,8 +81,10 @@ SELECT k_int FROM t_mult WHERE (k_int, k_int_2) > (1, 2)
 ----
 project
  ├── columns: k_int:1!null
+ ├── immutable
  └── select
       ├── columns: k_int:1!null k_int_2:2
+      ├── immutable
       ├── scan t_mult
       │    ├── columns: k_int:1 k_int_2:2
       │    └── computed column expressions
@@ -93,7 +95,7 @@ project
       │         └── c_mult_2:5
       │              └── k_int:1 + 1
       └── filters
-           └── (k_int:1, k_int_2:2) > (1, 2) [outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
+           └── (k_int:1, k_int_2:2) > (1, 2) [outer=(1,2), immutable, constraints=(/1/2: [/1/3 - ]; tight)]
 
 # Don't constrain when filter has multiple spans.
 opt

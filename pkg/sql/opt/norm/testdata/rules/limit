@@ -169,6 +169,7 @@ SELECT k, f*2.0 AS r FROM a LIMIT 5
 project
  ├── columns: k:1!null r:6
  ├── cardinality: [0 - 5]
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── limit
@@ -183,7 +184,7 @@ project
  │    │    └── limit hint: 5.00
  │    └── 5
  └── projections
-      └── f:3 * 2.0 [as=r:6, outer=(3)]
+      └── f:3 * 2.0 [as=r:6, outer=(3), immutable]
 
 norm expect=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY k LIMIT 5
@@ -191,6 +192,7 @@ SELECT k, f*2.0 AS r FROM a ORDER BY k LIMIT 5
 project
  ├── columns: k:1!null r:6
  ├── cardinality: [0 - 5]
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── ordering: +1
@@ -209,7 +211,7 @@ project
  │    │    └── limit hint: 5.00
  │    └── 5
  └── projections
-      └── f:3 * 2.0 [as=r:6, outer=(3)]
+      └── f:3 * 2.0 [as=r:6, outer=(3), immutable]
 
 # Don't push the limit through project when the ordering is on a
 # synthesized column.
@@ -220,17 +222,20 @@ limit
  ├── columns: k:1!null r:6
  ├── internal-ordering: +6
  ├── cardinality: [0 - 5]
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── ordering: +6
  ├── sort
  │    ├── columns: k:1!null r:6
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +6
  │    ├── limit hint: 5.00
  │    └── project
  │         ├── columns: r:6 k:1!null
+ │         ├── immutable
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── scan a
@@ -238,7 +243,7 @@ limit
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3)
  │         └── projections
- │              └── f:3 * 2.0 [as=r:6, outer=(3)]
+ │              └── f:3 * 2.0 [as=r:6, outer=(3), immutable]
  └── 5
 
 
@@ -249,6 +254,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 
 project
  ├── columns: f:3 r:6
  ├── cardinality: [0 - 5]
+ ├── immutable
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2 f:3
@@ -270,7 +276,7 @@ project
  │    │              └── columns: i:2 f:3
  │    └── 5
  └── projections
-      └── f:3 + 1.1 [as=r:6, outer=(3)]
+      └── f:3 + 1.1 [as=r:6, outer=(3), immutable]
 
 # Don't push negative limit into Scan.
 norm
@@ -297,6 +303,7 @@ SELECT k, f*2.0 AS r FROM a OFFSET 5
 ----
 project
  ├── columns: k:1!null r:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── offset
@@ -309,13 +316,14 @@ project
  │    │    └── fd: (1)-->(3)
  │    └── 5
  └── projections
-      └── f:3 * 2.0 [as=r:6, outer=(3)]
+      └── f:3 * 2.0 [as=r:6, outer=(3), immutable]
 
 norm expect=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY k OFFSET 5
 ----
 project
  ├── columns: k:1!null r:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── ordering: +1
@@ -332,7 +340,7 @@ project
  │    │    └── ordering: +1
  │    └── 5
  └── projections
-      └── f:3 * 2.0 [as=r:6, outer=(3)]
+      └── f:3 * 2.0 [as=r:6, outer=(3), immutable]
 
 # Don't push the offset through project when the ordering is on a
 # synthesized column.
@@ -342,16 +350,19 @@ SELECT k, f*2.0 AS r FROM a ORDER BY r OFFSET 5
 offset
  ├── columns: k:1!null r:6
  ├── internal-ordering: +6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── ordering: +6
  ├── sort
  │    ├── columns: k:1!null r:6
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +6
  │    └── project
  │         ├── columns: r:6 k:1!null
+ │         ├── immutable
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── scan a
@@ -359,7 +370,7 @@ offset
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3)
  │         └── projections
- │              └── f:3 * 2.0 [as=r:6, outer=(3)]
+ │              └── f:3 * 2.0 [as=r:6, outer=(3), immutable]
  └── 5
 
 # Detect PushOffsetIntoProject and FilterUnusedOffsetCols dependency cycle.
@@ -368,6 +379,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 ----
 project
  ├── columns: f:3 r:6
+ ├── immutable
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2 f:3
@@ -386,7 +398,7 @@ project
  │    │              └── columns: i:2 f:3
  │    └── 5
  └── projections
-      └── f:3 + 1.1 [as=r:6, outer=(3)]
+      └── f:3 + 1.1 [as=r:6, outer=(3), immutable]
 
 # --------------------------------------------------
 # PushLimitIntoProject + PushOffsetIntoProject
@@ -397,6 +409,7 @@ SELECT k, f*2.0 AS r FROM a OFFSET 5 LIMIT 10
 project
  ├── columns: k:1!null r:6
  ├── cardinality: [0 - 10]
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── offset
@@ -417,7 +430,7 @@ project
  │    │    └── 15
  │    └── 5
  └── projections
-      └── f:3 * 2.0 [as=r:6, outer=(3)]
+      └── f:3 * 2.0 [as=r:6, outer=(3), immutable]
 
 norm expect=(PushLimitIntoProject,PushOffsetIntoProject)
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
@@ -425,6 +438,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 project
  ├── columns: f:3 r:6
  ├── cardinality: [0 - 10]
+ ├── immutable
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2 f:3
@@ -453,7 +467,7 @@ project
  │    │    └── 15
  │    └── 5
  └── projections
-      └── f:3 + 1.1 [as=r:6, outer=(3)]
+      └── f:3 + 1.1 [as=r:6, outer=(3), immutable]
 
 # --------------------------------------------------
 # PushLimitIntoOffset

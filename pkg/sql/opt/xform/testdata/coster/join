@@ -11,12 +11,14 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 ----
 project
  ├── columns: k:1!null x:5!null
+ ├── immutable
  ├── stats: [rows=99]
  ├── cost: 2124.725
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join (hash)
       ├── columns: k:1!null d:4!null x:5!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      ├── immutable
       ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
       ├── cost: 2123.725
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
@@ -26,6 +28,7 @@ project
       │    └── cost: 1040.02
       ├── select
       │    ├── columns: k:1!null d:4!null
+      │    ├── immutable
       │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0]
       │    ├── cost: 1070.03
       │    ├── key: (1)
@@ -37,7 +40,7 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
       │    └── filters
-      │         └── d:4 = 1.0 [outer=(4), constraints=(/4: [/1.0 - /1.0]; tight), fd=()-->(4)]
+      │         └── d:4 = 1.0 [outer=(4), immutable, constraints=(/4: [/1.0 - /1.0]; tight), fd=()-->(4)]
       └── filters
            └── k:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 

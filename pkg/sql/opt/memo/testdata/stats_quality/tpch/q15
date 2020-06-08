@@ -53,6 +53,7 @@ ORDER BY
 project
  ├── save-table-name: q15_project_1
  ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_phone:5(char!null) total_revenue:25(float!null)
+ ├── immutable
  ├── stats: [rows=3333.33333, distinct(1)=3306.66667, null(1)=0, distinct(2)=2834.3606, null(2)=0, distinct(3)=2834.80729, null(3)=0, distinct(5)=2834.80729, null(5)=0, distinct(25)=2100.04396, null(25)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3,5,25)
@@ -62,6 +63,7 @@ project
       ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_phone:5(char!null) l_suppkey:10(int!null) sum:25(float!null)
       ├── left ordering: +1
       ├── right ordering: +10
+      ├── immutable
       ├── stats: [rows=3333.33333, distinct(1)=3306.66667, null(1)=0, distinct(2)=2834.3606, null(2)=0, distinct(3)=2834.80729, null(3)=0, distinct(5)=2834.80729, null(5)=0, distinct(10)=3306.66667, null(10)=0, distinct(25)=2100.04396, null(25)=0]
       ├── key: (10)
       ├── fd: (1)-->(2,3,5), (10)-->(25), (1)==(10), (10)==(1)
@@ -78,6 +80,7 @@ project
       ├── sort
       │    ├── save-table-name: q15_sort_4
       │    ├── columns: l_suppkey:10(int!null) sum:25(float!null)
+      │    ├── immutable
       │    ├── stats: [rows=3306.66667, distinct(10)=3306.66667, null(10)=0, distinct(25)=3306.66667, null(25)=0]
       │    ├── key: (10)
       │    ├── fd: (10)-->(25)
@@ -85,6 +88,7 @@ project
       │    └── select
       │         ├── save-table-name: q15_select_5
       │         ├── columns: l_suppkey:10(int!null) sum:25(float!null)
+      │         ├── immutable
       │         ├── stats: [rows=3306.66667, distinct(10)=3306.66667, null(10)=0, distinct(25)=3306.66667, null(25)=0]
       │         ├── key: (10)
       │         ├── fd: (10)-->(25)
@@ -92,12 +96,14 @@ project
       │         │    ├── save-table-name: q15_group_by_6
       │         │    ├── columns: l_suppkey:10(int!null) sum:25(float!null)
       │         │    ├── grouping columns: l_suppkey:10(int!null)
+      │         │    ├── immutable
       │         │    ├── stats: [rows=9920, distinct(10)=9920, null(10)=0, distinct(25)=9920, null(25)=0]
       │         │    ├── key: (10)
       │         │    ├── fd: (10)-->(25)
       │         │    ├── project
       │         │    │    ├── save-table-name: q15_project_7
       │         │    │    ├── columns: column24:24(float!null) l_suppkey:10(int!null)
+      │         │    │    ├── immutable
       │         │    │    ├── stats: [rows=259635.063, distinct(10)=9920, null(10)=0, distinct(24)=259635.063, null(24)=0]
       │         │    │    ├── index-join lineitem
       │         │    │    │    ├── save-table-name: q15_index_join_8
@@ -117,18 +123,19 @@ project
       │         │    │    │         ├── key: (8,11)
       │         │    │    │         └── fd: (8,11)-->(18)
       │         │    │    └── projections
-      │         │    │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=column24:24, type=float, outer=(13,14)]
+      │         │    │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=column24:24, type=float, outer=(13,14), immutable]
       │         │    └── aggregations
       │         │         └── sum [as=sum:25, type=float, outer=(24)]
       │         │              └── column24:24 [type=float]
       │         └── filters
-      │              └── eq [type=bool, outer=(25), subquery, constraints=(/25: (/NULL - ])]
+      │              └── eq [type=bool, outer=(25), immutable, subquery, constraints=(/25: (/NULL - ])]
       │                   ├── sum:25 [type=float]
       │                   └── subquery [type=float]
       │                        └── scalar-group-by
       │                             ├── save-table-name: q15_scalar_group_by_10
       │                             ├── columns: max:44(float)
       │                             ├── cardinality: [1 - 1]
+      │                             ├── immutable
       │                             ├── stats: [rows=1, distinct(44)=1, null(44)=0]
       │                             ├── key: ()
       │                             ├── fd: ()-->(44)
@@ -136,12 +143,14 @@ project
       │                             │    ├── save-table-name: q15_group_by_11
       │                             │    ├── columns: l_suppkey:28(int!null) sum:43(float!null)
       │                             │    ├── grouping columns: l_suppkey:28(int!null)
+      │                             │    ├── immutable
       │                             │    ├── stats: [rows=9920, distinct(28)=9920, null(28)=0, distinct(43)=9920, null(43)=0]
       │                             │    ├── key: (28)
       │                             │    ├── fd: (28)-->(43)
       │                             │    ├── project
       │                             │    │    ├── save-table-name: q15_project_12
       │                             │    │    ├── columns: column42:42(float!null) l_suppkey:28(int!null)
+      │                             │    │    ├── immutable
       │                             │    │    ├── stats: [rows=259635.063, distinct(28)=9920, null(28)=0, distinct(42)=259635.063, null(42)=0]
       │                             │    │    ├── index-join lineitem
       │                             │    │    │    ├── save-table-name: q15_index_join_13
@@ -161,7 +170,7 @@ project
       │                             │    │    │         ├── key: (26,29)
       │                             │    │    │         └── fd: (26,29)-->(36)
       │                             │    │    └── projections
-      │                             │    │         └── l_extendedprice:31 * (1.0 - l_discount:32) [as=column42:42, type=float, outer=(31,32)]
+      │                             │    │         └── l_extendedprice:31 * (1.0 - l_discount:32) [as=column42:42, type=float, outer=(31,32), immutable]
       │                             │    └── aggregations
       │                             │         └── sum [as=sum:43, type=float, outer=(42)]
       │                             │              └── column42:42 [type=float]

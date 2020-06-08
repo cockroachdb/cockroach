@@ -482,7 +482,7 @@ LIBSNAPPY   := $(SNAPPY_DIR)/libsnappy.a
 LIBEDIT     := $(LIBEDIT_DIR)/src/.libs/libedit.a
 LIBROACH    := $(LIBROACH_DIR)/libroach.a
 LIBROACHCCL := $(LIBROACH_DIR)/libroachccl.a
-LIBPROJ     := $(PROJ_DIR)/lib/libproj.a
+LIBPROJ     := $(PROJ_DIR)/lib/libproj$(if $(target-is-windows),_4_9).a
 LIBKRB5     := $(KRB5_DIR)/lib/libgssapi_krb5.a
 PROTOC      := $(PROTOC_DIR)/protoc
 
@@ -553,7 +553,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo >> $@
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
-	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS) $(GEOS_DIR)/capi $(PROJ_DIR)/lib)' >> $@
+	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(LIBEDIT_DIR)/src/.libs $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
@@ -972,7 +972,7 @@ buildshort: ## Build the CockroachDB binary without the admin UI.
 build: $(COCKROACH)
 buildoss: $(COCKROACHOSS)
 buildshort: $(COCKROACHSHORT)
-build buildoss buildshort: $(DOCGEN_TARGETS)
+build buildoss buildshort: $(if $(is-cross-compile),,$(DOCGEN_TARGETS))
 build buildshort: $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
 
 # For historical reasons, symlink cockroach to cockroachshort.
@@ -1715,7 +1715,8 @@ logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 # Additional dependencies for binaries that depend on generated code.
 #
 # TODO(benesch): Derive this automatically. This is getting out of hand.
-bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES) $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/docgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES)
 bin/workload bin/roachtest $(logictest-bins): $(EXECGEN_TARGETS)
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS)
 

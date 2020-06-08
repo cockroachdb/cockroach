@@ -28,20 +28,21 @@ FROM a
 ----
 project
  ├── columns: r:7 s:8 t:9!null u:10!null v:11 w:12 x:13 y:14 z:15
+ ├── immutable
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── k:1 = (i:2 + 1) [as=r:7, outer=(1,2)]
-      ├── i:2 != (2 - k:1) [as=s:8, outer=(1,2)]
-      ├── k:1 IS NOT DISTINCT FROM (i:2 + 1) [as=t:9, outer=(1,2)]
-      ├── k:1 IS DISTINCT FROM (i:2 - 1) [as=u:10, outer=(1,2)]
-      ├── k:1 + (i:2 * 2) [as=v:11, outer=(1,2)]
-      ├── k:1 * (i:2 + 2) [as=w:12, outer=(1,2)]
-      ├── k:1 & (i:2 ^ 2) [as=x:13, outer=(1,2)]
-      ├── k:1 | (i:2 ^ 2) [as=y:14, outer=(1,2)]
-      └── k:1 # (i:2 * i:2) [as=z:15, outer=(1,2)]
+      ├── k:1 = (i:2 + 1) [as=r:7, outer=(1,2), immutable]
+      ├── i:2 != (2 - k:1) [as=s:8, outer=(1,2), immutable]
+      ├── k:1 IS NOT DISTINCT FROM (i:2 + 1) [as=t:9, outer=(1,2), immutable]
+      ├── k:1 IS DISTINCT FROM (i:2 - 1) [as=u:10, outer=(1,2), immutable]
+      ├── k:1 + (i:2 * 2) [as=v:11, outer=(1,2), immutable]
+      ├── k:1 * (i:2 + 2) [as=w:12, outer=(1,2), immutable]
+      ├── k:1 & (i:2 ^ 2) [as=x:13, outer=(1,2), immutable]
+      ├── k:1 | (i:2 ^ 2) [as=y:14, outer=(1,2), immutable]
+      └── k:1 # (i:2 * i:2) [as=z:15, outer=(1,2), immutable]
 
 # --------------------------------------------------
 # CommuteConst
@@ -62,20 +63,21 @@ FROM a
 ----
 project
  ├── columns: r:7 s:8 t:9!null u:10!null v:11 w:12 x:13 y:14 z:15!null
+ ├── immutable
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── projections
-      ├── (i:2 + k:1) = 4 [as=r:7, outer=(1,2)]
-      ├── (i:2 * 2) != 3 [as=s:8, outer=(2)]
-      ├── (1 - k:1) IS NOT DISTINCT FROM 5 [as=t:9, outer=(1)]
+      ├── (i:2 + k:1) = 4 [as=r:7, outer=(1,2), immutable]
+      ├── (i:2 * 2) != 3 [as=s:8, outer=(2), immutable]
+      ├── (1 - k:1) IS NOT DISTINCT FROM 5 [as=t:9, outer=(1), immutable]
       ├── k:1 IS DISTINCT FROM 11 [as=u:10, outer=(1)]
-      ├── f:3 + 1.0 [as=v:11, outer=(3)]
-      ├── (i:2 * i:2) * 15 [as=w:12, outer=(2)]
-      ├── (i:2 + i:2) & 10000 [as=x:13, outer=(2)]
-      ├── (i:2 + i:2) | 4 [as=y:14, outer=(2)]
-      └── (k:1 ^ 2) # -2 [as=z:15, outer=(1)]
+      ├── f:3 + 1.0 [as=v:11, outer=(3), immutable]
+      ├── (i:2 * i:2) * 15 [as=w:12, outer=(2), immutable]
+      ├── (i:2 + i:2) & 10000 [as=x:13, outer=(2), immutable]
+      ├── (i:2 + i:2) | 4 [as=y:14, outer=(2), immutable]
+      └── (k:1 ^ 2) # -2 [as=z:15, outer=(1), immutable]
 
 # --------------------------------------------------
 # EliminateCoalesce
@@ -119,10 +121,11 @@ SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
 ----
 project
  ├── columns: coalesce:7
+ ├── immutable
  ├── scan a
  │    └── columns: s:4
  └── projections
-      └── COALESCE(s:4, s:4 || 'foo') [as=coalesce:7, outer=(4)]
+      └── COALESCE(s:4, s:4 || 'foo') [as=coalesce:7, outer=(4), immutable]
 
 # Trailing null can't be removed.
 norm
@@ -247,6 +250,7 @@ SELECT
 values
  ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1)
  └── (true IN (NULL, NULL, ('201.249.149.90/18' & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61') << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82'),)
@@ -581,6 +585,7 @@ SELECT * FROM a WHERE j->'a' = '"b"'::JSON
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -588,13 +593,14 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── j:5 @> '{"a": "b"}' [outer=(5)]
+      └── j:5 @> '{"a": "b"}' [outer=(5), immutable]
 
 norm expect=NormalizeJSONFieldAccess
 SELECT * FROM a WHERE j->'a'->'x' = '"b"'::JSON
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -602,7 +608,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5)]
+      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5), immutable]
 
 # The transformation is not valid in this case.
 norm expect-not=NormalizeJSONFieldAccess
@@ -610,6 +616,7 @@ SELECT * FROM a WHERE j->2 = '"b"'::JSON
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -617,7 +624,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── (j:5->2) = '"b"' [outer=(5)]
+      └── (j:5->2) = '"b"' [outer=(5), immutable]
 
 # The transformation is not valid in this case, since j->'a' could be an array.
 norm expect-not=NormalizeJSONFieldAccess
@@ -625,6 +632,7 @@ SELECT * FROM a WHERE j->'a' @> '"b"'::JSON
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -632,7 +640,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── (j:5->'a') @> '"b"' [outer=(5)]
+      └── (j:5->'a') @> '"b"' [outer=(5), immutable]
 
 # The transformation is not valid in this case, since containment doesn't imply
 # equality for non-scalars.
@@ -641,11 +649,12 @@ SELECT j->'a' = '["b"]'::JSON, j->'a' = '{"b": "c"}'::JSON FROM a
 ----
 project
  ├── columns: "?column?":7 "?column?":8
+ ├── immutable
  ├── scan a
  │    └── columns: j:5
  └── projections
-      ├── (j:5->'a') = '["b"]' [as="?column?":7, outer=(5)]
-      └── (j:5->'a') = '{"b": "c"}' [as="?column?":8, outer=(5)]
+      ├── (j:5->'a') = '["b"]' [as="?column?":7, outer=(5), immutable]
+      └── (j:5->'a') = '{"b": "c"}' [as="?column?":8, outer=(5), immutable]
 
 # --------------------------------------------------
 # NormalizeJSONContains
@@ -656,6 +665,7 @@ SELECT * FROM a WHERE j->'a' @> '{"x": "b"}'::JSON
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -663,7 +673,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5)]
+      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5), immutable]
 
 # --------------------------------------------------
 # SimplifyCaseWhenConstValue
@@ -1072,9 +1082,11 @@ SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
 ----
 project
  ├── columns: k:1!null
+ ├── stable
  ├── key: (1)
  └── select
       ├── columns: k:1!null tz:4!null
+      ├── stable
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── scan e
@@ -1082,7 +1094,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(4)
       └── filters
-           └── tz:4 > '2017-11-12 07:35:01+00:00' [outer=(4), constraints=(/4: (/NULL - ])]
+           └── tz:4 > '2017-11-12 07:35:01+00:00' [outer=(4), stable, constraints=(/4: (/NULL - ])]
 
 norm expect=UnifyComparisonTypes
 SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
@@ -1127,9 +1139,11 @@ SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w1s'::INTE
 ----
 project
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── select
       ├── columns: k:1!null d:5!null
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(5)
       ├── scan e
@@ -1138,7 +1152,7 @@ project
       │    └── fd: (1)-->(5)
       └── filters
            ├── d:5 > '2018-07-01' [outer=(5), constraints=(/5: [/'2018-07-02' - ]; tight)]
-           └── d:5 < '2018-07-08 00:00:01+00:00' [outer=(5), constraints=(/5: (/NULL - ])]
+           └── d:5 < '2018-07-08 00:00:01+00:00' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 # NULL value.
 norm
@@ -1190,12 +1204,13 @@ SELECT k FROM a WHERE k IN (VALUES ((SELECT k*i FROM a)), (2), (3))
 ----
 select
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── filters
-      └── in [outer=(1), subquery]
+      └── in [outer=(1), immutable, subquery]
            ├── k:1
            └── tuple
                 ├── subquery
@@ -1203,16 +1218,18 @@ select
                 │         ├── columns: "?column?":13
                 │         ├── error: "more than one row returned by a subquery used as an expression"
                 │         ├── cardinality: [0 - 1]
+                │         ├── immutable
                 │         ├── key: ()
                 │         ├── fd: ()-->(13)
                 │         └── project
                 │              ├── columns: "?column?":13
+                │              ├── immutable
                 │              ├── scan a
                 │              │    ├── columns: k:7!null i:8
                 │              │    ├── key: (7)
                 │              │    └── fd: (7)-->(8)
                 │              └── projections
-                │                   └── k:7 * i:8 [as="?column?":13, outer=(7,8)]
+                │                   └── k:7 * i:8 [as="?column?":13, outer=(7,8), immutable]
                 ├── 2
                 └── 3
 
@@ -1245,9 +1262,11 @@ SELECT k FROM a WHERE (k, i) IN (SELECT b, a FROM (VALUES (1, 1), (2, 2), (3, 3)
 ----
 project
  ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── semi-join (hash)
       ├── columns: k:1!null column10:10
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(10)
       ├── project
@@ -1272,7 +1291,7 @@ project
       │    └── projections
       │         └── (column2:8, column1:7) [as=column9:9, outer=(7,8)]
       └── filters
-           └── column10:10 = column9:9 [outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+           └── column10:10 = column9:9 [outer=(9,10), immutable, constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
 
 # --------------------------------------------------
 # SimplifyEqualsAnyTuple
