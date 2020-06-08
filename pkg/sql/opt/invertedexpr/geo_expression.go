@@ -19,12 +19,12 @@ import (
 )
 
 // This file contains functions to encode geoindex.{UnionKeySpans, RPKeyExpr}
-// into a SpanExpressionProto. These functions are in this package since they
+// into a SpanExpression. These functions are in this package since they
 // need to use sqlbase.EncodeTableKey to convert geoindex.Key to
 // invertedexpr.EncInvertedVal and that cannot be done in the geoindex package
 // as it introduces a circular dependency.
 //
-// TODO(sumeer): change geoindex to produce SpanExpressionProtos directly.
+// TODO(sumeer): change geoindex to produce SpanExpressions directly.
 
 func geoKeyToEncInvertedVal(k geoindex.Key) EncInvertedVal {
 	dint := tree.DInt(k)
@@ -35,49 +35,47 @@ func geoKeyToEncInvertedVal(k geoindex.Key) EncInvertedVal {
 	return encoded
 }
 
-func geoToSpan(span geoindex.KeySpan) SpanExpressionProto_Span {
-	return SpanExpressionProto_Span{
-		Start: geoKeyToEncInvertedVal(span.Start),
-		End:   geoKeyToEncInvertedVal(span.End),
+func geoToSpan(span geoindex.KeySpan) InvertedSpan {
+	return InvertedSpan{
+		start: geoKeyToEncInvertedVal(span.Start),
+		end:   geoKeyToEncInvertedVal(span.End),
 	}
 }
 
-// GeoUnionKeySpansToProto converts geoindex.UnionKeySpans to
-// SpanExpressionProto.
-func GeoUnionKeySpansToProto(ukSpans geoindex.UnionKeySpans) *SpanExpressionProto {
+// GeoUnionKeySpansToSpanExpr converts geoindex.UnionKeySpans to a
+// SpanExpression.
+func GeoUnionKeySpansToSpanExpr(ukSpans geoindex.UnionKeySpans) *SpanExpression {
 	if len(ukSpans) == 0 {
 		return nil
 	}
-	spans := make([]SpanExpressionProto_Span, len(ukSpans))
+	spans := make([]InvertedSpan, len(ukSpans))
 	for i, ukSpan := range ukSpans {
 		spans[i] = geoToSpan(ukSpan)
 	}
-	return &SpanExpressionProto{
-		SpansToRead: spans,
-		Node: SpanExpressionProto_Node{
-			FactoredUnionSpans: spans,
-		},
+	return &SpanExpression{
+		SpansToRead:        spans,
+		FactoredUnionSpans: spans,
 	}
 }
 
-// GeoRPKeyExprToProto converts geoindex.RPKeyExpr to SpanExpressionProto.
-func GeoRPKeyExprToProto(rpExpr geoindex.RPKeyExpr) (*SpanExpressionProto, error) {
+// GeoRPKeyExprToSpanExpr converts geoindex.RPKeyExpr to SpanExpression.
+func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*SpanExpression, error) {
 	if len(rpExpr) == 0 {
 		return nil, nil
 	}
-	spansToRead := make([]SpanExpressionProto_Span, 0, len(rpExpr))
+	spansToRead := make([]InvertedSpan, 0, len(rpExpr))
 	for _, elem := range rpExpr {
 		// The keys in the RPKeyExpr are unique.
 		if key, ok := elem.(geoindex.Key); ok {
 			spansToRead = append(spansToRead, geoToSpan(geoindex.KeySpan{Start: key, End: key + 1}))
 		}
 	}
-	var stack []*SpanExpressionProto_Node
+	var stack []*SpanExpression
 	for _, elem := range rpExpr {
 		switch e := elem.(type) {
 		case geoindex.Key:
-			stack = append(stack, &SpanExpressionProto_Node{
-				FactoredUnionSpans: []SpanExpressionProto_Span{
+			stack = append(stack, &SpanExpression{
+				FactoredUnionSpans: []InvertedSpan{
 					geoToSpan(geoindex.KeySpan{Start: e, End: e + 1})},
 			})
 		case geoindex.RPSetOperator:
@@ -85,11 +83,11 @@ func GeoRPKeyExprToProto(rpExpr geoindex.RPKeyExpr) (*SpanExpressionProto, error
 				return nil, errors.Errorf("malformed expression: %s", rpExpr)
 			}
 			node0, node1 := stack[len(stack)-1], stack[len(stack)-2]
-			var node *SpanExpressionProto_Node
+			var node *SpanExpression
 			stack = stack[:len(stack)-2]
 			switch e {
 			case geoindex.RPSetIntersection:
-				node = &SpanExpressionProto_Node{
+				node = &SpanExpression{
 					Operator: SetIntersection,
 					Left:     node0,
 					Right:    node1,
@@ -102,7 +100,7 @@ func GeoRPKeyExprToProto(rpExpr geoindex.RPKeyExpr) (*SpanExpressionProto, error
 					node = node0
 					node.FactoredUnionSpans = append(node.FactoredUnionSpans, node1.FactoredUnionSpans...)
 				} else {
-					node = &SpanExpressionProto_Node{
+					node = &SpanExpression{
 						Operator: SetUnion,
 						Left:     node0,
 						Right:    node1,
@@ -115,8 +113,7 @@ func GeoRPKeyExprToProto(rpExpr geoindex.RPKeyExpr) (*SpanExpressionProto, error
 	if len(stack) != 1 {
 		return nil, errors.Errorf("malformed expression: %s", rpExpr)
 	}
-	return &SpanExpressionProto{
-		SpansToRead: spansToRead,
-		Node:        *stack[0],
-	}, nil
+	spanExpr := *stack[0]
+	spanExpr.SpansToRead = spansToRead
+	return &spanExpr, nil
 }
