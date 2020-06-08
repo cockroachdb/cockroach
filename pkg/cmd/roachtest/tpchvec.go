@@ -148,8 +148,8 @@ func (b tpchVecTestCaseBase) postTestRunHook(_ *test, _ *gosql.DB, _ crdbVersion
 
 const (
 	tpchPerfTestNumRunsPerQuery = 3
-	tpchPerfTestVecOnConfigIdx  = 0
-	tpchPerfTestVecOffConfigIdx = 1
+	tpchPerfTestVecOnConfigIdx  = 1
+	tpchPerfTestVecOffConfigIdx = 0
 )
 
 type tpchVecPerfTest struct {
@@ -168,7 +168,7 @@ func newTpchVecPerfTest() *tpchVecPerfTest {
 func (p tpchVecPerfTest) vectorizeOptions() []bool {
 	// Since this is a performance test, each query should be run with both
 	// vectorize modes.
-	return []bool{true, false}
+	return []bool{false, true}
 }
 
 func (p tpchVecPerfTest) numRunsPerQuery() int {
