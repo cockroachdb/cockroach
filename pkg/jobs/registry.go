@@ -709,13 +709,14 @@ func (r *Registry) Failed(ctx context.Context, txn *kv.Txn, id int64, causingErr
 	return job.WithTxn(txn).failed(ctx, causingError, nil)
 }
 
-// Resume resumes the paused job with id using the specified txn (may be nil).
-func (r *Registry) Resume(ctx context.Context, txn *kv.Txn, id int64) error {
+// Unpause changes the paused job with id to running or reverting using the
+// specified txn (may be nil).
+func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).resumed(ctx)
+	return job.WithTxn(txn).unpaused(ctx)
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be

@@ -361,11 +361,11 @@ func (j *Job) paused(ctx context.Context, fn func(context.Context, *kv.Txn) erro
 	})
 }
 
-// resumed sets the status of the tracked job to running or reverting iff the
+// unpaused sets the status of the tracked job to running or reverting iff the
 // job is currently paused. It does not directly resume the job; rather, it
 // expires the job's lease so that a Registry adoption loop detects it and
 // resumes it.
-func (j *Job) resumed(ctx context.Context) error {
+func (j *Job) unpaused(ctx context.Context) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusRunning || md.Status == StatusReverting {
 			// Already resumed - do nothing.
