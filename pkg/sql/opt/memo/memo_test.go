@@ -13,10 +13,8 @@ package memo_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	opttestutils "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
@@ -135,24 +133,6 @@ func TestMemoIsStale(t *testing.T) {
 		}
 	}
 
-	notStale()
-
-	// Stale location.
-	evalCtx.SessionData.DataConversion.Location = time.FixedZone("PST", -8*60*60)
-	stale()
-	evalCtx.SessionData.DataConversion.Location = time.UTC
-	notStale()
-
-	// Stale bytes encode format.
-	evalCtx.SessionData.DataConversion.BytesEncodeFormat = lex.BytesEncodeBase64
-	stale()
-	evalCtx.SessionData.DataConversion.BytesEncodeFormat = lex.BytesEncodeHex
-	notStale()
-
-	// Stale extra float digits.
-	evalCtx.SessionData.DataConversion.ExtraFloatDigits = 2
-	stale()
-	evalCtx.SessionData.DataConversion.ExtraFloatDigits = 0
 	notStale()
 
 	// Stale reorder joins limit.

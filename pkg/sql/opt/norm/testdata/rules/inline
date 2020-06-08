@@ -591,48 +591,61 @@ LIMIT
 project
  ├── columns: c0:6!null
  ├── cardinality: [0 - 107]
- ├── stable+volatile, side-effects
+ ├── volatile
  └── limit
-      ├── columns: c0:6!null c1:7!null
+      ├── columns: c0:6!null c1:7!null true_agg:15 rownum:17!null
       ├── cardinality: [0 - 107]
-      ├── stable+volatile, side-effects
+      ├── volatile
+      ├── key: (17)
+      ├── fd: (17)-->(6,7,15)
       ├── select
-      │    ├── columns: c0:6!null c1:7!null
-      │    ├── stable+volatile, side-effects
+      │    ├── columns: c0:6!null c1:7!null true_agg:15 rownum:17!null
+      │    ├── volatile
+      │    ├── key: (17)
+      │    ├── fd: (17)-->(6,7,15)
       │    ├── limit hint: 107.00
-      │    ├── project
-      │    │    ├── columns: c0:6!null c1:7!null
+      │    ├── group-by
+      │    │    ├── columns: c0:6!null c1:7!null true_agg:15 rownum:17!null
+      │    │    ├── grouping columns: rownum:17!null
       │    │    ├── immutable
+      │    │    ├── key: (17)
+      │    │    ├── fd: (17)-->(6,7,15)
       │    │    ├── limit hint: 321.00
-      │    │    ├── scan crdb_internal.public.zones
-      │    │    │    ├── columns: crdb_internal.public.zones.zone_id:1!null
-      │    │    │    └── limit hint: 321.00
-      │    │    └── projections
-      │    │         ├── crdb_internal.public.zones.zone_id:1 + 1 [as=c0:6, outer=(1), immutable]
-      │    │         └── crdb_internal.public.zones.zone_id:1 + 2 [as=c1:7, outer=(1), immutable]
+      │    │    ├── left-join (cross)
+      │    │    │    ├── columns: c0:6!null c1:7!null true:14 rownum:17!null
+      │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      │    │    │    ├── immutable
+      │    │    │    ├── fd: (17)-->(6,7)
+      │    │    │    ├── ordinality
+      │    │    │    │    ├── columns: c0:6!null c1:7!null rownum:17!null
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── key: (17)
+      │    │    │    │    ├── fd: (17)-->(6,7)
+      │    │    │    │    └── project
+      │    │    │    │         ├── columns: c0:6!null c1:7!null
+      │    │    │    │         ├── immutable
+      │    │    │    │         ├── scan crdb_internal.public.zones
+      │    │    │    │         │    └── columns: crdb_internal.public.zones.zone_id:1!null
+      │    │    │    │         └── projections
+      │    │    │    │              ├── crdb_internal.public.zones.zone_id:1 + 1 [as=c0:6, outer=(1), immutable]
+      │    │    │    │              └── crdb_internal.public.zones.zone_id:1 + 2 [as=c1:7, outer=(1), immutable]
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: true:14!null
+      │    │    │    │    ├── fd: ()-->(14)
+      │    │    │    │    ├── scan ref_1
+      │    │    │    │    └── projections
+      │    │    │    │         └── true [as=true:14]
+      │    │    │    └── filters
+      │    │    │         └── c0:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── aggregations
+      │    │         ├── const-not-null-agg [as=true_agg:15, outer=(14)]
+      │    │         │    └── true:14
+      │    │         ├── const-agg [as=c0:6, outer=(6)]
+      │    │         │    └── c0:6
+      │    │         └── const-agg [as=c1:7, outer=(7)]
+      │    │              └── c1:7
       │    └── filters
-      │         └── le [outer=(6,7), stable+volatile, side-effects, correlated-subquery]
-      │              ├── case
-      │              │    ├── true
-      │              │    ├── when
-      │              │    │    ├── c1:7 IS NOT NULL
-      │              │    │    └── function: extract
-      │              │    │         ├── case
-      │              │    │         │    ├── true
-      │              │    │         │    ├── when
-      │              │    │         │    │    ├── exists
-      │              │    │         │    │    │    └── select
-      │              │    │         │    │    │         ├── columns: ref_1.config_yaml:10!null
-      │              │    │         │    │    │         ├── outer: (6)
-      │              │    │         │    │    │         ├── scan ref_1
-      │              │    │         │    │    │         │    └── columns: ref_1.config_yaml:10!null
-      │              │    │         │    │    │         └── filters
-      │              │    │         │    │    │              └── c0:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
-      │              │    │         │    │    └── version()
-      │              │    │         │    └── version()
-      │              │    │         └── current_date()
-      │              │    └── 1.0
-      │              └── 1.0
+      │         └── CASE WHEN c1:7 IS NOT NULL THEN extract(CASE WHEN true_agg:15 IS NOT NULL THEN version() ELSE version() END, '2017-05-10') ELSE 1.0 END <= 1.0 [outer=(7,15), volatile]
       └── 107
 
 # --------------------------------------------------
