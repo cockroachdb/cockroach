@@ -88,6 +88,11 @@ var redactedQueryParams = map[string]struct{}{
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
 var ErrListingUnsupported = errors.New("listing is not supported")
 
+// ErrFileDoesNotExist is a sentinel error for indicating that a specified
+// bucket/object/key/file (depending on storage terminology) does not exist.
+// This error is raised by the ReadFile method.
+var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
+
 // ExternalStorageFactory describes a factory function for ExternalStorage.
 type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
 
@@ -113,6 +118,8 @@ type ExternalStorage interface {
 	Conf() roachpb.ExternalStorage
 
 	// ReadFile should return a Reader for requested name.
+	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
+	// This can be leveraged for an existence check.
 	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
 
 	// WriteFile should write the content to requested name.
