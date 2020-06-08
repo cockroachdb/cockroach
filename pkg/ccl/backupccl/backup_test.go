@@ -430,7 +430,7 @@ func backupAndRestore(
 			if err := protoutil.Unmarshal(backupDetails.BackupManifest, backupManifest); err != nil {
 				t.Fatal("cannot unmarshal backup descriptor from job payload from system.jobs")
 			}
-			if backupManifest.Statistics != nil {
+			if backupManifest.DeprecatedStatistics != nil {
 				t.Fatal("expected statistics field of backup descriptor payload to be nil")
 			}
 		}

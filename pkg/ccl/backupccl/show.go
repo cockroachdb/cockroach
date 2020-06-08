@@ -126,7 +126,7 @@ func showBackupPlanHook(
 				return err
 			}
 			// Blank the stats to prevent memory blowup.
-			m.Statistics = nil
+			m.DeprecatedStatistics = nil
 			manifests[i+1] = m
 		}
 

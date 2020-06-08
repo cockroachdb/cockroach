@@ -367,7 +367,7 @@ func backupPlanHook(
 				}
 				tables = append(tables, table)
 
-				// TODO: look into the tradeoffs of having all objects in the array to be in the same file,
+				// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
 				// vs having each object in a separate file, or somewhere in between.
 				statsFiles[tableDesc.GetID()] = BackupStatisticsFileName
 			}
