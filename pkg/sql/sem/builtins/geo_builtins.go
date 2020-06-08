@@ -47,6 +47,10 @@ const spheroidDistanceMessage = `"\n\nWhen operating on a spheroid, this functio
 	`the closest two points using S2. The spheroid distance between these two points is calculated using GeographicLib. ` +
 	`This follows observed PostGIS behavior.`
 
+const (
+	defaultGeoJSONDecimalDigits = 9
+)
+
 // infoBuilder is used to build a detailed info string that is consistent between
 // geospatial data types.
 type infoBuilder struct {
@@ -837,22 +841,118 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB())
+				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), defaultGeoJSONDecimalDigits, geo.EWKBToGeoJSONFlagShortCRSIfNot4326)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
-			infoBuilder{info: "Returns the GeoJSON representation of a given Geometry."},
+			infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of %d decimal digits.",
+					defaultGeoJSONDecimalDigits,
+				),
+			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"max_decimal_digits", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), maxDecimalDigits, geo.EWKBToGeoJSONFlagShortCRSIfNot4326)
+				return tree.NewDString(string(geojson)), err
+			},
+			Info: infoBuilder{
+				info: `Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"max_decimal_digits", types.Int},
+				{"options", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+				options := geo.EWKBToGeoJSONFlag(tree.MustBeDInt(args[2]))
+				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), maxDecimalDigits, options)
+				return tree.NewDString(string(geojson)), err
+			},
+			Info: infoBuilder{
+				info: `Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.
+
+Options is a flag that can be bitmasked. The options are:
+* 0: no option
+* 1: GeoJSON BBOX
+* 2: GeoJSON Short CRS (e.g EPSG:4326)
+* 4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)
+* 8: GeoJSON Short CRS if not EPSG:4326 (default for Geometry)
+`}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB())
+				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), defaultGeoJSONDecimalDigits, geo.EWKBToGeoJSONFlagZero)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
-			infoBuilder{info: "Returns the GeoJSON representation of a given Geography."},
+			infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the GeoJSON representation of a given Geography. Coordinates have a maximum of %d decimal digits.",
+					defaultGeoJSONDecimalDigits,
+				),
+			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"max_decimal_digits", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), maxDecimalDigits, geo.EWKBToGeoJSONFlagZero)
+				return tree.NewDString(string(geojson)), err
+			},
+			Info: infoBuilder{
+				info: `Returns the GeoJSON representation of a given Geography with max_decimal_digits output for each coordinate value.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"max_decimal_digits", types.Int},
+				{"options", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+				options := geo.EWKBToGeoJSONFlag(tree.MustBeDInt(args[2]))
+				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), maxDecimalDigits, options)
+				return tree.NewDString(string(geojson)), err
+			},
+			Info: infoBuilder{
+				info: `Returns the GeoJSON representation of a given Geography with max_decimal_digits output for each coordinate value.
+
+Options is a flag that can be bitmasked. The options are:
+* 0: no option (default for Geography)
+* 1: GeoJSON BBOX
+* 2: GeoJSON Short CRS (e.g EPSG:4326)
+* 4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)
+* 8: GeoJSON Short CRS if not EPSG:4326
+`}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 
 	//
