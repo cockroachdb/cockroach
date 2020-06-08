@@ -141,30 +141,32 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	leftCol := batch.ColVec(o.leftIdx)
 	leftColVals := leftCol.Bool()
 	var curIdx int
+	var leftNulls *coldata.Nulls
+	if leftCol.MaybeHasNulls() {
+		leftNulls = leftCol.Nulls()
+	}
 	if usesSel {
 		sel := batch.Selection()
 		origSel := o.origSel[:origLen]
 		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
 			for _, i := range origSel {
-				_ADD_TUPLE_FOR_RIGHT(true)
+				curIdx = addTupleForRight(curIdx, i, sel, leftNulls, leftColVals, knownResult, true)
 			}
 		} else {
 			for _, i := range origSel {
-				_ADD_TUPLE_FOR_RIGHT(false)
+				curIdx = addTupleForRight(curIdx, i, sel, leftNulls, leftColVals, knownResult, false)
 			}
 		}
 	} else {
 		batch.SetSelection(true)
 		sel := batch.Selection()
 		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
 			for i := 0; i < origLen; i++ {
-				_ADD_TUPLE_FOR_RIGHT(true)
+				curIdx = addTupleForRight(curIdx, i, sel, leftNulls, leftColVals, knownResult, true)
 			}
 		} else {
 			for i := 0; i < origLen; i++ {
-				_ADD_TUPLE_FOR_RIGHT(false)
+				curIdx = addTupleForRight(curIdx, i, sel, leftNulls, leftColVals, knownResult, false)
 			}
 		}
 	}
@@ -228,29 +230,33 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 
 // {{end}}
 
-// {{/*
 // This code snippet decides whether to include the tuple with index i into
 // the selection vector to be used by the right side projection. The tuple is
 // excluded if we already know the result of logical operation (i.e. we do the
 // short-circuiting for it).
-func _ADD_TUPLE_FOR_RIGHT(_L_HAS_NULLS bool) { // */}}
-	// {{define "addTupleForRight" -}}
-	// {{if _L_HAS_NULLS}}
-	isLeftNull = leftNulls.NullAt(i)
-	// {{else}}
-	isLeftNull = false
-	// {{end}}
+// execgen:inline
+// execgen:template<lHasNulls>
+func addTupleForRight(
+	curIdx int,
+	i int,
+	sel []int,
+	leftNulls *coldata.Nulls,
+	leftColVals []bool,
+	knownResult bool,
+	lHasNulls bool,
+) int {
+	var isLeftNull bool
+	if lHasNulls {
+		isLeftNull = leftNulls.NullAt(i)
+	}
 	if isLeftNull || leftColVals[i] != knownResult {
 		// We add the tuple into the selection vector if the left value is NULL or
 		// it is different from knownResult.
 		sel[curIdx] = i
 		curIdx++
 	}
-	// {{end}}
-	// {{/*
+	return curIdx
 }
-
-// */}}
 
 // {{/*
 // This code snippet sets the result of applying a logical operation AND or OR
