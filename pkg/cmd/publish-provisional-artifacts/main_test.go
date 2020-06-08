@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/cockroachdb/cockroach/pkg/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -227,7 +228,7 @@ func TestBless(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var s3 mockS3
-			var execFn execRunner // bless shouldn't exec anything
+			var execFn release.ExecFn // bless shouldn't exec anything
 			run(&s3, execFn, test.flags)
 			require.Equal(t, test.expectedGets, s3.gets)
 			require.Equal(t, test.expectedPuts, s3.puts)
