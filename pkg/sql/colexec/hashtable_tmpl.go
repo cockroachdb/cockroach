@@ -516,20 +516,22 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 
 // {{end}}
 
-// {{/*
-func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
-	// {{define "updateSelBody" -}}
+// execgen:inline
+// execgen:template<useSel>
+func updateSelBody(ht *hashTable, b coldata.Batch, sel []int, useSel bool) int {
+	distinctCount := 0
+
 	// Reuse the buffer allocated for distinct.
 	visited := ht.probeScratch.distinct
 	copy(visited, zeroBoolColumn)
 	for i := 0; i < b.Length(); i++ {
 		if ht.probeScratch.headID[i] != 0 {
 			if hasVisited := visited[ht.probeScratch.headID[i]-1]; !hasVisited {
-				// {{if .UseSel}}
-				sel[distinctCount] = sel[ht.probeScratch.headID[i]-1]
-				// {{else}}
-				sel[distinctCount] = int(ht.probeScratch.headID[i] - 1)
-				// {{end}}
+				if useSel {
+					sel[distinctCount] = sel[ht.probeScratch.headID[i]-1]
+				} else {
+					sel[distinctCount] = int(ht.probeScratch.headID[i] - 1)
+				}
 				visited[ht.probeScratch.headID[i]-1] = true
 				// Compacting and deduplicating hash buffer.
 				ht.probeScratch.hashBuffer[distinctCount] = ht.probeScratch.hashBuffer[i]
@@ -539,9 +541,8 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 		ht.probeScratch.headID[i] = 0
 		ht.probeScratch.differs[i] = false
 	}
-	// {{end}}
-	// {{/*
-} // */}}
+	return distinctCount
+}
 
 // {{if .HashTableMode.IsDistinctBuild}}
 
@@ -553,13 +554,13 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 // key index will be used. The duplicated keyIDs will be discarded. The
 // hashBuffer will also compact and discard hash values of duplicated keys.
 func (ht *hashTable) updateSel(b coldata.Batch) {
-	distinctCount := 0
+	var distinctCount int
 	if sel := b.Selection(); sel != nil {
-		_UPDATE_SEL_BODY(true)
+		distinctCount = updateSelBody(ht, b, sel, true)
 	} else {
 		b.SetSelection(true)
 		sel = b.Selection()
-		_UPDATE_SEL_BODY(false)
+		distinctCount = updateSelBody(ht, b, sel, false)
 	}
 	b.SetLength(distinctCount)
 }
