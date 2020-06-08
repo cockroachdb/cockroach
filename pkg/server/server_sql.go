@@ -199,6 +199,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 				return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			cfg.jobAdoptionStopFile,
+			// TODO(spaskob): pass a codec created from the tenant id.
+			keys.TODOSQLCodec,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())

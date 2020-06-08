@@ -59,6 +59,13 @@ type Lease struct {
 	}
 }
 
+// GetLeaseVal returns the LeaseVal embedded in Lease.
+func (l *Lease) GetLeaseVal() *LeaseVal {
+	l.val.sem <- struct{}{}
+	defer func() { <-l.val.sem }()
+	return l.val.lease
+}
+
 // Options are used to configure a new LeaseManager.
 type Options struct {
 	// ClientID must be unique to this LeaseManager instance.

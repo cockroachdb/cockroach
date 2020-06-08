@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 )
 
 func ResetConstructors() func() {
@@ -99,4 +100,9 @@ func (j *Job) Failed(ctx context.Context, causingErr error) error {
 // succeeded state.
 func (j *Job) Succeeded(ctx context.Context) error {
 	return j.succeeded(ctx, nil /* fn */)
+}
+
+// AcquireLease acquires a new lease for the job with given id.
+func (r *Registry) AcquireLease(ctx context.Context, jobID int64) (*leasemanager.Lease, error) {
+	return r.lm.AcquireLease(ctx, makeJobLeaseKey(r.codec, jobID))
 }

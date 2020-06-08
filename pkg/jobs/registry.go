@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -101,6 +103,11 @@ type Registry struct {
 	planFn     planHookMaker
 	metrics    Metrics
 	adoptionCh chan struct{}
+	// In the multi-tenant world each tenant has its own sql pods. There will be a
+	// 1:1 correspondence between a registry and a sql pod. The server which
+	// constructs the registry will have its codec and will pass it in this field.
+	codec keys.SQLCodec
+	lm    *leasemanager.LeaseManager
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
 	// internal executors. This is rarely needed, and usually job resumers should
@@ -179,6 +186,7 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	planFn planHookMaker,
 	preventAdoptionFile string,
+	codec keys.SQLCodec,
 ) *Registry {
 	r := &Registry{
 		ac:                  ac,
@@ -192,10 +200,15 @@ func MakeRegistry(
 		planFn:              planFn,
 		preventAdoptionFile: preventAdoptionFile,
 		adoptionCh:          make(chan struct{}),
+		codec:               codec,
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
 	r.metrics.InitHooks(histogramWindowInterval)
+	opts := leasemanager.Options{
+		ClientID: nodeID.SQLInstanceID().String(),
+	}
+	r.lm = leasemanager.New(db, clock, opts)
 	return r
 }
 
@@ -1287,9 +1300,4 @@ func makeJobLeaseKey(codec keys.SQLCodec, jobID int64) roachpb.Key {
 	k := encoding.EncodeVarintAscending(prefix, jobID)
 	k = keys.MakeFamilyKey(k, leaseFamilyID)
 	return k
-}
-
-// AcquireLease acquires a new lease for the job with given id.
-func (r *Registry) AcquireLease(ctx context.Context, jobID int64) (*leasemanager.Lease, error) {
-	return r.lm.AcquireLease(ctx, makeJobLeaseKey(r.codec, jobID))
 }
