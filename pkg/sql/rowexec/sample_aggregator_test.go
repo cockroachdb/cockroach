@@ -84,6 +84,8 @@ func TestSampleAggregator(t *testing.T) {
 			types.Int,   // num rows
 			types.Int,   // null vals
 			types.Bytes, // sketch data
+			types.Int,   // inverted index column
+			types.Bytes, // inverted index data
 		}
 
 		sketchSpecs := []execinfrapb.SketchSpec{
