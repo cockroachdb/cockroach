@@ -823,6 +823,12 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 func (ot *OptTester) Memo() (string, error) {
 	var o xform.Optimizer
 	o.Init(&ot.evalCtx, ot.catalog)
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if ot.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
+		return true
+	})
 	if _, err := ot.optimizeExpr(&o); err != nil {
 		return "", err
 	}

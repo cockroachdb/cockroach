@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -128,6 +129,110 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //
 // ----------------------------------------------------------------------
 
+// GeneratePartialIndexScans generates unconstrained index scans over all
+// partial indexes with predicates that are implied by the filters. Partial
+// indexes with predicates cannot be proven to be implied by the filters are
+// disregarded.
+//
+// When a filter completely matches the predicate, the remaining filters are
+// simplified so that they do not include the filter. A redundnat filter is
+// unnecessary to include in the remaing filters because a scan over the partial
+// index implicitly filters the results.
+//
+// For each partial index, there are two conditions to consider: whether or not
+// the index "covers" the columns needed and whether or not the remaining filter
+// is empty. There two conditions combine to create four possible cases:
+//
+//   - The index is covering and the remaining filter is empty. In this case, A
+//     single unconstrained Scan operator is added to the same group as the
+//     original Select operator).
+//
+//       (Scan $scanDef)
+//
+//   - The index is covering and the remaining filter is not empty. An
+//     unconstrained Scan operator is added to a new memo group, wrapped in a
+//     Select operator in the same group as the original Select operator.
+//
+//       (Select (Scan $scanDef) $remainingFilters)
+//
+//   - The index is not covering and the remaining filter is empty. An
+//     unconstrained Scan operator is added to a new memo group, wrapped in an
+//     IndexJoin to retrieve the needed columns.
+//
+//       (IndexJoin (Scan $scanDef) $indexJoinDef)
+//
+//   - The index is not covering and the remaining filter is not empty. An
+//     unconstrained Scan operator is added to a new memo group, wrapped in a
+//     Select operator also in a new group. The Select operator is wrapped in an
+//     IndexJoin which is added to same group as the original Select operator.
+//
+//       (IndexJoin
+//         (Select (Scan $scanDef) $remainingFilters)
+//         $indexJoinDef
+//       )
+//
+func (c *CustomFuncs) GeneratePartialIndexScans(
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+) {
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
+
+	// Iterate over all partial indexes.
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes)
+	for iter.Next() {
+		pred := tabMeta.PartialIndexPredicates[iter.IndexOrdinal()]
+		remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred)
+		if !ok {
+			continue
+		}
+
+		covering := iter.IsCovering()
+
+		// If index is covering and there are no remaining filters, construct a
+		// new Scan in the same group as the original Select.
+		if remainingFilters.ChildCount() == 0 && covering {
+			scan := memo.ScanExpr{ScanPrivate: *scanPrivate}
+			scan.Index = iter.IndexOrdinal()
+			c.e.mem.AddScanToGroup(&scan, grp)
+			continue
+		}
+
+		// All remaining cases require new groups, so create an indexScanBuilder
+		// to facilitate creating these new groups.
+		var sb indexScanBuilder
+		sb.init(c, scanPrivate.Table)
+		newScanPrivate := *scanPrivate
+		newScanPrivate.Index = iter.IndexOrdinal()
+
+		// If the index is covering and there are remaining filters, construct a
+		// Scan in a new group and a Select operator in the same group as the
+		// original Select.
+		if covering {
+			sb.setScan(&newScanPrivate)
+
+			// Add a Select with the remaining filters.
+			sb.addSelect(remainingFilters)
+			sb.build(grp)
+			continue
+		}
+
+		// The index is not covering, so scan the needed index columns plus the
+		// primary key columns.
+		newScanPrivate.Cols = iter.IndexColumns().Intersection(scanPrivate.Cols)
+		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(&newScanPrivate)
+
+		// If there are remaining filters, construct a Select with them.
+		if remainingFilters.ChildCount() != 0 {
+			sb.addSelect(remainingFilters)
+		}
+
+		// Add an index join to provide all the needed columns.
+		sb.addIndexJoin(scanPrivate.Cols)
+		sb.build(grp)
+	}
+}
+
 // GenerateConstrainedScans enumerates all non-inverted secondary indexes on the
 // Scan operator's table and tries to push the given Select filter into new
 // constrained Scan operators using those indexes. Since this only needs to be
@@ -209,10 +314,10 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	// Iterate over all non-inverted indexes.
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes|rejectPartialIndexes)
 	for iter.Next() {
-		// TODO(mgartner): Reject partial indexes if they are not implied by the
-		// filter.
+		// TODO(mgartner): Generate constrained scans for partial indexes if
+		//  they are implied by the filter.
 
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values

@@ -42,6 +42,10 @@ const (
 
 	// rejectPartialIndexes excludes any partial indexes during iteration.
 	rejectPartialIndexes
+
+	// rejectNonPartialIndexes excludes any non-partial indexes during
+	// iteration.
+	rejectNonPartialIndexes
 )
 
 // scanIndexIter is a helper struct that supports iteration over the indexes
@@ -139,10 +143,16 @@ func (it *scanIndexIter) Next() bool {
 			continue
 		}
 
-		// Skip over partial indexes if rejectPartialIndexes is set.
-		if it.hasRejectFlag(rejectPartialIndexes) {
+		if it.hasRejectFlag(rejectPartialIndexes | rejectNonPartialIndexes) {
 			_, ok := it.currIndex.Predicate()
-			if ok {
+
+			// Skip over partial indexes if rejectPartialIndexes is set.
+			if it.hasRejectFlag(rejectPartialIndexes) && ok {
+				continue
+			}
+
+			// Skip over non-partial indexes if rejectNonPartialIndexes is set.
+			if it.hasRejectFlag(rejectNonPartialIndexes) && !ok {
 				continue
 			}
 		}

@@ -2,6 +2,28 @@
 # select.opt contains exploration rules for the Select operator.
 # =============================================================================
 
+# GeneratePartialIndexScans generates a set of unconstrained Scan expressions,
+# one for each eligible partial index on the scanned table. A partial index is
+# eligible to be scanned if the filters imply the partial index predicate.
+#
+# Note that this rule differs from both the GenerateIndexScans and
+# GenerateConstrainedScans. GenerateIndexScans matches only Scan operators and
+# does not deal with filters. GenerateConstrainedScans does not generate
+# unconstrained scans. These subtle differences require this rule to be
+# separate from the other rules.
+#
+# The resulting Scan expressions can consist of Scans, Selects, and IndexJoins,
+# depending on remaining filters and the columns included in the index. See the
+# comment for the GeneratePartialIndexScans custom method for more details and
+# examples.
+[GeneratePartialIndexScans, Explore]
+(Select
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
+)
+=>
+(GeneratePartialIndexScans $scanPrivate $filters)
+
 # GenerateConstrainedScans generates a set of constrained Scan expressions, one
 # for each matching index on the scanned table. The expressions consist of
 # either a standalone Scan operator (if no remaining filter), or else a Scan
