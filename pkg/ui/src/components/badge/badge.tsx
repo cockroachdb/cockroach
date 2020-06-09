@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import * as React from "react";
-import cn from "classnames";
+import classNames from "classnames/bind";
 
-import "./badge.styl";
+import styles from "./badge.module.styl";
 
 export type BadgeStatus = "success" | "danger" | "default" | "info" | "warning";
 
@@ -19,7 +19,6 @@ export interface BadgeProps {
   text: React.ReactNode;
   size?: "small" | "medium" | "large";
   status?: BadgeStatus;
-  tag?: boolean; // TODO (koorosh): Tag behavior isn't implemented yet.
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
 }
@@ -27,17 +26,20 @@ export interface BadgeProps {
 Badge.defaultProps = {
   size: "medium",
   status: "default",
-  tag: false,
 };
+
+const cx = classNames.bind(styles);
 
 export function Badge(props: BadgeProps) {
   const { size, status, icon, iconPosition, text } = props;
-  const classes = cn("badge", `badge--size-${size}`, `badge--status-${status}`);
-  const iconClasses = cn("badge__icon", `badge__icon--position-${iconPosition || "left"}`);
+  const classes = cx("badge", `badge--size-${size}`, `badge--status-${status}`);
+  const iconClasses = cx("badge__icon", `badge__icon--position-${iconPosition || "left"}`);
   return (
     <div className={classes}>
       { icon && <div className={iconClasses}>{icon}</div> }
-      <div className="badge__text badge__text--no-wrap">
+      <div
+        className={cx("badge__text", "badge__text--no-wrap")}
+      >
         { text }
       </div>
     </div>
