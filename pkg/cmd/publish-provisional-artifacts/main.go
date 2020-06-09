@@ -298,7 +298,6 @@ func buildCockroach(execFn release.ExecFn, flags runFlags, o opts) {
 	opts := []release.MakeReleaseOption{
 		release.WithMakeReleaseOptionExecFn(execFn),
 		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "GOFLAGS", o.GoFlags)),
-		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix)),
 		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "TAGS", o.Tags)),
 		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary")),
 	}
