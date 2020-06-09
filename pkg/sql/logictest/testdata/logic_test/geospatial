@@ -385,9 +385,30 @@ SELECT
   ST_AsEWKT(ST_Union(a.geom, b.geom))
 FROM geom_operators_test a
 JOIN geom_operators_test b ON (1=1)
-WHERE a.dsc NOT LIKE '%Empty%' and b.dsc NOT LIKE '%Empty%' -- Remove after #49209 is resolved.
 ORDER BY a.dsc, b.dsc
 ----
+Empty GeometryCollection                  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Empty LineString                          LINESTRING EMPTY
+Empty GeometryCollection                  Faraway point                             POINT (5 5)
+Empty GeometryCollection                  Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
+Empty GeometryCollection                  NULL                                      NULL
+Empty GeometryCollection                  Point middle of Left Square               POINT (-0.5 0.5)
+Empty GeometryCollection                  Point middle of Right Square              POINT (0.5 0.5)
+Empty GeometryCollection                  Square (left)                             POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Empty GeometryCollection                  Square (right)                            POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Empty GeometryCollection                  Square overlapping left and right square  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+Empty LineString                          Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Empty LineString                          LINESTRING EMPTY
+Empty LineString                          Faraway point                             POINT (5 5)
+Empty LineString                          Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
+Empty LineString                          NULL                                      NULL
+Empty LineString                          Point middle of Left Square               POINT (-0.5 0.5)
+Empty LineString                          Point middle of Right Square              POINT (0.5 0.5)
+Empty LineString                          Square (left)                             POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Empty LineString                          Square (right)                            POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Empty LineString                          Square overlapping left and right square  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+Faraway point                             Empty GeometryCollection                  POINT (5 5)
+Faraway point                             Empty LineString                          POINT (5 5)
 Faraway point                             Faraway point                             POINT (5 5)
 Faraway point                             Line going through left and right square  GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))
 Faraway point                             NULL                                      NULL
@@ -396,6 +417,8 @@ Faraway point                             Point middle of Right Square          
 Faraway point                             Square (left)                             GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
 Faraway point                             Square (right)                            GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
 Faraway point                             Square overlapping left and right square  GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
+Line going through left and right square  Empty GeometryCollection                  LINESTRING (-0.5 0.5, 0.5 0.5)
+Line going through left and right square  Empty LineString                          LINESTRING (-0.5 0.5, 0.5 0.5)
 Line going through left and right square  Faraway point                             GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))
 Line going through left and right square  Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
 Line going through left and right square  NULL                                      NULL
@@ -404,6 +427,8 @@ Line going through left and right square  Point middle of Right Square          
 Line going through left and right square  Square (left)                             GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))
 Line going through left and right square  Square (right)                            GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))
 Line going through left and right square  Square overlapping left and right square  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))
+NULL                                      Empty GeometryCollection                  NULL
+NULL                                      Empty LineString                          NULL
 NULL                                      Faraway point                             NULL
 NULL                                      Line going through left and right square  NULL
 NULL                                      NULL                                      NULL
@@ -412,6 +437,8 @@ NULL                                      Point middle of Right Square          
 NULL                                      Square (left)                             NULL
 NULL                                      Square (right)                            NULL
 NULL                                      Square overlapping left and right square  NULL
+Point middle of Left Square               Empty GeometryCollection                  POINT (-0.5 0.5)
+Point middle of Left Square               Empty LineString                          POINT (-0.5 0.5)
 Point middle of Left Square               Faraway point                             MULTIPOINT (-0.5 0.5, 5 5)
 Point middle of Left Square               Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
 Point middle of Left Square               NULL                                      NULL
@@ -420,6 +447,8 @@ Point middle of Left Square               Point middle of Right Square          
 Point middle of Left Square               Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
 Point middle of Left Square               Square (right)                            GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
 Point middle of Left Square               Square overlapping left and right square  GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
+Point middle of Right Square              Empty GeometryCollection                  POINT (0.5 0.5)
+Point middle of Right Square              Empty LineString                          POINT (0.5 0.5)
 Point middle of Right Square              Faraway point                             MULTIPOINT (0.5 0.5, 5 5)
 Point middle of Right Square              Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
 Point middle of Right Square              NULL                                      NULL
@@ -428,6 +457,8 @@ Point middle of Right Square              Point middle of Right Square          
 Point middle of Right Square              Square (left)                             GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
 Point middle of Right Square              Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
 Point middle of Right Square              Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
+Square (left)                             Empty GeometryCollection                  POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Square (left)                             Empty LineString                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
 Square (left)                             Faraway point                             GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))
 Square (left)                             Line going through left and right square  GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))
 Square (left)                             NULL                                      NULL
@@ -436,6 +467,8 @@ Square (left)                             Point middle of Right Square          
 Square (left)                             Square (left)                             POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0))
 Square (left)                             Square (right)                            POLYGON ((0 0, -1 0, -1 1, 0 1, 1 1, 1 0, 0 0))
 Square (left)                             Square overlapping left and right square  POLYGON ((-0.1 0, -1 0, -1 1, -0.1 1, 0 1, 1 1, 1 0, 0 0, -0.1 0))
+Square (right)                            Empty GeometryCollection                  POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Square (right)                            Empty LineString                          POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 Square (right)                            Faraway point                             GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))
 Square (right)                            Line going through left and right square  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))
 Square (right)                            NULL                                      NULL
@@ -444,6 +477,8 @@ Square (right)                            Point middle of Right Square          
 Square (right)                            Square (left)                             POLYGON ((0 1, 1 1, 1 0, 0 0, -1 0, -1 1, 0 1))
 Square (right)                            Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))
 Square (right)                            Square overlapping left and right square  POLYGON ((1 0, 0 0, -0.1 0, -0.1 1, 0 1, 1 1, 1 0))
+Square overlapping left and right square  Empty GeometryCollection                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+Square overlapping left and right square  Empty LineString                          POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 Square overlapping left and right square  Faraway point                             GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))
 Square overlapping left and right square  Line going through left and right square  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))
 Square overlapping left and right square  NULL                                      NULL
@@ -460,10 +495,108 @@ SELECT
   ST_AsEWKT(ST_Intersection(a.geom, b.geom))
 FROM geom_operators_test a
 JOIN geom_operators_test b ON (1=1)
-WHERE a.dsc = 'Square (left)' and b.dsc = 'Square (right)' -- Remove after #49209 is resolved.
 ORDER BY a.dsc, b.dsc
 ----
-Square (left)  Square (right)  LINESTRING (0 0, 0 1)
+Empty GeometryCollection                  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Faraway point                             GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Line going through left and right square  GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  NULL                                      NULL
+Empty GeometryCollection                  Point middle of Left Square               GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Point middle of Right Square              GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Square (left)                             GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Square (right)                            GEOMETRYCOLLECTION EMPTY
+Empty GeometryCollection                  Square overlapping left and right square  GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Faraway point                             GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Line going through left and right square  GEOMETRYCOLLECTION EMPTY
+Empty LineString                          NULL                                      NULL
+Empty LineString                          Point middle of Left Square               GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Point middle of Right Square              GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Square (left)                             GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Square (right)                            GEOMETRYCOLLECTION EMPTY
+Empty LineString                          Square overlapping left and right square  GEOMETRYCOLLECTION EMPTY
+Faraway point                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Faraway point                             Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Faraway point                             Faraway point                             POINT (5 5)
+Faraway point                             Line going through left and right square  POINT (NaN NaN)
+Faraway point                             NULL                                      NULL
+Faraway point                             Point middle of Left Square               POINT (NaN NaN)
+Faraway point                             Point middle of Right Square              POINT (NaN NaN)
+Faraway point                             Square (left)                             POINT (NaN NaN)
+Faraway point                             Square (right)                            POINT (NaN NaN)
+Faraway point                             Square overlapping left and right square  POINT (NaN NaN)
+Line going through left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Line going through left and right square  Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Line going through left and right square  Faraway point                             POINT (NaN NaN)
+Line going through left and right square  Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
+Line going through left and right square  NULL                                      NULL
+Line going through left and right square  Point middle of Left Square               POINT (-0.5 0.5)
+Line going through left and right square  Point middle of Right Square              POINT (0.5 0.5)
+Line going through left and right square  Square (left)                             LINESTRING (-0.5 0.5, 0 0.5)
+Line going through left and right square  Square (right)                            LINESTRING (0 0.5, 0.5 0.5)
+Line going through left and right square  Square overlapping left and right square  LINESTRING (-0.1 0.5, 0.5 0.5)
+NULL                                      Empty GeometryCollection                  NULL
+NULL                                      Empty LineString                          NULL
+NULL                                      Faraway point                             NULL
+NULL                                      Line going through left and right square  NULL
+NULL                                      NULL                                      NULL
+NULL                                      Point middle of Left Square               NULL
+NULL                                      Point middle of Right Square              NULL
+NULL                                      Square (left)                             NULL
+NULL                                      Square (right)                            NULL
+NULL                                      Square overlapping left and right square  NULL
+Point middle of Left Square               Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Point middle of Left Square               Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Point middle of Left Square               Faraway point                             POINT (NaN NaN)
+Point middle of Left Square               Line going through left and right square  POINT (-0.5 0.5)
+Point middle of Left Square               NULL                                      NULL
+Point middle of Left Square               Point middle of Left Square               POINT (-0.5 0.5)
+Point middle of Left Square               Point middle of Right Square              POINT (NaN NaN)
+Point middle of Left Square               Square (left)                             POINT (-0.5 0.5)
+Point middle of Left Square               Square (right)                            POINT (NaN NaN)
+Point middle of Left Square               Square overlapping left and right square  POINT (NaN NaN)
+Point middle of Right Square              Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Point middle of Right Square              Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Point middle of Right Square              Faraway point                             POINT (NaN NaN)
+Point middle of Right Square              Line going through left and right square  POINT (0.5 0.5)
+Point middle of Right Square              NULL                                      NULL
+Point middle of Right Square              Point middle of Left Square               POINT (NaN NaN)
+Point middle of Right Square              Point middle of Right Square              POINT (0.5 0.5)
+Point middle of Right Square              Square (left)                             POINT (NaN NaN)
+Point middle of Right Square              Square (right)                            POINT (0.5 0.5)
+Point middle of Right Square              Square overlapping left and right square  POINT (0.5 0.5)
+Square (left)                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Square (left)                             Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Square (left)                             Faraway point                             POINT (NaN NaN)
+Square (left)                             Line going through left and right square  LINESTRING (-0.5 0.5, 0 0.5)
+Square (left)                             NULL                                      NULL
+Square (left)                             Point middle of Left Square               POINT (-0.5 0.5)
+Square (left)                             Point middle of Right Square              POINT (NaN NaN)
+Square (left)                             Square (left)                             POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0))
+Square (left)                             Square (right)                            LINESTRING (0 0, 0 1)
+Square (left)                             Square overlapping left and right square  POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
+Square (right)                            Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Square (right)                            Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Square (right)                            Faraway point                             POINT (NaN NaN)
+Square (right)                            Line going through left and right square  LINESTRING (0 0.5, 0.5 0.5)
+Square (right)                            NULL                                      NULL
+Square (right)                            Point middle of Left Square               POINT (NaN NaN)
+Square (right)                            Point middle of Right Square              POINT (0.5 0.5)
+Square (right)                            Square (left)                             LINESTRING (0 1, 0 0)
+Square (right)                            Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))
+Square (right)                            Square overlapping left and right square  POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))
+Square overlapping left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Square overlapping left and right square  Empty LineString                          GEOMETRYCOLLECTION EMPTY
+Square overlapping left and right square  Faraway point                             POINT (NaN NaN)
+Square overlapping left and right square  Line going through left and right square  LINESTRING (-0.1 0.5, 0.5 0.5)
+Square overlapping left and right square  NULL                                      NULL
+Square overlapping left and right square  Point middle of Left Square               POINT (NaN NaN)
+Square overlapping left and right square  Point middle of Right Square              POINT (0.5 0.5)
+Square overlapping left and right square  Square (left)                             POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
+Square overlapping left and right square  Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))
+Square overlapping left and right square  Square overlapping left and right square  POLYGON ((1 0, -0.1 0, -0.1 1, 1 1, 1 0))
 
 query TTT
 SELECT
@@ -473,8 +606,8 @@ SELECT
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  POINT EMPTY                     POINT EMPTY
-Empty LineString                          POINT EMPTY                     POINT EMPTY
+Empty GeometryCollection                  POINT (NaN NaN)                 POINT (NaN NaN)
+Empty LineString                          POINT (NaN NaN)                 POINT (NaN NaN)
 Faraway point                             POINT (5 5)                     POINT (5 5)
 Line going through left and right square  POINT (0 0.5)                   POINT (-0.5 0.5)
 NULL                                      NULL                            NULL
@@ -492,8 +625,8 @@ SELECT
 FROM [SELECT dsc, ST_AsEWKT(a.geom) ewkt FROM geom_operators_test a]
 ORDER BY dsc ASC
 ----
-Empty GeometryCollection                  POINT EMPTY
-Empty LineString                          POINT EMPTY
+Empty GeometryCollection                  POINT (NaN NaN)
+Empty LineString                          POINT (NaN NaN)
 Faraway point                             POINT (5 5)
 Line going through left and right square  POINT (0 0.5)
 NULL                                      NULL
@@ -1020,12 +1153,13 @@ SELECT
   ST_Y(a.geom)
 FROM (VALUES
   ('POINT(1.0 2.0)'::geometry),
-  ('POINT(33.0 66.0)'::geometry)
---  ('0101000000000000000000F87F000000000000F87F'::geometry) -- POINT EMPTY -- blocked on https://github.com/twpayne/go-geom/pull/159
+  ('POINT(33.0 66.0)'::geometry),
+  ('POINT EMPTY'::geometry)
 ) a(geom)
 ----
-1   2
-33  66
+1    2
+33   66
+NaN  NaN
 
 statement error argument to ST_X\(\) must have shape POINT
 SELECT ST_X('LINESTRING(0.0 0.0, 1.0 1.0)')
@@ -1781,16 +1915,16 @@ JOIN (VALUES (0.0), (0.2), (0.5), (0.51), (1.0)) b(fraction) ON (1=1)
 JOIN (VALUES (true), (false)) c(repeat) ON (1=1)
 ORDER BY a.dsc, b.fraction, c.repeat
 ----
-Empty LineString                                                0.0   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                0.0   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                0.2   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                0.2   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                0.5   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                0.5   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                0.51  false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                0.51  true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                1.0   false  POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
-Empty LineString                                                1.0   true   POINT EMPTY                                              POINT EMPTY                                                                                                                                  POINT EMPTY
+Empty LineString                                                0.0   false  POINT (NaN NaN)                                          POINT (NaN NaN)                                                                                                                              POINT (NaN NaN)
+Empty LineString                                                0.0   true   POINT (NaN NaN)                                          POINT (NaN NaN)                                                                                                                              POINT (NaN NaN)
+Empty LineString                                                0.2   false  POINT (NaN NaN)                                          MULTIPOINT (NaN NaN, NaN NaN, NaN NaN, NaN NaN, NaN NaN)                                                                                     POINT (NaN NaN)
+Empty LineString                                                0.2   true   POINT (NaN NaN)                                          MULTIPOINT (NaN NaN, NaN NaN, NaN NaN, NaN NaN, NaN NaN)                                                                                     MULTIPOINT (NaN NaN, NaN NaN, NaN NaN, NaN NaN, NaN NaN)
+Empty LineString                                                0.5   false  POINT (NaN NaN)                                          MULTIPOINT (NaN NaN, NaN NaN)                                                                                                                POINT (NaN NaN)
+Empty LineString                                                0.5   true   POINT (NaN NaN)                                          MULTIPOINT (NaN NaN, NaN NaN)                                                                                                                MULTIPOINT (NaN NaN, NaN NaN)
+Empty LineString                                                0.51  false  POINT (NaN NaN)                                          POINT (NaN NaN)                                                                                                                              POINT (NaN NaN)
+Empty LineString                                                0.51  true   POINT (NaN NaN)                                          POINT (NaN NaN)                                                                                                                              POINT (NaN NaN)
+Empty LineString                                                1.0   false  POINT (NaN NaN)                                          POINT (NaN NaN)                                                                                                                              POINT (NaN NaN)
+Empty LineString                                                1.0   true   POINT (NaN NaN)                                          POINT (NaN NaN)                                                                                                                              POINT (NaN NaN)
 LineString anticlockwise covering all the quadrants             0.0   false  POINT (1 -1)                                             POINT (1 -1)                                                                                                                                 POINT (1 -1)
 LineString anticlockwise covering all the quadrants             0.0   true   POINT (1 -1)                                             POINT (1 -1)                                                                                                                                 POINT (1 -1)
 LineString anticlockwise covering all the quadrants             0.2   false  POINT (1.6529822128134706 0.9589466384404113)            MULTIPOINT (1.6529822128134706 0.9589466384404113, 1.032455532033675 2, -1.0324555320336777 2, -1.65298221281347 0.9589466384404097, -1 -1)  POINT (1.6529822128134706 0.9589466384404113)

@@ -112,6 +112,30 @@ func TestParseEWKT(t *testing.T) {
 		expected    geopb.SpatialObject
 	}{
 		{
+			"EMPTY POINT, no SRID",
+			"POINT EMPTY",
+			0,
+			DefaultSRIDIsHint,
+			geopb.SpatialObject{
+				EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf8\x7f\x00\x00\x00\x00\x00\x00\xf8\x7f"),
+				SRID:        0,
+				Shape:       geopb.Shape_Point,
+				BoundingBox: nil,
+			},
+		},
+		{
+			"EMPTY POINT, SRID 4326",
+			"SRID=4326;POINT EMPTY",
+			0,
+			DefaultSRIDIsHint,
+			geopb.SpatialObject{
+				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf8\x7f\x00\x00\x00\x00\x00\x00\xf8\x7f"),
+				SRID:        4326,
+				Shape:       geopb.Shape_Point,
+				BoundingBox: nil,
+			},
+		},
+		{
 			"SRID 4326 is hint; EWKT has 4004",
 			"SRID=4004;POINT(1.0 1.0)",
 			4326,
