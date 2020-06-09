@@ -10,26 +10,26 @@
 
 package main
 
-var hibernateBlacklists = blacklistsForVersion{
-	{"v2.0", "hibernateBlackList2_0", hibernateBlackList2_0, "", nil},
-	{"v2.1", "hibernateBlackList2_1", hibernateBlackList2_1, "", nil},
-	{"v2.2", "hibernateBlackList19_1", hibernateBlackList19_1, "", nil},
-	{"v19.1", "hibernateBlackList19_1", hibernateBlackList19_1, "", nil},
-	{"v19.2", "hibernateBlackList19_2", hibernateBlackList19_2, "", nil},
-	{"v20.1", "hibernateBlackList20_1", hibernateBlackList20_1, "", nil},
-	{"v20.2", "hibernateBlackList20_2", hibernateBlackList20_2, "", nil},
+var hibernateBlocklists = blocklistsForVersion{
+	{"v2.0", "hibernateBlockList2_0", hibernateBlockList2_0, "", nil},
+	{"v2.1", "hibernateBlockList2_1", hibernateBlockList2_1, "", nil},
+	{"v2.2", "hibernateBlockList19_1", hibernateBlockList19_1, "", nil},
+	{"v19.1", "hibernateBlockList19_1", hibernateBlockList19_1, "", nil},
+	{"v19.2", "hibernateBlockList19_2", hibernateBlockList19_2, "", nil},
+	{"v20.1", "hibernateBlockList20_1", hibernateBlockList20_1, "", nil},
+	{"v20.2", "hibernateBlockList20_2", hibernateBlockList20_2, "", nil},
 }
 
 // Please keep these lists alphabetized for easy diffing.
-// After a failed run, an updated version of this blacklist should be available
+// After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var hibernateBlackList20_2 = blacklist{}
+var hibernateBlockList20_2 = blocklist{}
 
-var hibernateBlackList20_1 = blacklist{}
+var hibernateBlockList20_1 = blocklist{}
 
-var hibernateBlackList19_2 = blacklist{}
+var hibernateBlockList19_2 = blocklist{}
 
-var hibernateBlackList19_1 = blacklist{
+var hibernateBlockList19_1 = blocklist{
 	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                                                                               "31708",
 	"org.hibernate.jpa.test.indetifier.AssignedInitialValueTableGeneratorConfiguredTest.testTheFirstGeneratedIdIsEqualToTableGeneratorInitialValuePlusOne": "6583",
 	"org.hibernate.jpa.test.indetifier.AssignedInitialValueTableGeneratorConfiguredTest.testTheGeneratedIdValuesAreCorrect":                                "6583",
@@ -125,7 +125,7 @@ var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.test.tool.schema.SchemaToolTransactionHandlingTest.testValidateInExistingJtaTransaction":                                                "16769",
 }
 
-var hibernateBlackList2_1 = blacklist{
+var hibernateBlockList2_1 = blocklist{
 	"org.hibernate.id.hhh12973.SequenceMismatchStrategyDefaultExceptionTest.test":                                                                          "unknown",
 	"org.hibernate.id.hhh12973.SequenceMismatchStrategyExceptionEnumTest.test":                                                                             "unknown",
 	"org.hibernate.id.hhh12973.SequenceMismatchStrategyFixWithSequenceGeneratorTest.test":                                                                  "unknown",
@@ -246,7 +246,7 @@ var hibernateBlackList2_1 = blacklist{
 	"org.hibernate.test.tool.schema.SchemaToolTransactionHandlingTest.testValidateInExistingJtaTransaction":                                                "16769",
 }
 
-var hibernateBlackList2_0 = blacklist{
+var hibernateBlockList2_0 = blocklist{
 	"org.hibernate.engine.spi.ExtraStateTest.shouldMaintainExtraStateWhenUsingIdentityIdGenerationStrategy":                                                                                      "unknown",
 	"org.hibernate.event.EmbeddableCallbackTest.test":                                                                                                                                            "unknown",
 	"org.hibernate.id.CreateDeleteTest.createAndDeleteAnEntityInTheSameTransactionTest":                                                                                                          "unknown",

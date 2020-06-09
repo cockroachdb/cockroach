@@ -117,14 +117,14 @@ func registerPgjdbc(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, ignorelistName, ignorelist := pgjdbcBlacklists.getLists(version)
+		blocklistName, expectedFailures, ignorelistName, ignorelist := pgjdbcBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No pgjdbc blacklist defined for cockroach version %s", version)
+			t.Fatalf("No pgjdbc blocklist defined for cockroach version %s", version)
 		}
-		status := fmt.Sprintf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 		if ignorelist != nil {
-			status = fmt.Sprintf("Running cockroach version %s, using blacklist %s, using ignorelist %s",
-				version, blacklistName, ignorelistName)
+			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+				version, blocklistName, ignorelistName)
 		}
 		c.l.Printf("%s", status)
 
@@ -173,7 +173,7 @@ func registerPgjdbc(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "pgjdbc" /* ormName */, output,
-			blacklistName, expectedFailures, ignorelist, version, latestTag,
+			blocklistName, expectedFailures, ignorelist, version, latestTag,
 		)
 	}
 

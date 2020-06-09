@@ -6,7 +6,7 @@ CREATE TABLE x (a INT PRIMARY KEY)
 
 # Tests for EXPLAIN counters.
 
-feature-whitelist
+feature-allowlist
 sql.plan.explain
 sql.plan.explain-analyze
 sql.plan.explain-opt
@@ -45,7 +45,7 @@ sql.plan.explain-opt-verbose
 
 # Tests for hints.
 
-feature-whitelist
+feature-allowlist
 sql.plan.hints.*
 ----
 
@@ -84,7 +84,7 @@ sql.plan.hints.index.delete
 
 # Tests for tracking important setting changes.
 
-feature-whitelist
+feature-allowlist
 sql.plan.reorder-joins.*
 sql.plan.automatic-stats.*
 ----
@@ -125,7 +125,7 @@ RESET CLUSTER SETTING sql.stats.automatic_collection.enabled
 sql.plan.automatic-stats.enabled
 
 # Test telemetry for manual statistics creation.
-feature-whitelist
+feature-allowlist
 sql.plan.stats.created
 ----
 
@@ -135,7 +135,7 @@ CREATE STATISTICS stats FROM x
 sql.plan.stats.created
 
 # Test various planning counters.
-feature-whitelist
+feature-allowlist
 sql.plan.cte.*
 sql.plan.lateral-join
 sql.plan.subquery.*
@@ -174,7 +174,7 @@ sql.plan.subquery.correlated
 
 # Test some sql.plan.ops counters, using some esoteric operators unlikely to be
 # executed in background activity).
-feature-whitelist
+feature-allowlist
 sql.plan.ops.cast.string::inet
 sql.plan.ops.bin.jsonb - string
 sql.plan.ops.array.*
@@ -202,7 +202,7 @@ INSERT INTO x SELECT unnest(ARRAY[9, 10, 11, 12])
 sql.plan.ops.array.cons
 
 # Test a few sql.plan.opt.node counters.
-feature-whitelist
+feature-allowlist
 sql.plan.opt.node.project-set
 sql.plan.opt.node.join.*
 ----

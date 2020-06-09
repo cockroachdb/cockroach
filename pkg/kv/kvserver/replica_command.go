@@ -2037,12 +2037,12 @@ func (s *Store) AdminRelocateRange(
 	rangeDesc = *newDesc
 
 	canRetry := func(err error) bool {
-		whitelist := []string{
+		allowlist := []string{
 			snapshotApplySemBusyMsg,
 			IntersectingSnapshotMsg,
 		}
 		errStr := err.Error()
-		for _, substr := range whitelist {
+		for _, substr := range allowlist {
 			if strings.Contains(errStr, substr) {
 				return true
 			}

@@ -336,7 +336,7 @@ func isExpectedRelocateError(err error) bool {
 	// for more failure modes not caught here. We decided to avoid adding
 	// to this catchall and to fix the root causes instead.
 	// We've also seen "breaker open" errors here.
-	whitelist := []string{
+	allowlist := []string{
 		"descriptor changed",
 		"unable to remove replica .* which is not present",
 		"unable to add replica .* which is already present",
@@ -344,7 +344,7 @@ func isExpectedRelocateError(err error) bool {
 		"failed to apply snapshot: raft group deleted",
 		"snapshot failed:",
 	}
-	pattern := "(" + strings.Join(whitelist, "|") + ")"
+	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)
 }
 

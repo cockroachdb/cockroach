@@ -10,17 +10,17 @@
 
 package main
 
-var sqlAlchemyBlacklists = blacklistsForVersion{
-	{"v2.1", "sqlAlchemyBlacklist", sqlAlchemyBlacklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
-	{"v19.1", "sqlAlchemyBlacklist", sqlAlchemyBlacklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
-	{"v19.2", "sqlAlchemyBlacklist", sqlAlchemyBlacklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
-	{"v20.1", "sqlAlchemyBlacklist20_1", sqlAlchemyBlacklist20_1, "sqlAlchemyIgnoreList20_1", sqlAlchemyIgnoreList20_1},
-	{"v20.2", "sqlAlchemyBlacklist20_2", sqlAlchemyBlacklist20_2, "sqlAlchemyIgnoreList20_2", sqlAlchemyIgnoreList20_2},
+var sqlAlchemyBlocklists = blocklistsForVersion{
+	{"v2.1", "sqlAlchemyBlocklist", sqlAlchemyBlocklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
+	{"v19.1", "sqlAlchemyBlocklist", sqlAlchemyBlocklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
+	{"v19.2", "sqlAlchemyBlocklist", sqlAlchemyBlocklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
+	{"v20.1", "sqlAlchemyBlocklist20_1", sqlAlchemyBlocklist20_1, "sqlAlchemyIgnoreList20_1", sqlAlchemyIgnoreList20_1},
+	{"v20.2", "sqlAlchemyBlocklist20_2", sqlAlchemyBlocklist20_2, "sqlAlchemyIgnoreList20_2", sqlAlchemyIgnoreList20_2},
 }
 
-var sqlAlchemyBlacklist20_2 = sqlAlchemyBlacklist20_1
+var sqlAlchemyBlocklist20_2 = sqlAlchemyBlocklist20_1
 
-var sqlAlchemyBlacklist20_1 = blacklist{
+var sqlAlchemyBlocklist20_1 = blocklist{
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_autoincrement_col":                  "5807",
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_deprecated_get_primary_keys":        "5807",
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_dialect_initialize":                 "5807",
@@ -90,7 +90,7 @@ var sqlAlchemyBlacklist20_1 = blacklist{
 	"test/dialect/test_suite.py::TableDDLTest_cockroachdb+psycopg2_9_5_0::test_create_table_schema":                           "unknown",
 }
 
-var sqlAlchemyBlacklist = blacklist{
+var sqlAlchemyBlocklist = blocklist{
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_autoincrement_col":                  "5807",
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_deprecated_get_primary_keys":        "5807",
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_dialect_initialize":                 "5807",
@@ -164,7 +164,7 @@ var sqlAlchemyIgnoreList20_2 = sqlAlchemyIgnoreList
 
 var sqlAlchemyIgnoreList20_1 = sqlAlchemyIgnoreList
 
-var sqlAlchemyIgnoreList = blacklist{
+var sqlAlchemyIgnoreList = blocklist{
 	"test/dialect/test_suite.py::ExceptionTest_cockroachdb+psycopg2_9_5_0::test_integrity_error": "passes, but can't parse result",
 	"test/dialect/test_suite.py::TableDDLTest_cockroachdb+psycopg2_9_5_0::test_create_table":     "flaky",
 }

@@ -172,7 +172,7 @@ func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver physicalplan.SpanResolve
 }
 
 // distSQLExprCheckVisitor is a tree.Visitor that checks if expressions
-// contain things not supported by distSQL, like distSQL-blacklisted functions.
+// contain things not supported by distSQL, like distSQL-blocklisted functions.
 type distSQLExprCheckVisitor struct {
 	err error
 }
@@ -185,7 +185,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 	}
 	switch t := expr.(type) {
 	case *tree.FuncExpr:
-		if t.IsDistSQLBlacklist() {
+		if t.IsDistSQLBlocklist() {
 			v.err = newQueryNotSupportedErrorf("function %s cannot be executed with distsql", t)
 			return false, expr
 		}
@@ -206,7 +206,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 func (v *distSQLExprCheckVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // checkExpr verifies that an expression doesn't contain things that are not yet
-// supported by distSQL, like distSQL-blacklisted functions.
+// supported by distSQL, like distSQL-blocklisted functions.
 func checkExpr(expr tree.Expr) error {
 	if expr == nil {
 		return nil

@@ -1401,9 +1401,9 @@ func (node *FuncExpr) IsImpure() bool {
 	return node.fnProps != nil && node.fnProps.Impure
 }
 
-// IsDistSQLBlacklist returns whether the function is not supported by DistSQL.
-func (node *FuncExpr) IsDistSQLBlacklist() bool {
-	return node.fnProps != nil && node.fnProps.DistsqlBlacklist
+// IsDistSQLBlocklist returns whether the function is not supported by DistSQL.
+func (node *FuncExpr) IsDistSQLBlocklist() bool {
+	return node.fnProps != nil && node.fnProps.DistsqlBlocklist
 }
 
 // CanHandleNulls returns whether or not the function can handle null

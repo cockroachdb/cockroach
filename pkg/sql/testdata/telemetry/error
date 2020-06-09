@@ -1,6 +1,6 @@
 # This file contains telemetry tests for counters triggered by errors.
 
-feature-whitelist
+feature-allowlist
 othererror.*
 errorcodes.*
 unimplemented.*

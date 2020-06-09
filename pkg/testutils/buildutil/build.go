@@ -38,7 +38,7 @@ func short(in string) string {
 // indirectly) on forbidden packages. The forbidden packages are specified as
 // either exact matches or prefix matches.
 // A match is not reported if the package that includes the forbidden package
-// is listed in the whitelist.
+// is listed in the allowlist.
 // If GOPATH isn't set, it is an indication that the source is not available and
 // the test is skipped.
 func VerifyNoImports(
@@ -46,7 +46,7 @@ func VerifyNoImports(
 	pkgPath string,
 	cgo bool,
 	forbiddenPkgs, forbiddenPrefixes []string,
-	whitelist ...string,
+	allowlist ...string,
 ) {
 
 	// Skip test if source is not available.
@@ -68,14 +68,14 @@ func VerifyNoImports(
 		for _, imp := range pkg.Imports {
 			for _, forbidden := range forbiddenPkgs {
 				if forbidden == imp {
-					whitelisted := false
-					for _, w := range whitelist {
+					allowlisted := false
+					for _, w := range allowlist {
 						if path == w {
-							whitelisted = true
+							allowlisted = true
 							break
 						}
 					}
-					if !whitelisted {
+					if !allowlisted {
 						return errors.Errorf("%s imports %s, which is forbidden", short(path), short(imp))
 					}
 				}
@@ -129,10 +129,10 @@ func VerifyNoImports(
 	}
 }
 
-// VerifyTransitiveWhitelist checks that the entire set of transitive
-// dependencies of the given package is in a whitelist. Vendored and stdlib
+// VerifyTransitiveAllowlist checks that the entire set of transitive
+// dependencies of the given package is in a allowlist. Vendored and stdlib
 // packages are always allowed.
-func VerifyTransitiveWhitelist(t testing.TB, pkg string, allowedPkgs []string) {
+func VerifyTransitiveAllowlist(t testing.TB, pkg string, allowedPkgs []string) {
 	// Skip test if source is not available.
 	if build.Default.GOPATH == "" {
 		t.Skip("GOPATH isn't set")

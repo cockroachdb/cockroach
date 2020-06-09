@@ -389,7 +389,7 @@ func makePGPrivilegeInquiryDef(
 	}
 	return builtinDefinition{
 		props: tree.FunctionProperties{
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 		},
 		overloads: variants,
 	}
@@ -645,7 +645,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	// pg_get_constraintdef functions like SHOW CREATE CONSTRAINT would if we
 	// supported that statement.
-	"pg_get_constraintdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_constraintdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		makePGGetConstraintDef(tree.ArgTypes{
 			{"constraint_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
@@ -726,14 +726,14 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
-	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}}),
 		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}, {"column_no", types.Int}, {"pretty_bool", types.Bool}}),
 	),
 
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
 	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
-	"pg_get_viewdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_viewdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}}),
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 	),
@@ -766,7 +766,7 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"pg_get_userbyid": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_userbyid": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"role_oid", types.Oid},
@@ -791,7 +791,7 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"pg_sequence_parameters": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_sequence_parameters": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		// pg_sequence_parameters is an undocumented Postgres builtin that returns
 		// information about a sequence given its OID. It's nevertheless used by
 		// at least one UI tool, so we provide an implementation for compatibility.
@@ -1717,7 +1717,7 @@ SELECT description
 	"current_setting": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}},
@@ -1743,7 +1743,7 @@ SELECT description
 	"set_config": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 			Impure:           true,
 		},
 		tree.Overload{

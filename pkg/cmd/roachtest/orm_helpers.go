@@ -114,9 +114,9 @@ func newORMTestsResults() *ormTestsResults {
 
 // summarizeAll summarizes the result of running an ORM or a driver test suite
 // against a cockroach node. If an unexpected result is observed (for example,
-// a test unexpectedly failed or passed), a new blacklist is populated.
+// a test unexpectedly failed or passed), a new blocklist is populated.
 func (r *ormTestsResults) summarizeAll(
-	t *test, ormName, blacklistName string, expectedFailures blacklist, version, latestTag string,
+	t *test, ormName, blocklistName string, expectedFailures blocklist, version, latestTag string,
 ) {
 	// Collect all the tests that were not run.
 	notRunCount := 0
@@ -142,7 +142,7 @@ func (r *ormTestsResults) summarizeAll(
 	t.l.Printf("------------------------\n")
 
 	r.summarizeFailed(
-		t, ormName, blacklistName, expectedFailures, version, latestTag, notRunCount,
+		t, ormName, blocklistName, expectedFailures, version, latestTag, notRunCount,
 	)
 }
 
@@ -152,8 +152,8 @@ func (r *ormTestsResults) summarizeAll(
 // If a test suite outputs only the failures, then this method should be used.
 func (r *ormTestsResults) summarizeFailed(
 	t *test,
-	ormName, blacklistName string,
-	expectedFailures blacklist,
+	ormName, blocklistName string,
+	expectedFailures blocklist,
 	version, latestTag string,
 	notRunCount int,
 ) {
@@ -193,11 +193,11 @@ func (r *ormTestsResults) summarizeFailed(
 
 	if r.failUnexpectedCount > 0 || r.passUnexpectedCount > 0 ||
 		notRunCount > 0 || r.unexpectedSkipCount > 0 {
-		// Create a new blacklist so we can easily update this test.
+		// Create a new blocklist so we can easily update this test.
 		sort.Strings(r.currentFailures)
 		var b strings.Builder
-		fmt.Fprintf(&b, "Here is new %s blacklist that can be used to update the test:\n\n", ormName)
-		fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
+		fmt.Fprintf(&b, "Here is new %s blocklist that can be used to update the test:\n\n", ormName)
+		fmt.Fprintf(&b, "var %s = blocklist{\n", blocklistName)
 		for _, test := range r.currentFailures {
 			issue := expectedFailures[test]
 			if len(issue) == 0 || issue == "unknown" {
@@ -211,9 +211,9 @@ func (r *ormTestsResults) summarizeFailed(
 		fmt.Fprintf(&b, "}\n\n")
 		t.l.Printf("\n\n%s\n\n", b.String())
 		t.l.Printf("------------------------\n")
-		t.Fatalf("\n%s\nAn updated blacklist (%s) is available in the artifacts' %s log\n",
+		t.Fatalf("\n%s\nAn updated blocklist (%s) is available in the artifacts' %s log\n",
 			bResults.String(),
-			blacklistName,
+			blocklistName,
 			ormName,
 		)
 	}

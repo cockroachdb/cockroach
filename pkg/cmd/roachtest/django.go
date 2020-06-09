@@ -165,15 +165,15 @@ func registerDjango(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := djangoBlacklists.getLists(version)
+		blocklistName, expectedFailureList, ignoredlistName, ignoredlist := djangoBlocklists.getLists(version)
 		if expectedFailureList == nil {
-			t.Fatalf("No django blacklist defined for cockroach version %s", version)
+			t.Fatalf("No django blocklist defined for cockroach version %s", version)
 		}
 		if ignoredlist == nil {
 			t.Fatalf("No django ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignoredlist %s",
-			version, blacklistName, ignoredlistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+			version, blocklistName, ignoredlistName)
 
 		// TODO (rohany): move this to a file backed buffer if the output becomes
 		//  too large.
@@ -197,7 +197,7 @@ func registerDjango(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parsePythonUnitTestOutput(fullTestResults, expectedFailureList, ignoredlist)
 		results.summarizeAll(
-			t, "django" /* ormName */, blacklistName,
+			t, "django" /* ormName */, blocklistName,
 			expectedFailureList, version, djangoLatestTag,
 		)
 	}
