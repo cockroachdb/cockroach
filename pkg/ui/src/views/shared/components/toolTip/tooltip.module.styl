@@ -10,9 +10,9 @@
 
 @require '~src/components/core/index.styl'
 
-.ant-tooltip.tooltip__preset--white
+:global(.ant-tooltip).tooltip__preset--white
   max-width 500px
-  .ant-tooltip-content
+  :global(.ant-tooltip-content)
     position relative
     &:after, &:before
       content ''
@@ -25,10 +25,10 @@
       border-width 10px
     &:before
       border-width 10px
-  .ant-tooltip-arrow
+  :global(.ant-tooltip-arrow)
     &:before
       background-color transparent
-  .ant-tooltip-inner
+  :global(.ant-tooltip-inner)
     padding 10px
     border-radius 3px
     border solid 1px $colors--neutral-2
@@ -39,7 +39,7 @@
     color $colors--neutral-6
 
 .tooltip__preset--placement-bottom
-  .ant-tooltip-content
+  :global(.ant-tooltip-content)
     &:after, &:before
       transform translate(-50%, 0)
       left 50%
@@ -51,7 +51,7 @@
       border-color transparent transparent $colors--neutral-2 transparent
 
 .tooltip__preset--placement-left
-  .ant-tooltip-content
+  :global(.ant-tooltip-content)
     &:after, &:before
       top 50%
       transform translate(0, -50%)

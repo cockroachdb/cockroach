@@ -9,20 +9,19 @@
 // licenses/APL.txt.
 
 import React from "react";
-import "./styles.styl";
+import classnames from "classnames/bind";
+import styles from  "./summaryCard.module.styl";
 
 interface ISummaryCardProps {
   children: React.ReactNode;
   className?: string;
 }
 
+const cx = classnames.bind(styles);
+
 // tslint:disable-next-line: variable-name
-export const SummaryCard: React.FC<ISummaryCardProps> = ({ children, className }) => (
-  <div className={`summary--card ${className}`}>
+export const SummaryCard: React.FC<ISummaryCardProps> = ({ children, className = "" }) => (
+  <div className={`${cx("summary--card")} ${className}`}>
     {children}
   </div>
 );
-
-SummaryCard.defaultProps = {
-  className: "",
-};
