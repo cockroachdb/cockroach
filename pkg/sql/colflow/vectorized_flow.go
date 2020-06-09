@@ -673,9 +673,8 @@ func (s *vectorizedFlowCreator) setupInput(
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
 	factory coldata.ColumnFactory,
-) (op colexecbase.Operator, _ []execinfrapb.MetadataSource, _ error) {
-	inputStreamOps := make([]colexecbase.Operator, 0, len(input.Streams))
-	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
+) (colexecbase.Operator, []execinfrapb.MetadataSource, error) {
+	inputStreamOps := make([]colexec.SynchronizerInput, 0, len(input.Streams))
 	// Before we can safely use types we received over the wire in the
 	// operators, we need to make sure they are hydrated. In row execution
 	// engine it is done during the processor initialization, but operators
@@ -689,8 +688,10 @@ func (s *vectorizedFlowCreator) setupInput(
 		switch inputStream.Type {
 		case execinfrapb.StreamEndpointSpec_LOCAL:
 			in := s.streamIDToInputOp[inputStream.StreamID]
-			inputStreamOps = append(inputStreamOps, in.rootOperator)
-			metaSources = append(metaSources, in.metadataSources...)
+			inputStreamOps = append(inputStreamOps, colexec.SynchronizerInput{
+				Op:              in.rootOperator,
+				MetadataSources: in.metadataSources,
+			})
 		case execinfrapb.StreamEndpointSpec_REMOTE:
 			// If the input is remote, the input operator does not exist in
 			// streamIDToInputOp. Create an inbox.
@@ -705,8 +706,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, err
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
-			metaSources = append(metaSources, inbox)
-			op = inbox
+			op := colexecbase.Operator(inbox)
 			if s.recordingStats {
 				op, err = s.wrapWithVectorizedStatsCollector(
 					inbox, nil /* inputs */, int32(inputStream.StreamID),
@@ -716,28 +716,34 @@ func (s *vectorizedFlowCreator) setupInput(
 					return nil, nil, err
 				}
 			}
-			inputStreamOps = append(inputStreamOps, op)
+			inputStreamOps = append(inputStreamOps, colexec.SynchronizerInput{Op: op, MetadataSources: []execinfrapb.MetadataSource{inbox}})
 		default:
 			return nil, nil, errors.Errorf("unsupported input stream type %s", inputStream.Type)
 		}
 	}
-	op = inputStreamOps[0]
+	op := inputStreamOps[0].Op
+	metaSources := inputStreamOps[0].MetadataSources
 	if len(inputStreamOps) > 1 {
-		var err error
 		statsInputs := inputStreamOps
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
-			op, err = colexec.NewOrderedSynchronizer(
+			os, err := colexec.NewOrderedSynchronizer(
 				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
 				inputStreamOps, input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 			if err != nil {
 				return nil, nil, err
 			}
+			op = os
+			metaSources = []execinfrapb.MetadataSource{os}
 		} else {
 			if opt == flowinfra.FuseAggressively {
-				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, input.ColumnTypes)
+				sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
+				op = sync
+				metaSources = []execinfrapb.MetadataSource{sync}
 			} else {
-				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, input.ColumnTypes, s.waitGroup)
+				sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+				op = sync
+				metaSources = []execinfrapb.MetadataSources{sync}
 				s.operatorConcurrency = true
 			}
 			// Don't use the unordered synchronizer's inputs for stats collection
@@ -746,10 +752,15 @@ func (s *vectorizedFlowCreator) setupInput(
 			statsInputs = nil
 		}
 		if s.recordingStats {
+			statsInputsAsOps := make([]colexecbase.Operator, len(statsInputs))
+			for i := range statsInputs {
+				statsInputsAsOps[i] = statsInputs[i].Op
+			}
 			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
 			// this stats collector to display stats.
+			var err error
 			op, err = s.wrapWithVectorizedStatsCollector(
-				op, statsInputs, -1 /* id */, "" /* idTagKey */, nil, /* monitors */
+				op, statsInputsAsOps, -1 /* id */, "" /* idTagKey */, nil, /* monitors */
 			)
 			if err != nil {
 				return nil, nil, err

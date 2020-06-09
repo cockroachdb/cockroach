@@ -110,7 +110,11 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	runTestsWithoutAllNullsInjection(t, inputTuples, [][]*types.T{inputTypes, inputTypes}, expected,
 		unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 			var input colexecbase.Operator
-			input = NewParallelUnorderedSynchronizer(inputs, inputTypes, &wg)
+			parallelUnorderedSynchronizerInputs := make([]SynchronizerInput, len(inputs))
+			for i := range parallelUnorderedSynchronizerInputs {
+				parallelUnorderedSynchronizerInputs[i].Op = inputs[i]
+			}
+			input = NewParallelUnorderedSynchronizer(parallelUnorderedSynchronizerInputs, &wg)
 			input = NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
 			return NewConstOp(testAllocator, input, types.Int, constVal, 1)
 		})
