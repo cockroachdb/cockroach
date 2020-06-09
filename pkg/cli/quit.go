@@ -26,22 +26,23 @@ import (
 )
 
 // quitCmd command shuts down the node server.
+// TODO(irfansharif): Delete this subcommand once v20.2 is cut.
 var quitCmd = &cobra.Command{
 	Use:   "quit",
 	Short: "drain and shut down a node\n",
 	Long: `
-Shut down the server. The first stage is drain, where the server
-stops accepting client connections, then stops extant
-connections, and finally pushes range leases onto other nodes,
-subject to various timeout parameters configurable via
-cluster settings. After the first stage completes,
-the server process is shut down.
-
-See also 'cockroach node drain' to drain a server
-without stopping the server process.
+Shut down the server. The first stage is drain, where the server stops accepting
+client connections, then stops extant connections, and finally pushes range
+leases onto other nodes, subject to various timeout parameters configurable via
+cluster settings. After the first stage completes, the server process is shut
+down.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runQuit),
+	Deprecated: `see 'cockroach node drain' instead to drain a 
+server without terminating the server process (which can in turn be done using 
+an orchestration layer or a process manager, or by sending a termination signal
+directly).`,
 }
 
 // runQuit accesses the quit shutdown path.
