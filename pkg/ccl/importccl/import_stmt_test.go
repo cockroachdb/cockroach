@@ -2911,20 +2911,19 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	b.ReportAllocs()
 }
 
-
 // goos: darwin
 // goarch: amd64
 // pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
-// BenchmarkPgCopyConvertRecord-16    	   88598	     13374 ns/op	   8.97 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   88972	     13221 ns/op	   9.08 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   91716	     13242 ns/op	   9.06 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   90674	     13375 ns/op	   8.97 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   89626	     13265 ns/op	   9.05 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   90408	     13303 ns/op	   9.02 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   90818	     13374 ns/op	   8.97 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   90483	     13290 ns/op	   9.03 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   85894	     13447 ns/op	   8.92 MB/s
-// BenchmarkPgCopyConvertRecord-16    	   87988	     13227 ns/op	   9.07 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  317534	      3752 ns/op	  31.98 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  317433	      3767 ns/op	  31.86 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  308832	      3867 ns/op	  31.03 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  255715	      3913 ns/op	  30.67 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  303086	      3942 ns/op	  30.44 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  304741	      3520 ns/op	  34.09 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  338954	      3506 ns/op	  34.22 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  339795	      3531 ns/op	  33.99 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  339940	      3610 ns/op	  33.24 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  307701	      3833 ns/op	  31.30 MB/s
 func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	ctx := context.Background()
 
@@ -2973,10 +2972,12 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	create := stmt.AST.(*tree.CreateTable)
+	semaCtx := tree.MakeSemaContext()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100),
+		sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -2993,11 +2994,11 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	for i, col := range descr.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
-	r, err := newPgCopyReader(ctx, kvCh, roachpb.PgCopyOptions{
-		Delimiter:   '\t',
-		Null: `\N`,
+	r, err := newPgCopyReader(roachpb.PgCopyOptions{
+		Delimiter:  '\t',
+		Null:       `\N`,
 		MaxRowSize: 4096,
-	}, descr, &evalCtx)
+	}, kvCh, 0, 0, descr, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -3008,7 +3009,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 
 	pgCopyInput := &fileReader{Reader: producer}
 	b.ResetTimer()
-	require.NoError(b, r.readFile(ctx,pgCopyInput,0, 0, nil))
+	require.NoError(b, r.readFile(ctx, pgCopyInput, 0, 0, nil))
 	close(kvCh)
 	b.ReportAllocs()
 }
