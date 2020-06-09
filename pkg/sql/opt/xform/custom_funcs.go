@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -852,9 +853,25 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	var iter scanIndexIter
 	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
 	for iter.next() {
+		var invertedConstraint *invertedexpr.SpanExpression
+		var constraint *constraint.Constraint
+		var remaining memo.FiltersExpr
+		var ok bool
+
 		// Check whether the filter can constrain the index.
-		constraint, remaining, ok := c.tryConstrainIndex(
-			filters, nil /* optionalFilters */, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
+		// TODO(rytaft): Unify these two cases so both return an invertedConstraint.
+		invertedConstraint, remaining, ok = c.tryConstrainGeoIndex(
+			filters, scanPrivate.Table, iter.index,
+		)
+		if !ok {
+			constraint, remaining, ok = c.tryConstrainIndex(
+				filters,
+				nil, /* optionalFilters */
+				scanPrivate.Table,
+				iter.indexOrdinal,
+				true, /* isInverted */
+			)
+		}
 		if !ok {
 			continue
 		}
@@ -863,6 +880,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
 		newScanPrivate.Constraint = constraint
+		newScanPrivate.InvertedConstraint = invertedConstraint
 
 		// Though the index is marked as containing the JSONB column being
 		// indexed, it doesn't actually, and it's only valid to extract the
@@ -1016,6 +1034,184 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 	}
 
 	return false
+}
+
+// tryConstrainGeoIndex tries to derive an inverted index constraint for the
+// given geospatial index from the specified filters. If a constraint is
+// derived, it is returned along with any filter remaining after extracting
+// the constraint. If no constraint can be derived, then tryConstrainGeoIndex
+// returns ok = false.
+func (c *CustomFuncs) tryConstrainGeoIndex(
+	filters memo.FiltersExpr, tabID opt.TableID, index cat.Index,
+) (invertedConstraint *invertedexpr.SpanExpression, remainingFilters memo.FiltersExpr, ok bool) {
+	config := index.GeoConfig()
+	if geoindex.IsGeographyConfig(config) {
+		return c.tryConstrainGeographyIndex(filters, tabID, index)
+	} else if geoindex.IsGeometryConfig(config) {
+		return c.tryConstrainGeometryIndex(filters, tabID, index)
+	}
+	return nil, nil, false
+}
+
+// tryConstrainGeographyIndex implements tryConstrainGeoIndex for Geography
+// indexes.
+func (c *CustomFuncs) tryConstrainGeographyIndex(
+	filters memo.FiltersExpr, tabID opt.TableID, index cat.Index,
+) (invertedConstraint *invertedexpr.SpanExpression, remainingFilters memo.FiltersExpr, ok bool) {
+	geogIdx := geoindex.NewS2GeographyIndex(*index.GeoConfig().S2Geography)
+	for i := range filters {
+		fn, ok := filters[i].Condition.(*memo.FunctionExpr)
+		if !ok {
+			continue
+		}
+		d, ok := c.canFnConstrainGeoIndex(fn, tabID, index)
+		if !ok {
+			continue
+		}
+
+		geog := d.(*tree.DGeography).Geography
+
+		relationship, _ := geoRelationshipMap[fn.Name]
+		switch relationship {
+		case geoindex.Covers:
+			unionKeySpans, err := geogIdx.Covers(c.e.evalCtx.Context, geog)
+			if err != nil {
+				panic(err)
+			}
+			invertedConstraint = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+		case geoindex.CoveredBy:
+			rpKeyExpr, err := geogIdx.CoveredBy(c.e.evalCtx.Context, geog)
+			if err != nil {
+				panic(err)
+			}
+			if invertedConstraint, err = invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr); err != nil {
+				panic(err)
+			}
+
+		case geoindex.Intersects:
+			unionKeySpans, err := geogIdx.Intersects(c.e.evalCtx.Context, geog)
+			if err != nil {
+				panic(err)
+			}
+			invertedConstraint = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled relationship: %v", relationship))
+		}
+
+		// TODO(rytaft): What if there are multiple functions that could constrain
+		// the index? Should we explore them all?
+		break
+	}
+
+	if invertedConstraint == nil {
+		return nil, nil, false
+	}
+
+	// Geo index scans can never be tight, so remaining filters is always the
+	// same as filters.
+	return invertedConstraint, filters, true
+}
+
+// tryConstrainGeometryIndex implements tryConstrainGeoIndex for Geometry
+// indexes.
+func (c *CustomFuncs) tryConstrainGeometryIndex(
+	filters memo.FiltersExpr, tabID opt.TableID, index cat.Index,
+) (invertedConstraint *invertedexpr.SpanExpression, remainingFilters memo.FiltersExpr, ok bool) {
+	geomIdx := geoindex.NewS2GeometryIndex(*index.GeoConfig().S2Geometry)
+	for i := range filters {
+		fn, ok := filters[i].Condition.(*memo.FunctionExpr)
+		if !ok {
+			continue
+		}
+		d, ok := c.canFnConstrainGeoIndex(fn, tabID, index)
+		if !ok {
+			continue
+		}
+
+		geom := d.(*tree.DGeometry).Geometry
+
+		relationship, _ := geoRelationshipMap[fn.Name]
+		switch relationship {
+		case geoindex.Covers:
+			unionKeySpans, err := geomIdx.Covers(c.e.evalCtx.Context, geom)
+			if err != nil {
+				panic(err)
+			}
+			invertedConstraint = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+		case geoindex.CoveredBy:
+			rpKeyExpr, err := geomIdx.CoveredBy(c.e.evalCtx.Context, geom)
+			if err != nil {
+				panic(err)
+			}
+			if invertedConstraint, err = invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr); err != nil {
+				panic(err)
+			}
+
+		case geoindex.Intersects:
+			unionKeySpans, err := geomIdx.Intersects(c.e.evalCtx.Context, geom)
+			if err != nil {
+				panic(err)
+			}
+			invertedConstraint = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled relationship: %v", relationship))
+		}
+
+		// TODO(rytaft): What if there are multiple functions that could constrain
+		// the index? Should we explore them all?
+		break
+	}
+
+	if invertedConstraint == nil {
+		return nil, nil, false
+	}
+
+	// Geo index scans can never be tight, so remaining filters is always the
+	// same as filters.
+	return invertedConstraint, filters, true
+}
+
+// canFnConstrainGeoIndex returns true if the given function can constrain
+// the given geospatial index. If so, it also returns the constant that will
+// be used to constrain the index.
+func (c *CustomFuncs) canFnConstrainGeoIndex(
+	fn *memo.FunctionExpr, tabID opt.TableID, index cat.Index,
+) (_ tree.Datum, ok bool) {
+	if !IsGeoIndexFunction(fn) {
+		return nil, false
+	}
+
+	if fn.Args.ChildCount() != 2 {
+		panic(errors.AssertionFailedf(
+			"all index-accelerated geospatial functions should have two arguments",
+		))
+	}
+
+	// The first argument should be a variable corresponding to the index
+	// column.
+	variable, ok := fn.Args.Child(0).(*memo.VariableExpr)
+	if !ok {
+		// TODO(rytaft): Commute the geospatial function in this case.
+		//   Contains    <->  ContainedBy
+		//   Intersects  <->  Intersects
+		return nil, false
+	}
+	if variable.Col != tabID.ColumnID(index.Column(0).Ordinal) {
+		// The column in the function does not match the index column.
+		return nil, false
+	}
+
+	// The second argument should be a constant.
+	if !memo.CanExtractConstDatum(fn.Args.Child(1)) {
+		return nil, false
+	}
+	d := memo.ExtractConstDatum(fn.Args.Child(1))
+
+	return d, true
 }
 
 // ----------------------------------------------------------------------
