@@ -828,11 +828,7 @@ func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 // concatenating keyPrefix with the encodings of the column in the
 // index.
 func EncodeInvertedIndexKeys(
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
-	colMap map[ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
+	index *IndexDescriptor, colMap map[ColumnID]int, values []tree.Datum, keyPrefix []byte,
 ) (key [][]byte, err error) {
 	if len(index.ColumnIDs) > 1 {
 		return nil, errors.AssertionFailedf("trying to apply inverted index to more than one column")
@@ -1051,7 +1047,7 @@ func EncodeSecondaryIndex(
 	var secondaryKeys [][]byte
 	var err error
 	if secondaryIndex.Type == IndexDescriptor_INVERTED {
-		secondaryKeys, err = EncodeInvertedIndexKeys(tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		secondaryKeys, err = EncodeInvertedIndexKeys(secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 	} else {
 		var secondaryIndexKey []byte
 		secondaryIndexKey, containsNull, err = EncodeIndexKey(

@@ -112,3 +112,7 @@
 - Version: 29 (MinAcceptedVersion: 29)
     - The hashing of DArray datums was changed and is incompatible with the
       existing method of hashing DArrays.
+- Version: 30 (MinAcceptedVersion: 30)
+    - The Sampler and SampleAggregator specs for optimizer statistics have
+      added fields for inverted sketches. Two new row types are produced by
+      Samplers, which are not backward compatible with the previous version.
