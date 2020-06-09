@@ -30,6 +30,7 @@ import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import { Button, BackIcon } from "src/components/button";
 import { DATE_FORMAT } from "src/util/format";
 import { JobStatusCell } from "./jobStatusCell";
+import "src/views/shared/components/summaryCard/styles.styl";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
