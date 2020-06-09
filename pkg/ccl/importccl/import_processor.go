@@ -148,7 +148,7 @@ func makeInputConverter(
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, kvCh, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
-		return newPgCopyReader(ctx, kvCh, spec.Format.PgCopy, singleTable, evalCtx)
+		return newPgCopyReader(spec.Format.PgCopy,kvCh, spec.WalltimeNanos, int(spec.ReaderParallelism),  singleTable, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:

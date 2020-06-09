@@ -18,7 +18,6 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,25 +31,28 @@ import (
 const defaultScanBuffer = 1024 * 1024 * 4
 
 type pgCopyReader struct {
-	conv row.DatumRowConverter
+	importCtx *parallelImportContext
 	opts roachpb.PgCopyOptions
 }
 
 var _ inputConverter = &pgCopyReader{}
 
 func newPgCopyReader(
-	ctx context.Context,
-	kvCh chan row.KVBatch,
 	opts roachpb.PgCopyOptions,
+	kvCh chan row.KVBatch,
+	walltime int64,
+	parallelism int,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
-	conv, err := row.NewDatumRowConverter(ctx, tableDesc, nil /* targetColNames */, evalCtx, kvCh)
-	if err != nil {
-		return nil, err
-	}
 	return &pgCopyReader{
-		conv: *conv,
+		importCtx: &parallelImportContext{
+			walltime:   walltime,
+			numWorkers: parallelism,
+			evalCtx:    evalCtx,
+			tableDesc:  tableDesc,
+			kvCh:       kvCh,
+		},
 		opts: opts,
 	}, nil
 }
@@ -254,6 +256,81 @@ func (c copyData) String() string {
 	return buf.String()
 }
 
+type pgCopyProducer struct {
+	importCtx *parallelImportContext
+	opts *roachpb.PgCopyOptions
+	input *fileReader
+	copyStream *postgreStreamCopy
+	row copyData
+	err error
+}
+var _ importRowProducer = &pgCopyProducer{}
+
+// Scan implements importRowProducer
+func (p *pgCopyProducer) Scan() bool {
+	p.row, p.err = p.copyStream.Next()
+	if p.err == io.EOF {
+		p.err = nil
+		return false
+	}
+
+	if p.err != nil {
+		return false
+	}
+
+	return true
+}
+
+// Err implements importRowProducer
+func (p *pgCopyProducer) Err() error {
+	return p.err
+}
+
+// Skip implements importRowProducer
+func (p *pgCopyProducer) Skip() error {
+	return nil // no-op
+}
+
+// Row implements importRowProducer
+func (p *pgCopyProducer) Row() (interface{}, error) {
+	return p.row, p.err
+}
+
+// Progress implements importRowProducer
+func (p *pgCopyProducer) Progress() float32 {
+	return p.input.ReadFraction()
+}
+
+type pgCopyConsumer struct {
+	opts *roachpb.PgCopyOptions
+}
+
+var _ importRowConsumer = &pgCopyConsumer{}
+
+// FillDatums implements importRowConsumer
+func (p *pgCopyConsumer) FillDatums(row interface{}, rowNum int64, conv *row.DatumRowConverter) error {
+	data := row.(copyData)
+	var err error
+
+	if len(data) != len(conv.VisibleColTypes) {
+		return newImportRowError(fmt.Errorf(
+			"unexpected number of columns, expected %d values, got %d", len(conv.VisibleColTypes), len(data)), data.String(), rowNum)
+	}
+
+	for i, s := range data {
+		if s == nil {
+			conv.Datums[i] = tree.DNull
+		} else {
+			conv.Datums[i], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
+			if err != nil {
+				col := conv.VisibleCols[i]
+				return newImportRowError(fmt.Errorf("encountered error %s when attempting to parse %q as %s", err.Error(), col.Name, col.Type.SQLString()), data.String(), rowNum)
+			}
+		}
+	}
+	return nil
+}
+
 func (d *pgCopyReader) readFile(
 	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
@@ -265,47 +342,23 @@ func (d *pgCopyReader) readFile(
 		d.opts.Delimiter,
 		d.opts.Null,
 	)
-	d.conv.KvBatch.Source = inputIdx
-	d.conv.FractionFn = input.ReadFraction
-	count := int64(1)
-	d.conv.CompletedRowFn = func() int64 {
-		return count
+
+	producer := &pgCopyProducer{
+		importCtx:  d.importCtx,
+		opts:       &d.opts,
+		input:      input,
+		copyStream: c,
 	}
 
-	for ; ; count++ {
-		row, err := c.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
-		}
-
-		if count <= resumePos {
-			continue
-		}
-
-		if len(row) != len(d.conv.VisibleColTypes) {
-			return makeRowErr("", count, pgcode.Syntax,
-				"expected %d values, got %d", len(d.conv.VisibleColTypes), len(row))
-		}
-		for i, s := range row {
-			if s == nil {
-				d.conv.Datums[i] = tree.DNull
-			} else {
-				d.conv.Datums[i], err = sqlbase.ParseDatumStringAs(d.conv.VisibleColTypes[i], *s, d.conv.EvalCtx)
-				if err != nil {
-					col := d.conv.VisibleCols[i]
-					return wrapRowErr(err, "", count, pgcode.Syntax,
-						"parse %q as %s", col.Name, col.Type.SQLString())
-				}
-			}
-		}
-
-		if err := d.conv.Row(ctx, inputIdx, count); err != nil {
-			return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
-		}
+	consumer := &pgCopyConsumer{
+		opts: &d.opts,
 	}
 
-	return d.conv.SendBatch(ctx)
+	fileCtx := &importFileContext{
+		source: inputIdx,
+		skip: resumePos,
+		rejected: rejected,
+	}
+
+	return runParallelImport(ctx, d.importCtx, fileCtx, producer, consumer)
 }
