@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -852,17 +853,36 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	// Iterate over all inverted indexes.
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
 	for iter.Next() {
+		var invertedConstraint *invertedexpr.SpanExpression
+		var constraint *constraint.Constraint
+		var remaining memo.FiltersExpr
+		var geoOk, nonGeoOk bool
+
 		// Check whether the filter can constrain the index.
-		constraint, remaining, ok := c.tryConstrainIndex(
-			filters, nil /* optionalFilters */, scanPrivate.Table, iter.IndexOrdinal(), true /* isInverted */)
-		if !ok {
-			continue
+		// TODO(rytaft): Unify these two cases so both return an invertedConstraint.
+		invertedConstraint, geoOk = c.tryConstrainGeoIndex(filters, scanPrivate.Table, iter.Index())
+		if geoOk {
+			// Geo index scans can never be tight, so remaining filters is always the
+			// same as filters.
+			remaining = filters
+		} else {
+			constraint, remaining, nonGeoOk = c.tryConstrainIndex(
+				filters,
+				nil, /* optionalFilters */
+				scanPrivate.Table,
+				iter.IndexOrdinal(),
+				true, /* isInverted */
+			)
+			if !nonGeoOk {
+				continue
+			}
 		}
 
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.IndexOrdinal()
 		newScanPrivate.Constraint = constraint
+		newScanPrivate.InvertedConstraint = invertedConstraint
 
 		// Though the index is marked as containing the JSONB column being
 		// indexed, it doesn't actually, and it's only valid to extract the
@@ -1016,6 +1036,193 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 	}
 
 	return false
+}
+
+// getSpanExprForGeoIndexFn is a function that returns a SpanExpression that
+// constrains the given geo index according to the given constant and
+// geospatial relationship. It is implemented by getSpanExprForGeographyIndex
+// and getSpanExprForGeometryIndex and used in constrainGeoIndex.
+type getSpanExprForGeoIndexFn func(
+	tree.Datum, geoindex.RelationshipType, cat.Index,
+) *invertedexpr.SpanExpression
+
+// tryConstrainGeoIndex tries to derive an inverted index constraint for the
+// given geospatial index from the specified filters. If a constraint is
+// derived, it is returned with ok=true. If no constraint can be derived,
+// then tryConstrainGeoIndex returns ok=false.
+func (c *CustomFuncs) tryConstrainGeoIndex(
+	filters memo.FiltersExpr, tabID opt.TableID, index cat.Index,
+) (invertedConstraint *invertedexpr.SpanExpression, ok bool) {
+	config := index.GeoConfig()
+	var getSpanExpr getSpanExprForGeoIndexFn
+	if geoindex.IsGeographyConfig(config) {
+		getSpanExpr = c.getSpanExprForGeographyIndex
+	} else if geoindex.IsGeometryConfig(config) {
+		getSpanExpr = c.getSpanExprForGeometryIndex
+	} else {
+		return nil, false
+	}
+
+	var invertedExpr invertedexpr.InvertedExpression
+	for i := range filters {
+		invertedExprLocal := c.constrainGeoIndex(filters[i].Condition, tabID, index, getSpanExpr)
+		if invertedExpr == nil {
+			invertedExpr = invertedExprLocal
+		} else {
+			invertedExpr = invertedexpr.And(invertedExpr, invertedExprLocal)
+		}
+	}
+
+	if invertedExpr == nil {
+		return nil, false
+	}
+
+	spanExpr, ok := invertedExpr.(*invertedexpr.SpanExpression)
+	if !ok {
+		return nil, false
+	}
+
+	return spanExpr, true
+}
+
+// getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
+// geography index according to the given constant and geospatial relationship.
+func (c *CustomFuncs) getSpanExprForGeographyIndex(
+	d tree.Datum, relationship geoindex.RelationshipType, index cat.Index,
+) *invertedexpr.SpanExpression {
+	geogIdx := geoindex.NewS2GeographyIndex(*index.GeoConfig().S2Geography)
+	geog := d.(*tree.DGeography).Geography
+	var spanExpr *invertedexpr.SpanExpression
+
+	switch relationship {
+	case geoindex.Covers:
+		unionKeySpans, err := geogIdx.Covers(c.e.evalCtx.Context, geog)
+		if err != nil {
+			panic(err)
+		}
+		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+	case geoindex.CoveredBy:
+		rpKeyExpr, err := geogIdx.CoveredBy(c.e.evalCtx.Context, geog)
+		if err != nil {
+			panic(err)
+		}
+		if spanExpr, err = invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr); err != nil {
+			panic(err)
+		}
+
+	case geoindex.Intersects:
+		unionKeySpans, err := geogIdx.Intersects(c.e.evalCtx.Context, geog)
+		if err != nil {
+			panic(err)
+		}
+		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+	default:
+		panic(errors.AssertionFailedf("unhandled relationship: %v", relationship))
+	}
+
+	return spanExpr
+}
+
+// getSpanExprForGeometryIndex gets a SpanExpression that constrains the given
+// geometry index according to the given constant and geospatial relationship.
+func (c *CustomFuncs) getSpanExprForGeometryIndex(
+	d tree.Datum, relationship geoindex.RelationshipType, index cat.Index,
+) *invertedexpr.SpanExpression {
+	geomIdx := geoindex.NewS2GeometryIndex(*index.GeoConfig().S2Geometry)
+	geom := d.(*tree.DGeometry).Geometry
+	var spanExpr *invertedexpr.SpanExpression
+
+	switch relationship {
+	case geoindex.Covers:
+		unionKeySpans, err := geomIdx.Covers(c.e.evalCtx.Context, geom)
+		if err != nil {
+			panic(err)
+		}
+		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+	case geoindex.CoveredBy:
+		rpKeyExpr, err := geomIdx.CoveredBy(c.e.evalCtx.Context, geom)
+		if err != nil {
+			panic(err)
+		}
+		if spanExpr, err = invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr); err != nil {
+			panic(err)
+		}
+
+	case geoindex.Intersects:
+		unionKeySpans, err := geomIdx.Intersects(c.e.evalCtx.Context, geom)
+		if err != nil {
+			panic(err)
+		}
+		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+	default:
+		panic(errors.AssertionFailedf("unhandled relationship: %v", relationship))
+	}
+
+	return spanExpr
+}
+
+// constrainGeoIndex returns an InvertedExpression representing a constraint
+// of the given geospatial index.
+func (c *CustomFuncs) constrainGeoIndex(
+	expr opt.ScalarExpr, tabID opt.TableID, index cat.Index, getSpanExpr getSpanExprForGeoIndexFn,
+) (_ invertedexpr.InvertedExpression) {
+	var fn *memo.FunctionExpr
+	switch t := expr.(type) {
+	case *memo.AndExpr:
+		return invertedexpr.And(
+			c.constrainGeoIndex(t.Left, tabID, index, getSpanExpr),
+			c.constrainGeoIndex(t.Right, tabID, index, getSpanExpr),
+		)
+
+	case *memo.OrExpr:
+		return invertedexpr.Or(
+			c.constrainGeoIndex(t.Left, tabID, index, getSpanExpr),
+			c.constrainGeoIndex(t.Right, tabID, index, getSpanExpr),
+		)
+
+	case *memo.FunctionExpr:
+		fn = t
+
+	default:
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	if !IsGeoIndexFunction(fn) {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	if fn.Args.ChildCount() < 2 {
+		panic(errors.AssertionFailedf(
+			"all index-accelerated geospatial functions should have at least two arguments",
+		))
+	}
+
+	// The first argument should be a variable corresponding to the index
+	// column.
+	variable, ok := fn.Args.Child(0).(*memo.VariableExpr)
+	if !ok {
+		// TODO(rytaft): Commute the geospatial function in this case.
+		//   Covers      <->  CoveredBy
+		//   Intersects  <->  Intersects
+		return invertedexpr.NonInvertedColExpression{}
+	}
+	if variable.Col != tabID.ColumnID(index.Column(0).Ordinal) {
+		// The column in the function does not match the index column.
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	// The second argument should be a constant.
+	if !memo.CanExtractConstDatum(fn.Args.Child(1)) {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+	d := memo.ExtractConstDatum(fn.Args.Child(1))
+
+	relationship := geoRelationshipMap[fn.Name]
+	return getSpanExpr(d, relationship, index)
 }
 
 // ----------------------------------------------------------------------
@@ -1549,9 +1756,9 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		))
 	}
 
-	if function.Args.ChildCount() != 2 {
+	if function.Args.ChildCount() < 2 {
 		panic(errors.AssertionFailedf(
-			"all index-accelerated geospatial functions should have two arguments",
+			"all index-accelerated geospatial functions should have at least two arguments",
 		))
 	}
 
@@ -1572,7 +1779,7 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 	if !inputProps.OutputCols.Contains(variable.Col) {
 		// The second argument should be from the input.
 		// TODO(rytaft): Commute the geospatial function in this case.
-		//   Contains    <->  ContainedBy
+		//   Covers      <->  CoveredBy
 		//   Intersects  <->  Intersects
 		return
 	}

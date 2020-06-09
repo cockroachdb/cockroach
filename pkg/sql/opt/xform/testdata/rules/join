@@ -356,7 +356,7 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
 memo
 SELECT * FROM abc INNER HASH JOIN xyz ON a=x
 ----
-memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
  │         ├── best: (inner-join G2 G3 G4)
