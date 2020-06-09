@@ -198,8 +198,7 @@ type TypeLookupFunc func(id ID) (*tree.TypeName, TypeDescriptorInterface, error)
 // types present in a table descriptor. typeLookup retrieves the fully
 // qualified name and descriptor for a particular ID.
 func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupFunc) error {
-	for i := range desc.Columns {
-		col := &desc.Columns[i]
+	hydrateCol := func(col *ColumnDescriptor) error {
 		if col.Type.UserDefined() {
 			// Look up its type descriptor.
 			name, typDesc, err := typeLookup(ID(col.Type.StableTypeID()))
@@ -210,6 +209,20 @@ func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupF
 			//  information present in the descriptor has the same version as
 			//  the resolved type descriptor we found here.
 			if err := typDesc.HydrateTypeInfoWithName(col.Type, name, typeLookup); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for i := range desc.Columns {
+		if err := hydrateCol(&desc.Columns[i]); err != nil {
+			return err
+		}
+	}
+	for i := range desc.Mutations {
+		mut := &desc.Mutations[i]
+		if col := mut.GetColumn(); col != nil {
+			if err := hydrateCol(col); err != nil {
 				return err
 			}
 		}

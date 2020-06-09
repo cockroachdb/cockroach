@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -65,9 +66,12 @@ type ColumnBackfiller struct {
 func (cb *ColumnBackfiller) Init(
 	ctx context.Context, evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
 ) error {
+	cols := desc.Columns
 	cb.evalCtx = evalCtx
 	var dropped []sqlbase.ColumnDescriptor
 	if len(desc.Mutations) > 0 {
+		cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+		cols = append(cols, desc.Columns...)
 		for _, m := range desc.Mutations {
 			if ColumnMutationFilter(m) {
 				desc := *m.GetColumn()
@@ -77,27 +81,67 @@ func (cb *ColumnBackfiller) Init(
 				case sqlbase.DescriptorMutation_DROP:
 					dropped = append(dropped, desc)
 				}
+				cols = append(cols, desc)
 			}
 		}
 	}
-	defaultExprs, err := sqlbase.MakeDefaultExprs(
-		ctx, cb.added, &transform.ExprTransformContext{}, cb.evalCtx,
-	)
-	if err != nil {
-		return err
+
+	colTyps := make([]*types.T, len(cols))
+	for i := range cols {
+		colTyps[i] = cols[i].Type
 	}
-	var txCtx transform.ExprTransformContext
-	computedExprs, err := sqlbase.MakeComputedExprs(
-		ctx,
-		cb.added,
-		desc,
-		tree.NewUnqualifiedTableName(tree.Name(desc.Name)),
-		&txCtx,
-		cb.evalCtx,
-		true, /* addingCols */
-	)
-	if err != nil {
-		return err
+
+	var defaultExprs, computedExprs []tree.TypedExpr
+	// Set up a closure to hydrate and preprocess expressions needed for
+	// the backfill.
+	hydrateTypes := func(ctx context.Context, evalCtx *tree.EvalContext) error {
+		// Hydrate all the types present in the table.
+		if err := execinfrapb.HydrateTypeSlice(cb.evalCtx, colTyps); err != nil {
+			return err
+		}
+		// Set up a SemaContext to type check the default and computed expressions.
+		semaCtx := tree.MakeSemaContext()
+		semaCtx.TypeResolver = cb.evalCtx.TypeResolver
+		var err error
+		defaultExprs, err = sqlbase.MakeDefaultExprs(
+			ctx, cb.added, &transform.ExprTransformContext{}, cb.evalCtx, &semaCtx,
+		)
+		if err != nil {
+			return err
+		}
+		var txCtx transform.ExprTransformContext
+		computedExprs, err = schemaexpr.MakeComputedExprs(
+			ctx,
+			cb.added,
+			desc,
+			tree.NewUnqualifiedTableName(tree.Name(desc.Name)),
+			&txCtx,
+			cb.evalCtx,
+			&semaCtx,
+			true, /* addingCols */
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if cb.evalCtx.Txn != nil {
+		// If we have a txn, then use it.
+		if err := hydrateTypes(ctx, cb.evalCtx); err != nil {
+			return err
+		}
+	} else {
+		// Otherwise, create one. We fall into this case when performing
+		// a distributed backfill outside of a transaction.
+		if err := cb.evalCtx.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			cb.evalCtx.Txn = txn
+			return hydrateTypes(ctx, cb.evalCtx)
+		}); err != nil {
+			return err
+		}
+		// Reset the evalCtx's transaction after type the expressions are processed.
+		cb.evalCtx.Txn = nil
 	}
 
 	cb.updateCols = append(cb.added, dropped...)
