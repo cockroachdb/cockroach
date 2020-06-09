@@ -165,18 +165,18 @@ var enabledDjangoTests = []string{
 	"view_tests",
 }
 
-var djangoBlacklists = blacklistsForVersion{
-	{"v19.2", "djangoBlacklist19_2", djangoBlacklist19_2, "djangoIgnoreList19_2", djangoIgnoreList19_2},
-	{"v20.1", "djangoBlacklist20_1", djangoBlacklist20_1, "djangoIgnoreList20_1", djangoIgnoreList20_1},
-	{"v20.2", "djangoBlacklist20_2", djangoBlacklist20_2, "djangoIgnoreList20_2", djangoIgnoreList20_2},
+var djangoBlocklists = blocklistsForVersion{
+	{"v19.2", "djangoBlocklist19_2", djangoBlocklist19_2, "djangoIgnoreList19_2", djangoIgnoreList19_2},
+	{"v20.1", "djangoBlocklist20_1", djangoBlocklist20_1, "djangoIgnoreList20_1", djangoIgnoreList20_1},
+	{"v20.2", "djangoBlocklist20_2", djangoBlocklist20_2, "djangoIgnoreList20_2", djangoIgnoreList20_2},
 }
 
 // Maintain that this list is alphabetized.
-var djangoBlacklist20_2 = blacklist{}
+var djangoBlocklist20_2 = blocklist{}
 
-var djangoBlacklist20_1 = blacklist{}
+var djangoBlocklist20_1 = blocklist{}
 
-var djangoBlacklist19_2 = blacklist{
+var djangoBlocklist19_2 = blocklist{
 	"admin_views.tests.AdminViewBasicTest.test_date_hierarchy_timezone_dst":                      "unknown",
 	"admin_views.tests.SecureViewTests.test_secure_view_shows_login_if_not_logged_in":            "unknown",
 	"admin_views.tests.SecureViewTests.test_staff_member_required_decorator_works_with_argument": "unknown",
@@ -218,8 +218,8 @@ var djangoBlacklist19_2 = blacklist{
 	//"postgres_tests.test_array.TestOtherTypesExactQuerying.test_exact_decimals":                                     "23468",
 }
 
-var djangoIgnoreList20_2 = blacklist{}
+var djangoIgnoreList20_2 = blocklist{}
 
-var djangoIgnoreList20_1 = blacklist{}
+var djangoIgnoreList20_1 = blocklist{}
 
-var djangoIgnoreList19_2 = blacklist{}
+var djangoIgnoreList19_2 = blocklist{}

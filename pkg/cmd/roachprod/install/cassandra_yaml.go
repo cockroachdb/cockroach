@@ -88,7 +88,7 @@ num_tokens: 256
 # May either be "true" or "false" to enable globally
 hinted_handoff_enabled: true
 
-# When hinted_handoff_enabled is true, a black list of data centers that will not
+# When hinted_handoff_enabled is true, a blocklist of data centers that will not
 # perform hinted handoff
 # hinted_handoff_disabled_datacenters:
 #    - DC1

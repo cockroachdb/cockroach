@@ -114,7 +114,7 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string
 // parseJUnitXML parses testOutputInJUnitXMLFormat and updates the receiver
 // accordingly.
 func (r *ormTestsResults) parseJUnitXML(
-	t *test, expectedFailures, ignorelist blacklist, testOutputInJUnitXMLFormat []byte,
+	t *test, expectedFailures, ignorelist blocklist, testOutputInJUnitXMLFormat []byte,
 ) {
 	tests, statuses, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
 	if err != nil {
@@ -170,7 +170,7 @@ func (r *ormTestsResults) parseJUnitXML(
 // parseAndSummarizeJavaORMTestsResults parses the test output of running a
 // test suite for some Java ORM against cockroach and summarizes it. If an
 // unexpected result is observed (for example, a test unexpectedly failed or
-// passed), a new blacklist is populated.
+// passed), a new blocklist is populated.
 func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
 	t *test,
@@ -178,9 +178,9 @@ func parseAndSummarizeJavaORMTestsResults(
 	node nodeListOption,
 	ormName string,
 	testOutput []byte,
-	blacklistName string,
-	expectedFailures blacklist,
-	ignorelist blacklist,
+	blocklistName string,
+	expectedFailures blocklist,
+	ignorelist blocklist,
 	version string,
 	latestTag string,
 ) {
@@ -214,6 +214,6 @@ func parseAndSummarizeJavaORMTestsResults(
 	}
 
 	results.summarizeAll(
-		t, ormName, blacklistName, expectedFailures, version, latestTag,
+		t, ormName, blocklistName, expectedFailures, version, latestTag,
 	)
 }

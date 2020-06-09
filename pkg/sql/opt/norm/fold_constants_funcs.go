@@ -404,7 +404,7 @@ func (c *CustomFuncs) FoldColumnAccess(input opt.ScalarExpr, idx memo.TupleOrdin
 
 // FoldFunction evaluates a function expression with constant inputs. It
 // returns a constant expression as long as the function is contained in the
-// FoldFunctionWhitelist, and the evaluation causes no error.
+// FoldFunctionAllowlist, and the evaluation causes no error.
 func (c *CustomFuncs) FoldFunction(
 	args memo.ScalarListExpr, private *memo.FunctionPrivate,
 ) opt.ScalarExpr {
@@ -413,9 +413,9 @@ func (c *CustomFuncs) FoldFunction(
 	if private.Properties.Class != tree.NormalClass {
 		return nil
 	}
-	// Functions that aren't immutable and also not in the whitelist cannot
+	// Functions that aren't immutable and also not in the allowlist cannot
 	// be folded.
-	if _, ok := FoldFunctionWhitelist[private.Name]; !ok && private.Overload.Volatility > tree.VolatilityImmutable {
+	if _, ok := FoldFunctionAllowlist[private.Name]; !ok && private.Overload.Volatility > tree.VolatilityImmutable {
 		return nil
 	}
 
@@ -442,9 +442,9 @@ func (c *CustomFuncs) FoldFunction(
 	return c.f.ConstructConstVal(result, private.Typ)
 }
 
-// FoldFunctionWhitelist contains non-immutable functions that are nevertheless
+// FoldFunctionAllowlist contains non-immutable functions that are nevertheless
 // known to be safe for folding.
-var FoldFunctionWhitelist = map[string]struct{}{
+var FoldFunctionAllowlist = map[string]struct{}{
 	// The SQL statement is generated in the optbuilder phase, so the remaining
 	// function execution is immutable.
 	"addgeometrycolumn": {},

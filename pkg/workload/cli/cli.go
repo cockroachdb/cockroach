@@ -28,18 +28,18 @@ func WorkloadCmd(userFacing bool) *cobra.Command {
 		rootCmd.AddCommand(subCmdFn(userFacing))
 	}
 	if userFacing {
-		whitelist := map[string]struct{}{
+		allowlist := map[string]struct{}{
 			`workload`: {},
 			`init`:     {},
 			`run`:      {},
 		}
 		for _, m := range workload.Registered() {
-			whitelist[m.Name] = struct{}{}
+			allowlist[m.Name] = struct{}{}
 		}
 		var addExperimental func(c *cobra.Command)
 		addExperimental = func(c *cobra.Command) {
 			c.Short = `[experimental] ` + c.Short
-			if _, ok := whitelist[c.Name()]; !ok {
+			if _, ok := allowlist[c.Name()]; !ok {
 				c.Hidden = true
 			}
 			for _, sub := range c.Commands() {

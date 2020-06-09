@@ -10,21 +10,21 @@
 
 package main
 
-var pgjdbcBlacklists = blacklistsForVersion{
-	{"v2.1", "pgjdbcBlackList2_1", pgjdbcBlackList2_1, "", nil},
-	{"v2.2", "pgjdbcBlackList19_1", pgjdbcBlackList19_1, "", pgjdbcIgnoreList19_1},
-	{"v19.1", "pgjdbcBlackList19_1", pgjdbcBlackList19_1, "", pgjdbcIgnoreList19_1},
-	{"v19.2", "pgjdbcBlackList19_2", pgjdbcBlackList19_2, "pgjdbcIgnoreList19_2", pgjdbcIgnoreList19_2},
-	{"v20.1", "pgjdbcBlackList20_1", pgjdbcBlackList20_1, "pgjdbcIgnoreList20_1", pgjdbcIgnoreList20_1},
-	{"v20.2", "pgjdbcBlackList20_2", pgjdbcBlackList20_2, "pgjdbcIgnoreList20_2", pgjdbcIgnoreList20_2},
+var pgjdbcBlocklists = blocklistsForVersion{
+	{"v2.1", "pgjdbcBlockList2_1", pgjdbcBlockList2_1, "", nil},
+	{"v2.2", "pgjdbcBlockList19_1", pgjdbcBlockList19_1, "", pgjdbcIgnoreList19_1},
+	{"v19.1", "pgjdbcBlockList19_1", pgjdbcBlockList19_1, "", pgjdbcIgnoreList19_1},
+	{"v19.2", "pgjdbcBlockList19_2", pgjdbcBlockList19_2, "pgjdbcIgnoreList19_2", pgjdbcIgnoreList19_2},
+	{"v20.1", "pgjdbcBlockList20_1", pgjdbcBlockList20_1, "pgjdbcIgnoreList20_1", pgjdbcIgnoreList20_1},
+	{"v20.2", "pgjdbcBlockList20_2", pgjdbcBlockList20_2, "pgjdbcIgnoreList20_2", pgjdbcIgnoreList20_2},
 }
 
 // Please keep these lists alphabetized for easy diffing.
-// After a failed run, an updated version of this blacklist should be available
+// After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var pgjdbcBlackList20_2 = pgjdbcBlackList20_1
+var pgjdbcBlockList20_2 = pgjdbcBlockList20_1
 
-var pgjdbcBlackList20_1 = blacklist{
+var pgjdbcBlockList20_1 = blocklist{
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testDeepInternalsBatchedQueryDecorator": "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testUnspecifiedParameterType":           "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testVaryingTypeCounts":                  "26508",
@@ -1149,7 +1149,7 @@ var pgjdbcBlackList20_1 = blacklist{
 	"org.postgresql.test.xa.XADataSourceTest.testWrapperEquals":                                                                                                                "22329",
 }
 
-var pgjdbcBlackList19_1 = blacklist{
+var pgjdbcBlockList19_1 = blocklist{
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testDeepInternalsBatchedQueryDecorator":       "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testUnspecifiedParameterType":                 "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testVaryingTypeCounts":                        "26508",
@@ -2666,7 +2666,7 @@ var pgjdbcBlackList19_1 = blacklist{
 	"org.postgresql.test.xa.XADataSourceTest.testWrapperEquals":                                                                                                                "22329",
 }
 
-var pgjdbcBlackList19_2 = blacklist{
+var pgjdbcBlockList19_2 = blocklist{
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testDeepInternalsBatchedQueryDecorator": "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testUnspecifiedParameterType":           "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testVaryingTypeCounts":                  "26508",
@@ -4138,7 +4138,7 @@ var pgjdbcBlackList19_2 = blacklist{
 	"org.postgresql.test.xa.XADataSourceTest.testWrapperEquals":                                                                                                                "22329",
 }
 
-var pgjdbcBlackList2_1 = blacklist{
+var pgjdbcBlockList2_1 = blocklist{
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testDeepInternalsBatchedQueryDecorator":       "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testUnspecifiedParameterType":                 "26508",
 	"org.postgresql.jdbc.DeepBatchedInsertStatementTest.testVaryingTypeCounts":                        "26508",
@@ -5551,14 +5551,14 @@ var pgjdbcIgnoreList20_2 = pgjdbcIgnoreList20_1
 
 var pgjdbcIgnoreList20_1 = pgjdbcIgnoreList19_2
 
-var pgjdbcIgnoreList19_2 = blacklist{
+var pgjdbcIgnoreList19_2 = blocklist{
 	"org.postgresql.replication.ReplicationTestSuite.org.postgresql.replication.ReplicationTestSuite": "expected fail - no replication",
 	"org.postgresql.test.core.LogServerMessagePropertyTest.testWithDefaults":                          "expected fail - checks error message",
 	"org.postgresql.test.core.LogServerMessagePropertyTest.testWithExplicitlyEnabled":                 "expected fail - checks error message",
 	"org.postgresql.test.core.LogServerMessagePropertyTest.testWithLogServerErrorDetailDisabled":      "expected fail - checks error message",
 }
 
-var pgjdbcIgnoreList19_1 = blacklist{
+var pgjdbcIgnoreList19_1 = blocklist{
 	"org.postgresql.replication.ReplicationTestSuite.org.postgresql.replication.ReplicationTestSuite": "expected fail - no replication",
 	"org.postgresql.test.core.LogServerMessagePropertyTest.testWithDefaults":                          "expected fail - checks error message",
 	"org.postgresql.test.core.LogServerMessagePropertyTest.testWithExplicitlyEnabled":                 "expected fail - checks error message",

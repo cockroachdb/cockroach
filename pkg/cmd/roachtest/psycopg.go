@@ -90,15 +90,15 @@ func registerPsycopg(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
+		blocklistName, expectedFailures, ignoredlistName, ignoredlist := psycopgBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)
+			t.Fatalf("No psycopg blocklist defined for cockroach version %s", version)
 		}
 		if ignoredlist == nil {
 			t.Fatalf("No psycopg ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignoredlist %s",
-			version, blacklistName, ignoredlistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+			version, blocklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
 		// Note that this is expected to return an error, since the test suite
@@ -119,7 +119,7 @@ func registerPsycopg(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parsePythonUnitTestOutput(rawResults, expectedFailures, ignoredlist)
 		results.summarizeAll(
-			t, "psycopg" /* ormName */, blacklistName, expectedFailures,
+			t, "psycopg" /* ormName */, blocklistName, expectedFailures,
 			version, latestTag,
 		)
 	}
