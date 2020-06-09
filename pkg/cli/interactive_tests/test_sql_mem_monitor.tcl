@@ -83,9 +83,6 @@ expect {
     "cannot allocate memory" {}
     "std::bad_alloc" {}
     "Resource temporarily unavailable" {}
-    # TODO(peter): Pebble's behavior is to segfault on failed manual
-    # allocations. We should provide a cleaner signal.
-    "signal SIGSEGV" {}
     timeout { handle_timeout "memory allocation error" }
 }
 # Stop the tail command.
