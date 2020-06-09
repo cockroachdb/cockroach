@@ -236,21 +236,21 @@ func TestShowBackup(t *testing.T) {
 	}
 
 	{
-		full_cluster := localFoo + "/full_cluster"
-		sqlDB.Exec(t, `BACKUP TO $1;`, full_cluster)
+		fullCluster := localFoo + "/full_cluster"
+		sqlDB.Exec(t, `BACKUP TO $1;`, fullCluster)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
-		is_full_cluster := showBackupRows[0][6]
-		if !eqWhitespace(is_full_cluster, "true") {
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, fullCluster))
+		isFullCluster := showBackupRows[0][6]
+		if !eqWhitespace(isFullCluster, "true") {
 			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
 
-		full_cluster_inc := localFoo + "/full_cluster_inc"
-		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, full_cluster_inc, full_cluster)
+		fullClusterInc := localFoo + "/full_cluster_inc"
+		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, fullClusterInc, fullCluster)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
-		is_full_cluster = showBackupRows[0][6]
-		if !eqWhitespace(is_full_cluster, "true") {
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, fullCluster))
+		isFullCluster = showBackupRows[0][6]
+		if !eqWhitespace(isFullCluster, "true") {
 			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
 	}
