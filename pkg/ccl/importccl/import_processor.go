@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -115,6 +116,24 @@ func makeInputConverter(
 	var singleTableTargetCols tree.NameList
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {
+			// Attempt to hydrate all of the types in the tables for importing.
+			// We only perform this logic if evalCtx.DB != nil because there are
+			// some tests that pass an evalCtx with a nil DB to this function.
+			if evalCtx.DB != nil {
+				// TODO (rohany): Once we lease type descriptors, this should instead
+				//  look into the leased set using the DistSQLTypeResolver.
+				// Create a new transaction to hydrate the types in.
+				if err := evalCtx.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					evalCtx.Txn = txn
+					var colTypes []*types.T
+					for _, col := range table.Desc.Columns {
+						colTypes = append(colTypes, col.Type)
+					}
+					return execinfrapb.HydrateTypeSlice(evalCtx, colTypes)
+				}); err != nil {
+					return nil, err
+				}
+			}
 			singleTable = table.Desc
 			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {

@@ -474,7 +474,13 @@ func mysqlTableToCockroach(
 		stmt.Defs = append(stmt.Defs, c)
 	}
 
-	desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), evalCtx.Settings, stmt, parentID, id, fks, time.WallTime)
+	semaCtx := tree.MakeSemaContext()
+	semaCtxPtr := &semaCtx
+	// p is nil in some tests.
+	if p != nil {
+		semaCtxPtr = p.SemaCtx()
+	}
+	desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, evalCtx.Settings, stmt, parentID, id, fks, time.WallTime)
 	if err != nil {
 		return nil, nil, err
 	}
