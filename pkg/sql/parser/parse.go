@@ -88,9 +88,21 @@ type Parser struct {
 
 // INT8 is the historical interpretation of INT. This should be left
 // alone in the future, since there are many sql fragments stored
-// in various descriptors.  Any user input that was created after
+// in various descriptors. Any user input that was created after
 // INT := INT4 will simply use INT4 in any resulting code.
 var defaultNakedIntType = types.Int
+
+// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
+// of how a "naked" INT type should be parsed returns the corresponding integer
+// type.
+func NakedIntTypeFromDefaultIntSize(defaultIntSize int) *types.T {
+	switch defaultIntSize {
+	case 4, 32:
+		return types.Int4
+	default:
+		return types.Int
+	}
+}
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (Statements, error) {
@@ -103,8 +115,8 @@ func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (Statements, er
 	return p.parseWithDepth(1, sql, nakedIntType)
 }
 
-func (p *Parser) parseOneWithDepth(depth int, sql string) (Statement, error) {
-	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType)
+func (p *Parser) parseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
+	stmts, err := p.parseWithDepth(1, sql, nakedIntType)
 	if err != nil {
 		return Statement{}, err
 	}
@@ -232,8 +244,14 @@ func Parse(sql string) (Statements, error) {
 // bits of SQL from other nodes. In general, we expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (Statement, error) {
+	return ParseOneWithInt(sql, defaultNakedIntType)
+}
+
+// ParseOneWithInt is similar to ParseOne but interprets the INT and SERIAL
+// types as the provided integer type.
+func ParseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
 	var p Parser
-	return p.parseOneWithDepth(1, sql)
+	return p.parseOneWithInt(sql, nakedIntType)
 }
 
 // ParseQualifiedTableName parses a SQL string of the form
@@ -262,9 +280,9 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	return rename.Name, nil
 }
 
-// parseExprs parses one or more sql expressions.
-func parseExprs(exprs []string) (tree.Exprs, error) {
-	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")))
+// parseExprsWithInt parses one or more sql expressions.
+func parseExprsWithInt(exprs []string, nakedIntType *types.T) (tree.Exprs, error) {
+	stmt, err := ParseOneWithInt(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), nakedIntType)
 	if err != nil {
 		return nil, err
 	}
@@ -275,17 +293,24 @@ func parseExprs(exprs []string) (tree.Exprs, error) {
 	return set.Values, nil
 }
 
-// ParseExprs is a short-hand for parseExprs(sql)
+// ParseExprs is a short-hand for parseExprs(sql).
 func ParseExprs(sql []string) (tree.Exprs, error) {
 	if len(sql) == 0 {
 		return tree.Exprs{}, nil
 	}
-	return parseExprs(sql)
+	return parseExprsWithInt(sql, defaultNakedIntType)
 }
 
-// ParseExpr is a short-hand for parseExprs([]string{sql})
+// ParseExpr is a short-hand for parseExprsWithInt([]string{sql},
+// defaultNakedIntType).
 func ParseExpr(sql string) (tree.Expr, error) {
-	exprs, err := parseExprs([]string{sql})
+	return ParseExprWithInt(sql, defaultNakedIntType)
+}
+
+// ParseExprWithInt is a short-hand for parseExprsWithInt([]string{sql},
+// nakedIntType).'
+func ParseExprWithInt(sql string, nakedIntType *types.T) (tree.Expr, error) {
+	exprs, err := parseExprsWithInt([]string{sql}, nakedIntType)
 	if err != nil {
 		return nil, err
 	}

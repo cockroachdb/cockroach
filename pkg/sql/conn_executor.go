@@ -449,12 +449,7 @@ func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
 		// no server is actually present.
 		size = h.ex.sessionData.DefaultIntSize
 	}
-	switch size {
-	case 4, 32:
-		return types.Int4
-	default:
-		return types.Int
-	}
+	return parser.NakedIntTypeFromDefaultIntSize(size)
 }
 
 // GetParamStatus retrieves the configured value of the session

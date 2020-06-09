@@ -288,7 +288,8 @@ func (ds *ServerImpl) setupFlow(
 				BytesEncodeFormat: be,
 				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 			},
-			VectorizeMode: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
+			VectorizeMode:  sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
+			DefaultIntSize: int(req.EvalContext.DefaultIntSize),
 		}
 		ie := &lazyInternalExecutor{
 			newInternalExecutor: func() sqlutil.InternalExecutor {
