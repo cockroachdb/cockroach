@@ -120,6 +120,7 @@ func (pt *partitioningTest) parse() error {
 
 	{
 		ctx := context.Background()
+		semaCtx := tree.MakeSemaContext()
 		stmt, err := parser.ParseOne(pt.parsed.createStmt)
 		if err != nil {
 			return errors.Wrapf(err, `parsing %s`, pt.parsed.createStmt)
@@ -131,7 +132,7 @@ func (pt *partitioningTest) parse() error {
 		st := cluster.MakeTestingClusterSettings()
 		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
 		mutDesc, err := importccl.MakeSimpleTableDescriptor(
-			ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
+			ctx, &semaCtx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
 		if err != nil {
 			return err
 		}
