@@ -68,8 +68,15 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
           options={this.getSortValues(sort)}
           selected={this.pageView()}
           onChange={this.navigateTo}
+          className="Sort-latency__dropdown--spacing"
         />
-        <Filter sort={sort} onChangeFilter={onChangeFilter} deselectFilterByKey={deselectFilterByKey} filter={filter} />
+        <Filter
+          sort={sort}
+          onChangeFilter={onChangeFilter}
+          deselectFilterByKey={deselectFilterByKey}
+          filter={filter}
+          dropDownClassName="Sort-latency__dropdown--spacing"
+        />
         <Divider type="vertical" style={{ height: "100%" }} />
         <Checkbox disabled={!nodeId || nodeId === "cluster"} checked={collapsed} onChange={this.onChange}>Collapse Nodes</Checkbox>
       </div>

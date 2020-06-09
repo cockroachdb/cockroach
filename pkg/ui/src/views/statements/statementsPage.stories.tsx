@@ -11,12 +11,13 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import { withRouterProvider } from ".storybook/decorators";
+import {withBackgroundFactory, withRouterProvider} from ".storybook/decorators";
 import { StatementsPage } from "./statementsPage";
 import statementsPagePropsFixture from "./statementsPage.fixture";
 
 storiesOf("StatementsPage", module)
   .addDecorator(withRouterProvider)
+  .addDecorator(withBackgroundFactory())
   .add("with data", () => (
     <StatementsPage {...statementsPagePropsFixture}/>
   ));

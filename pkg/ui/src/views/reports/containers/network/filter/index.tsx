@@ -20,6 +20,7 @@ interface IFilterProps {
   deselectFilterByKey: (key: string) => void;
   sort: NetworkSort[];
   filter: NetworkFilter;
+  dropDownClassName?: string;
 }
 
 interface IFilterState {
@@ -106,6 +107,7 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
 
   render() {
     const { opened, width } = this.state;
+    const { dropDownClassName } = this.props;
     const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
     const left = width >= (containerLeft + 240) ? 0 : width - (containerLeft + 240);
     return (
@@ -114,7 +116,7 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
           title="Filter"
           options={[]}
           selected=""
-          className={classNames({ "dropdown__focused": opened })}
+          className={classNames({ "dropdown__focused": opened }, dropDownClassName)}
           content={
             <div ref={this.rangeContainer} className="Range">
               <div className="click-zone" onClick={() => this.setState({ opened: !opened })}/>

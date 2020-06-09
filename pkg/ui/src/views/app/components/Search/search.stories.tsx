@@ -8,5 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./withRouterProvider";
-export * from "./withBackground";
+import React from "react";
+import { storiesOf } from "@storybook/react";
+
+import { Search } from "./index";
+
+storiesOf("Search", module)
+  .add("empty", () => (
+    <Search defaultValue="" onSubmit={() => {}} value="" />
+  ))
+  .add("with search text", () => (
+    <Search defaultValue="select * from" onSubmit={() => {}} value="select * from" />
+  ));

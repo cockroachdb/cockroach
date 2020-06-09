@@ -164,7 +164,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
       onClick={this.handleOptionButtonOnClick(option)}
       ghost
     >
-      <span className="dropdown__range-title">{this.props.selected.title !== "Custom" && option.value === "Custom" ? "--" : option.timeLabel}</span>
+      <span className="range__range-title">{this.props.selected.title !== "Custom" && option.value === "Custom" ? "--" : option.timeLabel}</span>
       <span className="__option-label">{option.value === "Custom" ? "Custom date range" : option.value}</span>
     </Button>
   )
