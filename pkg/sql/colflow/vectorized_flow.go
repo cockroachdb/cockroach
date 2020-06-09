@@ -610,18 +610,12 @@ func (s *vectorizedFlowCreator) setupRouter(
 		limit = 1
 	}
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
-	router, outputs := colexec.NewHashRouter(
-		allocators, input, outputTyps, output.HashColumns, limit,
-		s.diskQueueCfg, s.fdSemaphore, diskAccounts, toClose,
-	)
+	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccounts, metadataSourcesQueue, toClose)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		logtags.AddTag(ctx, "hashRouterID", mmName)
 		router.Run(ctx)
 	}
 	s.accumulateAsyncComponent(runRouter)
-
-	// Append the router to the metadata sources.
-	metadataSourcesQueue = append(metadataSourcesQueue, router)
 
 	foundLocalOutput := false
 	for i, op := range outputs {
@@ -633,19 +627,20 @@ func (s *vectorizedFlowCreator) setupRouter(
 			// Note that here we pass in nil 'toClose' slice because hash
 			// router is responsible for closing all of the idempotent closers.
 			if _, err := s.setupRemoteOutputStream(
-				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue, nil /* toClose */, factory,
+				ctx, flowCtx, op, outputTyps, stream, []execinfrapb.MetadataSource{op}, nil /* toClose */, factory,
 			); err != nil {
 				return err
 			}
 		case execinfrapb.StreamEndpointSpec_LOCAL:
 			foundLocalOutput = true
+			localOp := colexecbase.Operator(op)
 			if s.recordingStats {
 				mons := []*mon.BytesMonitor{hashRouterMemMonitor, diskMon}
 				// Wrap local outputs with vectorized stats collectors when recording
 				// stats. This is mostly for compatibility but will provide some useful
 				// information (e.g. output stall time).
 				var err error
-				op, err = s.wrapWithVectorizedStatsCollector(
+				localOp, err = s.wrapWithVectorizedStatsCollector(
 					op, nil /* inputs */, int32(stream.StreamID),
 					execinfrapb.StreamIDTagKey, mons,
 				)
@@ -654,13 +649,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 				}
 			}
 			s.streamIDToInputOp[stream.StreamID] = opDAGWithMetaSources{
-				rootOperator: op, metadataSources: metadataSourcesQueue, toClose: toClose,
+				rootOperator: localOp, metadataSources: []execinfrapb.MetadataSource{op}, toClose: toClose,
 			}
 		}
-		// Either the metadataSourcesQueue will be drained by an outbox or we
-		// created an opDAGWithMetaSources to pass along these metadataSources. We don't need to
-		// worry about metadata sources for following iterations of the loop.
-		metadataSourcesQueue = nil
 	}
 	if !foundLocalOutput {
 		// No local output means that our router is a leaf node.
