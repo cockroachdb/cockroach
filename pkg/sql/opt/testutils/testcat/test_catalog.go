@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -736,6 +737,10 @@ type Index struct {
 
 	// predicate is the partial index predicate expression, if it exists.
 	predicate string
+
+	// geoConfig is the geospatial index configuration, if this is a geospatial
+	// inverted index. Otherwise geoConfig is nil.
+	geoConfig *geoindex.Config
 }
 
 // ID is part of the cat.Index interface.
@@ -884,6 +889,11 @@ func (ti *Index) InterleavedByCount() int {
 // InterleavedBy is part of the cat.Index interface.
 func (ti *Index) InterleavedBy(i int) (table, index cat.StableID) {
 	panic("no interleavings")
+}
+
+// GeoConfig is part of the cat.Index interface.
+func (ti *Index) GeoConfig() *geoindex.Config {
+	return ti.geoConfig
 }
 
 // Column implements the cat.Column interface for testing purposes.
