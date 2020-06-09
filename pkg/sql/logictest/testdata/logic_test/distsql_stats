@@ -578,7 +578,8 @@ statistics_name  column_names  row_count  distinct_count  null_count
 arr_stats        {rowid}       4          4               0
 arr_stats        {x}           4          3               1
 
-# Regression test for #46964. Do not try to create a histogram on the array column.
+# Regression test for #46964 (however we have added array histogram
+# support since this).
 statement ok
 CREATE STATISTICS arr_stats_x ON x FROM arr
 
@@ -595,7 +596,7 @@ ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
 arr_stats        {rowid}       4          4               0           true
-arr_stats_x      {x}           4          3               1           false
+arr_stats_x      {x}           4          3               1           true
 
 # Test that enum columns always have histograms collected for them.
 statement ok
@@ -687,4 +688,4 @@ ORDER BY
 statistics_name  column_names    row_count  distinct_count  null_count  has_histogram
 s                {last_updated}  5          1               0           false
 s                {profile_id}    5          5               0           true
-s                {user_profile}  5          4               1           false
+s                {user_profile}  5          4               1           true
