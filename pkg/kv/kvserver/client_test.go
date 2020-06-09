@@ -25,6 +25,7 @@ import (
 	"net"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -273,7 +274,7 @@ type multiTestContext struct {
 	transport  *kvserver.RaftTransport
 
 	// The per-store clocks slice normally contains aliases of
-	// multiTestContext.clock, but it may be populated before Start() to
+	// multiTestContext.clock, but it may be populleaseholderInfoated before Start() to
 	// use distinct clocks per store.
 	clocks      []*hlc.Clock
 	engines     []storage.Engine
@@ -554,6 +555,13 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }
 
+// magicMultiTestContextKVTransportError can be returned by kvserver from an RPC
+// to ask the multiTestContextKVTransport to inject an RPC error. This will
+// cause the DistSender to consider the result ambiguous and to try the next
+// replica. This is useful for triggering DistSender retries *after* the request
+// has already evaluated.
+const magicMultiTestContextKVTransportError = "inject RPC error (magicMultiTestContextKVTransportError)"
+
 func (t *multiTestContextKVTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
@@ -583,7 +591,7 @@ func (t *multiTestContextKVTransport) SendNext(
 
 	if s == nil {
 		t.setPending(rep.ReplicaID, false)
-		return nil, roachpb.NewSendError("store is stopped")
+		return nil, errors.New("store is stopped")
 	}
 
 	// Clone txn of ba args for sending.
@@ -597,6 +605,11 @@ func (t *multiTestContextKVTransport) SendNext(
 		br, pErr = sender.Send(ctx, ba)
 	}); err != nil {
 		pErr = roachpb.NewError(err)
+	}
+	if pErr != nil && strings.Contains(pErr.GoError().Error(), magicMultiTestContextKVTransportError) {
+		// We've been asked to inject an RPC error. This will cause the DistSender
+		// to consider the result ambiguous and to try the next replica.
+		return nil, errors.New("error injected by multiTestContextKVTransport after request has been evaluated")
 	}
 	if br == nil {
 		br = &roachpb.BatchResponse{}

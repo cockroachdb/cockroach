@@ -41,7 +41,7 @@ namespace protobuf_roachpb_2ferrors_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[33];
+  static const ::google::protobuf::internal::ParseTable schema[32];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -112,9 +112,6 @@ extern ReplicaCorruptionErrorDefaultTypeInternal _ReplicaCorruptionError_default
 class ReplicaTooOldError;
 class ReplicaTooOldErrorDefaultTypeInternal;
 extern ReplicaTooOldErrorDefaultTypeInternal _ReplicaTooOldError_default_instance_;
-class SendError;
-class SendErrorDefaultTypeInternal;
-extern SendErrorDefaultTypeInternal _SendError_default_instance_;
 class StoreNotFoundError;
 class StoreNotFoundErrorDefaultTypeInternal;
 extern StoreNotFoundErrorDefaultTypeInternal _StoreNotFoundError_default_instance_;
@@ -173,7 +170,6 @@ template<> ::cockroach::roachpb::RangeNotFoundError* Arena::CreateMaybeMessage<:
 template<> ::cockroach::roachpb::ReadWithinUncertaintyIntervalError* Arena::CreateMaybeMessage<::cockroach::roachpb::ReadWithinUncertaintyIntervalError>(Arena*);
 template<> ::cockroach::roachpb::ReplicaCorruptionError* Arena::CreateMaybeMessage<::cockroach::roachpb::ReplicaCorruptionError>(Arena*);
 template<> ::cockroach::roachpb::ReplicaTooOldError* Arena::CreateMaybeMessage<::cockroach::roachpb::ReplicaTooOldError>(Arena*);
-template<> ::cockroach::roachpb::SendError* Arena::CreateMaybeMessage<::cockroach::roachpb::SendError>(Arena*);
 template<> ::cockroach::roachpb::StoreNotFoundError* Arena::CreateMaybeMessage<::cockroach::roachpb::StoreNotFoundError>(Arena*);
 template<> ::cockroach::roachpb::TransactionAbortedError* Arena::CreateMaybeMessage<::cockroach::roachpb::TransactionAbortedError>(Arena*);
 template<> ::cockroach::roachpb::TransactionPushError* Arena::CreateMaybeMessage<::cockroach::roachpb::TransactionPushError>(Arena*);
@@ -2177,125 +2173,6 @@ class LeaseRejectedError : public ::google::protobuf::MessageLite /* @@protoc_in
 };
 // -------------------------------------------------------------------
 
-class SendError : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.SendError) */ {
- public:
-  SendError();
-  virtual ~SendError();
-
-  SendError(const SendError& from);
-
-  inline SendError& operator=(const SendError& from) {
-    CopyFrom(from);
-    return *this;
-  }
-  #if LANG_CXX11
-  SendError(SendError&& from) noexcept
-    : SendError() {
-    *this = ::std::move(from);
-  }
-
-  inline SendError& operator=(SendError&& from) noexcept {
-    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
-      if (this != &from) InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
-  #endif
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const SendError& default_instance();
-
-  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const SendError* internal_default_instance() {
-    return reinterpret_cast<const SendError*>(
-               &_SendError_default_instance_);
-  }
-  static constexpr int kIndexInFileMessages =
-    15;
-
-  void Swap(SendError* other);
-  friend void swap(SendError& a, SendError& b) {
-    a.Swap(&b);
-  }
-
-  // implements Message ----------------------------------------------
-
-  inline SendError* New() const final {
-    return CreateMaybeMessage<SendError>(NULL);
-  }
-
-  SendError* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<SendError>(arena);
-  }
-  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
-    final;
-  void CopyFrom(const SendError& from);
-  void MergeFrom(const SendError& from);
-  void Clear() final;
-  bool IsInitialized() const final;
-
-  size_t ByteSizeLong() const final;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input) final;
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const final;
-  void DiscardUnknownFields();
-  int GetCachedSize() const final { return _cached_size_.Get(); }
-
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(SendError* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return NULL;
-  }
-  inline void* MaybeArenaPtr() const {
-    return NULL;
-  }
-  public:
-
-  ::std::string GetTypeName() const final;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  bool has_message() const;
-  void clear_message();
-  static const int kMessageFieldNumber = 1;
-  const ::std::string& message() const;
-  void set_message(const ::std::string& value);
-  #if LANG_CXX11
-  void set_message(::std::string&& value);
-  #endif
-  void set_message(const char* value);
-  void set_message(const char* value, size_t size);
-  ::std::string* mutable_message();
-  ::std::string* release_message();
-  void set_allocated_message(::std::string* message);
-
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.SendError)
- private:
-  void set_has_message();
-  void clear_has_message();
-
-  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable ::google::protobuf::internal::CachedSize _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr message_;
-  friend struct ::protobuf_roachpb_2ferrors_2eproto::TableStruct;
-};
-// -------------------------------------------------------------------
-
 class AmbiguousResultError : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.AmbiguousResultError) */ {
  public:
   AmbiguousResultError();
@@ -2337,7 +2214,7 @@ class AmbiguousResultError : public ::google::protobuf::MessageLite /* @@protoc_
                &_AmbiguousResultError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    15;
 
   void Swap(AmbiguousResultError* other);
   friend void swap(AmbiguousResultError& a, AmbiguousResultError& b) {
@@ -2471,7 +2348,7 @@ class RaftGroupDeletedError : public ::google::protobuf::MessageLite /* @@protoc
                &_RaftGroupDeletedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    17;
+    16;
 
   void Swap(RaftGroupDeletedError* other);
   friend void swap(RaftGroupDeletedError& a, RaftGroupDeletedError& b) {
@@ -2573,7 +2450,7 @@ class ReplicaCorruptionError : public ::google::protobuf::MessageLite /* @@proto
                &_ReplicaCorruptionError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    17;
 
   void Swap(ReplicaCorruptionError* other);
   friend void swap(ReplicaCorruptionError& a, ReplicaCorruptionError& b) {
@@ -2701,7 +2578,7 @@ class ReplicaTooOldError : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ReplicaTooOldError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    19;
+    18;
 
   void Swap(ReplicaTooOldError* other);
   friend void swap(ReplicaTooOldError& a, ReplicaTooOldError& b) {
@@ -2812,7 +2689,7 @@ class StoreNotFoundError : public ::google::protobuf::MessageLite /* @@protoc_in
                &_StoreNotFoundError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    20;
+    19;
 
   void Swap(StoreNotFoundError* other);
   friend void swap(StoreNotFoundError& a, StoreNotFoundError& b) {
@@ -2923,7 +2800,7 @@ class UnhandledRetryableError : public ::google::protobuf::MessageLite /* @@prot
                &_UnhandledRetryableError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    21;
+    20;
 
   void Swap(UnhandledRetryableError* other);
   friend void swap(UnhandledRetryableError& a, UnhandledRetryableError& b) {
@@ -3039,7 +2916,7 @@ class TransactionRetryWithProtoRefreshError : public ::google::protobuf::Message
                &_TransactionRetryWithProtoRefreshError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    22;
+    21;
 
   void Swap(TransactionRetryWithProtoRefreshError* other);
   friend void swap(TransactionRetryWithProtoRefreshError& a, TransactionRetryWithProtoRefreshError& b) {
@@ -3189,7 +3066,7 @@ class TxnAlreadyEncounteredErrorError : public ::google::protobuf::MessageLite /
                &_TxnAlreadyEncounteredErrorError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    23;
+    22;
 
   void Swap(TxnAlreadyEncounteredErrorError* other);
   friend void swap(TxnAlreadyEncounteredErrorError& a, TxnAlreadyEncounteredErrorError& b) {
@@ -3308,7 +3185,7 @@ class IntegerOverflowError : public ::google::protobuf::MessageLite /* @@protoc_
                &_IntegerOverflowError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    24;
+    23;
 
   void Swap(IntegerOverflowError* other);
   friend void swap(IntegerOverflowError& a, IntegerOverflowError& b) {
@@ -3445,7 +3322,7 @@ class BatchTimestampBeforeGCError : public ::google::protobuf::MessageLite /* @@
                &_BatchTimestampBeforeGCError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    25;
+    24;
 
   void Swap(BatchTimestampBeforeGCError* other);
   friend void swap(BatchTimestampBeforeGCError& a, BatchTimestampBeforeGCError& b) {
@@ -3575,7 +3452,7 @@ class IntentMissingError : public ::google::protobuf::MessageLite /* @@protoc_in
                &_IntentMissingError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    26;
+    25;
 
   void Swap(IntentMissingError* other);
   friend void swap(IntentMissingError& a, IntentMissingError& b) {
@@ -3709,7 +3586,7 @@ class MergeInProgressError : public ::google::protobuf::MessageLite /* @@protoc_
                &_MergeInProgressError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    27;
+    26;
 
   void Swap(MergeInProgressError* other);
   friend void swap(MergeInProgressError& a, MergeInProgressError& b) {
@@ -3811,7 +3688,7 @@ class RangeFeedRetryError : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedRetryError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    28;
+    27;
 
   void Swap(RangeFeedRetryError* other);
   friend void swap(RangeFeedRetryError& a, RangeFeedRetryError& b) {
@@ -3945,7 +3822,7 @@ class IndeterminateCommitError : public ::google::protobuf::MessageLite /* @@pro
                &_IndeterminateCommitError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    29;
+    28;
 
   void Swap(IndeterminateCommitError* other);
   friend void swap(IndeterminateCommitError& a, IndeterminateCommitError& b) {
@@ -4070,7 +3947,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
     kConditionFailed = 12,
     kLeaseRejected = 13,
     kNodeUnavailable = 14,
-    kSend = 15,
     kRaftGroupDeleted = 16,
     kReplicaCorruption = 17,
     kReplicaTooOld = 18,
@@ -4094,7 +3970,7 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
                &_ErrorDetail_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    30;
+    29;
 
   void Swap(ErrorDetail* other);
   friend void swap(ErrorDetail& a, ErrorDetail& b) {
@@ -4313,18 +4189,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::NodeUnavailableError* mutable_node_unavailable();
   void set_allocated_node_unavailable(::cockroach::roachpb::NodeUnavailableError* node_unavailable);
 
-  // optional .cockroach.roachpb.SendError send = 15;
-  bool has_send() const;
-  void clear_send();
-  static const int kSendFieldNumber = 15;
-  private:
-  const ::cockroach::roachpb::SendError& _internal_send() const;
-  public:
-  const ::cockroach::roachpb::SendError& send() const;
-  ::cockroach::roachpb::SendError* release_send();
-  ::cockroach::roachpb::SendError* mutable_send();
-  void set_allocated_send(::cockroach::roachpb::SendError* send);
-
   // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
   bool has_raft_group_deleted() const;
   void clear_raft_group_deleted();
@@ -4511,7 +4375,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
   void set_has_condition_failed();
   void set_has_lease_rejected();
   void set_has_node_unavailable();
-  void set_has_send();
   void set_has_raft_group_deleted();
   void set_has_replica_corruption();
   void set_has_replica_too_old();
@@ -4549,7 +4412,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
     ::cockroach::roachpb::ConditionFailedError* condition_failed_;
     ::cockroach::roachpb::LeaseRejectedError* lease_rejected_;
     ::cockroach::roachpb::NodeUnavailableError* node_unavailable_;
-    ::cockroach::roachpb::SendError* send_;
     ::cockroach::roachpb::RaftGroupDeletedError* raft_group_deleted_;
     ::cockroach::roachpb::ReplicaCorruptionError* replica_corruption_;
     ::cockroach::roachpb::ReplicaTooOldError* replica_too_old_;
@@ -4612,7 +4474,7 @@ class ErrPosition : public ::google::protobuf::MessageLite /* @@protoc_insertion
                &_ErrPosition_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    31;
+    30;
 
   void Swap(ErrPosition* other);
   friend void swap(ErrPosition& a, ErrPosition& b) {
@@ -4723,7 +4585,7 @@ class Error : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Error_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    32;
+    31;
 
   void Swap(Error* other);
   friend void swap(Error& a, Error& b) {
@@ -6270,75 +6132,6 @@ inline void LeaseRejectedError::set_allocated_existing(::cockroach::roachpb::Lea
   }
   existing_ = existing;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LeaseRejectedError.existing)
-}
-
-// -------------------------------------------------------------------
-
-// SendError
-
-inline bool SendError::has_message() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void SendError::set_has_message() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void SendError::clear_has_message() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void SendError::clear_message() {
-  message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_message();
-}
-inline const ::std::string& SendError::message() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.SendError.message)
-  return message_.GetNoArena();
-}
-inline void SendError::set_message(const ::std::string& value) {
-  set_has_message();
-  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.SendError.message)
-}
-#if LANG_CXX11
-inline void SendError::set_message(::std::string&& value) {
-  set_has_message();
-  message_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.SendError.message)
-}
-#endif
-inline void SendError::set_message(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  set_has_message();
-  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.SendError.message)
-}
-inline void SendError::set_message(const char* value, size_t size) {
-  set_has_message();
-  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.SendError.message)
-}
-inline ::std::string* SendError::mutable_message() {
-  set_has_message();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SendError.message)
-  return message_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* SendError::release_message() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.SendError.message)
-  if (!has_message()) {
-    return NULL;
-  }
-  clear_has_message();
-  return message_.ReleaseNonDefaultNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void SendError::set_allocated_message(::std::string* message) {
-  if (message != NULL) {
-    set_has_message();
-  } else {
-    clear_has_message();
-  }
-  message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), message);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SendError.message)
 }
 
 // -------------------------------------------------------------------
@@ -7992,50 +7785,6 @@ inline ::cockroach::roachpb::NodeUnavailableError* ErrorDetail::mutable_node_una
   return value_.node_unavailable_;
 }
 
-// optional .cockroach.roachpb.SendError send = 15;
-inline bool ErrorDetail::has_send() const {
-  return value_case() == kSend;
-}
-inline void ErrorDetail::set_has_send() {
-  _oneof_case_[0] = kSend;
-}
-inline void ErrorDetail::clear_send() {
-  if (has_send()) {
-    delete value_.send_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::roachpb::SendError& ErrorDetail::_internal_send() const {
-  return *value_.send_;
-}
-inline ::cockroach::roachpb::SendError* ErrorDetail::release_send() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ErrorDetail.send)
-  if (has_send()) {
-    clear_has_value();
-      ::cockroach::roachpb::SendError* temp = value_.send_;
-    value_.send_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline const ::cockroach::roachpb::SendError& ErrorDetail::send() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.send)
-  return has_send()
-      ? *value_.send_
-      : *reinterpret_cast< ::cockroach::roachpb::SendError*>(&::cockroach::roachpb::_SendError_default_instance_);
-}
-inline ::cockroach::roachpb::SendError* ErrorDetail::mutable_send() {
-  if (!has_send()) {
-    clear_value();
-    set_has_send();
-    value_.send_ = CreateMaybeMessage< ::cockroach::roachpb::SendError >(
-        GetArenaNoVirtual());
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.send)
-  return value_.send_;
-}
-
 // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
 inline bool ErrorDetail::has_raft_group_deleted() const {
   return value_case() == kRaftGroupDeleted;
@@ -9029,8 +8778,6 @@ inline void Error::set_allocated_now(::cockroach::util::hlc::Timestamp* now) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

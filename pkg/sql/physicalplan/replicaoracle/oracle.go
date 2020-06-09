@@ -64,7 +64,7 @@ type Oracle interface {
 	// A RangeUnavailableError can be returned if there's no information in gossip
 	// about any of the nodes that might be tried.
 	ChoosePreferredReplica(
-		context.Context, roachpb.RangeDescriptor, QueryState,
+		context.Context, *roachpb.RangeDescriptor, QueryState,
 	) (roachpb.ReplicaDescriptor, error)
 }
 
@@ -131,7 +131,7 @@ func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *randomOracle) ChoosePreferredReplica(
-	ctx context.Context, desc roachpb.RangeDescriptor, _ QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	replicas, err := replicaSliceOrErr(desc, o.gossip)
 	if err != nil {
@@ -161,7 +161,7 @@ func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *closestOracle) ChoosePreferredReplica(
-	ctx context.Context, desc roachpb.RangeDescriptor, _ QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	replicas, err := replicaSliceOrErr(desc, o.gossip)
 	if err != nil {
@@ -213,7 +213,7 @@ func (o *binPackingOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *binPackingOracle) ChoosePreferredReplica(
-	ctx context.Context, desc roachpb.RangeDescriptor, queryState QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, queryState QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	// Attempt to find a cached lease holder and use it if found.
 	// If an error occurs, ignore it and proceed to choose a replica below.
@@ -259,21 +259,11 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 // is available in gossip. If no nodes are available, a RangeUnavailableError is
 // returned.
 func replicaSliceOrErr(
-	desc roachpb.RangeDescriptor, gsp gossip.DeprecatedOracleGossip,
+	desc *roachpb.RangeDescriptor, gsp gossip.DeprecatedOracleGossip,
 ) (kvcoord.ReplicaSlice, error) {
-	// Learner replicas won't serve reads/writes, so send only to the `Voters`
-	// replicas. This is just an optimization to save a network hop, everything
-	// would still work if we had `All` here.
-	voterReplicas := desc.Replicas().Voters()
-	replicas := kvcoord.NewReplicaSlice(gsp, voterReplicas)
-	if len(replicas) == 0 {
-		// We couldn't get node descriptors for any replicas.
-		var nodeIDs []roachpb.NodeID
-		for _, r := range voterReplicas {
-			nodeIDs = append(nodeIDs, r.NodeID)
-		}
-		return kvcoord.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(
-			desc.RangeID, errors.Errorf("node info not available in gossip"), nodeIDs...)
+	replicas, err := kvcoord.NewReplicaSlice(context.TODO(), gsp, desc)
+	if err != nil {
+		return kvcoord.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(desc.RangeID, err)
 	}
 	return replicas, nil
 }

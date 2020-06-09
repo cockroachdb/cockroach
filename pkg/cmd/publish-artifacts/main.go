@@ -239,7 +239,6 @@ func buildOneCockroach(svc s3putter, o opts) {
 
 	opts := []release.MakeReleaseOption{
 		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "GOFLAGS", o.GoFlags)),
-		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix)),
 		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "TAGS", o.Tags)),
 		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary")),
 	}
