@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 // CR_PROJ_Slice contains data that does not need to be freed.
-// // It can be either a Go or C pointer (which indicates who allocated the
+// It can be either a Go or C pointer (which indicates who allocated the
 // memory).
 typedef struct {
   char* data;
@@ -29,6 +29,10 @@ typedef CR_PROJ_Slice CR_PROJ_Status;
 CR_PROJ_Status CR_PROJ_Transform(char* fromSpec, char* toSpec, long point_count, double* x,
                                  double* y, double* z);
 
+// CR_PROJ_GetProjMetadata gets the metadata for a given spec in relation to
+// the spheroid it represents.
+CR_PROJ_Status CR_PROJ_GetProjMetadata(char* spec, int* retIsLatLng, double* retMajorAxis,
+                                       double* retEccentricitySquared);
 #ifdef __cplusplus
 }  // extern "C"
 #endif
