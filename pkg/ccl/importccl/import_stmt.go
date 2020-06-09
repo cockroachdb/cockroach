@@ -672,9 +672,8 @@ func importPlanHook(
 						)
 					}
 				}
-
 				tbl, err := MakeSimpleTableDescriptor(
-					ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, NoFKs, walltime)
+					ctx, p.SemaCtx(), p.ExecCfg().Settings, create, parentID, defaultCSVTableID, NoFKs, walltime)
 				if err != nil {
 					return err
 				}
