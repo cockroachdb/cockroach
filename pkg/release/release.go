@@ -15,6 +15,7 @@ package release
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -102,7 +103,10 @@ func MakeRelease(b SupportedTarget, pkgDir string, opts ...MakeReleaseOption) er
 	}
 
 	{
-		args := append([]string{b.BuildType}, params.args...)
+		args := append(
+			[]string{b.BuildType, fmt.Sprintf("%s=%s", "SUFFIX", b.Suffix)},
+			params.args...,
+		)
 		cmd := exec.Command("mkrelease", args...)
 		cmd.Dir = pkgDir
 		cmd.Stderr = os.Stderr
