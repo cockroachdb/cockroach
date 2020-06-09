@@ -18,6 +18,7 @@
 #include <memory>
 #include <stdlib.h>
 #include <string>
+#include <vector>
 
 #include "geos.h"
 
@@ -53,6 +54,9 @@ typedef void (*CR_GEOS_Free_r)(CR_GEOS_Handle, void* buffer);
 typedef void (*CR_GEOS_SetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry, int);
 typedef int (*CR_GEOS_GetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef void (*CR_GEOS_GeomDestroy_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef char (*CR_GEOS_IsEmpty_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef int (*CR_GEOS_GeomTypeId_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef CR_GEOS_WKTReader (*CR_GEOS_WKTReader_create_r)(CR_GEOS_Handle);
 typedef CR_GEOS_Geometry (*CR_GEOS_WKTReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKTReader,
@@ -128,6 +132,9 @@ struct CR_GEOS {
   CR_GEOS_finish_r GEOS_finish_r;
   CR_GEOS_Context_setErrorMessageHandler_r GEOSContext_setErrorMessageHandler_r;
   CR_GEOS_Free_r GEOSFree_r;
+
+  CR_GEOS_IsEmpty_r GEOSisEmpty_r;
+  CR_GEOS_GeomTypeId_r GEOSGeomTypeId_r;
 
   CR_GEOS_BufferParams_create_r GEOSBufferParams_create_r;
   CR_GEOS_GEOSBufferParams_destroy_r GEOSBufferParams_destroy_r;
@@ -213,6 +220,8 @@ struct CR_GEOS {
     INIT(GEOSBufferParams_setQuadrantSegments_r);
     INIT(GEOSBufferParams_setSingleSided_r);
     INIT(GEOSBufferWithParams_r);
+    INIT(GEOSisEmpty_r);
+    INIT(GEOSGeomTypeId_r);
     INIT(GEOSSetSRID_r);
     INIT(GEOSGetSRID_r);
     INIT(GEOSArea_r);
@@ -313,8 +322,45 @@ CR_GEOS_Geometry CR_GEOS_GeometryFromSlice(CR_GEOS* lib, CR_GEOS_Handle handle,
   return geom;
 }
 
+void CR_GEOS_PushLittleEndianUint32(std::vector<unsigned char>& buf, uint32_t value) {
+  for (auto i = 0; i < sizeof(value); i++) {
+    buf.push_back(static_cast<unsigned char>((value >> (8 * i)) & 0xff));
+  }
+}
+
 void CR_GEOS_writeGeomToEWKB(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Geometry geom,
                              CR_GEOS_String* ewkb, int srid) {
+  // Empty points error in GEOS EWKB encoding. As such, we have to decode ourselves.
+  // This is still broken for GEOMETRYCOLLECTIONs/MULTIPOINT containing empty points,
+  // but there's not much we can do there for now.
+  if (lib->GEOSisEmpty_r(handle, geom) && lib->GEOSGeomTypeId_r(handle, geom) == 0) {
+    std::vector<unsigned char> buf;
+    buf.push_back('\x01');  // little endian
+
+    uint32_t metadataInfo = 1;  // 1 means it is a point.
+    if (srid != 0) {
+      metadataInfo |= 0x20000000;  // add SRID bit.
+    }
+    CR_GEOS_PushLittleEndianUint32(buf, metadataInfo);
+    if (srid != 0) {
+      CR_GEOS_PushLittleEndianUint32(buf, uint32_t(srid));
+    }
+    // Push back two NaN float values in little endian order.
+    for (auto i = 0; i < 2; i++) {
+      buf.push_back('\x00');
+      buf.push_back('\x00');
+      buf.push_back('\x00');
+      buf.push_back('\x00');
+      buf.push_back('\x00');
+      buf.push_back('\x00');
+      buf.push_back('\xF8');
+      buf.push_back('\x7F');
+    }
+    ewkb->data = static_cast<char*>(malloc(buf.size()));
+    ewkb->len = buf.size();
+    memcpy(ewkb->data, buf.data(), buf.size());
+    return;
+  }
   auto wkbWriter = lib->GEOSWKBWriter_create_r(handle);
   lib->GEOSWKBWriter_setByteOrder_r(handle, wkbWriter, 1);
   if (srid != 0) {
