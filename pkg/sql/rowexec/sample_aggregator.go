@@ -62,6 +62,13 @@ type sampleAggregator struct {
 	numRowsCol   int
 	numNullsCol  int
 	sketchCol    int
+	invColIdxCol int
+	invIdxKeyCol int
+
+	// The sample aggregator tracks sketches and reservoirs for inverted
+	// index keys. These maps are indexed by column ID.
+	invSr     map[uint32]*stats.SampleReservoir
+	invSketch map[uint32]*sketchInfo
 }
 
 var _ execinfra.Processor = &sampleAggregator{}
@@ -100,7 +107,7 @@ func newSampleAggregator(
 	// The processor will disable histogram collection if this limit is not
 	// enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sample-aggregator-mem")
-	rankCol := len(input.OutputTypes()) - 5
+	rankCol := len(input.OutputTypes()) - 7
 	s := &sampleAggregator{
 		spec:         spec,
 		input:        input,
@@ -115,6 +122,10 @@ func newSampleAggregator(
 		numRowsCol:   rankCol + 2,
 		numNullsCol:  rankCol + 3,
 		sketchCol:    rankCol + 4,
+		invColIdxCol: rankCol + 5,
+		invIdxKeyCol: rankCol + 6,
+		invSr:        make(map[uint32]*stats.SampleReservoir, len(spec.InvertedSketches)),
+		invSketch:    make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
 
 	var sampleCols util.FastIntSet
@@ -131,6 +142,21 @@ func newSampleAggregator(
 	}
 
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
+	for i := range spec.InvertedSketches {
+		var sr stats.SampleReservoir
+		// The datums are converted to their inverted index bytes and
+		// sent as single DBytes column.
+		var srCols util.FastIntSet
+		srCols.Add(0)
+		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		s.invSr[spec.InvertedSketches[i].Columns[0]] = &sr
+		s.invSketch[spec.InvertedSketches[i].Columns[0]] = &sketchInfo{
+			spec:     spec.InvertedSketches[i],
+			sketch:   hyperloglog.New14(),
+			numNulls: 0,
+			numRows:  0,
+		}
+	}
 
 	if err := s.Init(
 		nil, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor,
@@ -232,6 +258,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 					// collecting histogram samples. Disable sample collection so we
 					// don't create a biased histogram.
 					s.sr.Disable()
+					for _, sr := range s.invSr {
+						sr.Disable()
+					}
 				}
 			} else if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
@@ -243,13 +272,67 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 			break
 		}
 
-		// The row is either:
-		//  - a sampled row, which has NULLs on all columns from sketchIdxCol
-		//    onward, or
-		//  - a sketch row, which has all NULLs on all columns before sketchIdxCol.
-		if row[s.sketchIdxCol].IsNull() {
-			// This must be a sampled row.
-			rank, err := row[s.rankCol].GetInt()
+		// There are four kinds of rows normal and inverted samples and
+		// sketches. They should be identified in this order:
+		//  - an inverted sample has invColIdxCol and rankCol
+		//  - an inverted sketch has invColIdxCol
+		//  - a normal sketch has sketchIdxCol
+		//  - a normal sample has rankCol
+		if invColIdx, err := row[s.invColIdxCol].GetInt(); err == nil {
+			colIdx := uint32(invColIdx)
+			if rank, err := row[s.rankCol].GetInt(); err == nil {
+				// Inverted sample row.
+				if err != nil {
+					return false, errors.NewAssertionErrorWithWrappedErrf(err, "decoding rank column")
+				}
+				// Retain the rows with the top ranks.
+				if err := s.invSr[colIdx].SampleRow(ctx, s.EvalCtx, row[s.invIdxKeyCol:s.invIdxKeyCol+1], uint64(rank)); err != nil {
+					if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+						return false, err
+					}
+					// We hit an out of memory error. Clear the sample reservoir and
+					// disable histogram sample collection.
+					s.invSr[colIdx].Disable()
+					log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
+				}
+				continue
+			}
+			// Inverted sketch row.
+			invSketch, ok := s.invSketch[colIdx]
+			if !ok {
+				return false, errors.AssertionFailedf("unknown inverted sketch")
+			}
+
+			numRows, err := row[s.numRowsCol].GetInt()
+			if err != nil {
+				return false, err
+			}
+			invSketch.numRows += numRows
+
+			numNulls, err := row[s.numNullsCol].GetInt()
+			if err != nil {
+				return false, err
+			}
+			invSketch.numNulls += numNulls
+
+			// Decode the sketch.
+			if err := row[s.sketchCol].EnsureDecoded(s.inTypes[s.sketchCol], &da); err != nil {
+				return false, err
+			}
+			d := row[s.sketchCol].Datum
+			if d == tree.DNull {
+				return false, errors.AssertionFailedf("NULL sketch data")
+			}
+			if err := tmpSketch.UnmarshalBinary([]byte(*d.(*tree.DBytes))); err != nil {
+				return false, err
+			}
+			if err := invSketch.sketch.Merge(&tmpSketch); err != nil {
+				return false, errors.NewAssertionErrorWithWrappedErrf(err, "merging sketch data")
+			}
+			continue
+		}
+		if rank, err := row[s.rankCol].GetInt(); err == nil {
+			// Sample row.
 			if err != nil {
 				return false, errors.NewAssertionErrorWithWrappedErrf(err, "decoding rank column")
 			}
@@ -265,7 +348,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 			continue
 		}
-		// This is a sketch row.
+		// Sketch row.
 		sketchIdx, err := row[s.sketchIdxCol].GetInt()
 		if err != nil {
 			return false, err
@@ -340,6 +423,32 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					si.numRows-si.numNulls,
 					distinctCount,
 					int(si.spec.HistogramMaxBuckets),
+				)
+				if err != nil {
+					return err
+				}
+				histogram = &h
+			} else if invSr, ok := s.invSr[si.spec.Columns[0]]; ok && len(invSr.Get()) != 0 {
+				invSketch, ok := s.invSketch[si.spec.Columns[0]]
+				if !ok {
+					return errors.Errorf("no associated inverted sketch")
+				}
+				// GenerateHistogram is false for sketches
+				// with inverted index columns. Instead, the
+				// presence of those histograms is indicated
+				// by the existence of an inverted sketch on
+				// the column.
+
+				invDistinctCount := int64(invSketch.sketch.Estimate())
+				h, err := s.generateHistogram(
+					ctx,
+					s.EvalCtx,
+					invSr.Get(),
+					0, /* colIdx */
+					types.Bytes,
+					invSketch.numRows-invSketch.numNulls,
+					invDistinctCount,
+					int(invSketch.spec.HistogramMaxBuckets),
 				)
 				if err != nil {
 					return err

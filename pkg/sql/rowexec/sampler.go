@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -54,12 +55,18 @@ type samplerProcessor struct {
 	outTypes        []*types.T
 	maxFractionIdle float64
 
+	// invSr and invSketch map column IDs to samplers/sketches.
+	invSr     map[uint32]*stats.SampleReservoir
+	invSketch map[uint32]*sketchInfo
+
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
 	numRowsCol   int
 	numNullsCol  int
 	sketchCol    int
+	invColIdxCol int
+	invIdxKeyCol int
 }
 
 var _ execinfra.Processor = &samplerProcessor{}
@@ -87,6 +94,8 @@ const cpuUsageMinThrottle = 0.25
 // At 75% average CPU usage we reach maximum throttling of automatic stats.
 const cpuUsageMaxThrottle = 0.75
 
+var bytesRowType = []*types.T{types.Bytes}
+
 func newSamplerProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -112,8 +121,11 @@ func newSamplerProcessor(
 		memAcc:          memMonitor.MakeBoundAccount(),
 		sketches:        make([]sketchInfo, len(spec.Sketches)),
 		maxFractionIdle: spec.MaxFractionIdle,
+		invSr:           make(map[uint32]*stats.SampleReservoir, len(spec.InvertedSketches)),
+		invSketch:       make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
 
+	inTypes := input.OutputTypes()
 	var sampleCols util.FastIntSet
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
@@ -126,10 +138,28 @@ func newSamplerProcessor(
 			sampleCols.Add(int(spec.Sketches[i].Columns[0]))
 		}
 	}
+	for i := range spec.InvertedSketches {
+		var sr stats.SampleReservoir
+		// The datums are converted to their inverted index bytes and
+		// sent as single DBytes column.
+		var srCols util.FastIntSet
+		srCols.Add(0)
+		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		col := spec.InvertedSketches[i].Columns[0]
+		s.invSr[col] = &sr
+		sketchSpec := spec.InvertedSketches[i]
+		// Rejigger the sketch spec to only refer to a single bytes column.
+		sketchSpec.Columns = []uint32{0}
+		s.invSketch[col] = &sketchInfo{
+			spec:     sketchSpec,
+			sketch:   hyperloglog.New14(),
+			numNulls: 0,
+			numRows:  0,
+		}
+	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes(), &s.memAcc, sampleCols)
+	s.sr.Init(int(spec.SampleSize), inTypes, &s.memAcc, sampleCols)
 
-	inTypes := input.OutputTypes()
 	outTypes := make([]*types.T, 0, len(inTypes)+5)
 
 	// First columns are the same as the input.
@@ -155,6 +185,15 @@ func newSamplerProcessor(
 	// A BYTES column with the sketch data.
 	s.sketchCol = len(outTypes)
 	outTypes = append(outTypes, types.Bytes)
+
+	// An INT column indicating the inverted sketch index.
+	s.invColIdxCol = len(outTypes)
+	outTypes = append(outTypes, types.Int)
+
+	// A BYTES column with the inverted index key datum.
+	s.invIdxKeyCol = len(outTypes)
+	outTypes = append(outTypes, types.Bytes)
+
 	s.outTypes = outTypes
 
 	if err := s.Init(
@@ -202,6 +241,17 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	var buf []byte
 	rowCount := 0
 	lastWakeupTime := timeutil.Now()
+
+	// Inverted index variables for EncodeInvertedIndexKeys.
+	invIndexDesc := &sqlbase.IndexDescriptor{
+		GeoConfig: geoindex.Config{
+			S2Geography: geoindex.DefaultGeographyIndexConfig().S2Geography,
+			S2Geometry:  geoindex.DefaultGeometryIndexConfig().S2Geometry,
+		},
+	}
+	var invKeys [][]byte
+	invRow := sqlbase.EncDatumRow{sqlbase.EncDatum{}}
+
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -273,52 +323,9 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 		}
 
-		var intbuf [8]byte
 		for i := range s.sketches {
-			s.sketches[i].numRows++
-
-			var col uint32
-			var useFastPath bool
-			if len(s.sketches[i].spec.Columns) == 1 {
-				col = s.sketches[i].spec.Columns[0]
-				isNull := row[col].IsNull()
-				useFastPath = s.outTypes[col].Family() == types.IntFamily && !isNull
-			}
-
-			if useFastPath {
-				// Fast path for integers.
-				// TODO(radu): make this more general.
-				val, err := row[col].GetInt()
-				if err != nil {
-					return false, err
-				}
-
-				// Note: this encoding is not identical with the one in the general path
-				// below, but it achieves the same thing (we want equal integers to
-				// encode to equal []bytes). The only caveat is that all samplers must
-				// use the same encodings, so changes will require a new SketchType to
-				// avoid problems during upgrade.
-				//
-				// We could use a more efficient hash function and use InsertHash, but
-				// it must be a very good hash function (HLL expects the hash values to
-				// be uniformly distributed in the 2^64 range). Experiments (on tpcc
-				// order_line) with simplistic functions yielded bad results.
-				binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
-				s.sketches[i].sketch.Insert(intbuf[:])
-			} else {
-				isNull := true
-				buf = buf[:0]
-				for _, col := range s.sketches[i].spec.Columns {
-					buf, err = row[col].Fingerprint(s.outTypes[col], &da, buf)
-					isNull = isNull && row[col].IsNull()
-					if err != nil {
-						return false, err
-					}
-				}
-				if isNull {
-					s.sketches[i].numNulls++
-				}
-				s.sketches[i].sketch.Insert(buf)
+			if err := s.sketches[i].addRow(row, s.outTypes, &buf, &da); err != nil {
+				return false, err
 			}
 		}
 
@@ -342,13 +349,51 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				return true, nil
 			}
 		}
+
+		for col, invSr := range s.invSr {
+			row[col].EnsureDecoded(s.outTypes[col], &da)
+			switch s.outTypes[col].Family() {
+			case types.GeographyFamily, types.GeometryFamily:
+				invKeys, err = sqlbase.EncodeGeoInvertedIndexTableKeys(row[col].Datum, nil /* inKey */, invIndexDesc)
+			default:
+				invKeys, err = sqlbase.EncodeInvertedIndexTableKeys(row[col].Datum, nil /* inKey */)
+			}
+			if err != nil {
+				return false, err
+			}
+			for _, key := range invKeys {
+				invRow[0].Datum = tree.NewDBytes(tree.DBytes(key))
+				if err := s.invSketch[col].addRow(invRow, bytesRowType, &buf, &da); err != nil {
+					return false, err
+				}
+				rank = uint64(rng.Int63())
+				if err := invSr.SampleRow(ctx, s.EvalCtx, invRow, rank); err != nil {
+					if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+						return false, err
+					}
+					// We hit an out of memory error. Clear the sample reservoir and
+					// disable histogram sample collection.
+					invSr.Disable()
+					log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
+
+					// Send a metadata record so the sample aggregator will also disable
+					// histogram collection.
+					meta := &execinfrapb.ProducerMetadata{SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
+						HistogramDisabled: true,
+					}}
+					if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+						return true, nil
+					}
+				}
+			}
+		}
 	}
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))
+	// Emit the sampled rows.
 	for i := range outRow {
 		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
-	// Emit the sampled rows.
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
@@ -356,19 +401,52 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			return true, nil
 		}
 	}
+	// Emit the inverted sample rows.
+	for i := range outRow {
+		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
+	}
+	for col, invSr := range s.invSr {
+		outRow[s.invColIdxCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}
+		for _, sample := range invSr.Get() {
+			// Reuse the rank column for inverted index keys.
+			outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
+			outRow[s.invIdxKeyCol] = sample.Row[0]
+			if !emitHelper(ctx, &s.Out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+				return true, nil
+			}
+		}
+	}
 	// Release the memory for the sampled rows.
 	s.sr = stats.SampleReservoir{}
+	s.invSr = nil
 
 	// Emit the sketch rows.
 	for i := range outRow {
 		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
-
 	for i, si := range s.sketches {
 		outRow[s.sketchIdxCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
 		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numRows))}
 		outRow[s.numNullsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numNulls))}
 		data, err := si.sketch.MarshalBinary()
+		if err != nil {
+			return false, err
+		}
+		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
+		if !emitHelper(ctx, &s.Out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+			return true, nil
+		}
+	}
+
+	// Emit the inverted sketch rows.
+	for i := range outRow {
+		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
+	}
+	for col, invSketch := range s.invSketch {
+		outRow[s.invColIdxCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}
+		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(invSketch.numRows))}
+		outRow[s.numNullsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(invSketch.numNulls))}
+		data, err := invSketch.sketch.MarshalBinary()
 		if err != nil {
 			return false, err
 		}
@@ -394,4 +472,57 @@ func (s *samplerProcessor) close() {
 		s.memAcc.Close(s.Ctx)
 		s.MemMonitor.Stop(s.Ctx)
 	}
+}
+
+func (s *sketchInfo) addRow(
+	row sqlbase.EncDatumRow, typs []*types.T, buf *[]byte, da *sqlbase.DatumAlloc,
+) error {
+	var err error
+	var intbuf [8]byte
+	s.numRows++
+
+	var col uint32
+	var useFastPath bool
+	if len(s.spec.Columns) == 1 {
+		col = s.spec.Columns[0]
+		isNull := row[col].IsNull()
+		useFastPath = typs[col].Family() == types.IntFamily && !isNull
+	}
+
+	if useFastPath {
+		// Fast path for integers.
+		// TODO(radu): make this more general.
+		val, err := row[col].GetInt()
+		if err != nil {
+			return err
+		}
+
+		// Note: this encoding is not identical with the one in the general path
+		// below, but it achieves the same thing (we want equal integers to
+		// encode to equal []bytes). The only caveat is that all samplers must
+		// use the same encodings, so changes will require a new SketchType to
+		// avoid problems during upgrade.
+		//
+		// We could use a more efficient hash function and use InsertHash, but
+		// it must be a very good hash function (HLL expects the hash values to
+		// be uniformly distributed in the 2^64 range). Experiments (on tpcc
+		// order_line) with simplistic functions yielded bad results.
+		binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
+		s.sketch.Insert(intbuf[:])
+	} else {
+		isNull := true
+		*buf = (*buf)[:0]
+		for _, col := range s.spec.Columns {
+			*buf, err = row[col].Fingerprint(typs[col], da, *buf)
+			isNull = isNull && row[col].IsNull()
+			if err != nil {
+				return err
+			}
+		}
+		if isNull {
+			s.numNulls++
+		}
+		s.sketch.Insert(*buf)
+	}
+	return nil
 }

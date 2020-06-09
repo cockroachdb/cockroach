@@ -93,6 +93,8 @@ message SamplerSpec {
   // value of the cluster setting
   // sql.stats.automatic_collection.max_fraction_idle.
   optional double max_fraction_idle = 3 [(gogoproto.nullable) = false];
+
+  repeated SketchSpec inverted_sketches = 4 [(gogoproto.nullable) = false];
 }
 
 // SampleAggregatorSpec is the specification of a processor that aggregates the
@@ -142,4 +144,6 @@ message SampleAggregatorSpec {
   // CREATE STATISTICS. Used for progress reporting. If rows expected is 0,
   // reported progress is 0 until the very end.
   optional uint64 rows_expected = 7 [(gogoproto.nullable) = false];
+
+  repeated SketchSpec inverted_sketches = 8 [(gogoproto.nullable) = false];
 }

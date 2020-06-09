@@ -212,7 +212,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
 			// with a single column.
-			HasHistogram: len(columnIDs) == 1 && canHistogramType(columns[0].Type),
+			HasHistogram: len(columnIDs) == 1,
 		}}
 	}
 
@@ -255,10 +255,6 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	}, nil
 }
 
-func canHistogramType(t *types.T) bool {
-	return !sqlbase.ColumnTypeIsInvertedIndexable(t)
-}
-
 // maxNonIndexCols is the maximum number of non-index columns that we will use
 // when choosing a default set of column statistics.
 const maxNonIndexCols = 100
@@ -297,13 +293,9 @@ func createStatsDefaultColumns(
 		key := makeColStatKey(colIDs)
 		requestedStats[key] = struct{}{}
 
-		col, err := desc.FindColumnByID(colIDs[i])
-		if err != nil {
-			return nil, err
-		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:    colIDs,
-			HasHistogram: i == 0 && canHistogramType(col.Type),
+			HasHistogram: i == 0,
 		})
 	}
 
@@ -323,13 +315,9 @@ func createStatsDefaultColumns(
 			}
 			requestedStats[key] = struct{}{}
 
-			col, err := desc.FindColumnByID(colIDs[j])
-			if err != nil {
-				return nil, err
-			}
 			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 				ColumnIDs:    colIDs,
-				HasHistogram: j == 0 && canHistogramType(col.Type),
+				HasHistogram: j == 0,
 			})
 		}
 	}

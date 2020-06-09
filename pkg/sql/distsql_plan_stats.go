@@ -104,6 +104,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	sketchSpecs := make([]execinfrapb.SketchSpec, len(reqStats))
+	var invSketchSpecs []execinfrapb.SketchSpec
 	sampledColumnIDs := make([]sqlbase.ColumnID, len(scan.cols))
 	for i, s := range reqStats {
 		spec := execinfrapb.SketchSpec{
@@ -122,12 +123,27 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			spec.Columns[i] = uint32(streamColIdx)
 			sampledColumnIDs[streamColIdx] = colID
 		}
+		// Histograms on inverted index types get their own inverted sketches.
+		if spec.GenerateHistogram {
+			col, err := desc.FindColumnByID(s.columns[0])
+			if err != nil {
+				return nil, err
+			}
+			if sqlbase.ColumnTypeIsInvertedIndexable(col.Type) {
+				invSketchSpecs = append(invSketchSpecs, spec)
+				// Unset histogram of the non-inverted spec.
+				spec.GenerateHistogram = false
+			}
+		}
 
 		sketchSpecs[i] = spec
 	}
 
 	// Set up the samplers.
-	sampler := &execinfrapb.SamplerSpec{Sketches: sketchSpecs}
+	sampler := &execinfrapb.SamplerSpec{
+		Sketches:         sketchSpecs,
+		InvertedSketches: invSketchSpecs,
+	}
 	for _, s := range reqStats {
 		sampler.MaxFractionIdle = details.MaxFractionIdle
 		if s.histogram {
@@ -135,7 +151,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	// The sampler outputs the original columns plus a rank column and four sketch columns.
+	// The sampler outputs the original columns plus a rank column, four
+	// sketch columns, and two inverted histogram columns.
 	outTypes := make([]*types.T, 0, len(p.ResultTypes)+5)
 	outTypes = append(outTypes, p.ResultTypes...)
 	// An INT column for the rank of each row.
@@ -148,6 +165,10 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// column.
 	outTypes = append(outTypes, types.Int)
 	// A BYTES column with the sketch data.
+	outTypes = append(outTypes, types.Bytes)
+	// An INT column indicating the inverted sketch index.
+	outTypes = append(outTypes, types.Int)
+	// A BYTES column with the inverted index key datum.
 	outTypes = append(outTypes, types.Bytes)
 
 	p.AddNoGroupingStage(
@@ -182,6 +203,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Set up the final SampleAggregator stage.
 	agg := &execinfrapb.SampleAggregatorSpec{
 		Sketches:         sketchSpecs,
+		InvertedSketches: invSketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
 		TableID:          desc.ID,
