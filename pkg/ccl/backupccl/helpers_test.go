@@ -27,10 +27,10 @@ import (
 
 const (
 	singleNode                  = 1
-	multiNode                   = 3
+	MultiNode                   = 3
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
-	localFoo                    = "nodelocal://0/foo"
+	LocalFoo                    = "nodelocal://0/foo"
 )
 
 func backupRestoreTestSetupWithParams(
@@ -80,7 +80,7 @@ func backupRestoreTestSetupWithParams(
 	return ctx, tc, sqlDB, dir, cleanupFn
 }
 
-func backupRestoreTestSetup(
+func BackupRestoreTestSetup(
 	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
 ) (
 	ctx context.Context,
