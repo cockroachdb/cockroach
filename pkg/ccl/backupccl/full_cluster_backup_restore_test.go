@@ -9,62 +9,15 @@
 package backupccl_test
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func backupRestoreTestSetupEmptyWithParams(
-	t testing.TB,
-	clusterSize int,
-	dir string,
-	init func(tc *testcluster.TestCluster),
-	params base.TestClusterArgs,
-) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
-	ctx = context.Background()
-
-	params.ServerArgs.ExternalIODir = dir
-	tc = testcluster.StartTestCluster(t, clusterSize, params)
-	init(tc)
-
-	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	cleanupFn := func() {
-		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
-	}
-
-	return ctx, tc, sqlDB, cleanupFn
-}
-
-func createEmptyCluster(
-	t testing.TB, clusterSize int,
-) (sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
-	ctx := context.Background()
-
-	dir, dirCleanupFn := testutils.TempDir(t)
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-	tc := testcluster.StartTestCluster(t, clusterSize, params)
-
-	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	cleanupFn := func() {
-		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
-		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
-	}
-
-	return sqlDB, dir, cleanupFn
-}
 
 // Large test to ensure that all of the system table data is being restored in
 // the new cluster. Ensures that all the moving pieces are working together.
