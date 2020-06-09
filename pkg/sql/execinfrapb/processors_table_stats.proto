@@ -57,13 +57,16 @@ message SketchSpec {
 // row with sketch information for each sketch plus at most
 // sample_size sampled rows.
 //
+// For each column with an inverted index, a sketch and sample reservoir are
+// created. Each of these produces one sketch row and at most sample_size
+// sampled rows from the inverted index keys.
+//
 // The following method is used to do reservoir sampling: we generate a
 // "rank" for each row, which is just a random, uniformly distributed
 // 64-bit value. The rows with the smallest <sample_size> ranks are selected.
 // This method is chosen because it allows to combine sample sets very easily.
 //
-// The internal schema of the processor is formed of two column
-// groups:
+// The internal schema of the processor is formed of four column groups:
 //   1. sampled row columns:
 //       - columns that map 1-1 to the columns in the input (same
 //         schema as the input). Note that columns unused in a histogram are
@@ -78,10 +81,23 @@ message SketchSpec {
 //         on all columns of the sketch.
 //       - a BYTES column with the binary sketch data (format
 //         dependent on the sketch type).
+//   3. inverted sampled row columns:
+//       - an INT column identifying the column index for this inverted sample
+//       - an INT column with the "rank" of the row; this is a random value
+//         associated with the row (necessary for combining sample sets).
+//       - a BYTE column of the inverted index key.
+//   4. inverted sketch columns:
+//       - an INT column identifying the column index for this inverted sketch
+//       - an INT column indicating the number of rows processed
+//       - an INT column indicating the number of rows with NULL values
+//         on all columns of the sketch.
+//       - a BYTES column with the binary sketch data (format
+//         dependent on the sketch type).
 // Rows have NULLs on either all the sampled row columns or on all the
 // sketch columns.
 message SamplerSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
+  repeated SketchSpec inverted_sketches = 4 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
 
   // Setting this value enables throttling; this is the fraction of time that
@@ -109,8 +125,18 @@ message SamplerSpec {
 //    - number of rows processed
 //    - number of rows encountered with NULL values on all columns of the sketch
 //    - binary sketch data
+//  3. inverted sampled row columns:
+//    - column index for inverted sample
+//    - row rank
+//    - sample column
+//  4. inverted sketch columns:
+//    - column index for inverted sketch
+//    - number of rows processed
+//    - number of rows encountered with NULL values on all columns of the sketch
+//    - binary sketch data
 message SampleAggregatorSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
+  repeated SketchSpec inverted_sketches = 8 [(gogoproto.nullable) = false];
 
   // The processor merges reservoir sample sets into a single
   // sample set of this size. This must match the sample size
