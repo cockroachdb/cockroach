@@ -88,6 +88,7 @@ var NoFKs = fkHandler{resolver: make(fkResolver)}
 // unique_rowid().
 func MakeSimpleTableDescriptor(
 	ctx context.Context,
+	semaCtx *tree.SemaContext,
 	st *cluster.Settings,
 	create *tree.CreateTable,
 	parentID, tableID sqlbase.ID,
@@ -142,7 +143,6 @@ func MakeSimpleTableDescriptor(
 	}
 	create.Defs = filteredDefs
 
-	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.EvalContext{
 		Context:  ctx,
 		Sequence: &importSequenceOperators{},
@@ -161,7 +161,7 @@ func MakeSimpleTableDescriptor(
 		hlc.Timestamp{WallTime: walltime},
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 		affected,
-		&semaCtx,
+		semaCtx,
 		&evalCtx,
 		&sessiondata.SessionData{}, /* sessionData */
 		false,                      /* temporary */

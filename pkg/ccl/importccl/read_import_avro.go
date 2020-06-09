@@ -155,6 +155,7 @@ var familyToAvroT = map[types.Family][]string{
 	types.JsonFamily:           {"string"},
 	types.BitFamily:            {"string"},
 	types.DecimalFamily:        {"string"},
+	types.EnumFamily:           {"string"},
 }
 
 // avroConsumer implements importRowConsumer interface.
