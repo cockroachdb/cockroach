@@ -40,7 +40,9 @@ func InlineFuncs(inputFileContents string) (string, error) {
 
 	// Do a second pass over the AST, this time replacing calls to the inlined
 	// functions with the inlined function itself.
+	var funcIdx int
 	dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
+		cursor.Index()
 		n := cursor.Node()
 		// There are two cases. AssignStmt, which are like:
 		// a = foo()
@@ -131,7 +133,7 @@ func InlineFuncs(inputFileContents string) (string, error) {
 			// Make a copy of the function to inline, and walk through it, replacing
 			// return statements at the end of the body with assignments to the return
 			// value declarations we made first.
-			body = replaceReturnStatements(decl.Name.Name, body, func(stmt *dst.ReturnStmt) dst.Stmt {
+			body = replaceReturnStatements(decl.Name.Name, funcIdx, body, func(stmt *dst.ReturnStmt) dst.Stmt {
 				returnAssignmentSpecs := make([]dst.Stmt, len(retValNames))
 				for i := range retValNames {
 					returnAssignmentSpecs[i] = &dst.AssignStmt{
@@ -183,12 +185,15 @@ func InlineFuncs(inputFileContents string) (string, error) {
 
 			// Remove return values if there are any, since we're ignoring returns
 			// as a raw function call.
-			body = replaceReturnStatements(decl.Name.Name, body, nil)
+			body = replaceReturnStatements(decl.Name.Name, funcIdx, body, nil)
 			// Add the inlined function body to the block.
 			funcBlock.List = append(funcBlock.List, body.List...)
 
 			cursor.Replace(funcBlock)
+		default:
+			return true
 		}
+		funcIdx++
 		return true
 	}, nil)
 
@@ -352,17 +357,34 @@ func getFormalParamReassignments(decl *dst.FuncDecl, callExpr *dst.CallExpr) dst
 // It will panic if any return statements are not in the final position of the
 // input block.
 func replaceReturnStatements(
-	funcName string, stmt *dst.BlockStmt, returnModifier func(*dst.ReturnStmt) dst.Stmt,
+	funcName string, funcIdx int, stmt *dst.BlockStmt, returnModifier func(*dst.ReturnStmt) dst.Stmt,
 ) *dst.BlockStmt {
-	// Remove return values if there are any, since we're ignoring returns
-	// as a raw function call.
-	var seenReturn bool
-	return dstutil.Apply(stmt, func(cursor *dstutil.Cursor) bool {
-		if seenReturn {
-			panic(fmt.Errorf("can't inline function %s: return not at end of body (found %s)", funcName, cursor.Node()))
-		}
+	if len(stmt.List) == 0 {
+		return stmt
+	}
+	// Insert an explicit return at the end if there isn't one.
+	// We'll need to edit this later to make early returns work properly.
+	lastStmt := stmt.List[len(stmt.List)-1]
+	if _, ok := lastStmt.(*dst.ReturnStmt); !ok {
+		ret := &dst.ReturnStmt{}
+		stmt.List = append(stmt.List, ret)
+		lastStmt = ret
+	}
+	retStmt := lastStmt.(*dst.ReturnStmt)
+	if returnModifier == nil {
+		stmt.List[len(stmt.List)-1] = &dst.EmptyStmt{}
+	} else {
+		stmt.List[len(stmt.List)-1] = returnModifier(retStmt)
+	}
+
+	label := dst.NewIdent(fmt.Sprintf("%s_return_%d", funcName, funcIdx))
+
+	// Find returns that weren't at the end of the function and replace them with
+	// labeled gotos.
+	var foundInlineReturn bool
+	stmt = dstutil.Apply(stmt, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
-		switch t := n.(type) {
+		switch n := n.(type) {
 		case *dst.FuncLit:
 			// A FuncLit is a function literal, like:
 			// x := func() int { return 3 }
@@ -370,16 +392,31 @@ func replaceReturnStatements(
 			// they contain aren't relevant to the inliner.
 			return false
 		case *dst.ReturnStmt:
-			seenReturn = true
-			if returnModifier == nil {
-				cursor.Delete()
-				return false
+			foundInlineReturn = true
+			gotoStmt := &dst.BranchStmt{
+				Tok:   token.GOTO,
+				Label: dst.Clone(label).(*dst.Ident),
 			}
-			cursor.Replace(returnModifier(t))
+			if returnModifier != nil {
+				cursor.Replace(returnModifier(n))
+				cursor.InsertAfter(gotoStmt)
+			} else {
+				cursor.Replace(gotoStmt)
+			}
 			return false
 		}
 		return true
 	}, nil).(*dst.BlockStmt)
+
+	if foundInlineReturn {
+		// Add the label at the end.
+		stmt.List = append(stmt.List,
+			&dst.LabeledStmt{
+				Label: label,
+				Stmt:  &dst.EmptyStmt{Implicit: true},
+			})
+	}
+	return stmt
 }
 
 // getTemplateFunc returns the corresponding FuncDecl for a CallExpr from the

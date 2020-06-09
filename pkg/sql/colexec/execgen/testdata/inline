@@ -152,3 +152,61 @@ func d() {
 const _ = "inlined_b"
 ----
 ----
+
+# Test early returns.
+inline
+package main
+
+func a() {
+  b()
+  x = b()
+}
+
+// execgen:inline
+func b() int {
+  foo = bar
+  if foo {
+      return 2
+  }
+  foo = false
+  return 3
+}
+----
+----
+package main
+
+func a() {
+	{
+		foo = bar
+		if foo {
+			goto b_return_0
+		}
+		foo = false
+	b_return_0:
+		;
+	}
+	{
+		var __retval_0 int
+		{
+			foo = bar
+			if foo {
+				{
+					__retval_0 = 2
+				}
+				goto b_return_1
+			}
+			foo = false
+			{
+				__retval_0 = 3
+			}
+		b_return_1:
+			;
+		}
+		x = __retval_0
+	}
+}
+
+// execgen:inline
+const _ = "inlined_b"
+----
+----
