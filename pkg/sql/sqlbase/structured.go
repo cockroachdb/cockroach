@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -168,6 +169,13 @@ type MutableTableDescriptor struct {
 
 	// ClusterVersion represents the version of the table descriptor read from the store.
 	ClusterVersion TableDescriptor
+}
+
+// DescriptorProto prepares desc for serialization.
+func (desc *TableDescriptor) DescriptorProto() *Descriptor {
+	// TODO(ajwerner): Copy over the metadata fields. This method should not exist
+	// on the TableDescriptor itself but rather on the wrappers.
+	return wrapDescriptor(desc)
 }
 
 // ImmutableTableDescriptor is a custom type for TableDescriptors
@@ -341,10 +349,10 @@ type protoGetter interface {
 // descriptor doesn't exist or if it exists and is not a database.
 func GetDatabaseDescFromID(
 	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
-) (*DatabaseDescriptor, error) {
+) (*ImmutableDatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(codec, id)
-	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
+	ts, err := protoGetter.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -352,26 +360,8 @@ func GetDatabaseDescFromID(
 	if db == nil {
 		return nil, ErrDescriptorNotFound
 	}
-	return db, nil
-}
-
-// GetTypeDescFromID retrieves the type descriptor for the type ID passed
-// in using an existing proto getter. It returns an error if the descriptor
-// doesn't exist or if it exists and is not a type descriptor.
-func GetTypeDescFromID(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
-) (*TypeDescriptor, error) {
-	descKey := MakeDescMetadataKey(codec, id)
-	desc := &Descriptor{}
-	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
-	if err != nil {
-		return nil, err
-	}
-	typ := desc.GetType()
-	if typ == nil {
-		return nil, ErrDescriptorNotFound
-	}
-	return typ, nil
+	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
+	return NewImmutableDatabaseDescriptor(*db), nil
 }
 
 // GetTableDescFromID retrieves the table descriptor for the table
@@ -682,11 +672,6 @@ func (desc *IndexDescriptor) IsSharded() bool {
 // IsPartial returns true if the index is a partial index.
 func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
-}
-
-// SetID implements the DescriptorProto interface.
-func (desc *TableDescriptor) SetID(id ID) {
-	desc.ID = id
 }
 
 // TypeName returns the plain type of this descriptor.
@@ -2752,6 +2737,9 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 
 // FindIndexByName finds the index with the specified name in the active
 // list or the mutations list. It returns true if the index is being dropped.
+//
+// TODO(ajwerner): Lift this and methods like it up to the
+// ImmutableTableDescriptor.
 func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, bool, error) {
 	if desc.IsPhysicalTable() && desc.PrimaryIndex.Name == name {
 		return &desc.PrimaryIndex, false, nil
@@ -3679,64 +3667,6 @@ func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
 	return exprs
 }
 
-// SetID implements the DescriptorProto interface.
-func (desc *DatabaseDescriptor) SetID(id ID) {
-	desc.ID = id
-}
-
-// TypeName returns the plain type of this descriptor.
-func (desc *DatabaseDescriptor) TypeName() string {
-	return "database"
-}
-
-// SetName implements the DescriptorProto interface.
-func (desc *DatabaseDescriptor) SetName(name string) {
-	desc.Name = name
-}
-
-// DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) DatabaseDesc() *DatabaseDescriptor {
-	return desc
-}
-
-// SchemaDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) SchemaDesc() *SchemaDescriptor {
-	return nil
-}
-
-// TableDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) TableDesc() *TableDescriptor {
-	return nil
-}
-
-// TypeDesc implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
-	return nil
-}
-
-// NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *DatabaseDescriptor) NameResolutionResult() {}
-
-// Validate validates that the database descriptor is well formed.
-// Checks include validate the database name, and verifying that there
-// is at least one read and write user.
-func (desc *DatabaseDescriptor) Validate() error {
-	if err := validateName(desc.Name, "descriptor"); err != nil {
-		return err
-	}
-	if desc.ID == 0 {
-		return fmt.Errorf("invalid database ID %d", desc.ID)
-	}
-
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
-	desc.Privileges.MaybeFixPrivileges(desc.GetID())
-
-	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
-}
-
 // GetID returns the ID of the descriptor.
 func (desc *Descriptor) GetID() ID {
 	switch t := desc.Union.(type) {
@@ -3746,8 +3676,10 @@ func (desc *Descriptor) GetID() ID {
 		return t.Database.ID
 	case *Descriptor_Type:
 		return t.Type.ID
+	case *Descriptor_Schema:
+		return t.Schema.ID
 	default:
-		return 0
+		panic(errors.AssertionFailedf("GetID: unknown Descriptor type %T", t))
 	}
 }
 
@@ -3760,27 +3692,66 @@ func (desc *Descriptor) GetName() string {
 		return t.Database.Name
 	case *Descriptor_Type:
 		return t.Type.Name
+	case *Descriptor_Schema:
+		return t.Schema.Name
 	default:
-		return ""
+		panic(errors.AssertionFailedf("GetName: unknown Descriptor type %T", t))
 	}
 }
 
-// Table is a replacement for GetTable() which seeks to ensure that clients
-// which unmarshal Descriptor structs properly set the ModificationTime on
-// tables based on the MVCC timestamp at which the descriptor was read.
-//
-// A linter should ensure that GetTable() is not called.
-func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
-	t := desc.GetTable()
-	if t != nil {
-		t.maybeSetTimeFromMVCCTimestamp(ts)
+// GetVersion returns the Version of the descriptor.
+func (desc *Descriptor) GetVersion() DescriptorVersion {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.Version
+	case *Descriptor_Database:
+		return t.Database.Version
+	case *Descriptor_Type:
+		return t.Type.Version
+	case *Descriptor_Schema:
+		return t.Schema.Version
+	default:
+		panic(errors.AssertionFailedf("GetVersion: unknown Descriptor type %T", t))
 	}
-	return t
 }
 
-// maybeSetTimeFromMVCCTimestamp will update ModificationTime and possible
-// CreateAsOfTime with the provided timestamp. If desc.ModificationTime is
-// non-zero it must be the case that it is not after the provided timestamp.
+// GetModificationTime returns the ModificationTime of the descriptor.
+func (desc *Descriptor) GetModificationTime() hlc.Timestamp {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.ModificationTime
+	case *Descriptor_Database:
+		return t.Database.ModificationTime
+	case *Descriptor_Type:
+		return t.Type.ModificationTime
+	case *Descriptor_Schema:
+		return t.Schema.ModificationTime
+	default:
+		debug.PrintStack()
+		panic(errors.AssertionFailedf("GetModificationTime: unknown Descriptor type %T", t))
+	}
+}
+
+// GetModificationTime returns the ModificationTime of the descriptor.
+func (desc *Descriptor) setModificationTime(ts hlc.Timestamp) {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		t.Table.ModificationTime = ts
+	case *Descriptor_Database:
+		t.Database.ModificationTime = ts
+	case *Descriptor_Type:
+		t.Type.ModificationTime = ts
+	case *Descriptor_Schema:
+		t.Schema.ModificationTime = ts
+	default:
+		panic(errors.AssertionFailedf("setModificationTime: unknown Descriptor type %T", t))
+	}
+}
+
+// MaybeSetModificationTimeFromMVCCTimestamp will update ModificationTime and
+// possibly CreateAsOfTime on TableDescriptor with the provided timestamp. If
+// ModificationTime is non-zero it must be the case that it is not after the
+// provided timestamp.
 //
 // When table descriptor versions are incremented they are written with a
 // zero-valued ModificationTime. This is done to avoid the need to observe
@@ -3794,30 +3765,37 @@ func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
 //
 // It is vital that users which read table descriptor values from the KV store
 // call this method.
-func (desc *TableDescriptor) maybeSetTimeFromMVCCTimestamp(ts hlc.Timestamp) {
-	// CreateAsOfTime is used for CREATE TABLE ... AS ... and was introduced in
-	// v19.1. In general it is not critical to set except for tables in the ADD
-	// ADD state which were created from CTAS so we should not assert on its not
-	// being set. It's not always sensical to set it from the passed MVCC
-	// timestamp. However, starting in 19.2 the CreateAsOfTime and
-	// ModificationTime fields are both unset for the first Version of a
-	// TableDescriptor and the code relies on the value being set based on the
-	// MVCC timestamp.
-	if !ts.IsEmpty() &&
-		desc.ModificationTime.IsEmpty() &&
-		desc.CreateAsOfTime.IsEmpty() &&
-		desc.Version == 1 {
-		desc.CreateAsOfTime = ts
-	}
+func (desc *Descriptor) MaybeSetModificationTimeFromMVCCTimestamp(
+	ctx context.Context, ts hlc.Timestamp,
+) {
+	switch t := desc.Union.(type) {
+	case nil:
+		// Empty descriptors shouldn't be touched.
+		return
+	case *Descriptor_Table:
+		// CreateAsOfTime is used for CREATE TABLE ... AS ... and was introduced in
+		// v19.1. In general it is not critical to set except for tables in the ADD
+		// state which were created from CTAS so we should not assert on its not
+		// being set. It's not always sensical to set it from the passed MVCC
+		// timestamp. However, starting in 19.2 the CreateAsOfTime and
+		// ModificationTime fields are both unset for the first Version of a
+		// TableDescriptor and the code relies on the value being set based on the
+		// MVCC timestamp.
+		if !ts.IsEmpty() &&
+			t.Table.ModificationTime.IsEmpty() &&
+			t.Table.CreateAsOfTime.IsEmpty() &&
+			t.Table.Version == 1 {
+			t.Table.CreateAsOfTime = ts
+		}
 
-	// Ensure that if the table is in the process of being added and relies on
-	// CreateAsOfTime that it is now set.
-	if desc.Adding() && desc.IsAs() && desc.CreateAsOfTime.IsEmpty() {
-		log.Fatalf(context.TODO(), "table descriptor for %q (%d.%d) is in the "+
-			"ADD state and was created with CREATE TABLE ... AS but does not have a "+
-			"CreateAsOfTime set", desc.Name, desc.ParentID, desc.ID)
+		// Ensure that if the table is in the process of being added and relies on
+		// CreateAsOfTime that it is now set.
+		if t.Table.Adding() && t.Table.IsAs() && t.Table.CreateAsOfTime.IsEmpty() {
+			log.Fatalf(context.TODO(), "table descriptor for %q (%d.%d) is in the "+
+				"ADD state and was created with CREATE TABLE ... AS but does not have a "+
+				"CreateAsOfTime set", t.Table.Name, t.Table.ParentID, t.Table.ID)
+		}
 	}
-
 	// Set the ModificationTime based on the passed ts if we should.
 	// Table descriptors can be updated in place after their version has been
 	// incremented (e.g. to include a schema change lease).
@@ -3825,16 +3803,33 @@ func (desc *TableDescriptor) maybeSetTimeFromMVCCTimestamp(ts hlc.Timestamp) {
 	// with the value that lives on the in-memory copy. That value should contain
 	// a timestamp set by this method. Thus if the ModificationTime is set it
 	// must not be after the MVCC timestamp we just read it at.
-	if desc.ModificationTime.IsEmpty() && ts.IsEmpty() {
-		log.Fatalf(context.TODO(), "read table descriptor for %q (%d.%d) without ModificationTime "+
-			"with zero MVCC timestamp", desc.Name, desc.ParentID, desc.ID)
-	} else if desc.ModificationTime.IsEmpty() {
-		desc.ModificationTime = ts
-	} else if !ts.IsEmpty() && ts.Less(desc.ModificationTime) {
-		log.Fatalf(context.TODO(), "read table descriptor %q (%d.%d) which has a ModificationTime "+
+	if modTime := desc.GetModificationTime(); modTime.IsEmpty() && ts.IsEmpty() && desc.GetVersion() > 1 {
+		// TODO(ajwerner): reconsider the third condition here.It seems that there
+		// are some cases where system tables lack this timestamp and then when they
+		// are rendered in some other downstream setting we expect the timestamp to
+		// be read. This is a hack we shouldn't need to do.
+		log.Fatalf(context.TODO(), "read table descriptor for %q (%d) without ModificationTime "+
+			"with zero MVCC timestamp", desc.GetName(), desc.GetID())
+	} else if modTime.IsEmpty() {
+		desc.setModificationTime(ts)
+	} else if !ts.IsEmpty() && ts.Less(modTime) {
+		log.Fatalf(context.TODO(), "read table descriptor %q (%d) which has a ModificationTime "+
 			"after its MVCC timestamp: has %v, expected %v",
-			desc.Name, desc.ParentID, desc.ID, desc.ModificationTime, ts)
+			desc.GetName(), desc.GetID(), modTime, ts)
 	}
+}
+
+// Table is a replacement for GetTable() which seeks to ensure that clients
+// which unmarshal Descriptor structs properly set the ModificationTime on
+// tables based on the MVCC timestamp at which the descriptor was read.
+//
+// A linter should ensure that GetTable() is not called.
+func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
+	t := desc.GetTable()
+	if t != nil {
+		desc.MaybeSetModificationTimeFromMVCCTimestamp(context.TODO(), ts)
+	}
+	return t
 }
 
 // IsSet returns whether or not the foreign key actually references a table.
@@ -4192,12 +4187,6 @@ func (desc *TableDescriptor) SetAuditMode(mode tree.AuditMode) (bool, error) {
 	return prev != desc.AuditMode, nil
 }
 
-// GetAuditMode is part of the DescriptorProto interface.
-// This is a stub until per-database auditing is enabled.
-func (desc *DatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
-}
-
 // FindAllReferences returns all the references from a table.
 func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 	refs := map[ID]struct{}{}
@@ -4324,260 +4313,6 @@ func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 func (desc *ImmutableTableDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
-
-// MutableTypeDescriptor is a custom type for TypeDescriptors undergoing
-// any types of modifications.
-type MutableTypeDescriptor struct {
-	TypeDescriptor
-
-	// ClusterVersion represents the version of the type descriptor read
-	// from the store.
-	ClusterVersion TypeDescriptor
-}
-
-// ImmutableTypeDescriptor is a custom type for wrapping TypeDescriptors
-// when used in a read only way.
-type ImmutableTypeDescriptor struct {
-	TypeDescriptor
-}
-
-// Avoid linter unused warnings.
-var _ = NewMutableCreatedTypeDescriptor
-
-// NewMutableCreatedTypeDescriptor returns a MutableTypeDescriptor from the
-// given type descriptor with the cluster version being the zero type. This
-// is for a type that is created in the same transaction.
-func NewMutableCreatedTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor {
-	return &MutableTypeDescriptor{TypeDescriptor: desc}
-}
-
-// NewMutableExistingTypeDescriptor returns a MutableTypeDescriptor from the
-// given type descriptor with the cluster version also set to the descriptor.
-// This is for types that already exist.
-func NewMutableExistingTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor {
-	return &MutableTypeDescriptor{TypeDescriptor: desc, ClusterVersion: desc}
-}
-
-// NewImmutableTypeDescriptor returns an ImmutableTypeDescriptor from the
-// given TypeDescriptor.
-func NewImmutableTypeDescriptor(desc TypeDescriptor) *ImmutableTypeDescriptor {
-	return &ImmutableTypeDescriptor{TypeDescriptor: desc}
-}
-
-// DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
-	return nil
-}
-
-// SchemaDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) SchemaDesc() *SchemaDescriptor {
-	return nil
-}
-
-// TableDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) TableDesc() *TableDescriptor {
-	return nil
-}
-
-// TypeDesc implements the ObjectDescriptor interface.
-func (desc *TypeDescriptor) TypeDesc() *TypeDescriptor {
-	return desc
-}
-
-// GetAuditMode implements the DescriptorProto interface.
-func (desc *TypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
-}
-
-// GetPrivileges implements the DescriptorProto interface.
-func (desc *TypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
-	return nil
-}
-
-// SetID implements the DescriptorProto interface.
-func (desc *TypeDescriptor) SetID(id ID) {
-	desc.ID = id
-}
-
-// TypeName implements the DescriptorProto interface.
-func (desc *TypeDescriptor) TypeName() string {
-	return "type"
-}
-
-// SetName implements the DescriptorProto interface.
-func (desc *TypeDescriptor) SetName(name string) {
-	desc.Name = name
-}
-
-// HydrateTypeInfoWithName fills in user defined type metadata for
-// a type and sets the name in the metadata to the passed in name.
-// This is used when hydrating a type with a known qualified name.
-// TODO (rohany): This method should eventually be defined on an
-//  ImmutableTypeDescriptor so that pointers to the cached info
-//  can be shared among callers.
-func (desc *TypeDescriptor) HydrateTypeInfoWithName(
-	typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc,
-) error {
-	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
-	switch desc.Kind {
-	case TypeDescriptor_ENUM:
-		if typ.Family() != types.EnumFamily {
-			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
-		}
-		logical := make([]string, len(desc.EnumMembers))
-		physical := make([][]byte, len(desc.EnumMembers))
-		for i := range desc.EnumMembers {
-			member := &desc.EnumMembers[i]
-			logical[i] = member.LogicalRepresentation
-			physical[i] = member.PhysicalRepresentation
-		}
-		typ.TypeMeta.EnumData = &types.EnumMetadata{
-			LogicalRepresentations:  logical,
-			PhysicalRepresentations: physical,
-		}
-		return nil
-	case TypeDescriptor_ALIAS:
-		if typ.UserDefined() {
-			switch typ.Family() {
-			case types.ArrayFamily:
-				// Hydrate the element type.
-				elemType := typ.ArrayContents()
-				elemTypName, elemTypDesc, err := typeLookup(ID(elemType.StableTypeID()))
-				if err != nil {
-					return err
-				}
-				if err := elemTypDesc.HydrateTypeInfoWithName(elemType, elemTypName, typeLookup); err != nil {
-					return err
-				}
-				return nil
-			default:
-				return errors.AssertionFailedf("only array types aliases can be user defined")
-			}
-		}
-		return nil
-	default:
-		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
-	}
-}
-
-// TypeLookupFunc is a type alias for a function that looks up a type by ID.
-type TypeLookupFunc func(id ID) (*tree.TypeName, *TypeDescriptor, error)
-
-// MakeTypesT creates a types.T from the input type descriptor.
-func (desc *TypeDescriptor) MakeTypesT(
-	name *tree.TypeName, typeLookup TypeLookupFunc,
-) (*types.T, error) {
-	switch t := desc.Kind; t {
-	case TypeDescriptor_ENUM:
-		typ := types.MakeEnum(uint32(desc.ID), uint32(desc.ArrayTypeID))
-		if err := desc.HydrateTypeInfoWithName(typ, name, typeLookup); err != nil {
-			return nil, err
-		}
-		return typ, nil
-	case TypeDescriptor_ALIAS:
-		// Hydrate the alias and return it.
-		if err := desc.HydrateTypeInfoWithName(desc.Alias, name, typeLookup); err != nil {
-			return nil, err
-		}
-		return desc.Alias, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
-	}
-}
-
-// HydrateTypesInTableDescriptor uses typeLookup to install metadata in the
-// types present in a table descriptor. typeLookup retrieves the fully
-// qualified name and descriptor for a particular ID.
-func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupFunc) error {
-	for i := range desc.Columns {
-		col := &desc.Columns[i]
-		if col.Type.UserDefined() {
-			// Look up its type descriptor.
-			name, typDesc, err := typeLookup(ID(col.Type.StableTypeID()))
-			if err != nil {
-				return err
-			}
-			// TODO (rohany): This should be a noop if the hydrated type
-			//  information present in the descriptor has the same version as
-			//  the resolved type descriptor we found here.
-			if err := typDesc.HydrateTypeInfoWithName(col.Type, name, typeLookup); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// MakeSimpleAliasTypeDescriptor creates a type descriptor that is an alias
-// for the input type. It is intended to be used as an intermediate for name
-// resolution, and should not be serialized and stored on disk.
-func MakeSimpleAliasTypeDescriptor(typ *types.T) *TypeDescriptor {
-	return &TypeDescriptor{
-		ParentID:       InvalidID,
-		ParentSchemaID: InvalidID,
-		Name:           typ.Name(),
-		ID:             InvalidID,
-		Kind:           TypeDescriptor_ALIAS,
-		Alias:          typ,
-	}
-}
-
-// MakeTypeDescriptor creates a type descriptor. It does not fill in kind
-// specific information about the type.
-func MakeTypeDescriptor(parentID, parentSchemaID, id ID, name string) TypeDescriptor {
-	return TypeDescriptor{
-		ParentID:       parentID,
-		ParentSchemaID: parentSchemaID,
-		Name:           name,
-		ID:             id,
-	}
-}
-
-// NameResolutionResult implements the NameResolutionResult interface.
-func (desc *TypeDescriptor) NameResolutionResult() {}
-
-// GetAuditMode implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
-}
-
-// SetID implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) SetID(id ID) {
-	desc.ID = id
-}
-
-// TypeName implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) TypeName() string {
-	return "schema"
-}
-
-// SetName implements the DescriptorProto interface.
-func (desc *SchemaDescriptor) SetName(name string) {
-	desc.Name = name
-}
-
-// DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) DatabaseDesc() *DatabaseDescriptor {
-	return nil
-}
-
-// SchemaDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) SchemaDesc() *SchemaDescriptor {
-	return desc
-}
-
-// TableDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) TableDesc() *TableDescriptor {
-	return nil
-}
-
-// TypeDesc implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) TypeDesc() *TypeDescriptor {
-	return nil
-}
-
-// NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *SchemaDescriptor) NameResolutionResult() {}
 
 // DatabaseKey implements DescriptorKey.
 type DatabaseKey struct {

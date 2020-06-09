@@ -176,6 +176,11 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 // * fixing default privileges for the "root" user
 // * fixing maximum privileges for users.
 // Returns true if the privilege descriptor was modified.
+//
+// TODO(ajwerner): Figure out whether this is still needed. It seems like
+// perhaps it was intended only for the 2.0 release but then somehow we got
+// bad descriptors with bad initial permissions into later versions or we didn't
+// properly bake this migration in.
 func (p *PrivilegeDescriptor) MaybeFixPrivileges(id ID) bool {
 	allowedPrivilegesBits := privilege.ALL.Mask()
 	if IsReservedID(id) {

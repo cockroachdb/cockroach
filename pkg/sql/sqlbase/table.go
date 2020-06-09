@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -579,6 +580,9 @@ func FindFKOriginIndexInTxn(
 // ConditionFailedError on mismatch. We don't directly use CPut with protos
 // because the marshaling is not guaranteed to be stable and also because it's
 // sensitive to things like missing vs default values of fields.
+//
+// TODO(ajwerner): Make this take a TableDescriptorInterface and probably add
+// an equality method on that interface or something like that.
 func ConditionalGetTableDescFromTxn(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation *TableDescriptor,
 ) (*roachpb.Value, error) {
@@ -596,7 +600,7 @@ func ConditionalGetTableDescFromTxn(
 		}
 		existing.Table(existingKV.Value.Timestamp)
 	}
-	wrapped := WrapDescriptor(expectation)
+	wrapped := wrapDescriptor(expectation)
 	if !existing.Equal(wrapped) {
 		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
 	}
@@ -643,4 +647,45 @@ func HasAddingTableError(err error) bool {
 // inactiveTableError.
 func HasInactiveTableError(err error) bool {
 	return errors.HasType(err, (*inactiveTableError)(nil))
+}
+
+// InitTableDescriptor returns a blank TableDescriptor.
+func InitTableDescriptor(
+	id, parentID, parentSchemaID ID,
+	name string,
+	creationTime hlc.Timestamp,
+	privileges *PrivilegeDescriptor,
+	temporary bool,
+) MutableTableDescriptor {
+	return MutableTableDescriptor{TableDescriptor: TableDescriptor{
+		ID:                      id,
+		Name:                    name,
+		ParentID:                parentID,
+		UnexposedParentSchemaID: parentSchemaID,
+		FormatVersion:           InterleavedFormatVersion,
+		Version:                 1,
+		ModificationTime:        creationTime,
+		Privileges:              privileges,
+		CreateAsOfTime:          creationTime,
+		Temporary:               temporary,
+	}}
+}
+
+// NewMutableTableDescriptorAsReplacement creates a new MutableTableDescriptor
+// as a replacement of an existing table. This is utilized with truncate.
+//
+// The passed readTimestamp is serialized into the descriptor's ReplacementOf
+// field for debugging purposes. The passed id will be the ID of the newly
+// returned replacement.
+func NewMutableTableDescriptorAsReplacement(
+	id ID, replacementOf *MutableTableDescriptor, readTimestamp hlc.Timestamp,
+) *MutableTableDescriptor {
+	replacement := &MutableTableDescriptor{TableDescriptor: replacementOf.TableDescriptor}
+	replacement.ID = id
+	replacement.Version = 1
+	replacement.ReplacementOf = TableDescriptor_Replacement{
+		ID:   replacementOf.ID,
+		Time: readTimestamp,
+	}
+	return replacement
 }

@@ -2478,3 +2478,59 @@ query B
 SELECT rolcanlogin FROM pg_roles WHERE rolname = 'role_test_nologin';
 ----
 false
+
+subtest mutations
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables RENAME TO pg_catalog.bad
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables RENAME COLUMN x TO y
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables ADD COLUMN x DECIMAL
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables DROP COLUMN x
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables ADD CONSTRAINT foo UNIQUE (b)
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables DROP CONSTRAINT bar
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables ALTER COLUMN x SET DEFAULT 'foo'
+
+statement error pg_tables is a system catalog
+ALTER TABLE pg_catalog.pg_tables ALTER x DROP NOT NULL
+
+statement error pg_tables is a system catalog
+CREATE INDEX i on pg_catalog.pg_tables (x)
+
+statement error pg_tables is a system catalog
+DROP TABLE pg_catalog.pg_tables
+
+statement error pg_tables is a system catalog
+DROP INDEX pg_catalog.pg_tables@i
+
+statement error pg_tables is a system catalog
+GRANT CREATE ON pg_catalog.pg_tables TO root
+
+statement error pg_tables is a system catalog
+REVOKE CREATE ON pg_catalog.pg_tables FROM root
+
+# Verify pg_catalog tables handles read-only property correctly.
+
+query error user root does not have DELETE privilege on relation pg_tables
+DELETE FROM pg_catalog.pg_tables
+
+query error user root does not have INSERT privilege on relation pg_tables
+INSERT INTO pg_catalog.pg_tables VALUES ('abc')
+
+statement error user root does not have UPDATE privilege on relation pg_tables
+UPDATE pg_catalog.pg_tables SET a = 'abc'
+
+statement error pg_tables is a system catalog
+TRUNCATE TABLE pg_catalog.pg_tables
+

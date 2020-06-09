@@ -25,13 +25,14 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc := MakeDatabaseDesc(stmt.AST.(*tree.CreateDatabase))
-	if desc.Name != "test" {
-		t.Fatalf("expected Name == test, got %s", desc.Name)
+	const id = 17
+	desc := NewInitialDatabaseDescriptor(id, string(stmt.AST.(*tree.CreateDatabase).Name))
+	if desc.GetName() != "test" {
+		t.Fatalf("expected Name == test, got %s", desc.GetName())
 	}
 	// ID is not set yet.
-	if desc.ID != 0 {
-		t.Fatalf("expected ID == 0, got %d", desc.ID)
+	if desc.GetID() != id {
+		t.Fatalf("expected ID == %d, got %d", id, desc.GetID())
 	}
 	if len(desc.GetPrivileges().Users) != 2 {
 		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))

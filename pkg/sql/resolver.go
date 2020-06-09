@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,11 +33,15 @@ var _ resolver.SchemaResolver = &planner{}
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
-) (res *UncachedDatabaseDescriptor, err error) {
+) (res *sqlbase.ImmutableDatabaseDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		res, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
+		var desc sqlbase.DatabaseDescriptorInterface
+		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
 			ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(required),
 		)
+		if desc != nil {
+			res = desc.(*sqlbase.ImmutableDatabaseDescriptor)
+		}
 	})
 	return res, err
 }
@@ -105,11 +109,11 @@ func (p *planner) LookupSchema(
 	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
-	found, _, err = sc.IsValidSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID, scName)
+	found, _, err = sc.IsValidSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName)
 	if err != nil {
 		return false, nil, err
 	}
-	return found, dbDesc, nil
+	return found, dbDesc.(*sqlbase.ImmutableDatabaseDescriptor), nil
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
@@ -139,8 +143,8 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 }
 
 func (p *planner) makeTypeLookupFn(ctx context.Context) sqlbase.TypeLookupFunc {
-	return func(id sqlbase.ID) (*tree.TypeName, *TypeDescriptor, error) {
-		return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	return func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+		return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id, tree.ObjectLookupFlags{})
 	}
 }
 
@@ -180,7 +184,7 @@ func (p *planner) ResolveType(
 
 // ResolveTypeByID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	name, desc, err := resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
+	name, desc, err := resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id), tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}
@@ -195,17 +199,11 @@ func (p *planner) maybeHydrateTypesInDescriptor(
 ) error {
 	// As of now, only {Mutable,Immutable}TableDescriptor have types.T that
 	// need to be hydrated.
-	switch desc := objDesc.(type) {
-	case *sqlbase.MutableTableDescriptor:
-		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), p.makeTypeLookupFn(ctx)); err != nil {
-			return err
-		}
-	case *sqlbase.ImmutableTableDescriptor:
-		if err := sqlbase.HydrateTypesInTableDescriptor(desc.TableDesc(), p.makeTypeLookupFn(ctx)); err != nil {
-			return err
-		}
+	tableDesc := objDesc.(catalog.Descriptor).TableDesc()
+	if tableDesc == nil {
+		return nil
 	}
-	return nil
+	return sqlbase.HydrateTypesInTableDescriptor(tableDesc, p.makeTypeLookupFn(ctx))
 }
 
 // ObjectLookupFlags is part of the resolver.SchemaResolver interface.
@@ -219,12 +217,12 @@ func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLo
 // getDescriptorsFromTargetList fetches the descriptors for the targets.
 func getDescriptorsFromTargetList(
 	ctx context.Context, p *planner, targets tree.TargetList,
-) ([]sqlbase.DescriptorProto, error) {
+) ([]sqlbase.DescriptorInterface, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase
 		}
-		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
+		descs := make([]sqlbase.DescriptorInterface, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
 			descriptor, err := p.ResolveUncachedDatabaseByName(ctx, string(database), true /*required*/)
 			if err != nil {
@@ -241,7 +239,7 @@ func getDescriptorsFromTargetList(
 	if len(targets.Tables) == 0 {
 		return nil, errNoTable
 	}
-	descs := make([]sqlbase.DescriptorProto, 0, len(targets.Tables))
+	descs := make([]sqlbase.DescriptorInterface, 0, len(targets.Tables))
 	for _, tableTarget := range targets.Tables {
 		tableGlob, err := tableTarget.NormalizeTablePattern()
 		if err != nil {
@@ -288,7 +286,7 @@ func (p *planner) getQualifiedTableName(
 		return "", err
 	}
 	tbName := tree.MakeTableNameWithSchema(
-		tree.Name(dbDesc.Name),
+		tree.Name(dbDesc.GetName()),
 		tree.Name(schemaName),
 		tree.Name(desc.Name),
 	)
@@ -504,10 +502,10 @@ func (r *fkSelfResolver) LookupObject(
 type internalLookupCtx struct {
 	dbNames  map[sqlbase.ID]string
 	dbIDs    []sqlbase.ID
-	dbDescs  map[sqlbase.ID]*DatabaseDescriptor
-	tbDescs  map[sqlbase.ID]*TableDescriptor
+	dbDescs  map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor
+	tbDescs  map[sqlbase.ID]*ImmutableTableDescriptor
 	tbIDs    []sqlbase.ID
-	typDescs map[sqlbase.ID]*TypeDescriptor
+	typDescs map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor
 	typIDs   []sqlbase.ID
 }
 
@@ -515,43 +513,57 @@ type internalLookupCtx struct {
 // database descriptor using the table's ID.
 type tableLookupFn = *internalLookupCtx
 
-func newInternalLookupCtx(
-	descs []sqlbase.DescriptorProto, prefix *DatabaseDescriptor,
+// newInternalLookupCtxFromDescriptors "unwraps" the descriptors into the
+// appropriate implementation of DescriptorInterface before constructing a
+// new internalLookupCtx. It is intended only for use when dealing with backups.
+func newInternalLookupCtxFromDescriptors(
+	rawDescs []sqlbase.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
-	wrappedDescs := make([]sqlbase.Descriptor, len(descs))
-	for i, desc := range descs {
-		wrappedDescs[i] = *sqlbase.WrapDescriptor(desc)
+	descs := make([]sqlbase.DescriptorInterface, len(rawDescs))
+	for i := range rawDescs {
+		desc := &rawDescs[i]
+		switch t := desc.Union.(type) {
+		case *sqlbase.Descriptor_Database:
+			descs[i] = sqlbase.NewImmutableDatabaseDescriptor(*t.Database)
+		case *sqlbase.Descriptor_Table:
+			descs[i] = sqlbase.NewImmutableTableDescriptor(*t.Table)
+		case *sqlbase.Descriptor_Type:
+			descs[i] = sqlbase.NewImmutableTypeDescriptor(*t.Type)
+		case *sqlbase.Descriptor_Schema:
+			descs[i] = sqlbase.NewImmutableSchemaDescriptor(*t.Schema)
+		}
 	}
-	return newInternalLookupCtxFromDescriptors(wrappedDescs, prefix)
+	return newInternalLookupCtx(descs, prefix)
 }
 
-func newInternalLookupCtxFromDescriptors(
-	descs []sqlbase.Descriptor, prefix *DatabaseDescriptor,
+func newInternalLookupCtx(
+	descs []sqlbase.DescriptorInterface, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
 	dbNames := make(map[sqlbase.ID]string)
-	dbDescs := make(map[sqlbase.ID]*DatabaseDescriptor)
-	tbDescs := make(map[sqlbase.ID]*TableDescriptor)
-	typDescs := make(map[sqlbase.ID]*TypeDescriptor)
+	dbDescs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
+	tbDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
+	typDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor)
 	var tbIDs, typIDs, dbIDs []sqlbase.ID
 	// Record database descriptors for name lookups.
-	for _, desc := range descs {
-		if database := desc.GetDatabase(); database != nil {
-			dbNames[database.ID] = database.Name
-			dbDescs[database.ID] = database
-			if prefix == nil || prefix.ID == database.ID {
-				dbIDs = append(dbIDs, database.ID)
+	for i := range descs {
+		switch desc := descs[i].(type) {
+		case *sqlbase.ImmutableDatabaseDescriptor:
+			dbNames[desc.GetID()] = desc.GetName()
+			dbDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.GetID() {
+				dbIDs = append(dbIDs, desc.GetID())
 			}
-		} else if table := desc.Table(hlc.Timestamp{}); table != nil {
-			tbDescs[table.ID] = table
-			if prefix == nil || prefix.ID == table.ParentID {
+		case *sqlbase.ImmutableTableDescriptor:
+			tbDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
-				tbIDs = append(tbIDs, table.ID)
+				tbIDs = append(tbIDs, desc.ID)
 			}
-		} else if typ := desc.GetType(); typ != nil {
-			typDescs[typ.ID] = typ
-			if prefix == nil || prefix.ID == typ.ParentID {
+		case *sqlbase.ImmutableTypeDescriptor:
+			typDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the type visible for iteration if the prefix was included.
-				typIDs = append(typIDs, typ.ID)
+				typIDs = append(typIDs, desc.GetID())
 			}
 		}
 	}
@@ -566,7 +578,9 @@ func newInternalLookupCtxFromDescriptors(
 	}
 }
 
-func (l *internalLookupCtx) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error) {
+func (l *internalLookupCtx) getDatabaseByID(
+	id sqlbase.ID,
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
 		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
@@ -580,7 +594,7 @@ func (l *internalLookupCtx) getTableByID(id sqlbase.ID) (*TableDescriptor, error
 		return nil, sqlbase.NewUndefinedRelationError(
 			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
 	}
-	return tb, nil
+	return tb.TableDesc(), nil
 }
 
 func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
@@ -610,22 +624,22 @@ func getParentAsTableName(
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
-	parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
+	parentName = tree.MakeTableName(tree.Name(parentDbDesc.GetName()), tree.Name(parentTable.Name))
+	parentName.ExplicitSchema = parentDbDesc.GetName() != dbPrefix
 	return parentName, nil
 }
 
 // getTableAsTableName returns a TableName object for a given TableDescriptor.
 func getTableAsTableName(
-	l simpleSchemaResolver, table *sqlbase.TableDescriptor, dbPrefix string,
+	l simpleSchemaResolver, table *sqlbase.ImmutableTableDescriptor, dbPrefix string,
 ) (tree.TableName, error) {
 	var tableName tree.TableName
 	tableDbDesc, err := l.getDatabaseByID(table.ParentID)
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
-	tableName.ExplicitSchema = tableDbDesc.Name != dbPrefix
+	tableName = tree.MakeTableName(tree.Name(tableDbDesc.GetName()), tree.Name(table.Name))
+	tableName.ExplicitSchema = tableDbDesc.GetName() != dbPrefix
 	return tableName, nil
 }
 
@@ -707,6 +721,6 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 }
 
 type simpleSchemaResolver interface {
-	getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error)
+	getDatabaseByID(id sqlbase.ID) (*sqlbase.ImmutableDatabaseDescriptor, error)
 	getTableByID(id sqlbase.ID) (*TableDescriptor, error)
 }

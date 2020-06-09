@@ -50,7 +50,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 
 func resolveNewTypeName(
 	params runParams, name *tree.UnresolvedObjectName,
-) (*tree.TypeName, *DatabaseDescriptor, error) {
+) (*tree.TypeName, *sqlbase.ImmutableDatabaseDescriptor, error) {
 	// Resolve the target schema and database.
 	db, prefix, err := params.p.ResolveUncachedDatabase(params.ctx, name)
 	if err != nil {
@@ -62,7 +62,7 @@ func resolveNewTypeName(
 	}
 
 	// Disallow type creation in the system database.
-	if db.ID == keys.SystemDatabaseID {
+	if db.GetID() == keys.SystemDatabaseID {
 		return nil, nil, errors.New("cannot create a type in the system database")
 	}
 
@@ -75,21 +75,21 @@ func resolveNewTypeName(
 // TypeName and returns the key for the new type descriptor, the ID of the
 // new type, the parent database and parent schema id.
 func getCreateTypeParams(
-	params runParams, name *tree.TypeName, db *DatabaseDescriptor,
+	params runParams, name *tree.TypeName, db *sqlbase.ImmutableDatabaseDescriptor,
 ) (sqlbase.DescriptorKey, sqlbase.ID, error) {
 	// TODO (rohany): This should be named object key.
-	typeKey := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings, db.ID, name.Type())
+	typeKey := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), name.Type())
 	// As of now, we can only create types in the public schema.
 	schemaID := sqlbase.ID(keys.PublicSchemaID)
 	exists, collided, err := sqlbase.LookupObjectID(
-		params.ctx, params.p.txn, params.ExecCfg().Codec, db.ID, schemaID, name.Type())
+		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided)
 		if err != nil {
 			return nil, 0, err
 		}
-		return nil, 0, makeObjectAlreadyExistsError(desc, name.String())
+		return nil, 0, makeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
 	}
 	if err != nil {
 		return nil, 0, err
@@ -112,7 +112,7 @@ func (p *planner) createArrayType(
 	n *tree.CreateType,
 	typ *tree.TypeName,
 	typDesc *sqlbase.MutableTypeDescriptor,
-	db *DatabaseDescriptor,
+	db *sqlbase.ImmutableDatabaseDescriptor,
 ) (sqlbase.ID, error) {
 	// Postgres starts off trying to create the type as _<typename>. It then
 	// continues adding "_" to the front of the name until it doesn't find
@@ -126,7 +126,7 @@ func (p *planner) createArrayType(
 			params.ctx,
 			params.p.txn,
 			params.ExecCfg().Codec,
-			db.ID,
+			db.GetID(),
 			schemaID,
 			arrayTypeName,
 		)
@@ -138,7 +138,7 @@ func (p *planner) createArrayType(
 			arrayTypeKey = sqlbase.MakePublicTableNameKey(
 				params.ctx,
 				params.ExecCfg().Settings,
-				db.ID,
+				db.GetID(),
 				arrayTypeName,
 			)
 			break
@@ -158,17 +158,22 @@ func (p *planner) createArrayType(
 	var elemTyp *types.T
 	switch t := typDesc.Kind; t {
 	case sqlbase.TypeDescriptor_ENUM:
-		elemTyp = types.MakeEnum(uint32(typDesc.ID), uint32(id))
+		elemTyp = types.MakeEnum(uint32(typDesc.GetID()), uint32(id))
 	default:
 		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}
 
 	// Construct the descriptor for the array type.
-	arrayTypDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.MakeTypeDescriptor(
-		db.ID, keys.PublicSchemaID, id, arrayTypeName,
-	))
-	arrayTypDesc.Kind = sqlbase.TypeDescriptor_ALIAS
-	arrayTypDesc.Alias = types.MakeArray(elemTyp)
+	// TODO(ajwerner): This is getting fixed up in a later commit to deal with
+	// meta, just hold on.
+	arrayTypDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.TypeDescriptor{
+		Name:           arrayTypeName,
+		ID:             id,
+		ParentID:       db.GetID(),
+		ParentSchemaID: keys.PublicSchemaID,
+		Kind:           sqlbase.TypeDescriptor_ALIAS,
+		Alias:          types.MakeArray(elemTyp),
+	})
 
 	jobStr := fmt.Sprintf("implicit array type creation for %s", tree.AsStringWithFQNames(n, params.Ann()))
 	if err := p.createDescriptorWithID(
@@ -235,11 +240,14 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.MakeTypeDescriptor(
-		db.ID, keys.PublicSchemaID, id, typeName.Type(),
-	))
-	typeDesc.Kind = sqlbase.TypeDescriptor_ENUM
-	typeDesc.EnumMembers = members
+	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(sqlbase.TypeDescriptor{
+		Name:           typeName.Type(),
+		ID:             id,
+		ParentID:       db.GetID(),
+		ParentSchemaID: keys.PublicSchemaID,
+		Kind:           sqlbase.TypeDescriptor_ENUM,
+		EnumMembers:    members,
+	})
 
 	// Create the implicit array type for this type before finishing the type.
 	arrayTypeID, err := p.createArrayType(params, n, typeName, typeDesc, db)

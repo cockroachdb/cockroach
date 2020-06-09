@@ -369,9 +369,6 @@ func runDecommissionNodeImpl(
 	wait nodeDecommissionWaitType,
 	nodeIDs []roachpb.NodeID,
 ) error {
-	if wait == nodeDecommissionWaitLive {
-		fmt.Fprintln(stderr, "\n--wait=live is deprecated and is treated as --wait=all")
-	}
 	minReplicaCount := int64(math.MaxInt64)
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,

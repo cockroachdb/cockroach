@@ -514,13 +514,8 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 
 // AdminSplit splits the range at splitkey.
 //
-// spanKey is a key within the range that should be split, and splitKey is the
-// key at which that range should be split. splitKey is not used exactly as
-// provided--it is first mutated by keys.EnsureSafeSplitKey. Accounting for
-// this mutation sometimes requires constructing a key that falls in a
-// different range, hence the separation between spanKey and splitKey. See
-// #16008 for details, and #16344 for the tracking issue to clean this mess up
-// properly.
+// splitKey is the key at which a split point should be added. It will become
+// the start key of the right-hand side of the new range.
 //
 // expirationTime is the timestamp when the split expires and is eligible for
 // automatic merging by the merge queue. To specify that a split should
@@ -530,10 +525,10 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 //
 // The keys can be either byte slices or a strings.
 func (db *DB) AdminSplit(
-	ctx context.Context, spanKey, splitKey interface{}, expirationTime hlc.Timestamp,
+	ctx context.Context, splitKey interface{}, expirationTime hlc.Timestamp,
 ) error {
 	b := &Batch{}
-	b.adminSplit(spanKey, splitKey, expirationTime)
+	b.adminSplit(splitKey, expirationTime)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
@@ -541,7 +536,7 @@ func (db *DB) AdminSplit(
 func (db *DB) SplitAndScatter(
 	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp,
 ) error {
-	if err := db.AdminSplit(ctx, key, key, expirationTime); err != nil {
+	if err := db.AdminSplit(ctx, key, expirationTime); err != nil {
 		return err
 	}
 	scatterReq := &roachpb.AdminScatterRequest{

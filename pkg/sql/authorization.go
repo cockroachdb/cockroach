@@ -41,11 +41,11 @@ type userRoleMembership map[string]bool
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
-		ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+		ctx context.Context, descriptor sqlbase.DescriptorInterface, privilege privilege.Kind,
 	) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error
+	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorInterface) error
 
 	// HasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
@@ -69,7 +69,7 @@ var _ AuthorizationAccessor = &planner{}
 // CheckPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) CheckPrivilege(
-	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+	ctx context.Context, descriptor sqlbase.DescriptorInterface, privilege privilege.Kind,
 ) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
@@ -118,7 +118,9 @@ func (p *planner) CheckPrivilege(
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error {
+func (p *planner) CheckAnyPrivilege(
+	ctx context.Context, descriptor sqlbase.DescriptorInterface,
+) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.

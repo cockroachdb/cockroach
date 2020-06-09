@@ -754,10 +754,8 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 				return compiledTestCase{}, err
 			}
 		}
-		sysCfgBuilder.addDBDesc(dbID, sqlbase.DatabaseDescriptor{
-			Name: db.name,
-			ID:   sqlbase.ID(dbID),
-		})
+		sysCfgBuilder.addDBDesc(dbID,
+			sqlbase.NewInitialDatabaseDescriptor(sqlbase.ID(dbID), db.name))
 
 		for _, table := range db.tables {
 			tableID := objectCounter
@@ -1090,16 +1088,11 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc sqlbase.TableDescri
 }
 
 // addTableDesc adds a database descriptor to the SystemConfig.
-func (b *systemConfigBuilder) addDBDesc(id int, dbDesc sqlbase.DatabaseDescriptor) {
+func (b *systemConfigBuilder) addDBDesc(id int, dbDesc *sqlbase.ImmutableDatabaseDescriptor) {
 	// Write the table to the SystemConfig, in the descriptors table.
 	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(id))
-	desc := &sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Database{
-			Database: &dbDesc,
-		},
-	}
 	var v roachpb.Value
-	if err := v.SetProto(desc); err != nil {
+	if err := v.SetProto(dbDesc.DescriptorProto()); err != nil {
 		panic(err)
 	}
 	b.kv = append(b.kv, roachpb.KeyValue{Key: k, Value: v})

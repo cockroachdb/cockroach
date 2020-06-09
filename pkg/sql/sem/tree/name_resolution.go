@@ -239,6 +239,10 @@ func (c *ColumnItem) Resolve(
 
 // ObjectNameTargetResolver is the helper interface to resolve object
 // names when the object is not expected to exist.
+//
+// TODO(ajwerner): figure out what scMeta is supposed to be. Currently it's
+// the database but with User-defined schemas, should it be the schema?
+// Should it be both?
 type ObjectNameTargetResolver interface {
 	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
 }

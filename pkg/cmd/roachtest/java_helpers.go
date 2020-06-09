@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-var issueRegexp = regexp.MustCompile(`See: https://github.com/cockroachdb/cockroach/issues/(\d+)`)
+var issueRegexp = regexp.MustCompile(`See: https://[^\s]+issues?/(\d+)`)
 
 type status int
 

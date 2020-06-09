@@ -286,6 +286,6 @@ func (p *planner) writeTableDescToBatch(
 		b,
 		p.ExecCfg().Codec,
 		tableDesc.GetID(),
-		tableDesc.TableDesc(),
+		tableDesc,
 	)
 }

@@ -823,7 +823,8 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	return threshold
 }
 
-// isSystemRange returns true if r's key range precedes keys.UserTableDataMin.
+// isSystemRange returns true if r's key range precedes the start of user
+// structured data (SQL keys) for the range's tenant keyspace.
 func (r *Replica) isSystemRange() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -831,7 +832,8 @@ func (r *Replica) isSystemRange() bool {
 }
 
 func (r *Replica) isSystemRangeRLocked() bool {
-	return r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.UserTableDataMin))
+	rem, _, err := keys.DecodeTenantPrefix(r.mu.state.Desc.StartKey.AsRawKey())
+	return err == nil && roachpb.Key(rem).Compare(keys.UserTableDataMin) < 0
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including

@@ -268,7 +268,7 @@ func verifyTables(
 		if err := kvDB.GetProto(context.Background(), descKey, desc); err != nil {
 			t.Fatal(err)
 		}
-		if (*desc != sqlbase.Descriptor{}) {
+		if !desc.Equal(sqlbase.Descriptor{}) {
 			t.Fatalf("extra descriptor with id %d", id)
 		}
 	}

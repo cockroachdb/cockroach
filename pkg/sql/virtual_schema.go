@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -64,7 +65,7 @@ type virtualSchemaDef interface {
 type virtualIndex struct {
 	// populate populates the table given the constraint. matched is true if any
 	// rows were generated.
-	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *DatabaseDescriptor,
+	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *sqlbase.ImmutableDatabaseDescriptor,
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
 
@@ -89,7 +90,7 @@ type virtualSchemaTable struct {
 	// populate, if non-nil, is a function that is used when creating a
 	// valuesNode. This function eagerly loads every row of the virtual table
 	// during initialization of the valuesNode.
-	populate func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+	populate func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error
 
 	// indexes, if non empty, is a slice of populate methods that also take a
 	// constraint, only generating rows that match the constraint. The order of
@@ -100,7 +101,7 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error)
+	generator func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error)
 }
 
 // virtualSchemaView represents a view within a virtualSchema
@@ -157,7 +158,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		0, /* parentID */
 		parentSchemaID,
 		id,
-		hlc.Timestamp{}, /* creationTime */
+		startTime, /* creationTime */
 		publicSelectPrivileges,
 		nil,                        /* affected */
 		nil,                        /* semaCtx */
@@ -235,7 +236,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		parentSchemaID,
 		id,
 		columns,
-		hlc.Timestamp{}, /* creationTime */
+		startTime, /* creationTime */
 		publicSelectPrivileges,
 		nil,   /* semaCtx */
 		nil,   /* evalCtx */
@@ -258,6 +259,10 @@ var virtualSchemas = map[sqlbase.ID]virtualSchema{
 	sqlbase.PgCatalogID:         pgCatalog,
 	sqlbase.CrdbInternalID:      crdbInternal,
 	sqlbase.PgExtensionSchemaID: pgExtension,
+}
+
+var startTime = hlc.Timestamp{
+	WallTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
 }
 
 //
@@ -287,7 +292,7 @@ var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
 type virtualSchemaEntry struct {
 	// TODO(ajwerner): Use a sqlbase.SchemaDescriptor here as part of the
 	// user-defined schema work.
-	desc            *sqlbase.DatabaseDescriptor
+	desc            *sqlbase.ImmutableDatabaseDescriptor
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
@@ -320,8 +325,8 @@ func (v virtualSchemaEntry) GetObjectByName(
 			return &def, nil
 		}
 		if _, ok := v.allTableNames[name]; ok {
-			return nil, unimplemented.Newf(v.desc.Name+"."+name,
-				"virtual schema table not implemented: %s.%s", v.desc.Name, name)
+			return nil, unimplemented.Newf(v.desc.GetName()+"."+name,
+				"virtual schema table not implemented: %s.%s", v.desc.GetName(), name)
 		}
 		return nil, nil
 	case tree.TypeObject:
@@ -346,6 +351,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		if !ok {
 			return nil, nil
 		}
+
 		return virtualTypeEntry{
 			desc:    sqlbase.MakeSimpleAliasTypeDescriptor(typ),
 			mutable: flags.RequireMutable,
@@ -375,15 +381,14 @@ func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc    *sqlbase.TypeDescriptor
+	desc    *sqlbase.ImmutableTypeDescriptor
 	mutable bool
 }
 
 func (e virtualTypeEntry) Desc() catalog.Descriptor {
-	if e.mutable {
-		return sqlbase.NewMutableExistingTypeDescriptor(*e.desc)
-	}
-	return sqlbase.NewImmutableTypeDescriptor(*e.desc)
+	// TODO(ajwerner): Should this be allowed? I think no. Let's just store an
+	// ImmutableTypeDesc off of this thing.
+	return e.desc
 }
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
@@ -442,14 +447,14 @@ func (e virtualDefEntry) getPlanInfo(
 	}
 
 	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
-		var dbDesc *DatabaseDescriptor
+		var dbDesc *sqlbase.ImmutableDatabaseDescriptor
 		if dbName != "" {
-			var err error
-			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec,
+			dbDescI, err := p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec,
 				dbName, tree.DatabaseLookupFlags{Required: true, AvoidCached: p.avoidCachedDescriptors})
 			if err != nil {
 				return nil, err
 			}
+			dbDesc = dbDescI.(*sqlbase.ImmutableDatabaseDescriptor)
 		} else {
 			if !e.validWithNoDatabaseContext {
 				return nil, errInvalidDbPrefix
@@ -512,7 +517,7 @@ func (e virtualDefEntry) getPlanInfo(
 func (e virtualDefEntry) makeConstrainedRowsGenerator(
 	ctx context.Context,
 	p *planner,
-	dbDesc *DatabaseDescriptor,
+	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
 	index *sqlbase.IndexDescriptor,
 	indexKeyDatums []tree.Datum,
 	columnIdxMap map[sqlbase.ColumnID]int,
@@ -654,12 +659,8 @@ func NewVirtualSchemaHolder(
 // user has access to.
 var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(sqlbase.PublicRole, privilege.List{privilege.SELECT})
 
-func initVirtualDatabaseDesc(id sqlbase.ID, name string) *sqlbase.DatabaseDescriptor {
-	return &sqlbase.DatabaseDescriptor{
-		Name:       name,
-		ID:         id,
-		Privileges: publicSelectPrivileges,
-	}
+func initVirtualDatabaseDesc(id sqlbase.ID, name string) *sqlbase.ImmutableDatabaseDescriptor {
+	return sqlbase.NewInitialDatabaseDescriptorWithPrivileges(id, name, publicSelectPrivileges)
 }
 
 // getEntries is part of the VirtualTabler interface.

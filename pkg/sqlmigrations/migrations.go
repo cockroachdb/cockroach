@@ -1077,7 +1077,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 	//
 	// There are probably more efficient ways to do this part of the migration,
 	// but the current approach seemed like the most straightforward.
-	var allDescs []sqlbase.DescriptorProto
+	var allDescs []sqlbase.DescriptorInterface
 	schemaChangeJobsForDesc := make(map[sqlbase.ID][]int64)
 	gcJobsForDesc := make(map[sqlbase.ID][]int64)
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -1176,42 +1176,41 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 
 	log.Infof(ctx, "evaluating tables for creating jobs")
 	for _, desc := range allDescs {
-		switch desc := desc.(type) {
-		case *sqlbase.TableDescriptor:
-			if scJobs := schemaChangeJobsForDesc[desc.ID]; len(scJobs) > 0 {
-				log.VEventf(ctx, 3, "table %d has running schema change jobs %v, skipping", desc.ID, scJobs)
+		if tableDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
+			if scJobs := schemaChangeJobsForDesc[tableDesc.ID]; len(scJobs) > 0 {
+				log.VEventf(ctx, 3, "table %d has running schema change jobs %v, skipping", tableDesc.ID, scJobs)
 				continue
-			} else if gcJobs := gcJobsForDesc[desc.ID]; len(gcJobs) > 0 {
-				log.VEventf(ctx, 3, "table %d has running GC jobs %v, skipping", desc.ID, gcJobs)
+			} else if gcJobs := gcJobsForDesc[tableDesc.ID]; len(gcJobs) > 0 {
+				log.VEventf(ctx, 3, "table %d has running GC jobs %v, skipping", tableDesc.ID, gcJobs)
 				continue
 			}
-			if !desc.Adding() && !desc.Dropped() && !desc.HasDrainingNames() {
+			if !tableDesc.Adding() && !tableDesc.Dropped() && !tableDesc.HasDrainingNames() {
 				log.VEventf(ctx, 3,
 					"table %d is not being added or dropped and does not have draining names, skipping",
-					desc.ID,
+					tableDesc.ID,
 				)
 				continue
 			}
 
 			if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				key := schemaChangeJobMigrationKeyForTable(r.codec, desc.ID)
+				key := schemaChangeJobMigrationKeyForTable(r.codec, tableDesc.ID)
 				startTime := timeutil.Now().String()
 				if kv, err := txn.Get(ctx, key); err != nil {
 					return err
 				} else if kv.Exists() {
-					log.VEventf(ctx, 3, "table %d already processed in migration", desc.ID)
+					log.VEventf(ctx, 3, "table %d already processed in migration", tableDesc.ID)
 					return nil
 				}
-				if desc.Adding() || desc.HasDrainingNames() {
-					if err := createSchemaChangeJobForTable(txn, desc); err != nil {
+				if tableDesc.Adding() || tableDesc.HasDrainingNames() {
+					if err := createSchemaChangeJobForTable(txn, tableDesc.TableDesc()); err != nil {
 						return err
 					}
-				} else if desc.Dropped() {
+				} else if tableDesc.Dropped() {
 					// Note that a table can be both in the DROP state and have draining
 					// names. In that case it was enough to just create a schema change
 					// job, as in the case above, because that job will itself create a
 					// GC job.
-					if err := createGCJobForTable(txn, desc); err != nil {
+					if err := createGCJobForTable(txn, tableDesc.TableDesc()); err != nil {
 						return err
 					}
 				}
@@ -1222,9 +1221,8 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 			}); err != nil {
 				return err
 			}
-		case *sqlbase.DatabaseDescriptor:
-			// Do nothing.
 		}
+		// Do nothing.
 	}
 
 	return nil
@@ -1482,14 +1480,14 @@ func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Ke
 	return append(codec.MigrationKeyPrefix(), roachpb.RKey(migration.name)...)
 }
 
-func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
+func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptorInterface) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		tKey := sqlbase.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(r.codec), desc.GetID(), nil)
-		b.CPut(sqlbase.MakeDescMetadataKey(r.codec, desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
+		b.CPut(sqlbase.MakeDescMetadataKey(r.codec, desc.GetID()), desc.DescriptorProto(), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
@@ -1574,7 +1572,7 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 			sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTableName)
 		b.Put(nameKey.Key(r.codec), sqlbase.NamespaceTable.GetID())
 		b.Put(sqlbase.MakeDescMetadataKey(
-			r.codec, sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable))
+			r.codec, sqlbase.NamespaceTable.GetID()), sqlbase.NamespaceTable.DescriptorProto())
 		return txn.Run(ctx, b)
 	})
 }

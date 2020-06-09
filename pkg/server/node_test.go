@@ -526,7 +526,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(context.Background(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := ts.db.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 

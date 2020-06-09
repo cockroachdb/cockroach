@@ -147,8 +147,9 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		// configs through proper channels.
 		//
 		// Getting here outside tests is impossible.
+		desc := sqlbase.NewImmutableTableDescriptor(sqlbase.TableDescriptor{}).DescriptorProto()
 		var val roachpb.Value
-		if err := val.SetProto(sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{})); err != nil {
+		if err := val.SetProto(desc); err != nil {
 			panic(err)
 		}
 		return &val
@@ -176,14 +177,19 @@ func (s *SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
 
 // GetIndex searches the kv list for 'key' and returns its index if found.
 func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
-	l := len(s.Values)
-	i := sort.Search(l, func(i int) bool {
-		return key.Compare(s.Values[i].Key) <= 0
-	})
-	if i == l || !key.Equal(s.Values[i].Key) {
+	i := s.getIndexBound(key)
+	if i == len(s.Values) || !key.Equal(s.Values[i].Key) {
 		return 0, false
 	}
 	return i, true
+}
+
+// getIndexBound searches the kv list for 'key' and returns its index if found
+// or the index it would be placed at if not found.
+func (s *SystemConfig) getIndexBound(key roachpb.Key) int {
+	return sort.Search(len(s.Values), func(i int) bool {
+		return key.Compare(s.Values[i].Key) <= 0
+	})
 }
 
 // GetLargestObjectID returns the largest object ID found in the config which is
@@ -200,16 +206,14 @@ func (s *SystemConfig) GetLargestObjectID(
 		return hook(maxID), nil
 	}
 
-	// Search for the descriptor table entries within the SystemConfig.
-	highBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID + 1)
-	highIndex := sort.Search(len(s.Values), func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, highBound) >= 0
-	})
+	// Search for the descriptor table entries within the SystemConfig. lowIndex
+	// (in s.Values) is the first and highIndex one past the last KV pair in the
+	// descriptor table.
 	lowBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
-	lowIndex := sort.Search(len(s.Values), func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, lowBound) >= 0
-	})
-	if highIndex == lowIndex {
+	lowIndex := s.getIndexBound(lowBound)
+	highBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID + 1)
+	highIndex := s.getIndexBound(highBound)
+	if lowIndex == highIndex {
 		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
 	}
 
@@ -455,7 +459,9 @@ func StaticSplits() []roachpb.RKey {
 //
 // Splits are also required between secondary tenants (i.e. /tenant/<id>).
 // However, splits are not required between the tables of secondary tenants.
-func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachpb.RKey) {
+func (s *SystemConfig) ComputeSplitKey(
+	ctx context.Context, startKey, endKey roachpb.RKey,
+) (rr roachpb.RKey) {
 	// Before dealing with splits necessitated by SQL tables, handle all of the
 	// static splits earlier in the keyspace. Note that this list must be kept in
 	// the proper order (ascending in the keyspace) for the logic below to work.
@@ -480,17 +486,17 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachp
 	// If the above iteration over the static split points didn't decide
 	// anything, the key range must be somewhere in the SQL table part of the
 	// keyspace. First, look for split keys within the system-tenant's keyspace.
-	if split := s.systemTenantTableBoundarySplitKey(startKey, endKey); split != nil {
+	if split := s.systemTenantTableBoundarySplitKey(ctx, startKey, endKey); split != nil {
 		return split
 	}
 
 	// If the system tenant does not have any splits, look for split keys at the
 	// boundary of each secondary tenant.
-	return s.tenantBoundarySplitKey(startKey, endKey)
+	return s.tenantBoundarySplitKey(ctx, startKey, endKey)
 }
 
 func (s *SystemConfig) systemTenantTableBoundarySplitKey(
-	startKey, endKey roachpb.RKey,
+	ctx context.Context, startKey, endKey roachpb.RKey,
 ) roachpb.RKey {
 	if bytes.HasPrefix(startKey, keys.TenantPrefix) {
 		// If the start key has a tenant prefix, don't try to find a split key
@@ -559,7 +565,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	if startID <= keys.MaxReservedDescID {
 		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID, keys.PseudoTableIDs)
 		if err != nil {
-			log.Errorf(context.TODO(), "unable to determine largest reserved object ID from system config: %s", err)
+			log.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
 		}
 		if splitKey := findSplitKey(startID, endID); splitKey != nil {
@@ -571,21 +577,101 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	// Find the split key in the system tenant's user space.
 	endID, err := s.GetLargestObjectID(0, keys.PseudoTableIDs)
 	if err != nil {
-		log.Errorf(context.TODO(), "unable to determine largest object ID from system config: %s", err)
+		log.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
 		return nil
 	}
 	return findSplitKey(startID, endID)
 }
 
-func (s *SystemConfig) tenantBoundarySplitKey(startKey, endKey roachpb.RKey) roachpb.RKey {
-	// TODO(nvanbenschoten): implement this logic. Tracked in #48774.
-	return nil
+func (s *SystemConfig) tenantBoundarySplitKey(
+	ctx context.Context, startKey, endKey roachpb.RKey,
+) roachpb.RKey {
+	// Bail early if there's no overlap with the secondary tenant keyspace.
+	searchSpan := roachpb.Span{Key: startKey.AsRawKey(), EndKey: endKey.AsRawKey()}
+	tenantSpan := roachpb.Span{Key: keys.TenantTableDataMin, EndKey: keys.TenantTableDataMax}
+	if !searchSpan.Overlaps(tenantSpan) {
+		return nil
+	}
+
+	// Determine tenant ID range being searched: [lowTenID, highTenID].
+	var lowTenID, highTenID roachpb.TenantID
+	if searchSpan.Key.Compare(tenantSpan.Key) < 0 {
+		// startKey before tenant keyspace.
+		lowTenID = roachpb.MinTenantID
+	} else {
+		// MakeTenantPrefix(lowTenIDExcl) is either the start key of this key
+		// range or is outside of this key range. We're only searching for split
+		// points within the specified key range, so the first tenant ID that we
+		// would consider splitting on is the following ID.
+		_, lowTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.Key)
+		if err != nil {
+			log.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
+			return nil
+		}
+		if lowTenIDExcl == roachpb.MaxTenantID {
+			// MaxTenantID already split or outside range.
+			return nil
+		}
+		lowTenID = roachpb.MakeTenantID(lowTenIDExcl.ToUint64() + 1)
+	}
+	if searchSpan.EndKey.Compare(tenantSpan.EndKey) >= 0 {
+		// endKey after tenant keyspace.
+		highTenID = roachpb.MaxTenantID
+	} else {
+		rem, highTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.EndKey)
+		if err != nil {
+			log.Errorf(ctx, "unable to decode tenant ID from end key: %s", err)
+			return nil
+		}
+		if len(rem) == 0 {
+			// MakeTenantPrefix(highTenIDExcl) is the end key of this key range.
+			// The key range is exclusive but we're looking for an inclusive
+			// range of tenant IDs, so the last tenant ID that we would consider
+			// splitting on is the previous ID.
+			//
+			// Unlike with searchSpan.Key and MaxTenantID, there is no exception
+			// for DecodeTenantPrefix(searchSpan.EndKey) == MinTenantID. This is
+			// because tenantSpan.Key is set to MakeTenantPrefix(MinTenantID),
+			// so we would have already returned early in that case.
+			highTenID = roachpb.MakeTenantID(highTenIDExcl.ToUint64() - 1)
+		} else {
+			highTenID = highTenIDExcl
+		}
+	}
+
+	// Bail if there is no chance of any tenant boundaries between these IDs.
+	if lowTenID.ToUint64() > highTenID.ToUint64() {
+		return nil
+	}
+
+	// Search for the tenants table entries in the SystemConfig within the
+	// desired tenant ID range.
+	lowBound := keys.SystemSQLCodec.TenantMetadataKey(lowTenID)
+	lowIndex := s.getIndexBound(lowBound)
+	if lowIndex == len(s.Values) {
+		// No keys within range found.
+		return nil
+	}
+
+	// Choose the first key in this range. Extract its tenant ID and check
+	// whether its within the desired tenant ID range.
+	splitKey := s.Values[lowIndex].Key
+	splitTenID, err := keys.SystemSQLCodec.DecodeTenantMetadataID(splitKey)
+	if err != nil {
+		log.Errorf(ctx, "unable to decode tenant ID from system config: %s", err)
+		return nil
+	}
+	if splitTenID.ToUint64() > highTenID.ToUint64() {
+		// No keys within range found.
+		return nil
+	}
+	return roachpb.RKey(keys.MakeTenantPrefix(splitTenID))
 }
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
-func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
-	return len(s.ComputeSplitKey(startKey, endKey)) > 0
+func (s *SystemConfig) NeedsSplit(ctx context.Context, startKey, endKey roachpb.RKey) bool {
+	return len(s.ComputeSplitKey(ctx, startKey, endKey)) > 0
 }
 
 // shouldSplitOnSystemTenantObject checks if the ID is eligible for a split at

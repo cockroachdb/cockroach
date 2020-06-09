@@ -77,29 +77,29 @@ func (oc *optCatalog) reset() {
 	oc.cfg = oc.planner.execCfg.Gossip.DeprecatedSystemConfig(47150)
 }
 
-// optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
-// cat.Object and cat.Schema interfaces.
+// optSchema is a wrapper around sqlbase.ImmutableDatabaseDescriptor that
+// implements the cat.Object and cat.Schema interfaces.
 type optSchema struct {
 	planner *planner
-	desc    *sqlbase.DatabaseDescriptor
+	desc    *sqlbase.ImmutableDatabaseDescriptor
 
 	name cat.SchemaName
 }
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (os *optSchema) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(os.desc.ID)
+	return cat.StableID(os.desc.GetID())
 }
 
 // Equals is part of the cat.Object interface.
 func (os *optSchema) Equals(other cat.Object) bool {
 	otherSchema, ok := other.(*optSchema)
-	return ok && os.desc.ID == otherSchema.desc.ID
+	return ok && os.desc.GetID() == otherSchema.desc.GetID()
 }
 
 // Name is part of the cat.Schema interface.
@@ -153,7 +153,7 @@ func (oc *optCatalog) ResolveSchema(
 	}
 	return &optSchema{
 		planner: oc.planner,
-		desc:    desc.(*DatabaseDescriptor),
+		desc:    desc.(*sqlbase.ImmutableDatabaseDescriptor),
 		name:    oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil
 }
@@ -206,7 +206,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	return ds, false, err
 }
 
-func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorProto, error) {
+func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorInterface, error) {
 	switch t := o.(type) {
 	case *optSchema:
 		return t.desc, nil
@@ -292,7 +292,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
-	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name)), nil
+	return tree.MakeTableName(tree.Name(dbDesc.GetName()), tree.Name(desc.Name)), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -1324,7 +1324,7 @@ func newOptVirtualTable(
 			// both cases.
 			id |= cat.StableID(math.MaxUint32) << 32
 		} else {
-			id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
+			id |= cat.StableID(dbDesc.(*sqlbase.ImmutableDatabaseDescriptor).GetID()) << 32
 		}
 	}
 

@@ -72,12 +72,13 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	registry := server.JobRegistry().(*jobs.Registry)
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	if err := kvDB.Put(
 		ctx,
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
-		sqlbase.WrapDescriptor(tableDesc),
+		tableDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)
 	}

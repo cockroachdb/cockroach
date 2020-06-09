@@ -25,13 +25,15 @@ import (
 
 type descriptorsMatched struct {
 	// all tables that match targets plus their parent databases.
+	//
+	// TODO(ajwerner): Replace this with DescriptorInterface.
 	descs []sqlbase.Descriptor
 
 	// the databases from which all tables were matched (eg a.* or DATABASE a).
 	expandedDB []sqlbase.ID
 
 	// explicitly requested DBs (e.g. DATABASE a).
-	requestedDBs []*sqlbase.DatabaseDescriptor
+	requestedDBs []*sqlbase.ImmutableDatabaseDescriptor
 }
 
 func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
@@ -40,7 +42,7 @@ func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
 		covered[i] = true
 	}
 	for _, i := range d.requestedDBs {
-		if !covered[i.ID] {
+		if !covered[i.GetID()] {
 			return errors.Errorf("cannot RESTORE DATABASE from a backup of individual tables (use SHOW BACKUP to determine available tables)")
 		}
 	}
@@ -99,6 +101,8 @@ func (r *descriptorResolver) LookupObject(
 
 // newDescriptorResolver prepares a descriptorResolver for the given
 // known set of descriptors.
+//
+// TODO(ajwerner): overhaul this structure to use "unwrapped" descriptors.
 func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, error) {
 	r := &descriptorResolver{
 		descByID:   make(map[sqlbase.ID]sqlbase.Descriptor),
@@ -110,12 +114,12 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 	// check the ParentID for tables, and all the valid parents must be
 	// known before we start to check that.
 	for _, desc := range descs {
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			if _, ok := r.dbsByName[dbDesc.Name]; ok {
+		if desc.GetDatabase() != nil {
+			if _, ok := r.dbsByName[desc.GetName()]; ok {
 				return nil, errors.Errorf("duplicate database name: %q used for ID %d and %d",
-					dbDesc.Name, r.dbsByName[dbDesc.Name], dbDesc.ID)
+					desc.GetName(), r.dbsByName[desc.GetName()], desc.GetID())
 			}
-			r.dbsByName[dbDesc.Name] = dbDesc.ID
+			r.dbsByName[desc.GetName()] = desc.GetID()
 		}
 
 		// Incidentally, also remember all the descriptors by ID.
@@ -191,7 +195,8 @@ func descriptorsMatchingTargets(
 		if _, ok := alreadyRequestedDBs[dbID]; !ok {
 			desc := resolver.descByID[dbID]
 			ret.descs = append(ret.descs, desc)
-			ret.requestedDBs = append(ret.requestedDBs, desc.GetDatabase())
+			ret.requestedDBs = append(ret.requestedDBs,
+				sqlbase.NewImmutableDatabaseDescriptor(*desc.GetDatabase()))
 			ret.expandedDB = append(ret.expandedDB, dbID)
 			alreadyRequestedDBs[dbID] = struct{}{}
 			alreadyExpandedDBs[dbID] = struct{}{}
@@ -464,25 +469,26 @@ func allSQLDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.Descriptor, 
 	return sqlDescs, nil
 }
 
-func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
+func ensureInterleavesIncluded(tables []sqlbase.TableDescriptorInterface) error {
 	inBackup := make(map[sqlbase.ID]bool, len(tables))
 	for _, t := range tables {
-		inBackup[t.ID] = true
+		inBackup[t.GetID()] = true
 	}
 
 	for _, table := range tables {
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		tableDesc := table.TableDesc()
+		if err := tableDesc.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			for _, a := range index.Interleave.Ancestors {
 				if !inBackup[a.TableID] {
 					return errors.Errorf(
-						"cannot backup table %q without interleave parent (ID %d)", table.Name, a.TableID,
+						"cannot backup table %q without interleave parent (ID %d)", table.GetName(), a.TableID,
 					)
 				}
 			}
 			for _, c := range index.InterleavedBy {
 				if !inBackup[c.Table] {
 					return errors.Errorf(
-						"cannot backup table %q without interleave child table (ID %d)", table.Name, c.Table,
+						"cannot backup table %q without interleave child table (ID %d)", table.GetName(), c.Table,
 					)
 				}
 			}
@@ -563,9 +569,9 @@ func fullClusterTargetsBackup(
 // full cluster backup, and all the user databases.
 func fullClusterTargets(
 	allDescs []sqlbase.Descriptor,
-) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
 	fullClusterDescs := make([]sqlbase.Descriptor, 0, len(allDescs))
-	fullClusterDBs := make([]*sqlbase.DatabaseDescriptor, 0)
+	fullClusterDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0)
 
 	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
 	for _, tableName := range fullClusterSystemTables {
@@ -574,14 +580,15 @@ func fullClusterTargets(
 
 	for _, desc := range allDescs {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
 			fullClusterDescs = append(fullClusterDescs, desc)
-			if dbDesc.ID != sqlbase.SystemDB.ID {
+			if dbDesc.GetID() != sqlbase.SystemDB.GetID() {
 				// The only database that isn't being fully backed up is the system DB.
 				fullClusterDBs = append(fullClusterDBs, dbDesc)
 			}
 		}
 		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-			if tableDesc.ParentID == sqlbase.SystemDB.ID {
+			if tableDesc.ParentID == keys.SystemDatabaseID {
 				// Add only the system tables that we plan to include in a full cluster
 				// backup.
 				if _, ok := systemTablesToBackup[tableDesc.Name]; ok {
@@ -628,20 +635,20 @@ func CheckTableExists(
 
 func fullClusterTargetsRestore(
 	allDescs []sqlbase.Descriptor,
-) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, err
 	}
 	filteredDescs := make([]sqlbase.Descriptor, 0, len(fullClusterDescs))
 	for _, desc := range fullClusterDescs {
-		if _, isDefaultDB := sqlbase.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != sqlbase.SystemDB.ID {
+		if _, isDefaultDB := sqlbase.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != keys.SystemDatabaseID {
 			filteredDescs = append(filteredDescs, desc)
 		}
 	}
-	filteredDBs := make([]*sqlbase.DatabaseDescriptor, 0, len(fullClusterDBs))
+	filteredDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0, len(fullClusterDBs))
 	for _, db := range fullClusterDBs {
-		if _, isDefaultDB := sqlbase.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != sqlbase.SystemDB.ID {
+		if _, isDefaultDB := sqlbase.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != keys.SystemDatabaseID {
 			filteredDBs = append(filteredDBs, db)
 		}
 	}
@@ -656,7 +663,7 @@ func selectTargets(
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {

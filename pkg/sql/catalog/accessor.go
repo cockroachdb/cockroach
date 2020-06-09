@@ -22,10 +22,11 @@ import (
 
 // Accessor provides access to sql object descriptors.
 type Accessor interface {
+
 	// GetDatabaseDesc looks up a database by name and returns its
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
-	GetDatabaseDesc(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbName string, flags tree.DatabaseLookupFlags) (*sqlbase.DatabaseDescriptor, error)
+	GetDatabaseDesc(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbName string, flags tree.DatabaseLookupFlags) (sqlbase.DatabaseDescriptorInterface, error)
 
 	// IsValidSchema returns true and the SchemaID if the given schema name is valid for the given database.
 	IsValidSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string) (bool, sqlbase.ID, error)
@@ -34,7 +35,12 @@ type Accessor interface {
 	// database and schema.
 	// TODO(solon): when separate schemas are supported, this
 	// API should be extended to use schema descriptors.
-	GetObjectNames(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db *sqlbase.DatabaseDescriptor, scName string, flags tree.DatabaseListFlags) (tree.TableNames, error)
+	//
+	// TODO(ajwerner,rohany): This API is utilized to support glob patterns that
+	// are fundamentally sometimes ambiguous (see GRANT and the ambiguity between
+	// tables and types). Furthermore, the fact that this buffers everything
+	// in ram in unfortunate.
+	GetObjectNames(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db sqlbase.DatabaseDescriptorInterface, scName string, flags tree.DatabaseListFlags) (tree.TableNames, error)
 
 	// GetObjectDesc looks up an object by name and returns both its
 	// descriptor and that of its parent database. If the object is not

@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -128,7 +127,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	}
 	mKey := sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(idCounter))
 	// Fill the dummy descriptor with garbage.
-	desc := sql.InitTableDescriptor(
+	desc := sqlbase.InitTableDescriptor(
 		sqlbase.ID(idCounter),
 		dbID,
 		keys.PublicSchemaID,
@@ -140,7 +139,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.Put(ctx, mKey, sqlbase.WrapDescriptor(&desc)); err != nil {
+	if err := kvDB.Put(ctx, mKey, desc.DescriptorProto()); err != nil {
 		t.Fatal(err)
 	}
 

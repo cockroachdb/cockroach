@@ -632,7 +632,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableSetAudit:
 			var err error
-			descriptorChanged, err = params.p.setAuditMode(params.ctx, n.tableDesc.TableDesc(), t.Mode)
+			descriptorChanged, err = params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
 			if err != nil {
 				return err
 			}
@@ -747,7 +747,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 }
 
 func (p *planner) setAuditMode(
-	ctx context.Context, desc *sqlbase.TableDescriptor, auditMode tree.AuditMode,
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, auditMode tree.AuditMode,
 ) (bool, error) {
 	// An auditing config change is itself auditable!
 	// We record the event even if the permission check below fails:

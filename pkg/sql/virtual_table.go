@@ -191,7 +191,7 @@ type vTableLookupJoinNode struct {
 	input planNode
 
 	dbName string
-	db     *sqlbase.DatabaseDescriptor
+	db     *sqlbase.ImmutableDatabaseDescriptor
 	table  *sqlbase.TableDescriptor
 	index  *sqlbase.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
@@ -241,13 +241,17 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 		sqlbase.ColTypeInfoFromResCols(v.columns), 0)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	v.db, err = params.p.LogicalSchemaAccessor().GetDatabaseDesc(
+	db, err := params.p.LogicalSchemaAccessor().GetDatabaseDesc(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg().Codec,
 		v.dbName,
 		tree.DatabaseLookupFlags{Required: true, AvoidCached: params.p.avoidCachedDescriptors},
 	)
+	if err != nil {
+		return err
+	}
+	v.db = db.(*sqlbase.ImmutableDatabaseDescriptor)
 	return err
 }
 

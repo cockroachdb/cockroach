@@ -129,7 +129,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 		}}
 		s, _, kvDB := serverutils.StartServer(b, args)
 		for _, t := range tables {
-			if err := kvDB.AdminSplit(ctx, t.span.Key, t.span.Key, hlc.Timestamp{} /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(ctx, t.span.Key, hlc.Timestamp{} /* expirationTime */); err != nil {
 				b.Fatal(err)
 			}
 		}
