@@ -158,7 +158,7 @@ func (eh *ExprHelper) Init(
 	}
 	var err error
 	semaContext := tree.MakeSemaContext()
-	semaContext.TypeResolver = evalCtx.DistSQLTypeResolver
+	semaContext.TypeResolver = evalCtx.TypeResolver
 	eh.Expr, err = processExpression(expr, evalCtx, &semaContext, &eh.Vars)
 	if err != nil {
 		return err
