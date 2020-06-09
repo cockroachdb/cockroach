@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl_test
+package backupccl
 
 import (
 	"bytes"
@@ -31,7 +31,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -81,13 +80,13 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	// have been stored in the GZip compressed format.
 	t.Run("GZipBackupManifest", func(t *testing.T) {
 		backupDir := fmt.Sprintf("%s/foo", dir)
-		backupManifestFile := backupDir + "/" + backupccl.BackupManifestName
+		backupManifestFile := backupDir + "/" + BackupManifestName
 		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
-		require.Equal(t, backupccl.ZipType, fileType)
+		require.Equal(t, ZipType, fileType)
 	})
 
 	sqlDB.Exec(t, "CREATE DATABASE data2")
@@ -205,7 +204,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 						t.Fatal(err)
 					}
 					fileType := http.DetectContentType(backupPartitionBytes)
-					require.Equal(t, backupccl.ZipType, fileType)
+					require.Equal(t, ZipType, fileType)
 				}
 			}
 		}
@@ -417,7 +416,7 @@ func backupAndRestore(
 				t.Fatal("cannot unmarshal job payload from system.jobs")
 			}
 
-			backupManifest := &backupccl.BackupManifest{}
+			backupManifest := &BackupManifest{}
 			backupPayload, ok := payload.Details.(*jobspb.Payload_Backup)
 			if !ok {
 				t.Logf("job %T is not a backup: %v", payload.Details, payload.Details)
@@ -766,19 +765,19 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/33357")
 
 	defer func(oldInterval time.Duration) {
-		backupccl.BackupCheckpointInterval = oldInterval
-	}(backupccl.BackupCheckpointInterval)
-	backupccl.BackupCheckpointInterval = 0
+		BackupCheckpointInterval = oldInterval
+	}(BackupCheckpointInterval)
+	BackupCheckpointInterval = 0
 
 	var checkpointPath string
 
 	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		checkpointPath = filepath.Join(ip.dir, ip.name, backupccl.BackupManifestCheckpointName)
+		checkpointPath = filepath.Join(ip.dir, ip.name, BackupManifestCheckpointName)
 		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
 		if err != nil {
 			return errors.Errorf("%+v", err)
 		}
-		var checkpointDesc backupccl.BackupManifest
+		var checkpointDesc BackupManifest
 		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
 			return errors.Errorf("%+v", err)
 		}
@@ -882,9 +881,9 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
-		mockManifest, err := protoutil.Marshal(&backupccl.BackupManifest{
+		mockManifest, err := protoutil.Marshal(&BackupManifest{
 			ClusterID: tc.Servers[0].ClusterID(),
-			Files: []backupccl.BackupManifest_File{
+			Files: []BackupManifest_File{
 				{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 			},
 		})
@@ -895,7 +894,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err := os.MkdirAll(backupDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		checkpointFile := backupDir + "/" + backupccl.BackupManifestCheckpointName
+		checkpointFile := backupDir + "/" + BackupManifestCheckpointName
 		if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -911,17 +910,17 @@ func TestBackupRestoreResume(t *testing.T) {
 
 		// If the backup properly took the (incorrect) checkpoint into account, it
 		// won't have tried to re-export any keys within backupCompletedSpan.
-		backupManifestFile := backupDir + "/" + backupccl.BackupManifestName
+		backupManifestFile := backupDir + "/" + BackupManifestName
 		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType == backupccl.ZipType {
-			backupManifestBytes, err = backupccl.DecompressData(backupManifestBytes)
+		if fileType == ZipType {
+			backupManifestBytes, err = DecompressData(backupManifestBytes)
 			require.NoError(t, err)
 		}
-		var backupManifest backupccl.BackupManifest
+		var backupManifest BackupManifest
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatal(err)
 		}
@@ -1203,7 +1202,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupccl.BackupManifestName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == BackupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -1246,7 +1245,7 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupccl.BackupManifestName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == BackupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -2432,15 +2431,15 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
 
-	var backupManifest backupccl.BackupManifest
+	var backupManifest BackupManifest
 	{
-		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupccl.BackupManifestName))
+		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, BackupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
-		if fileType == backupccl.ZipType {
-			backupManifestBytes, err = backupccl.DecompressData(backupManifestBytes)
+		if fileType == ZipType {
+			backupManifestBytes, err = DecompressData(backupManifestBytes)
 			require.NoError(t, err)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
